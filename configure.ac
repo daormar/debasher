@@ -438,7 +438,7 @@ AC_MSG_CHECKING(whether to disable job schedulers)
 AC_ARG_ENABLE(schedulers,[  --disable-schedulers   disable job schedulers], disable_schedulers=yes,
               disable_schedulers=no)
 
-# Yes, debug is enabled
+# Yes, schedulers are enabled
 if test "$disable_schedulers" = "yes"; then
    AC_MSG_RESULT(yes)
 fi
