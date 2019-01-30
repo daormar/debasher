@@ -16,10 +16,10 @@ UNFINISHED_STEP_STATUS="UNFINISHED"
 TODO_STEP_STATUS="TO-DO"
 NO_SCHEDULER="NO_SCHEDULER"
 SLURM_SCHEDULER="SLURM_SCHEDULER"
-ANALYSIS_FINISHED_EXIT_CODE=0
-ANALYSIS_IN_PROGRESS_EXIT_CODE=1
-ANALYSIS_ONE_OR_MORE_STEPS_IN_PROGRESS_EXIT_CODE=2
-ANALYSIS_UNFINISHED_EXIT_CODE=3
+PIPELINE_FINISHED_EXIT_CODE=0
+PIPELINE_IN_PROGRESS_EXIT_CODE=1
+PIPELINE_ONE_OR_MORE_STEPS_IN_PROGRESS_EXIT_CODE=2
+PIPELINE_UNFINISHED_EXIT_CODE=3
 AFTER_JOBDEP_TYPE="after"
 AFTEROK_JOBDEP_TYPE="afterok"
 AFTERNOTOK_JOBDEP_TYPE="afternotok"
@@ -634,14 +634,14 @@ get_step_info()
 }
 
 ########
-analysis_jobspec_is_comment()
+pipeline_jobspec_is_comment()
 {
     local jobspec=$1
     echo "${jobspec}" | $AWK '{if(index($1,"#")==1) print"yes\n"; else print"no\n"}'
 }
 
 ########
-analysis_jobspec_is_ok()
+pipeline_jobspec_is_ok()
 {
     local jobspec=$1
     echo "${jobspec}" | $AWK '{if(NF>=4) print"yes\n"; else print"no\n"}'
@@ -818,7 +818,7 @@ reset_outdir_for_step()
     local outd=`get_step_dirname ${dirname} ${stepname}`
 
     if [ -d ${outd} ]; then
-        echo "Warning: ${stepname} output directory already exists but analysis was not finished, directory content will be removed">&2
+        echo "Warning: ${stepname} output directory already exists but pipeline was not finished, directory content will be removed">&2
         rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
     else
         mkdir ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }

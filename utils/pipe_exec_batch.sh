@@ -6,14 +6,14 @@
 ########
 print_desc()
 {
-    echo "exec_pipeline_batch executes a batch of pipelines"
-    echo "type \"exec_pipeline_batch --help\" to get usage information"
+    echo "pipe_exec_batch executes a batch of pipelines"
+    echo "type \"pipe_exec_batch --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "exec_pipeline_batch       -f <string> -m <int> [-o <string>]"
+    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>]"
     echo "                          [--help]"
     echo ""
     echo "-f <string>               File with a set of exec_pipeline commands (one"
@@ -77,14 +77,14 @@ wait_simul_exec_reduction()
         local num_unfinished_pipelines=0
         for pipeline_outd in "${!assoc_array[@]}"; do
             # Check if pipeline has finished execution
-            ${bindir}/get_analysis_status -d ${pipeline_outd} > /dev/null 2>&1
+            ${bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
             local exit_code=$?
 
             case ${exit_code} in
-                ${ANALYSIS_FINISHED_EXIT_CODE})
+                ${PIPELINE_FINISHED_EXIT_CODE})
                     num_finished_pipelines=`expr ${num_finished_pipelines} + 1`
                     ;;
-                ${ANALYSIS_UNFINISHED_EXIT_CODE})
+                ${PIPELINE_UNFINISHED_EXIT_CODE})
                     num_unfinished_pipelines=`expr ${num_unfinished_pipelines} + 1`                    
                     ;;
             esac
@@ -123,10 +123,10 @@ update_active_pipelines()
     # Iterate over active pipelines
     for pipeline_outd in "${!assoc_array[@]}"; do
         # Check if pipeline has finished execution
-        ${bindir}/get_analysis_status -d ${pipeline_outd} > /dev/null 2>&1
+        ${bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
         local exit_code=$?
         
-        if [ ${exit_code} -eq ${ANALYSIS_FINISHED_EXIT_CODE} ]; then
+        if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
             # Remove pipeline from array of active pipelines
             unset assoc_array[${pipeline_outd}]
             

@@ -13,18 +13,18 @@ MAX_NUM_SCRIPT_OPTS_TO_DISPLAY=10
 ########
 print_desc()
 {
-    echo "exec_pipeline executes general purpose pipelines"
-    echo "type \"exec_pipeline --help\" to get usage information"
+    echo "pipe_exec executes general purpose pipelines"
+    echo "type \"pipe_exec --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "exec_pipeline        -a <string> -o <string>"
+    echo "pipe_exec            -a <string> -o <string>"
     echo "                     [--showopts|--checkopts|--debug]"
     echo "                     [--version] [--help]"
     echo ""
-    echo "-a <string>          File with analysis steps to be performed (see manual"
+    echo "-a <string>          File with pipeline steps to be performed (see manual"
     echo "                     for additional information)"
     echo "-o <string>          Output directory"
     echo "--showopts           Show pipeline options"
@@ -164,8 +164,8 @@ show_pipeline_opts()
         
     # Read information about the steps to be executed
     while read jobspec; do
-        local jobspec_comment=`analysis_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`analysis_jobspec_is_ok "$jobspec"`
+        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
+        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
         if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_jobspec "$jobspec"`
@@ -192,8 +192,8 @@ check_pipeline_opts()
         
     # Read information about the steps to be executed
     while read jobspec; do
-        local jobspec_comment=`analysis_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`analysis_jobspec_is_ok "$jobspec"`
+        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
+        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
         if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_jobspec "$jobspec"`
@@ -433,13 +433,13 @@ execute_pipeline_steps()
     load_pipeline_modules $afile || return 1
     local fullmodnames=`get_pipeline_fullmodnames $afile` || return 1
     
-    # step_jids will store the job ids of the analysis steps
+    # step_jids will store the job ids of the pipeline steps
     local step_jids=""
     
     # Read information about the steps to be executed
     while read jobspec; do
-        local jobspec_comment=`analysis_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`analysis_jobspec_is_ok "$jobspec"`
+        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
+        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
         if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
             # Extract step name
             local stepname=`extract_stepname_from_jobspec "$jobspec"`

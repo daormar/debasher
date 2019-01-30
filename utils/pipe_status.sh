@@ -6,17 +6,17 @@
 ########
 print_desc()
 {
-    echo "get_analysis_status get status of analysis steps"
-    echo "type \"get_analysis_status --help\" to get usage information"
+    echo "pipe_status get status of pipeline steps"
+    echo "type \"pipe_status --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "get_analysis_status       -d <string> [-s <string>]"
+    echo "pipe_status              -d <string> [-s <string>]"
     echo "                          [--help]"
     echo ""
-    echo "-d <string>               Directory where the analysis steps are stored"
+    echo "-d <string>               Directory where the pipeline steps are stored"
     echo "-s <string>               Step name whose status should be determined"
     echo "--help                    Display this help and exit"
 }
@@ -59,7 +59,7 @@ check_pars()
         exit 1
     else
         if [ ! -d ${adir} ]; then
-            echo "Error! analysis directory does not exist" >&2 
+            echo "Error! pipeline directory does not exist" >&2 
             exit 1
         fi
 
@@ -114,12 +114,12 @@ process_status_for_afile()
         
     # Read information about the steps to be executed
     lineno=1
-    analysis_finished=1
-    analysis_in_progress=1
-    analysis_one_or_more_steps_in_progress=0
+    pipeline_finished=1
+    pipeline_in_progress=1
+    pipeline_one_or_more_steps_in_progress=0
     while read jobspec; do
-        local jobspec_comment=`analysis_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`analysis_jobspec_is_ok "$jobspec"`
+        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
+        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
         if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_jobspec "$jobspec"`
@@ -138,19 +138,19 @@ process_status_for_afile()
             # Print status
             echo "STEP: $stepname ; STATUS: $status"
 
-            # Revise value of analysis_finished variable
+            # Revise value of pipeline_finished variable
             if [ "${status}" != "${FINISHED_STEP_STATUS}" ]; then
-                analysis_finished=0
+                pipeline_finished=0
             fi
 
-            # Revise value of analysis_in_progress variable
+            # Revise value of pipeline_in_progress variable
             if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
-                analysis_in_progress=0
+                pipeline_in_progress=0
             fi
 
-            # Revise value of analysis_in_progress variable
+            # Revise value of pipeline_in_progress variable
             if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
-                analysis_one_or_more_steps_in_progress=1
+                pipeline_one_or_more_steps_in_progress=1
             fi
             
         else
@@ -165,17 +165,17 @@ process_status_for_afile()
         
     done < ${afile}
 
-    # Return error if analysis is not finished
-    if [ ${analysis_finished} -eq 1 ]; then
-        return ${ANALYSIS_FINISHED_EXIT_CODE}
+    # Return error if pipeline is not finished
+    if [ ${pipeline_finished} -eq 1 ]; then
+        return ${PIPELINE_FINISHED_EXIT_CODE}
     else
-        if [ ${analysis_in_progress} -eq 1 ]; then
-            return ${ANALYSIS_IN_PROGRESS_EXIT_CODE}
+        if [ ${pipeline_in_progress} -eq 1 ]; then
+            return ${PIPELINE_IN_PROGRESS_EXIT_CODE}
         else
-            if [ ${analysis_one_or_more_steps_in_progress} -eq 1 ]; then
-                return ${ANALYSIS_ONE_OR_MORE_STEPS_IN_PROGRESS_EXIT_CODE}
+            if [ ${pipeline_one_or_more_steps_in_progress} -eq 1 ]; then
+                return ${PIPELINE_ONE_OR_MORE_STEPS_IN_PROGRESS_EXIT_CODE}
             else
-                return ${ANALYSIS_UNFINISHED_EXIT_CODE}
+                return ${PIPELINE_UNFINISHED_EXIT_CODE}
             fi
         fi
     fi
