@@ -54,12 +54,6 @@ SUFFIXES= .sh .py .r .R
 	echo "PYTHON="$(PYTHON) >> $@
 	echo "JAVA="$(JAVA) >> $@
 	echo "DISABLE_SCHEDULERS="$(DISABLE_SCHEDULERS) >> $@
-	echo "SAMTOOLS="$(SAMTOOLS) >> $@
-	echo "PLATYPUS_HOME_DIR="$(PLATYPUS_HOME_DIR) >> $@
-	echo "FACETS_HOME_DIR="$(FACETS_HOME_DIR) >> $@
-	echo "ICGCSTOR_HOME_DIR="$(ICGCSTOR_HOME_DIR) >> $@
-	echo "ASPERA_HOME_DIR="$(ASPERA_HOME_DIR) >> $@
-	echo "EGADECRYPT_HOME_DIR="$(EGADECRYPT_HOME_DIR) >> $@
 	cat $< >> $@
 	chmod ugo+x $@
 
