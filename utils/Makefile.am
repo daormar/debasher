@@ -1,12 +1,12 @@
-SCRIPTS_TO_BE_BUILT= bam_utils_lib exec_pipeline exec_pipeline_batch	\
-check_pipeline pipeline_software_test get_analysis_status
+SCRIPTS_TO_BE_BUILT= panpipe_lib pipe_exec pipe_exec_batch pipe_check	\
+pipe_status pipe_software_test
 
 bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
 CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
 
-EXTRA_DIST = bam_utils_lib.sh exec_pipeline.sh exec_pipeline_batch.sh	\
-check_pipeline.py pipeline_software_test.sh get_analysis_status.sh
+EXTRA_DIST = panpipe_lib.sh pipe_exec.sh pipe_exec_batch.sh	\
+pipe_check.py pipe_status.sh pipe_software_test.sh
 
 # Build rules for libraries
 bam_utils_lib: bam_utils_lib.sh
