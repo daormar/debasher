@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT(bam-utils, 1.0, daniel.ortiz@irbbarcelona.org)
+AC_INIT(panpipe, 1.0, daniel.ortiz@irbbarcelona.org)
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 dnl AC_CONFIG_HEADER(config.h)
@@ -443,86 +443,6 @@ if test "$disable_schedulers" = "yes"; then
    AC_MSG_RESULT(yes)
 fi
 AC_SUBST(DISABLE_SCHEDULERS,$disable_schedulers)
-
-# Adds an extra argument to configure (enable use of Platypus)
-AC_MSG_CHECKING(whether to enable platypus library)
-AC_ARG_WITH([platypus],
- [AS_HELP_STRING([--with-platypus=DIR],
-   [installs the package with the necessary code to combine it with the platypus library @<:@default=no@:>@])],
- [with_platypus=$withval],
- [with_platypus=""])
-if test "$with_platypus" = ""; then
- enable_platypus_lib="no"
- AC_MSG_RESULT(no)
-else
- enable_platypus_lib="yes"
- AC_MSG_RESULT(yes)
-fi
-AC_SUBST(PLATYPUS_HOME_DIR,$with_platypus)
-
-# Adds an extra argument to configure (enable use of Facets)
-AC_MSG_CHECKING(whether to enable facets library)
-AC_ARG_WITH([facets],
- [AS_HELP_STRING([--with-facets=DIR],
-   [installs the package with the necessary code to combine it with the facets library @<:@default=no@:>@])],
- [with_facets=$withval],
- [with_facets=""])
-if test "$with_facets" = ""; then
- enable_facets_lib="no"
- AC_MSG_RESULT(no)
-else
- enable_facets_lib="yes"
- AC_MSG_RESULT(yes)
-fi
-AC_SUBST(FACETS_HOME_DIR,$with_facets)
-
-# Adds an extra argument to configure (enable use of icgcstor)
-AC_MSG_CHECKING(whether to enable icgcstor library)
-AC_ARG_WITH([icgcstor],
- [AS_HELP_STRING([--with-icgcstor=DIR],
-   [installs the package with the necessary code to combine it with the icgcstor library @<:@default=no@:>@])],
- [with_icgcstor=$withval],
- [with_icgcstor=""])
-if test "$with_icgcstor" = ""; then
- enable_icgcstor_lib="no"
- AC_MSG_RESULT(no)
-else
- enable_icgcstor_lib="yes"
- AC_MSG_RESULT(yes)
-fi
-AC_SUBST(ICGCSTOR_HOME_DIR,$with_icgcstor)
-
-# Adds an extra argument to configure (enable use of aspera)
-AC_MSG_CHECKING(whether to enable aspera library)
-AC_ARG_WITH([aspera],
- [AS_HELP_STRING([--with-aspera=DIR],
-   [installs the package with the necessary code to combine it with the aspera library @<:@default=no@:>@])],
- [with_aspera=$withval],
- [with_aspera=""])
-if test "$with_aspera" = ""; then
- enable_aspera_lib="no"
- AC_MSG_RESULT(no)
-else
- enable_aspera_lib="yes"
- AC_MSG_RESULT(yes)
-fi
-AC_SUBST(ASPERA_HOME_DIR,$with_aspera)
-
-# Adds an extra argument to configure (enable use of ega decryptor)
-AC_MSG_CHECKING(whether to enable egadecrypt library)
-AC_ARG_WITH([egadecrypt],
- [AS_HELP_STRING([--with-egadecrypt=DIR],
-   [installs the package with the necessary code to combine it with the egadecrypt library @<:@default=no@:>@])],
- [with_egadecrypt=$withval],
- [with_egadecrypt=""])
-if test "$with_egadecrypt" = ""; then
- enable_egadecrypt_lib="no"
- AC_MSG_RESULT(no)
-else
- enable_egadecrypt_lib="yes"
- AC_MSG_RESULT(yes)
-fi
-AC_SUBST(EGADECRYPT_HOME_DIR,$with_egadecrypt)
 
 # Process options given in shell variables
 

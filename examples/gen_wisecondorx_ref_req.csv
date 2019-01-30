@@ -1,3 +1,0 @@
-bam_download_and_npz_conv dortiz normal_prio 1  2048  4:00:00
-gen_reffile_wisecondorx   dortiz normal_prio 1  2048 12:00:00
-remove_dir                dortiz normal_prio 1  2048  0:10:00
