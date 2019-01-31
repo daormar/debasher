@@ -13,7 +13,7 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>] [-c]"
+    echo "pipe_exec_batch           -f <string> -m <int> [-o <string> [-c]]"
     echo "                          [--help]"
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"
@@ -22,8 +22,8 @@ usage()
     echo "-o <string>               Output directory where the pipeline output should be"
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
-    echo "-c                        Clear content of output directory given by means of"
-    echo "                          -o option before start"
+    echo "-c                        Clear content of destination directory of each pipeline"
+    echo "                          when moving data (-o option should be given)"
     echo "--help                    Display this help and exit"
 }
 
@@ -124,6 +124,31 @@ wait_simul_exec_reduction()
 }
 
 ########
+move_dir()
+{
+    local pipeline_outd=$1
+    local outd=$2
+    
+    basedir=`$BASENAME ${pipeline_outd}`
+
+    # Remove destination directory if requested
+    if [ ${c_given} -eq 1 ]; then
+        if [ -d ${outd}/${basedir} ]; then
+            echo "Warning: removing ${outd}/${basedir} directory" >&2
+            rm -rf ${outd}/${basedir} || return 1
+        fi
+    fi
+
+    # Move directory
+    if [ -d ${outd}/${basedir} ]; then
+        echo "Error: ${outd}/${basedir} exists" >&2
+        return 1
+    else
+        mv ${pipeline_outd} ${outd} || return 1
+    fi
+}
+
+########
 update_active_pipelines()
 {
     local -n assoc_array=$1
@@ -145,7 +170,7 @@ update_active_pipelines()
             # Move directory if requested
             if [ ! -z "${outd}" ]; then
                 echo "Moving ${pipeline_outd} directory to ${outd}" >&2
-                mv ${pipeline_outd} ${outd} || return 1
+                move_dir ${pipeline_outd} ${outd} || return 1
             fi
         fi
     done
@@ -192,7 +217,7 @@ execute_batches()
         echo "" >&2
             
         echo "** Update array of active pipelines..." >&2
-        update_active_pipelines "PIPELINE_COMMANDS" "${outd}"
+        update_active_pipelines "PIPELINE_COMMANDS" "${outd}" || return 1
         echo "" >&2
         
         echo "** Execute pipeline..." >&2
@@ -216,7 +241,7 @@ execute_batches()
     # Final update of active pipelines (necessary to finish moving
     # directories if requested)
     echo "* Final update of array of active pipelines..." >&2
-    update_active_pipelines "PIPELINE_COMMANDS" "${outd}"
+    update_active_pipelines "PIPELINE_COMMANDS" "${outd}" || return 1
     echo "" >&2
 }
 
@@ -261,10 +286,5 @@ fi
 read_pars $@ || exit 1
 
 check_pars || exit 1
-
-if [ ${c_given} -eq 1 ]; then
-    echo "Warning: removing content of ${outd} directory..." >&2
-    rm -rf ${outd}/*
-fi
 
 execute_batches || exit 1
