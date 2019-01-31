@@ -699,8 +699,8 @@ extract_jobdeps_from_jobspec()
 ########
 get_pipeline_modules()
 {
-    local afile=$1
-    local modules=`$AWK '{if($1=="#import") {$1=""; printf "%s ",$0}}' $afile | $AWK '{for(i=1;i<=NF;++i) printf"%s",$i}'`
+    local pfile=$1
+    local modules=`$AWK '{if($1=="#import") {$1=""; printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) printf"%s",$i}'`
     echo ${modules}
 }
 
@@ -739,11 +739,11 @@ load_pipeline_module()
 ########
 load_pipeline_modules()
 {
-    local afile=$1
+    local pfile=$1
 
-    file_exists $afile || { echo "Error: file $afile does not exist" >&2 ; return 1; }
+    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
     
-    local comma_sep_modules=`get_pipeline_modules $afile`
+    local comma_sep_modules=`get_pipeline_modules $pfile`
     
     if [ -z "${comma_sep_modules}" ]; then
         echo "Error: no pipeline modules were given" >&2
@@ -753,7 +753,7 @@ load_pipeline_modules()
         prevIFS=$IFS
         IFS=','
         for mod in ${comma_sep_modules}; do
-            load_pipeline_module $mod || { echo "Error while loading ${fullmodname}" >&2 ; return 1; }
+            load_pipeline_module $mod || { echo "Error while loading ${mod}" >&2 ; return 1; }
         done
         IFS=${prevIFS}
     fi
@@ -762,11 +762,11 @@ load_pipeline_modules()
 ########
 get_pipeline_fullmodnames()
 {
-    local afile=$1
+    local pfile=$1
 
-    file_exists $afile || { echo "Error: file $afile does not exist" >&2 ; return 1; }
+    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
     
-    local comma_sep_modules=`get_pipeline_modules $afile`
+    local comma_sep_modules=`get_pipeline_modules $pfile`
     
     if [ -z "${comma_sep_modules}" ]; then
         echo "Warning: no pipeline modules were given" >&2
