@@ -1,4 +1,4 @@
-#import pipeline_software_test
+#import pipe_software_test
 #
 step_a                dortiz normal_prio 1 32 00:01:00 jobdeps=none
 step_b                dortiz normal_prio 1 32 00:01:00 jobdeps=afterok:step_a
