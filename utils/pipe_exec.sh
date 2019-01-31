@@ -20,11 +20,11 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec            -a <string> -o <string>"
+    echo "pipe_exec            -p <string> -o <string>"
     echo "                     [--showopts|--checkopts|--debug]"
     echo "                     [--version] [--help]"
     echo ""
-    echo "-a <string>          File with pipeline steps to be performed (see manual"
+    echo "-p <string>          File with pipeline steps to be performed (see manual"
     echo "                     for additional information)"
     echo "-o <string>          Output directory"
     echo "--showopts           Show pipeline options"
@@ -44,7 +44,7 @@ save_command_line()
 ########
 read_pars()
 {
-    a_given=0
+    p_given=0
     o_given=0
     showopts_given=0
     checkopts_given=0
@@ -57,10 +57,10 @@ read_pars()
             "--version") version
                          exit 1
                          ;;
-            "-a") shift
+            "-p") shift
                   if [ $# -ne 0 ]; then
-                      afile=$1
-                      a_given=1
+                      pfile=$1
+                      p_given=1
                   fi
                   ;;
             "-o") shift
@@ -83,12 +83,12 @@ read_pars()
 ########
 check_pars()
 {
-    if [ ${a_given} -eq 0 ]; then   
-        echo "Error! -a parameter not given!" >&2
+    if [ ${p_given} -eq 0 ]; then   
+        echo "Error! -p parameter not given!" >&2
         exit 1
     else
-        if [ ! -f ${afile} ]; then
-            echo "Error! file ${afile} does not exist" >&2
+        if [ ! -f ${pfile} ]; then
+            echo "Error! file ${pfile} does not exist" >&2
             exit 1
         fi
     fi
@@ -121,8 +121,8 @@ check_pars()
 ########
 absolutize_file_paths()
 {
-    if [ ${a_given} -eq 1 ]; then   
-        afile=`get_absolute_path ${afile}`
+    if [ ${p_given} -eq 1 ]; then   
+        pfile=`get_absolute_path ${pfile}`
     fi
 
     if [ ${o_given} -eq 1 ]; then   
@@ -133,9 +133,9 @@ absolutize_file_paths()
 ########
 check_pipeline_file()
 {
-    echo "* Checking pipeline file ($afile)..." >&2
+    echo "* Checking pipeline file ($pfile)..." >&2
 
-    ${bindir}/check_pipeline -a ${afile} || return 1
+    ${bindir}/pipe_check -p ${pfile} || return 1
 
     echo "" >&2
 }
@@ -143,9 +143,9 @@ check_pipeline_file()
 ########
 reorder_pipeline_file()
 {
-    echo "* Obtaining reordered pipeline file ($afile)..." >&2
+    echo "* Obtaining reordered pipeline file ($pfile)..." >&2
 
-    ${bindir}/check_pipeline -a ${afile} -r > ${outd}/reordered_pipeline.csv 2> /dev/null || return 1
+    ${bindir}/pipe_check -p ${pfile} -r > ${outd}/reordered_pipeline.csv 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -157,10 +157,10 @@ show_pipeline_opts()
 
     # Read input parameters
     local cmdline=$1
-    local afile=$2
+    local pfile=$2
 
     # Load pipeline modules
-    load_pipeline_modules $afile || return 1
+    load_pipeline_modules $pfile || return 1
         
     # Read information about the steps to be executed
     while read jobspec; do
@@ -185,10 +185,10 @@ check_pipeline_opts()
     
     # Read input parameters
     local cmdline=$1
-    local afile=$2
+    local pfile=$2
 
     # Load pipeline modules
-    load_pipeline_modules $afile || return 1
+    load_pipeline_modules $pfile || return 1
         
     # Read information about the steps to be executed
     while read jobspec; do
@@ -427,11 +427,11 @@ execute_pipeline_steps()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local afile=$3
+    local pfile=$3
 
     # Load pipeline modules
-    load_pipeline_modules $afile || return 1
-    local fullmodnames=`get_pipeline_fullmodnames $afile` || return 1
+    load_pipeline_modules $pfile || return 1
+    local fullmodnames=`get_pipeline_fullmodnames $pfile` || return 1
     
     # step_jids will store the job ids of the pipeline steps
     local step_jids=""
@@ -479,12 +479,12 @@ check_pipeline_file || exit 1
 reorder_pipeline_file || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
-    show_pipeline_opts "${command_line}" ${afile} || exit 1
+    show_pipeline_opts "${command_line}" ${pfile} || exit 1
 else
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" ${afile} || exit 1
+        check_pipeline_opts "${command_line}" ${pfile} || exit 1
     else
-        check_pipeline_opts "${command_line}" ${afile} || exit 1
+        check_pipeline_opts "${command_line}" ${pfile} || exit 1
 
         create_shared_dirs
 
@@ -493,6 +493,6 @@ else
 
         print_command_line || exit 1
         
-        execute_pipeline_steps "${command_line}" ${outd} ${afile} || exit 1    
+        execute_pipeline_steps "${command_line}" ${outd} ${pfile} || exit 1    
     fi
 fi

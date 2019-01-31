@@ -16,13 +16,13 @@ class jobdep_data:
 def take_pars():
     flags={}
     values={}
-    flags["a_given"]=False
+    flags["p_given"]=False
     flags["r_given"]=False
     flags["g_given"]=False
     values["verbose"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"a:rgv",["afile="])
+        opts, args = getopt.getopt(sys.argv[1:],"p:rgv",["pfile="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -31,9 +31,9 @@ def take_pars():
         sys.exit()
     else:
         for opt, arg in opts:
-            if opt in ("-a", "--afile"):
-                values["afile"] = arg
-                flags["a_given"]=True
+            if opt in ("-p", "--pfile"):
+                values["pfile"] = arg
+                flags["p_given"]=True
             elif opt in ("-r", "--print-reord"):
                 flags["r_given"]=True
             elif opt in ("-g", "--print-graph"):
@@ -44,8 +44,8 @@ def take_pars():
 
 ##################################################
 def check_pars(flags,values):
-    if(flags["a_given"]==False):
-        print >> sys.stderr, "Error! -a parameter not given"
+    if(flags["p_given"]==False):
+        print >> sys.stderr, "Error! -p parameter not given"
         sys.exit(2)
 
     if(flags["r_given"] and flags["g_given"]):
@@ -54,9 +54,9 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "check_pipeline -a <string> [-r|-g] [-v]"
+    print >> sys.stderr, "check_pipeline -p <string> [-r|-g] [-v]"
     print >> sys.stderr, ""
-    print >> sys.stderr, "-a <string>    Analysis file"
+    print >> sys.stderr, "-p <string>    Pipeline file"
     print >> sys.stderr, "-r             Print reordered pipeline"
     print >> sys.stderr, "-g             Print pipeline in graphviz format"
     print >> sys.stderr, "-v             Verbose mode"
@@ -101,9 +101,9 @@ def extract_job_deps(entry):
     return jdeps_list
         
 ##################################################
-def extract_job_entries(afile):
+def extract_job_entries(pfile):
     job_entries=[]
-    file = open(afile, 'r')
+    file = open(pfile, 'r')
     # read file entry by entry
     for entry in file:
         entry=entry.strip("\n")
@@ -233,7 +233,7 @@ def print_graph(ordered_job_entries,jobdeps_map):
     
 ##################################################
 def process_pars(flags,values):
-    job_entries=extract_job_entries(values["afile"])
+    job_entries=extract_job_entries(values["pfile"])
     jobdeps_map=create_jobdeps_map(job_entries)
     ordered_job_entries=[]
     if(jobdeps_correct(job_entries,jobdeps_map,ordered_job_entries)):
