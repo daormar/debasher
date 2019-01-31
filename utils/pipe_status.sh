@@ -36,7 +36,7 @@ read_pars()
                          ;;
             "-d") shift
                   if [ $# -ne 0 ]; then
-                      adir=$1
+                      pdir=$1
                       d_given=1
                   fi
                   ;;
@@ -58,13 +58,13 @@ check_pars()
         echo "Error! -d parameter not given!" >&2
         exit 1
     else
-        if [ ! -d ${adir} ]; then
+        if [ ! -d ${pdir} ]; then
             echo "Error! pipeline directory does not exist" >&2 
             exit 1
         fi
 
-        if [ ! -f ${adir}/command_line.sh ]; then
-            echo "Error! ${adir}/command_line.sh file is missing" >&2 
+        if [ ! -f ${pdir}/command_line.sh ]; then
+            echo "Error! ${pdir}/command_line.sh file is missing" >&2 
             exit 1
         fi
     fi
@@ -87,16 +87,16 @@ get_cmdline()
 }
 
 ########
-get_afile()
+get_pfile()
 {
     local command_line_file=$1
     local cmdline=`$TAIL -1 ${command_line_file}`
-    local afile=`read_opt_value_from_line "$cmdline" "-a"` || return 1
-    echo $afile
+    local pfile=`read_opt_value_from_line "$cmdline" "-p"` || return 1
+    echo $pfile
 }
 
 ########
-process_status_for_afile()
+process_status_for_pfile()
 {
     local dirname=$1
     command_line_file=$dirname/command_line.sh
@@ -104,13 +104,13 @@ process_status_for_afile()
     # Extract information from command_line.sh file
     local orig_workdir=`get_orig_workdir ${command_line_file}` || return 1
     local cmdline=`get_cmdline ${command_line_file}` || return 1
-    local afile=`get_afile ${command_line_file}` || return 1
+    local pfile=`get_pfile ${command_line_file}` || return 1
 
     # Change directory
     cd ${orig_workdir}
 
     # Load pipeline modules
-    load_pipeline_modules $afile 2>/dev/null || return 1
+    load_pipeline_modules $pfile 2>/dev/null || return 1
         
     # Read information about the steps to be executed
     lineno=1
@@ -155,7 +155,7 @@ process_status_for_afile()
             
         else
             if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "no" ]; then
-                echo "Error: incorrect job specification at line $lineno of ${afile}" >&2
+                echo "Error: incorrect job specification at line $lineno of ${pfile}" >&2
                 return 1
             fi
         fi
@@ -163,7 +163,7 @@ process_status_for_afile()
         # Increase lineno
         lineno=`expr $lineno + 1`
         
-    done < ${afile}
+    done < ${pfile}
 
     # Return error if pipeline is not finished
     if [ ${pipeline_finished} -eq 1 ]; then
@@ -192,6 +192,6 @@ read_pars $@ || exit 1
 
 check_pars || exit 1
 
-process_status_for_afile ${adir} ${afile}
+process_status_for_pfile ${pdir} ${pfile}
 
 exit $?
