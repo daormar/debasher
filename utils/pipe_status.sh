@@ -1,7 +1,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${bindir}/panpipe_lib
+. ${bindir}/panpipe_lib || exit 1
 
 ########
 print_desc()
