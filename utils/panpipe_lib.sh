@@ -704,6 +704,31 @@ get_pipeline_modules()
     echo ${modules}
 }
 
+
+########
+search_mod_in_dirs()
+{
+    local module=$1
+    
+    # Search module in directories listed in PANPIPE_MOD_DIR
+    local prevIFS=$IFS
+    IFS=':'
+    for dir in ${PANPIPE_MOD_DIR}; do
+        if [ -f ${dir}/${module} ]; then
+            fullmodname=${dir}/${module}
+            break
+        fi
+    done
+    IFS=${prevIFS}
+    
+    # Fallback to package bindir
+    if [ -z "${fullmodname}" ]; then
+        fullmodname=${bindir}${module}
+    fi
+
+    echo $fullmodname
+}
+
 ########
 determine_full_module_name()
 {
@@ -712,7 +737,7 @@ determine_full_module_name()
     if [ $absolute -eq 1 ]; then
         fullmodname=${module}
     else
-        fullmodname=${bindir}${module}
+        fullmodname=`search_mod_in_dirs ${module}`
     fi
 
     echo $fullmodname
@@ -750,7 +775,7 @@ load_pipeline_modules()
         return 1
     else
         # Load modules
-        prevIFS=$IFS
+        local prevIFS=$IFS
         IFS=','
         for mod in ${comma_sep_modules}; do
             load_pipeline_module $mod || { echo "Error while loading ${mod}" >&2 ; return 1; }
