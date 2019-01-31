@@ -1,3 +1,3 @@
-# bam-utils
+# panpipe
 
-Utilities to analyze bam files
+Software to execute general pipelines
