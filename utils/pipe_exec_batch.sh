@@ -13,7 +13,7 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>]"
+    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>] [-c]"
     echo "                          [--help]"
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"
@@ -22,6 +22,8 @@ usage()
     echo "-o <string>               Output directory where the pipeline output should be"
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
+    echo "-c                        Clear content of output directory given by means of"
+    echo "                          -o option before start"
     echo "--help                    Display this help and exit"
 }
 
@@ -31,6 +33,7 @@ read_pars()
     f_given=0
     m_given=0
     o_given=0
+    c_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -57,6 +60,10 @@ read_pars()
                       o_given=1
                   fi
                   ;;
+            "-c") if [ $# -ne 0 ]; then
+                      c_given=1
+                  fi
+                  ;;
         esac
         shift
     done   
@@ -68,11 +75,11 @@ wait_simul_exec_reduction()
     local -n assoc_array=$1
     local maxp=$2
     local SLEEP_TIME=100
-    end=0
+    local end=0
+    local num_active_pipelines=${#assoc_array[@]}
     
     while [ ${end} -eq 0 ] ; do
         # Iterate over active pipelines
-        local num_active_pipelines=${#assoc_array[@]}
         local num_finished_pipelines=0
         local num_unfinished_pipelines=0
         for pipeline_outd in "${!assoc_array[@]}"; do
@@ -94,8 +101,13 @@ wait_simul_exec_reduction()
         # reached and all pipelines are unfinished, then it is not
         # possible to continue execution
         if [ ${num_active_pipelines} -ge ${maxp} -a ${num_unfinished_pipelines} -eq ${num_active_pipelines} ]; then
-            echo "Error: all active pipelines are unfinished and it is not possible to execute new ones" >&2
-            return 1
+            if [ ${maxp} -gt 0 ]; then
+                echo "Error: all active pipelines are unfinished and it is not possible to execute new ones" >&2
+                return 1
+            else
+                echo "Error: all active pipelines are unfinished" >&2
+                return 1
+            fi
         fi
         
         # Obtain number of pending pipelines
@@ -127,13 +139,14 @@ update_active_pipelines()
         local exit_code=$?
         
         if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
+            echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
             # Remove pipeline from array of active pipelines
             unset assoc_array[${pipeline_outd}]
-            
             # Move directory if requested
             if [ ! -z "${outd}" ]; then
-                mv ${pipeline_outd} ${outd}
-            fi            
+                echo "Moving ${pipeline_outd} directory to ${outd}" >&2
+                mv ${pipeline_outd} ${outd} || return 1
+            fi
         fi
     done
 
@@ -156,6 +169,13 @@ add_cmd_to_assoc_array()
     fi
 }
 
+########
+wait_until_pending_ppls_finish()
+{
+    local assoc_array_name=$1
+    wait_simul_exec_reduction ${assoc_array_name} 1 || return 1
+}
+ 
 ########
 execute_batches()
 {
@@ -188,6 +208,16 @@ execute_batches()
         lineno=`expr $lineno + 1`
         
     done < ${file}
+
+    # Wait for all pipelines to finish
+    echo "* Waiting for pending pipelines to finish..." >&2
+    wait_until_pending_ppls_finish "PIPELINE_COMMANDS" || return 1
+
+    # Final update of active pipelines (necessary to finish moving
+    # directories if requested)
+    echo "* Final update of array of active pipelines..." >&2
+    update_active_pipelines "PIPELINE_COMMANDS" "${outd}"
+    echo "" >&2
 }
 
 ########
@@ -214,6 +244,11 @@ check_pars()
             exit 1
         fi
     fi
+
+    if [ ${c_given} -eq 1 -a ${o_given} -eq 0 ]; then
+        echo "Error! -c option cannot be given without -o option" >&2 
+        exit 1
+    fi
 }
 
 ########
@@ -226,5 +261,10 @@ fi
 read_pars $@ || exit 1
 
 check_pars || exit 1
+
+if [ ${c_given} -eq 1 ]; then
+    echo "Warning: removing content of ${outd} directory..." >&2
+    rm -rf ${outd}/*
+fi
 
 execute_batches || exit 1
