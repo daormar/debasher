@@ -16,12 +16,12 @@ usage()
     echo "pipe_exec_batch           -f <string> -m <int> [-o <string>]"
     echo "                          [--help]"
     echo ""
-    echo "-f <string>               File with a set of exec_pipeline commands (one"
+    echo "-f <string>               File with a set of pipe_exec commands (one"
     echo "                          per line)"
     echo "-m <string>               Maximum number of pipelines executed simultaneously"
     echo "-o <string>               Output directory where the pipeline output should be"
     echo "                          moved (if not given, the output directories are"
-    echo "                          provided by the exec_pipeline commands)"
+    echo "                          provided by the pipe_exec commands)"
     echo "--help                    Display this help and exit"
 }
 
@@ -159,10 +159,10 @@ add_cmd_to_assoc_array()
 ########
 execute_batches()
 {
-    # Read file with exec_pipeline commands
+    # Read file with pipe_exec commands
     lineno=1
     declare -A PIPELINE_COMMANDS
-    while read exec_pipeline_cmd; do
+    while read pipe_exec_cmd; do
 
         echo "* Processing line ${lineno}..." >&2
         echo "" >&2
@@ -176,12 +176,12 @@ execute_batches()
         echo "" >&2
         
         echo "** Execute pipeline..." >&2
-        echo ${exec_pipeline_cmd} >&2
-        ${exec_pipeline_cmd} > /dev/null 2>&1 || return 1
+        echo ${pipe_exec_cmd} >&2
+        ${pipe_exec_cmd} > /dev/null 2>&1 || return 1
         echo "" >&2
 
         echo "** Add pipeline command to associative array..." >&2
-        add_cmd_to_assoc_array "PIPELINE_COMMANDS" "${exec_pipeline_cmd}"
+        add_cmd_to_assoc_array "PIPELINE_COMMANDS" "${pipe_exec_cmd}"
         echo "" >&2
         
         # Increase lineno
