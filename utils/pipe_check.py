@@ -70,6 +70,14 @@ def entry_is_comment(entry):
         return False
 
 ##################################################
+def entry_is_config(entry):
+    fields=entry.split()
+    if fields[0]=="#import":
+        return True
+    else:
+        return False
+
+##################################################
 def extract_job_name(entry):
     fields=entry.split()
     return fields[0]
@@ -99,7 +107,19 @@ def extract_job_deps(entry):
             jdeps_list.append(data)
         
     return jdeps_list
-        
+
+##################################################
+def extract_config_entries(pfile):
+    job_entries=[]
+    file = open(pfile, 'r')
+    # read file entry by entry
+    for entry in file:
+        entry=entry.strip("\n")
+        if entry_is_config(entry):
+            job_entries.append(entry)
+            
+    return job_entries
+
 ##################################################
 def extract_job_entries(pfile):
     job_entries=[]
@@ -204,8 +224,10 @@ def jobdeps_correct(job_entries,jobdeps_map,ordered_job_entries):
     return True
 
 ##################################################
-def print_entries(entries):
-    for e in entries:
+def print_entries(config_entries,job_entries):
+    for e in config_entries:
+        print e
+    for e in job_entries:
         print e
 
 ##################################################
@@ -233,13 +255,14 @@ def print_graph(ordered_job_entries,jobdeps_map):
     
 ##################################################
 def process_pars(flags,values):
+    config_entries=extract_config_entries(values["pfile"])
     job_entries=extract_job_entries(values["pfile"])
     jobdeps_map=create_jobdeps_map(job_entries)
     ordered_job_entries=[]
     if(jobdeps_correct(job_entries,jobdeps_map,ordered_job_entries)):
         print >> sys.stderr, "Pipeline file is correct"
         if(flags["r_given"]):
-            print_entries(ordered_job_entries)
+            print_entries(config_entries,ordered_job_entries)
         elif(flags["g_given"]):
             print_graph(ordered_job_entries,jobdeps_map)
     else:
