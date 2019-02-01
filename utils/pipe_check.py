@@ -54,7 +54,7 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "check_pipeline -p <string> [-r|-g] [-v]"
+    print >> sys.stderr, "pipe_check     -p <string> [-r|-g] [-v]"
     print >> sys.stderr, ""
     print >> sys.stderr, "-p <string>    Pipeline file"
     print >> sys.stderr, "-r             Print reordered pipeline"
