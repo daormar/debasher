@@ -402,6 +402,21 @@ get_default_outd_for_dep()
 }
 
 ########
+get_default_outd_for_dep_given_jobspec()
+{
+    local jobspec=$1
+    local depname=$2
+    
+    local dep=`find_dependency_for_step "${jobspec}" $depname`
+    if [ ${dep} = ${DEP_NOT_FOUND} ]; then
+        return 1
+    else
+        local outd=`get_default_outd_for_dep "${cmdline}" "${dep}"`
+        echo ${outd}
+    fi
+}
+
+########
 apply_deptype_to_jobids()
 {
     # Initialize variables
