@@ -110,7 +110,7 @@ process_status_for_pfile()
     cd ${orig_workdir}
 
     # Load pipeline modules
-    load_pipeline_modules $pfile 2>/dev/null || return 1
+    load_pipeline_modules $pfile || return 1
         
     # Read information about the steps to be executed
     lineno=1
