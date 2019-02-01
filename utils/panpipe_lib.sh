@@ -370,7 +370,7 @@ find_dependency_for_step()
     IFS=','
     for local_dep in ${jobdeps}; do
         local stepname_part_in_dep=`get_stepname_part_in_dep ${local_dep}`
-        if [ ${stepname_part_in_dep} = ${stepname_part} ]; then
+        if [ "${stepname_part_in_dep}" = ${stepname_part} ]; then
             echo ${local_dep}
             IFS=${prevIFS}
             return 0
@@ -413,6 +413,7 @@ get_default_outd_for_dep_given_jobspec()
     else
         local outd=`get_default_outd_for_dep "${cmdline}" "${dep}"`
         echo ${outd}
+        return 0
     fi
 }
 
@@ -475,7 +476,11 @@ get_deptype_part_in_dep()
 get_stepname_part_in_dep()
 {
     local dep=$1
-    echo ${dep} | $AWK -F ":" '{print $2}'
+    if [ ${dep} = "none" ]; then
+        echo ${dep}
+    else
+        echo ${dep} | $AWK -F ":" '{print $2}'
+    fi
 }
 
 ########
