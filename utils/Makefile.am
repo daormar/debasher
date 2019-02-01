@@ -40,6 +40,7 @@ SUFFIXES= .sh .py .r .R
 	echo "WC="$(WC) >> $@
 	echo "MKTEMP="$(MKTEMP) >> $@
 	echo "FLOCK="$(FLOCK) >> $@
+	echo "GZIP="$(GZIP) >> $@
 	echo "QSUB=\""$(QSUB)"\"" >> $@
 	echo "QSUB_WORKS=\""$(QSUB_WORKS)"\"" >> $@
 	echo "QSUB_TERSE_OPT=\""$(QSUB_TERSE_OPT)"\"" >> $@
