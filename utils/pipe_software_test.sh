@@ -11,7 +11,9 @@
 ########
 step_a_explain_cmdline_opts()
 {
-    :
+    # -a option
+    description="Sleep time in seconds for step_a (required)"
+    explain_cmdline_opt "-a" "<int>" "$description"
 }
 
 ########
@@ -26,6 +28,9 @@ step_a_define_opts()
     # which will have the same name of the step
     define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
 
+    # -a option
+    define_cmdline_opt "$cmdline" "-a" optlist || exit 1
+
     # Save option list
     save_opt_list optlist
 }
@@ -37,9 +42,10 @@ step_a()
 
     # Initialize variables
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local sleep_time=`read_opt_value_from_line "$*" "-a"`
 
     # sleep some time
-    sleep 10
+    sleep ${sleep_time}
 
     display_end_step_message
 }
