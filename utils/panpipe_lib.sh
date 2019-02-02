@@ -1097,6 +1097,12 @@ memoize_opts()
             # Argument is option
             local opt=$1
             shift
+
+            # continue if option was already given
+            if [ "${MEMOIZED_OPTS[$opt]}" != "" ]; then
+                continue
+            fi
+            
             if [ $# -ne 0 ]; then
                 # Check if next argument is option
                 if [ ${1:0:1} = "-" -o ${1:0:2} = "--"  ]; then
