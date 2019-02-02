@@ -14,7 +14,7 @@ FINISHED_STEP_STATUS="FINISHED"
 INPROGRESS_STEP_STATUS="IN-PROGRESS"
 UNFINISHED_STEP_STATUS="UNFINISHED"
 TODO_STEP_STATUS="TO-DO"
-NO_SCHEDULER="NO_SCHEDULER"
+BUILTIN_SCHEDULER="BUILTIN_SCHEDULER"
 SLURM_SCHEDULER="SLURM_SCHEDULER"
 PIPELINE_FINISHED_EXIT_CODE=0
 PIPELINE_IN_PROGRESS_EXIT_CODE=1
@@ -158,10 +158,10 @@ serialize_string_array()
 determine_scheduler()
 {
     if [ ${DISABLE_SCHEDULERS} = "yes" ]; then
-        echo ${NO_SCHEDULER}
+        echo ${BUILTIN_SCHEDULER}
     else
         if [ -z "${SBATCH}" ]; then
-            echo ${NO_SCHEDULER}
+            echo ${BUILTIN_SCHEDULER}
         else
             echo ${SLURM_SCHEDULER}
         fi
@@ -169,7 +169,7 @@ determine_scheduler()
 }
 
 ########
-create_no_scheduler_script()
+create_builtin_scheduler_script()
 {
     # Init variables
     local name=$1
@@ -263,8 +263,8 @@ create_script()
         ${SLURM_SCHEDULER})
             create_slurm_script $name $command ${opts_array}
             ;;
-        ${NO_SCHEDULER})
-            create_no_scheduler_script $name $command ${opts_array}
+        ${BUILTIN_SCHEDULER})
+            create_builtin_scheduler_script $name $command ${opts_array}
             ;;
     esac
 }
@@ -508,7 +508,7 @@ get_exit_code()
 }
 
 ########
-wait_for_deps_no_scheduler()
+wait_for_deps_builtin_scheduler()
 {
     # Initialize variables
     local jobdeps=$1
@@ -553,14 +553,14 @@ wait_for_deps_no_scheduler()
 }
 
 ########
-no_scheduler_launch()
+builtin_scheduler_launch()
 {
     # Initialize variables
     local file=$1
     local jobdeps=$2
     local outvar=$3
 
-    if wait_for_deps_no_scheduler "${jobdeps}"; then
+    if wait_for_deps_builtin_scheduler "${jobdeps}"; then
         ${file} > ${file}.log 2>&1 &
         local pid=$!
         eval "${outvar}='${pid}'"
@@ -621,8 +621,8 @@ launch()
             slurm_launch ${file} ${array_size} "${jobspec}" "${jobdeps}" ${outvar}
             ;;
 
-        *) # No scheduler will be used
-            no_scheduler_launch ${file} "${jobdeps}" ${outvar}
+        *) # Built-in scheduler will be used
+            builtin_scheduler_launch ${file} "${jobdeps}" ${outvar}
             ;;
     esac
 }
@@ -939,7 +939,7 @@ check_if_id_exists()
         ${SLURM_SCHEDULER})
             check_if_slurm_jid_exists $id
         ;;
-        *) # No scheduler is being used
+        *) # Use built-in scheduler
             check_if_pid_exists $id
         ;;
     esac
