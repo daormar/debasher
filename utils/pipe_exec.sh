@@ -20,13 +20,15 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec            -p <string> -o <string>"
+    echo "pipe_exec            -p <string> -o <string> [--cfgfile <string>]"
     echo "                     [--showopts|--checkopts|--debug]"
     echo "                     [--version] [--help]"
     echo ""
     echo "-p <string>          File with pipeline steps to be performed (see manual"
     echo "                     for additional information)"
     echo "-o <string>          Output directory"
+    echo "--cfgfile <strings>  File with options (options provided in command line"
+    echo "                     overwrite those given in the configuration file)"
     echo "--showopts           Show pipeline options"
     echo "--checkopts          Check pipeline options"
     echo "--debug              Do everything except launching pipeline steps"
@@ -46,6 +48,7 @@ read_pars()
 {
     p_given=0
     o_given=0
+    cfgfile_given=0
     showopts_given=0
     checkopts_given=0
     debug=0
@@ -67,6 +70,12 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       outd=$1
                       o_given=1
+                  fi
+                  ;;
+            "--cfgfile") shift
+                  if [ $# -ne 0 ]; then
+                      cfgfile=$1
+                      cfgfile_given=1
                   fi
                   ;;
             "--showopts") showopts_given=1
@@ -102,6 +111,13 @@ check_pars()
         fi
     fi
 
+    if [ ${cfgfile_given} -eq 1 ]; then
+        if [ ! -f ${cfgfile} ]; then
+            echo "Error: ${cfgfile} file does not exist" >&2
+            exit 1
+        fi
+    fi
+
     if [ ${showopts_given} -eq 1 -a ${checkopts_given} -eq 1 ]; then
         echo "Error! --showopts and --checkopts options cannot be given simultaneously"
         exit 1
@@ -127,6 +143,10 @@ absolutize_file_paths()
 
     if [ ${o_given} -eq 1 ]; then   
         outd=`get_absolute_path ${outd}`
+    fi
+
+    if [ ${cfgfile_given} -eq 1 ]; then   
+        cfgfile=`get_absolute_path ${cfgfile}`
     fi
 }
 
@@ -156,8 +176,7 @@ show_pipeline_opts()
     echo "* Pipeline options..." >&2
 
     # Read input parameters
-    local cmdline=$1
-    local pfile=$2
+    local pfile=$1
 
     # Load pipeline modules
     load_pipeline_modules $pfile || return 1
@@ -457,6 +476,21 @@ execute_pipeline_steps()
 }
 
 ########
+obtain_augmented_cmdline()
+{
+    local cmdline=$1
+    
+    if [ ${cfgfile_given} -eq 1 ]; then
+        echo "* Processing configuration file (${cfgfile})..." >&2
+        cfgfile_str=`cfgfile_to_string ${cfgfile}` || return 1
+        echo "${cmdline} ${cfgfile_str}"
+        echo "" >&2
+    else
+        echo $cmdline
+    fi
+}
+
+########
 
 if [ $# -eq 0 ]; then
     print_desc
@@ -479,12 +513,14 @@ check_pipeline_file || exit 1
 reorder_pipeline_file || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
-    show_pipeline_opts "${command_line}" ${pfile} || exit 1
+    show_pipeline_opts ${pfile} || exit 1
 else
+    augmented_cmdline=`obtain_augmented_cmdline "${command_line}"` || exit 1
+    
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" ${pfile} || exit 1
+        check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
     else
-        check_pipeline_opts "${command_line}" ${pfile} || exit 1
+        check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
 
         create_shared_dirs
 
@@ -493,6 +529,6 @@ else
 
         print_command_line || exit 1
         
-        execute_pipeline_steps "${command_line}" ${outd} ${pfile} || exit 1    
+        execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1    
     fi
 fi
