@@ -1590,3 +1590,36 @@ save_opt_list()
     local optlist_varname=$1
     SCRIPT_OPT_LIST_ARRAY+=("${!optlist_varname}")
 }
+
+########
+cfgfile_to_string()
+{
+    local cfgfile=$1
+    local str=""
+
+    # Check that the cfg file exists
+    if [ ! -f ${cfgfile} ]; then
+        return 1
+    fi
+
+    # Read cfg file line by line
+    while read line; do
+        for field in $line; do
+            # Stop processing line when finding a comment
+            if [[ $field = \#* ]]; then
+                break
+            fi
+
+            # Add field to string
+            if [ "${str}" = "" ]; then
+                str=$field
+            else
+                str="${str} ${field}"
+            fi
+        done
+    done < ${cfgfile}
+
+    echo ${str}
+
+    return 0
+}
