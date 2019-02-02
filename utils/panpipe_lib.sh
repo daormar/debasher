@@ -14,8 +14,9 @@ FINISHED_STEP_STATUS="FINISHED"
 INPROGRESS_STEP_STATUS="IN-PROGRESS"
 UNFINISHED_STEP_STATUS="UNFINISHED"
 TODO_STEP_STATUS="TO-DO"
-BUILTIN_SCHEDULER="BUILTIN_SCHEDULER"
-SLURM_SCHEDULER="SLURM_SCHEDULER"
+PANPIPE_SCHEDULER=""
+BUILTIN_SCHEDULER="BUILTIN"
+SLURM_SCHEDULER="SLURM"
 PIPELINE_FINISHED_EXIT_CODE=0
 PIPELINE_IN_PROGRESS_EXIT_CODE=1
 PIPELINE_ONE_OR_MORE_STEPS_IN_PROGRESS_EXIT_CODE=2
@@ -155,15 +156,54 @@ serialize_string_array()
 }
 
 ########
+get_scheduler_from_ppl_file()
+{
+    local pfile=$1
+    local modules=`$AWK '{if($1=="#scheduler") {printf "%s",$2}}' ${pfile}` || return 1
+    if [ -z "${modules}" ]; then
+        echo ${VOID_VALUE}
+    else
+        echo ${modules}
+    fi
+}
+
+########
+set_panpipe_scheduler()
+{
+    local sched=$1
+
+    case $sched in
+        ${SLURM_SCHEDULER})
+            PANPIPE_SCHEDULER=${SLURM_SCHEDULER}
+            ;;
+        ${BUILTIN_SCHEDULER})
+            PANPIPE_SCHEDULER=${BUILTIN_SCHEDULER}
+            ;;
+        *)  echo "Error: ${sched} is not a valid scheduler"
+            PANPIPE_SCHEDULER=""
+            return 1
+            ;;
+    esac
+}
+
+########
 determine_scheduler()
 {
+    # Check if schedulers were disabled
     if [ ${DISABLE_SCHEDULERS} = "yes" ]; then
         echo ${BUILTIN_SCHEDULER}
     else
-        if [ -z "${SBATCH}" ]; then
-            echo ${BUILTIN_SCHEDULER}
+        # Check if scheduler was already specified
+        if [ -z "${PANPIPE_SCHEDULER}" ]; then
+            # Scheduler not specified, set it based on information
+            # gathered during package configuration
+            if [ -z "${SBATCH}" ]; then
+                echo ${BUILTIN_SCHEDULER}
+            else
+                echo ${SLURM_SCHEDULER}
+            fi
         else
-            echo ${SLURM_SCHEDULER}
+            echo ${PANPIPE_SCHEDULER}
         fi
     fi
 }
@@ -720,7 +760,7 @@ extract_jobdeps_from_jobspec()
 get_pipeline_modules()
 {
     local pfile=$1
-    local modules=`$AWK '{if($1=="#import") {$1=""; printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) printf"%s",$i}'`
+    local modules=`$AWK '{if($1=="#import") {$1=""; printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) printf"%s",$i}'` ; pipe_fail || return 1
     echo ${modules}
 }
 

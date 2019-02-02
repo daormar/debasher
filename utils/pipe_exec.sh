@@ -171,6 +171,20 @@ reorder_pipeline_file()
 }
 
 ########
+set_scheduler()
+{
+    echo "* Obtaining scheduler information from pipeline file ($pfile)..." >&2
+    sched=`get_scheduler_from_ppl_file $pfile` || return 1
+    if [ ${sched} = ${VOID_VALUE} ]; then
+        echo "Warning: pipeline file does not incorporate scheduler information" >&2
+    else
+        set_panpipe_scheduler ${sched} || return 1
+        echo "scheduler: ${sched}" >&2
+    fi
+    echo "" >&2
+}
+
+########
 show_pipeline_opts()
 {
     echo "* Pipeline options..." >&2
@@ -511,6 +525,8 @@ create_basic_dirs || exit 1
 check_pipeline_file || exit 1
 
 reorder_pipeline_file || exit 1
+
+set_scheduler || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
     show_pipeline_opts ${pfile} || exit 1
