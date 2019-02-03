@@ -5,6 +5,7 @@
 #############
 
 NOFILE="_NONE_"
+ATTR_NOT_FOUND="_ATTR_NOT_FOUND_"
 OPT_NOT_FOUND="_OPT_NOT_FOUND_"
 DEP_NOT_FOUND="_DEP_NOT_FOUND_"
 INVALID_JID="_INVALID_JID_"
@@ -317,11 +318,47 @@ get_file_timestamp()
 }
 
 ########
-get_account_opt()
+get_slurm_cpus_opt()
+{
+    local cpus=$1
+
+    if [ "${cpus}" = ${ATTR_NOT_FOUND} ]; then
+        echo ""
+    else
+        echo "--cpus-per-task=${cpus}"
+    fi
+}
+
+########
+get_slurm_mem_opt()
+{
+    local mem=$1
+
+    if [ "${mem}" = ${ATTR_NOT_FOUND} ]; then
+        echo ""
+    else
+        echo "--mem=${mem}"
+    fi
+}
+
+########
+get_slurm_time_opt()
+{
+    local time=$1
+
+    if [ "${time}" = ${ATTR_NOT_FOUND} ]; then
+        echo ""
+    else
+        echo "--time ${time}"
+    fi
+}
+
+########
+get_slurm_account_opt()
 {
     local account=$1
 
-    if [ -z "${account}" ]; then
+    if [ "${account}" = ${ATTR_NOT_FOUND} ]; then
         echo ""
     else
         echo "-A ${account}"
@@ -329,11 +366,11 @@ get_account_opt()
 }
 
 ########
-get_partition_opt()
+get_slurm_partition_opt()
 {
     local partition=$1
 
-    if [ -z "${partition}" ]; then
+    if [ "${partition}" = ${ATTR_NOT_FOUND} ]; then
         echo ""
     else
         echo "--partition=${partition}"
@@ -486,7 +523,7 @@ get_slurm_dependency_opt()
     local jobdeps=$1
 
     # Create dependency option
-    if [ -z "${jobdeps}" ]; then
+    if [ "${jobdeps}" = ${ATTR_NOT_FOUND} ]; then
         echo ""
     else
         echo "--dependency=${jobdeps}"
@@ -621,20 +658,23 @@ slurm_launch()
     local outvar=$5
 
     # Retrieve specification
-    local account=`extract_account_from_jobspec "$jobspec"`
-    local partition=`extract_partition_from_jobspec "$jobspec"`
-    local cpus=`extract_cpus_from_jobspec "$jobspec"`
-    local mem=`extract_mem_from_jobspec "$jobspec"`
-    local time=`extract_time_from_jobspec "$jobspec"`
+    local cpus=`extract_attr_from_jobspec "$jobspec" "cpus"`
+    local mem=`extract_attr_from_jobspec "$jobspec" "mem"`
+    local time=`extract_attr_from_jobspec "$jobspec" "time"`
+    local account=`extract_attr_from_jobspec "$jobspec" "account"`
+    local partition=`extract_attr_from_jobspec "$jobspec" "partition"`
 
     # Define options for sbatch
-    local account_opt=`get_account_opt ${account}`
-    local partition_opt=`get_partition_opt ${partition}`
+    local cpus_opt=`get_slurm_cpus_opt ${cpus}`
+    local mem_opt=`get_slurm_mem_opt ${mem}`
+    local time_opt=`get_slurm_time_opt ${time}`
+    local account_opt=`get_slurm_account_opt ${account}`
+    local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${jobdeps}"`
     local jobarray_opt=`get_slurm_job_array_opt ${array_size}`
     
     # Submit job
-    local jid=$($SBATCH --cpus-per-task=${cpus} --mem=${mem} --time ${time} --parsable ${account_opt} ${partition_opt} ${dependency_opt} ${jobarray_opt} ${file})
+    local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${dependency_opt} ${jobarray_opt} ${file})
     
     # Check for errors
     if [ -z "$jid" ]; then
@@ -697,63 +737,65 @@ get_step_info()
 pipeline_jobspec_is_comment()
 {
     local jobspec=$1
-    echo "${jobspec}" | $AWK '{if(index($1,"#")==1) print"yes\n"; else print"no\n"}'
+    fields=( $jobspec )
+    if [[ "${fields[0]}" = \#* ]]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
 }
 
 ########
 pipeline_jobspec_is_ok()
 {
     local jobspec=$1
-    echo "${jobspec}" | $AWK '{if(NF>=4) print"yes\n"; else print"no\n"}'
+
+    local fieldno=1
+    for field in $jobspec; do
+        if [[ ${field} = "jobdeps="* ]]; then
+            if [ $fieldno -ge 2 ]; then
+                echo "yes"
+                return 0
+            fi
+        fi
+        fieldno=`expr ${fieldno} + 1`
+    done
+
+    echo "no"
+}
+
+########
+extract_attr_from_jobspec()
+{
+    local jobspec=$1
+    local attrname=$2
+
+    for field in $jobspec; do
+        if [[ "${field}" = "${attrname}="* ]]; then
+            local attrname_len=${#attrname}
+            local start=`expr ${attrname_len} + 1`
+            local attr_val=${attrname:${start}}
+            echo ${attr_val}
+            return 0
+        fi
+    done
+
+    echo ${ATTR_NOT_FOUND}
 }
 
 ########
 extract_stepname_from_jobspec()
 {
     local jobspec=$1
-    echo "${jobspec}" | $AWK '{print $1}'
-}
-
-########
-extract_account_from_jobspec()
-{
-    local jobspec=$1
-    echo "${jobspec}" | $AWK '{print $2}'
-}
-
-########
-extract_partition_from_jobspec()
-{
-    local jobspec=$1
-    echo "${jobspec}" | $AWK '{print $3}'
-}
-
-########
-extract_cpus_from_jobspec()
-{
-    local jobspec=$1
-    echo "${jobspec}" | $AWK '{print $4}'
-}
-
-########
-extract_mem_from_jobspec()
-{
-    local jobspec=$1
-    echo "${jobspec}" | $AWK '{print $5}'
-}
-
-########
-extract_time_from_jobspec()
-{
-    local jobspec=$1
-    echo "${jobspec}" | $AWK '{print $6}'
+    fields=( $jobspec )
+    echo ${fields[0]}
 }
 
 ########
 extract_jobdeps_from_jobspec()
 {
     local jobspec=$1
-    echo "${jobspec}" | $AWK '{print substr($7,9)}'
+    extract_attr_from_jobspec "${jobspec}" "jobdeps"    
 }
 
 ########
