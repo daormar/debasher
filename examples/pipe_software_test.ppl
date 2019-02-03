@@ -1,6 +1,6 @@
 #import pipe_software_test
 #scheduler SLURM
 #
-step_a                dortiz normal_prio 1 32 00:01:00 jobdeps=none
-step_b                dortiz normal_prio 1 32 00:01:00 jobdeps=afterok:step_a
-step_c                dortiz normal_prio 1 32 00:01:00 jobdeps=afterok:step_a
+step_a  cpus=1 mem=32 time=00:01:00 jobdeps=none
+step_b  cpus=1 mem=32 time=00:01:00 jobdeps=afterok:step_a
+step_c  cpus=1 mem=32 time=00:01:00 jobdeps=afterok:step_a
