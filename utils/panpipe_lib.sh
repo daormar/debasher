@@ -1024,14 +1024,34 @@ check_if_pid_exists()
 }
 
 ########
+get_slurm_state_code()
+{
+    local jid
+    ${SQUEUE} -j $jid -h -o "%t" 2>/dev/null
+}
+
+########
 check_if_slurm_jid_exists()
 {
     local jid=$1
-    
-    local jid_exists=1
-#    ${SQUEUE} -j $jid -h -o %t || jid_exists=0
-    ${SQUEUE} -j $jid > /dev/null 2>&1 || jid_exists=0
 
+    # Use squeue to get job status
+    local squeue_success=1
+    ${SQUEUE} -j $jid > /dev/null 2>&1 || squeue_success=0
+
+    if [ ${squeue_success} -eq 1 ]; then
+        # If squeue succeeds, determine if it returns a state code
+        local job_state_code=`get_slurm_state_code $jid`
+        if [ -z "${job_state_code}" ]; then
+            echo 0
+        else
+            echo 1
+        fi
+    else
+        # Since squeue has failed, the job is not being executed
+        echo 0
+    fi
+    
     echo ${jid_exists}
 }
 
