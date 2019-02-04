@@ -223,9 +223,11 @@ execute_batches()
         update_active_pipelines "${outd}" || return 1
         echo "" >&2
         
+        echo "**********************" >&2
         echo "** Execute pipeline..." >&2
         echo ${pipe_exec_cmd} >&2
-        ${pipe_exec_cmd} > /dev/null 2>&1 || return 1
+        ${pipe_exec_cmd} || return 1
+        echo "**********************" >&2
         echo "" >&2
 
         echo "** Add pipeline command to associative array..." >&2
