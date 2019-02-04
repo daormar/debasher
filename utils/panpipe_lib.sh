@@ -126,7 +126,8 @@ exclude_bashisms()
 ########
 serialize_string_array()
 {
-    local -n str_array=$1
+    local str_array_name=$1[@]
+    local str_array=("${!str_array_name}")
     local sep=$2
     local max_elems=$3
     local result=""
@@ -215,8 +216,10 @@ create_builtin_scheduler_script()
     # Init variables
     local name=$1
     local command=$2
-    local -n opts_array=$3
+    local opts_array_name=$3[@]
+    local opts_array=("${!opts_array_name}")
 
+    
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
     echo ${BASH_SHEBANG} > ${name} || return 1
@@ -247,7 +250,8 @@ create_slurm_script()
     # Init variables
     local name=$1
     local command=$2
-    local -n opts_array=$3
+    local opts_array_name=$3[@]
+    local opts_array=("${!opts_array_name}")
     local num_scripts=${#opts_array[@]}
 
     # Write bash shebang
@@ -297,15 +301,15 @@ create_script()
     # Init variables
     local name=$1
     local command=$2
-    local opts_array=$3
+    local opts_array_name=$3
 
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script $name $command ${opts_array}
+            create_slurm_script $name $command ${opts_array_name}
             ;;
         ${BUILTIN_SCHEDULER})
-            create_builtin_scheduler_script $name $command ${opts_array}
+            create_builtin_scheduler_script $name $command ${opts_array_name}
             ;;
     esac
 }
@@ -714,11 +718,11 @@ launch_step()
     local stepname=$1
     local jobspec=$2
     local jobdeps=$3
-    local opts_array=$4
+    local opts_array_name=$4
     local jid=$5
 
     # Create script
-    create_script ${tmpdir}/scripts/${stepname} ${stepname} ${opts_array} || return 1
+    create_script ${tmpdir}/scripts/${stepname} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
     launch ${tmpdir}/scripts/${stepname} "${jobspec}" ${jobdeps} ${jid} || return 1
