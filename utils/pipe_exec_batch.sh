@@ -72,17 +72,19 @@ read_pars()
 ########
 wait_simul_exec_reduction()
 {
-    local -n assoc_array=$1
-    local maxp=$2
+    # Example of passing associative array as function parameter
+    # local _assoc_array=$(declare -p "$1")
+    # eval "local -A assoc_array="${_assoc_array#*=}
+    local maxp=$1
     local SLEEP_TIME=100
     local end=0
-    local num_active_pipelines=${#assoc_array[@]}
+    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
     
     while [ ${end} -eq 0 ] ; do
         # Iterate over active pipelines
         local num_finished_pipelines=0
         local num_unfinished_pipelines=0
-        for pipeline_outd in "${!assoc_array[@]}"; do
+        for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
             # Check if pipeline has finished execution
             ${bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
             local exit_code=$?
@@ -151,14 +153,13 @@ move_dir()
 ########
 update_active_pipelines()
 {
-    local -n assoc_array=$1
-    local outd=$2
+    local outd=$1
     
-    local num_active_pipelines=${#assoc_array[@]}
+    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
     echo "Previous number of active pipelines: ${num_active_pipelines}" >&2
     
     # Iterate over active pipelines
-    for pipeline_outd in "${!assoc_array[@]}"; do
+    for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
         # Check if pipeline has finished execution
         ${bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
         local exit_code=$?
@@ -166,7 +167,7 @@ update_active_pipelines()
         if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
             echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
             # Remove pipeline from array of active pipelines
-            unset assoc_array[${pipeline_outd}]
+            unset PIPELINE_COMMANDS[${pipeline_outd}]
             # Move directory if requested
             if [ ! -z "${outd}" ]; then
                 echo "Moving ${pipeline_outd} directory to ${outd}" >&2
@@ -175,30 +176,28 @@ update_active_pipelines()
         fi
     done
 
-    local num_active_pipelines=${#assoc_array[@]}
+    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
     echo "Updated number of active pipelines: ${num_active_pipelines}" >&2
 }
 
 ########
 add_cmd_to_assoc_array()
 {
-    local -n assoc_array=$1
-    local cmd=$2
+    local cmd=$1
 
     # Extract output directory from command
     local dir=`read_opt_value_from_line "${cmd}" "-o"`
 
     # Add command to associative array if directory was sucessfully retrieved
     if [ ${dir} != ${OPT_NOT_FOUND} ]; then
-        assoc_array[${dir}]=${cmd}
+        PIPELINE_COMMANDS[${dir}]=${cmd}
     fi
 }
 
 ########
 wait_until_pending_ppls_finish()
 {
-    local assoc_array_name=$1
-    wait_simul_exec_reduction ${assoc_array_name} 1 || return 1
+    wait_simul_exec_reduction 1 || return 1
 }
  
 ########
@@ -213,11 +212,11 @@ execute_batches()
         echo "" >&2
         
         echo "** Wait until number of simultaneous executions is below the given maximum..." >&2
-        wait_simul_exec_reduction "PIPELINE_COMMANDS" ${maxp} || return 1
+        wait_simul_exec_reduction ${maxp} || return 1
         echo "" >&2
             
         echo "** Update array of active pipelines..." >&2
-        update_active_pipelines "PIPELINE_COMMANDS" "${outd}" || return 1
+        update_active_pipelines "${outd}" || return 1
         echo "" >&2
         
         echo "** Execute pipeline..." >&2
@@ -226,7 +225,7 @@ execute_batches()
         echo "" >&2
 
         echo "** Add pipeline command to associative array..." >&2
-        add_cmd_to_assoc_array "PIPELINE_COMMANDS" "${pipe_exec_cmd}"
+        add_cmd_to_assoc_array "${pipe_exec_cmd}"
         echo "" >&2
         
         # Increase lineno
@@ -236,12 +235,12 @@ execute_batches()
 
     # Wait for all pipelines to finish
     echo "* Waiting for pending pipelines to finish..." >&2
-    wait_until_pending_ppls_finish "PIPELINE_COMMANDS" || return 1
+    wait_until_pending_ppls_finish || return 1
 
     # Final update of active pipelines (necessary to finish moving
     # directories if requested)
     echo "* Final update of array of active pipelines..." >&2
-    update_active_pipelines "PIPELINE_COMMANDS" "${outd}" || return 1
+    update_active_pipelines "${outd}" || return 1
     echo "" >&2
 }
 
