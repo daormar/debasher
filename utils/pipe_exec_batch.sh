@@ -205,7 +205,11 @@ execute_batches()
 {
     # Read file with pipe_exec commands
     lineno=1
+
+    # Global variable declaration
     declare -A PIPELINE_COMMANDS
+
+    # Process pipeline execution commands...
     while read pipe_exec_cmd; do
 
         echo "* Processing line ${lineno}..." >&2
