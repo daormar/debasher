@@ -774,7 +774,7 @@ extract_attr_from_jobspec()
         if [[ "${field}" = "${attrname}="* ]]; then
             local attrname_len=${#attrname}
             local start=`expr ${attrname_len} + 1`
-            local attr_val=${attrname:${start}}
+            local attr_val=${field:${start}}
             echo ${attr_val}
             return 0
         fi
@@ -796,6 +796,13 @@ extract_jobdeps_from_jobspec()
 {
     local jobspec=$1
     extract_attr_from_jobspec "${jobspec}" "jobdeps"    
+}
+
+########
+extract_cpus_from_jobspec()
+{
+    local jobspec=$1
+    extract_attr_from_jobspec "${jobspec}" "cpus"
 }
 
 ########
