@@ -556,7 +556,7 @@ get_slurm_job_array_opt()
         echo ""
     else
         if [ "${throttle}" = ${ATTR_NOT_FOUND} ]; then
-            echo "--array=1-${array_size}%1"
+            echo "--array=1-${array_size}"
         else
             echo "--array=1-${array_size}%${throttle}"
         fi
