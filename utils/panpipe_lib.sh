@@ -550,11 +550,16 @@ get_slurm_dependency_opt()
 get_slurm_job_array_opt()
 {
     local array_size=$1
+    local throttle=$2
 
     if [ ${array_size} -eq 1 ]; then
         echo ""
     else
-        echo "--array=1-${array_size}"
+        if [ "${throttle}" = ${ATTR_NOT_FOUND} ]; then
+            echo "--array=1-${array_size}%1"
+        else
+            echo "--array=1-${array_size}%${throttle}"
+        fi
     fi
 }
 
@@ -680,6 +685,7 @@ slurm_launch()
     local account=`extract_attr_from_jobspec "$jobspec" "account"`
     local partition=`extract_attr_from_jobspec "$jobspec" "partition"`
     local nodes=`extract_attr_from_jobspec "$jobspec" "nodes"`
+    local task_array_throttle=`extract_attr_from_jobspec "$jobspec" "throttle"`
 
     # Define options for sbatch
     local cpus_opt=`get_slurm_cpus_opt ${cpus}`
@@ -689,7 +695,7 @@ slurm_launch()
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${jobdeps}"`
-    local jobarray_opt=`get_slurm_job_array_opt ${array_size}`
+    local jobarray_opt=`get_slurm_job_array_opt ${array_size} ${task_array_throttle}`
     
     # Submit job
     local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
