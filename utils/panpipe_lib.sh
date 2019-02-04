@@ -370,6 +370,18 @@ get_slurm_account_opt()
 }
 
 ########
+get_slurm_nodes_opt()
+{
+    local nodes=$1
+
+    if [ "${nodes}" = ${ATTR_NOT_FOUND} ]; then
+        echo ""
+    else
+        echo "-w ${nodes}"
+    fi
+}
+
+########
 get_slurm_partition_opt()
 {
     local partition=$1
@@ -667,18 +679,20 @@ slurm_launch()
     local time=`extract_attr_from_jobspec "$jobspec" "time"`
     local account=`extract_attr_from_jobspec "$jobspec" "account"`
     local partition=`extract_attr_from_jobspec "$jobspec" "partition"`
+    local nodes=`extract_attr_from_jobspec "$jobspec" "nodes"`
 
     # Define options for sbatch
     local cpus_opt=`get_slurm_cpus_opt ${cpus}`
     local mem_opt=`get_slurm_mem_opt ${mem}`
     local time_opt=`get_slurm_time_opt ${time}`
     local account_opt=`get_slurm_account_opt ${account}`
+    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${jobdeps}"`
     local jobarray_opt=`get_slurm_job_array_opt ${array_size}`
     
     # Submit job
-    local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${dependency_opt} ${jobarray_opt} ${file})
+    local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
     
     # Check for errors
     if [ -z "$jid" ]; then
