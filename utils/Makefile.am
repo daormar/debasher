@@ -50,6 +50,7 @@ SUFFIXES= .sh .py .r .R
 	echo "SRUN="$(SRUN) >> $@
 	echo "SBATCH="$(SBATCH) >> $@
 	echo "SQUEUE="$(SQUEUE) >> $@
+	echo "SACCT="$(SACCT) >> $@
 	echo "WGET="$(WGET) >> $@
 	echo "PANDOC="$(PANDOC) >> $@
 	echo "PYTHON="$(PYTHON) >> $@
