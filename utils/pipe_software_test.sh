@@ -105,7 +105,7 @@ step_c_define_opts()
     define_default_step_outd_opt "$cmdline" "$jobspec" basic_optlist || exit 1
 
     # Save option list twice (step will be executed two times)
-    for id in 1 2; do
+    for id in 1 2 3 4; do
         local optlist=${basic_optlist}
         define_opt "-id" $id optlist || exit 1
         save_opt_list optlist
