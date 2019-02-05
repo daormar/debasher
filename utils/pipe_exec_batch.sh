@@ -126,24 +126,32 @@ wait_simul_exec_reduction()
 }
 
 ########
+get_dest_dir_for_ppl()
+{
+    local pipeline_outd=$1
+    local outd=$2    
+    basedir=`$BASENAME ${pipeline_outd}`
+    echo ${outd}/${basedir}
+}
+
+########
 move_dir()
 {
     local pipeline_outd=$1
-    local outd=$2
+    local outd=$2    
+    destdir=`get_dest_dir_for_ppl ${pipeline_outd} ${outd}`
     
-    basedir=`$BASENAME ${pipeline_outd}`
-
     # Remove destination directory if requested
     if [ ${c_given} -eq 1 ]; then
-        if [ -d ${outd}/${basedir} ]; then
-            echo "Warning: removing ${outd}/${basedir} directory" >&2
-            rm -rf ${outd}/${basedir} || return 1
+        if [ -d ${destdir} ]; then
+            echo "Warning: removing ${destdir} directory" >&2
+            rm -rf ${destdir} || return 1
         fi
     fi
 
     # Move directory
-    if [ -d ${outd}/${basedir} ]; then
-        echo "Error: ${outd}/${basedir} exists" >&2
+    if [ -d ${destdir} ]; then
+        echo "Error: ${destdir} exists" >&2
         return 1
     else
         mv ${pipeline_outd} ${outd} || return 1
@@ -189,8 +197,11 @@ add_cmd_to_assoc_array()
     local dir=`read_opt_value_from_line "${cmd}" "-o"`
 
     # Add command to associative array if directory was sucessfully retrieved
-    if [ ${dir} != ${OPT_NOT_FOUND} ]; then
+    if [ ${dir} = ${OPT_NOT_FOUND} ]; then
+        return 1
+    else
         PIPELINE_COMMANDS[${dir}]=${cmd}
+        return 0
     fi
 }
 
@@ -199,7 +210,55 @@ wait_until_pending_ppls_finish()
 {
     wait_simul_exec_reduction 1 || return 1
 }
- 
+
+########
+check_ppl_complete()
+{
+    local pipe_exec_cmd=$1
+    local outd=$2
+    
+    if [ -z ${outd} ]; then
+        # Results are not being moved to another directory, check if
+        # pipeline has completed execution
+        
+        # Extract output directory from command
+        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "-o"`
+        if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
+            return 1
+        fi
+
+        # Check pipeline status
+        ${bindir}/pipe_status -d ${pipe_cmd_outd} > /dev/null 2>&1
+        exit_code=$?
+        if [ ${exit_code} -eq 0 ]; then
+            echo "yes"
+        else
+            echo "no"
+        fi
+    else
+        # Check if complete pipeline was already moved to output
+        # directory
+
+        # Extract output directory from command
+        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "-o"`
+        if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
+            return 1
+        fi
+
+        # Get pipeline directory after moving
+        local destdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
+
+        # Check pipeline status
+        ${bindir}/pipe_status -d ${destdir} > /dev/null 2>&1
+        exit_code=$?
+        if [ ${exit_code} -eq 0 ]; then
+            echo "yes"
+        else
+            echo "no"
+        fi
+    fi
+}
+
 ########
 execute_batches()
 {
@@ -222,17 +281,24 @@ execute_batches()
         echo "** Update array of active pipelines..." >&2
         update_active_pipelines "${outd}" || return 1
         echo "" >&2
-        
-        echo "**********************" >&2
-        echo "** Execute pipeline..." >&2
-        echo ${pipe_exec_cmd} >&2
-        ${pipe_exec_cmd} || return 1
-        echo "**********************" >&2
+
+        echo "** Check if pipeline is already completed..." >&2
+        ppl_complete=`check_ppl_complete "${pipe_exec_cmd}" ${outd}` || { echo "Error: pipeline command does not contain -o option">&2 ; return 1; }
+        echo ${ppl_complete}
         echo "" >&2
 
-        echo "** Add pipeline command to associative array..." >&2
-        add_cmd_to_assoc_array "${pipe_exec_cmd}"
-        echo "" >&2
+        if [ ${ppl_complete} = "no" ]; then
+            echo "**********************" >&2
+            echo "** Execute pipeline..." >&2
+            echo ${pipe_exec_cmd} >&2
+            ${pipe_exec_cmd} || return 1
+            echo "**********************" >&2
+            echo "" >&2
+            
+            echo "** Add pipeline command to associative array..." >&2
+            add_cmd_to_assoc_array "${pipe_exec_cmd}" || { echo "Error: pipeline command does not contain -o option">&2 ; return 1; }
+            echo "" >&2
+        fi
         
         # Increase lineno
         lineno=`expr $lineno + 1`
