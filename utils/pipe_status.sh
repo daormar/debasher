@@ -117,6 +117,33 @@ get_pfile()
 }
 
 ########
+replace_outdir_in_cmdline()
+{
+    local cmdline=$1
+    local newdir=$2
+
+    echo $cmdline | $AWK -v newdir=$newdir 'BEGIN{
+                                replace=0
+                               }
+                               {
+                                for(i=1;i<=NF;++i)
+                                {
+                                 if(replace==0)
+                                 {
+                                  printf"%s",$i
+                                 } 
+                                 else
+                                 {
+                                  printf"%s",newdir
+                                  replace=0
+                                 }
+                                 if($i=="-o") replace=1
+                                 if(i!=NF) printf" "
+                                }
+                               }'
+}
+
+########
 process_status_for_pfile()
 {
     local dirname=$1
@@ -136,8 +163,12 @@ process_status_for_pfile()
 
     # Show warning if directory provided as option is different than the
     # original working directory
-    if [ ${orig_outdir} != ${absdirname} ]; then
+    if [ ${orig_outdir} = ${absdirname} ]; then
+        local moved_outdir="no"        
+    else
         echo "Warning: pipeline output directory was moved (original directory: ${orig_outdir})" >&2
+        cmdline=`replace_outdir_in_cmdline "${cmdline}" ${absdirname}`
+        local moved_outdir="yes"
     fi
 
     # Load pipeline modules
