@@ -231,11 +231,21 @@ create_builtin_scheduler_script()
     local lineno=1
     local num_scripts=${#opts_array[@]}
     for script_opts in "${opts_array[@]}"; do
+        # Write treatment for task id
+        if [ ${num_scripts} -gt 1 ]; then
+            echo "if [ \"\${BUILTIN_SCHED_ARRAY_TASK_${lineno}\" -eq 1 ]; then" >> ${name} || return 1
+        fi
+
         # Write command to be executed
         echo "${command} ${script_opts} || exit 1" >> ${name} || return 1
 
         # Write command to signal step completion
         echo "signal_step_completion ${name} ${lineno} ${num_scripts}" >> ${name} || return 1
+
+        # Close if statement
+        if [ ${num_scripts} -gt 1 ]; then
+            echo "fi" >> ${name} || return 1
+        fi
 
         lineno=`expr $lineno + 1`
     done
@@ -458,7 +468,7 @@ find_dependency_for_step()
     local jobspec=$1
     local stepname_part=$2
 
-    jobdeps=`extract_jobdeps_from_jobspec "$jobspec"`
+    local jobdeps=`extract_jobdeps_from_jobspec "$jobspec"`
     local prevIFS=$IFS
     IFS=','
     for local_dep in ${jobdeps}; do
@@ -547,18 +557,60 @@ get_slurm_dependency_opt()
 }
 
 ########
+get_job_array_list()
+{
+    local file=$1
+    local array_size=$2
+
+    if [ -f ${file}.finished ]; then
+        # Some jobs were completed, return list containing pending ones
+
+        # Create associative map containing completed jobs
+        local -A completed_jobs
+        while read line; do
+            local fields=( $line )
+            local num_fields=${#fields[@]}
+            if [ ${num_fields} -eq 7 ]; then
+                local id=${fields[3]}
+                completed_jobs[${id}]="1"
+            fi
+        done < ${file}.finished
+            
+        # Create string enumerating pending jobs
+        local pending_jobs=""
+        local id=1
+        while [ $id -le ${array_size} ]; do
+            if [ -z "${completed_jobs[${id}]}" ]; then
+                if [ -z "${pending_jobs}" ]; then
+                    pending_jobs=${id}
+                else
+                    pending_jobs="${pending_jobs},${id}"
+                fi
+            fi
+            id=`expr $id + 1`
+        done
+
+        echo ${pending_jobs}
+    else
+        # No jobs were completed, return list containing all of them
+        echo "1-${array_size}"
+    fi
+}
+
+########
 get_slurm_job_array_opt()
 {
-    local array_size=$1
-    local throttle=$2
+    local file=$1
+    local job_array_list=$2
+    local throttle=$3
 
-    if [ ${array_size} -eq 1 ]; then
+    if [ ${job_array_list} = "1-1" -o ${job_array_list} = "1" ]; then
         echo ""
     else
         if [ "${throttle}" = ${ATTR_NOT_FOUND} ]; then
-            echo "--array=1-${array_size}"
+            echo "--array=${job_array_list}"
         else
-            echo "--array=1-${array_size}%${throttle}"
+            echo "--array=${job_array_list}%${throttle}"
         fi
     fi
 }
@@ -655,9 +707,19 @@ builtin_scheduler_launch()
 {
     # Initialize variables
     local file=$1
-    local jobdeps=$2
-    local outvar=$3
+    local job_array_list=$2
+    local jobdeps=$3
+    local outvar=$4
 
+    # Determine which jobs from the array will be executed
+    local prevIFS=$IFS
+    IFS=','
+    for id in ${job_array_list}; do
+        local BUILTIN_SCHED_ARRAY_TASK_${id}=1
+    done
+    IFS=${prevIFS}
+
+    # Execute file
     if wait_for_deps_builtin_scheduler "${jobdeps}"; then
         ${file} > ${file}.log 2>&1 &
         local pid=$!
@@ -673,7 +735,7 @@ slurm_launch()
 {
     # Initialize variables
     local file=$1
-    local array_size=$2
+    local job_array_list=$2
     local jobspec=$3
     local jobdeps=$4
     local outvar=$5
@@ -695,7 +757,7 @@ slurm_launch()
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${jobdeps}"`
-    local jobarray_opt=`get_slurm_job_array_opt ${array_size} ${task_array_throttle}`
+    local jobarray_opt=`get_slurm_job_array_opt ${file} ${job_array_list} ${task_array_throttle}`
     
     # Submit job
     local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
@@ -713,7 +775,7 @@ launch()
 {
     # Initialize variables
     local file=$1
-    local array_size=$2
+    local job_array_list=$2
     local jobspec=$3
     local jobdeps=$4
     local outvar=$5
@@ -722,11 +784,11 @@ launch()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${file} ${array_size} "${jobspec}" "${jobdeps}" ${outvar}
+            slurm_launch ${file} ${job_array_list} "${jobspec}" "${jobdeps}" ${outvar}
             ;;
 
         *) # Built-in scheduler will be used
-            builtin_scheduler_launch ${file} "${jobdeps}" ${outvar}
+            builtin_scheduler_launch ${file} ${job_array_list} "${jobdeps}" ${outvar}
             ;;
     esac
 }
@@ -736,16 +798,17 @@ launch_step()
 {
     # Initialize variables
     local stepname=$1
-    local jobspec=$2
-    local jobdeps=$3
-    local opts_array_name=$4
-    local jid=$5
+    local job_array_list=$2
+    local jobspec=$3
+    local jobdeps=$4
+    local opts_array_name=$5
+    local jid=$6
 
     # Create script
     create_script ${tmpdir}/scripts/${stepname} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
-    launch ${tmpdir}/scripts/${stepname} "${jobspec}" ${jobdeps} ${jid} || return 1
+    launch ${tmpdir}/scripts/${stepname} ${job_array_list} "${jobspec}" ${jobdeps} ${jid} || return 1
 }
 
 ########
@@ -761,7 +824,7 @@ get_step_info()
 pipeline_jobspec_is_comment()
 {
     local jobspec=$1
-    fields=( $jobspec )
+    local fields=( $jobspec )
     if [[ "${fields[0]}" = \#* ]]; then
         echo "yes"
     else
@@ -811,7 +874,7 @@ extract_attr_from_jobspec()
 extract_stepname_from_jobspec()
 {
     local jobspec=$1
-    fields=( $jobspec )
+    local fields=( $jobspec )
     echo ${fields[0]}
 }
 

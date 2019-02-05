@@ -387,6 +387,7 @@ execute_step()
     define_opts_for_script "${cmdline}" "${jobspec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
+    local job_array_list=`get_job_array_list ${script_filename} ${array_size}`
     
     ## Obtain step status
     local status=`get_step_status ${dirname} ${stepname}`
@@ -406,7 +407,7 @@ execute_step()
         local jobdeps_spec=`extract_jobdeps_from_jobspec "$jobspec"`
         local jobdeps="`get_jobdeps ${jobdeps_spec}`"
         local stepname_jid=${stepname}_jid
-        launch ${script_filename} ${array_size} "${jobspec}" "${jobdeps}" ${stepname_jid} || return 1
+        launch ${script_filename} ${job_array_list} "${jobspec}" "${jobdeps}" ${stepname_jid} || return 1
         
         # Update variables storing jids
         step_jids="${step_jids}:${!stepname_jid}"
