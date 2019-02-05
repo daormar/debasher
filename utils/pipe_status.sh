@@ -74,8 +74,29 @@ check_pars()
 get_orig_workdir()
 {
     local command_line_file=$1
-    local workdir=`$HEAD -1 ${command_line_file} | $AWK '{print $2}'` || return 1
+    local workdir=`$HEAD -1 ${command_line_file} | $AWK '{print $2}'` ; pipe_fail || return 1
     echo $workdir
+}
+
+########
+get_orig_outdir()
+{
+    # initialize variables
+    local command_line_file=$1
+
+    # Extract information from command line file
+    local workdir=`$HEAD -1 ${command_line_file} | $AWK '{print $2}'` ; pipe_fail || return 1
+    local cmdline=`$TAIL -1 ${command_line_file}` || return 1
+    local outdir=`read_opt_value_from_line "$cmdline" "-o"`
+
+    # Retrieve original output directory
+    local oldpwd=$PWD
+    cd $workdir
+    local outdir_abspath=`get_absolute_path ${outdir}` || { cd $oldpwd; return 1; }
+    cd $oldpwd
+
+    # Print result
+    echo ${outdir_abspath}
 }
 
 ########
@@ -99,7 +120,8 @@ get_pfile()
 process_status_for_pfile()
 {
     local dirname=$1
-    command_line_file=$dirname/command_line.sh
+    local absdirname=`get_absolute_path ${dirname}`
+    local command_line_file=$dirname/command_line.sh
     
     # Extract information from command_line.sh file
     local orig_workdir=`get_orig_workdir ${command_line_file}` || return 1
@@ -108,6 +130,15 @@ process_status_for_pfile()
 
     # Change directory
     cd ${orig_workdir}
+    
+    # Get original output directory
+    local orig_outdir=`get_orig_outdir ${command_line_file}`
+
+    # Show warning if directory provided as option is different than the
+    # original working directory
+    if [ ${orig_outdir} != ${absdirname} ]; then
+        echo "Warning: pipeline output directory was moved (original directory: ${orig_outdir})" >&2
+    fi
 
     # Load pipeline modules
     load_pipeline_modules $pfile || return 1
@@ -133,7 +164,7 @@ process_status_for_pfile()
             define_opts_for_script "${cmdline}" "${jobspec}" || return 1
 
             # Check step status
-            local status=`get_step_status ${dirname} ${stepname}`
+            local status=`get_step_status ${absdirname} ${stepname}`
 
             # Print status
             echo "STEP: $stepname ; STATUS: $status"
