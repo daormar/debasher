@@ -1296,6 +1296,10 @@ memoize_opts()
 
             # continue if option was already given
             if [ "${MEMOIZED_OPTS[$opt]}" != "" ]; then
+                # If option has a value it is necessary to execute shift
+                if [ ${1:0:1} != "-" -a ${1:0:2} != "--"  ]; then
+                    shift
+                fi
                 continue
             fi
             
