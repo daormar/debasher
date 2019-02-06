@@ -20,13 +20,13 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec            -p <string> -o <string> [--sched <string>]"
+    echo "pipe_exec            --pfile <string> --outdir <string> [--sched <string>]"
     echo "                     [--cfgfile <string>] [--showopts|--checkopts|--debug]"
     echo "                     [--version] [--help]"
     echo ""
-    echo "-p <string>          File with pipeline steps to be performed (see manual"
+    echo "--pfile <string>     File with pipeline steps to be performed (see manual"
     echo "                     for additional information)"
-    echo "-o <string>          Output directory"
+    echo "--outdir <string>    Output directory"
     echo "--sched <string>     Scheduler used to execute the pipeline (if not given,"
     echo "                     it is determined using information gathered during"
     echo "                     package configuration)" 
@@ -49,8 +49,8 @@ save_command_line()
 ########
 read_pars()
 {
-    p_given=0
-    o_given=0
+    pfile_given=0
+    outdir_given=0
     sched_given=0
     cfgfile_given=0
     showopts_given=0
@@ -64,16 +64,16 @@ read_pars()
             "--version") version
                          exit 1
                          ;;
-            "-p") shift
+            "--pfile") shift
                   if [ $# -ne 0 ]; then
                       pfile=$1
-                      p_given=1
+                      pfile_given=1
                   fi
                   ;;
-            "-o") shift
+            "--outdir") shift
                   if [ $# -ne 0 ]; then
                       outd=$1
-                      o_given=1
+                      outdir_given=1
                   fi
                   ;;
             "--sched") shift
@@ -102,8 +102,8 @@ read_pars()
 ########
 check_pars()
 {
-    if [ ${p_given} -eq 0 ]; then   
-        echo "Error! -p parameter not given!" >&2
+    if [ ${pfile_given} -eq 0 ]; then   
+        echo "Error! --pfile parameter not given!" >&2
         exit 1
     else
         if [ ! -f ${pfile} ]; then
@@ -112,8 +112,8 @@ check_pars()
         fi
     fi
     
-    if [ ${o_given} -eq 0 ]; then
-        echo "Error! -o parameter not given!" >&2
+    if [ ${outdir_given} -eq 0 ]; then
+        echo "Error! --outdir parameter not given!" >&2
         exit 1
     else
         if [ -d ${outd} ]; then
@@ -147,11 +147,11 @@ check_pars()
 ########
 absolutize_file_paths()
 {
-    if [ ${p_given} -eq 1 ]; then   
+    if [ ${pfile_given} -eq 1 ]; then   
         pfile=`get_absolute_path ${pfile}`
     fi
 
-    if [ ${o_given} -eq 1 ]; then   
+    if [ ${outdir_given} -eq 1 ]; then   
         outd=`get_absolute_path ${outd}`
     fi
 

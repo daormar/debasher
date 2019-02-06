@@ -482,7 +482,7 @@ get_default_outd_for_dep()
         echo ""
     else
         # Get name of output directory
-        read_opt_value_from_line_memoiz "$cmdline" "-o" || return 1
+        read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
         local outd=${_OPT_VALUE_}
 
         # Get stepname
@@ -1609,8 +1609,8 @@ define_default_step_outd_opt()
 
     # Get full path of directory
     # local outd
-    # outd=`read_opt_value_from_line "$cmdline" "-o"` || return 1
-    read_opt_value_from_line_memoiz "$cmdline" "-o" || return 1
+    # outd=`read_opt_value_from_line "$cmdline" "--outdir"` || return 1
+    read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
     local outd=${_OPT_VALUE_}
 
     outd=`get_absolute_path ${outd}`
@@ -1740,7 +1740,7 @@ get_default_shdirname()
     local shdiropt=$2
 
     # Get full path of directory
-    read_opt_value_from_line_memoiz "$cmdline" "-o" || return 1
+    read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
     local outd=${_OPT_VALUE_}
     outd=`get_absolute_path ${outd}`
 
@@ -1759,7 +1759,7 @@ get_default_nonmandatory_opt_shdirname()
     local default_value=$3
 
     # Get full path of directory
-    read_opt_value_from_line_memoiz "$cmdline" "-o" || return 1
+    read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
     local outd=${_OPT_VALUE_}
     outd=`get_absolute_path ${outd}`
 

@@ -87,7 +87,7 @@ get_orig_outdir()
     # Extract information from command line file
     local workdir=`$HEAD -1 ${command_line_file} | $AWK '{print $2}'` ; pipe_fail || return 1
     local cmdline=`$TAIL -1 ${command_line_file}` || return 1
-    local outdir=`read_opt_value_from_line "$cmdline" "-o"`
+    local outdir=`read_opt_value_from_line "$cmdline" "--outdir"`
 
     # Retrieve original output directory
     local oldpwd=$PWD
@@ -137,7 +137,7 @@ replace_outdir_in_cmdline()
                                   printf"%s",newdir
                                   replace=0
                                  }
-                                 if($i=="-o") replace=1
+                                 if($i=="--outdir") replace=1
                                  if(i!=NF) printf" "
                                 }
                                }'
