@@ -158,18 +158,6 @@ serialize_string_array()
 }
 
 ########
-get_scheduler_from_ppl_file()
-{
-    local pfile=$1
-    local modules=`$AWK '{if($1=="#scheduler") {printf "%s",$2}}' ${pfile}` || return 1
-    if [ -z "${modules}" ]; then
-        echo ${VOID_VALUE}
-    else
-        echo ${modules}
-    fi
-}
-
-########
 set_panpipe_scheduler()
 {
     local sched=$1
