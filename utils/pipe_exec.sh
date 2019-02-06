@@ -413,7 +413,11 @@ execute_step()
 
         # Execute script
         reset_scriptdir_for_step ${script_filename} || return 1
-        reset_outdir_for_step ${dirname} ${stepname} || return 1
+        if [ ${array_size} -eq 1 ]; then
+            reset_outdir_for_step ${dirname} ${stepname} || return 1
+        else
+            echo "Warning: Warning: ${stepname} output directory already exists, however, directory content will not be removed since it executes a job array" >&2
+        fi
         local jobdeps_spec=`extract_jobdeps_from_jobspec "$jobspec"`
         local jobdeps="`get_jobdeps ${jobdeps_spec}`"
         local stepname_jid=${stepname}_jid
