@@ -1027,9 +1027,11 @@ prepare_outdir_for_step()
     local remove=$3
     local outd=`get_step_dirname ${dirname} ${stepname}`
 
-    if [ -d ${outd} -a ${remove} -eq 1 ]; then
-        echo "Warning: ${stepname} output directory already exists but pipeline was not finished, directory content will be removed">&2
-        rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
+    if [ -d ${outd} ]; then
+        if [ ${remove} -eq 1 ]; then
+           echo "Warning: ${stepname} output directory already exists but pipeline was not finished, directory content will be removed">&2
+           rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
+        fi
     else
         mkdir ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     fi
@@ -1042,7 +1044,6 @@ reset_scriptdir_for_step()
 
     rm -f ${script_filename}.log
     rm -f ${script_filename}.id
-    rm -f ${script_filename}.finished
 }
 
 ########
