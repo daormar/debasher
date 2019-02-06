@@ -537,7 +537,7 @@ get_slurm_dependency_opt()
     local jobdeps=$1
 
     # Create dependency option
-    if [ "${jobdeps}" = ${ATTR_NOT_FOUND} ]; then
+    if [ "${jobdeps}" = ${ATTR_NOT_FOUND} -o "${jobdeps}" = "" ]; then
         echo ""
     else
         echo "--dependency=${jobdeps}"
