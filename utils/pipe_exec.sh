@@ -209,6 +209,7 @@ show_pipeline_opts()
     echo "* Pipeline options..." >&2
         
     # Read information about the steps to be executed
+    local jobspec
     while read jobspec; do
         local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
         local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
@@ -311,6 +312,7 @@ get_jobdeps_from_detailed_spec()
     # Iterate over the elements of the job specification: type1:stepname1,...,typen:stepnamen
     prevIFS=$IFS
     IFS=','
+    local dep_spec
     for dep_spec in ${jobdeps_spec}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
         local step=`get_stepname_part_in_dep ${dep_spec}`
@@ -364,6 +366,7 @@ check_script_is_older_than_modules()
     if [ -f ${script_filename} ]; then
         # script exists
         script_older=0
+        local mod
         for mod in ${fullmodnames}; do
             if [ ${script_filename} -ot ${mod} ]; then
                 script_older=1
@@ -486,6 +489,7 @@ execute_pipeline_steps()
     local step_jids=""
     
     # Read information about the steps to be executed
+    local jobspec
     while read jobspec; do
         local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
         local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
