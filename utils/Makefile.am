@@ -9,9 +9,9 @@ EXTRA_DIST = panpipe_lib.sh pipe_exec.sh pipe_exec_batch.sh	\
 pipe_check.py pipe_status.sh pipe_software_test.sh
 
 # Build rules for libraries
-bam_utils_lib: bam_utils_lib.sh
+panpipe_lib: panpipe_lib.sh
 	rm -f $@
-	cat bam_utils_lib.sh >> $@
+	cat panpipe_lib.sh >> $@
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
