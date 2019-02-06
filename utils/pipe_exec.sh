@@ -20,13 +20,16 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec            -p <string> -o <string> [--cfgfile <string>]"
-    echo "                     [--showopts|--checkopts|--debug]"
+    echo "pipe_exec            -p <string> -o <string> [--sched <string>]"
+    echo "                     [--cfgfile <string>] [--showopts|--checkopts|--debug]"
     echo "                     [--version] [--help]"
     echo ""
     echo "-p <string>          File with pipeline steps to be performed (see manual"
     echo "                     for additional information)"
     echo "-o <string>          Output directory"
+    echo "--sched <string>     Scheduler used to execute the pipeline (if not given,"
+    echo "                     it is determined using information gathered during"
+    echo "                     package configuration)" 
     echo "--cfgfile <strings>  File with options (options provided in command line"
     echo "                     overwrite those given in the configuration file)"
     echo "--showopts           Show pipeline options"
@@ -48,6 +51,7 @@ read_pars()
 {
     p_given=0
     o_given=0
+    sched_given=0
     cfgfile_given=0
     showopts_given=0
     checkopts_given=0
@@ -70,6 +74,12 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       outd=$1
                       o_given=1
+                  fi
+                  ;;
+            "--sched") shift
+                  if [ $# -ne 0 ]; then
+                      sched=$1
+                      sched_given=1
                   fi
                   ;;
             "--cfgfile") shift
@@ -173,15 +183,12 @@ reorder_pipeline_file()
 ########
 set_scheduler()
 {
-    echo "* Obtaining scheduler information from pipeline file ($pfile)..." >&2
-    sched=`get_scheduler_from_ppl_file $pfile` || return 1
-    if [ ${sched} = ${VOID_VALUE} ]; then
-        echo "Warning: pipeline file does not incorporate scheduler information" >&2
-    else
+    if [ ${sched_given} -eq 1 ]; then
+        echo "* Setting scheduler from value of \"--sched\" option..." >&2
         set_panpipe_scheduler ${sched} || return 1
         echo "scheduler: ${sched}" >&2
+        echo "" >&2
     fi
-    echo "" >&2
 }
 
 ########
