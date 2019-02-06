@@ -59,6 +59,7 @@ declare -a SCRIPT_OPT_LIST_ARRAY
 pipe_fail()
 {
     # test if there is at least one command to exit with a non-zero status
+    local pipe_status_elem
     for pipe_status_elem in ${PIPESTATUS[*]}; do 
         if test ${pipe_status_elem} -ne 0; then 
             return 1; 
@@ -132,7 +133,8 @@ serialize_string_array()
     local max_elems=$3
     local result=""
     local num_elem=0
-    
+
+    local str
     for str in "${str_array[@]}"; do
         # Check if number of elements has been exceeded
         if [ ! -z "${max_elems}" ]; then
@@ -199,6 +201,15 @@ determine_scheduler()
 }
 
 ########
+get_job_array_task_varname()
+{
+    local arrayname=$1
+    local taskid=$2
+    
+    echo "BUILTIN_SCHED_ARRAY_TASK_${arrayname}_${taskid}"
+}
+
+########
 create_builtin_scheduler_script()
 {
     # Init variables
@@ -206,7 +217,7 @@ create_builtin_scheduler_script()
     local command=$2
     local opts_array_name=$3[@]
     local opts_array=("${!opts_array_name}")
-
+    local base_fname=`$BASENAME $name`
     
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -218,10 +229,12 @@ create_builtin_scheduler_script()
     # Iterate over options array
     local lineno=1
     local num_scripts=${#opts_array[@]}
+    local script_opts
     for script_opts in "${opts_array[@]}"; do
         # Write treatment for task id
         if [ ${num_scripts} -gt 1 ]; then
-            echo "if [ \"\${BUILTIN_SCHED_ARRAY_TASK_${lineno}\" -eq 1 ]; then" >> ${name} || return 1
+            local varname=`get_job_array_task_varname ${base_fname} ${lineno}`
+            echo "if [ \"\${${varname}}\" -eq 1 ]; then" >> ${name} || return 1
         fi
 
         # Write command to be executed
@@ -269,6 +282,7 @@ create_slurm_script()
 
     # Iterate over options array
     local lineno=1
+    local script_opts
     for script_opts in "${opts_array[@]}"; do
         # Write treatment for task id
         if [ ${num_scripts} -gt 1 ]; then
@@ -459,10 +473,11 @@ find_dependency_for_step()
     local jobdeps=`extract_jobdeps_from_jobspec "$jobspec"`
     local prevIFS=$IFS
     IFS=','
-    for local_dep in ${jobdeps}; do
-        local stepname_part_in_dep=`get_stepname_part_in_dep ${local_dep}`
+    local dep
+    for dep in ${jobdeps}; do
+        local stepname_part_in_dep=`get_stepname_part_in_dep ${dep}`
         if [ "${stepname_part_in_dep}" = ${stepname_part} ]; then
-            echo ${local_dep}
+            echo ${dep}
             IFS=${prevIFS}
             return 0
         fi
@@ -654,10 +669,11 @@ wait_for_deps_builtin_scheduler()
     # Iterate over dependencies
     local prevIFS=$IFS
     IFS=','
-    for local_dep in ${jobdeps}; do
+    local dep
+    for dep in ${jobdeps}; do
         # Extract information from dependency
-        local deptype=`get_deptype_part_in_dep ${local_dep}`
-        local pid=`get_id_part_in_dep ${local_dep}`
+        local deptype=`get_deptype_part_in_dep ${dep}`
+        local pid=`get_id_part_in_dep ${dep}`
 
         # Wait for process to finish (except for "after" dependency
         # types)
@@ -691,6 +707,48 @@ wait_for_deps_builtin_scheduler()
 }
 
 ########
+check_job_array_elem_is_range()
+{
+    local elem=$1
+    local array
+    IFS='-' read -r -a array <<< "$elem"
+    numfields=${#array[@]}
+    if [ $numfields -eq 2 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+get_start_id_in_range()
+{
+    local elem=$1
+    local array
+    IFS='-' read -r -a array <<< "$elem"
+    numfields=${#array[@]}
+    if [ $numfields -eq 2 ]; then
+        echo ${array[0]}
+    else
+        echo "-1"
+    fi
+}
+
+########
+get_end_id_in_range()
+{
+    local elem=$1
+    local array
+    IFS='-' read -r -a array <<< "$elem"
+    numfields=${#array[@]}
+    if [ $numfields -eq 2 ]; then
+        echo ${array[1]}
+    else
+        echo "-1"
+    fi
+}
+
+########
 builtin_scheduler_launch()
 {
     # Initialize variables
@@ -698,12 +756,26 @@ builtin_scheduler_launch()
     local job_array_list=$2
     local jobdeps=$3
     local outvar=$4
-
+    local base_fname=`$BASENAME $file`
+    
     # Determine which jobs from the array will be executed
     local prevIFS=$IFS
     IFS=','
-    for id in ${job_array_list}; do
-        local BUILTIN_SCHED_ARRAY_TASK_${id}=1
+    local elem
+    for elem in ${job_array_list}; do
+        if check_job_array_elem_is_range $elem; then
+            local start_id=`get_start_id_in_range $elem`
+            local end_id=`get_end_id_in_range $elem`
+            local id=${start_id}
+            while [ ${id} -le ${end_id} ]; do
+                local varname=`get_job_array_task_varname ${base_fname} ${id}`
+                export ${varname}=1
+                id=`expr $id + 1`
+            done
+        else
+            local varname=`get_job_array_task_varname ${base_fname} ${elem}`
+            export ${varname}=1
+        fi
     done
     IFS=${prevIFS}
 
@@ -826,6 +898,7 @@ pipeline_jobspec_is_ok()
     local jobspec=$1
 
     local fieldno=1
+    local field
     for field in $jobspec; do
         if [[ ${field} = "jobdeps="* ]]; then
             if [ $fieldno -ge 2 ]; then
@@ -845,6 +918,7 @@ extract_attr_from_jobspec()
     local jobspec=$1
     local attrname=$2
 
+    local field
     for field in $jobspec; do
         if [[ "${field}" = "${attrname}="* ]]; then
             local attrname_len=${#attrname}
@@ -897,6 +971,7 @@ search_mod_in_dirs()
     # Search module in directories listed in PANPIPE_MOD_DIR
     local prevIFS=$IFS
     IFS=':'
+    local dir
     for dir in ${PANPIPE_MOD_DIR}; do
         if [ -f ${dir}/${module} ]; then
             fullmodname=${dir}/${module}
@@ -961,6 +1036,7 @@ load_pipeline_modules()
         # Load modules
         local prevIFS=$IFS
         IFS=','
+        local mod
         for mod in ${comma_sep_modules}; do
             load_pipeline_module $mod || { echo "Error while loading ${mod}" >&2 ; return 1; }
         done
@@ -984,6 +1060,7 @@ get_pipeline_fullmodnames()
         local fullmodnames
         local prevIFS=$IFS
         IFS=','
+        local mod
         for mod in ${comma_sep_modules}; do
             local fullmodname=`determine_full_module_name $mod`
             if [ -z "${fullmodnames}" ]; then
@@ -1459,6 +1536,7 @@ explain_cmdline_opt_wo_value()
 ########
 print_pipeline_opts()
 {
+    local opt
     for opt in ${!PIPELINE_OPT_TYPE[@]}; do
         if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
             echo "${opt} ${PIPELINE_OPT_DESC[$opt]}"
@@ -1718,7 +1796,8 @@ define_indir_opt()
 create_pipeline_shdirs()
 {
     local outd=$1
-    
+
+    local dirname
     for dirname in "${PIPELINE_SHDIRS[@]}"; do
         absdir=`get_absolute_shdirname $outd $dirname`
         if [ ! -d ${absdir} ]; then
@@ -1799,6 +1878,8 @@ cfgfile_to_string()
     fi
 
     # Read cfg file line by line
+    local line
+    local field
     while read line; do
         for field in $line; do
             # Stop processing line when finding a comment
