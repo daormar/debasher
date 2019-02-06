@@ -185,15 +185,21 @@ set_scheduler()
 }
 
 ########
+load_modules()
+{
+    echo "* Loading pipeline modules..." >&2
+
+    local pfile=$1
+    
+    load_pipeline_modules ${pfile} || return 1
+
+    echo "" >&2
+}
+
+########
 show_pipeline_opts()
 {
     echo "* Pipeline options..." >&2
-
-    # Read input parameters
-    local pfile=$1
-
-    # Load pipeline modules
-    load_pipeline_modules $pfile || return 1
         
     # Read information about the steps to be executed
     while read jobspec; do
@@ -219,9 +225,6 @@ check_pipeline_opts()
     # Read input parameters
     local cmdline=$1
     local pfile=$2
-
-    # Load pipeline modules
-    load_pipeline_modules $pfile || return 1
         
     # Read information about the steps to be executed
     while read jobspec; do
@@ -462,9 +465,8 @@ execute_pipeline_steps()
     local cmdline=$1
     local dirname=$2
     local pfile=$3
-
-    # Load pipeline modules
-    load_pipeline_modules $pfile || return 1
+    
+    # Get names of pipeline modules
     local fullmodnames=`get_pipeline_fullmodnames $pfile` || return 1
     
     # step_jids will store the job ids of the pipeline steps
@@ -529,14 +531,17 @@ reorder_pipeline_file || exit 1
 
 set_scheduler || exit 1
 
+load_modules ${pfile} || return 1
+
 if [ ${showopts_given} -eq 1 ]; then
-    show_pipeline_opts ${pfile} || exit 1
+    show_pipeline_opts || exit 1
 else
     augmented_cmdline=`obtain_augmented_cmdline "${command_line}"` || exit 1
     
     if [ ${checkopts_given} -eq 1 ]; then
         check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
     else
+        load_pipeline_modules=1
         check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
 
         create_shared_dirs
