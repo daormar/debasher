@@ -1,5 +1,4 @@
 #import pipe_software_test
-#scheduler SLURM
 #
 step_a  cpus=1 mem=32 time=00:01:00 jobdeps=none
 step_b  cpus=1 mem=32 time=00:01:00 jobdeps=afterok:step_a
