@@ -74,8 +74,6 @@ def entry_is_config(entry):
     fields=entry.split()
     if fields[0]=="#import":
         return True
-    elif fields[0]=="#scheduler":
-        return True
     else:
         return False
 
