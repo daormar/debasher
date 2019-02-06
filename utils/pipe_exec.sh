@@ -207,7 +207,7 @@ load_modules()
 show_pipeline_opts()
 {
     echo "* Pipeline options..." >&2
-        
+
     # Read information about the steps to be executed
     local jobspec
     while read jobspec; do
@@ -223,6 +223,8 @@ show_pipeline_opts()
 
     # Print options
     print_pipeline_opts
+
+    echo "" >&2
 }
 
 ########
