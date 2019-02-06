@@ -414,14 +414,16 @@ execute_step()
         # Execute script
         reset_scriptdir_for_step ${script_filename} || return 1
         if [ ${array_size} -eq 1 ]; then
-            reset_outdir_for_step ${dirname} ${stepname} || return 1
+            local remove=1
+            prepare_outdir_for_step ${dirname} ${stepname} ${remove} || return 1
         else
-            echo "Warning: Warning: ${stepname} output directory already exists, however, directory content will not be removed since it executes a job array" >&2
+            local remove=0
+            prepare_outdir_for_step ${dirname} ${stepname} ${remove} || return 1
         fi
         local jobdeps_spec=`extract_jobdeps_from_jobspec "$jobspec"`
         local jobdeps="`get_jobdeps ${jobdeps_spec}`"
         local stepname_jid=${stepname}_jid
-        launch ${script_filename} ${job_array_list} "${jobspec}" "${jobdeps}" ${stepname_jid} || return 1
+        launch ${script_filename} "${job_array_list}" "${jobspec}" "${jobdeps}" ${stepname_jid} || return 1
         
         # Update variables storing jids
         step_jids="${step_jids}:${!stepname_jid}"

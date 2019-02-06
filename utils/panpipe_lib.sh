@@ -772,11 +772,11 @@ launch()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${file} ${job_array_list} "${jobspec}" "${jobdeps}" ${outvar}
+            slurm_launch ${file} "${job_array_list}" "${jobspec}" "${jobdeps}" ${outvar}
             ;;
 
         *) # Built-in scheduler will be used
-            builtin_scheduler_launch ${file} ${job_array_list} "${jobdeps}" ${outvar}
+            builtin_scheduler_launch ${file} "${job_array_list}" "${jobdeps}" ${outvar}
             ;;
     esac
 }
@@ -1020,13 +1020,14 @@ get_step_dirname()
 }
 
 ########
-reset_outdir_for_step() 
+prepare_outdir_for_step() 
 {
     local dirname=$1
     local stepname=$2
+    local remove=$3
     local outd=`get_step_dirname ${dirname} ${stepname}`
 
-    if [ -d ${outd} ]; then
+    if [ -d ${outd} -a ${remove} -eq 1 ]; then
         echo "Warning: ${stepname} output directory already exists but pipeline was not finished, directory content will be removed">&2
         rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
     else
