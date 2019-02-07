@@ -1196,6 +1196,7 @@ reset_scriptdir_for_step()
 
     rm -f ${script_filename}.log
     rm -f ${script_filename}.id
+    rm -f ${script_filename}_*
 }
 
 ########
