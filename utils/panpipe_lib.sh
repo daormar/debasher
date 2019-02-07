@@ -211,6 +211,45 @@ get_job_array_task_varname()
 }
 
 ########
+print_task_body_builtin_sched()
+{
+    # Initialize variables
+    local num_scripts=$1
+    local base_fname=$2
+    local taskid=$3
+    local funct=$4
+    local funct_clean=$5
+    local script_opts=$6
+    
+    # Write treatment for task id
+    if [ ${num_scripts} -gt 1 ]; then
+        local varname=`get_job_array_task_varname ${base_fname} ${taskid}`
+        echo "if [ \"\${${varname}}\" -eq 1 ]; then"
+    fi
+
+    # Write function to be executed
+    echo "${funct} ${script_opts}"
+    echo "funct_exit_code=\$?"
+    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
+    
+    # Write function for cleaning if it was provided
+    if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
+        echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; }"
+    fi
+
+    # Return if function to execute failed
+    echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
+        
+    # Write command to signal step completion
+    echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" 
+
+    # Close if statement
+    if [ ${num_scripts} -gt 1 ]; then
+        echo "fi" 
+    fi
+}
+
+########
 create_builtin_scheduler_script()
 {
     # Init variables
@@ -233,38 +272,52 @@ create_builtin_scheduler_script()
     local num_scripts=${#opts_array[@]}
     local script_opts
     for script_opts in "${opts_array[@]}"; do
-        # Write treatment for task id
-        if [ ${num_scripts} -gt 1 ]; then
-            local varname=`get_job_array_task_varname ${base_fname} ${lineno}`
-            echo "if [ \"\${${varname}}\" -eq 1 ]; then" >> ${fname} || return 1
-        fi
 
-        # Write function to be executed
-        echo "${funct} ${script_opts}" >> ${fname} || return 1
-        echo "funct_exit_code=\$?" >> ${fname} || return 1
-        echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi" >> ${fname} || return 1
-        
-        # Write function for cleaning if it was provided
-        if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
-            echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; } " >> ${fname} || return 1
-        fi
-
-        # Return if function to execute failed
-        echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" >> ${fname} || return 1
-        
-        # Write command to signal step completion
-        echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" >> ${fname} || return 1
-
-        # Close if statement
-        if [ ${num_scripts} -gt 1 ]; then
-            echo "fi" >> ${fname} || return 1
-        fi
+        print_task_body_builtin_sched ${num_scripts} ${base_fname} ${lineno} ${funct} ${funct_clean} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
+
     done
     
     # Give execution permission
     chmod u+x ${fname} || return 1
+}
+
+########
+print_task_body_slurm_sched()
+{
+    # Initialize variables
+    local num_scripts=$1
+    local taskid=$2
+    local funct=$3
+    local funct_clean=$4
+    local script_opts=$5
+
+    # Write treatment for task id
+    if [ ${num_scripts} -gt 1 ]; then
+        echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskid ]; then"
+    fi
+
+    # Write function to be executed
+    echo "${funct} ${script_opts}"
+    echo "funct_exit_code=\$?"
+    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
+    
+    # Write function for cleaning if it was provided
+    if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
+        echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; }"
+    fi
+
+    # Return if function to execute failed
+    echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
+        
+    # Write command to signal step completion
+    echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" 
+
+    # Close if statement
+    if [ ${num_scripts} -gt 1 ]; then
+        echo "fi" 
+    fi
 }
 
 ########
@@ -297,33 +350,11 @@ create_slurm_script()
     local lineno=1
     local script_opts
     for script_opts in "${opts_array[@]}"; do
-        # Write treatment for task id
-        if [ ${num_scripts} -gt 1 ]; then
-            echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $lineno ]; then" >> ${fname} || return 1
-        fi
-        
-        # Write function to be executed
-        echo "${funct} ${script_opts}" >> ${fname} || return 1
-        echo "funct_exit_code=\$?" >> ${fname} || return 1
-        echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi" >> ${fname} || return 1
-        
-        # Write function for cleaning if it was provided
-        if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
-            echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; } " >> ${fname} || return 1
-        fi
 
-        # Return if function to execute failed
-        echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" >> ${fname} || return 1
-        
-        # Write command to signal step completion
-        echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" >> ${fname} || return 1
-
-        # Close if statement
-        if [ ${num_scripts} -gt 1 ]; then
-            echo "fi" >> ${fname} || return 1
-        fi
+        print_task_body_slurm_sched ${num_scripts} ${lineno} ${funct} ${funct_clean} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
+        
     done
     
     # Give execution permission
