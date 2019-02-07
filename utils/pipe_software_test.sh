@@ -121,11 +121,29 @@ step_c()
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
+    # create auxiliary file
+    touch ${step_outd}/${id}_aux
+
     # sleep some time
     sleep 10
-
+    
     # create file
     touch ${step_outd}/$id
-    
+
     display_end_step_message
+}
+
+########
+step_c_clean()
+{
+    logmsg "Cleaning directory..."
+    
+    # Initialize variables
+    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local id=`read_opt_value_from_line "$*" "-id"`
+
+    # Remove auxiliary file
+    rm ${step_outd}/${id}_aux    
+
+    logmsg "Cleaning finished..."
 }
