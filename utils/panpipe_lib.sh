@@ -8,6 +8,7 @@ NOFILE="_NONE_"
 ATTR_NOT_FOUND="_ATTR_NOT_FOUND_"
 OPT_NOT_FOUND="_OPT_NOT_FOUND_"
 DEP_NOT_FOUND="_DEP_NOT_FOUND_"
+FUNCT_NOT_FOUND="_FUNCT_NOT_FOUND_"
 INVALID_JID="_INVALID_JID_"
 INVALID_PID="_INVALID_PID_"
 VOID_VALUE="_VOID_VALUE_"
@@ -213,18 +214,19 @@ get_job_array_task_varname()
 create_builtin_scheduler_script()
 {
     # Init variables
-    local name=$1
-    local command=$2
-    local opts_array_name=$3[@]
+    local fname=$1
+    local funct=$2
+    local funct_clean=$3
+    local opts_array_name=$4[@]
     local opts_array=("${!opts_array_name}")
-    local base_fname=`$BASENAME $name`
+    local base_fname=`$BASENAME $fname`
     
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
-    echo ${BASH_SHEBANG} > ${name} || return 1
+    echo ${BASH_SHEBANG} > ${fname} || return 1
     
     # Write environment variables
-    set | exclude_readonly_vars | exclude_bashisms >> ${name} || return 1
+    set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Iterate over options array
     local lineno=1
@@ -234,51 +236,62 @@ create_builtin_scheduler_script()
         # Write treatment for task id
         if [ ${num_scripts} -gt 1 ]; then
             local varname=`get_job_array_task_varname ${base_fname} ${lineno}`
-            echo "if [ \"\${${varname}}\" -eq 1 ]; then" >> ${name} || return 1
+            echo "if [ \"\${${varname}}\" -eq 1 ]; then" >> ${fname} || return 1
         fi
 
-        # Write command to be executed
-        echo "${command} ${script_opts} || exit 1" >> ${name} || return 1
+        # Write function to be executed
+        echo "${funct} ${script_opts}" >> ${fname} || return 1
+        echo "funct_exit_code=\$?" >> ${fname} || return 1
+        echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi" >> ${fname} || return 1
+        
+        # Write function for cleaning if it was provided
+        if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
+            echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; } " >> ${fname} || return 1
+        fi
 
+        # Return if function to execute failed
+        echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" >> ${fname} || return 1
+        
         # Write command to signal step completion
-        echo "signal_step_completion ${name} ${lineno} ${num_scripts}" >> ${name} || return 1
+        echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" >> ${fname} || return 1
 
         # Close if statement
         if [ ${num_scripts} -gt 1 ]; then
-            echo "fi" >> ${name} || return 1
+            echo "fi" >> ${fname} || return 1
         fi
 
         lineno=`expr $lineno + 1`
     done
     
     # Give execution permission
-    chmod u+x ${name} || return 1
+    chmod u+x ${fname} || return 1
 }
 
 ########
 create_slurm_script()
 {
     # Init variables
-    local name=$1
-    local command=$2
-    local opts_array_name=$3[@]
+    local fname=$1
+    local funct=$2
+    local funct_clean=$3
+    local opts_array_name=$4[@]
     local opts_array=("${!opts_array_name}")
     local num_scripts=${#opts_array[@]}
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
-    echo ${BASH_SHEBANG} > ${name} || return 1
+    echo ${BASH_SHEBANG} > ${fname} || return 1
 
     # Set SLURM options
-    echo "#SBATCH --job-name=${command}" >> ${name} || return 1
+    echo "#SBATCH --job-name=${funct}" >> ${fname} || return 1
     if [ ${num_scripts} -eq 1 ]; then
-        echo "#SBATCH --output=${name}.slurm_out" >> ${name} || return 1
+        echo "#SBATCH --output=${fname}.slurm_out" >> ${fname} || return 1
     else
-        echo "#SBATCH --output=${name}_%a.slurm_out" >> ${name} || return 1
+        echo "#SBATCH --output=${fname}_%a.slurm_out" >> ${fname} || return 1
     fi
     
     # Write environment variables
-    set | exclude_readonly_vars | exclude_bashisms >> ${name} || return 1
+    set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Iterate over options array
     local lineno=1
@@ -286,42 +299,53 @@ create_slurm_script()
     for script_opts in "${opts_array[@]}"; do
         # Write treatment for task id
         if [ ${num_scripts} -gt 1 ]; then
-            echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $lineno ]; then" >> ${name} || return 1
+            echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $lineno ]; then" >> ${fname} || return 1
         fi
         
-        # Write command to be executed
-        echo "${command} ${script_opts} || exit 1" >> ${name} || return 1
+        # Write function to be executed
+        echo "${funct} ${script_opts}" >> ${fname} || return 1
+        echo "funct_exit_code=\$?" >> ${fname} || return 1
+        echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi" >> ${fname} || return 1
+        
+        # Write function for cleaning if it was provided
+        if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
+            echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; } " >> ${fname} || return 1
+        fi
 
+        # Return if function to execute failed
+        echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" >> ${fname} || return 1
+        
         # Write command to signal step completion
-        echo "signal_step_completion ${name} ${lineno} ${num_scripts}" >> ${name} || return 1
+        echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" >> ${fname} || return 1
 
         # Close if statement
         if [ ${num_scripts} -gt 1 ]; then
-            echo "fi" >> ${name} || return 1
+            echo "fi" >> ${fname} || return 1
         fi
 
         lineno=`expr $lineno + 1`
     done
     
     # Give execution permission
-    chmod u+x ${name} || return 1
+    chmod u+x ${fname} || return 1
 }
 
 ########
 create_script()
 {
     # Init variables
-    local name=$1
-    local command=$2
-    local opts_array_name=$3
+    local fname=$1
+    local funct=$2
+    local funct_clean=$3
+    local opts_array_name=$4
 
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script $name $command ${opts_array_name}
+            create_slurm_script $fname $funct "${funct_clean}" ${opts_array_name}
             ;;
         ${BUILTIN_SCHEDULER})
-            create_builtin_scheduler_script $name $command ${opts_array_name}
+            create_builtin_scheduler_script $fname $funct "${funct_clean}" ${opts_array_name}
             ;;
     esac
 }
@@ -430,6 +454,26 @@ get_step_function()
     local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
     
     echo "${stepname_wo_suffix}"
+}
+
+########
+get_step_function_clean()
+{
+    local stepname=$1
+
+    local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
+
+    local step_function_clean="${stepname_wo_suffix}_clean"
+
+    local funct_exists=1
+
+    type ${step_function_clean} >/dev/null 2>&1 || funct_exists=0
+    
+    if [ ${funct_exists} -eq 1 ]; then
+        echo ${step_function_clean}
+    else
+        echo ${FUNCT_NOT_FOUND}
+    fi
 }
 
 ########

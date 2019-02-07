@@ -399,6 +399,7 @@ execute_step()
     # Initialize script variables
     local script_filename=`get_script_filename ${dirname} ${stepname}`
     local step_function=`get_step_function ${stepname}`
+    local step_function_clean=`get_step_function_clean ${stepname}`
     define_opts_for_script "${cmdline}" "${jobspec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
@@ -411,7 +412,7 @@ execute_step()
     ## Decide whether the step should be executed
     if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
         # Create script
-        create_script ${script_filename} ${step_function} "script_opts_array"
+        create_script ${script_filename} ${step_function} "${step_function_clean}" "script_opts_array"
 
         # Archive script
         archive_script ${script_filename}
