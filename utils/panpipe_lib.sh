@@ -1951,7 +1951,7 @@ get_absolute_shdirname()
 }
 
 ########
-get_default_shdirname()
+get_default_abs_shdirname()
 {
     local cmdline=$1
     local shdiropt=$2
@@ -1969,7 +1969,7 @@ get_default_shdirname()
 }
 
 ########
-get_default_nonmandatory_opt_shdirname()
+get_default_nonmandatory_opt_abs_shdirname()
 {
     local cmdline=$1
     local shdiropt=$2
