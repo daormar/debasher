@@ -218,7 +218,7 @@ print_task_body_builtin_sched()
     local base_fname=$2
     local taskid=$3
     local funct=$4
-    local funct_clean=$5
+    local post_funct=$5
     local script_opts=$6
     
     # Write treatment for task id
@@ -233,8 +233,8 @@ print_task_body_builtin_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
     
     # Write function for cleaning if it was provided
-    if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; }"
+    if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
+        echo "${post_funct} ${script_opts} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2 ;exit 1; }"
     fi
 
     # Return if function to execute failed
@@ -255,7 +255,7 @@ create_builtin_scheduler_script()
     # Init variables
     local fname=$1
     local funct=$2
-    local funct_clean=$3
+    local post_funct=$3
     local opts_array_name=$4[@]
     local opts_array=("${!opts_array_name}")
     local base_fname=`$BASENAME $fname`
@@ -273,7 +273,7 @@ create_builtin_scheduler_script()
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        print_task_body_builtin_sched ${num_scripts} ${base_fname} ${lineno} ${funct} ${funct_clean} "${script_opts}" >> ${fname} || return 1
+        print_task_body_builtin_sched ${num_scripts} ${base_fname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
 
@@ -290,7 +290,7 @@ print_task_body_slurm_sched()
     local num_scripts=$1
     local taskid=$2
     local funct=$3
-    local funct_clean=$4
+    local post_funct=$4
     local script_opts=$5
 
     # Write treatment for task id
@@ -304,8 +304,8 @@ print_task_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
     
     # Write function for cleaning if it was provided
-    if [ "${funct_clean}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${funct_clean} ${script_opts} || { echo \"Error: execution of \${funct_clean} failed with exit code \$?\" >&2 ;exit 1; }"
+    if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
+        echo "${post_funct} ${script_opts} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2 ;exit 1; }"
     fi
 
     # Return if function to execute failed
@@ -326,7 +326,7 @@ create_slurm_script()
     # Init variables
     local fname=$1
     local funct=$2
-    local funct_clean=$3
+    local post_funct=$3
     local opts_array_name=$4[@]
     local opts_array=("${!opts_array_name}")
     local num_scripts=${#opts_array[@]}
@@ -351,7 +351,7 @@ create_slurm_script()
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        print_task_body_slurm_sched ${num_scripts} ${lineno} ${funct} ${funct_clean} "${script_opts}" >> ${fname} || return 1
+        print_task_body_slurm_sched ${num_scripts} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
         
@@ -367,16 +367,16 @@ create_script()
     # Init variables
     local fname=$1
     local funct=$2
-    local funct_clean=$3
+    local post_funct=$3
     local opts_array_name=$4
 
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script $fname $funct "${funct_clean}" ${opts_array_name}
+            create_slurm_script $fname $funct "${post_funct}" ${opts_array_name}
             ;;
         ${BUILTIN_SCHEDULER})
-            create_builtin_scheduler_script $fname $funct "${funct_clean}" ${opts_array_name}
+            create_builtin_scheduler_script $fname $funct "${post_funct}" ${opts_array_name}
             ;;
     esac
 }
