@@ -22,7 +22,8 @@ usage()
     echo "-o <string>               Output directory where the pipeline output should be"
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
-    echo "-c                        Clear content of destination directory of each pipeline"
+    echo "-c                        Clear content of destination directory of each"
+    echo "                          pipeline"
     echo "                          when moving data (-o option should be given)"
     echo "--help                    Display this help and exit"
 }
