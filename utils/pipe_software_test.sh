@@ -145,5 +145,5 @@ step_c_clean()
     # Remove auxiliary file
     rm ${step_outd}/${id}_aux    
 
-    logmsg "Cleaning finished..."
+    logmsg "Cleaning finished"
 }
