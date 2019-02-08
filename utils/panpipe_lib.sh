@@ -43,6 +43,9 @@ declare -A PIPELINE_OPT_TYPE
 declare -A PIPELINE_STEPDIRS
 declare -A PIPELINE_SHDIRS
 
+# Declare associative array to store names of fifos
+declare -A PIPELINE_FIFOS
+
 # Declare associative array to memoize command line options
 declare -A MEMOIZED_OPTS
 
@@ -1701,6 +1704,20 @@ define_cmdline_infile_opt()
 }
 
 ########
+define_opt_fifo()
+{
+    local opt=$1
+    local fifoname=$2
+    local varname=$3
+
+    # Add option
+    define_opt $opt $fifoname $varname
+
+    # Store name of FIFO in associative array
+    PIPELINE_FIFOS["-$opt"]=${fifoname}
+}
+
+########
 define_cmdline_opt_shdir()
 {
     local cmdline=$1
@@ -1878,6 +1895,21 @@ create_pipeline_shdirs()
         absdir=`get_absolute_shdirname $outd $dirname`
         if [ ! -d ${absdir} ]; then
            mkdir ${absdir} || exit 1
+        fi
+    done
+}
+
+########
+create_pipeline_fifos()
+{
+    local fifodir=$1
+
+    local fifoname
+    for fifoname in "${PIPELINE_FIFOS[@]}"; do
+        if [ ! -p ${fifodir}/${fifoname} ]; then
+            rm -f ${fifodir}/${fifoname} || exit 1
+            $MKFIFO ${fifodir}/${fifoname} || exit 1
+            mkdir ${absdir} || exit 1
         fi
     done
 }

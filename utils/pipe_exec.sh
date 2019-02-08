@@ -287,6 +287,8 @@ create_basic_dirs()
     mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
 
     mkdir -p ${outd}/scripts || { echo "Error! cannot create scripts directory" >&2; return 1; }
+
+    mkdir -p ${outd}/.fifos || { echo "Error! cannot create fifos directory" >&2; return 1; }
 }
 
 ########
@@ -296,6 +298,15 @@ create_shared_dirs()
     # IMPORTANT NOTE: the following function can only be executed after
     # executing check_pipeline_pars
     create_pipeline_shdirs ${outd}
+}
+
+########
+create_fifos()
+{
+    # Create fifos (named pipes) required by the pipeline steps
+    # IMPORTANT NOTE: the following function can only be executed after
+    # executing check_pipeline_pars
+    create_pipeline_fifos ${outd}/.fifos
 }
 
 ########
@@ -565,6 +576,8 @@ else
         check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
 
         create_shared_dirs
+
+        create_fifos
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: exec_pipeline is being executed for the same output directory" ; exit 1; }
