@@ -112,8 +112,17 @@ get_pfile()
 {
     local command_line_file=$1
     local cmdline=`$TAIL -1 ${command_line_file}`
-    local pfile=`read_opt_value_from_line "$cmdline" "-p"` || return 1
+    local pfile=`read_opt_value_from_line "$cmdline" "--pfile"` || return 1
     echo $pfile
+}
+
+########
+get_sched()
+{
+    local command_line_file=$1
+    local cmdline=`$TAIL -1 ${command_line_file}`
+    local sched=`read_opt_value_from_line "$cmdline" "--sched"` || return 1
+    echo $sched
 }
 
 ########
@@ -144,6 +153,15 @@ replace_outdir_in_cmdline()
 }
 
 ########
+configure_scheduler()
+{
+    local sched=$1
+    if [ ${sched} != ${OPT_NOT_FOUND} ]; then
+        set_panpipe_scheduler ${sched} || return 1
+    fi
+}
+
+########
 process_status_for_pfile()
 {
     local dirname=$1
@@ -154,6 +172,7 @@ process_status_for_pfile()
     local orig_workdir=`get_orig_workdir ${command_line_file}` || return 1
     local cmdline=`get_cmdline ${command_line_file}` || return 1
     local pfile=`get_pfile ${command_line_file}` || return 1
+    local sched=`get_sched ${command_line_file}` || return 1
 
     # Change directory
     cd ${orig_workdir}
@@ -173,7 +192,10 @@ process_status_for_pfile()
 
     # Load pipeline modules
     load_pipeline_modules $pfile || return 1
-        
+
+    # Configure scheduler
+    configure_scheduler $sched || return 1
+    
     # Read information about the steps to be executed
     lineno=1
     pipeline_finished=1
