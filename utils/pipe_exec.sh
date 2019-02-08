@@ -20,23 +20,27 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec            --pfile <string> --outdir <string> [--sched <string>]"
-    echo "                     [--cfgfile <string>] [--showopts|--checkopts|--debug]"
-    echo "                     [--version] [--help]"
+    echo "pipe_exec                 --pfile <string> --outdir <string> [--sched <string>]"
+    echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
+    echo "                          [--cfgfile <string>]"
+    echo "                          [--showopts|--checkopts|--debug]"
+    echo "                          [--version] [--help]"
     echo ""
-    echo "--pfile <string>     File with pipeline steps to be performed (see manual"
-    echo "                     for additional information)"
-    echo "--outdir <string>    Output directory"
-    echo "--sched <string>     Scheduler used to execute the pipeline (if not given,"
-    echo "                     it is determined using information gathered during"
-    echo "                     package configuration)" 
-    echo "--cfgfile <strings>  File with options (options provided in command line"
-    echo "                     overwrite those given in the configuration file)"
-    echo "--showopts           Show pipeline options"
-    echo "--checkopts          Check pipeline options"
-    echo "--debug              Do everything except launching pipeline steps"
-    echo "--version            Display version information and exit"
-    echo "--help               Display this help and exit"
+    echo "--pfile <string>          File with pipeline steps to be performed (see manual"
+    echo "                          for additional information)"
+    echo "--outdir <string>         Output directory"
+    echo "--sched <string>          Scheduler used to execute the pipeline (if not given,"
+    echo "                          it is determined using information gathered during"
+    echo "                          package configuration)" 
+    echo "--dflt-nodes <strings>    Default set of nodes used to execute the pipeline"
+    echo "--dflt-throttle <strings> Default task throttle used when executing job arrays"
+    echo "--cfgfile <strings>       File with options (options provided in command line"
+    echo "                          overwrite those given in the configuration file)"
+    echo "--showopts                Show pipeline options"
+    echo "--checkopts               Check pipeline options"
+    echo "--debug                   Do everything except launching pipeline steps"
+    echo "--version                 Display version information and exit"
+    echo "--help                    Display this help and exit"
 }
 
 ########
@@ -52,6 +56,8 @@ read_pars()
     pfile_given=0
     outdir_given=0
     sched_given=0
+    dflt_nodes_given=0
+    dflt_throttle_given=0
     cfgfile_given=0
     showopts_given=0
     checkopts_given=0
@@ -80,6 +86,18 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       sched=$1
                       sched_given=1
+                  fi
+                  ;;
+            "--dflt-nodes") shift
+                  if [ $# -ne 0 ]; then
+                      dflt_nodes=$1
+                      dflt_nodes_given=1
+                  fi
+                  ;;
+            "--dflt-throttle") shift
+                  if [ $# -ne 0 ]; then
+                      dflt_throttle=$1
+                      dflt_throttle_given=1
                   fi
                   ;;
             "--cfgfile") shift
@@ -181,12 +199,27 @@ reorder_pipeline_file()
 }
 
 ########
-set_scheduler()
+configure_scheduler()
 {
+    echo "* Configuring scheduler..." >&2
+    echo "" >&2
+
     if [ ${sched_given} -eq 1 ]; then
-        echo "* Setting scheduler from value of \"--sched\" option..." >&2
+        echo "** Setting scheduler type from value of \"--sched\" option..." >&2
         set_panpipe_scheduler ${sched} || return 1
         echo "scheduler: ${sched}" >&2
+        echo "" >&2
+    fi
+
+    if [ ${dflt_nodes_given} -eq 1 ]; then
+        echo "** Setting default nodes for pipeline execution... (${dflt_nodes})" >&2
+        set_panpipe_default_nodes ${dflt_nodes} || return 1
+        echo "" >&2
+    fi
+
+    if [ ${dflt_throttle_given} -eq 1 ]; then
+        echo "** Setting default job array task throttle... (${dflt_throttle})" >&2
+        set_panpipe_default_array_task_throttle ${dflt_throttle} || return 1
         echo "" >&2
     fi
 }
@@ -560,7 +593,7 @@ check_pipeline_file || exit 1
 
 reorder_pipeline_file || exit 1
 
-set_scheduler || exit 1
+configure_scheduler || exit 1
 
 load_modules ${pfile} || return 1
 

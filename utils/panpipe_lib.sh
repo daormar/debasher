@@ -49,6 +49,11 @@ declare -A PIPELINE_FIFOS
 # Declare associative array to memoize command line options
 declare -A MEMOIZED_OPTS
 
+# Declare scheduling-related variables
+declare PANPIPE_SCHEDULER
+declare PANPIPE_DEFAULT_NODES
+declare PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=1
+
 # Declare string variable to store last processed command line when
 # memoizing options
 LAST_PROC_LINE_MEMOPTS=""
@@ -180,6 +185,22 @@ set_panpipe_scheduler()
             return 1
             ;;
     esac
+}
+
+########
+set_panpipe_default_nodes()
+{
+    local value=$1
+    
+    PANPIPE_DEFAULT_NODES=$value
+}
+
+########
+set_panpipe_default_array_task_throttle()
+{
+    local value=$1
+    
+    PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=$value
 }
 
 ########
@@ -445,7 +466,11 @@ get_slurm_nodes_opt()
     local nodes=$1
 
     if [ "${nodes}" = ${ATTR_NOT_FOUND} ]; then
-        echo ""
+        if [ "${PANPIPE_DEFAULT_NODES}" != "" ]; then
+            echo "-w ${PANPIPE_DEFAULT_NODES}"
+        else
+            echo ""
+        fi
     else
         echo "-w ${nodes}"
     fi
@@ -689,7 +714,7 @@ get_slurm_job_array_opt()
         echo ""
     else
         if [ "${throttle}" = ${ATTR_NOT_FOUND} ]; then
-            echo "--array=${job_array_list}"
+            echo "--array=${job_array_list}%${PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE}"
         else
             echo "--array=${job_array_list}%${throttle}"
         fi
