@@ -1780,6 +1780,9 @@ define_cmdline_nonmandatory_opt_shdir()
         value=${default_value}
     fi
 
+    # Add option
+    define_opt $opt $value $varname
+
     # Store shared directory name in associative array
     PIPELINE_SHDIRS["-$opt"]=$value
 }
