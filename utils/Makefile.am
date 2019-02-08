@@ -39,6 +39,7 @@ SUFFIXES= .sh .py .r .R
 	echo "FIND="$(FIND) >> $@
 	echo "WC="$(WC) >> $@
 	echo "MKTEMP="$(MKTEMP) >> $@
+	echo "MKFIFO="$(MKFIFO) >> $@
 	echo "FLOCK="$(FLOCK) >> $@
 	echo "GZIP="$(GZIP) >> $@
 	echo "QSUB=\""$(QSUB)"\"" >> $@
