@@ -32,12 +32,25 @@ AFTERANY_JOBDEP_TYPE="afterany"
 # GLOBAL VARIABLES #
 ####################
 
-# Declare associative array to store exit code for processes
-declare -A EXIT_CODE
-
 # Declare associative arrays to store help about pipeline options
 declare -A PIPELINE_OPT_DESC
 declare -A PIPELINE_OPT_TYPE
+
+# Declare associative array to memoize command line options
+declare -A MEMOIZED_OPTS
+
+# Declare string variable to store last processed command line when
+# memoizing options
+LAST_PROC_LINE_MEMOPTS=""
+
+# Declare array used to save option lists for scripts
+declare -a SCRIPT_OPT_LIST_ARRAY
+
+# Declare variable to store name of output directory
+declare PIPELINE_OUTDIR
+
+# Declare associative array to store names of loaded modules
+declare -A PIPELINE_MODULES
 
 # Declare associative arrays to store names of directories
 declare -A PIPELINE_STEPDIRS
@@ -46,20 +59,13 @@ declare -A PIPELINE_SHDIRS
 # Declare associative array to store names of fifos
 declare -A PIPELINE_FIFOS
 
-# Declare associative array to memoize command line options
-declare -A MEMOIZED_OPTS
-
 # Declare scheduling-related variables
 declare PANPIPE_SCHEDULER
 declare PANPIPE_DEFAULT_NODES
 declare PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=1
 
-# Declare string variable to store last processed command line when
-# memoizing options
-LAST_PROC_LINE_MEMOPTS=""
-
-# Declare array used to save option lists for scripts
-declare -a SCRIPT_OPT_LIST_ARRAY
+# Declare associative array to store exit code for processes
+declare -A EXIT_CODE
 
 #####################
 # GENERAL FUNCTIONS #
@@ -166,6 +172,14 @@ serialize_string_array()
     done
 
     echo $result
+}
+
+########
+set_panpipe_outdir()
+{
+    local abs_outd=$1
+
+    PIPELINE_OUTDIR=${abs_outd}
 }
 
 ########
@@ -1118,6 +1132,9 @@ load_pipeline_module()
     # Check that module file exists
     if [ -f ${fullmodname} ]; then
         . ${fullmodname} || return 1
+        # Store module name in associative array
+        PIPELINE_MODULES[${fullmodname}]=1
+        
     else
         return 1
     fi
@@ -1651,6 +1668,24 @@ print_pipeline_opts()
 }
 
 ########
+define_fifo()
+{
+    local fifoname=$1
+
+    # Store name of FIFO in associative array
+    PIPELINE_FIFOS[${fifoname}]=1
+}
+
+########
+define_shared_dir()
+{
+    local shared_dir=$1
+
+    # Store name of shared directory in associative array
+    PIPELINE_SHDIRS[${shared_dir}]=1
+}
+
+########
 define_cmdline_opt()
 {
     local cmdline=$1
@@ -1726,65 +1761,6 @@ define_cmdline_infile_opt()
     
     # Add option
     define_opt $opt $value $varname
-}
-
-########
-define_opt_fifo()
-{
-    local opt=$1
-    local fifoname=$2
-    local varname=$3
-
-    # Add option
-    define_opt $opt $fifoname $varname
-
-    # Store name of FIFO in associative array
-    PIPELINE_FIFOS["-$opt"]=${fifoname}
-}
-
-########
-define_cmdline_opt_shdir()
-{
-    local cmdline=$1
-    local opt=$2
-    local varname=$3
-
-    # Get value for option
-    # local value
-    # value=`read_opt_value_from_line "$cmdline" $opt` || { errmsg "$opt option not found" ; return 1; }
-    read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
-    local value=${_OPT_VALUE_}
-
-    # Add option
-    define_opt $opt $value $varname
-
-    # Store shared directory name in associative array
-    PIPELINE_SHDIRS["-$opt"]=$value
-}
-
-########
-define_cmdline_nonmandatory_opt_shdir()
-{
-    local cmdline=$1
-    local opt=$2
-    local default_value=$3
-    local varname=$4
-
-    # Get value for option
-    # local value
-    # value=`read_opt_value_from_line "$cmdline" $opt`
-    read_opt_value_from_line_memoiz "$cmdline" $opt
-    local value=${_OPT_VALUE_}
-
-    if [ $value = ${OPT_NOT_FOUND} ]; then
-        value=${default_value}
-    fi
-
-    # Add option
-    define_opt $opt $value $varname
-
-    # Store shared directory name in associative array
-    PIPELINE_SHDIRS["-$opt"]=$value
 }
 
 ########
@@ -1914,13 +1890,30 @@ define_indir_opt()
 }
 
 ########
+get_shrdirs_func_name()
+{
+    local absmodname=$1
+
+    local modname=`$BASENAME ${absmodname}`
+
+    echo "${modname}_shared_dirs"
+}
+
+########
 create_pipeline_shdirs()
 {
-    local outd=$1
-
+    # Populate associative array of shared directories for the loaded
+    # modules
+    local absmodname
+    for absmodname in "${!PIPELINE_MODULES[@]}"; do
+        shrdirs_func_name=`get_shrdirs_func_name ${absmodname}`
+        ${shrdirs_func_name}
+    done
+    
+    # Create shared directories
     local dirname
-    for dirname in "${PIPELINE_SHDIRS[@]}"; do
-        absdir=`get_absolute_shdirname $outd $dirname`
+    for dirname in "${!PIPELINE_SHDIRS[@]}"; do
+        absdir=`get_absolute_shdirname $dirname`
         if [ ! -d ${absdir} ]; then
            mkdir ${absdir} || exit 1
         fi
@@ -1928,12 +1921,31 @@ create_pipeline_shdirs()
 }
 
 ########
+get_fifos_func_name()
+{
+    local absmodname=$1
+
+    local modname=`$BASENAME ${absmodname}`
+
+    echo "${modname}_fifos"
+}
+
+########
 create_pipeline_fifos()
 {
-    local fifodir=$1
+    # Obtain name of directory for FIFOS
+    local fifodir=`get_absolute_fifoname`
 
+    # Populate associative array of FIFOS for the loaded modules
+    local absmodname
+    for absmodname in "${!PIPELINE_MODULES[@]}"; do
+        fifos_func_name=`get_fifos_func_name ${absmodname}`
+        ${fifos_func_name}
+    done
+
+    # Create FIFOS
     local fifoname
-    for fifoname in "${PIPELINE_FIFOS[@]}"; do
+    for fifoname in "${!PIPELINE_FIFOS[@]}"; do
         if [ ! -p ${fifodir}/${fifoname} ]; then
             rm -f ${fifodir}/${fifoname} || exit 1
             $MKFIFO ${fifodir}/${fifoname} || exit 1
@@ -1945,48 +1957,15 @@ create_pipeline_fifos()
 ########
 get_absolute_shdirname()
 {
-    local outd=$1
-    local shdirname=$2
-    echo ${outd}/${shdirname}
+    local shdirname=$1
+    echo ${PIPELINE_OUTDIR}/${shdirname}
 }
 
 ########
-get_default_abs_shdirname()
+get_absolute_fifoname()
 {
-    local cmdline=$1
-    local shdiropt=$2
-
-    # Get full path of directory
-    read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
-    local outd=${_OPT_VALUE_}
-    outd=`get_absolute_path ${outd}`
-
-    # Get name of shared dir
-    read_opt_value_from_line_memoiz "$cmdline" "${shdiropt}" || return 1
-    local shdir=${_OPT_VALUE_}
-
-    get_absolute_shdirname $outd $shdir
-}
-
-########
-get_default_nonmandatory_opt_abs_shdirname()
-{
-    local cmdline=$1
-    local shdiropt=$2
-    local default_value=$3
-
-    # Get full path of directory
-    read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
-    local outd=${_OPT_VALUE_}
-    outd=`get_absolute_path ${outd}`
-
-    # Get name of shared dir
-    if read_opt_value_from_line_memoiz "$cmdline" "${shdiropt}"; then
-        local shdir=${_OPT_VALUE_}
-        get_absolute_shdirname $outd $shdir
-    else
-        get_absolute_shdirname $outd ${default_value}
-    fi
+    local fifoname=$1
+    echo ${PIPELINE_OUTDIR}/.fifos/${fifoname}
 }
 
 ########

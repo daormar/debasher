@@ -318,10 +318,12 @@ ensure_exclusive_execution()
 create_basic_dirs()
 {
     mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
-
+    set_panpipe_outdir ${outd}
+    
     mkdir -p ${outd}/scripts || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
-    mkdir -p ${outd}/.fifos || { echo "Error! cannot create fifos directory" >&2; return 1; }
+    fifodir=`get_absolute_fifoname`
+    mkdir -p ${fifodir} || { echo "Error! cannot create fifos directory" >&2; return 1; }
 }
 
 ########
@@ -329,8 +331,8 @@ create_shared_dirs()
 {
     # Create shared directories required by the pipeline steps
     # IMPORTANT NOTE: the following function can only be executed after
-    # executing check_pipeline_pars
-    create_pipeline_shdirs ${outd}
+    # loading pipeline modules
+    create_pipeline_shdirs
 }
 
 ########
@@ -338,8 +340,8 @@ create_fifos()
 {
     # Create fifos (named pipes) required by the pipeline steps
     # IMPORTANT NOTE: the following function can only be executed after
-    # executing check_pipeline_pars
-    create_pipeline_fifos ${outd}/.fifos
+    # loading pipeline modules
+    create_pipeline_fifos
 }
 
 ########
