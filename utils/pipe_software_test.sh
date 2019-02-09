@@ -4,6 +4,22 @@
 # CONSTANTS #
 #############
 
+#################
+# CFG FUNCTIONS #
+#################
+
+########
+pipe_software_test_shared_dirs()
+{
+    define_shared_dir "data"
+}
+
+########
+pipe_software_test_fifos()
+{
+    define_fifo "step_d_fifo"
+}
+
 ###################################
 # PIPELINE SOFTWARE TESTING STEPS #
 ###################################
@@ -53,7 +69,10 @@ step_a()
 ########
 step_b_explain_cmdline_opts()
 {
-    :
+    # -b option
+    description="Value to write to file in data directory (required)"
+    explain_cmdline_opt "-b" "<int>" "$description"
+
 }
 
 ########
@@ -68,6 +87,15 @@ step_b_define_opts()
     # which will have the same name of the step
     define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
 
+    # -b option
+    define_cmdline_opt "$cmdline" "-b" optlist || exit 1
+
+    # Get absolute name of shared directory
+    abs_shrdir=`get_absolute_shdirname "data"`
+
+    # Define option for FIFO
+    define_opt "-datadir" ${abs_shrdir} optlist || exit 1
+
     # Save option list
     save_opt_list optlist
 }
@@ -79,10 +107,15 @@ step_b()
 
     # Initialize variables
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local value=`read_opt_value_from_line "$*" "-b"`
+    local datadir=`read_opt_value_from_line "$*" "-datadir"`
 
     # sleep some time
     sleep 10
 
+    # Write value to file
+    echo "$value" > ${datadir}/step_b.out
+    
     display_end_step_message
 }
 
@@ -146,4 +179,96 @@ step_c_clean()
     rm ${step_outd}/${id}_aux    
 
     logmsg "Cleaning finished"
+}
+
+########
+step_d_explain_cmdline_opts()
+{
+    :
+}
+
+########
+step_d_define_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local jobspec=$2
+    local optlist=""
+    
+    # Define the -step-outd option, the output directory for the step,
+    # which will have the same name of the step
+    define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
+
+    # Get absolute name of FIFO
+    abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
+
+    # Define option for FIFO
+    define_opt "-fifo" ${abs_fifoname} optlist || exit 1
+        
+    # Save option list
+    save_opt_list optlist
+}
+
+########
+step_d()
+{
+    display_begin_step_message
+
+    # Initialize variables
+    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local fifo=`read_opt_value_from_line "$*" "-fifo"`
+
+    # Write string to FIFO
+    echo "Hello World" > ${fifo}
+    
+    # sleep some time
+    sleep 10
+
+    display_end_step_message
+}
+
+########
+step_e_explain_cmdline_opts()
+{
+    :
+}
+
+########
+step_e_define_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local jobspec=$2
+    local optlist=""
+    
+    # Define the -step-outd option, the output directory for the step,
+    # which will have the same name of the step
+    define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
+
+    # Get absolute name of FIFO
+    abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
+
+    # Define option for FIFO
+    define_opt "-fifo" ${abs_fifoname} optlist || exit 1
+        
+    # Save option list
+    save_opt_list optlist
+}
+
+########
+step_e()
+{
+    display_begin_step_message
+
+    # Initialize variables
+    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local fifo=`read_opt_value_from_line "$*" "-fifo"`
+
+    # Write string to FIFO
+    cat < ${fifo}
+    
+    # sleep some time
+    sleep 10
+
+    display_end_step_message
 }
