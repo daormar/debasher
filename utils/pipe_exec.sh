@@ -242,13 +242,13 @@ show_pipeline_opts()
     echo "* Pipeline options..." >&2
 
     # Read information about the steps to be executed
-    local jobspec
-    while read jobspec; do
-        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
-        if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
-            local stepname=`extract_stepname_from_jobspec "$jobspec"`
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
             local script_explain_cmdline_opts_funcname=`get_script_explain_cmdline_opts_funcname ${stepname}`
             ${script_explain_cmdline_opts_funcname} || exit 1
         fi
@@ -270,13 +270,13 @@ check_pipeline_opts()
     local pfile=$2
         
     # Read information about the steps to be executed
-    while read jobspec; do
-        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
-        if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
-            local stepname=`extract_stepname_from_jobspec "$jobspec"`
-            define_opts_for_script "${cmdline}" "${jobspec}" || return 1
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            define_opts_for_script "${cmdline}" "${stepspec}" || return 1
             local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
             local serial_script_opts=`serialize_string_array "script_opts_array" " ||| " ${MAX_NUM_SCRIPT_OPTS_TO_DISPLAY}`
             echo "STEP: ${stepname} ; OPTIONS: ${serial_script_opts}" >&2
@@ -352,16 +352,16 @@ print_command_line()
 }
 
 ########
-get_jobdeps_from_detailed_spec()
+get_stepdeps_from_detailed_spec()
 {
-    local jobdeps_spec=$1
+    local stepdeps_spec=$1
     local jdeps=""
 
     # Iterate over the elements of the job specification: type1:stepname1,...,typen:stepnamen
     prevIFS=$IFS
     IFS=','
     local dep_spec
-    for dep_spec in ${jobdeps_spec}; do
+    for dep_spec in ${stepdeps_spec}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
         local step=`get_stepname_part_in_dep ${dep_spec}`
         
@@ -381,15 +381,15 @@ get_jobdeps_from_detailed_spec()
 }
 
 ########
-get_jobdeps()
+get_stepdeps()
 {
-    local jobdeps_spec=$1
-    case ${jobdeps_spec} in
+    local stepdeps_spec=$1
+    case ${stepdeps_spec} in
             "afterok:all") apply_deptype_to_jobids ${step_jids} afterok
                     ;;
             "none") echo ""
                     ;;
-            *) get_jobdeps_from_detailed_spec ${jobdeps_spec}
+            *) get_stepdeps_from_detailed_spec ${stepdeps_spec}
                ;;
     esac
 }
@@ -438,22 +438,22 @@ execute_step()
     local fullmodnames=$2
     local dirname=$3
     local stepname=$4
-    local jobspec=$5
+    local stepspec=$5
     
     # Execute step
 
     # Initialize script variables
     local script_filename=`get_script_filename ${dirname} ${stepname}`
-    local step_function=`get_step_function ${stepname}`
-    local step_function_clean=`get_step_function_clean ${stepname}`
-    define_opts_for_script "${cmdline}" "${jobspec}" || return 1
+    local step_function=`get_name_of_step_function ${stepname}`
+    local step_function_clean=`get_name_of_step_function_clean ${stepname}`
+    define_opts_for_script "${cmdline}" "${stepspec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
     local job_array_list=`get_job_array_list ${script_filename} ${array_size}`
     
     ## Obtain step status
     local status=`get_step_status ${dirname} ${stepname}`
-    echo "STEP: ${stepname} ; STATUS: ${status} ; JOBSPEC: ${jobspec}" >&2
+    echo "STEP: ${stepname} ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
 
     ## Decide whether the step should be executed
     if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
@@ -472,10 +472,10 @@ execute_step()
             local remove=0
             prepare_outdir_for_step ${dirname} ${stepname} ${remove} || return 1
         fi
-        local jobdeps_spec=`extract_jobdeps_from_jobspec "$jobspec"`
-        local jobdeps="`get_jobdeps ${jobdeps_spec}`"
+        local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
+        local stepdeps="`get_stepdeps ${stepdeps_spec}`"
         local stepname_jid=${stepname}_jid
-        launch ${script_filename} "${job_array_list}" "${jobspec}" "${jobdeps}" ${stepname_jid} || return 1
+        launch ${script_filename} "${job_array_list}" "${stepspec}" "${stepdeps}" ${stepname_jid} || return 1
         
         # Update variables storing jids
         step_jids="${step_jids}:${!stepname_jid}"
@@ -504,17 +504,17 @@ debug_step()
     local fullmodnames=$2
     local dirname=$3
     local stepname=$4
-    local jobspec=$5
+    local stepspec=$5
     
     # Debug step
 
     ## Obtain step status
     local status=`get_step_status ${dirname} ${stepname}`
-    echo "STEP: ${stepname} ; STATUS: ${status} ; JOBSPEC: ${jobspec}" >&2
+    echo "STEP: ${stepname} ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
 
     ## Obtain step options
     local script_define_opts_funcname=`get_script_define_opts_funcname ${stepname}`
-    ${script_define_opts_funcname} "${cmdline}" "${jobspec}" || return 1
+    ${script_define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
 }
 
 ########
@@ -538,19 +538,19 @@ execute_pipeline_steps()
     local step_jids=""
     
     # Read information about the steps to be executed
-    local jobspec
-    while read jobspec; do
-        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
-        if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step name
-            local stepname=`extract_stepname_from_jobspec "$jobspec"`
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
             # Decide whether to execute or debug step
             if [ $debug -eq 0 ]; then
-                execute_step "${cmdline}" "${fullmodnames}" ${dirname} ${stepname} "${jobspec}" || return 1
+                execute_step "${cmdline}" "${fullmodnames}" ${dirname} ${stepname} "${stepspec}" || return 1
             else
-                debug_step "${cmdline}" "${fullmodnames}" ${dirname} ${stepname} "${jobspec}" || return 1                
+                debug_step "${cmdline}" "${fullmodnames}" ${dirname} ${stepname} "${stepspec}" || return 1                
             fi
         fi
     done < ${outd}/reordered_pipeline.csv

@@ -37,13 +37,9 @@ step_a_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local jobspec=$2
+    local stepspec=$2
     local optlist=""
     
-    # Define the -step-outd option, the output directory for the step,
-    # which will have the same name of the step
-    define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
-
     # -a option
     define_cmdline_opt "$cmdline" "-a" optlist || exit 1
 
@@ -57,7 +53,6 @@ step_a()
     display_begin_step_message
 
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local sleep_time=`read_opt_value_from_line "$*" "-a"`
 
     # sleep some time
@@ -80,13 +75,9 @@ step_b_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local jobspec=$2
+    local stepspec=$2
     local optlist=""
     
-    # Define the -step-outd option, the output directory for the step,
-    # which will have the same name of the step
-    define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
-
     # -b option
     define_cmdline_opt "$cmdline" "-b" optlist || exit 1
 
@@ -106,7 +97,6 @@ step_b()
     display_begin_step_message
 
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local value=`read_opt_value_from_line "$*" "-b"`
     local datadir=`read_opt_value_from_line "$*" "-datadir"`
 
@@ -130,12 +120,12 @@ step_c_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local jobspec=$2
+    local stepspec=$2
     local basic_optlist=""
-    
-    # Define the -step-outd option, the output directory for the step,
-    # which will have the same name of the step
-    define_default_step_outd_opt "$cmdline" "$jobspec" basic_optlist || exit 1
+
+    # Define the -step-outd option, the output directory for the step
+    local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
+    define_opt "-step-outd" ${step_outd} basic_optlist || exit 1
 
     # Save option list so as to execute step four times
     for id in 1 2 3 4; do
@@ -192,12 +182,8 @@ step_d_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local jobspec=$2
+    local stepspec=$2
     local optlist=""
-    
-    # Define the -step-outd option, the output directory for the step,
-    # which will have the same name of the step
-    define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
 
     # Get absolute name of FIFO
     abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
@@ -215,7 +201,6 @@ step_d()
     display_begin_step_message
 
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local fifo=`read_opt_value_from_line "$*" "-fifo"`
 
     # Write string to FIFO
@@ -238,13 +223,9 @@ step_e_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local jobspec=$2
+    local stepspec=$2
     local optlist=""
     
-    # Define the -step-outd option, the output directory for the step,
-    # which will have the same name of the step
-    define_default_step_outd_opt "$cmdline" "$jobspec" optlist || exit 1
-
     # Get absolute name of FIFO
     abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
 
@@ -261,7 +242,6 @@ step_e()
     display_begin_step_message
 
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local fifo=`read_opt_value_from_line "$*" "-fifo"`
 
     # Write string to FIFO

@@ -201,12 +201,12 @@ process_status_for_pfile()
     pipeline_finished=1
     pipeline_in_progress=1
     pipeline_one_or_more_steps_in_progress=0
-    while read jobspec; do
-        local jobspec_comment=`pipeline_jobspec_is_comment "$jobspec"`
-        local jobspec_ok=`pipeline_jobspec_is_ok "$jobspec"`
-        if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "yes" ]; then
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
-            local stepname=`extract_stepname_from_jobspec "$jobspec"`
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
             # If s option was given, continue to next iteration if step
             # name does not match with the given one
@@ -214,7 +214,7 @@ process_status_for_pfile()
                 continue
             fi
 
-            define_opts_for_script "${cmdline}" "${jobspec}" || return 1
+            define_opts_for_script "${cmdline}" "${stepspec}" || return 1
 
             # Check step status
             local status=`get_step_status ${absdirname} ${stepname}`
@@ -238,7 +238,7 @@ process_status_for_pfile()
             fi
             
         else
-            if [ ${jobspec_comment} = "no" -a ${jobspec_ok} = "no" ]; then
+            if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "no" ]; then
                 echo "Error: incorrect job specification at line $lineno of ${pfile}" >&2
                 return 1
             fi
