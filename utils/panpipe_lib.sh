@@ -1739,6 +1739,25 @@ define_cmdline_nonmandatory_opt()
 }
 
 ########
+define_cmdline_opt_if_given()
+{
+    local cmdline=$1
+    local opt=$2
+    local varname=$3
+
+    # Get value for option
+    # local value
+    # value=`read_opt_value_from_line "$cmdline" $opt`
+    read_opt_value_from_line_memoiz "$cmdline" $opt
+    local value=${_OPT_VALUE_}
+
+    if [ $value != ${OPT_NOT_FOUND} ]; then
+        # Add option
+        define_opt $opt $value $varname
+    fi
+}
+
+########
 define_cmdline_infile_opt()
 {
     local cmdline=$1
