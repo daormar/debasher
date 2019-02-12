@@ -17,7 +17,7 @@ pipe_software_test_shared_dirs()
 ########
 pipe_software_test_fifos()
 {
-    define_fifo "step_d_fifo"
+    define_fifo "step_d_fifo" step_d
 }
 
 ###################################
