@@ -1691,9 +1691,16 @@ print_pipeline_opts()
 define_fifo()
 {
     local fifoname=$1
+    local stepname=$2
 
-    # Store name of FIFO in associative array
-    PIPELINE_FIFOS[${fifoname}]=1
+    # Check if FIFO was previously defined
+    if [ "${PIPELINE_FIFOS[${fifoname}]}" != "" ]; then
+        errmsg "Error: FIFO was previously defined (${fifoname})"
+        return 1
+    else
+        # Store name of FIFO in associative array
+        PIPELINE_FIFOS[${fifoname}]=${stepname}
+    fi
 }
 
 ########
@@ -1950,22 +1957,28 @@ get_fifos_func_name()
 }
 
 ########
-create_pipeline_fifos()
+register_pipeline_fifos()
 {
-    # Obtain name of directory for FIFOS
-    local fifodir=`get_absolute_fifoname`
-
     # Populate associative array of FIFOS for the loaded modules
     local absmodname
     for absmodname in "${!PIPELINE_MODULES[@]}"; do
         fifos_func_name=`get_fifos_func_name ${absmodname}`
         ${fifos_func_name}
     done
+}
+
+########
+prepare_fifos_owned_by_step()
+{
+    local stepname=$1
+
+    # Obtain name of directory for FIFOS
+    local fifodir=`get_absolute_fifoname`
 
     # Create FIFOS
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        if [ ! -p ${fifodir}/${fifoname} ]; then
+        if [ ${PIPELINE_FIFOS[${fifoname}]} = "${stepname}" ]; then         
             rm -f ${fifodir}/${fifoname} || exit 1
             $MKFIFO ${fifodir}/${fifoname} || exit 1
         fi

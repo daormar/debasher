@@ -336,12 +336,12 @@ create_shared_dirs()
 }
 
 ########
-create_fifos()
+register_fifos()
 {
-    # Create fifos (named pipes) required by the pipeline steps
+    # Register FIFOs (named pipes) required by the pipeline steps
     # IMPORTANT NOTE: the following function can only be executed after
     # loading pipeline modules
-    create_pipeline_fifos
+    register_pipeline_fifos
 }
 
 ########
@@ -463,15 +463,16 @@ execute_step()
         # Archive script
         archive_script ${script_filename}
 
-        # Execute script
+        # Prepare files and directories for step
         reset_scriptdir_for_step ${script_filename} || return 1
+        local remove=0
         if [ ${array_size} -eq 1 ]; then
-            local remove=1
-            prepare_outdir_for_step ${dirname} ${stepname} ${remove} || return 1
-        else
-            local remove=0
-            prepare_outdir_for_step ${dirname} ${stepname} ${remove} || return 1
+            remove=1
         fi
+        prepare_outdir_for_step ${dirname} ${stepname} ${remove} || return 1
+        prepare_fifos_owned_by_step ${stepname}
+        
+        # Execute script
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
         local stepname_jid=${stepname}_jid
@@ -484,7 +485,7 @@ execute_step()
         write_step_id_to_file ${dirname} ${stepname} ${!stepname_jid}
     else
         local script_filename=`get_script_filename ${dirname} ${stepname}`
-        prev_script_older=0
+        local prev_script_older=0
         check_script_is_older_than_modules ${script_filename} "${fullmodnames}" || prev_script_older=1
         if [ ${prev_script_older} -eq 1 ]; then
             if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
@@ -612,7 +613,7 @@ else
 
         create_shared_dirs
 
-        create_fifos
+        register_fifos
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: exec_pipeline is being executed for the same output directory" ; exit 1; }
