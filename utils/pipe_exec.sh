@@ -598,7 +598,7 @@ reorder_pipeline_file || exit 1
 
 configure_scheduler || exit 1
 
-load_modules ${pfile} || return 1
+load_modules ${pfile} || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
     show_pipeline_opts || exit 1
