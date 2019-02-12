@@ -4,13 +4,13 @@
 import io, sys, getopt, operator
 
 # Constants
-NONE_JOB_DEP="none"
+NONE_STEP_DEP="none"
 
 ##################################################
-class jobdep_data:
+class stepdep_data:
     def __init__(self):
         self.deptype=None
-        self.jobname=None
+        self.stepname=None
 
 ##################################################
 def take_pars():
@@ -78,160 +78,163 @@ def entry_is_config(entry):
         return False
 
 ##################################################
-def extract_job_name(entry):
+def extract_step_name(entry):
     fields=entry.split()
     return fields[0]
 
 ##################################################
-def extract_job_deps(entry):
+def extract_step_deps(entry):
     # extract text field
     fields=entry.split()
     for f in fields:
-        if f.find("jobdeps=")==0:
-            jdeps_str=f[8:]
+        if f.find("stepdeps=")==0:
+            jdeps_str=f[9:]
 
-    # Return empty list of job dependencies if corresponding field was
+    # Return empty list of step dependencies if corresponding field was
     # not found
     if len(jdeps_str)==0:
         return []
     
-    # create list of job dependencies
+    # create list of step dependencies
     jdeps_list=[]
     jdeps_fields=jdeps_str.split(",")
     for jdep in jdeps_fields:
-        if jdep!=NONE_JOB_DEP:
+        if jdep!=NONE_STEP_DEP:
             jdep_fields=jdep.split(":")
-            data=jobdep_data()
-            data.deptype=jdep_fields[0]
-            data.jobname=jdep_fields[1]
-            jdeps_list.append(data)
+            if(len(jdep_fields)==2):
+                data=stepdep_data()
+                data.deptype=jdep_fields[0]
+                data.stepname=jdep_fields[1]
+                jdeps_list.append(data)
+            else:
+                print >> sys.stderr, "Error: incorrect definition of step dependency (",jdeps_str,")"
         
     return jdeps_list
 
 ##################################################
 def extract_config_entries(pfile):
-    job_entries=[]
+    step_entries=[]
     file = open(pfile, 'r')
     # read file entry by entry
     for entry in file:
         entry=entry.strip("\n")
         if entry_is_config(entry):
-            job_entries.append(entry)
+            step_entries.append(entry)
             
-    return job_entries
+    return step_entries
 
 ##################################################
-def extract_job_entries(pfile):
-    job_entries=[]
+def extract_step_entries(pfile):
+    step_entries=[]
     file = open(pfile, 'r')
     # read file entry by entry
     for entry in file:
         entry=entry.strip("\n")
         if not entry_is_comment(entry):
-            job_entries.append(entry)
+            step_entries.append(entry)
             
-    return job_entries
+    return step_entries
 
 ##################################################
-def create_jobdeps_map(job_entries):
-    jobdeps_map={}
-    for entry in job_entries:
-        jname=extract_job_name(entry)
-        deps=extract_job_deps(entry)
-        jobdeps_map[jname]=deps
-    return jobdeps_map
+def create_stepdeps_map(step_entries):
+    stepdeps_map={}
+    for entry in step_entries:
+        jname=extract_step_name(entry)
+        deps=extract_step_deps(entry)
+        stepdeps_map[jname]=deps
+    return stepdeps_map
 
 ##################################################
-def jobnames_duplicated(job_entries):
-    jobnames=set()
+def stepnames_duplicated(step_entries):
+    stepnames=set()
     lineno=1
-    for entry in job_entries:
-        jname=extract_job_name(entry)
-        if jname in jobnames:
-            print >> sys.stderr, "Error: duplicated job name in line",lineno
+    for entry in step_entries:
+        jname=extract_step_name(entry)
+        if jname in stepnames:
+            print >> sys.stderr, "Error: duplicated step name in line",lineno
             return True
         else:
-            jobnames.add(jname)
+            stepnames.add(jname)
         lineno=lineno+1
     return False
     
 ##################################################
-def depnames_correct(jobdeps_map):
-    jobnames=set()
-    jobdepnames=set()
+def depnames_correct(stepdeps_map):
+    stepnames=set()
+    stepdepnames=set()
 
-    # Obtain sets of job names and names of job dependencies
-    for jobname in jobdeps_map:
-        jobnames.add(jobname)
-        for elem in jobdeps_map[jobname]:
-            jobdepnames.add(elem.jobname)
+    # Obtain sets of step names and names of step dependencies
+    for stepname in stepdeps_map:
+        stepnames.add(stepname)
+        for elem in stepdeps_map[stepname]:
+            stepdepnames.add(elem.stepname)
 
-    for name in jobdepnames:
-        if name not in jobnames:
-            print >> sys.stderr, "Error: unrecognized job dependency",name
+    for name in stepdepnames:
+        if name not in stepnames:
+            print >> sys.stderr, "Error: unrecognized step dependency",name
             return False
 
     return True
 
 ##################################################
-def jobname_can_be_added(jname,processed_jobs,jobdeps_map):
-    # Check if job name has already been added
-    if jname in processed_jobs:
+def stepname_can_be_added(jname,processed_steps,stepdeps_map):
+    # Check if step name has already been added
+    if jname in processed_steps:
         return False
 
-    # Check if all dependencies for job name were processed
-    for elem in jobdeps_map[jname]:
-        if(elem.jobname not in processed_jobs):
+    # Check if all dependencies for step name were processed
+    for elem in stepdeps_map[jname]:
+        if(elem.stepname not in processed_steps):
             return False
     
     return True
     
 ##################################################
-def order_job_entries(job_entries,jobdeps_map,ordered_job_entries):
-    processed_jobs=set()
-    # Add jobs to ordered jobs list incrementally
-    while len(processed_jobs)!=len(jobdeps_map):
-        prev_proc_jobs_len=len(processed_jobs)
-        # Explore list of job entries
-        for entry in job_entries:
-            jname=extract_job_name(entry)
-            if(jobname_can_be_added(jname,processed_jobs,jobdeps_map)):
-                processed_jobs.add(jname)
-                ordered_job_entries.append(entry)
-        # Check if no jobs were added
-        if(prev_proc_jobs_len==len(processed_jobs)):
+def order_step_entries(step_entries,stepdeps_map,ordered_step_entries):
+    processed_steps=set()
+    # Add steps to ordered steps list incrementally
+    while len(processed_steps)!=len(stepdeps_map):
+        prev_proc_steps_len=len(processed_steps)
+        # Explore list of step entries
+        for entry in step_entries:
+            jname=extract_step_name(entry)
+            if(stepname_can_be_added(jname,processed_steps,stepdeps_map)):
+                processed_steps.add(jname)
+                ordered_step_entries.append(entry)
+        # Check if no steps were added
+        if(prev_proc_steps_len==len(processed_steps)):
             print >> sys.stderr, "Error: the analysis file contains at least one cycle"
-            return ordered_job_entries
+            return ordered_step_entries
         
-    return ordered_job_entries
+    return ordered_step_entries
     
 ##################################################
-def jobdeps_correct(job_entries,jobdeps_map,ordered_job_entries):
+def stepdeps_correct(step_entries,stepdeps_map,ordered_step_entries):
 
-    # Check existence of duplicated jobs
-    if(jobnames_duplicated(job_entries)):
+    # Check existence of duplicated steps
+    if(stepnames_duplicated(step_entries)):
         return False
     
     # Check dependency names
-    if(not depnames_correct(jobdeps_map)):
+    if(not depnames_correct(stepdeps_map)):
         return False
 
-    # Reorder job entries
-    order_job_entries(job_entries,jobdeps_map,ordered_job_entries)
-    if(len(job_entries)!=len(ordered_job_entries)):
+    # Reorder step entries
+    order_step_entries(step_entries,stepdeps_map,ordered_step_entries)
+    if(len(step_entries)!=len(ordered_step_entries)):
         return False
     
     return True
 
 ##################################################
-def print_entries(config_entries,job_entries):
+def print_entries(config_entries,step_entries):
     for e in config_entries:
         print e
-    for e in job_entries:
+    for e in step_entries:
         print e
 
 ##################################################
-def print_graph(ordered_job_entries,jobdeps_map):
+def print_graph(ordered_step_entries,stepdeps_map):
     # Print header
     print "digraph G {"
 #    print "rankdir=LR;"
@@ -242,13 +245,13 @@ def print_graph(ordered_job_entries,jobdeps_map):
     # Set representation for steps
     print "node [shape = ellipse];"
 
-    # Process jobs
-    for job in jobdeps_map:
-        if len(jobdeps_map[job])==0:
-            print "start","->",job, "[ label= \"\" ,","color = black ];"            
+    # Process steps
+    for step in stepdeps_map:
+        if len(stepdeps_map[step])==0:
+            print "start","->",step, "[ label= \"\" ,","color = black ];"            
         else:
-            for elem in jobdeps_map[job]:
-                print elem.jobname,"->",job, "[ label= \""+elem.deptype+"\" ,","color = black ];"
+            for elem in stepdeps_map[step]:
+                print elem.stepname,"->",step, "[ label= \""+elem.deptype+"\" ,","color = black ];"
     
     # Print footer
     print "}"
@@ -256,15 +259,15 @@ def print_graph(ordered_job_entries,jobdeps_map):
 ##################################################
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
-    job_entries=extract_job_entries(values["pfile"])
-    jobdeps_map=create_jobdeps_map(job_entries)
-    ordered_job_entries=[]
-    if(jobdeps_correct(job_entries,jobdeps_map,ordered_job_entries)):
+    step_entries=extract_step_entries(values["pfile"])
+    stepdeps_map=create_stepdeps_map(step_entries)
+    ordered_step_entries=[]
+    if(stepdeps_correct(step_entries,stepdeps_map,ordered_step_entries)):
         print >> sys.stderr, "Pipeline file is correct"
         if(flags["r_given"]):
-            print_entries(config_entries,ordered_job_entries)
+            print_entries(config_entries,ordered_step_entries)
         elif(flags["g_given"]):
-            print_graph(ordered_job_entries,jobdeps_map)
+            print_graph(ordered_step_entries,stepdeps_map)
     else:
         print >> sys.stderr, "Pipeline file is not correct"
         return 1
