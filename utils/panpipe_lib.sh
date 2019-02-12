@@ -52,8 +52,7 @@ declare PIPELINE_OUTDIR
 # Declare associative array to store names of loaded modules
 declare -A PIPELINE_MODULES
 
-# Declare associative arrays to store names of directories
-declare -A PIPELINE_STEPDIRS
+# Declare associative array to store name of shared directories
 declare -A PIPELINE_SHDIRS
 
 # Declare associative array to store names of fifos
@@ -520,7 +519,7 @@ remove_suffix_from_stepname()
 }
 
 ########
-get_step_function()
+get_name_of_step_function()
 {
     local stepname=$1
 
@@ -530,7 +529,7 @@ get_step_function()
 }
 
 ########
-get_step_function_clean()
+get_name_of_step_function_clean()
 {
     local stepname=$1
 
@@ -544,6 +543,26 @@ get_step_function_clean()
     
     if [ ${funct_exists} -eq 1 ]; then
         echo ${step_function_clean}
+    else
+        echo ${FUNCT_NOT_FOUND}
+    fi
+}
+
+########
+get_name_of_step_function_outdir()
+{
+    local stepname=$1
+
+    local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
+
+    local step_function_outdir="${stepname_wo_suffix}_outdir_basename"
+
+    local funct_exists=1
+
+    type ${step_function_outdir} >/dev/null 2>&1 || funct_exists=0
+    
+    if [ ${funct_exists} -eq 1 ]; then
+        echo ${step_function_outdir}
     else
         echo ${FUNCT_NOT_FOUND}
     fi
@@ -573,25 +592,25 @@ get_script_define_opts_funcname()
 define_opts_for_script()
 {
     local cmdline=$1
-    local jobspec=$2
-    local stepname=`extract_stepname_from_jobspec "$jobspec"`
+    local stepspec=$2
+    local stepname=`extract_stepname_from_stepspec "$stepspec"`
     
     clear_opt_list_array
     local script_define_opts_funcname=`get_script_define_opts_funcname ${stepname}`
-    ${script_define_opts_funcname} "${cmdline}" "${jobspec}" || return 1
+    ${script_define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
 }
 
 ########
 find_dependency_for_step()
 {
-    local jobspec=$1
+    local stepspec=$1
     local stepname_part=$2
 
-    local jobdeps=`extract_jobdeps_from_jobspec "$jobspec"`
+    local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
     local prevIFS=$IFS
     IFS=','
     local dep
-    for dep in ${jobdeps}; do
+    for dep in ${stepdeps}; do
         local stepname_part_in_dep=`get_stepname_part_in_dep ${dep}`
         if [ "${stepname_part_in_dep}" = ${stepname_part} ]; then
             echo ${dep}
@@ -605,17 +624,15 @@ find_dependency_for_step()
 }
 
 ########
-get_default_outd_for_dep()
+get_outd_for_dep()
 {
-    local cmdline=$1
-    local dep=$2
+    local dep=$1
 
     if [ -z "${dep}" ]; then
         echo ""
     else
         # Get name of output directory
-        read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
-        local outd=${_OPT_VALUE_}
+        local outd=${PIPELINE_OUTDIR}
 
         # Get stepname
         local stepname_part=`echo ${dep} | $AWK -F ":" '{print $2}'`
@@ -625,16 +642,16 @@ get_default_outd_for_dep()
 }
 
 ########
-get_default_outd_for_dep_given_jobspec()
+get_outd_for_dep_given_stepspec()
 {
-    local jobspec=$1
+    local stepspec=$1
     local depname=$2
     
-    local dep=`find_dependency_for_step "${jobspec}" $depname`
+    local dep=`find_dependency_for_step "${stepspec}" $depname`
     if [ ${dep} = ${DEP_NOT_FOUND} ]; then
         return 1
     else
-        local outd=`get_default_outd_for_dep "${cmdline}" "${dep}"`
+        local outd=`get_outd_for_dep "${dep}"`
         echo ${outd}
         return 0
     fi
@@ -666,13 +683,13 @@ apply_deptype_to_jobids()
 ########
 get_slurm_dependency_opt()
 {
-    local jobdeps=$1
+    local stepdeps=$1
 
     # Create dependency option
-    if [ "${jobdeps}" = ${ATTR_NOT_FOUND} -o "${jobdeps}" = "" ]; then
+    if [ "${stepdeps}" = ${ATTR_NOT_FOUND} -o "${stepdeps}" = "" ]; then
         echo ""
     else
-        echo "--dependency=${jobdeps}"
+        echo "--dependency=${stepdeps}"
     fi
 }
 
@@ -781,13 +798,13 @@ get_exit_code()
 wait_for_deps_builtin_scheduler()
 {
     # Initialize variables
-    local jobdeps=$1
+    local stepdeps=$1
 
     # Iterate over dependencies
     local prevIFS=$IFS
     IFS=','
     local dep
-    for dep in ${jobdeps}; do
+    for dep in ${stepdeps}; do
         # Extract information from dependency
         local deptype=`get_deptype_part_in_dep ${dep}`
         local pid=`get_id_part_in_dep ${dep}`
@@ -871,7 +888,7 @@ builtin_scheduler_launch()
     # Initialize variables
     local file=$1
     local job_array_list=$2
-    local jobdeps=$3
+    local stepdeps=$3
     local outvar=$4
     local base_fname=`$BASENAME $file`
     
@@ -897,7 +914,7 @@ builtin_scheduler_launch()
     IFS=${prevIFS}
 
     # Execute file
-    if wait_for_deps_builtin_scheduler "${jobdeps}"; then
+    if wait_for_deps_builtin_scheduler "${stepdeps}"; then
         ${file} > ${file}.log 2>&1 &
         local pid=$!
         eval "${outvar}='${pid}'"
@@ -913,18 +930,18 @@ slurm_launch()
     # Initialize variables
     local file=$1
     local job_array_list=$2
-    local jobspec=$3
-    local jobdeps=$4
+    local stepspec=$3
+    local stepdeps=$4
     local outvar=$5
 
     # Retrieve specification
-    local cpus=`extract_attr_from_jobspec "$jobspec" "cpus"`
-    local mem=`extract_attr_from_jobspec "$jobspec" "mem"`
-    local time=`extract_attr_from_jobspec "$jobspec" "time"`
-    local account=`extract_attr_from_jobspec "$jobspec" "account"`
-    local partition=`extract_attr_from_jobspec "$jobspec" "partition"`
-    local nodes=`extract_attr_from_jobspec "$jobspec" "nodes"`
-    local task_array_throttle=`extract_attr_from_jobspec "$jobspec" "throttle"`
+    local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
+    local mem=`extract_attr_from_stepspec "$stepspec" "mem"`
+    local time=`extract_attr_from_stepspec "$stepspec" "time"`
+    local account=`extract_attr_from_stepspec "$stepspec" "account"`
+    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
+    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
+    local task_array_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
 
     # Define options for sbatch
     local cpus_opt=`get_slurm_cpus_opt ${cpus}`
@@ -933,7 +950,7 @@ slurm_launch()
     local account_opt=`get_slurm_account_opt ${account}`
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
-    local dependency_opt=`get_slurm_dependency_opt "${jobdeps}"`
+    local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
     local jobarray_opt=`get_slurm_job_array_opt ${file} ${job_array_list} ${task_array_throttle}`
     
     # Submit job
@@ -953,19 +970,19 @@ launch()
     # Initialize variables
     local file=$1
     local job_array_list=$2
-    local jobspec=$3
-    local jobdeps=$4
+    local stepspec=$3
+    local stepdeps=$4
     local outvar=$5
     
     # Launch file
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${file} "${job_array_list}" "${jobspec}" "${jobdeps}" ${outvar}
+            slurm_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar}
             ;;
 
         *) # Built-in scheduler will be used
-            builtin_scheduler_launch ${file} "${job_array_list}" "${jobdeps}" ${outvar}
+            builtin_scheduler_launch ${file} "${job_array_list}" "${stepdeps}" ${outvar}
             ;;
     esac
 }
@@ -976,8 +993,8 @@ launch_step()
     # Initialize variables
     local stepname=$1
     local job_array_list=$2
-    local jobspec=$3
-    local jobdeps=$4
+    local stepspec=$3
+    local stepdeps=$4
     local opts_array_name=$5
     local jid=$6
 
@@ -985,7 +1002,7 @@ launch_step()
     create_script ${tmpdir}/scripts/${stepname} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
-    launch ${tmpdir}/scripts/${stepname} ${job_array_list} "${jobspec}" ${jobdeps} ${jid} || return 1
+    launch ${tmpdir}/scripts/${stepname} ${job_array_list} "${stepspec}" ${stepdeps} ${jid} || return 1
 }
 
 ########
@@ -998,10 +1015,10 @@ get_step_info()
 }
 
 ########
-pipeline_jobspec_is_comment()
+pipeline_stepspec_is_comment()
 {
-    local jobspec=$1
-    local fields=( $jobspec )
+    local stepspec=$1
+    local fields=( $stepspec )
     if [[ "${fields[0]}" = \#* ]]; then
         echo "yes"
     else
@@ -1010,14 +1027,14 @@ pipeline_jobspec_is_comment()
 }
 
 ########
-pipeline_jobspec_is_ok()
+pipeline_stepspec_is_ok()
 {
-    local jobspec=$1
+    local stepspec=$1
 
     local fieldno=1
     local field
-    for field in $jobspec; do
-        if [[ ${field} = "jobdeps="* ]]; then
+    for field in $stepspec; do
+        if [[ ${field} = "stepdeps="* ]]; then
             if [ $fieldno -ge 2 ]; then
                 echo "yes"
                 return 0
@@ -1030,13 +1047,13 @@ pipeline_jobspec_is_ok()
 }
 
 ########
-extract_attr_from_jobspec()
+extract_attr_from_stepspec()
 {
-    local jobspec=$1
+    local stepspec=$1
     local attrname=$2
 
     local field
-    for field in $jobspec; do
+    for field in $stepspec; do
         if [[ "${field}" = "${attrname}="* ]]; then
             local attrname_len=${#attrname}
             local start=`expr ${attrname_len} + 1`
@@ -1050,25 +1067,25 @@ extract_attr_from_jobspec()
 }
 
 ########
-extract_stepname_from_jobspec()
+extract_stepname_from_stepspec()
 {
-    local jobspec=$1
-    local fields=( $jobspec )
+    local stepspec=$1
+    local fields=( $stepspec )
     echo ${fields[0]}
 }
 
 ########
-extract_jobdeps_from_jobspec()
+extract_stepdeps_from_stepspec()
 {
-    local jobspec=$1
-    extract_attr_from_jobspec "${jobspec}" "jobdeps"    
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "stepdeps"    
 }
 
 ########
-extract_cpus_from_jobspec()
+extract_cpus_from_stepspec()
 {
-    local jobspec=$1
-    extract_attr_from_jobspec "${jobspec}" "cpus"
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "cpus"
 }
 
 ########
@@ -1195,7 +1212,7 @@ get_pipeline_fullmodnames()
 }
 
 ########
-get_default_step_dirname()
+get_default_step_outdir()
 {
     local dirname=$1
     local stepname=$2
@@ -1203,16 +1220,19 @@ get_default_step_dirname()
 }
 
 ########
-get_step_dirname()
+get_step_outdir()
 {
     local dirname=$1
     local stepname=$2
 
-    if [ -z "${PIPELINE_STEPDIRS[${stepname}]}" ]; then
-        echo "Warning! directory for step ${stepname} not defined, assuming default name" >&2
-        get_default_step_dirname $dirname $stepname
+    # Get name of step function to set output directory
+    step_function_outdir=`get_name_of_step_function_outdir ${stepname}`
+    
+    if [ ${step_function_outdir} = "${FUNCT_NOT_FOUND}" ]; then
+        get_default_step_outdir $dirname $stepname
     else
-        echo ${PIPELINE_STEPDIRS[${stepname}]}
+        outdir_basename=`step_function_outdir`
+        echo ${dirname}/${outdir_basename}
     fi
 }
 
@@ -1222,7 +1242,7 @@ prepare_outdir_for_step()
     local dirname=$1
     local stepname=$2
     local remove=$3
-    local outd=`get_step_dirname ${dirname} ${stepname}`
+    local outd=`get_step_outdir ${dirname} ${stepname}`
 
     if [ -d ${outd} ]; then
         if [ ${remove} -eq 1 ]; then
@@ -1387,7 +1407,7 @@ get_step_status()
 {
     local dirname=$1
     local stepname=$2
-    local stepdirname=`get_step_dirname ${dirname} ${stepname}`
+    local stepdirname=`get_step_outdir ${dirname} ${stepname}`
     
     if [ -d ${stepdirname} ]; then
         step_is_finished=`check_step_is_finished $dirname $stepname`
@@ -1783,38 +1803,18 @@ define_cmdline_infile_opt()
 }
 
 ########
-define_step_outd_opt()
+get_step_outdir_given_stepspec()
 {
-    local stepname=$1
-    local step_outd=$2
-    local varname=$3
+    local stepspec=$1
 
-    # Add option
-    define_opt "-step-outd" ${step_outd} $varname
+    # Get full path of output directory
+    local outd=${PIPELINE_OUTDIR}
 
-    # Store directory name for step in associative array
-    PIPELINE_STEPDIRS[${stepname}]=${step_outd}
-}
+    # Obtain output directory for step
+    local stepname=`extract_stepname_from_stepspec ${stepspec}`
+    local step_outd=`get_step_outdir ${outd} ${stepname}`
 
-########
-define_default_step_outd_opt()
-{
-    local cmdline=$1
-    local jobspec=$2
-    local varname=$3
-
-    # Get full path of directory
-    # local outd
-    # outd=`read_opt_value_from_line "$cmdline" "--outdir"` || return 1
-    read_opt_value_from_line_memoiz "$cmdline" "--outdir" || return 1
-    local outd=${_OPT_VALUE_}
-
-    outd=`get_absolute_path ${outd}`
-    local stepname=`extract_stepname_from_jobspec ${jobspec}`
-    local step_outd=`get_default_step_dirname ${outd} ${stepname}`
-
-    # Add option
-    define_step_outd_opt ${stepname} ${step_outd} ${varname}
+    echo ${step_outd}
 }
 
 ########
@@ -1968,7 +1968,6 @@ create_pipeline_fifos()
         if [ ! -p ${fifodir}/${fifoname} ]; then
             rm -f ${fifodir}/${fifoname} || exit 1
             $MKFIFO ${fifodir}/${fifoname} || exit 1
-            mkdir ${absdir} || exit 1
         fi
     done
 }
