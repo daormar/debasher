@@ -637,7 +637,7 @@ get_outd_for_dep()
         # Get stepname
         local stepname_part=`echo ${dep} | $AWK -F ":" '{print $2}'`
         
-        get_step_dirname ${outd} ${stepname_part}
+        get_step_outdir ${outd} ${stepname_part}
     fi
 }
 
