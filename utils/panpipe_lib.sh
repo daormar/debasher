@@ -27,6 +27,7 @@ AFTER_STEPDEP_TYPE="after"
 AFTEROK_STEPDEP_TYPE="afterok"
 AFTERNOTOK_STEPDEP_TYPE="afternotok"
 AFTERANY_STEPDEP_TYPE="afterany"
+GENERAL_OPT_CATEGORY="GENERAL"
 
 ####################
 # GLOBAL VARIABLES #
@@ -35,6 +36,8 @@ AFTERANY_STEPDEP_TYPE="afterany"
 # Declare associative arrays to store help about pipeline options
 declare -A PIPELINE_OPT_DESC
 declare -A PIPELINE_OPT_TYPE
+declare -A PIPELINE_OPT_CATEG
+declare -A PIPELINE_CATEG_MAP
 
 # Declare associative array to memoize command line options
 declare -A MEMOIZED_OPTS
@@ -1658,10 +1661,18 @@ explain_cmdline_opt()
     local opt=$1
     local type=$2
     local desc=$3
+    local categ=$4
 
-    # Store option in associative array
+    # Assign default category if not given
+    if [ "$categ" = "" ]; then
+        categ=${GENERAL_OPT_CATEGORY}
+    fi
+
+    # Store option in associative arrays
     PIPELINE_OPT_TYPE[$opt]=$type
     PIPELINE_OPT_DESC[$opt]=$desc
+    PIPELINE_OPT_CATEG[$opt]=$categ
+    PIPELINE_CATEG_MAP[$categ]=1
 }
 
 ########
@@ -1669,22 +1680,47 @@ explain_cmdline_opt_wo_value()
 {
     local opt=$1
     local desc=$2
+    local categ=$3
 
-    # Store option in associative array
+    # Assign default category if not given
+    if [ "$categ" = "" ]; then
+        categ=${GENERAL_OPT_CATEGORY}
+    fi
+    
+    # Store option in associative arrays
     PIPELINE_OPT_TYPE[$opt]=""
     PIPELINE_OPT_DESC[$opt]=$desc
+    PIPELINE_OPT_CATEG[$opt]=$categ
+    PIPELINE_CATEG_MAP[$categ]=1
 }
 
 ########
 print_pipeline_opts()
 {
-    local opt
-    for opt in ${!PIPELINE_OPT_TYPE[@]}; do
-        if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
-            echo "${opt} ${PIPELINE_OPT_DESC[$opt]}"
-        else
-            echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}"
+    local lineno=0
+    
+    # Iterate over option categories
+    local categ
+    for categ in ${!PIPELINE_CATEG_MAP[@]}; do
+        if [ ${lineno} -gt 0 ]; then
+            echo ""
         fi
+        echo "CATEGORY: ${categ}"
+        # Iterate over options
+        local opt
+        for opt in ${!PIPELINE_OPT_TYPE[@]}; do
+            # Check if option belongs to current category
+            if [ ${PIPELINE_OPT_CATEG[${opt}]} = $categ ]; then
+                # Print option
+                if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
+                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]}"
+                else
+                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}"
+                fi
+            fi
+        done
+
+        lineno=`expr ${lineno} + 1`
     done
 }
 
