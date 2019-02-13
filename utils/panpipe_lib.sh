@@ -251,6 +251,53 @@ get_job_array_task_varname()
 }
 
 ########
+execute_funct_plus_postfunct()
+{
+    local num_scripts=$1
+    local base_fname=$2
+    local taskid=$3
+    local funct=$4
+    local post_funct=$5
+    local script_opts=$6
+
+    # Execute step function
+    $funct ${script_opts}
+    local funct_exit_code=$?
+    if [ ${funct_exit_code} -ne 0 ]; then
+        echo "Error: execution of ${funct} failed with exit code ${funct_exit_code}" >&2
+    else
+        echo "Function ${funct} successfully executed" >&2
+    fi
+
+    # Execute step post-function
+    if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
+        ${post_funct} ${script_opts} || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
+    fi
+
+    # Treat errors
+    if [ ${funct_exit_code} -ne 0 ]; then
+        return 1;
+    fi
+
+    # Signal step completion
+    signal_step_completion ${base_fname} ${taskid} ${num_scripts}
+}
+
+########
+job_array_throttle_wait()
+{
+    local num_concurrent_tasks=$1
+    local throttle=$2
+
+    if [ ${num_concurrent_tasks} -ge ${throttle} ]; then
+        wait
+        return 1
+    else
+        return 0
+    fi
+}
+
+########
 print_task_body_builtin_sched()
 {
     # Initialize variables
@@ -268,21 +315,8 @@ print_task_body_builtin_sched()
     fi
 
     # Write function to be executed
-    echo "${funct} ${script_opts}"
-    echo "funct_exit_code=\$?"
-    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
-    
-    # Write function for cleaning if it was provided
-    if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} ${script_opts} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2 ;exit 1; }"
-    fi
-
-    # Return if function to execute failed
-    echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
+    echo "execute_funct_plus_postfunct ${num_scripts} ${base_fname} ${taskid} ${funct} ${post_funct} \"${script_opts}\""
         
-    # Write command to signal step completion
-    echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" 
-
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
         echo "fi" 
