@@ -23,10 +23,10 @@ PIPELINE_FINISHED_EXIT_CODE=0
 PIPELINE_IN_PROGRESS_EXIT_CODE=1
 PIPELINE_ONE_OR_MORE_STEPS_IN_PROGRESS_EXIT_CODE=2
 PIPELINE_UNFINISHED_EXIT_CODE=3
-AFTER_JOBDEP_TYPE="after"
-AFTEROK_JOBDEP_TYPE="afterok"
-AFTERNOTOK_JOBDEP_TYPE="afternotok"
-AFTERANY_JOBDEP_TYPE="afterany"
+AFTER_STEPDEP_TYPE="after"
+AFTEROK_STEPDEP_TYPE="afterok"
+AFTERNOTOK_STEPDEP_TYPE="afternotok"
+AFTERANY_STEPDEP_TYPE="afterany"
 
 ####################
 # GLOBAL VARIABLES #
@@ -658,21 +658,22 @@ get_outd_for_dep_given_stepspec()
 }
 
 ########
-apply_deptype_to_jobids()
+apply_deptype_to_stepids()
 {
     # Initialize variables
-    local jids=$1
+    local stepids=$1
     local deptype=$2
 
     # Apply deptype
     local result=""
     local prevIFS=$IFS
     IFS=','
-    for local_jid in ${jids}; do
+    local id
+    for id in ${stepids}; do
         if [ -z "" ]; then
-            result=${deptype}:${local_jid}
+            result=${deptype}:${id}
         else
-            result=${result}","${deptype}:${local_jid}
+            result=${result}","${deptype}:${id}
         fi
     done
     IFS=${prevIFS}
@@ -811,25 +812,25 @@ wait_for_deps_builtin_scheduler()
 
         # Wait for process to finish (except for "after" dependency
         # types)
-        if [ ${deptype} != ${AFTER_JOBDEP_TYPE} ]; then
+        if [ ${deptype} != ${AFTER_STEPDEP_TYPE} ]; then
             get_exit_code $pid _exit_code
             local exit_code=${_exit_code}
             
             # Process exit code
             case ${deptype} in
-                ${AFTEROK_JOBDEP_TYPE})
+                ${AFTEROK_STEPDEP_TYPE})
                     if [ ${exit_code} -ne 0 ]; then
                         return 1
                         IFS=${prevIFS}
                     fi
                 ;;
-                ${AFTERNOTOK_JOBDEP_TYPE})
+                ${AFTERNOTOK_STEPDEP_TYPE})
                     if [ ${exit_code} -eq 0 ]; then
                         return 1
                         IFS=${prevIFS}
                     fi 
                 ;;
-                ${AFTERANY_JOBDEP_TYPE})
+                ${AFTERANY_STEPDEP_TYPE})
                 # No actions required
                     :
                 ;;
@@ -1366,7 +1367,7 @@ check_step_is_in_progress()
 }
 
 ########
-get_num_jobs_finished()
+get_num_substeps_finished()
 {
     local script_filename=$1
 
@@ -1374,7 +1375,7 @@ get_num_jobs_finished()
 }
 
 ########
-get_num_jobs_to_finish()
+get_num_substeps_to_finish()
 {
     local script_filename=$1
 
@@ -1389,10 +1390,10 @@ check_step_is_finished()
     local script_filename=`get_script_filename ${dirname} ${stepname}`
 
     if [ -f ${script_filename}.finished ]; then
-        # Check that all jobs are finished
-        local num_jobs_finished=`get_num_jobs_finished ${script_filename}`
-        local num_jobs=`get_num_jobs_to_finish ${script_filename}`
-        if [ ${num_jobs_finished} -eq ${num_jobs} ]; then
+        # Check that all sub-steps are finished
+        local num_substeps_finished=`get_num_substeps_finished ${script_filename}`
+        local num_substeps=`get_num_substeps_to_finish ${script_filename}`
+        if [ ${num_substeps_finished} -eq ${num_substeps} ]; then
             echo 1
         else
             echo 0

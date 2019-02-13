@@ -357,7 +357,7 @@ get_stepdeps_from_detailed_spec()
     local stepdeps_spec=$1
     local jdeps=""
 
-    # Iterate over the elements of the job specification: type1:stepname1,...,typen:stepnamen
+    # Iterate over the elements of the step specification: type1:stepname1,...,typen:stepnamen
     prevIFS=$IFS
     IFS=','
     local dep_spec
@@ -385,7 +385,7 @@ get_stepdeps()
 {
     local stepdeps_spec=$1
     case ${stepdeps_spec} in
-            "afterok:all") apply_deptype_to_jobids ${step_jids} afterok
+            "afterok:all") apply_deptype_to_stepids ${step_jids} afterok
                     ;;
             "none") echo ""
                     ;;
@@ -535,7 +535,7 @@ execute_pipeline_steps()
     # Get names of pipeline modules
     local fullmodnames=`get_pipeline_fullmodnames $pfile` || return 1
     
-    # step_jids will store the job ids of the pipeline steps
+    # step_jids will store the step ids of the pipeline steps
     local step_jids=""
     
     # Read information about the steps to be executed

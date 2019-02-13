@@ -239,7 +239,7 @@ process_status_for_pfile()
             
         else
             if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "no" ]; then
-                echo "Error: incorrect job specification at line $lineno of ${pfile}" >&2
+                echo "Error: incorrect step specification at line $lineno of ${pfile}" >&2
                 return 1
             fi
         fi
