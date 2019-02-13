@@ -157,7 +157,7 @@ step_c()
 }
 
 ########
-step_c_clean()
+step_c_post()
 {
     logmsg "Cleaning directory..."
     

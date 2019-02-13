@@ -532,20 +532,20 @@ get_name_of_step_function()
 }
 
 ########
-get_name_of_step_function_clean()
+get_name_of_step_function_post()
 {
     local stepname=$1
 
     local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
 
-    local step_function_clean="${stepname_wo_suffix}_clean"
+    local step_function_post="${stepname_wo_suffix}_post"
 
     local funct_exists=1
 
-    type ${step_function_clean} >/dev/null 2>&1 || funct_exists=0
+    type ${step_function_post} >/dev/null 2>&1 || funct_exists=0
     
     if [ ${funct_exists} -eq 1 ]; then
-        echo ${step_function_clean}
+        echo ${step_function_post}
     else
         echo ${FUNCT_NOT_FOUND}
     fi
