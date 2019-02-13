@@ -251,10 +251,19 @@ get_job_array_task_varname()
 }
 
 ########
+get_job_array_task_throttle_varname()
+{
+    local arrayname=$1
+
+    echo "BUILTIN_SCHED_ARRAY_TASK_THROTTLE_${arrayname}"
+}
+
+########
 execute_funct_plus_postfunct()
 {
     local num_scripts=$1
-    local base_fname=$2
+    local fname=$2
+    local base_fname=`$BASENAME $fname`
     local taskid=$3
     local funct=$4
     local post_funct=$5
@@ -280,7 +289,7 @@ execute_funct_plus_postfunct()
     fi
 
     # Signal step completion
-    signal_step_completion ${base_fname} ${taskid} ${num_scripts}
+    signal_step_completion ${fname} ${taskid} ${num_scripts}
 }
 
 ########
@@ -290,7 +299,7 @@ job_array_throttle_wait()
     local throttle=$2
 
     if [ ${num_concurrent_tasks} -ge ${throttle} ]; then
-        wait
+        wait || exit 1
         return 1
     else
         return 0
@@ -298,11 +307,18 @@ job_array_throttle_wait()
 }
 
 ########
+print_task_header_builtin_sched()
+{
+    echo "num_concurrent_tasks=0"
+}
+
+########
 print_task_body_builtin_sched()
 {
     # Initialize variables
     local num_scripts=$1
-    local base_fname=$2
+    local fname=$2
+    local base_fname=`$BASENAME $fname`
     local taskid=$3
     local funct=$4
     local post_funct=$5
@@ -315,12 +331,24 @@ print_task_body_builtin_sched()
     fi
 
     # Write function to be executed
-    echo "execute_funct_plus_postfunct ${num_scripts} ${base_fname} ${taskid} ${funct} ${post_funct} \"${script_opts}\""
-        
+    echo "execute_funct_plus_postfunct ${num_scripts} ${fname} ${taskid} ${funct} ${post_funct} \"${script_opts}\" &"
+
+    # Add code related to job array task throttle
+    echo "num_concurrent_tasks=\`expr \${num_concurrent_tasks} + 1\`"
+
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
         echo "fi" 
     fi
+
+    local throttle_varname=`get_job_array_task_throttle_varname ${base_fname}`
+    echo "job_array_throttle_wait \${num_concurrent_tasks} \${${throttle_varname}} || num_concurrent_tasks=0"
+}
+
+########
+print_task_foot_builtin_sched()
+{
+    echo "wait"
 }
 
 ########
@@ -332,7 +360,6 @@ create_builtin_scheduler_script()
     local post_funct=$3
     local opts_array_name=$4[@]
     local opts_array=("${!opts_array_name}")
-    local base_fname=`$BASENAME $fname`
     
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -341,17 +368,23 @@ create_builtin_scheduler_script()
     # Write environment variables
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
+    # Print header
+    print_task_header_builtin_sched >> ${fname} || return 1
+    
     # Iterate over options array
     local lineno=1
     local num_scripts=${#opts_array[@]}
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        print_task_body_builtin_sched ${num_scripts} ${base_fname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        print_task_body_builtin_sched ${num_scripts} ${fname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
 
     done
+
+    # Print foot
+    print_task_foot_builtin_sched >> ${fname} || return 1
     
     # Give execution permission
     chmod u+x ${fname} || return 1
@@ -782,11 +815,7 @@ get_slurm_job_array_opt()
     if [ ${job_array_list} = "1-1" -o ${job_array_list} = "1" ]; then
         echo ""
     else
-        if [ "${throttle}" = ${ATTR_NOT_FOUND} ]; then
-            echo "--array=${job_array_list}%${PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE}"
-        else
-            echo "--array=${job_array_list}%${throttle}"
-        fi
+        echo "--array=${job_array_list}%${throttle}"
     fi
 }
 
@@ -921,15 +950,34 @@ get_end_id_in_range()
 }
 
 ########
+get_scheduler_throttle()
+{
+    local stepspec_throttle=$1
+
+    if [ "${stepspec_throttle}" = ${ATTR_NOT_FOUND} ]; then
+        echo ${PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE}
+    else
+        echo ${stepspec_throttle}
+    fi
+}
+
+########
 builtin_scheduler_launch()
 {
     # Initialize variables
     local file=$1
     local job_array_list=$2
-    local stepdeps=$3
-    local outvar=$4
+    local stepspec=$3
+    local stepdeps=$4
+    local outvar=$5
     local base_fname=`$BASENAME $file`
-    
+
+    # Export task throttle variable
+    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
+    local throttle_varname=`get_job_array_task_throttle_varname ${base_fname}`
+    export ${throttle_varname}=${sched_throttle}
+
     # Determine which jobs from the array will be executed
     local prevIFS=$IFS
     IFS=','
@@ -940,13 +988,13 @@ builtin_scheduler_launch()
             local end_id=`get_end_id_in_range $elem`
             local id=${start_id}
             while [ ${id} -le ${end_id} ]; do
-                local varname=`get_job_array_task_varname ${base_fname} ${id}`
-                export ${varname}=1
+                local task_varname=`get_job_array_task_varname ${base_fname} ${id}`
+                export ${task_varname}=1
                 id=`expr $id + 1`
             done
         else
-            local varname=`get_job_array_task_varname ${base_fname} ${elem}`
-            export ${varname}=1
+            local task_varname=`get_job_array_task_varname ${base_fname} ${elem}`
+            export ${task_varname}=1
         fi
     done
     IFS=${prevIFS}
@@ -979,7 +1027,8 @@ slurm_launch()
     local account=`extract_attr_from_stepspec "$stepspec" "account"`
     local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
     local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
-    local task_array_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
 
     # Define options for sbatch
     local cpus_opt=`get_slurm_cpus_opt ${cpus}`
@@ -989,7 +1038,7 @@ slurm_launch()
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
-    local jobarray_opt=`get_slurm_job_array_opt ${file} ${job_array_list} ${task_array_throttle}`
+    local jobarray_opt=`get_slurm_job_array_opt ${file} ${job_array_list} ${sched_throttle}`
     
     # Submit job
     local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
@@ -1020,7 +1069,7 @@ launch()
             ;;
 
         *) # Built-in scheduler will be used
-            builtin_scheduler_launch ${file} "${job_array_list}" "${stepdeps}" ${outvar}
+            builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar}
             ;;
     esac
 }
