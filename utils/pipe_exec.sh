@@ -1,7 +1,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${bindir}/panpipe_lib || exit 1
+. ${panpipe_bindir}/panpipe_lib || exit 1
 
 #############
 # CONSTANTS #
@@ -67,7 +67,7 @@ read_pars()
             "--help") usage
                       exit 1
                       ;;
-            "--version") version
+            "--version") panpipe_version
                          exit 1
                          ;;
             "--pfile") shift
@@ -183,7 +183,7 @@ check_pipeline_file()
 {
     echo "* Checking pipeline file ($pfile)..." >&2
 
-    ${bindir}/pipe_check -p ${pfile} || return 1
+    ${panpipe_bindir}/pipe_check -p ${pfile} || return 1
 
     echo "" >&2
 }
@@ -193,7 +193,7 @@ reorder_pipeline_file()
 {
     echo "* Obtaining reordered pipeline file ($pfile)..." >&2
 
-    ${bindir}/pipe_check -p ${pfile} -r > ${outd}/reordered_pipeline.csv 2> /dev/null || return 1
+    ${panpipe_bindir}/pipe_check -p ${pfile} -r > ${outd}/reordered_pipeline.csv 2> /dev/null || return 1
 
     echo "" >&2
 }
