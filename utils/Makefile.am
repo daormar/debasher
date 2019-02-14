@@ -19,9 +19,9 @@ SUFFIXES= .sh .py .r .R
 .sh :
 	rm -f $@
 	echo "#! " $(BASH) > $@
-	echo "pkgname=\""$(PACKAGE_NAME)"\"" >> $@
-	echo "version=\""$(PACKAGE_VERSION)"\"" >> $@
-	echo "bindir="$(prefix)/bin/ >> $@
+	echo "panpipe_pkgname=\""$(PACKAGE_NAME)"\"" >> $@
+	echo "panpipe_version=\""$(PACKAGE_VERSION)"\"" >> $@
+	echo "panpipe_bindir="$(prefix)/bin/ >> $@
 	echo "BASH="$(BASH) >> $@
 	echo "AWK="$(AWK) >> $@
 	echo "SORT="$(SORT) >> $@
