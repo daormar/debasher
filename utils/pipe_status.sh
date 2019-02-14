@@ -214,8 +214,6 @@ process_status_for_pfile()
                 continue
             fi
 
-            define_opts_for_script "${cmdline}" "${stepspec}" || return 1
-
             # Check step status
             local status=`get_step_status ${absdirname} ${stepname}`
 
