@@ -73,6 +73,13 @@ declare -A EXIT_CODE
 # GENERAL FUNCTIONS #
 #####################
 
+########
+panpipe_version()
+{
+    echo "${panpipe_pkgname} version: ${panpipe_version}" >&2
+}
+
+########
 pipe_fail()
 {
     # test if there is at least one command to exit with a non-zero status
@@ -1203,7 +1210,7 @@ search_mod_in_dirs()
     
     # Fallback to package bindir
     if [ -z "${fullmodname}" ]; then
-        fullmodname=${bindir}${module}
+        fullmodname=${panpipe_bindir}${module}
     fi
 
     echo $fullmodname
