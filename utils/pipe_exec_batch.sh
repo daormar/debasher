@@ -1,7 +1,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${bindir}/panpipe_lib || exit 1
+. ${panpipe_bindir}/panpipe_lib || exit 1
 
 ########
 print_desc()
@@ -40,9 +40,6 @@ read_pars()
             "--help") usage
                       exit 1
                       ;;
-            "--version") version
-                         exit 1
-                         ;;
             "-f") shift
                   if [ $# -ne 0 ]; then
                       file=$1
@@ -87,7 +84,7 @@ wait_simul_exec_reduction()
         local num_unfinished_pipelines=0
         for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
             # Check if pipeline has finished execution
-            ${bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
+            ${panpipe_bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
             local exit_code=$?
 
             case ${exit_code} in
@@ -170,7 +167,7 @@ update_active_pipelines()
     # Iterate over active pipelines
     for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
         # Check if pipeline has finished execution
-        ${bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
+        ${panpipe_bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
         local exit_code=$?
         
         if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
@@ -229,7 +226,7 @@ check_ppl_complete()
         fi
 
         # Check pipeline status
-        ${bindir}/pipe_status -d ${pipe_cmd_outd} > /dev/null 2>&1
+        ${panpipe_bindir}/pipe_status -d ${pipe_cmd_outd} > /dev/null 2>&1
         exit_code=$?
         if [ ${exit_code} -eq 0 ]; then
             echo "yes"
@@ -250,7 +247,7 @@ check_ppl_complete()
         local destdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
 
         # Check pipeline status
-        ${bindir}/pipe_status -d ${destdir} > /dev/null 2>&1
+        ${panpipe_bindir}/pipe_status -d ${destdir} > /dev/null 2>&1
         exit_code=$?
         if [ ${exit_code} -eq 0 ]; then
             echo "yes"
