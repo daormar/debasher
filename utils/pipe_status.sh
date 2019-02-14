@@ -1,7 +1,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${bindir}/panpipe_lib || exit 1
+. ${panpipe_bindir}/panpipe_lib || exit 1
 
 ########
 print_desc()
@@ -31,9 +31,6 @@ read_pars()
             "--help") usage
                       exit 1
                       ;;
-            "--version") version
-                         exit 1
-                         ;;
             "-d") shift
                   if [ $# -ne 0 ]; then
                       pdir=$1
