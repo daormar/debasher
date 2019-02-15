@@ -316,7 +316,10 @@ job_array_throttle_wait()
 ########
 print_task_header_builtin_sched()
 {
-    echo "num_concurrent_tasks=0"
+    local step_name=$1
+    
+    echo "PANPIPE_STEP_NAME=${step_name}"
+    echo "NUM_CONCURRENT_PIPE_TASKS=0"
 }
 
 ########
@@ -341,7 +344,7 @@ print_task_body_builtin_sched()
     echo "execute_funct_plus_postfunct ${num_scripts} ${fname} ${taskid} ${funct} ${post_funct} \"${script_opts}\" &"
 
     # Add code related to job array task throttle
-    echo "num_concurrent_tasks=\`expr \${num_concurrent_tasks} + 1\`"
+    echo "NUM_CONCURRENT_PIPE_TASKS=\`expr \${NUM_CONCURRENT_PIPE_TASKS} + 1\`"
 
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
@@ -349,7 +352,7 @@ print_task_body_builtin_sched()
     fi
 
     local throttle_varname=`get_job_array_task_throttle_varname ${base_fname}`
-    echo "job_array_throttle_wait \${num_concurrent_tasks} \${${throttle_varname}} || num_concurrent_tasks=0"
+    echo "job_array_throttle_wait \${NUM_CONCURRENT_PIPE_TASKS} \${${throttle_varname}} || NUM_CONCURRENT_PIPE_TASKS=0"
 }
 
 ########
@@ -376,7 +379,7 @@ create_builtin_scheduler_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    print_task_header_builtin_sched >> ${fname} || return 1
+    print_task_header_builtin_sched ${funct} >> ${fname} || return 1
     
     # Iterate over options array
     local lineno=1
@@ -395,6 +398,14 @@ create_builtin_scheduler_script()
     
     # Give execution permission
     chmod u+x ${fname} || return 1
+}
+
+########
+print_task_header_slurm_sched()
+{
+    local step_name=$1
+    
+    echo "PANPIPE_STEP_NAME=${step_name}"
 }
 
 ########
@@ -435,6 +446,12 @@ print_task_body_slurm_sched()
 }
 
 ########
+print_task_foot_slurm_sched()
+{
+    :
+}
+
+########
 create_slurm_script()
 {
     # Init variables
@@ -460,6 +477,9 @@ create_slurm_script()
     # Write environment variables
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
+    # Print header
+    print_task_header_slurm_sched ${funct} >> ${fname} || return 1
+
     # Iterate over options array
     local lineno=1
     local script_opts
@@ -470,7 +490,10 @@ create_slurm_script()
         lineno=`expr $lineno + 1`
         
     done
-    
+
+    # Print foot
+    print_task_foot_builtin_sched >> ${fname} || return 1
+
     # Give execution permission
     chmod u+x ${fname} || return 1
 }
