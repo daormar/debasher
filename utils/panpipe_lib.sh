@@ -184,6 +184,16 @@ serialize_string_array()
 }
 
 ########
+check_func_exists()
+{
+    local funcname=$1
+    
+    type ${funcname} >/dev/null 2>&1 || return 1
+
+    return 0
+}
+
+########
 set_panpipe_outdir()
 {
     local abs_outd=$1
@@ -637,12 +647,8 @@ get_name_of_step_function_post()
 
     local step_function_post="${stepname_wo_suffix}_post"
 
-    local funct_exists=1
-
-    type ${step_function_post} >/dev/null 2>&1 || funct_exists=0
-    
-    if [ ${funct_exists} -eq 1 ]; then
-        echo ${step_function_post}
+    if check_func_exists ${step_function_post}; then
+        echo ${step_function_outdir}
     else
         echo ${FUNCT_NOT_FOUND}
     fi
@@ -657,11 +663,7 @@ get_name_of_step_function_outdir()
 
     local step_function_outdir="${stepname_wo_suffix}_outdir_basename"
 
-    local funct_exists=1
-
-    type ${step_function_outdir} >/dev/null 2>&1 || funct_exists=0
-    
-    if [ ${funct_exists} -eq 1 ]; then
+    if check_func_exists ${step_function_outdir}; then
         echo ${step_function_outdir}
     else
         echo ${FUNCT_NOT_FOUND}
@@ -669,7 +671,7 @@ get_name_of_step_function_outdir()
 }
 
 ########
-get_script_explain_cmdline_opts_funcname()
+get_explain_cmdline_opts_funcname()
 {
     local stepname=$1
 
@@ -679,13 +681,23 @@ get_script_explain_cmdline_opts_funcname()
 }
 
 ########
-get_script_define_opts_funcname()
+get_define_opts_funcname()
 {
     local stepname=$1
 
     local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
 
     echo ${stepname_wo_suffix}_define_opts
+}
+
+########
+get_conda_envs_funcname()
+{
+    local stepname=$1
+
+    local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
+
+    echo ${stepname_wo_suffix}_conda_envs
 }
 
 ########
@@ -696,8 +708,8 @@ define_opts_for_script()
     local stepname=`extract_stepname_from_stepspec "$stepspec"`
     
     clear_opt_list_array
-    local script_define_opts_funcname=`get_script_define_opts_funcname ${stepname}`
-    ${script_define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
+    local define_opts_funcname=`get_define_opts_funcname ${stepname}`
+    ${define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
 }
 
 ########
@@ -2195,4 +2207,45 @@ cfgfile_to_string()
     echo ${str}
 
     return 0
+}
+
+########
+define_conda_env()
+{
+    local env_name=$1
+    local yml_file=$2
+
+    echo "${env_name} ${yml_file}"
+}
+
+########
+conda_env_exists()
+{
+    local envname=$1
+
+    local env_exists=1
+    
+    conda activate $envname > /dev/null 2>&1 || env_exists=0
+
+    if [ ${env_exists} -eq 1 ]; then
+        conda deactivate
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+conda_env_prepare()
+{
+    local env_name=$1
+    local abs_yml_fname=$2
+    # TBD
+}
+
+########
+get_abs_yml_fname()
+{
+    local yml_fname=$2
+    # TBD
 }

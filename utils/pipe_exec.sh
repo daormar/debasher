@@ -22,7 +22,7 @@ usage()
 {
     echo "pipe_exec                 --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
-    echo "                          [--cfgfile <string>]"
+    echo "                          [--cfgfile <string>] [--conda-support]"
     echo "                          [--showopts|--checkopts|--debug]"
     echo "                          [--version] [--help]"
     echo ""
@@ -36,6 +36,7 @@ usage()
     echo "--dflt-throttle <strings> Default task throttle used when executing job arrays"
     echo "--cfgfile <strings>       File with options (options provided in command line"
     echo "                          overwrite those given in the configuration file)"
+    echo "--conda-support           Enable conda support"
     echo "--showopts                Show pipeline options"
     echo "--checkopts               Check pipeline options"
     echo "--debug                   Do everything except launching pipeline steps"
@@ -59,6 +60,7 @@ read_pars()
     dflt_nodes_given=0
     dflt_throttle_given=0
     cfgfile_given=0
+    conda_support_given=0
     showopts_given=0
     checkopts_given=0
     debug=0
@@ -104,6 +106,11 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       cfgfile=$1
                       cfgfile_given=1
+                  fi
+                  ;;
+            "--conda-support")
+                  if [ $# -ne 0 ]; then
+                      conda_support_given=1
                   fi
                   ;;
             "--showopts") showopts_given=1
@@ -252,8 +259,8 @@ show_pipeline_opts()
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local script_explain_cmdline_opts_funcname=`get_script_explain_cmdline_opts_funcname ${stepname}`
-            ${script_explain_cmdline_opts_funcname} || exit 1
+            local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${stepname}`
+            ${explain_cmdline_opts_funcname} || exit 1
         fi
     done < ${pfile}
 
@@ -285,6 +292,77 @@ check_pipeline_opts()
             echo "STEP: ${stepname} ; OPTIONS: ${serial_script_opts}" >&2
         fi
     done < ${pfile}
+
+    echo "" >&2
+}
+
+########
+process_conda_req_entry() 
+{
+    local env_name=$1
+    local yml_fname=$2
+
+    # Check if environment already exists
+    if conda_env_exists ${env_name}; then
+        :
+    else
+        # Obtain absolute yml file name
+        local abs_yml_fname=`get_abs_yml_fname ${yml_fname}`
+        conda_env_prepare ${env_name} ${abs_yml_fname} || return 1
+    fi
+}
+
+########
+process_conda_requirements_for_step()
+{
+    stepname=$1
+    step_conda_envs=$2
+
+    # Read information about conda environments
+    while read conda_env_entry; do
+        # Convert string to array
+        local array
+        IFS=' ' read -r -a array <<< $conda_env_entry
+        local arraylen=${#array[@]}
+        if [ ${arraylen} -ge 2 ]; then
+            local env_name=${array[0]}
+            local yml_fname=${array[1]}
+            process_conda_req_entry ${env_name} ${yml_fname} || return 1
+        else
+            echo "Error: invalid conda entry for step ${stepname}; Entry: ${step_conda_envs}" >&2
+        fi
+        
+        echo $stepname ${env_name} ${yml_fname}
+    done < <(echo ${step_conda_envs})
+}
+
+########
+process_conda_requirements()
+{
+    echo "* Processing conda requirements (if any)..." >&2
+
+    # Read input parameters
+    local pfile=$1
+
+    # Read information about the steps to be executed
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
+            # Extract step information
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            
+            # Process conda envs information
+            local conda_envs_funcname=`get_conda_envs_funcname ${stepname}`
+            if check_func_exists ${conda_envs_funcname}; then
+                step_conda_envs=`${conda_envs_funcname}` || exit 1
+                process_conda_requirements_for_step ${stepname} "${step_conda_envs}" || return 1
+            fi
+        fi
+    done < ${pfile}
+
+    echo "Processing complete" >&2
 
     echo "" >&2
 }
@@ -517,8 +595,8 @@ debug_step()
     echo "STEP: ${stepname} ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
 
     ## Obtain step options
-    local script_define_opts_funcname=`get_script_define_opts_funcname ${stepname}`
-    ${script_define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
+    local define_opts_funcname=`get_define_opts_funcname ${stepname}`
+    ${define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
 }
 
 ########
@@ -614,6 +692,10 @@ else
     else
         load_pipeline_modules=1
         check_pipeline_opts "${augmented_cmdline}" ${reordered_pfile} || exit 1
+
+        if [ ${conda_support_given} -eq 1 ]; then
+            process_conda_requirements ${reordered_pfile} || exit 1
+        fi
         
         create_shared_dirs
 
