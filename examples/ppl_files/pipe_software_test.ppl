@@ -5,3 +5,4 @@ step_b  cpus=1 mem=32 time=00:01:00 stepdeps=afterok:step_a
 step_c  cpus=1 mem=32 time=00:01:00 throttle=2 stepdeps=afterok:step_a
 step_d  cpus=1 mem=32 time=00:01:00 stepdeps=none
 step_e  cpus=1 mem=32 time=00:01:00 stepdeps=after:step_d
+step_f  cpus=1 mem=32 time=00:01:00 stepdeps=none

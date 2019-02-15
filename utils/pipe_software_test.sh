@@ -252,3 +252,54 @@ step_e()
 
     display_end_step_message
 }
+
+########
+step_f_explain_cmdline_opts()
+{
+    :
+}
+
+########
+step_f_define_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local stepspec=$2
+    local optlist=""
+
+    # Define the -step-outd option, the output directory for the step
+    local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
+    define_opt "-step-outd" ${step_outd} optlist || exit 1
+        
+    # Save option list
+    save_opt_list optlist
+}
+
+########
+step_f()
+{
+    display_begin_step_message
+
+    # Initialize variables
+    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+
+    # Activate conda environment
+    conda_activate py27
+
+    # Write string to FIFO
+    python --version 2>&1 > ${step_outd}/python_ver.txt
+
+    # Deactivate conda environment
+    conda_deactivate
+    
+    # sleep some time
+    sleep 10
+
+    display_end_step_message
+}
+
+########
+step_f_conda_envs()
+{
+    define_conda_env py27 py27.yml
+}
