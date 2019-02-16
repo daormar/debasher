@@ -287,7 +287,7 @@ step_f()
     conda_activate py27
 
     # Write string to FIFO
-    python --version 2>&1 > ${step_outd}/python_ver.txt
+    python --version > ${step_outd}/python_ver.txt 2>&1
 
     # Deactivate conda environment
     conda_deactivate
