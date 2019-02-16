@@ -19,10 +19,11 @@ def take_pars():
     flags["p_given"]=False
     flags["r_given"]=False
     flags["g_given"]=False
+    flags["d_given"]=False
     values["verbose"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"p:rgv",["pfile="])
+        opts, args = getopt.getopt(sys.argv[1:],"p:rgdv",["pfile="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -38,6 +39,8 @@ def take_pars():
                 flags["r_given"]=True
             elif opt in ("-g", "--print-graph"):
                 flags["g_given"]=True
+            elif opt in ("-d", "--print-deps"):
+                flags["d_given"]=True
             elif opt in ("-v", "--verbose"):
                 flags["verbose"]=True
     return (flags,values)
@@ -49,16 +52,25 @@ def check_pars(flags,values):
         sys.exit(2)
 
     if(flags["r_given"] and flags["g_given"]):
-        print >> sys.stderr, "Error! -r and -g parameters cannot be given simultaneously"
+        print >> sys.stderr, "Error! -r and -g options cannot be given simultaneously"
+        sys.exit(2)
+
+    if(flags["r_given"] and flags["d_given"]):
+        print >> sys.stderr, "Error! -r and -d options cannot be given simultaneously"
+        sys.exit(2)
+
+    if(flags["g_given"] and flags["d_given"]):
+        print >> sys.stderr, "Error! -g and -d options cannot be given simultaneously"
         sys.exit(2)
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "pipe_check     -p <string> [-r|-g] [-v]"
+    print >> sys.stderr, "pipe_check     -p <string> [-r|-g|-d] [-v]"
     print >> sys.stderr, ""
     print >> sys.stderr, "-p <string>    Pipeline file"
     print >> sys.stderr, "-r             Print reordered pipeline"
     print >> sys.stderr, "-g             Print pipeline in graphviz format"
+    print >> sys.stderr, "-d             Print dependencies for each step"
     print >> sys.stderr, "-v             Verbose mode"
 
 ##################################################
@@ -88,28 +100,28 @@ def extract_step_deps(entry):
     fields=entry.split()
     for f in fields:
         if f.find("stepdeps=")==0:
-            jdeps_str=f[9:]
+            sdeps_str=f[9:]
 
     # Return empty list of step dependencies if corresponding field was
     # not found
-    if len(jdeps_str)==0:
+    if len(sdeps_str)==0:
         return []
     
     # create list of step dependencies
-    jdeps_list=[]
-    jdeps_fields=jdeps_str.split(",")
-    for jdep in jdeps_fields:
-        if jdep!=NONE_STEP_DEP:
-            jdep_fields=jdep.split(":")
-            if(len(jdep_fields)==2):
+    sdeps_list=[]
+    sdeps_fields=sdeps_str.split(",")
+    for sdep in sdeps_fields:
+        if sdep!=NONE_STEP_DEP:
+            sdep_fields=sdep.split(":")
+            if(len(sdep_fields)==2):
                 data=stepdep_data()
-                data.deptype=jdep_fields[0]
-                data.stepname=jdep_fields[1]
-                jdeps_list.append(data)
+                data.deptype=sdep_fields[0]
+                data.stepname=sdep_fields[1]
+                sdeps_list.append(data)
             else:
-                print >> sys.stderr, "Error: incorrect definition of step dependency (",jdeps_str,")"
+                print >> sys.stderr, "Error: incorrect definition of step dependency (",sdeps_str,")"
         
-    return jdeps_list
+    return sdeps_list
 
 ##################################################
 def extract_config_entries(pfile):
@@ -139,9 +151,9 @@ def extract_step_entries(pfile):
 def create_stepdeps_map(step_entries):
     stepdeps_map={}
     for entry in step_entries:
-        jname=extract_step_name(entry)
+        sname=extract_step_name(entry)
         deps=extract_step_deps(entry)
-        stepdeps_map[jname]=deps
+        stepdeps_map[sname]=deps
     return stepdeps_map
 
 ##################################################
@@ -197,9 +209,9 @@ def order_step_entries(step_entries,stepdeps_map,ordered_step_entries):
         prev_proc_steps_len=len(processed_steps)
         # Explore list of step entries
         for entry in step_entries:
-            jname=extract_step_name(entry)
-            if(stepname_can_be_added(jname,processed_steps,stepdeps_map)):
-                processed_steps.add(jname)
+            sname=extract_step_name(entry)
+            if(stepname_can_be_added(sname,processed_steps,stepdeps_map)):
+                processed_steps.add(sname)
                 ordered_step_entries.append(entry)
         # Check if no steps were added
         if(prev_proc_steps_len==len(processed_steps)):
@@ -255,7 +267,34 @@ def print_graph(ordered_step_entries,stepdeps_map):
     
     # Print footer
     print "}"
-    
+
+##################################################
+def extract_all_deps_for_step(sname,stepdeps_map):
+    if sname not in stepdeps_map:
+        return set()
+    else:
+        result=set()
+        for stepdep in stepdeps_map[sname]:
+            result.add(stepdep.stepname)
+            result.union(extract_all_deps_for_step(stepdep.stepname,stepdeps_map))
+        return result
+
+##################################################
+def print_deps(ordered_step_entries,stepdeps_map):
+    for entry in ordered_step_entries:
+        # Extract dependencies for step
+        sname=extract_step_name(entry)
+        stepdeps=extract_all_deps_for_step(sname,stepdeps_map)
+        
+        # Print dependencies for step
+        depstr=""
+        for dep in stepdeps:
+            if(depstr==""):
+                depstr=dep
+            else:
+                depstr=depstr+" "+dep
+        print sname,":",depstr
+
 ##################################################
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
@@ -268,6 +307,8 @@ def process_pars(flags,values):
             print_entries(config_entries,ordered_step_entries)
         elif(flags["g_given"]):
             print_graph(ordered_step_entries,stepdeps_map)
+        elif(flags["d_given"]):
+            print_deps(ordered_step_entries,stepdeps_map)
     else:
         print >> sys.stderr, "Pipeline file is not correct"
         return 1
