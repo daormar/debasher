@@ -1235,6 +1235,7 @@ search_mod_in_dirs()
     local prevIFS=$IFS
     IFS=':'
     local dir
+    local fullmodname
     for dir in ${PANPIPE_MOD_DIR}; do
         if [ -f ${dir}/${module} ]; then
             fullmodname=${dir}/${module}
@@ -1245,7 +1246,7 @@ search_mod_in_dirs()
     
     # Fallback to package bindir
     if [ -z "${fullmodname}" ]; then
-        fullmodname=${panpipe_bindir}${module}
+        fullmodname=${panpipe_bindir}/${module}
     fi
 
     echo $fullmodname
@@ -2162,6 +2163,12 @@ get_absolute_fifoname()
 }
 
 ########
+get_absolute_condadir()
+{
+    echo ${PIPELINE_OUTDIR}/.conda
+}
+
+########
 clear_opt_list_array()
 {
     unset SCRIPT_OPT_LIST_ARRAY
@@ -2240,12 +2247,41 @@ conda_env_prepare()
 {
     local env_name=$1
     local abs_yml_fname=$2
-    # TBD
+    local condadir=$3
+
+    # Install packages
+    conda env create -f ${abs_yml_fname} -n ${env_name} > ${condadir}/${env_name}.log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/${env_name}.log file for more information">&2 ; return 1; }
+}
+
+########
+get_panpipe_yml_dir()
+{
+    echo ${panpipe_datadir}/conda_envs
 }
 
 ########
 get_abs_yml_fname()
 {
-    local yml_fname=$2
-    # TBD
+    local yml_fname=$1
+    
+    # Search module in directories listed in PANPIPE_YML_DIR
+    local prevIFS=$IFS
+    IFS=':'
+    local dir
+    local abs_yml_fname
+    for dir in ${PANPIPE_YML_DIR}; do
+        if [ -f ${dir}/${yml_fname} ]; then
+            abs_yml_fname=${dir}/${yml_fname}
+            break
+        fi
+    done
+    IFS=${prevIFS}
+    
+    # Fallback to panpipe yml package
+    if [ -z "${abs_yml_fname}" ]; then
+        panpipe_yml_dir=`get_panpipe_yml_dir`
+        abs_yml_fname=${panpipe_yml_dir}/${yml_fname}
+    fi
+
+    echo ${abs_yml_fname}
 }

@@ -306,9 +306,14 @@ process_conda_req_entry()
     if conda_env_exists ${env_name}; then
         :
     else
+        local condadir=`get_absolute_condadir`
+
         # Obtain absolute yml file name
         local abs_yml_fname=`get_abs_yml_fname ${yml_fname}`
-        conda_env_prepare ${env_name} ${abs_yml_fname} || return 1
+
+        echo "Creating conda environment ${env_name} from file ${abs_yml_fname}..." >&2
+        conda_env_prepare ${env_name} ${abs_yml_fname} ${condadir} || return 1
+        echo "Package successfully installed"
     fi
 }
 
@@ -330,9 +335,7 @@ process_conda_requirements_for_step()
             process_conda_req_entry ${env_name} ${yml_fname} || return 1
         else
             echo "Error: invalid conda entry for step ${stepname}; Entry: ${step_conda_envs}" >&2
-        fi
-        
-        echo $stepname ${env_name} ${yml_fname}
+        fi        
     done < <(echo ${step_conda_envs})
 }
 
@@ -403,8 +406,13 @@ create_basic_dirs()
     
     mkdir -p ${outd}/scripts || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
-    fifodir=`get_absolute_fifoname`
+    local fifodir=`get_absolute_fifoname`
     mkdir -p ${fifodir} || { echo "Error! cannot create fifos directory" >&2; return 1; }
+
+    local condadir=`get_absolute_condadir`
+    if [ ${conda_support_given} -eq 1 ]; then
+        mkdir -p ${condadir}
+    fi
 }
 
 ########
