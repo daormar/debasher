@@ -443,6 +443,8 @@ AC_ARG_ENABLE(schedulers,[  --disable-schedulers   disable job schedulers], disa
 # Yes, schedulers are enabled
 if test "$disable_schedulers" = "yes"; then
    AC_MSG_RESULT(yes)
+else
+   AC_MSG_RESULT(no)
 fi
 AC_SUBST(DISABLE_SCHEDULERS,$disable_schedulers)
 
