@@ -22,6 +22,7 @@ SUFFIXES= .sh .py .r .R
 	echo "panpipe_pkgname=\""$(PACKAGE_NAME)"\"" >> $@
 	echo "panpipe_version=\""$(PACKAGE_VERSION)"\"" >> $@
 	echo "panpipe_bindir="$(prefix)/bin/ >> $@
+	echo "panpipe_datadir="$(datadir)/$(PACKAGE_NAME) >> $@
 	echo "BASH="$(BASH) >> $@
 	echo "AWK="$(AWK) >> $@
 	echo "SORT="$(SORT) >> $@
