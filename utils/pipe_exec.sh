@@ -713,17 +713,17 @@ else
     else
         load_pipeline_modules=1
         check_pipeline_opts "${augmented_cmdline}" ${reordered_pfile} || exit 1
-
-        if [ ${conda_support_given} -eq 1 ]; then
-            process_conda_requirements ${reordered_pfile} || exit 1
-        fi
         
+        # NOTE: exclusive execution should be ensured after creating the output directory
+        ensure_exclusive_execution || { echo "Error: exec_pipeline is being executed for the same output directory" ; exit 1; }
+
         create_shared_dirs
 
         register_fifos
 
-        # NOTE: exclusive execution should be ensured after creating the output directory
-        ensure_exclusive_execution || { echo "Error: exec_pipeline is being executed for the same output directory" ; exit 1; }
+        if [ ${conda_support_given} -eq 1 ]; then
+            process_conda_requirements ${reordered_pfile} || exit 1
+        fi
 
         print_command_line || exit 1
         

@@ -1519,6 +1519,20 @@ get_num_substeps_to_finish()
 }
 
 ########
+mark_step_as_reexec()
+{
+    local stepname=$1
+    local reason=$2
+    
+    if [ "${PANPIPE_REEXEC_STEPS[${stepname}]}" = "" ]; then
+        PANPIPE_REEXEC_STEPS[${stepname}]=${reason}
+    else
+        local curr_val=PANPIPE_REEXEC_STEPS[${stepname}]
+        PANPIPE_REEXEC_STEPS[${stepname}]="${curr_val},${reason}"
+    fi
+}
+
+########
 check_step_should_be_reexec()
 {
     local stepname=$1
