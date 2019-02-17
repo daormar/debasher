@@ -13,9 +13,15 @@ INVALID_JID="_INVALID_JID_"
 INVALID_PID="_INVALID_PID_"
 VOID_VALUE="_VOID_VALUE_"
 FINISHED_STEP_STATUS="FINISHED"
+FINISHED_STEP_STATUS_EXIT_CODE=0
 INPROGRESS_STEP_STATUS="IN-PROGRESS"
+INPROGRESS_STEP_STATUS_EXIT_CODE=1
 UNFINISHED_STEP_STATUS="UNFINISHED"
+UNFINISHED_STEP_STATUS_EXIT_CODE=2
+REEXEC_STEP_STATUS="REEXECUTE"
+REEXEC_STEP_STATUS_EXIT_CODE=3
 TODO_STEP_STATUS="TO-DO"
+TODO_STEP_STATUS_EXIT_CODE=4
 PANPIPE_SCHEDULER=""
 BUILTIN_SCHEDULER="BUILTIN"
 SLURM_SCHEDULER="SLURM"
@@ -63,6 +69,7 @@ declare -A PIPELINE_FIFOS
 
 # Declare scheduling-related variables
 declare PANPIPE_SCHEDULER
+declare PANPIPE_REEXEC_STEPS
 declare PANPIPE_DEFAULT_NODES
 declare PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=1
 
@@ -1489,9 +1496,9 @@ check_step_is_in_progress()
     local stepid_exists=`check_if_id_exists $stepid`
 
     if [ ${stepid_exists} -eq 1 ]; then
-        echo 1
+        return 0
     else
-        echo 0
+        return 1
     fi
 }
 
@@ -1512,6 +1519,18 @@ get_num_substeps_to_finish()
 }
 
 ########
+check_step_should_be_reexec()
+{
+    local stepname=$1
+
+    if [ "${PANPIPE_REEXEC_STEPS[${stepname}]}" = "" ]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+########
 check_step_is_finished()
 {
     local dirname=$1
@@ -1523,12 +1542,12 @@ check_step_is_finished()
         local num_substeps_finished=`get_num_substeps_finished ${script_filename}`
         local num_substeps=`get_num_substeps_to_finish ${script_filename}`
         if [ ${num_substeps_finished} -eq ${num_substeps} ]; then
-            echo 1
+            return 0
         else
-            echo 0
+            return 1
         fi
     else
-        echo 0
+        return 1
     fi     
 }
 
@@ -1538,22 +1557,30 @@ get_step_status()
     local dirname=$1
     local stepname=$2
     local stepdirname=`get_step_outdir ${dirname} ${stepname}`
-    
+
+    # Check if output directory was created
     if [ -d ${stepdirname} ]; then
-        step_is_finished=`check_step_is_finished $dirname $stepname`
-        if [ ${step_is_finished} -eq 1 ]; then
-            echo "${FINISHED_STEP_STATUS}"
-        else
-            # Determine if step is unfinished or in progress
-            local step_is_in_progress=`check_step_is_in_progress $dirname $stepname`
-            if [ ${step_is_in_progress} -eq 1 ]; then
-                echo "${INPROGRESS_STEP_STATUS}"
-            else
-                echo "${UNFINISHED_STEP_STATUS}"
-            fi
+        if check_step_should_be_reexec $stepname; then
+            echo "${REEXEC_STEP_STATUS}"
+            return ${REEXEC_STEP_STATUS_EXIT_CODE}
         fi
+        
+        if check_step_is_finished $dirname $stepname; then
+            echo "${FINISHED_STEP_STATUS}"
+            return ${FINISHED_STEP_STATUS_EXIT_CODE}
+        fi
+        
+        # Determine if step is unfinished or in progress
+        if check_step_is_in_progress $dirname $stepname; then
+            echo "${INPROGRESS_STEP_STATUS}"
+            return ${INPROGRESS_STEP_STATUS_EXIT_CODE}
+        fi
+
+        echo "${UNFINISHED_STEP_STATUS}"
+        return ${UNFINISHED_STEP_STATUS_EXIT_CODE}
     else
         echo "${TODO_STEP_STATUS}"
+        return ${TODO_STEP_STATUS_EXIT_CODE}
     fi
 }
 
