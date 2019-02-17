@@ -206,6 +206,16 @@ reorder_pipeline_file()
 }
 
 ########
+gen_stepdeps()
+{
+    echo "* Generating step dependencies information ($pfile)..." >&2
+
+    ${panpipe_bindir}/pipe_check -p ${pfile} -d 2> /dev/null || return 1
+
+    echo "" >&2
+}
+
+########
 configure_scheduler()
 {
     echo "* Configuring scheduler..." >&2
@@ -685,6 +695,9 @@ check_pipeline_file || exit 1
 
 reordered_pfile=${outd}/reordered_pipeline.ppl
 reorder_pipeline_file > ${reordered_pfile} || exit 1
+
+stepdeps_file=${outd}/.stepdeps.txt
+gen_stepdeps > ${stepdeps_file} || exit 1
 
 configure_scheduler || exit 1
 
