@@ -1,12 +1,12 @@
 SCRIPTS_TO_BE_BUILT= panpipe_lib pipe_exec pipe_exec_batch pipe_check	\
-pipe_status pipe_software_test
+pipe_status pipe_software_test get_reexec_steps
 
 bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
 CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
 
-EXTRA_DIST = panpipe_lib.sh pipe_exec.sh pipe_exec_batch.sh	\
-pipe_check.py pipe_status.sh pipe_software_test.sh
+EXTRA_DIST = panpipe_lib.sh pipe_exec.sh pipe_exec_batch.sh		\
+pipe_check.py pipe_status.sh pipe_software_test.sh get_reexec_steps.py
 
 # Build rules for libraries
 panpipe_lib: panpipe_lib.sh
