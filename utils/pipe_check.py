@@ -269,22 +269,19 @@ def print_graph(ordered_step_entries,stepdeps_map):
     print "}"
 
 ##################################################
-def extract_all_deps_for_step(sname,stepdeps_map):
-    if sname not in stepdeps_map:
-        return set()
-    else:
-        result=set()
+def extract_all_deps_for_step(sname,stepdeps_map,result):
+    if sname in stepdeps_map:
         for stepdep in stepdeps_map[sname]:
             result.add(stepdep.stepname)
-            result.union(extract_all_deps_for_step(stepdep.stepname,stepdeps_map))
-        return result
+            extract_all_deps_for_step(stepdep.stepname,stepdeps_map,result)
 
 ##################################################
 def print_deps(ordered_step_entries,stepdeps_map):
     for entry in ordered_step_entries:
         # Extract dependencies for step
         sname=extract_step_name(entry)
-        stepdeps=extract_all_deps_for_step(sname,stepdeps_map)
+        stepdeps=set()
+        extract_all_deps_for_step(sname,stepdeps_map,stepdeps)
         
         # Print dependencies for step
         depstr=""
