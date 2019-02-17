@@ -1545,6 +1545,21 @@ mark_step_as_reexec()
 }
 
 ########
+get_reexec_steps_as_string()
+{
+    local result=""
+    for stepname in "${!PANPIPE_REEXEC_STEPS[@]}"; do
+        if [ "${result}" = "" ]; then
+            result=${stepname}
+        else
+            result="${result},${stepname}"
+        fi
+    done
+
+    echo ${result}
+}
+
+########
 check_step_should_be_reexec()
 {
     local stepname=$1
