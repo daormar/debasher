@@ -381,6 +381,34 @@ process_conda_requirements()
 }
 
 ########
+define_forced_exec_steps()
+{
+    echo "* Defining steps forced to be reexecuted (if any)..." >&2
+
+    # Read input parameters
+    local pfile=$1
+
+    # Read information about the steps to be executed
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
+            # Extract step information
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            local step_forced=`extract_attr_from_stepspec "$stepspec" "forced"`
+            if [ ${step_forced} = "yes" ]; then
+                mark_step_as_reexec $stepname ${FORCED_REEXEC_REASON}
+            fi 
+        fi
+    done < ${pfile}
+
+    echo "Definition complete" >&2
+
+    echo "" >&2
+}
+
+########
 release_lock()
 {
     local fd=$1
@@ -725,6 +753,8 @@ else
             process_conda_requirements ${reordered_pfile} || exit 1
         fi
 
+        define_forced_exec_steps ${reordered_pfile} || exit 1
+        
         print_command_line || exit 1
         
         execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1    
