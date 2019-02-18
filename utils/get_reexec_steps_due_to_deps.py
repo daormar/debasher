@@ -84,10 +84,10 @@ def step_should_reexec(reexec_steps,step_deplist):
     return False
     
 ##################################################
-def get_new_reexec_steps(reexec_steps,dep_info):
+def get_new_reexec_steps(reexec_steps,curr_reexec_steps,dep_info):
     new_reexec_steps=set()
     for step in dep_info:
-        if step not in reexec_steps and step_should_reexec(reexec_steps,dep_info[step]):
+        if step not in reexec_steps and step_should_reexec(curr_reexec_steps,dep_info[step]):
             new_reexec_steps.add(step)
             
     return new_reexec_steps
@@ -95,16 +95,16 @@ def get_new_reexec_steps(reexec_steps,dep_info):
 ##################################################
 def get_reexec_steps_due_to_deps(reexec_steps,dep_info):
     curr_reexec_steps=reexec_steps
-    result=set()
+    reexec_steps=set()
     end=False
     while not end:
-        curr_reexec_steps=get_new_reexec_steps(curr_reexec_steps,dep_info)
+        curr_reexec_steps=get_new_reexec_steps(reexec_steps,curr_reexec_steps,dep_info)
         if (len(curr_reexec_steps)==0):
             end=True
         else:
-            result=result.union(curr_reexec_steps)
+            reexec_steps=reexec_steps.union(curr_reexec_steps)
         
-    return result
+    return reexec_steps
 
 ##################################################
 def print_steps(reexec_steps):
