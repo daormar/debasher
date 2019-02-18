@@ -76,7 +76,9 @@ def print_help():
 ##################################################
 def entry_is_comment(entry):
     fields=entry.split()
-    if fields[0][0]=="#":
+    if len(fields)==0:
+        return False
+    elif fields[0][0]=="#":
         return True
     else:
         return False
@@ -84,7 +86,17 @@ def entry_is_comment(entry):
 ##################################################
 def entry_is_config(entry):
     fields=entry.split()
-    if fields[0]=="#import":
+    if len(fields)==0:
+        return False
+    elif fields[0]=="#import":
+        return True
+    else:
+        return False
+
+##################################################
+def entry_is_empty(entry):
+    fields=entry.split()
+    if len(fields)==0:
         return True
     else:
         return False
@@ -92,12 +104,16 @@ def entry_is_config(entry):
 ##################################################
 def extract_step_name(entry):
     fields=entry.split()
-    return fields[0]
+    if len(fields)==0:
+        return ""
+    else:
+        return fields[0]
 
 ##################################################
 def extract_step_deps(entry):
     # extract text field
     fields=entry.split()
+    sdeps_str=""
     for f in fields:
         if f.find("stepdeps=")==0:
             sdeps_str=f[9:]
@@ -142,7 +158,7 @@ def extract_step_entries(pfile):
     # read file entry by entry
     for entry in file:
         entry=entry.strip("\n")
-        if not entry_is_comment(entry):
+        if not entry_is_comment(entry) and not entry_is_empty(entry):
             step_entries.append(entry)
             
     return step_entries
@@ -151,6 +167,7 @@ def extract_step_entries(pfile):
 def create_stepdeps_map(step_entries):
     stepdeps_map={}
     for entry in step_entries:
+        fields=entry.split()
         sname=extract_step_name(entry)
         deps=extract_step_deps(entry)
         stepdeps_map[sname]=deps
@@ -161,12 +178,12 @@ def stepnames_duplicated(step_entries):
     stepnames=set()
     lineno=1
     for entry in step_entries:
-        jname=extract_step_name(entry)
-        if jname in stepnames:
+        sname=extract_step_name(entry)
+        if sname in stepnames:
             print >> sys.stderr, "Error: duplicated step name in line",lineno
             return True
         else:
-            stepnames.add(jname)
+            stepnames.add(sname)
         lineno=lineno+1
     return False
     
@@ -189,13 +206,13 @@ def depnames_correct(stepdeps_map):
     return True
 
 ##################################################
-def stepname_can_be_added(jname,processed_steps,stepdeps_map):
+def stepname_can_be_added(sname,processed_steps,stepdeps_map):
     # Check if step name has already been added
-    if jname in processed_steps:
+    if sname in processed_steps:
         return False
 
     # Check if all dependencies for step name were processed
-    for elem in stepdeps_map[jname]:
+    for elem in stepdeps_map[sname]:
         if(elem.stepname not in processed_steps):
             return False
     
