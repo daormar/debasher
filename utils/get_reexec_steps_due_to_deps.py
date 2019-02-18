@@ -95,7 +95,7 @@ def get_new_reexec_steps(reexec_steps,curr_reexec_steps,dep_info):
 ##################################################
 def get_reexec_steps_due_to_deps(initial_reexec_steps,dep_info):
     curr_reexec_steps=initial_reexec_steps
-    reexec_steps=set()
+    reexec_steps=initial_reexec_steps
     end=False
     while not end:
         curr_reexec_steps=get_new_reexec_steps(reexec_steps,curr_reexec_steps,dep_info)
@@ -104,7 +104,7 @@ def get_reexec_steps_due_to_deps(initial_reexec_steps,dep_info):
         else:
             reexec_steps=reexec_steps.union(curr_reexec_steps)
         
-    return reexec_steps
+    return reexec_steps-initial_reexec_steps
 
 ##################################################
 def print_steps(reexec_steps):
