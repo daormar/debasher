@@ -46,11 +46,11 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "get_reexec_steps -r <string> -d <string> [-v]"
+    print >> sys.stderr, "get_reexec_steps_due_to_deps -r <string> -d <string> [-v]"
     print >> sys.stderr, ""
-    print >> sys.stderr, "-r <string>       String with steps to be reexecuted"
-    print >> sys.stderr, "-d <string>       File with dependency information"
-    print >> sys.stderr, "-v                Verbose mode"
+    print >> sys.stderr, "-r <string>                  String with steps to be reexecuted"
+    print >> sys.stderr, "-d <string>                  File with dependency information"
+    print >> sys.stderr, "-v                           Verbose mode"
 
 ##################################################
 def process_r_opt(rexec_steps_str):
@@ -93,17 +93,18 @@ def get_new_reexec_steps(reexec_steps,dep_info):
     return new_reexec_steps
 
 ##################################################
-def get_reexec_steps(reexec_steps,dep_info):
+def get_reexec_steps_due_to_deps(reexec_steps,dep_info):
     curr_reexec_steps=reexec_steps
+    result=set()
     end=False
     while not end:
-        new_reexec_steps=get_new_reexec_steps(curr_reexec_steps,dep_info)
-        if (len(new_reexec_steps)==0):
+        curr_reexec_steps=get_new_reexec_steps(curr_reexec_steps,dep_info)
+        if (len(curr_reexec_steps)==0):
             end=True
         else:
-            curr_reexec_steps=curr_reexec_steps.union(new_reexec_steps)
+            result=result.union(curr_reexec_steps)
         
-    return curr_reexec_steps
+    return result
 
 ##################################################
 def print_steps(reexec_steps):
@@ -116,9 +117,9 @@ def process_pars(flags,values):
 
     dep_info=load_dep_info(values["depfile"])
     
-    reexec_steps=get_reexec_steps(initial_reexec_steps,dep_info)
-
-    print_steps(reexec_steps)
+    reexec_steps_due_to_deps=get_reexec_steps_due_to_deps(initial_reexec_steps,dep_info)
+    
+    print_steps(reexec_steps_due_to_deps)
     
 ##################################################
 def main(argv):
