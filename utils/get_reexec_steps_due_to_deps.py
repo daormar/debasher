@@ -93,8 +93,8 @@ def get_new_reexec_steps(reexec_steps,curr_reexec_steps,dep_info):
     return new_reexec_steps
 
 ##################################################
-def get_reexec_steps_due_to_deps(reexec_steps,dep_info):
-    curr_reexec_steps=reexec_steps
+def get_reexec_steps_due_to_deps(initial_reexec_steps,dep_info):
+    curr_reexec_steps=initial_reexec_steps
     reexec_steps=set()
     end=False
     while not end:
