@@ -396,12 +396,38 @@ define_forced_exec_steps()
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local step_forced=`extract_attr_from_stepspec "$stepspec" "forced"`
+            local step_forced=`extract_attr_from_stepspec "$stepspec" "force"`
             if [ ${step_forced} = "yes" ]; then
                 mark_step_as_reexec $stepname ${FORCED_REEXEC_REASON}
             fi 
         fi
     done < ${pfile}
+
+    echo "Definition complete" >&2
+
+    echo "" >&2
+}
+
+########
+define_reexec_steps_due_to_deps()
+{
+    echo "* Defining steps to be reexecuted due to dependencies (if any)..." >&2
+
+    local stepdeps_file=$1
+    local reexec_steps_file=$2
+    
+    # Obtain list of steps to be reexecuted due to dependencies
+    local reexec_steps_string=`get_reexec_steps_as_string`
+    ${panpipe_bindir}/get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d ${stepdeps_file} > ${reexec_steps_file} || return 1
+
+    # Read information about the steps to be re-executed due to
+    # dependencies
+    local stepname
+    while read stepname; do
+        if [ "${stepname}" != "" ]; then
+            mark_step_as_reexec $stepname ${DEPS_REEXEC_REASON}
+        fi
+    done < ${reexec_steps_file}
 
     echo "Definition complete" >&2
 
@@ -754,7 +780,10 @@ else
         fi
 
         define_forced_exec_steps ${reordered_pfile} || exit 1
-        
+
+        reexec_steps_file=${outd}/.reexec_steps_due_to_deps.txt
+        define_reexec_steps_due_to_deps ${stepdeps_file} ${reexec_steps_file} || exit 1
+
         print_command_line || exit 1
         
         execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1    
