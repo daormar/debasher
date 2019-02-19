@@ -637,10 +637,9 @@ execute_step()
         # Write id to file
         write_step_id_to_file ${dirname} ${stepname} ${!stepname_jid}
     else
+        # Step will not be executed, check if outdated modules were used
         local script_filename=`get_script_filename ${dirname} ${stepname}`
-        local prev_script_older=0
-        check_script_is_older_than_modules ${script_filename} "${fullmodnames}" || prev_script_older=1
-        if [ ${prev_script_older} -eq 1 ]; then
+        if check_script_is_older_than_modules ${script_filename} "${fullmodnames}"; then
             if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
                 echo "Warning: current execution of this script is using outdated modules">&2
             else
