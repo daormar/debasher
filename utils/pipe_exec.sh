@@ -518,13 +518,13 @@ get_stepdeps_from_detailed_spec()
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
         local step=`get_stepname_part_in_dep ${dep_spec}`
         
-        # Check if there is a jid for the step
-        local step_jid=${step}_jid
-        if [ ! -z "${!step_jid}" ]; then
+        # Check if there is a id for the step
+        local step_id=${step}_id
+        if [ ! -z "${!step_id}" ]; then
             if [ -z "${jdeps}" ]; then
-                jdeps=${deptype}":"${!step_jid}
+                jdeps=${deptype}":"${!step_id}
             else
-                jdeps=${jdeps}","${deptype}":"${!step_jid}
+                jdeps=${jdeps}","${deptype}":"${!step_id}
             fi
         fi
     done
@@ -538,7 +538,7 @@ get_stepdeps()
 {
     local stepdeps_spec=$1
     case ${stepdeps_spec} in
-            "afterok:all") apply_deptype_to_stepids ${step_jids} afterok
+            "afterok:all") apply_deptype_to_stepids ${step_ids} afterok
                     ;;
             "none") echo ""
                     ;;
@@ -628,14 +628,14 @@ execute_step()
         # Execute script
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
-        local stepname_jid=${stepname}_jid
-        launch ${script_filename} "${job_array_list}" "${stepspec}" "${stepdeps}" ${stepname_jid} || return 1
+        local stepname_id=${stepname}_id
+        launch ${script_filename} "${job_array_list}" "${stepspec}" "${stepdeps}" ${stepname_id} || return 1
         
-        # Update variables storing jids
-        step_jids="${step_jids}:${!stepname_jid}"
+        # Update variables storing ids
+        step_ids="${step_ids}:${!stepname_id}"
 
         # Write id to file
-        write_step_id_to_file ${dirname} ${stepname} ${!stepname_jid}
+        write_step_id_to_file ${dirname} ${stepname} ${!stepname_id}
     else
         # Step will not be executed, check if outdated modules were used
         local script_filename=`get_script_filename ${dirname} ${stepname}`
@@ -687,8 +687,8 @@ execute_pipeline_steps()
     # Get names of pipeline modules
     local fullmodnames=`get_pipeline_fullmodnames $pfile` || return 1
     
-    # step_jids will store the step ids of the pipeline steps
-    local step_jids=""
+    # step_ids will store the step ids of the pipeline steps
+    local step_ids=""
     
     # Read information about the steps to be executed
     local stepspec
