@@ -508,7 +508,7 @@ print_command_line()
 get_stepdeps_from_detailed_spec()
 {
     local stepdeps_spec=$1
-    local jdeps=""
+    local sdeps=""
 
     # Iterate over the elements of the step specification: type1:stepname1,...,typen:stepnamen
     prevIFS=$IFS
@@ -521,16 +521,16 @@ get_stepdeps_from_detailed_spec()
         # Check if there is a id for the step
         local step_id=${step}_id
         if [ ! -z "${!step_id}" ]; then
-            if [ -z "${jdeps}" ]; then
-                jdeps=${deptype}":"${!step_id}
+            if [ -z "${sdeps}" ]; then
+                sdeps=${deptype}":"${!step_id}
             else
-                jdeps=${jdeps}","${deptype}":"${!step_id}
+                sdeps=${sdeps}","${deptype}":"${!step_id}
             fi
         fi
     done
     IFS=${prevIFS}
 
-    echo ${jdeps}
+    echo ${sdeps}
 }
 
 ########
@@ -617,19 +617,19 @@ execute_step()
         archive_script ${script_filename}
 
         # Prepare files and directories for step
-        reset_scriptdir_for_step ${script_filename} || return 1
+        reset_scriptdir_for_step ${script_filename} || { echo "Error when resetting script directory for step" >&2 ; return 1; }
         local remove=0
         if [ ${array_size} -eq 1 ]; then
             remove=1
         fi
-        prepare_outdir_for_step ${dirname} ${stepname} ${remove} || return 1
+        prepare_outdir_for_step ${dirname} ${stepname} ${remove} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
         prepare_fifos_owned_by_step ${stepname}
         
         # Execute script
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
         local stepname_id=${stepname}_id
-        launch ${script_filename} "${job_array_list}" "${stepspec}" "${stepdeps}" ${stepname_id} || return 1
+        launch ${script_filename} "${job_array_list}" "${stepspec}" "${stepdeps}" ${stepname_id} || { echo "Error while launching step!" >&2 ; return 1; }
         
         # Update variables storing ids
         step_ids="${step_ids}:${!stepname_id}"
@@ -637,6 +637,15 @@ execute_step()
         # Write id to file
         write_step_id_to_file ${dirname} ${stepname} ${!stepname_id}
     else
+        # If step is in progress, its id should be retrieved so as to
+        # correctly express dependencies
+        if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
+            local stepname_id=${stepname}_id
+            local sid=`read_step_id_from_file ${dirname} ${stepname}` || { echo "Error while retrieving id of in-progress step" >&2 ; return 1; }
+            eval "${stepname_id}='${sid}'"
+            step_ids="${step_ids}:${!stepname_id}"
+        fi
+        
         # Step will not be executed, check if outdated modules were used
         local script_filename=`get_script_filename ${dirname} ${stepname}`
         if check_script_is_older_than_modules ${script_filename} "${fullmodnames}"; then
