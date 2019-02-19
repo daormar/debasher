@@ -266,7 +266,6 @@ def print_entries(config_entries,step_entries):
 def print_graph(ordered_step_entries,stepdeps_map):
     # Print header
     print "digraph G {"
-#    print "rankdir=LR;"
     print "overlap=false;"
     print "splines=true;"
     print "K=1;"
