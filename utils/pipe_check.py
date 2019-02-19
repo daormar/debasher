@@ -153,15 +153,19 @@ def extract_config_entries(pfile):
 
 ##################################################
 def extract_step_entries(pfile):
+    entries_lineno=[]
     step_entries=[]
     file = open(pfile, 'r')
     # read file entry by entry
+    lineno=1
     for entry in file:
         entry=entry.strip("\n")
         if not entry_is_comment(entry) and not entry_is_empty(entry):
             step_entries.append(entry)
-            
-    return step_entries
+            entries_lineno.append(lineno)
+        lineno=lineno+1
+        
+    return entries_lineno,step_entries
 
 ##################################################
 def create_stepdeps_map(step_entries):
@@ -174,13 +178,13 @@ def create_stepdeps_map(step_entries):
     return stepdeps_map
 
 ##################################################
-def stepnames_duplicated(step_entries):
+def stepnames_duplicated(entries_lineno,step_entries):
     stepnames=set()
     lineno=1
-    for entry in step_entries:
-        sname=extract_step_name(entry)
+    for i in range(len(step_entries)):
+        sname=extract_step_name(step_entries[i])
         if sname in stepnames:
-            print >> sys.stderr, "Error: duplicated step name in line",lineno
+            print >> sys.stderr, "Error: step",sname,"in line",entries_lineno[i],"is duplicated"
             return True
         else:
             stepnames.add(sname)
@@ -238,10 +242,10 @@ def order_step_entries(step_entries,stepdeps_map,ordered_step_entries):
     return ordered_step_entries
     
 ##################################################
-def stepdeps_correct(step_entries,stepdeps_map,ordered_step_entries):
+def stepdeps_correct(entries_lineno,step_entries,stepdeps_map,ordered_step_entries):
 
     # Check existence of duplicated steps
-    if(stepnames_duplicated(step_entries)):
+    if(stepnames_duplicated(entries_lineno,step_entries)):
         return False
     
     # Check dependency names
@@ -311,10 +315,10 @@ def print_deps(ordered_step_entries,stepdeps_map):
 ##################################################
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
-    step_entries=extract_step_entries(values["pfile"])
+    entries_lineno,step_entries=extract_step_entries(values["pfile"])
     stepdeps_map=create_stepdeps_map(step_entries)
     ordered_step_entries=[]
-    if(stepdeps_correct(step_entries,stepdeps_map,ordered_step_entries)):
+    if(stepdeps_correct(entries_lineno,step_entries,stepdeps_map,ordered_step_entries)):
         print >> sys.stderr, "Pipeline file is correct"
         if(flags["r_given"]):
             print_entries(config_entries,ordered_step_entries)
