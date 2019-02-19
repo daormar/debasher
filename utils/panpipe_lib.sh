@@ -10,6 +10,7 @@ ATTR_NOT_FOUND="_ATTR_NOT_FOUND_"
 OPT_NOT_FOUND="_OPT_NOT_FOUND_"
 DEP_NOT_FOUND="_DEP_NOT_FOUND_"
 FUNCT_NOT_FOUND="_FUNCT_NOT_FOUND_"
+INVALID_SID="_INVALID_SID_"
 INVALID_JID="_INVALID_JID_"
 INVALID_PID="_INVALID_PID_"
 VOID_VALUE="_VOID_VALUE_"
@@ -1145,13 +1146,13 @@ launch_step()
     local stepspec=$3
     local stepdeps=$4
     local opts_array_name=$5
-    local jid=$6
+    local id=$6
 
     # Create script
     create_script ${tmpdir}/scripts/${stepname} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
-    launch ${tmpdir}/scripts/${stepname} ${job_array_list} "${stepspec}" ${stepdeps} ${jid} || return 1
+    launch ${tmpdir}/scripts/${stepname} ${job_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
 }
 
 ########
@@ -1435,7 +1436,7 @@ read_step_id_from_file()
     if [ -f $filename ]; then
         cat $filename
     else
-        echo ${INVALID_JID}
+        echo ${INVALID_SID}
     fi
 }
 
