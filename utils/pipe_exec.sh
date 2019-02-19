@@ -414,10 +414,10 @@ define_reexec_steps_due_to_deps()
     echo "* Defining steps to be reexecuted due to dependencies (if any)..." >&2
 
     local stepdeps_file=$1
-    local reexec_steps_file=$2
     
     # Obtain list of steps to be reexecuted due to dependencies
     local reexec_steps_string=`get_reexec_steps_as_string`
+    local reexec_steps_file=${outd}/.reexec_steps_due_to_deps.txt
     ${panpipe_bindir}/get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d ${stepdeps_file} > ${reexec_steps_file} || return 1
 
     # Read information about the steps to be re-executed due to
@@ -781,8 +781,7 @@ else
 
         define_forced_exec_steps ${reordered_pfile} || exit 1
 
-        reexec_steps_file=${outd}/.reexec_steps_due_to_deps.txt
-        define_reexec_steps_due_to_deps ${stepdeps_file} ${reexec_steps_file} || exit 1
+        define_reexec_steps_due_to_deps ${stepdeps_file} || exit 1
 
         print_command_line || exit 1
         
