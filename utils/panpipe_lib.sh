@@ -1300,9 +1300,9 @@ load_pipeline_module()
     if [ -f ${fullmodname} ]; then
         . ${fullmodname} || return 1
         # Store module name in associative array
-        PIPELINE_MODULES[${fullmodname}]=1
-        
+        PIPELINE_MODULES[${fullmodname}]=1        
     else
+        echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
         return 1
     fi
 }
