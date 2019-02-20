@@ -1454,7 +1454,7 @@ check_if_pid_exists()
 ########
 get_slurm_state_code()
 {
-    local jid
+    local jid=$1
     ${SQUEUE} -j $jid -h -o "%t" 2>/dev/null
 }
 
