@@ -174,6 +174,21 @@ exclude_bashisms()
 }
 
 ########
+replace_str_elem_sep_with_blank()
+{
+    local sep=$1
+    local str=$2
+    local result
+
+    saveIFS="$IFS"
+    IFS="$sep" str_array=($str)
+    IFS="$saveIFS"
+    result=${str_array[@]}
+    
+    echo ${result}
+}
+
+########
 serialize_string_array()
 {
     local str_array_name=$1[@]
@@ -842,40 +857,48 @@ get_slurm_dependency_opt()
 }
 
 ########
+get_list_of_pending_jobs_in_array()
+{
+    local array_size=$1
+    local file=$2
+
+    # Create associative map containing completed jobs
+    local -A completed_jobs
+    while read line; do
+        local fields=( $line )
+        local num_fields=${#fields[@]}
+        if [ ${num_fields} -eq 7 ]; then
+            local id=${fields[3]}
+            completed_jobs[${id}]="1"
+        fi
+    done < ${file}.finished
+            
+    # Create string enumerating pending jobs
+    local pending_jobs=""
+    local id=1
+    while [ $id -le ${array_size} ]; do
+        if [ -z "${completed_jobs[${id}]}" ]; then
+            if [ -z "${pending_jobs}" ]; then
+                pending_jobs=${id}
+            else
+                pending_jobs="${pending_jobs},${id}"
+            fi
+        fi
+        id=`expr $id + 1`
+    done
+    
+    echo ${pending_jobs}    
+}
+
+########
 get_job_array_list()
 {
-    local file=$1
-    local array_size=$2
+    local array_size=$1
+    local file=$2
 
     if [ -f ${file}.finished ]; then
         # Some jobs were completed, return list containing pending ones
-
-        # Create associative map containing completed jobs
-        local -A completed_jobs
-        while read line; do
-            local fields=( $line )
-            local num_fields=${#fields[@]}
-            if [ ${num_fields} -eq 7 ]; then
-                local id=${fields[3]}
-                completed_jobs[${id}]="1"
-            fi
-        done < ${file}.finished
-            
-        # Create string enumerating pending jobs
-        local pending_jobs=""
-        local id=1
-        while [ $id -le ${array_size} ]; do
-            if [ -z "${completed_jobs[${id}]}" ]; then
-                if [ -z "${pending_jobs}" ]; then
-                    pending_jobs=${id}
-                else
-                    pending_jobs="${pending_jobs},${id}"
-                fi
-            fi
-            id=`expr $id + 1`
-        done
-
-        echo ${pending_jobs}
+        get_list_of_pending_jobs_in_array ${array_size} ${file}
     else
         # No jobs were completed, return list containing all of them
         echo "1-${array_size}"
@@ -1420,18 +1443,40 @@ prepare_outdir_for_step()
 }
 
 ########
-prepare_scriptdir_for_step() 
+update_step_completion_signal()
 {
     local status=$1
     local script_filename=$2
 
+    # If step will be reexecuted, file signaling step completion
+    # should be removed
     if [ "${status}" = "${REEXEC_STEP_STATUS}" ]; then
-        rm -f ${script_filename}.*
-    else
+        rm -f ${script_filename}.finished
+    fi
+}
+
+########
+clean_step_log_files()
+{
+    local array_size=$1
+    local script_filename=$2
+
+    # Remove log files depending on array size
+    if [ ${array_size} -eq 1 ]; then
         rm -f ${script_filename}.${BUILTIN_SCHED_LOG_FEXT}
         rm -f ${script_filename}.${SLURM_SCHED_LOG_FEXT}
-        rm -f ${script_filename}.id
-    fi        
+    else
+        # If array size is greater than 1, remove only those log files
+        # related to unfinished array tasks
+        local pending_jobs=`get_list_of_pending_jobs_in_array ${array_size} ${script_filename}`
+        if [ "${pending_jobs}" != "" ]; then
+            pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
+            for id in ${pending_jobs_blanks}; do
+                rm -f ${script_filename}_${id}.${BUILTIN_SCHED_LOG_FEXT}
+                rm -f ${script_filename}_${id}.${SLURM_SCHED_LOG_FEXT}
+            done
+        fi
+    fi
 }
 
 ########

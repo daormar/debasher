@@ -601,6 +601,7 @@ execute_step()
 
     ## Decide whether the step should be executed
     if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
+
         # Create script
         local script_filename=`get_script_filename ${dirname} ${stepname}`
         local step_function=`get_name_of_step_function ${stepname}`
@@ -614,7 +615,8 @@ execute_step()
         archive_script ${script_filename}
 
         # Prepare files and directories for step
-        prepare_scriptdir_for_step ${status} ${script_filename} || { echo "Error when resetting script directory for step" >&2 ; return 1; }
+        update_step_completion_signal ${status} ${script_filename} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
+        clean_step_log_files ${array_size} ${script_filename} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
         local remove=0
         if [ ${array_size} -eq 1 ]; then
             remove=1
@@ -623,7 +625,7 @@ execute_step()
         prepare_fifos_owned_by_step ${stepname}
         
         # Execute script
-        local job_array_list=`get_job_array_list ${script_filename} ${array_size}`
+        local job_array_list=`get_job_array_list ${array_size} ${script_filename}`
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
         local stepname_id=${stepname}_id
