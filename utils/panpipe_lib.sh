@@ -669,7 +669,7 @@ get_name_of_step_function_post()
     local step_function_post="${stepname_wo_suffix}_post"
 
     if check_func_exists ${step_function_post}; then
-        echo ${step_function_outdir}
+        echo ${step_function_post}
     else
         echo ${FUNCT_NOT_FOUND}
     fi
