@@ -767,7 +767,7 @@ find_dependency_for_step()
     local stepname_part=$2
 
     local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
-    local stepsdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
+    local stepdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
     local dep
     for dep in ${stepdeps_blanks}; do
         local stepname_part_in_dep=`get_stepname_part_in_dep ${dep}`
