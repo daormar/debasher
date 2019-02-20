@@ -49,6 +49,10 @@ PANPIPE_SCHEDULER=""
 BUILTIN_SCHEDULER="BUILTIN"
 SLURM_SCHEDULER="SLURM"
 
+# FILE EXTENSIONS
+BUILTIN_SCHED_LOG_FEXT="builtin_out"
+SLURM_SCHED_LOG_FEXT="slurm_out"
+
 ####################
 # GLOBAL VARIABLES #
 ####################
@@ -364,6 +368,9 @@ print_task_body_builtin_sched()
     local funct=$4
     local post_funct=$5
     local script_opts=$6
+
+    # Write start of code block
+    echo "{"
     
     # Write treatment for task id
     if [ ${num_scripts} -gt 1 ]; then
@@ -384,6 +391,13 @@ print_task_body_builtin_sched()
 
     local throttle_varname=`get_job_array_task_throttle_varname ${base_fname}`
     echo "job_array_throttle_wait \${NUM_CONCURRENT_PIPE_TASKS} \${${throttle_varname}} || NUM_CONCURRENT_PIPE_TASKS=0"
+
+    # Write end of code block with redirection
+    if [ ${num_scripts} -gt 1 ]; then
+        echo "} > ${fname}_${taskid}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
+    else
+        echo "} > ${fname}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
+    fi
 }
 
 ########
@@ -500,9 +514,9 @@ create_slurm_script()
     # Set SLURM options
     echo "#SBATCH --job-name=${funct}" >> ${fname} || return 1
     if [ ${num_scripts} -eq 1 ]; then
-        echo "#SBATCH --output=${fname}.slurm_out" >> ${fname} || return 1
+        echo "#SBATCH --output=${fname}.${SLURM_SCHED_LOG_FEXT}" >> ${fname} || return 1
     else
-        echo "#SBATCH --output=${fname}_%a.slurm_out" >> ${fname} || return 1
+        echo "#SBATCH --output=${fname}_%a.${SLURM_SCHED_LOG_FEXT}" >> ${fname} || return 1
     fi
     
     # Write environment variables
@@ -1064,7 +1078,7 @@ builtin_scheduler_launch()
 
     # Execute file
     if wait_for_deps_builtin_scheduler "${stepdeps}"; then
-        ${file} > ${file}.log 2>&1 &
+        ${file} &
         local pid=$!
         eval "${outvar}='${pid}'"
     else
@@ -1414,8 +1428,8 @@ prepare_scriptdir_for_step()
     if [ "${status}" = "${REEXEC_STEP_STATUS}" ]; then
         rm -f ${script_filename}.*
     else
-        rm -f ${script_filename}.log
-        rm -f ${script_filename}.slurm_out
+        rm -f ${script_filename}.${BUILTIN_SCHED_LOG_FEXT}
+        rm -f ${script_filename}.${SLURM_SCHED_LOG_FEXT}
         rm -f ${script_filename}.id
     fi        
 }
