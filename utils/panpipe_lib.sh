@@ -180,9 +180,7 @@ replace_str_elem_sep_with_blank()
     local str=$2
     local result
 
-    saveIFS="$IFS"
     IFS="$sep" str_array=($str)
-    IFS="$saveIFS"
     result=${str_array[@]}
     
     echo ${result}
@@ -769,18 +767,15 @@ find_dependency_for_step()
     local stepname_part=$2
 
     local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
-    local prevIFS=$IFS
-    IFS=','
+    local stepsdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
     local dep
-    for dep in ${stepdeps}; do
+    for dep in ${stepdeps_blanks}; do
         local stepname_part_in_dep=`get_stepname_part_in_dep ${dep}`
         if [ "${stepname_part_in_dep}" = ${stepname_part} ]; then
             echo ${dep}
-            IFS=${prevIFS}
             return 0
         fi
     done
-    IFS=${prevIFS}
     echo ${DEP_NOT_FOUND}
     return 1
 }
@@ -828,17 +823,15 @@ apply_deptype_to_stepids()
 
     # Apply deptype
     local result=""
-    local prevIFS=$IFS
-    IFS=','
+    local stepids_blanks=`replace_str_elem_sep_with_blank "," ${stepids}`
     local id
-    for id in ${stepids}; do
+    for id in ${stepids_blanks}; do
         if [ -z "" ]; then
             result=${deptype}:${id}
         else
             result=${result}","${deptype}:${id}
         fi
     done
-    IFS=${prevIFS}
 
     echo $result
 }
@@ -864,15 +857,17 @@ get_list_of_pending_jobs_in_array()
 
     # Create associative map containing completed jobs
     local -A completed_jobs
-    while read line; do
-        local fields=( $line )
-        local num_fields=${#fields[@]}
-        if [ ${num_fields} -eq 7 ]; then
-            local id=${fields[3]}
-            completed_jobs[${id}]="1"
-        fi
-    done < ${file}.finished
-            
+    if [ -f ${file}.finished ]; then
+        while read line; do
+            local fields=( $line )
+            local num_fields=${#fields[@]}
+            if [ ${num_fields} -eq 7 ]; then
+                local id=${fields[3]}
+                completed_jobs[${id}]="1"
+            fi
+        done < ${file}.finished
+    fi
+    
     # Create string enumerating pending jobs
     local pending_jobs=""
     local id=1
@@ -968,10 +963,9 @@ wait_for_deps_builtin_scheduler()
     local stepdeps=$1
 
     # Iterate over dependencies
-    local prevIFS=$IFS
-    IFS=','
+    local stepdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
     local dep
-    for dep in ${stepdeps}; do
+    for dep in ${stepdeps_blanks}; do
         # Extract information from dependency
         local deptype=`get_deptype_part_in_dep ${dep}`
         local pid=`get_id_part_in_dep ${dep}`
@@ -987,13 +981,11 @@ wait_for_deps_builtin_scheduler()
                 ${AFTEROK_STEPDEP_TYPE})
                     if [ ${exit_code} -ne 0 ]; then
                         return 1
-                        IFS=${prevIFS}
                     fi
                 ;;
                 ${AFTERNOTOK_STEPDEP_TYPE})
                     if [ ${exit_code} -eq 0 ]; then
                         return 1
-                        IFS=${prevIFS}
                     fi 
                 ;;
                 ${AFTERANY_STEPDEP_TYPE})
@@ -1003,7 +995,6 @@ wait_for_deps_builtin_scheduler()
             esac
         fi
     done
-    IFS=${prevIFS}
     return 0
 }
 
@@ -1079,10 +1070,9 @@ builtin_scheduler_launch()
     export ${throttle_varname}=${sched_throttle}
 
     # Determine which jobs from the array will be executed
-    local prevIFS=$IFS
-    IFS=','
+    local job_array_list_blanks=`replace_str_elem_sep_with_blank "," ${job_array_list}`
     local elem
-    for elem in ${job_array_list}; do
+    for elem in ${job_array_list_blanks}; do
         if check_job_array_elem_is_range $elem; then
             local start_id=`get_start_id_in_range $elem`
             local end_id=`get_end_id_in_range $elem`
@@ -1097,7 +1087,6 @@ builtin_scheduler_launch()
             export ${task_varname}=1
         fi
     done
-    IFS=${prevIFS}
 
     # Execute file
     if wait_for_deps_builtin_scheduler "${stepdeps}"; then
@@ -1290,17 +1279,15 @@ search_mod_in_dirs()
     local module=$1
     
     # Search module in directories listed in PANPIPE_MOD_DIR
-    local prevIFS=$IFS
-    IFS=':'
+    local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_MOD_DIR}`
     local dir
     local fullmodname
-    for dir in ${PANPIPE_MOD_DIR}; do
+    for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
         if [ -f ${dir}/${module} ]; then
             fullmodname=${dir}/${module}
             break
         fi
     done
-    IFS=${prevIFS}
     
     # Fallback to package bindir
     if [ -z "${fullmodname}" ]; then
@@ -1359,13 +1346,11 @@ load_pipeline_modules()
         return 1
     else
         # Load modules
-        local prevIFS=$IFS
-        IFS=','
+        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
         local mod
-        for mod in ${comma_sep_modules}; do
+        for mod in ${blank_sep_modules}; do
             load_pipeline_module $mod || { echo "Error while loading ${mod}" >&2 ; return 1; }
         done
-        IFS=${prevIFS}
     fi
 }
 
@@ -1383,10 +1368,9 @@ get_pipeline_fullmodnames()
     else
         # Get names
         local fullmodnames
-        local prevIFS=$IFS
-        IFS=','
+        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
         local mod
-        for mod in ${comma_sep_modules}; do
+        for mod in ${blank_sep_modules}; do
             local fullmodname=`determine_full_module_name $mod`
             if [ -z "${fullmodnames}" ]; then
                 fullmodnames=${fullmodname}
@@ -1394,7 +1378,6 @@ get_pipeline_fullmodnames()
                 fullmodnames="${fullmodnames} ${fullmodname}"
             fi
         done
-        IFS=${prevIFS}
         echo "${fullmodnames}"
     fi
 }
@@ -1434,7 +1417,7 @@ prepare_outdir_for_step()
 
     if [ -d ${outd} ]; then
         if [ ${remove} -eq 1 ]; then
-           echo "Warning: ${stepname} output directory already exists but pipeline was not finished, directory content will be removed">&2
+           echo "Warning: ${stepname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
            rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
         fi
     else
@@ -1470,7 +1453,7 @@ clean_step_log_files()
         # related to unfinished array tasks
         local pending_jobs=`get_list_of_pending_jobs_in_array ${array_size} ${script_filename}`
         if [ "${pending_jobs}" != "" ]; then
-            pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
+            local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
             for id in ${pending_jobs_blanks}; do
                 rm -f ${script_filename}_${id}.${BUILTIN_SCHED_LOG_FEXT}
                 rm -f ${script_filename}_${id}.${SLURM_SCHED_LOG_FEXT}
@@ -2405,17 +2388,15 @@ get_abs_yml_fname()
     local yml_fname=$1
     
     # Search module in directories listed in PANPIPE_YML_DIR
-    local prevIFS=$IFS
-    IFS=':'
+    local PANPIPE_YML_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_YML_DIR}`
     local dir
     local abs_yml_fname
-    for dir in ${PANPIPE_YML_DIR}; do
+    for dir in ${PANPIPE_YML_DIR_BLANKS}; do
         if [ -f ${dir}/${yml_fname} ]; then
             abs_yml_fname=${dir}/${yml_fname}
             break
         fi
     done
-    IFS=${prevIFS}
     
     # Fallback to panpipe yml package
     if [ -z "${abs_yml_fname}" ]; then
