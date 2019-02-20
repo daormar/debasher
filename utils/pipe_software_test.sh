@@ -121,17 +121,17 @@ step_c_define_opts()
     # Initialize variables
     local cmdline=$1
     local stepspec=$2
-    local basic_optlist=""
+    local optlist=""
 
     # Define the -step-outd option, the output directory for the step
     local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
-    define_opt "-step-outd" ${step_outd} basic_optlist || exit 1
+    define_opt "-step-outd" ${step_outd} optlist || exit 1
 
     # Save option list so as to execute step four times
     for id in 1 2 3 4; do
-        local optlist=${basic_optlist}
-        define_opt "-id" $id optlist || exit 1
-        save_opt_list optlist
+        local specific_optlist=${optlist}
+        define_opt "-id" $id specific_optlist || exit 1
+        save_opt_list specific_optlist
     done
 }
 
