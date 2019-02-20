@@ -1406,13 +1406,18 @@ prepare_outdir_for_step()
 }
 
 ########
-reset_scriptdir_for_step() 
+prepare_scriptdir_for_step() 
 {
-    local script_filename=$1
+    local status=$1
+    local script_filename=$2
 
-    rm -f ${script_filename}.log
-    rm -f ${script_filename}.id
-    rm -f ${script_filename}_*
+    if [ "${status}" = "${REEXEC_STEP_STATUS}" ]; then
+        rm -f ${script_filename}.*
+    else
+        rm -f ${script_filename}.log
+        rm -f ${script_filename}.slurm_out
+        rm -f ${script_filename}.id
+    fi        
 }
 
 ########
