@@ -511,7 +511,7 @@ get_stepdeps_from_detailed_spec()
     local sdeps=""
 
     # Iterate over the elements of the step specification: type1:stepname1,...,typen:stepnamen
-    local stepsdeps_spec_blanks=`replace_str_elem_sep_with_blank "," ${stepsdeps_spec}`
+    local stepdeps_spec_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps_spec}`
     local dep_spec
     for dep_spec in ${stepdeps_spec_blanks}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
