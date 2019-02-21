@@ -53,6 +53,7 @@ SLURM_SCHEDULER="SLURM"
 BUILTIN_SCHED_LOG_FEXT="builtin_out"
 SLURM_SCHED_LOG_FEXT="slurm_out"
 FINISHED_STEP_FEXT="finished"
+STEPID_FEXT="id"
 
 ####################
 # GLOBAL VARIABLES #
@@ -1469,7 +1470,7 @@ write_step_id_to_file()
     local dirname=$1
     local stepname=$2
     local id=$3
-    local filename=$dirname/scripts/$stepname.id
+    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
 
     echo $id > $filename
 }
@@ -1479,7 +1480,7 @@ read_step_id_from_file()
 {
     local dirname=$1
     local stepname=$2
-    local filename=$dirname/scripts/$stepname.id
+    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
 
     if [ -f $filename ]; then
         cat $filename
