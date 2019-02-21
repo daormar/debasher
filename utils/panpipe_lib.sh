@@ -52,6 +52,7 @@ SLURM_SCHEDULER="SLURM"
 # FILE EXTENSIONS
 BUILTIN_SCHED_LOG_FEXT="builtin_out"
 SLURM_SCHED_LOG_FEXT="slurm_out"
+FINISHED_STEP_FEXT="finished"
 
 ####################
 # GLOBAL VARIABLES #
@@ -857,7 +858,7 @@ get_list_of_pending_jobs_in_array()
 
     # Create associative map containing completed jobs
     local -A completed_jobs
-    if [ -f ${file}.finished ]; then
+    if [ -f ${file}.${FINISHED_STEP_FEXT} ]; then
         while read line; do
             local fields=( $line )
             local num_fields=${#fields[@]}
@@ -865,7 +866,7 @@ get_list_of_pending_jobs_in_array()
                 local id=${fields[3]}
                 completed_jobs[${id}]="1"
             fi
-        done < ${file}.finished
+        done < ${file}.${FINISHED_STEP_FEXT}
     fi
     
     # Create string enumerating pending jobs
@@ -891,7 +892,7 @@ get_job_array_list()
     local array_size=$1
     local file=$2
 
-    if [ -f ${file}.finished ]; then
+    if [ -f ${file}.${FINISHED_STEP_FEXT} ]; then
         # Some jobs were completed, return list containing pending ones
         get_list_of_pending_jobs_in_array ${array_size} ${file}
     else
@@ -1434,7 +1435,7 @@ update_step_completion_signal()
     # If step will be reexecuted, file signaling step completion
     # should be removed
     if [ "${status}" = "${REEXEC_STEP_STATUS}" ]; then
-        rm -f ${script_filename}.finished
+        rm -f ${script_filename}.${FINISHED_STEP_FEXT}
     fi
 }
 
@@ -1568,7 +1569,7 @@ get_num_substeps_finished()
 {
     local script_filename=$1
 
-    echo `$WC -l ${script_filename}.finished | $AWK '{print $1}'`
+    echo `$WC -l ${script_filename}.${FINISHED_STEP_FEXT} | $AWK '{print $1}'`
 }
 
 ########
@@ -1576,7 +1577,7 @@ get_num_substeps_to_finish()
 {
     local script_filename=$1
 
-    echo `$HEAD -1 ${script_filename}.finished | $AWK '{print $NF}'`
+    echo `$HEAD -1 ${script_filename}.${FINISHED_STEP_FEXT} | $AWK '{print $NF}'`
 }
 
 ########
@@ -1627,7 +1628,7 @@ check_step_is_finished()
     local stepname=$2
     local script_filename=`get_script_filename ${dirname} ${stepname}`
 
-    if [ -f ${script_filename}.finished ]; then
+    if [ -f ${script_filename}.${FINISHED_STEP_FEXT} ]; then
         # Check that all sub-steps are finished
         local num_substeps_finished=`get_num_substeps_finished ${script_filename}`
         local num_substeps=`get_num_substeps_to_finish ${script_filename}`
@@ -1735,7 +1736,7 @@ signal_step_completion()
     # since echo is atomic when writing short lines (for safety, up to
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
-    echo "Finished step id: $id ; Total: $total" >> ${script_filename}.finished
+    echo "Finished step id: $id ; Total: $total" >> ${script_filename}.${FINISHED_STEP_FEXT}
 }
 
 ########
