@@ -22,8 +22,8 @@ usage()
 {
     echo "pipe_exec                 --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
-    echo "                          [--cfgfile <string>] [--conda-support]"
-    echo "                          [--showopts|--checkopts|--debug]"
+    echo "                          [--cfgfile <string>] [--reexec-outdated-steps]"
+    echo "                          [--conda-support] [--showopts|--checkopts|--debug]"
     echo "                          [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with pipeline steps to be performed (see manual"
@@ -36,6 +36,7 @@ usage()
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--cfgfile <string>        File with options (options provided in command line"
     echo "                          overwrite those given in the configuration file)"
+    echo "--reexec-outdated-steps   Reexecute those steps with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--showopts                Show pipeline options"
     echo "--checkopts               Check pipeline options"
@@ -60,6 +61,7 @@ read_pars()
     dflt_nodes_given=0
     dflt_throttle_given=0
     cfgfile_given=0
+    reexec_outdated_steps_given=0
     conda_support_given=0
     showopts_given=0
     checkopts_given=0
@@ -106,6 +108,11 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       cfgfile=$1
                       cfgfile_given=1
+                  fi
+                  ;;
+            "--reexec-outdated-steps")
+                  if [ $# -ne 0 ]; then
+                      reexec_outdated_steps_given=1
                   fi
                   ;;
             "--conda-support")
@@ -409,6 +416,80 @@ define_forced_exec_steps()
 }
 
 ########
+check_script_is_older_than_modules()
+{
+    local script_filename=$1
+    local fullmodnames=$2
+    
+    # Check if script exists
+    if [ -f ${script_filename} ]; then
+        # script exists
+        script_older=0
+        local mod
+        for mod in ${fullmodnames}; do
+            if [ ${script_filename} -ot ${mod} ]; then
+                script_older=1
+                echo "Warning: ${script_filename} is older than module ${mod}" >&2
+            fi
+        done
+        # Return value
+        if [ ${script_older} -eq 1 ]; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        # script does not exist
+        echo "Warning: ${script_filename} does not exist" >&2
+        return 0
+    fi
+}
+
+########
+define_reexec_steps_due_to_code_update()
+{
+    echo "* Defining steps to be reexecuted due to code updates (if any)..." >&2
+
+    # Read input parameters
+    local dirname=$1
+    local pfile=$2
+
+    # Get names of pipeline modules
+    local fullmodnames=`get_pipeline_fullmodnames $pfile` || return 1
+
+    # Read information about the steps to be executed
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
+            # Extract step information
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            local status=`get_step_status ${dirname} ${stepname}`
+            local script_filename=`get_script_filename ${dirname} ${stepname}`
+
+            # Handle checkings depending of step status
+            if [ "${status}" = "${FINISHED_STEP_STATUS}" ]; then
+                if check_script_is_older_than_modules ${script_filename} "${fullmodnames}"; then
+                    echo "Warning: last execution of step ${stepname} used outdated modules">&2
+                    mark_step_as_reexec $stepname ${OUTDATED_CODE_REEXEC_REASON}
+                fi
+            fi
+
+            if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
+                if check_script_is_older_than_modules ${script_filename} "${fullmodnames}"; then
+                    echo "Warning: current execution of step ${stepname} is using outdated modules">&2
+                fi
+            fi
+        fi
+    done < ${pfile}
+
+    echo "Definition complete" >&2
+
+    echo "" >&2
+}
+
+########
 define_reexec_steps_due_to_deps()
 {
     echo "* Defining steps to be reexecuted due to dependencies (if any)..." >&2
@@ -505,6 +586,21 @@ print_command_line()
 }
 
 ########
+obtain_augmented_cmdline()
+{
+    local cmdline=$1
+    
+    if [ ${cfgfile_given} -eq 1 ]; then
+        echo "* Processing configuration file (${cfgfile})..." >&2
+        cfgfile_str=`cfgfile_to_string ${cfgfile}` || return 1
+        echo "${cmdline} ${cfgfile_str}"
+        echo "" >&2
+    else
+        echo $cmdline
+    fi
+}
+
+########
 get_stepdeps_from_detailed_spec()
 {
     local stepdeps_spec=$1
@@ -556,40 +652,13 @@ archive_script()
 }
 
 ########
-check_script_is_older_than_modules()
-{
-    local script_filename=$1
-    local fullmodnames=$2
-    
-    # Check if script exists
-    if [ -f ${script_filename} ]; then
-        # script exists
-        script_older=0
-        local mod
-        for mod in ${fullmodnames}; do
-            if [ ${script_filename} -ot ${mod} ]; then
-                script_older=1
-                echo "Warning: ${script_filename} is older than module ${mod}" >&2
-            fi
-        done
-        # Return value
-        return ${script_older}
-    else
-        # script does not exist
-        echo "Warning: ${script_filename} does not exist" >&2
-        return 1
-    fi
-}
-
-########
 execute_step()
 {
     # Initialize variables
     local cmdline=$1
-    local fullmodnames=$2
-    local dirname=$3
-    local stepname=$4
-    local stepspec=$5
+    local dirname=$2
+    local stepname=$3
+    local stepspec=$4
     
     # Execute step
 
@@ -599,7 +668,6 @@ execute_step()
 
     ## Decide whether the step should be executed
     if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
-
         # Create script
         local script_filename=`get_script_filename ${dirname} ${stepname}`
         local step_function=`get_name_of_step_function ${stepname}`
@@ -642,17 +710,7 @@ execute_step()
             local sid=`read_step_id_from_file ${dirname} ${stepname}` || { echo "Error while retrieving id of in-progress step" >&2 ; return 1; }
             eval "${stepname_id}='${sid}'"
             step_ids="${step_ids}:${!stepname_id}"
-        fi
-        
-        # Step will not be executed, check if outdated modules were used
-        local script_filename=`get_script_filename ${dirname} ${stepname}`
-        if check_script_is_older_than_modules ${script_filename} "${fullmodnames}"; then
-            if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
-                echo "Warning: current execution of this script is using outdated modules">&2
-            else
-                echo "Warning: last execution of this script used outdated modules">&2
-            fi
-        fi
+        fi        
     fi
 }
 
@@ -661,10 +719,9 @@ debug_step()
 {
     # Initialize variables
     local cmdline=$1
-    local fullmodnames=$2
-    local dirname=$3
-    local stepname=$4
-    local stepspec=$5
+    local dirname=$2
+    local stepname=$3
+    local stepspec=$4
     
     # Debug step
 
@@ -690,10 +747,7 @@ execute_pipeline_steps()
     local cmdline=$1
     local dirname=$2
     local pfile=$3
-    
-    # Get names of pipeline modules
-    local fullmodnames=`get_pipeline_fullmodnames $pfile` || return 1
-    
+        
     # step_ids will store the step ids of the pipeline steps
     local step_ids=""
     
@@ -708,29 +762,14 @@ execute_pipeline_steps()
 
             # Decide whether to execute or debug step
             if [ $debug -eq 0 ]; then
-                execute_step "${cmdline}" "${fullmodnames}" ${dirname} ${stepname} "${stepspec}" || return 1
+                execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
             else
-                debug_step "${cmdline}" "${fullmodnames}" ${dirname} ${stepname} "${stepspec}" || return 1                
+                debug_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1                
             fi
         fi
     done < ${pfile}
 
     echo "" >&2
-}
-
-########
-obtain_augmented_cmdline()
-{
-    local cmdline=$1
-    
-    if [ ${cfgfile_given} -eq 1 ]; then
-        echo "* Processing configuration file (${cfgfile})..." >&2
-        cfgfile_str=`cfgfile_to_string ${cfgfile}` || return 1
-        echo "${cmdline} ${cfgfile_str}"
-        echo "" >&2
-    else
-        echo $cmdline
-    fi
 }
 
 ########
@@ -787,10 +826,18 @@ else
 
         define_forced_exec_steps ${reordered_pfile} || exit 1
 
+        if [ ${reexec_outdated_steps_given} -eq 1 ]; then
+            define_reexec_steps_due_to_code_update ${outd} ${reordered_pfile} || exit 1
+        fi
+        
         define_reexec_steps_due_to_deps ${stepdeps_file} || exit 1
 
         print_command_line || exit 1
-        
-        execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1    
+
+#        if [ ${sched} != ${BUILTIN_SCHEDULER} or ${debug} -eq 1 ]; then
+            execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+#        else
+#            execute_pipeline_steps_builtin "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+#        fi
     fi
 fi
