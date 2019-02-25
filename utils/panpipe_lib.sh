@@ -65,6 +65,7 @@ declare -A PIPELINE_OPT_DESC
 declare -A PIPELINE_OPT_TYPE
 declare -A PIPELINE_OPT_CATEG
 declare -A PIPELINE_CATEG_MAP
+declare -A PIPELINE_OPT_STEP
 
 # Declare associative array to memoize command line options
 declare -A MEMOIZED_OPTS
@@ -1968,6 +1969,21 @@ read_opt_value_from_line_memoiz()
 }
 
 ########
+update_opt_to_step_map()
+{
+    local stepname=$1
+    local opts=$2
+
+    for opt in ${opts}; do
+        if [ "${PIPELINE_OPT_STEP[${opt}]}" = "" ]; then
+            PIPELINE_OPT_STEP[${opt}]=${stepname}
+        else
+            PIPELINE_OPT_STEP[${opt}]="${PIPELINE_OPT_STEP[${opt}]} ${stepname}"
+        fi
+    done
+}
+
+########
 explain_cmdline_opt()
 {
     local opt=$1
@@ -1985,6 +2001,13 @@ explain_cmdline_opt()
     PIPELINE_OPT_DESC[$opt]=$desc
     PIPELINE_OPT_CATEG[$opt]=$categ
     PIPELINE_CATEG_MAP[$categ]=1
+
+    # Add option to differential command line option string
+    if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
+        DIFFERENTIAL_CMDLINE_OPT_STR=${opt}
+    else
+        DIFFERENTIAL_CMDLINE_OPT_STR="${DIFFERENTIAL_CMDLINE_OPT_STR} ${opt}"
+    fi
 }
 
 ########
@@ -2004,6 +2027,13 @@ explain_cmdline_opt_wo_value()
     PIPELINE_OPT_DESC[$opt]=$desc
     PIPELINE_OPT_CATEG[$opt]=$categ
     PIPELINE_CATEG_MAP[$categ]=1
+
+    # Add option to differential command line option string
+    if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
+        DIFFERENTIAL_CMDLINE_OPT_STR=${opt}
+    else
+        DIFFERENTIAL_CMDLINE_OPT_STR="${DIFFERENTIAL_CMDLINE_OPT_STR} ${opt}"
+    fi
 }
 
 ########
@@ -2025,9 +2055,9 @@ print_pipeline_opts()
             if [ ${PIPELINE_OPT_CATEG[${opt}]} = $categ ]; then
                 # Print option
                 if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
-                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]}"
+                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]} [${PIPELINE_OPT_STEP[$opt]}]"
                 else
-                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}"
+                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]} [${PIPELINE_OPT_STEP[$opt]}]"
                 fi
             fi
         done

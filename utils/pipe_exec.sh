@@ -277,7 +277,9 @@ show_pipeline_opts()
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
             local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${stepname}`
+            DIFFERENTIAL_CMDLINE_OPT_STR=""
             ${explain_cmdline_opts_funcname} || exit 1
+            update_opt_to_step_map ${stepname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
         fi
     done < ${pfile}
 
