@@ -715,6 +715,35 @@ execute_step()
 }
 
 ########
+execute_pipeline_steps()
+{
+    echo "* Executing pipeline steps..." >&2
+
+    # Read input parameters
+    local cmdline=$1
+    local dirname=$2
+    local pfile=$3
+        
+    # step_ids will store the step ids of the pipeline steps
+    local step_ids=""
+    
+    # Read information about the steps to be executed
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
+            # Extract step name
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+
+            execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
+        fi
+    done < ${pfile}
+
+    echo "" >&2
+}
+
+########
 debug_step()
 {
     # Initialize variables
@@ -735,13 +764,9 @@ debug_step()
 }
 
 ########
-execute_pipeline_steps()
+execute_pipeline_steps_debug()
 {
-    if [ $debug -eq 0 ]; then
-        echo "* Executing pipeline steps..." >&2
-    else
-        echo "* Executing pipeline steps... (debug mode)" >&2
-    fi
+    echo "* Executing pipeline steps... (debug mode)" >&2
 
     # Read input parameters
     local cmdline=$1
@@ -760,16 +785,44 @@ execute_pipeline_steps()
             # Extract step name
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
-            # Decide whether to execute or debug step
-            if [ $debug -eq 0 ]; then
-                execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
-            else
-                debug_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1                
-            fi
+            debug_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1                
         fi
     done < ${pfile}
 
     echo "" >&2
+}
+
+########
+execute_pipeline_steps_builtin()
+{
+    echo "* Executing pipeline steps..." >&2
+
+    # Read input parameters
+    local cmdline=$1
+    local dirname=$2
+    local pfile=$3
+
+    # Initialize step status
+    builtin_sched_init_step_status ${dirname} ${pfile}
+
+    # Initialize active steps
+    builtin_sched_init_active_steps
+    
+    # Execute scheduling loop
+    local end=0
+    local sleep_time=5
+    while [ ${end} -eq 0 ]; do
+        # Determine steps that should be executed
+        if builtin_sched_determine_steps_to_be_exec; then
+            # Launch steps
+            builtin_sched_launch_steps
+            
+            sleep ${sleep_time}
+        else
+            # There are no steps to be executed
+            end=1
+        fi
+    done
 }
 
 ########
@@ -834,10 +887,14 @@ else
 
         print_command_line || exit 1
 
-#        if [ ${sched} != ${BUILTIN_SCHEDULER} or ${debug} -eq 1 ]; then
-            execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1
-#        else
-#            execute_pipeline_steps_builtin "${augmented_cmdline}" ${outd} ${pfile} || exit 1
-#        fi
+        if [ ${debug} -eq 1 ]; then
+            execute_pipeline_steps_debug "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+        else
+#            if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
+#                execute_pipeline_steps_builtin "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+#            else
+                execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+#            fi
+        fi
     fi
 fi

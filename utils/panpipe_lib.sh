@@ -16,19 +16,17 @@ INVALID_PID="_INVALID_PID_"
 VOID_VALUE="_VOID_VALUE_"
 GENERAL_OPT_CATEGORY="GENERAL"
 
-# STEP STATUSES
+# STEP STATUSES AND EXIT CODES
 FINISHED_STEP_STATUS="FINISHED"
 FINISHED_STEP_STATUS_EXIT_CODE=0
 INPROGRESS_STEP_STATUS="IN-PROGRESS"
 INPROGRESS_STEP_STATUS_EXIT_CODE=1
 UNFINISHED_STEP_STATUS="UNFINISHED"
 UNFINISHED_STEP_STATUS_EXIT_CODE=2
-FAILED_STEP_STATUS="FAILED"
-FAILED_STEP_STATUS_EXIT_CODE=3
 REEXEC_STEP_STATUS="REEXECUTE"
-REEXEC_STEP_STATUS_EXIT_CODE=4
+REEXEC_STEP_STATUS_EXIT_CODE=3
 TODO_STEP_STATUS="TO-DO"
-TODO_STEP_STATUS_EXIT_CODE=5
+TODO_STEP_STATUS_EXIT_CODE=4
 
 # REEXEC REASONS
 FORCED_REEXEC_REASON="forced"
@@ -73,7 +71,7 @@ declare -A MEMOIZED_OPTS
 
 # Declare string variable to store last processed command line when
 # memoizing options
-LAST_PROC_LINE_MEMOPTS=""
+declare LAST_PROC_LINE_MEMOPTS=""
 
 # Declare array used to save option lists for scripts
 declare -a SCRIPT_OPT_LIST_ARRAY
@@ -90,11 +88,20 @@ declare -A PIPELINE_SHDIRS
 # Declare associative array to store names of fifos
 declare -A PIPELINE_FIFOS
 
-# Declare scheduling-related variables
+# Declare general scheduler-related variables
 declare PANPIPE_SCHEDULER
 declare -A PANPIPE_REEXEC_STEPS
 declare PANPIPE_DEFAULT_NODES
 declare PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=1
+
+# Declare builtin scheduler-related variables
+declare -A BUILTIN_SCHED_STEP_STATUS
+declare -A BUILTIN_SCHED_STEP_EXIT_CODES
+declare -A BUILTIN_SCHED_ACTIVE_STEPS
+declare BUILTIN_SCHED_CPUS=1
+declare BUILTIN_SCHED_MEM=256
+declare BUILTIN_SCHED_ALLOC_CPUS=0
+declare BUILTIN_SCHED_ALLOC_MEM=0
 
 # Declare associative array to store exit code for processes
 declare -A EXIT_CODE
@@ -234,6 +241,95 @@ check_func_exists()
     type ${funcname} >/dev/null 2>&1 || return 1
 
     return 0
+}
+
+########
+errmsg()
+{
+    local msg=$1
+    echo "$msg" >&2
+}
+
+########
+logmsg()
+{
+    local msg=$1
+    echo "$msg" >&2
+}
+
+########
+file_exists()
+{
+    local file=$1
+    if [ -f $file ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+dir_exists()
+{
+    local dir=$1
+    if [ -d $dir ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+############################
+# STEP EXECUTION FUNCTIONS #
+############################
+
+########
+builtin_sched_init_step_status()
+{
+    local dirname=$1
+    local pfile=$2
+
+    # Read information about the steps to be executed
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
+            # Extract step information
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            local status=`get_step_status ${dirname} ${stepname}`
+
+            # Register step information
+            BUILTIN_SCHED_STEP_STATUS[${stepname}]=${status}   
+        fi
+    done < ${pfile}
+}
+
+########
+builtin_sched_init_active_steps()
+{
+    # Iterate over defined steps
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_STEP_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_STEP_STATUS[${stepname}]}
+        if [ ${status} != ${FINISHED_STEP_STATUS} ]; then
+            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${status}
+        fi
+    done
+}
+
+########
+builtin_sched_determine_steps_to_be_exec()
+{
+    # TBD
+    :
+}
+
+########
+builtin_sched_launch_steps()
+{
+    # TBD
+    :
 }
 
 ########
@@ -1692,42 +1788,6 @@ display_end_step_message()
 }
 
 ########
-errmsg()
-{
-    local msg=$1
-    echo "$msg" >&2
-}
-
-########
-logmsg()
-{
-    local msg=$1
-    echo "$msg" >&2
-}
-
-########
-file_exists()
-{
-    local file=$1
-    if [ -f $file ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-dir_exists()
-{
-    local dir=$1
-    if [ -d $dir ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
 signal_step_completion()
 {
     # Initialize variables
@@ -1742,6 +1802,10 @@ signal_step_completion()
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
     echo "Finished step id: $id ; Total: $total" >> ${script_filename}.${FINISHED_STEP_FEXT}
 }
+
+###############################
+# OPTION DEFINITION FUNCTIONS #
+###############################
 
 ########
 memoize_opts()
@@ -2337,6 +2401,10 @@ cfgfile_to_string()
 
     return 0
 }
+
+###########################
+# CONDA-RELATED FUNCTIONS #
+###########################
 
 ########
 define_conda_env()
