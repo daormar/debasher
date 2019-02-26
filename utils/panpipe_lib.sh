@@ -2084,16 +2084,16 @@ print_pipeline_opts()
             if [ ${PIPELINE_OPT_CATEG[${opt}]} = $categ ]; then
                 # Set value of required option flag
                 if [ "${PIPELINE_OPT_REQ[${opt}]}" != "" ]; then
-                    reqflag="(required)"
+                    reqflag=" (required) "
                 else
-                    reqflag=""
+                    reqflag=" "
                 fi
                    
                 # Print option
                 if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
-                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]} ${reqflag} [${PIPELINE_OPT_STEP[$opt]}]"
+                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]}${reqflag}[${PIPELINE_OPT_STEP[$opt]}]"
                 else
-                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]} ${reqflag} [${PIPELINE_OPT_STEP[$opt]}]"
+                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}${reqflag}[${PIPELINE_OPT_STEP[$opt]}]"
                 fi
             fi
         done
