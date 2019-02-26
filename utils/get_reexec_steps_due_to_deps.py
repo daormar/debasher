@@ -15,7 +15,7 @@ def take_pars():
     values["verbose"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"r:d:v",["pfile="])
+        opts, args = getopt.getopt(sys.argv[1:],"r:d:v",["reexec-steps=","depfile=","verbose"])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -130,9 +130,7 @@ def main(argv):
     check_pars(flags,values)
 
     # process parameters
-    success=process_pars(flags,values)
-
-    exit(success)
+    process_pars(flags,values)
     
 if __name__ == "__main__":
     main(sys.argv)
