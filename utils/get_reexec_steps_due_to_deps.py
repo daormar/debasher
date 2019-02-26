@@ -12,10 +12,9 @@ def take_pars():
     values={}
     flags["r_given"]=False
     flags["d_given"]=False
-    values["verbose"]=False
-
+    
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"r:d:v",["reexec-steps=","depfile=","verbose"])
+        opts, args = getopt.getopt(sys.argv[1:],"r:d:",["reexec-steps=","depfile="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -30,8 +29,6 @@ def take_pars():
             elif opt in ("-d", "--depfile"):
                 values["depfile"] = arg
                 flags["d_given"]=True
-            elif opt in ("-v", "--verbose"):
-                flags["verbose"]=True
     return (flags,values)
 
 ##################################################
@@ -46,11 +43,10 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "get_reexec_steps_due_to_deps -r <string> -d <string> [-v]"
+    print >> sys.stderr, "get_reexec_steps_due_to_deps -r <string> -d <string>"
     print >> sys.stderr, ""
     print >> sys.stderr, "-r <string>                  String with steps to be reexecuted"
     print >> sys.stderr, "-d <string>                  File with dependency information"
-    print >> sys.stderr, "-v                           Verbose mode"
 
 ##################################################
 def process_r_opt(rexec_steps_str):
