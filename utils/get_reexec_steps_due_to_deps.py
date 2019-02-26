@@ -3,9 +3,6 @@
 # import modules
 import io, sys, getopt, operator
 
-# Constants
-NONE_STEP_DEP="none"
-
 ##################################################
 def take_pars():
     flags={}
