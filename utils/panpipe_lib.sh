@@ -63,6 +63,7 @@ STEPID_FEXT="id"
 # Declare associative arrays to store help about pipeline options
 declare -A PIPELINE_OPT_DESC
 declare -A PIPELINE_OPT_TYPE
+declare -A PIPELINE_OPT_REQ
 declare -A PIPELINE_OPT_CATEG
 declare -A PIPELINE_CATEG_MAP
 declare -A PIPELINE_OPT_STEP
@@ -1984,6 +1985,34 @@ update_opt_to_step_map()
 }
 
 ########
+explain_cmdline_req_opt()
+{
+    local opt=$1
+    local type=$2
+    local desc=$3
+    local categ=$4
+
+    # Assign default category if not given
+    if [ "$categ" = "" ]; then
+        categ=${GENERAL_OPT_CATEGORY}
+    fi
+
+    # Store option in associative arrays
+    PIPELINE_OPT_TYPE[$opt]=$type
+    PIPELINE_OPT_REQ[$opt]=1
+    PIPELINE_OPT_DESC[$opt]=$desc
+    PIPELINE_OPT_CATEG[$opt]=$categ
+    PIPELINE_CATEG_MAP[$categ]=1
+
+    # Add option to differential command line option string
+    if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
+        DIFFERENTIAL_CMDLINE_OPT_STR=${opt}
+    else
+        DIFFERENTIAL_CMDLINE_OPT_STR="${DIFFERENTIAL_CMDLINE_OPT_STR} ${opt}"
+    fi
+}
+
+########
 explain_cmdline_opt()
 {
     local opt=$1
@@ -2053,11 +2082,18 @@ print_pipeline_opts()
         for opt in ${!PIPELINE_OPT_TYPE[@]}; do
             # Check if option belongs to current category
             if [ ${PIPELINE_OPT_CATEG[${opt}]} = $categ ]; then
+                # Set value of required option flag
+                if [ "${PIPELINE_OPT_REQ[${opt}]}" != "" ]; then
+                    reqflag="(required)"
+                else
+                    reqflag=""
+                fi
+                   
                 # Print option
                 if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
-                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]} [${PIPELINE_OPT_STEP[$opt]}]"
+                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]} ${reqflag} [${PIPELINE_OPT_STEP[$opt]}]"
                 else
-                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]} [${PIPELINE_OPT_STEP[$opt]}]"
+                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]} ${reqflag} [${PIPELINE_OPT_STEP[$opt]}]"
                 fi
             fi
         done
