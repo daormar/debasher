@@ -28,8 +28,8 @@ pipe_software_test_fifos()
 step_a_explain_cmdline_opts()
 {
     # -a option
-    description="Sleep time in seconds for step_a (required)"
-    explain_cmdline_opt "-a" "<int>" "$description"
+    description="Sleep time in seconds for step_a"
+    explain_cmdline_req_opt "-a" "<int>" "$description"
 }
 
 ########
@@ -65,8 +65,8 @@ step_a()
 step_b_explain_cmdline_opts()
 {
     # -b option
-    description="Value to write to file in data directory (required)"
-    explain_cmdline_opt "-b" "<int>" "$description"
+    description="Value to write to file in data directory"
+    explain_cmdline_req_opt "-b" "<int>" "$description"
 
 }
 
