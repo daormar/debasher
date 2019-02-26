@@ -23,7 +23,7 @@ def take_pars():
     values["verbose"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"p:rgdv",["pfile="])
+        opts, args = getopt.getopt(sys.argv[1:],"p:rgdv",["pfile=","print-reord","print-graph","print-deps","verbose"])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
