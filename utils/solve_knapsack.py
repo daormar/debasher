@@ -10,9 +10,11 @@ def take_pars():
     values={}
     flags["s_given"]=False
     flags["c_given"]=False
-
+    flags["t_given"]=False
+    values["time"]=-1
+    
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"s:c:",["spec=","capacities="])
+        opts, args = getopt.getopt(sys.argv[1:],"s:c:t:",["spec=","capacities=","time="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -27,6 +29,9 @@ def take_pars():
             elif opt in ("-c", "--capacities"):
                 values["capacities"] = arg
                 flags["c_given"]=True
+            elif opt in ("-t", "--time"):
+                values["time"] = float(arg)
+                flags["t_given"]=True
     return (flags,values)
 
 ##################################################
@@ -41,10 +46,11 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "solve_knapsack -s <string> -c <string>"
+    print >> sys.stderr, "solve_knapsack -s <string> -c <string> [-t <string>]"
     print >> sys.stderr, ""
     print >> sys.stderr, "-s <string>    Item weight and value specification"
     print >> sys.stderr, "-c <string>    Comma-separated list of capacities"
+    print >> sys.stderr, "-t <float>     Time limit in seconds (no limit by default)"
     
 ##################################################
 def extract_spec_info(specfile):
@@ -79,13 +85,17 @@ def get_capacities(capacities):
     return clist
 
 ##################################################
-def solve(items,weights,values,capacities):
+def solve(items,weights,values,capacities,tlimit):
     # Create solver
     solver = pywrapknapsack_solver.KnapsackSolver(pywrapknapsack_solver.KnapsackSolver.KNAPSACK_MULTIDIMENSION_BRANCH_AND_BOUND_SOLVER,'problem')
     
     # Initialize solver
     solver.Init(values, weights, capacities)
 
+    # Set time limit if given
+    if tlimit > 0:
+        solver.set_time_limit(tlimit)
+    
     # Solve problem
     computed_value= solver.Solve()
 
@@ -111,7 +121,7 @@ def print_solution(items,computed_value,packed_items,packed_weights):
 def process_pars(flags,values):
     items,weights,vals=extract_spec_info(values["spec"])
     capacities=get_capacities(values["capacities"])
-    computed_value,packed_items,packed_weights=solve(items,weights,vals,capacities)
+    computed_value,packed_items,packed_weights=solve(items,weights,vals,capacities,values["time"])
     print_solution(items,computed_value,packed_items,packed_weights)
     
 ##################################################
