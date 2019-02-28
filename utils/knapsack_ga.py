@@ -43,7 +43,7 @@ def fitness(target,weights,values,capacities):
         return total_value
     else:
         return -excess
-
+    
 ##################################################
 def spawn_starting_population(amount,start_pop_with_zeroes,num_items):
     population=[]
@@ -120,6 +120,9 @@ def get_packed_items(chrom):
             
 ##################################################
 def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities):
+    # Set random number seed
+    random.seed(31415)
+    
     # Compute generations
     generation = 1
     population = spawn_starting_population(pop_size,start_pop_with_zeroes,len(values))
