@@ -7,6 +7,7 @@ AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 dnl AC_CONFIG_HEADER(config.h)
 dnl AX_PREFIX_CONFIG_H([./src/snptools_config.h])
+AM_PATH_PYTHON
 
 dnl Initialize Libtool
 LT_CONFIG_LTDL_DIR([libltdl])

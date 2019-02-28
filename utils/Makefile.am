@@ -1,14 +1,17 @@
 SCRIPTS_TO_BE_BUILT= panpipe_lib pipe_exec pipe_exec_batch pipe_check	\
 pipe_status pipe_step_debug pipe_software_test				\
-get_reexec_steps_due_to_deps solve_knapsack
+get_reexec_steps_due_to_deps solve_knapsack solve_knapsack_ga
 
 bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
 CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
 
+python_PYTHON= knapsack_ga.py
+
 EXTRA_DIST = panpipe_lib.sh pipe_exec.sh pipe_exec_batch.sh		\
 pipe_check.py pipe_status.sh pipe_step_debug.sh pipe_software_test.sh	\
-get_reexec_steps_due_to_deps.py solve_knapsack.py
+get_reexec_steps_due_to_deps.py solve_knapsack.py solve_knapsack_ga.py	\
+knapsack_ga.py
 
 # Build rules for libraries
 panpipe_lib: panpipe_lib.sh
@@ -66,6 +69,8 @@ SUFFIXES= .sh .py .r .R
 .py:
 	rm -f $@
 	echo "#! " $(PYTHON) > $@
+	echo "import sys" >> $@
+	echo "sys.path.append(\"$(pythondir)\")" >> $@	
 	cat $< >> $@
 	chmod ugo+x $@
 
