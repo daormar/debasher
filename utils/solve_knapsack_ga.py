@@ -46,11 +46,11 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "solve_knapsack_ga -s <string> -c <string> [-t <string>]"
+    print >> sys.stderr, "solve_knapsack_ga -s <string> -c <string> [-g <int>]"
     print >> sys.stderr, ""
     print >> sys.stderr, "-s <string>    Item weight and value specification"
     print >> sys.stderr, "-c <string>    Comma-separated list of capacities"
-    print >> sys.stderr, "-t <float>     Time limit in seconds (no limit by default)"
+    print >> sys.stderr, "-g <float>     Number of generations (1000 by default)"
     
 ##################################################
 def extract_spec_info(specfile):
