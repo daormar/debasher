@@ -10,11 +10,13 @@ def take_pars():
     values={}
     flags["s_given"]=False
     flags["c_given"]=False
-    flags["t_given"]=False
+    flags["g_given"]=False
     values["maxgen"]=1000
+    flags["t_given"]=False
+    values["time"]=-1
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"s:c:g:",["spec=","capacities=","maxgen="])
+        opts, args = getopt.getopt(sys.argv[1:],"s:c:g:t:",["spec=","capacities=","maxgen=","time="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -32,6 +34,9 @@ def take_pars():
             elif opt in ("-g", "--maxgen"):
                 values["maxgen"] = int(arg)
                 flags["g_given"]=True
+            elif opt in ("-t", "--time"):
+                values["time"] = float(arg)
+                flags["t_given"]=True
     return (flags,values)
 
 ##################################################
@@ -51,6 +56,7 @@ def print_help():
     print >> sys.stderr, "-s <string>    Item weight and value specification"
     print >> sys.stderr, "-c <string>    Comma-separated list of capacities"
     print >> sys.stderr, "-g <float>     Number of generations (1000 by default)"
+    print >> sys.stderr, "-t <float>     Time limit in seconds (no limit by default)"
     
 ##################################################
 def extract_spec_info(specfile):
@@ -85,10 +91,10 @@ def get_capacities(capacities):
     return clist
 
 ##################################################
-def solve(max_gen,items,weights,values,capacities):
+def solve(max_gen,items,weights,values,capacities,time_limit):
     pop_size=100
     start_pop_with_zeroes=False
-    computed_value,packed_items=knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities)
+    computed_value,packed_items=knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities,time_limit)
     packed_weights=[]
     for i in range(len(weights)):
         packed_weights.append(0)
@@ -108,7 +114,7 @@ def print_solution(items,computed_value,packed_items,packed_weights):
 def process_pars(flags,values):
     items,weights,vals=extract_spec_info(values["spec"])
     capacities=get_capacities(values["capacities"])
-    computed_value,packed_items,packed_weights=solve(values["maxgen"],items,weights,vals,capacities)
+    computed_value,packed_items,packed_weights=solve(values["maxgen"],items,weights,vals,capacities,values["time"])
     print_solution(items,computed_value,packed_items,packed_weights)
     
 ##################################################
