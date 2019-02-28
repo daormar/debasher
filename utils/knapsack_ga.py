@@ -1,4 +1,4 @@
-import random
+import random, time
 
 ##############################################################################
 # 0-1 Knapsack Problem solved using Genetic Algorithms
@@ -119,9 +119,12 @@ def get_packed_items(chrom):
     return packed_items
             
 ##################################################
-def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities):
+def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities,time_limit=-1):
     # Set random number seed
     random.seed(31415)
+
+    # Get start time
+    start=time.clock()
     
     # Compute generations
     generation = 1
@@ -130,6 +133,9 @@ def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacit
         population = sorted(population, key=lambda x: fitness(x,weights,values,capacities), reverse=True)
         population = evolve_population(population)
         generation += 1
+        curr=time.clock()-start
+        if time_limit > 0 and curr > time_limit:
+            break
 
     # Sort final population
     population = sorted(population, key=lambda x: fitness(x,weights,values,capacities), reverse=True)
