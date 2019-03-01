@@ -104,7 +104,7 @@ def evolve_population(pop):
     while len(children) < desired_length :
         male = pop[random.randint(0,len(parents)-1)]
         female = pop[random.randint(0,len(parents)-1)]        
-        mixpoint=random.randint(0,len(parents)-1)
+        mixpoint=random.randint(0,len(parents))
         child = male[:mixpoint] + female[mixpoint:] # from start to mixpoint from father, from mixpoint to end from mother
         if mutation_chance > random.random():
             mutate(child)
