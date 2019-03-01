@@ -93,25 +93,25 @@ def evolve_population(pop):
         if parent_lottery > random.random():
             parents.append(np)
 
+    # Mutation lottery
+    for p in parents:
+        if mutation_chance > random.random():
+            mutate(p)
+
     # Start breeding
     children = []
     desired_length = len(pop) - len(parents)
     while len(children) < desired_length :
         male = pop[random.randint(0,len(parents)-1)]
         female = pop[random.randint(0,len(parents)-1)]        
-        half = len(male)/2
-        child = male[:half] + female[half:] # from start to half from father, from half to end from mother
+        mixpoint=random.randint(0,len(parents)-1)
+        child = male[:mixpoint] + female[mixpoint:] # from start to mixpoint from father, from mixpoint to end from mother
         if mutation_chance > random.random():
             mutate(child)
         children.append(child)
 
     # Add children to parents list
     parents.extend(children)
-
-    # Mutation lottery
-    for p in parents:
-        if mutation_chance > random.random():
-            mutate(p)
 
     return parents
 
