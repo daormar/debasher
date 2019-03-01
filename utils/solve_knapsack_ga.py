@@ -12,11 +12,13 @@ def take_pars():
     flags["c_given"]=False
     flags["g_given"]=False
     values["maxgen"]=1000
+    flags["p_given"]=False
+    values["popsize"]=100
     flags["t_given"]=False
     values["time"]=-1
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"s:c:g:t:",["spec=","capacities=","maxgen=","time="])
+        opts, args = getopt.getopt(sys.argv[1:],"s:c:g:p:t:",["spec=","capacities=","maxgen=","popsize=","time="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -34,6 +36,9 @@ def take_pars():
             elif opt in ("-g", "--maxgen"):
                 values["maxgen"] = int(arg)
                 flags["g_given"]=True
+            elif opt in ("-p", "--popsize"):
+                values["popsize"] = int(arg)
+                flags["p_given"]=True
             elif opt in ("-t", "--time"):
                 values["time"] = float(arg)
                 flags["t_given"]=True
@@ -51,11 +56,12 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "solve_knapsack_ga -s <string> -c <string> [-g <int>]"
+    print >> sys.stderr, "solve_knapsack_ga -s <string> -c <string> [-g <int>] [-p <int>] [-t <float>]"
     print >> sys.stderr, ""
     print >> sys.stderr, "-s <string>    Item weight and value specification"
     print >> sys.stderr, "-c <string>    Comma-separated list of capacities"
-    print >> sys.stderr, "-g <float>     Number of generations (1000 by default)"
+    print >> sys.stderr, "-g <int>       Number of generations (1000 by default)"
+    print >> sys.stderr, "-p <int>       Population size (100 by default)"
     print >> sys.stderr, "-t <float>     Time limit in seconds (no limit by default)"
     
 ##################################################
@@ -91,8 +97,7 @@ def get_capacities(capacities):
     return clist
 
 ##################################################
-def solve(max_gen,items,weights,values,capacities,time_limit):
-    pop_size=100
+def solve(max_gen,pop_size,items,weights,values,capacities,time_limit):
     start_pop_with_zeroes=False
     computed_value,packed_items=knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities,time_limit)
     packed_weights=[]
@@ -114,7 +119,7 @@ def print_solution(items,computed_value,packed_items,packed_weights):
 def process_pars(flags,values):
     items,weights,vals=extract_spec_info(values["spec"])
     capacities=get_capacities(values["capacities"])
-    computed_value,packed_items,packed_weights=solve(values["maxgen"],items,weights,vals,capacities,values["time"])
+    computed_value,packed_items,packed_weights=solve(values["maxgen"],values["popsize"],items,weights,vals,capacities,values["time"])
     print_solution(items,computed_value,packed_items,packed_weights)
     
 ##################################################
