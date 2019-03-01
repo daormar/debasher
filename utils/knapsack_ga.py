@@ -34,7 +34,7 @@ def fitness(target,weights,values,capacities):
     excess=0
     for i in range(len(total_weights)):
         if total_weights[i] > capacities[i]:
-            # Nope. No good!
+            # Capacity exceeded, accumulate excess
             capacity_exceeded=True
             excess+=total_weights[i] - capacities[i]
 
@@ -88,12 +88,12 @@ def evolve_population(pop):
     parents = pop[:parent_length]
     nonparents = pop[parent_length:]
 
-    # Parent lottery!
+    # Add a small fraction of less fitted individuals to the parent set
     for np in nonparents:
         if parent_lottery > random.random():
             parents.append(np)
 
-    # Breeding! Close the doors, please.
+    # Start breeding
     children = []
     desired_length = len(pop) - len(parents)
     while len(children) < desired_length :
@@ -108,7 +108,7 @@ def evolve_population(pop):
     # Add children to parents list
     parents.extend(children)
 
-    # Mutation lottery... I guess?
+    # Mutation lottery
     for p in parents:
         if mutation_chance > random.random():
             mutate(p)
