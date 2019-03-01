@@ -77,10 +77,13 @@ def mutate(target):
 
 ##################################################
 def evolve_population(pop):
+    # Define evolve parameters
     parent_eligibility = 0.2
     mutation_chance = 0.08
     parent_lottery = 0.05
 
+    # Determine parents list as the n-best fitted individuals
+    # (n=parent_eligibility*len(pop))
     parent_length = int(parent_eligibility*len(pop))
     parents = pop[:parent_length]
     nonparents = pop[parent_length:]
@@ -89,11 +92,6 @@ def evolve_population(pop):
     for np in nonparents:
         if parent_lottery > random.random():
             parents.append(np)
-
-    # Mutation lottery... I guess?
-    for p in parents:
-        if mutation_chance > random.random():
-            mutate(p)
 
     # Breeding! Close the doors, please.
     children = []
@@ -107,7 +105,14 @@ def evolve_population(pop):
             mutate(child)
         children.append(child)
 
+    # Add children to parents list
     parents.extend(children)
+
+    # Mutation lottery... I guess?
+    for p in parents:
+        if mutation_chance > random.random():
+            mutate(p)
+
     return parents
 
 ##################################################
