@@ -79,7 +79,7 @@ def mutate(target):
 def evolve_population(pop):
     # Define evolve parameters
     parent_eligibility = 0.2
-    mutation_chance = 0.08
+    mutation_chance = 0.1
     parent_lottery = 0.05
 
     # Determine parents list as the n-best fitted individuals
