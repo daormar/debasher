@@ -46,7 +46,7 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "solve_knapsack -s <string> -c <string> [-t <float>]"
+    print >> sys.stderr, "solve_knapsack_bb -s <string> -c <string> [-t <float>]"
     print >> sys.stderr, ""
     print >> sys.stderr, "-s <string>    Item weight and value specification"
     print >> sys.stderr, "-c <string>    Comma-separated list of capacities"
