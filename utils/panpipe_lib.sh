@@ -2167,8 +2167,6 @@ define_cmdline_nonmandatory_opt()
     local varname=$4
 
     # Get value for option
-    # local value
-    # value=`read_opt_value_from_line "$cmdline" $opt`
     read_opt_value_from_line_memoiz "$cmdline" $opt
     local value=${_OPT_VALUE_}
 
@@ -2188,8 +2186,6 @@ define_cmdline_opt_if_given()
     local varname=$3
 
     # Get value for option
-    # local value
-    # value=`read_opt_value_from_line "$cmdline" $opt`
     read_opt_value_from_line_memoiz "$cmdline" $opt
     local value=${_OPT_VALUE_}
 
@@ -2207,8 +2203,6 @@ define_cmdline_infile_opt()
     local varname=$3
 
     # Get value for option
-    # local value
-    # value=`read_opt_value_from_line "$cmdline" $opt` || { errmsg "$opt option not found" ; return 1; }
     read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
     local value=${_OPT_VALUE_}
 
@@ -2222,6 +2216,26 @@ define_cmdline_infile_opt()
     
     # Add option
     define_opt $opt $value $varname
+}
+
+########
+define_cmdline_infile_nonmand_opt()
+{
+    local cmdline=$1
+    local opt=$2
+    local default_value=$3
+    local varname=$4
+
+    # Get value for option
+    read_opt_value_from_line_memoiz "$cmdline" $opt
+    local value=${_OPT_VALUE_}
+
+    if [ $value = ${OPT_NOT_FOUND} ]; then
+        value=${default_value}
+    fi
+    
+    # Add option
+    define_cmdline_infile_opt $cmdline $opt $value
 }
 
 ########
