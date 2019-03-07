@@ -2235,7 +2235,7 @@ define_cmdline_infile_nonmand_opt()
     fi
     
     # Add option
-    define_cmdline_infile_opt $cmdline $opt $value
+    define_cmdline_infile_opt "$cmdline" $opt $value
 }
 
 ########
