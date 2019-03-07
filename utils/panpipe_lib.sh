@@ -2233,9 +2233,14 @@ define_cmdline_infile_nonmand_opt()
     if [ $value = ${OPT_NOT_FOUND} ]; then
         value=${default_value}
     fi
-    
+
+    if [ $value != ${NOFILE} ]; then
+        # Check if file exists
+        file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+    fi
+
     # Add option
-    define_cmdline_infile_opt "$cmdline" $opt $value
+    define_opt $opt $value $varname
 }
 
 ########
