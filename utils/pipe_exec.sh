@@ -7,8 +7,32 @@
 # CONSTANTS #
 #############
 
+# MISC. CONSTANTS
 LOCKFD=99
 MAX_NUM_SCRIPT_OPTS_TO_DISPLAY=10
+
+# BUILTIN SCHEDULER CONSTANTS
+BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
+
+####################
+# GLOBAL VARIABLES #
+####################
+
+# Declare builtin scheduler-related variables
+declare -A BUILTIN_SCHED_STEP_STATUS
+declare -A BUILTIN_SCHED_STEP_CPU
+declare -A BUILTIN_SCHED_STEP_MEM
+declare -A BUILTIN_SCHED_STEP_EXIT_CODES
+declare -A BUILTIN_SCHED_ACTIVE_STEPS
+declare BUILTIN_SCHED_SELECTED_STEPS
+declare BUILTIN_SCHED_CPUS=1
+declare BUILTIN_SCHED_MEM=256
+declare BUILTIN_SCHED_ALLOC_CPUS=0
+declare BUILTIN_SCHED_ALLOC_MEM=0
+
+#############################
+# OPTION HANDLING FUNCTIONS #
+#############################
 
 ########
 print_desc()
@@ -201,6 +225,10 @@ check_pipeline_file()
 
     echo "" >&2
 }
+
+####################################
+# GENERAL PIPE EXECUTION FUNCTIONS #
+####################################
 
 ########
 reorder_pipeline_file()
@@ -794,6 +822,221 @@ execute_pipeline_steps_debug()
     echo "" >&2
 }
 
+###############################
+# BUILTIN SCHEDULER FUNCTIONS #
+###############################
+
+########
+builtin_sched_init_step_status()
+{
+    local dirname=$1
+    local pfile=$2
+
+    # Read information about the steps to be executed
+    local stepspec
+    while read stepspec; do
+        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
+        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
+        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
+            # Extract step information
+            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            local status=`get_step_status ${dirname} ${stepname}`
+            local cpus=`extract_cpus_from_stepspec "$stepspec"`
+            local mem=`extract_mem_from_stepspec "$stepspec"`
+
+            # Register step information
+            BUILTIN_SCHED_STEP_STATUS[${stepname}]=${status}   
+            BUILTIN_SCHED_STEP_CPU[${stepname}]=${cpus}   
+            BUILTIN_SCHED_STEP_MEM[${stepname}]=${mem}   
+        fi
+    done < ${pfile}
+}
+
+########
+builtin_sched_init_active_steps()
+{
+    # Iterate over defined steps
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_STEP_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_STEP_STATUS[${stepname}]}
+        if [ ${status} != ${FINISHED_STEP_STATUS} ]; then
+            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${status}
+        fi
+    done
+}
+
+########
+builtin_sched_get_updated_step_status()
+{
+    local dirname=$1
+
+    # Iterate over defined steps
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
+        local status=`get_step_status ${dirname} ${stepname}`
+        BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]=${status}
+    done
+}
+
+########
+builtin_sched_release_mem()
+{
+    local stepname=$1
+    BUILTIN_SCHED_ALLOC_MEM=`expr BUILTIN_SCHED_ALLOC_MEM - BUILTIN_SCHED_STEP_MEM[${stepname}]`
+}
+
+########
+builtin_sched_release_cpus()
+{
+    local stepname=$1
+    BUILTIN_SCHED_ALLOC_CPUS=`expr BUILTIN_SCHED_ALLOC_CPUS - BUILTIN_SCHED_STEP_CPUS[${stepname}]`    
+}
+
+########
+builtin_sched_reserve_mem()
+{
+    local stepname=$1
+    BUILTIN_SCHED_ALLOC_MEM=`expr BUILTIN_SCHED_ALLOC_MEM + BUILTIN_SCHED_STEP_MEM[${stepname}]`
+}
+
+########
+builtin_sched_reserve_cpus()
+{
+    local stepname=$1
+    BUILTIN_SCHED_ALLOC_CPUS=`expr BUILTIN_SCHED_ALLOC_CPUS + BUILTIN_SCHED_STEP_CPUS[${stepname}]`    
+}
+
+########
+builtin_sched_update_comp_resources()
+{
+    # Copy updated status into current status
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
+        prev_status=BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]
+        updated_status=BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]
+        # Check if resources should be released
+        if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} ]; then
+            builtin_sched_release_mem $stepname
+            builtin_sched_release_cpus $stepname
+        fi
+
+        # Check if resources should be reserved
+        if [ ${prev_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
+            builtin_sched_reserve_mem $stepname
+            builtin_sched_reserve_cpus $stepname
+        fi
+    done
+}
+    
+########
+builtin_sched_fix_updated_step_status()
+{
+    # Copy updated status into current status
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
+        prev_status=BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]
+        updated_status=BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]
+        if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
+            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
+        else
+            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+        fi
+    done
+}
+
+########
+builtin_sched_get_executable_steps()
+{
+    # TBD
+    :
+}
+
+########
+builtin_sched_select_steps_to_exec()
+{
+    local dirname=$1
+
+    # Create file with item and weight specification
+    specfile=${dirname}/.knapsack_spec.txt
+    rm -f ${specfile}
+    local stepname
+    local step_value=1
+    for stepname in "${!BUILTIN_SCHED_EXECUTABLE_STEPS[@]}"; do
+        echo "$stepname $stepvalue BUILTIN_SCHED_STEP_CPUS[${stepname}] BUILTIN_SCHED_STEP_MEM[${stepname}]" >> ${specfile}
+    done
+    
+    # Solve knapsack problem
+    time_limit=1
+    knapsack_sol=${dirname}/.knapsack_sol.txt
+    ${panpipe_bindir}/solve_knapsack_ga -s ${specfile} -c ${BUILTIN_SCHED_ALLOC_CPUS},${BUILTIN_SCHED_ALLOC_CPUS} -t ${time_limit} > ${knapsack_sol}
+
+    # Store solution in output variable
+    BUILTIN_SCHED_SELECTED_STEPS=`${AWK} '{if($1=="Packed items") print $2}' ${knapsack_sol}`
+}
+
+########
+builtin_sched_count_executable_steps()
+{
+    echo ${#BUILTIN_SCHED_EXECUTABLE_STEPS[@]}
+}
+
+########
+builtin_sched_determine_steps_to_be_exec()
+{
+    local dirname=$1
+
+    # Obtain updated status for steps
+    local -A BUILTIN_SCHED_ACTIVE_STEPS_UPDATED
+    builtin_sched_get_updated_step_status $dirname
+
+    # Update computational resources depending on changes
+    builtin_sched_update_comp_resources
+
+    # Set updated status as current one
+    builtin_sched_fix_updated_step_status
+
+    # Obtain set of steps that can be executed
+    local -A BUILTIN_SCHED_EXECUTABLE_STEPS
+    builtin_sched_get_executable_steps $dirname
+
+    # Get number of executable steps
+    num_exec=`builtin_sched_count_executable_steps`
+
+    if [ ${num_exec} -eq 0 ]; then
+        # There are no executable steps
+        return 1
+    else
+        # There are executable steps, select which ones will be executed
+        builtin_sched_select_steps_to_exec $dirname
+
+        return 0
+    fi
+}
+
+########
+builtin_sched_exec_steps_and_update_status()
+{
+    # TBD
+    :
+}
+    
+########
+builtin_sched_exec_steps()
+{
+    local cmdline=$1
+    local dirname=$2
+
+    # Execute selected steps and update status accordingly
+    local -A BUILTIN_SCHED_ACTIVE_STEPS_UPDATED
+    builtin_sched_exec_steps_and_update_status "${cmdline}" $dirname
+
+    # Update computational resources after execution
+    builtin_sched_update_comp_resources
+
+    # Set updated status as current one
+    builtin_sched_fix_updated_step_status
+}
+
 ########
 execute_pipeline_steps_builtin()
 {
@@ -815,9 +1058,9 @@ execute_pipeline_steps_builtin()
     local sleep_time=5
     while [ ${end} -eq 0 ]; do
         # Determine steps that should be executed
-        if builtin_sched_determine_steps_to_be_exec; then
-            # Launch steps
-            builtin_sched_launch_steps
+        if builtin_sched_determine_steps_to_be_exec ${dirname}; then
+            # Execute steps
+            builtin_sched_exec_steps "${cmdline}" ${dirname}
             
             sleep ${sleep_time}
         else
@@ -826,6 +1069,10 @@ execute_pipeline_steps_builtin()
         fi
     done
 }
+
+#################
+# MAIN FUNCTION #
+#################
 
 ########
 

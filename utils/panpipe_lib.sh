@@ -96,15 +96,6 @@ declare -A PANPIPE_REEXEC_STEPS
 declare PANPIPE_DEFAULT_NODES
 declare PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=1
 
-# Declare builtin scheduler-related variables
-declare -A BUILTIN_SCHED_STEP_STATUS
-declare -A BUILTIN_SCHED_STEP_EXIT_CODES
-declare -A BUILTIN_SCHED_ACTIVE_STEPS
-declare BUILTIN_SCHED_CPUS=1
-declare BUILTIN_SCHED_MEM=256
-declare BUILTIN_SCHED_ALLOC_CPUS=0
-declare BUILTIN_SCHED_ALLOC_MEM=0
-
 # Declare associative array to store exit code for processes
 declare -A EXIT_CODE
 
@@ -284,55 +275,6 @@ dir_exists()
 ############################
 # STEP EXECUTION FUNCTIONS #
 ############################
-
-########
-builtin_sched_init_step_status()
-{
-    local dirname=$1
-    local pfile=$2
-
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local status=`get_step_status ${dirname} ${stepname}`
-
-            # Register step information
-            BUILTIN_SCHED_STEP_STATUS[${stepname}]=${status}   
-        fi
-    done < ${pfile}
-}
-
-########
-builtin_sched_init_active_steps()
-{
-    # Iterate over defined steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_STEP_STATUS[@]}"; do
-        status=${BUILTIN_SCHED_STEP_STATUS[${stepname}]}
-        if [ ${status} != ${FINISHED_STEP_STATUS} ]; then
-            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${status}
-        fi
-    done
-}
-
-########
-builtin_sched_determine_steps_to_be_exec()
-{
-    # TBD
-    :
-}
-
-########
-builtin_sched_launch_steps()
-{
-    # TBD
-    :
-}
 
 ########
 set_panpipe_outdir()
@@ -1365,6 +1307,13 @@ extract_cpus_from_stepspec()
 {
     local stepspec=$1
     extract_attr_from_stepspec "${stepspec}" "cpus"
+}
+
+########
+extract_mem_from_stepspec()
+{
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "mem"
 }
 
 ########
