@@ -1104,6 +1104,47 @@ builtin_scheduler_launch()
     local file=$1
     local job_array_list=$2
     local stepspec=$3
+    local outvar=$4
+    local base_fname=`$BASENAME $file`
+
+    # Export task throttle variable
+    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
+    local throttle_varname=`get_job_array_task_throttle_varname ${base_fname}`
+    export ${throttle_varname}=${sched_throttle}
+
+    # Determine which jobs from the array will be executed
+    local job_array_list_blanks=`replace_str_elem_sep_with_blank "," ${job_array_list}`
+    local elem
+    for elem in ${job_array_list_blanks}; do
+        if check_job_array_elem_is_range $elem; then
+            local start_id=`get_start_id_in_range $elem`
+            local end_id=`get_end_id_in_range $elem`
+            local id=${start_id}
+            while [ ${id} -le ${end_id} ]; do
+                local task_varname=`get_job_array_task_varname ${base_fname} ${id}`
+                export ${task_varname}=1
+                id=`expr $id + 1`
+            done
+        else
+            local task_varname=`get_job_array_task_varname ${base_fname} ${elem}`
+            export ${task_varname}=1
+        fi
+    done
+
+    # Execute file
+    ${file} &
+    local pid=$!
+    eval "${outvar}='${pid}'"
+}
+
+########
+builtin_scheduler_launch_old()
+{
+    # Initialize variables
+    local file=$1
+    local job_array_list=$2
+    local stepspec=$3
     local stepdeps=$4
     local outvar=$5
     local base_fname=`$BASENAME $file`
@@ -1203,7 +1244,8 @@ launch()
             ;;
 
         *) # Built-in scheduler will be used
-            builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar}
+            builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" ${outvar}
+            # builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar}
             ;;
     esac
 }

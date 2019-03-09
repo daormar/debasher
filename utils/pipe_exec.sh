@@ -20,6 +20,7 @@ BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
 
 # Declare builtin scheduler-related variables
 declare -A BUILTIN_SCHED_STEP_STATUS
+declare -A BUILTIN_SCHED_STEP_DEPS
 declare -A BUILTIN_SCHED_STEP_CPU
 declare -A BUILTIN_SCHED_STEP_MEM
 declare -A BUILTIN_SCHED_STEP_EXIT_CODES
@@ -841,13 +842,15 @@ builtin_sched_init_step_status()
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
             local status=`get_step_status ${dirname} ${stepname}`
+            local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
             local cpus=`extract_cpus_from_stepspec "$stepspec"`
             local mem=`extract_mem_from_stepspec "$stepspec"`
 
             # Register step information
             BUILTIN_SCHED_STEP_STATUS[${stepname}]=${status}   
-            BUILTIN_SCHED_STEP_CPU[${stepname}]=${cpus}   
-            BUILTIN_SCHED_STEP_MEM[${stepname}]=${mem}   
+            BUILTIN_SCHED_STEP_DEPS[${stepname}]=${stepdeps}
+            BUILTIN_SCHED_STEP_CPU[${stepname}]=${cpus}
+            BUILTIN_SCHED_STEP_MEM[${stepname}]=${mem}
         fi
     done < ${pfile}
 }
@@ -909,7 +912,7 @@ builtin_sched_reserve_cpus()
 ########
 builtin_sched_update_comp_resources()
 {
-    # Copy updated status into current status
+    # Iterate over active steps
     local stepname
     for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
         prev_status=BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]
@@ -945,10 +948,108 @@ builtin_sched_fix_updated_step_status()
 }
 
 ########
-builtin_sched_get_executable_steps()
+get_available_cpus()
 {
-    # TBD
-    :
+    echo `expr BUILTIN_SCHED_CPUS - BUILTIN_SCHED_ALLOC_CPUS`
+}
+
+########
+get_available_mem()
+{
+    echo `expr BUILTIN_SCHED_MEM - BUILTIN_SCHED_ALLOC_MEM`
+}
+
+########
+builtin_sched_check_comp_res()
+{
+    local stepname=$1
+
+    local available_cpus=`get_available_cpus`
+    if [ ${BUILTIN_SCHED_STEP_CPU} -gt ${available_cpus} ]; then
+        return 1
+    fi
+
+    local available_mem=`get_available_mem`
+    if [ ${BUILTIN_SCHED_STEP_MEM} -gt ${available_mem} ]; then
+        return 1
+    fi
+
+    return 0
+}
+
+########
+builtin_sched_check_step_deps()
+{
+    local stepname=$1
+    local stepdeps=${BUILTIN_SCHED_STEP_DEPS[${stepname}]}
+
+    # Iterate over dependencies
+    local stepdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
+    local dep
+    for dep in ${stepdeps_blanks}; do
+        # Extract information from dependency
+        local deptype=`get_deptype_part_in_dep ${dep}`
+        local depsname=`get_stepname_part_in_dep ${dep}`
+
+        # Process dependency
+        depstatus=${BUILTIN_SCHED_STEP_STATUS[${depsname}]}
+            
+        # Process exit code
+        case ${deptype} in
+            ${AFTER_STEPDEP_TYPE})
+                if [ ${depstatus} = ${TODO_STEP_STATUS} -o  ${depstatus} = ${UNFINISHED_STEP_STATUS} ]; then
+                    return 1
+                fi
+                ;;
+            ${AFTEROK_STEPDEP_TYPE})
+                if [ ${depstatus} != ${FINISHED_STEP_STATUS} ]; then
+                    return 1
+                fi
+                ;;
+            ${AFTERNOTOK_STEPDEP_TYPE})
+                if [ ${depstatus} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+                    return 1
+                fi 
+                ;;
+            ${AFTERANY_STEPDEP_TYPE})
+                if [ ${depstatus} = ${FINISHED_STEP_STATUS -o ${depstatus} = ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+                    return 1
+                fi 
+                ;;
+            esac
+        fi
+    done
+
+    return 0
+}
+
+########
+builtin_sched_step_can_be_executed()
+{
+    local stepname=$1
+
+    # Check there are enough computational resources
+    builtin_sched_check_comp_res $stepname || return 1
+    
+    # Check step dependencies are satisfied
+    builtin_sched_check_step_deps $stepname || return 1
+
+    return 0
+}
+
+########
+builtin_sched_get_executable_steps()
+{    
+    # Iterate over active steps
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
+        status=BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]
+        if [ ${status} !=${INPROGRESS_STEP_STATUS} -a ${status} !=${FINISHED_STEP_STATUS} -a ${status} !=${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+            if builtin_sched_step_can_be_executed ${stepname}; then
+                BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=1
+            fi
+        fi
+    done
 }
 
 ########
@@ -997,7 +1098,7 @@ builtin_sched_determine_steps_to_be_exec()
 
     # Obtain set of steps that can be executed
     local -A BUILTIN_SCHED_EXECUTABLE_STEPS
-    builtin_sched_get_executable_steps $dirname
+    builtin_sched_get_executable_steps
 
     # Get number of executable steps
     num_exec=`builtin_sched_count_executable_steps`
