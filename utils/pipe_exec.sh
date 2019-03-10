@@ -1071,7 +1071,7 @@ builtin_sched_select_steps_to_exec()
     ${panpipe_bindir}/solve_knapsack_ga -s ${specfile} -c ${BUILTIN_SCHED_ALLOC_CPUS},${BUILTIN_SCHED_ALLOC_CPUS} -t ${time_limit} > ${knapsack_sol}
 
     # Store solution in output variable
-    BUILTIN_SCHED_SELECTED_STEPS=`${AWK} '{if($1=="Packed items") print $2}' ${knapsack_sol}`
+    BUILTIN_SCHED_SELECTED_STEPS=`${AWK} -F ": " '{if($1=="Packed items") print $2}' ${knapsack_sol}`
 }
 
 ########
