@@ -20,6 +20,7 @@ BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
 
 # Declare builtin scheduler-related variables
 declare -A BUILTIN_SCHED_STEP_STATUS
+declare -A BUILTIN_SCHED_STEP_SPEC
 declare -A BUILTIN_SCHED_STEP_DEPS
 declare -A BUILTIN_SCHED_STEP_CPU
 declare -A BUILTIN_SCHED_STEP_MEM
@@ -848,6 +849,7 @@ builtin_sched_init_step_status()
 
             # Register step information
             BUILTIN_SCHED_STEP_STATUS[${stepname}]=${status}   
+            BUILTIN_SCHED_STEP_SPEC[${stepname}]=${stepspec}   
             BUILTIN_SCHED_STEP_DEPS[${stepname}]=${stepdeps}
             BUILTIN_SCHED_STEP_CPU[${stepname}]=${cpus}
             BUILTIN_SCHED_STEP_MEM[${stepname}]=${mem}
@@ -915,18 +917,20 @@ builtin_sched_update_comp_resources()
     # Iterate over active steps
     local stepname
     for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
-        prev_status=BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]
-        updated_status=BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]
-        # Check if resources should be released
-        if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} ]; then
-            builtin_sched_release_mem $stepname
-            builtin_sched_release_cpus $stepname
-        fi
+        prev_status=${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]}
+        updated_status=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+        if [ "${updated_status}" != "" ]; then
+            # Check if resources should be released
+            if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} ]; then
+                builtin_sched_release_mem $stepname
+                builtin_sched_release_cpus $stepname
+            fi
 
-        # Check if resources should be reserved
-        if [ ${prev_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
-            builtin_sched_reserve_mem $stepname
-            builtin_sched_reserve_cpus $stepname
+            # Check if resources should be reserved
+            if [ ${prev_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
+                builtin_sched_reserve_mem $stepname
+                builtin_sched_reserve_cpus $stepname
+            fi
         fi
     done
 }
@@ -937,12 +941,14 @@ builtin_sched_fix_updated_step_status()
     # Copy updated status into current status
     local stepname
     for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
-        prev_status=BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]
-        updated_status=BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]
-        if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
-            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
-        else
-            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+        prev_status=${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]}
+        updated_status=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+        if [ "${updated_status}" != "" ]; then
+            if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
+                BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
+            else
+                BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+            fi
         fi
     done
 }
@@ -1042,7 +1048,7 @@ builtin_sched_get_executable_steps()
     # Iterate over active steps
     local stepname
     for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
-        status=BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]
+        status=${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]}
         if [ ${status} !=${INPROGRESS_STEP_STATUS} -a ${status} !=${FINISHED_STEP_STATUS} -a ${status} !=${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
             if builtin_sched_step_can_be_executed ${stepname}; then
                 BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=1
@@ -1066,9 +1072,11 @@ builtin_sched_select_steps_to_exec()
     done
     
     # Solve knapsack problem
-    time_limit=1
-    knapsack_sol=${dirname}/.knapsack_sol.txt
-    ${panpipe_bindir}/solve_knapsack_ga -s ${specfile} -c ${BUILTIN_SCHED_ALLOC_CPUS},${BUILTIN_SCHED_ALLOC_CPUS} -t ${time_limit} > ${knapsack_sol}
+    local available_cpus=`get_available_cpus`
+    local available_mem=`get_available_mem`
+    local time_limit=1
+    local knapsack_sol=${dirname}/.knapsack_sol.txt
+    ${panpipe_bindir}/solve_knapsack_ga -s ${specfile} -c ${available_cpus},${available_mem} -t ${time_limit} > ${knapsack_sol}
 
     # Store solution in output variable
     BUILTIN_SCHED_SELECTED_STEPS=`${AWK} -F ": " '{if($1=="Packed items") print $2}' ${knapsack_sol}`
@@ -1116,8 +1124,17 @@ builtin_sched_determine_steps_to_be_exec()
 ########
 builtin_sched_exec_steps_and_update_status()
 {
-    # TBD
-    :
+    local cmdline=$1
+    local dirname=$2
+
+    for stepname in ${BUILTIN_SCHED_SELECTED_STEPS}; do
+        # Execute step
+        stepspec=${BUILTIN_SCHED_STEP_SPEC[${stepname}]}
+        execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
+
+        # Update step status
+        BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]=${INPROGRESS_STEP_STATUS}
+    done
 }
     
 ########
