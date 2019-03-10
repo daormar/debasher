@@ -131,9 +131,14 @@ init_bash_shebang_var()
 ########
 is_absolute_path()
 {
-    case $1 in
-        /*) echo 1 ;;
-       *) echo 0 ;;
+    file=$1
+    case $file in
+        /*) echo 1
+            return 0
+            ;;
+        *) echo 0
+           return 1
+           ;;
     esac
 }
 
