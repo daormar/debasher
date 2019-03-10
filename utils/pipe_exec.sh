@@ -1009,15 +1009,14 @@ builtin_sched_check_step_deps()
             ${AFTERNOTOK_STEPDEP_TYPE})
                 if [ ${depstatus} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
                     return 1
-                fi 
+                fi
                 ;;
             ${AFTERANY_STEPDEP_TYPE})
-                if [ ${depstatus} = ${FINISHED_STEP_STATUS -o ${depstatus} = ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+                if [ ${depstatus} = ${FINISHED_STEP_STATUS} -o ${depstatus} = ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
                     return 1
                 fi 
                 ;;
-            esac
-        fi
+        esac
     done
 
     return 0
