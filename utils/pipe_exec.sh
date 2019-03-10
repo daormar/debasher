@@ -50,7 +50,7 @@ usage()
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--cfgfile <string>] [--reexec-outdated-steps]"
     echo "                          [--conda-support] [--showopts|--checkopts|--debug]"
-    echo "                          [--version] [--help]"
+    echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with pipeline steps to be performed (see manual"
     echo "                          for additional information)"
@@ -67,6 +67,7 @@ usage()
     echo "--showopts                Show pipeline options"
     echo "--checkopts               Check pipeline options"
     echo "--debug                   Do everything except launching pipeline steps"
+    echo "--builtinsched-debug      Show debug information for built-in scheduler"
     echo "--version                 Display version information and exit"
     echo "--help                    Display this help and exit"
 }
@@ -92,6 +93,7 @@ read_pars()
     showopts_given=0
     checkopts_given=0
     debug=0
+    builtinsched_debug=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -147,11 +149,13 @@ read_pars()
                   fi
                   ;;
             "--showopts") showopts_given=1
-                  ;;
+                          ;;
             "--checkopts") checkopts_given=1
-                  ;;
+                           ;;
             "--debug") debug=1
-                      ;;
+                       ;;
+            "--builtinsched-debug") builtinsched_debug=1
+                                    ;;
         esac
         shift
     done   
