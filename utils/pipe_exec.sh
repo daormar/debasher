@@ -25,7 +25,7 @@ declare -A BUILTIN_SCHED_STEP_DEPS
 declare -A BUILTIN_SCHED_STEP_CPUS
 declare -A BUILTIN_SCHED_STEP_MEM
 declare -A BUILTIN_SCHED_STEP_EXIT_CODES
-declare -A BUILTIN_SCHED_ACTIVE_STEPS
+declare -A BUILTIN_SCHED_CURR_STEP_STATUS
 declare BUILTIN_SCHED_SELECTED_STEPS
 declare BUILTIN_SCHED_CPUS=1
 declare BUILTIN_SCHED_MEM=256
@@ -880,15 +880,13 @@ builtin_sched_init_step_status()
 }
 
 ########
-builtin_sched_init_active_steps()
+builtin_sched_init_curr_step_status()
 {
     # Iterate over defined steps
     local stepname
     for stepname in "${!BUILTIN_SCHED_STEP_STATUS[@]}"; do
         status=${BUILTIN_SCHED_STEP_STATUS[${stepname}]}
-        if [ ${status} != ${FINISHED_STEP_STATUS} ]; then
-            BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${status}
-        fi
+        BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}
     done
 }
 
@@ -899,9 +897,9 @@ builtin_sched_get_updated_step_status()
 
     # Iterate over defined steps
     local stepname
-    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
         local status=`get_step_status ${dirname} ${stepname}`
-        BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]=${status}
+        BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]=${status}
     done
 }
 
@@ -936,11 +934,11 @@ builtin_sched_reserve_cpus()
 ########
 builtin_sched_update_comp_resources()
 {
-    # Iterate over active steps
+    # Iterate over steps
     local stepname
-    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
-        prev_status=${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]}
-        updated_status=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
+        prev_status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
+        updated_status=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
         if [ "${updated_status}" != "" ]; then
             # Check if resources should be released
             if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} ]; then
@@ -962,14 +960,14 @@ builtin_sched_fix_updated_step_status()
 {
     # Copy updated status into current status
     local stepname
-    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
-        prev_status=${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]}
-        updated_status=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
+        prev_status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
+        updated_status=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
         if [ "${updated_status}" != "" ]; then
             if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
-                BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
+                BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
             else
-                BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]=${BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]}
+                BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
             fi
         fi
     done
@@ -1067,10 +1065,10 @@ builtin_sched_step_can_be_executed()
 ########
 builtin_sched_get_executable_steps()
 {    
-    # Iterate over active steps
+    # Iterate over steps
     local stepname
-    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
-        status=${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]}
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
         if [ ${status} != ${INPROGRESS_STEP_STATUS} -a ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
             if builtin_sched_step_can_be_executed ${stepname}; then
                 BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=1
@@ -1113,10 +1111,10 @@ builtin_sched_count_executable_steps()
 ########
 builtin_sched_end_condition_reached()
 {
-    # Iterate over active steps
+    # Iterate over steps
     local stepname
-    for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do
-        status=${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]}
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
         if [ ${status} = ${INPROGRESS_STEP_STATUS} -o ${status} = ${TODO_STEP_STATUS} -o ${status} != ${UNFINISHED_STEP_STATUS} ]; then
             return 1
         fi        
@@ -1131,7 +1129,7 @@ builtin_sched_select_steps_to_be_exec()
     local dirname=$1
 
     # Obtain updated status for steps
-    local -A BUILTIN_SCHED_ACTIVE_STEPS_UPDATED
+    local -A BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED
     builtin_sched_get_updated_step_status $dirname
 
     # Update computational resources depending on changes
@@ -1171,23 +1169,21 @@ builtin_sched_select_steps_to_be_exec()
 ########
 builtin_sched_exec_steps_and_update_status()
 {
-    if [ "${BUILTIN_SCHED_SELECTED_STEPS}" != "" ]; then
-        local cmdline=$1
-        local dirname=$2
+    local cmdline=$1
+    local dirname=$2
 
-        local stepname
-        for stepname in "${BUILTIN_SCHED_SELECTED_STEPS}"; do
-            # Execute step
-            local stepspec=${BUILTIN_SCHED_STEP_SPEC[${stepname}]}
-            execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
-            
-            # Update step status
-            BUILTIN_SCHED_ACTIVE_STEPS_UPDATED[${stepname}]=${INPROGRESS_STEP_STATUS}
-        done
+    local stepname
+    for stepname in "${BUILTIN_SCHED_SELECTED_STEPS}"; do
+        # Execute step
+        local stepspec=${BUILTIN_SCHED_STEP_SPEC[${stepname}]}
+        execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
         
-        # Reset variable
-        BUILTIN_SCHED_SELECTED_STEPS=""
-    fi
+        # Update step status
+        BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]=${INPROGRESS_STEP_STATUS}
+    done
+    
+    # Reset variable
+    BUILTIN_SCHED_SELECTED_STEPS=""
 }
     
 ########
@@ -1197,9 +1193,11 @@ builtin_sched_exec_steps()
     local dirname=$2
 
     # Execute selected steps and update status accordingly
-    local -A BUILTIN_SCHED_ACTIVE_STEPS_UPDATED
-    builtin_sched_exec_steps_and_update_status "${cmdline}" $dirname
-
+    if [ "${BUILTIN_SCHED_SELECTED_STEPS}" != "" ]; then
+        local -A BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED
+        builtin_sched_exec_steps_and_update_status "${cmdline}" $dirname
+    fi
+    
     # Update computational resources after execution
     builtin_sched_update_comp_resources
 
@@ -1233,8 +1231,8 @@ execute_pipeline_steps_builtin()
     # Initialize step status
     builtin_sched_init_step_status ${dirname} ${pfile}
 
-    # Initialize active steps
-    builtin_sched_init_active_steps
+    # Initialize current step status
+    builtin_sched_init_curr_step_status
     
     # Execute scheduling loop
     local end=0
@@ -1242,10 +1240,10 @@ execute_pipeline_steps_builtin()
     while [ ${end} -eq 0 ]; do
         if [ ${builtinsched_debug} -eq 1 ]; then
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
-            local active_steps_info=""
+            local step_status=""
             local stepname
-            for stepname in "${!BUILTIN_SCHED_ACTIVE_STEPS[@]}"; do active_steps_info="${active_steps_info} ${stepname} -> ${BUILTIN_SCHED_ACTIVE_STEPS[${stepname}]};"; done
-            echo "[BUILTIN_SCHED] - BUILTIN_SCHED_ACTIVE_STEPS: ${active_steps_info}"
+            for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do step_status="${step_status} ${stepname} -> ${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]};"; done
+            echo "[BUILTIN_SCHED] - BUILTIN_SCHED_CURR_STEP_STATUS: ${step_status}"
             echo "[BUILTIN_SCHED] - COMPUTATIONAL RESOURCES: total cpus= ${BUILTIN_SCHED_CPUS}, allocated cpus= ${BUILTIN_SCHED_ALLOC_CPUS}; total mem= ${BUILTIN_SCHED_MEM}, allocated mem= ${BUILTIN_SCHED_ALLOC_MEM}"
         fi
 
