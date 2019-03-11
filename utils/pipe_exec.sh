@@ -47,6 +47,7 @@ print_desc()
 usage()
 {
     echo "pipe_exec                 --pfile <string> --outdir <string> [--sched <string>]"
+    echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--cfgfile <string>] [--reexec-outdated-steps]"
     echo "                          [--conda-support] [--showopts|--checkopts|--debug]"
@@ -57,7 +58,10 @@ usage()
     echo "--outdir <string>         Output directory"
     echo "--sched <string>          Scheduler used to execute the pipeline (if not given,"
     echo "                          it is determined using information gathered during"
-    echo "                          package configuration)" 
+    echo "                          package configuration)"
+    echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${BUILTIN_SCHED_CPUS} by default)"
+    echo "--builtinsched-mem <int>  Available memory in MB for built-in scheduler"
+    echo "                          (${BUILTIN_SCHED_MEM} by default)"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the pipeline"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--cfgfile <string>        File with options (options provided in command line"
@@ -85,6 +89,8 @@ read_pars()
     pfile_given=0
     outdir_given=0
     sched_given=0
+    builtinsched_cpus_given=0    
+    builtinsched_mem_given=0
     dflt_nodes_given=0
     dflt_throttle_given=0
     cfgfile_given=0
@@ -118,6 +124,18 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       sched=$1
                       sched_given=1
+                  fi
+                  ;;
+            "--builtinsched-cpus") shift
+                  if [ $# -ne 0 ]; then
+                      builtinsched_cpus=$1
+                      builtinsched_cpus_given=1
+                  fi
+                  ;;
+            "--builtinsched-mem") shift
+                  if [ $# -ne 0 ]; then
+                      builtinsched_mem=$1
+                      builtinsched_mem_given=1
                   fi
                   ;;
             "--dflt-nodes") shift
@@ -1192,6 +1210,18 @@ builtin_sched_exec_steps()
 ########
 execute_pipeline_steps_builtin()
 {
+    echo "* Configuring scheduler..." >&2
+    if [ ${builtinsched_cpus_given} -eq 1 ]; then
+        BUILTIN_SCHED_CPUS=${builtinsched_cpus}
+    fi
+    
+    if [ ${builtinsched_mem_given} -eq 1 ]; then
+        BUILTIN_SCHED_MEM=${builtinsched_mem}
+    fi
+    echo "- Available CPUS: ${BUILTIN_SCHED_CPUS}" >&2
+    echo "- Available memory: ${BUILTIN_SCHED_MEM}" >&2
+    echo "" >&2
+    
     echo "* Executing pipeline steps..." >&2
 
     # Read input parameters
