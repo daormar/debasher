@@ -851,7 +851,7 @@ execute_pipeline_steps_debug()
 ###############################
 
 ########
-builtin_sched_init_step_status()
+builtin_sched_init_step_info()
 {
     local dirname=$1
     local pfile=$2
@@ -870,37 +870,13 @@ builtin_sched_init_step_status()
             local mem=`extract_mem_from_stepspec "$stepspec"`
 
             # Register step information
-            BUILTIN_SCHED_STEP_STATUS[${stepname}]=${status}   
+            BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}   
             BUILTIN_SCHED_STEP_SPEC[${stepname}]="${stepspec}"
             BUILTIN_SCHED_STEP_DEPS[${stepname}]=${stepdeps}
             BUILTIN_SCHED_STEP_CPUS[${stepname}]=${cpus}
             BUILTIN_SCHED_STEP_MEM[${stepname}]=${mem}
         fi
     done < ${pfile}
-}
-
-########
-builtin_sched_init_curr_step_status()
-{
-    # Iterate over defined steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_STEP_STATUS[@]}"; do
-        status=${BUILTIN_SCHED_STEP_STATUS[${stepname}]}
-        BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}
-    done
-}
-
-########
-builtin_sched_get_updated_step_status()
-{
-    local dirname=$1
-
-    # Iterate over defined steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        local status=`get_step_status ${dirname} ${stepname}`
-        BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]=${status}
-    done
 }
 
 ########
@@ -929,6 +905,33 @@ builtin_sched_reserve_cpus()
 {
     local stepname=$1
     BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} + ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}`    
+}
+
+########
+builtin_sched_init_curr_comp_resources()
+{
+    # Iterate over defined steps
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
+        if [ ${status} = ${INPROGRESS_STEP_STATUS} ]; then
+            builtin_sched_reserve_mem $stepname
+            builtin_sched_reserve_cpus $stepname
+        fi
+    done
+}
+
+########
+builtin_sched_get_updated_step_status()
+{
+    local dirname=$1
+
+    # Iterate over defined steps
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
+        local status=`get_step_status ${dirname} ${stepname}`
+        BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]=${status}
+    done
 }
 
 ########
@@ -991,12 +994,12 @@ builtin_sched_check_comp_res()
     local stepname=$1
 
     local available_cpus=`get_available_cpus`
-    if [ ${BUILTIN_SCHED_CPUS} -gt ${available_cpus} ]; then
+    if [ ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} -gt ${available_cpus} ]; then
         return 1
     fi
 
     local available_mem=`get_available_mem`
-    if [ ${BUILTIN_SCHED_MEM} -gt ${available_mem} ]; then
+    if [ ${BUILTIN_SCHED_STEP_MEM[${stepname}]} -gt ${available_mem} ]; then
         return 1
     fi
 
@@ -1018,7 +1021,7 @@ builtin_sched_check_step_deps()
         local depsname=`get_stepname_part_in_dep ${dep}`
 
         # Process dependency
-        depstatus=${BUILTIN_SCHED_STEP_STATUS[${depsname}]}
+        depstatus=${BUILTIN_SCHED_CURR_STEP_STATUS[${depsname}]}
             
         # Process exit code
         case ${deptype} in
@@ -1115,7 +1118,7 @@ builtin_sched_end_condition_reached()
     local stepname
     for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
         status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        if [ ${status} = ${INPROGRESS_STEP_STATUS} -o ${status} = ${TODO_STEP_STATUS} -o ${status} != ${UNFINISHED_STEP_STATUS} ]; then
+        if [ ${status} = ${INPROGRESS_STEP_STATUS} -o ${status} = ${TODO_STEP_STATUS} -o ${status} = ${UNFINISHED_STEP_STATUS} ]; then
             return 1
         fi        
     done
@@ -1173,7 +1176,7 @@ builtin_sched_exec_steps_and_update_status()
     local dirname=$2
 
     local stepname
-    for stepname in "${BUILTIN_SCHED_SELECTED_STEPS}"; do
+    for stepname in ${BUILTIN_SCHED_SELECTED_STEPS}; do
         # Execute step
         local stepspec=${BUILTIN_SCHED_STEP_SPEC[${stepname}]}
         execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
@@ -1229,10 +1232,10 @@ execute_pipeline_steps_builtin()
     local iterno=1
     
     # Initialize step status
-    builtin_sched_init_step_status ${dirname} ${pfile}
+    builtin_sched_init_step_info ${dirname} ${pfile}
 
     # Initialize current step status
-    builtin_sched_init_curr_step_status
+    builtin_sched_init_curr_comp_resources
     
     # Execute scheduling loop
     local end=0
