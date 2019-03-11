@@ -1146,6 +1146,11 @@ builtin_sched_select_steps_to_be_exec()
     builtin_sched_get_executable_steps
 
     if [ ${builtinsched_debug} -eq 1 ]; then
+        local step_status=""
+        local stepname
+        for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do step_status="${step_status} ${stepname} -> ${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]};"; done
+        echo "[BUILTIN_SCHED] - BUILTIN_SCHED_CURR_STEP_STATUS: ${step_status}"
+        echo "[BUILTIN_SCHED] - COMPUTATIONAL RESOURCES: total cpus= ${BUILTIN_SCHED_CPUS}, allocated cpus= ${BUILTIN_SCHED_ALLOC_CPUS}; total mem= ${BUILTIN_SCHED_MEM}, allocated mem= ${BUILTIN_SCHED_ALLOC_MEM}"
         echo "[BUILTIN_SCHED] - BUILTIN_SCHED_EXECUTABLE_STEPS: ${!BUILTIN_SCHED_EXECUTABLE_STEPS[@]}" 2>&1
     fi
         
@@ -1243,11 +1248,6 @@ execute_pipeline_steps_builtin()
     while [ ${end} -eq 0 ]; do
         if [ ${builtinsched_debug} -eq 1 ]; then
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
-            local step_status=""
-            local stepname
-            for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do step_status="${step_status} ${stepname} -> ${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]};"; done
-            echo "[BUILTIN_SCHED] - BUILTIN_SCHED_CURR_STEP_STATUS: ${step_status}"
-            echo "[BUILTIN_SCHED] - COMPUTATIONAL RESOURCES: total cpus= ${BUILTIN_SCHED_CPUS}, allocated cpus= ${BUILTIN_SCHED_ALLOC_CPUS}; total mem= ${BUILTIN_SCHED_MEM}, allocated mem= ${BUILTIN_SCHED_ALLOC_MEM}"
         fi
 
         # Select steps that should be executed
