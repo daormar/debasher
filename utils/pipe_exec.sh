@@ -129,12 +129,21 @@ read_pars()
             "--builtinsched-cpus") shift
                   if [ $# -ne 0 ]; then
                       builtinsched_cpus=$1
+                      if ! str_is_natural_number ${builtinsched_cpus}; then
+                          echo "Value for --builtinsched_cpus option should be a natural number" >&2
+                          return 1
+                      fi
                       builtinsched_cpus_given=1
                   fi
                   ;;
             "--builtinsched-mem") shift
                   if [ $# -ne 0 ]; then
                       builtinsched_mem=$1
+                      builtinsched_mem=`convert_mem_value_to_mb ${builtinsched_mem}` || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
+                      if ! str_is_natural_number ${builtinsched_mem}; then
+                          echo "Value for --builtinsched_mem option should be a natural number" >&2
+                          return 1
+                      fi
                       builtinsched_mem_given=1
                   fi
                   ;;
@@ -867,7 +876,10 @@ builtin_sched_init_step_info()
             local status=`get_step_status ${dirname} ${stepname}`
             local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
             local cpus=`extract_cpus_from_stepspec "$stepspec"`
+            str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $stepname should be a natural number" >&2; return 1; }
             local mem=`extract_mem_from_stepspec "$stepspec"`
+            mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for step ${stepname}" >&2; return 1; }
+            str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $stepname should be a natural number" >&2; return 1; }
 
             # Register step information
             BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}   
@@ -1237,10 +1249,10 @@ execute_pipeline_steps_builtin()
     local iterno=1
     
     # Initialize step status
-    builtin_sched_init_step_info ${dirname} ${pfile}
+    builtin_sched_init_step_info ${dirname} ${pfile} || return 1
 
     # Initialize current step status
-    builtin_sched_init_curr_comp_resources
+    builtin_sched_init_curr_comp_resources || return 1
     
     # Execute scheduling loop
     local end=0
