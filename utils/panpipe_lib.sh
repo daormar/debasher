@@ -274,6 +274,42 @@ dir_exists()
     fi
 }
 
+########
+convert_mem_value_to_mb()
+{
+    local mem_value=$1
+
+    local len=${#mem_value}
+    local len_m_one=`expr $len - 1`
+    local mem_value_suff="${mem_value:${len_m_one}:1}"
+    case ${mem_value_suff} in
+        "K") local mem_value_wo_suff=${mem_value:0:${len_m_one}}
+             expr ${mem_value_wo_suff} / 1024 || return 1
+             ;;
+        "M") echo ${mem_value:0:${len_m_one}}
+             ;;
+        "G") local mem_value_wo_suff=${mem_value:0:${len_m_one}}
+             expr ${mem_value_wo_suff} \* 1024 || return 1
+             ;;
+        "T") local mem_value_wo_suff=${mem_value:0:${len_m_one}}
+             expr ${mem_value_wo_suff} \* 1024 \* 1024 || return 1
+             ;;
+        *) echo ${mem_value}
+           ;;
+    esac
+}
+
+########
+str_is_natural_number()
+{
+    local str=$1
+    
+    case $str in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 ############################
 # STEP EXECUTION FUNCTIONS #
 ############################
