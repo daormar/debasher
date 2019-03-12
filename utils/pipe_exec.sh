@@ -1304,6 +1304,12 @@ builtin_sched_exec_steps()
 ########
 execute_pipeline_steps_builtin()
 {
+    # Read input parameters
+    local cmdline=$1
+    local dirname=$2
+    local pfile=$3
+    local iterno=1
+
     echo "* Configuring scheduler..." >&2
     if [ ${builtinsched_cpus_given} -eq 1 ]; then
         BUILTIN_SCHED_CPUS=${builtinsched_cpus}
@@ -1317,12 +1323,6 @@ execute_pipeline_steps_builtin()
     echo "" >&2
     
     echo "* Executing pipeline steps..." >&2
-
-    # Read input parameters
-    local cmdline=$1
-    local dirname=$2
-    local pfile=$3
-    local iterno=1
     
     # Initialize step status
     builtin_sched_init_step_info ${dirname} ${pfile} || return 1
