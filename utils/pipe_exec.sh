@@ -59,9 +59,11 @@ usage()
     echo "--sched <string>          Scheduler used to execute the pipeline (if not given,"
     echo "                          it is determined using information gathered during"
     echo "                          package configuration)"
-    echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${BUILTIN_SCHED_CPUS} by default)"
+    echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${BUILTIN_SCHED_CPUS} by default)."
+    echo "                          A value of zero means unlimited CPUs"
     echo "--builtinsched-mem <int>  Available memory in MB for built-in scheduler"
-    echo "                          (${BUILTIN_SCHED_MEM} by default)"
+    echo "                          (${BUILTIN_SCHED_MEM} by default). A value of zero"
+    echo "                          means unlimited memory"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the pipeline"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--cfgfile <string>        File with options (options provided in command line"
@@ -991,13 +993,21 @@ builtin_sched_fix_updated_step_status()
 ########
 get_available_cpus()
 {
-    echo `expr ${BUILTIN_SCHED_CPUS} - ${BUILTIN_SCHED_ALLOC_CPUS}`
+    if [ ${BUILTIN_SCHED_CPUS} -eq 0 ]; then
+        echo 0
+    else
+        echo `expr ${BUILTIN_SCHED_CPUS} - ${BUILTIN_SCHED_ALLOC_CPUS}`
+    fi
 }
 
 ########
 get_available_mem()
 {
-    echo `expr ${BUILTIN_SCHED_MEM} - ${BUILTIN_SCHED_ALLOC_MEM}`
+    if [ ${BUILTIN_SCHED_MEM} -eq 0 ]; then
+        echo 0
+    else
+        echo `expr ${BUILTIN_SCHED_MEM} - ${BUILTIN_SCHED_ALLOC_MEM}`
+    fi
 }
 
 ########
@@ -1005,14 +1015,18 @@ builtin_sched_check_comp_res()
 {
     local stepname=$1
 
-    local available_cpus=`get_available_cpus`
-    if [ ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} -gt ${available_cpus} ]; then
-        return 1
+    if [ ${BUILTIN_SCHED_CPUS} -gt 0 ]; then
+        local available_cpus=`get_available_cpus`
+        if [ ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} -gt ${available_cpus} ]; then
+            return 1
+        fi
     fi
 
-    local available_mem=`get_available_mem`
-    if [ ${BUILTIN_SCHED_STEP_MEM[${stepname}]} -gt ${available_mem} ]; then
-        return 1
+    if [ ${BUILTIN_SCHED_MEM} -gt 0 ]; then
+        local available_mem=`get_available_mem`
+        if [ ${BUILTIN_SCHED_STEP_MEM[${stepname}]} -gt ${available_mem} ]; then
+            return 1
+        fi
     fi
 
     return 0
@@ -1070,7 +1084,6 @@ builtin_sched_step_can_be_executed()
 
     # Check there are enough computational resources
     builtin_sched_check_comp_res $stepname || return 1
-    
     # Check step dependencies are satisfied
     builtin_sched_check_step_deps $stepname || return 1
 
@@ -1093,6 +1106,30 @@ builtin_sched_get_executable_steps()
 }
 
 ########
+get_knapsack_cpus_for_step()
+{
+    local stepname=$1
+    
+    if [ ${BUILTIN_SCHED_CPUS} -gt 0 ]; then
+        echo ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
+    else
+        echo 0
+    fi
+}
+
+########
+get_knapsack_mem_for_step()
+{
+    local stepname=$1
+    
+    if [ ${BUILTIN_SCHED_MEM} -gt 0 ]; then
+        echo ${BUILTIN_SCHED_STEP_MEM[${stepname}]}
+    else
+        echo 0
+    fi
+}
+
+########
 builtin_sched_select_steps_to_exec()
 {
     local dirname=$1
@@ -1103,9 +1140,15 @@ builtin_sched_select_steps_to_exec()
     local stepname
     local stepvalue=1
     for stepname in "${!BUILTIN_SCHED_EXECUTABLE_STEPS[@]}"; do
-        echo "$stepname ${stepvalue} ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} ${BUILTIN_SCHED_STEP_MEM[${stepname}]}" >> ${specfile}
+        # Determine cpu requirements
+        cpus=`get_knapsack_cpus_for_step ${stepname}`
+        
+        # Determine memory requirements
+        mem=`get_knapsack_mem_for_step ${stepname}`
+        
+        echo "$stepname ${stepvalue} ${cpus} ${mem}" >> ${specfile}
     done
-
+    
     # Solve knapsack problem
     local available_cpus=`get_available_cpus`
     local available_mem=`get_available_mem`
