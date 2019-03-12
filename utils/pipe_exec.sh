@@ -862,6 +862,36 @@ execute_pipeline_steps_debug()
 ###############################
 
 ########
+builtin_sched_cpus_exceed_limit()
+{
+    local cpus=$1
+    if [ ${BUILTIN_SCHED_CPUS} -eq 0 ]; then
+        return 0
+    else
+        if [ ${BUILTIN_SCHED_CPUS} -ge $cpus ]; then
+            return
+        else
+            return
+        fi
+    fi
+}
+
+########
+builtin_sched_mem_exceeds_limit()
+{
+    local mem=$1
+    if [ ${BUILTIN_SCHED_MEM} -eq 0 ]; then
+        return 0
+    else
+        if [ ${BUILTIN_SCHED_MEM} -ge $mem ]; then
+            return
+        else
+            return
+        fi
+    fi
+}
+
+########
 builtin_sched_init_step_info()
 {
     local dirname=$1
@@ -879,9 +909,12 @@ builtin_sched_init_step_info()
             local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
             local cpus=`extract_cpus_from_stepspec "$stepspec"`
             str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $stepname should be a natural number" >&2; return 1; }
+            builtin_sched_cpus_exceed_limit ${cpus} || { echo "Error: number of cpus ($cpus) for step $stepname exceeds available ones" >&2; return 1; }
             local mem=`extract_mem_from_stepspec "$stepspec"`
             mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for step ${stepname}" >&2; return 1; }
             str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $stepname should be a natural number" >&2; return 1; }
+            builtin_sched_mem_exceeds_limit ${mem} || { echo "Error: amount of memory ($mem) for step $stepname exceeds available one" >&2; return 1; }
+
 
             # Register step information
             BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}   
