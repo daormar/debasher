@@ -894,8 +894,9 @@ builtin_sched_mem_exceeds_limit()
 ########
 builtin_sched_init_step_info()
 {
-    local dirname=$1
-    local pfile=$2
+    local cmdline=$1
+    local dirname=$2
+    local pfile=$3
 
     # Read information about the steps to be executed
     local stepspec
@@ -907,14 +908,30 @@ builtin_sched_init_step_info()
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
             local status=`get_step_status ${dirname} ${stepname}`
             local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
+            local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+            local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
+            local array_size=`get_job_array_size_for_step "${cmdline}" "${stepspec}"`
+
+            # Get cpus info
             local cpus=`extract_cpus_from_stepspec "$stepspec"`
             str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $stepname should be a natural number" >&2; return 1; }
+            # Transform cpus value
+            if [ $array_size -gt 1 ]; then
+                cpus=`expr ${cpus} \* ${sched_throttle}`
+            fi
+            # Check cpus value
             builtin_sched_cpus_exceed_limit ${cpus} || { echo "Error: number of cpus ($cpus) for step $stepname exceeds available ones" >&2; return 1; }
+
+            # Get mem info
             local mem=`extract_mem_from_stepspec "$stepspec"`
             mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for step ${stepname}" >&2; return 1; }
             str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $stepname should be a natural number" >&2; return 1; }
+            # Transform mem value
+            if [ $array_size -gt 1 ]; then
+                mem=`expr ${mem} \* ${sched_throttle}`
+            fi
+            # Check mem value
             builtin_sched_mem_exceeds_limit ${mem} || { echo "Error: amount of memory ($mem) for step $stepname exceeds available one" >&2; return 1; }
-
 
             # Register step information
             BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}   
@@ -1325,7 +1342,7 @@ execute_pipeline_steps_builtin()
     echo "* Executing pipeline steps..." >&2
     
     # Initialize step status
-    builtin_sched_init_step_info ${dirname} ${pfile} || return 1
+    builtin_sched_init_step_info "${cmdline}" ${dirname} ${pfile} || return 1
 
     # Initialize current step status
     builtin_sched_init_curr_comp_resources || return 1
