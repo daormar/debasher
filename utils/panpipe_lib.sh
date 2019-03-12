@@ -380,6 +380,17 @@ determine_scheduler()
 }
 
 ########
+get_job_array_size_for_step()
+{
+    local cmdline=$1
+    local stepspec=$2
+
+    local stepname=`extract_stepname_from_stepspec "$stepspec"`
+    define_opts_for_script "${cmdline}" "${stepspec}" || return 1
+    echo ${#SCRIPT_OPT_LIST_ARRAY[@]}
+}
+
+########
 get_job_array_task_varname()
 {
     local arrayname=$1
