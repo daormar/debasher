@@ -281,7 +281,7 @@ execute_batches()
         echo "" >&2
 
         echo "** Check if pipeline is already completed..." >&2
-        ppl_complete=`check_ppl_complete "${pipe_exec_cmd}" ${outd}` || { echo "Error: pipeline command does not contain -o option">&2 ; return 1; }
+        ppl_complete=`check_ppl_complete "${pipe_exec_cmd}" ${outd}` || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
         echo ${ppl_complete}
         echo "" >&2
 
@@ -294,7 +294,7 @@ execute_batches()
             echo "" >&2
             
             echo "** Add pipeline command to associative array..." >&2
-            add_cmd_to_assoc_array "${pipe_exec_cmd}" || { echo "Error: pipeline command does not contain -o option">&2 ; return 1; }
+            add_cmd_to_assoc_array "${pipe_exec_cmd}" || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
             echo "" >&2
         fi
         
