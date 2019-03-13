@@ -192,7 +192,7 @@ add_cmd_to_assoc_array()
     local cmd=$1
 
     # Extract output directory from command
-    local dir=`read_opt_value_from_line "${cmd}" "-o"`
+    local dir=`read_opt_value_from_line "${cmd}" "--outdir"`
 
     # Add command to associative array if directory was sucessfully retrieved
     if [ ${dir} = ${OPT_NOT_FOUND} ]; then
