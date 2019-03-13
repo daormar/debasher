@@ -1741,7 +1741,7 @@ check_step_is_in_progress()
 }
 
 ########
-get_num_substeps_finished()
+get_num_array_tasks_finished()
 {
     local script_filename=$1
 
@@ -1749,7 +1749,7 @@ get_num_substeps_finished()
 }
 
 ########
-get_num_substeps_to_finish()
+get_num_array_tasks_to_finish()
 {
     local script_filename=$1
 
@@ -1806,9 +1806,9 @@ check_step_is_finished()
 
     if [ -f ${script_filename}.${FINISHED_STEP_FEXT} ]; then
         # Check that all sub-steps are finished
-        local num_substeps_finished=`get_num_substeps_finished ${script_filename}`
-        local num_substeps=`get_num_substeps_to_finish ${script_filename}`
-        if [ ${num_substeps_finished} -eq ${num_substeps} ]; then
+        local num_array_tasks_finished=`get_num_array_tasks_finished ${script_filename}`
+        local num_array_tasks=`get_num_array_tasks_to_finish ${script_filename}`
+        if [ ${num_array_tasks_finished} -eq ${num_array_tasks} ]; then
             return 0
         else
             return 1
