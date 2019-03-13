@@ -144,9 +144,6 @@ is_absolute_path()
 get_absolute_path()
 {
     local file=$1
-
-    # Replace initial "~" symbol by $HOME if necessary
-    file=`replace_tilde_by_homedir $file`
     
     # Check if an absolute path was given
     if is_absolute_path $file; then
@@ -2246,15 +2243,12 @@ define_cmdline_infile_opt()
     local value=${_OPT_VALUE_}
 
     if [ $value != ${NOFILE} ]; then
-        # Absolutize path
-        value=`get_absolute_path ${value}`
-
         # Check if file exists
         file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
-    fi
 
-    # Absolutize path
-    value=`get_absolute_path ${value}`
+        # Absolutize path
+        value=`get_absolute_path ${value}`
+    fi
     
     # Add option
     define_opt $opt $value $varname
@@ -2277,12 +2271,13 @@ define_cmdline_infile_nonmand_opt()
     fi
 
     if [ $value != ${NOFILE} ]; then
-        # Absolutize path
-        value=`get_absolute_path ${value}`
-
         # Check if file exists
         file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+        
+        # Absolutize path
+        value=`get_absolute_path ${value}`
     fi
+
 
     # Add option
     define_opt $opt $value $varname
@@ -2355,11 +2350,11 @@ define_infile_opt()
         return 1
     fi
 
-    # Absolutize path
-    value=`get_absolute_path ${value}`
-
     # Check if file exists
     file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+
+    # Absolutize path
+    value=`get_absolute_path ${value}`
 
     if [ -z "${!varname}" ]; then
         eval "${varname}='${opt} ${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
@@ -2381,11 +2376,11 @@ define_indir_opt()
         return 1
     fi
 
-    # Absolutize path
-    value=`get_absolute_path ${value}`
-
     # Check if file exists
     dir_exists "$value" || { errmsg "directory $value does not exist ($opt option)" ; return 1; }
+
+    # Absolutize path
+    value=`get_absolute_path ${value}`
 
     if [ -z "${!varname}" ]; then
         eval "${varname}='${opt} ${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
