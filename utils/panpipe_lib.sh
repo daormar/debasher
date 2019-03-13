@@ -2246,6 +2246,9 @@ define_cmdline_infile_opt()
     local value=${_OPT_VALUE_}
 
     if [ $value != ${NOFILE} ]; then
+        # Absolutize path
+        value=`get_absolute_path ${value}`
+
         # Check if file exists
         file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
     fi
@@ -2274,6 +2277,9 @@ define_cmdline_infile_nonmand_opt()
     fi
 
     if [ $value != ${NOFILE} ]; then
+        # Absolutize path
+        value=`get_absolute_path ${value}`
+
         # Check if file exists
         file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
     fi
@@ -2348,12 +2354,12 @@ define_infile_opt()
         errmsg "define_infile_opt: wrong input parameters"
         return 1
     fi
-    
-    # Check if file exists
-    file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
     value=`get_absolute_path ${value}`
+
+    # Check if file exists
+    file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
 
     if [ -z "${!varname}" ]; then
         eval "${varname}='${opt} ${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
@@ -2375,11 +2381,11 @@ define_indir_opt()
         return 1
     fi
 
-    # Check if file exists
-    dir_exists "$value" || { errmsg "directory $value does not exist ($opt option)" ; return 1; }
-
     # Absolutize path
     value=`get_absolute_path ${value}`
+
+    # Check if file exists
+    dir_exists "$value" || { errmsg "directory $value does not exist ($opt option)" ; return 1; }
 
     if [ -z "${!varname}" ]; then
         eval "${varname}='${opt} ${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
