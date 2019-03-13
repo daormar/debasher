@@ -271,7 +271,7 @@ execute_batches()
 
         # Execute built-in tilde expansion to avoid problems with "~"
         # symbol in file and directory paths
-        pipe_exec_cmd=`expand_tildes ${pipe_exec_cmd}`
+        pipe_exec_cmd=`expand_tildes "${pipe_exec_cmd}"`
         
         echo "* Processing line ${lineno}..." >&2
         echo "" >&2
