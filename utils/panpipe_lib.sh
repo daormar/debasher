@@ -458,8 +458,10 @@ job_array_throttle_wait()
 ########
 print_task_header_builtin_sched()
 {
-    local step_name=$1
+    local fname=$1
+    local step_name=$2
     
+    echo "PANPIPE_TASK_FILENAME=${fname}"
     echo "PANPIPE_STEP_NAME=${step_name}"
     echo "NUM_CONCURRENT_PIPE_TASKS=0"
 }
@@ -488,6 +490,11 @@ print_task_body_builtin_sched()
     # Write function to be executed
     echo "execute_funct_plus_postfunct ${num_scripts} ${fname} ${taskid} ${funct} ${post_funct} \"${script_opts}\" &"
 
+    # Store pid for task id
+    if [ ${num_scripts} -gt 1 ]; then
+        echo "echo \$! > ${fname}_${taskid}.${STEPID_FEXT}"
+    fi
+    
     # Add code related to job array task throttle
     echo "NUM_CONCURRENT_PIPE_TASKS=\`expr \${NUM_CONCURRENT_PIPE_TASKS} + 1\`"
 
@@ -531,7 +538,7 @@ create_builtin_scheduler_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    print_task_header_builtin_sched ${funct} >> ${fname} || return 1
+    print_task_header_builtin_sched ${fname} ${funct} >> ${fname} || return 1
     
     # Iterate over options array
     local lineno=1
@@ -1599,6 +1606,28 @@ clean_step_log_files()
             for id in ${pending_jobs_blanks}; do
                 rm -f ${script_filename}_${id}.${BUILTIN_SCHED_LOG_FEXT}
                 rm -f ${script_filename}_${id}.${SLURM_SCHED_LOG_FEXT}
+            done
+        fi
+    fi
+}
+
+########
+clean_step_id_files()
+{
+    local array_size=$1
+    local script_filename=$2
+
+    # Remove log files depending on array size
+    if [ ${array_size} -eq 1 ]; then
+        rm -f ${script_filename}.${STEPID_FEXT}
+    else
+        # If array size is greater than 1, remove only those log files
+        # related to unfinished array tasks
+        local pending_jobs=`get_list_of_pending_jobs_in_array ${array_size} ${script_filename}`
+        if [ "${pending_jobs}" != "" ]; then
+            local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
+            for id in ${pending_jobs_blanks}; do
+                rm -f ${script_filename}_${id}.${STEPID_FEXT}
             done
         fi
     fi

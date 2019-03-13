@@ -750,6 +750,7 @@ execute_step()
         # Prepare files and directories for step
         update_step_completion_signal ${status} ${script_filename} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
         clean_step_log_files ${array_size} ${script_filename} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
+        clean_step_id_files ${array_size} ${script_filename} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
         local remove=0
         if [ ${array_size} -eq 1 ]; then
             remove=1
