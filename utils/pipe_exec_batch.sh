@@ -269,6 +269,10 @@ execute_batches()
     # Process pipeline execution commands...
     while read pipe_exec_cmd; do
 
+        # Execute built-in tilde expansion to avoid problems with "~"
+        # symbol in file and directory paths
+        pipe_exec_cmd=`expand_tildes ${pipe_exec_cmd}`
+        
         echo "* Processing line ${lineno}..." >&2
         echo "" >&2
         
@@ -284,7 +288,7 @@ execute_batches()
         ppl_complete=`check_ppl_complete "${pipe_exec_cmd}" ${outd}` || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
         echo ${ppl_complete}
         echo "" >&2
-
+        
         if [ ${ppl_complete} = "no" ]; then
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
