@@ -144,6 +144,10 @@ is_absolute_path()
 get_absolute_path()
 {
     local file=$1
+
+    # Replace initial "~" symbol by $HOME if necessary
+    file=`replace_tilde_by_homedir $file`
+    
     # Check if an absolute path was given
     if is_absolute_path $file; then
         echo $file
@@ -268,7 +272,6 @@ replace_tilde_by_homedir()
 file_exists()
 {
     local file=$1
-    file=`replace_tilde_by_homedir $file`
     if [ -f $file ]; then
         return 0
     else
@@ -280,7 +283,6 @@ file_exists()
 dir_exists()
 {
     local dir=$1
-    dir=`replace_tilde_by_homedir $dir`
     if [ -d $dir ]; then
         return 0
     else
