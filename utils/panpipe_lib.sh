@@ -253,9 +253,22 @@ logmsg()
 }
 
 ########
+replace_tilde_by_homedir()
+{
+    local file=$1
+
+    if [ ${file:0:1} = "~" ]; then
+        echo "$HOME${file:1}"
+    else
+        echo $file
+    fi
+}
+
+########
 file_exists()
 {
     local file=$1
+    file=`replace_tilde_by_homedir $file`
     if [ -f $file ]; then
         return 0
     else
@@ -267,6 +280,7 @@ file_exists()
 dir_exists()
 {
     local dir=$1
+    dir=`replace_tilde_by_homedir $dir`
     if [ -d $dir ]; then
         return 0
     else
