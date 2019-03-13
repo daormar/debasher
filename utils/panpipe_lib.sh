@@ -354,6 +354,13 @@ str_is_natural_number()
     esac
 }
 
+########
+get_num_words_in_string()
+{
+    local str=$1
+    echo "${str}" | ${WC} -w
+}
+
 ############################
 # STEP EXECUTION FUNCTIONS #
 ############################
