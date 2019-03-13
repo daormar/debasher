@@ -2379,7 +2379,7 @@ define_infile_opt()
     fi
     
     # Check if file exists
-    file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+    file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
     value=`get_absolute_path ${value}`
