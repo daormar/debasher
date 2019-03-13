@@ -869,7 +869,7 @@ builtin_sched_cpus_within_limit()
 {
     local cpus=$1
     if [ ${BUILTIN_SCHED_CPUS} -eq 0 ]; then
-        return 1
+        return 0
     else
         if [ ${BUILTIN_SCHED_CPUS} -ge $cpus ]; then
             return 0
@@ -884,7 +884,7 @@ builtin_sched_mem_within_limit()
 {
     local mem=$1
     if [ ${BUILTIN_SCHED_MEM} -eq 0 ]; then
-        return 1
+        return 0
     else
         if [ ${BUILTIN_SCHED_MEM} -ge $mem ]; then
             return 0
