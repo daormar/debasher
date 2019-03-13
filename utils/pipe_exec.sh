@@ -971,33 +971,45 @@ builtin_sched_release_cpus()
 }
 
 ########
-builtin_sched_reserve_mem()
+builtin_sched_get_step_mem()
 {
     local stepname=$1
 
     if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
-        local mem=${BUILTIN_SCHED_STEP_MEM[${stepname}]}
+        echo ${BUILTIN_SCHED_STEP_MEM[${stepname}]}
     else
-        local mem=`expr ${BUILTIN_SCHED_STEP_MEM[${stepname}]} \* ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
+        echo `expr ${BUILTIN_SCHED_STEP_MEM[${stepname}]} \* ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
     fi
-    
-    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} + ${mem}`
-    BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${mem}
+}
+
+########
+builtin_sched_reserve_mem()
+{
+    local stepname=$1
+    local step_mem=`builtin_sched_get_step_mem ${stepname}`
+    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} + ${step_mem}`
+    BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${step_mem}
+}
+
+########
+builtin_sched_get_step_cpus()
+{
+    local stepname=$1
+
+    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
+        echo ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
+    else
+        echo `expr ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} \* ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
+    fi
 }
 
 ########
 builtin_sched_reserve_cpus()
 {
     local stepname=$1
-
-    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
-        local cpus=${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
-    else
-        local cpus=`expr ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} \* ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
-    fi
-    
-    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} + ${cpus}`
-    BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${cpus}
+    local step_cpus=`builtin_sched_get_step_cpus ${stepname}`
+    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} + ${step_cpus}`
+    BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_cpus}
 }
 
 ########
@@ -1096,14 +1108,16 @@ builtin_sched_check_comp_res()
 
     if [ ${BUILTIN_SCHED_CPUS} -gt 0 ]; then
         local available_cpus=`get_available_cpus`
-        if [ ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} -gt ${available_cpus} ]; then
+        step_cpus=`builtin_sched_get_step_cpus ${stepname}`
+        if [ ${step_cpus} -gt ${available_cpus} ]; then
             return 1
         fi
     fi
 
     if [ ${BUILTIN_SCHED_MEM} -gt 0 ]; then
         local available_mem=`get_available_mem`
-        if [ ${BUILTIN_SCHED_STEP_MEM[${stepname}]} -gt ${available_mem} ]; then
+        step_mem=`builtin_sched_get_step_mem ${stepname}`
+        if [ ${step_mem} -gt ${available_mem} ]; then
             return 1
         fi
     fi
