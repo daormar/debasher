@@ -1242,10 +1242,13 @@ slurm_launch()
     
     # Submit job
     local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
+    local exit_code=$?
     
     # Check for errors
-    if [ -z "$jid" ]; then
-        jid=${INVALID_JID}
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})"
+        echo "Error while launching step with sbatch (${command})" >&2
+        return 1
     fi
 
     eval "${outvar}='${jid}'"
