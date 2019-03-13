@@ -24,7 +24,9 @@ declare -A BUILTIN_SCHED_STEP_DEPS
 declare -A BUILTIN_SCHED_STEP_ARRAY_SIZE
 declare -A BUILTIN_SCHED_STEP_THROTTLE
 declare -A BUILTIN_SCHED_STEP_CPUS
+declare -A BUILTIN_SCHED_STEP_ALLOC_CPUS
 declare -A BUILTIN_SCHED_STEP_MEM
+declare -A BUILTIN_SCHED_STEP_ALLOC_MEM
 declare -A BUILTIN_SCHED_CURR_STEP_STATUS
 declare BUILTIN_SCHED_SELECTED_STEPS
 declare BUILTIN_SCHED_CPUS=1
@@ -954,28 +956,48 @@ builtin_sched_init_step_info()
 builtin_sched_release_mem()
 {
     local stepname=$1
-    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} - ${BUILTIN_SCHED_STEP_MEM[${stepname}]}`
+    
+    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]}`
+    BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=0
 }
 
 ########
 builtin_sched_release_cpus()
 {
     local stepname=$1
-    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} - ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}`    
+    
+    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]}`
+    BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=0
 }
 
 ########
 builtin_sched_reserve_mem()
 {
     local stepname=$1
-    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} + ${BUILTIN_SCHED_STEP_MEM[${stepname}]}`
+
+    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
+        local mem=${BUILTIN_SCHED_STEP_MEM[${stepname}]}
+    else
+        local mem=`expr ${BUILTIN_SCHED_STEP_MEM[${stepname}]} \* ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
+    fi
+    
+    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} + ${mem}`
+    BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${mem}
 }
 
 ########
 builtin_sched_reserve_cpus()
 {
     local stepname=$1
-    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} + ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}`    
+
+    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
+        local cpus=${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
+    else
+        local cpus=`expr ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} \* ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
+    fi
+    
+    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} + ${cpus}`
+    BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${cpus}
 }
 
 ########
