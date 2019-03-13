@@ -160,6 +160,37 @@ get_absolute_path()
 }
 
 ########
+expand_tilde_in_word()
+{
+    local word=$1
+
+    case "$word" in
+        "~/"*) echo "${HOME}/${word#"~/"}"
+               ;;
+        *) echo $word
+           ;;
+    esac
+}
+
+########
+expand_tildes()
+{
+    local str=$1
+    if [ "${str}" != "" ]; then
+        local result=""
+        for w in $str; do
+            w=`expand_tilde_in_word $w`
+            if [ "$result" = "" ]; then
+                result=$w
+            else
+                result="${result} ${w}"
+            fi
+        done
+        echo ${result}
+    fi
+}
+
+########
 exclude_readonly_vars()
 {
     $AWK -F "=" 'BEGIN{
