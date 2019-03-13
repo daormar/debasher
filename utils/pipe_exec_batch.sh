@@ -220,7 +220,7 @@ check_ppl_complete()
         # pipeline has completed execution
         
         # Extract output directory from command
-        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "-o"`
+        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
         if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
             return 1
         fi
@@ -238,7 +238,7 @@ check_ppl_complete()
         # directory
 
         # Extract output directory from command
-        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "-o"`
+        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
         if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
             return 1
         fi
