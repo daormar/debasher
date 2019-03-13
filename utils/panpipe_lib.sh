@@ -1317,7 +1317,6 @@ launch()
 
         *) # Built-in scheduler will be used
             builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" ${outvar}
-            # builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar}
             ;;
     esac
 }
