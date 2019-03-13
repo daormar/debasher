@@ -1268,11 +1268,11 @@ launch()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar}
+            slurm_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
             ;;
 
         *) # Built-in scheduler will be used
-            builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" ${outvar}
+            builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" ${outvar} || return 1
             ;;
     esac
 }
