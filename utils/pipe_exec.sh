@@ -864,31 +864,31 @@ execute_pipeline_steps_debug()
 ###############################
 
 ########
-builtin_sched_cpus_exceed_limit()
+builtin_sched_cpus_within_limit()
 {
     local cpus=$1
     if [ ${BUILTIN_SCHED_CPUS} -eq 0 ]; then
-        return 0
+        return 1
     else
         if [ ${BUILTIN_SCHED_CPUS} -ge $cpus ]; then
-            return
+            return 0
         else
-            return
+            return 1
         fi
     fi
 }
 
 ########
-builtin_sched_mem_exceeds_limit()
+builtin_sched_mem_within_limit()
 {
     local mem=$1
     if [ ${BUILTIN_SCHED_MEM} -eq 0 ]; then
-        return 0
+        return 1
     else
         if [ ${BUILTIN_SCHED_MEM} -ge $mem ]; then
-            return
+            return 0
         else
-            return
+            return 1
         fi
     fi
 }
@@ -924,18 +924,20 @@ builtin_sched_init_step_info()
             str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $stepname should be a natural number" >&2; return 1; }
 
             # Obtain full throttle cpus value
+            local full_throttle_cpus=${cpus}
             if [ $array_size -gt 1 ]; then
-                local full_throttle_cpus=`expr ${cpus} \* ${sched_throttle}`
+                full_throttle_cpus=`expr ${cpus} \* ${sched_throttle}`
             fi
             # Check full_throttle_cpus value
-            builtin_sched_cpus_exceed_limit ${full_throttle_cpus} || { echo "Error: number of cpus ($full_throttle_cpus) for step $stepname exceeds available ones" >&2; return 1; }
+            builtin_sched_cpus_within_limit ${full_throttle_cpus} || { echo "Error: number of cpus for step $stepname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
             # Obtain full throttle mem value
+            local full_throttle_mem=${mem}
             if [ $array_size -gt 1 ]; then
-                local full_throttle_mem=`expr ${mem} \* ${sched_throttle}`
+                full_throttle_mem=`expr ${mem} \* ${sched_throttle}`
             fi
             # Check mem value
-            builtin_sched_mem_exceeds_limit ${full_throttle_mem} || { echo "Error: amount of memory ($full_throttle_mem) for step $stepname exceeds available one" >&2; return 1; }
+            builtin_sched_mem_within_limit ${full_throttle_mem} || { echo "Error: amount of memory for step $stepname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
             # Register step information
             BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}   
