@@ -1052,7 +1052,7 @@ builtin_sched_get_failed_array_taskids()
     for taskid in `seq ${array_size}`; do
         local task_status=`get_array_task_status $dirname $stepname $taskid`
         if [ ${task_status} = ${FAILED_TASK_STATUS} ]; then
-            if [ ${result} = "" ]; then
+            if [ "${result}" = "" ]; then
                 result=$taskid
             else
                 result="$result $taskid"
@@ -1072,7 +1072,7 @@ builtin_sched_get_finished_array_taskids()
     for taskid in `seq ${array_size}`; do
         local task_status=`get_array_task_status $dirname $stepname $taskid`
         if [ ${task_status} = ${FINISHED_TASK_STATUS} ]; then
-            if [ ${result} = "" ]; then
+            if [ "${result}" = "" ]; then
                 result=$taskid
             else
                 result="$result $taskid"
@@ -1116,9 +1116,10 @@ builtin_sched_revise_array_mem()
 ########
 builtin_sched_revise_array_cpus()
 {
-    local stepname=$1
+    local dirname=$1
+    local stepname=$2
 
-    max_step_throttle=`builtin_sched_get_max_throttle_for_step ${stepname}`
+    max_step_throttle=`builtin_sched_get_max_throttle_for_step ${dirname} ${stepname}`
     step_throttle=${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}
 
     if [ ${max_step_throttle} -lt ${step_throttle} ]; then
