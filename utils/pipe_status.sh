@@ -163,7 +163,7 @@ process_status_for_pfile()
 {
     local dirname=$1
     local absdirname=`get_absolute_path ${dirname}`
-    local command_line_file=$dirname/command_line.sh
+    local command_line_file=${absdirname}/command_line.sh
     
     # Extract information from command_line.sh file
     local orig_workdir=`get_orig_workdir ${command_line_file}` || return 1
