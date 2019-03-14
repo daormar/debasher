@@ -113,8 +113,9 @@ panpipe_version()
 pipe_fail()
 {
     # test if there is at least one command to exit with a non-zero status
+    local pipestatus=${PIPESTATUS[*]}
     local pipe_status_elem
-    for pipe_status_elem in ${PIPESTATUS[*]}; do 
+    for pipe_status_elem in ${pipestatus}; do 
         if test ${pipe_status_elem} -ne 0; then 
             return 1; 
         fi 
