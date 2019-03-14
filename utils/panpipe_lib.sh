@@ -28,6 +28,12 @@ REEXEC_STEP_STATUS_EXIT_CODE=3
 TODO_STEP_STATUS="TO-DO"
 TODO_STEP_STATUS_EXIT_CODE=4
 
+# ARRAY TASK STATUSES
+FINISHED_TASK_STATUS="FINISHED"
+INPROGRESS_TASK_STATUS="IN-PROGRESS"
+FAILED_TASK_STATUS="FAILED"
+TODO_TASK_STATUS="TO-DO"
+
 # REEXEC REASONS
 FORCED_REEXEC_REASON="forced"
 OUTDATED_CODE_REEXEC_REASON="outdated_code"
@@ -55,6 +61,7 @@ BUILTIN_SCHED_LOG_FEXT="builtin_out"
 SLURM_SCHED_LOG_FEXT="slurm_out"
 FINISHED_STEP_FEXT="finished"
 STEPID_FEXT="id"
+ARRAY_TASKID_FEXT="id"
 
 ####################
 # GLOBAL VARIABLES #
@@ -1666,14 +1673,13 @@ read_step_id_from_file()
 }
 
 ########
-check_if_pid_exists()
+pid_exists()
 {
     local pid=$1
 
-    local pid_exists=1
-    kill -0 $pid  > /dev/null 2>&1 || pid_exists=0
+    kill -0 $pid  > /dev/null 2>&1 || return 1
 
-    echo ${pid_exists}
+    return 0
 }
 
 ########
@@ -1684,7 +1690,7 @@ get_slurm_state_code()
 }
 
 ########
-check_if_slurm_jid_exists()
+slurm_jid_exists()
 {
     local jid=$1
 
@@ -1696,31 +1702,34 @@ check_if_slurm_jid_exists()
         # If squeue succeeds, determine if it returns a state code
         local job_state_code=`get_slurm_state_code $jid`
         if [ -z "${job_state_code}" ]; then
-            echo 0
+            return 1
         else
-            echo 1
+            return 0
         fi
     else
         # Since squeue has failed, the job is not being executed
-        echo 0
+        return 1
     fi
-    
-    echo ${jid_exists}
 }
 
 ########
-check_if_id_exists()
+id_exists()
 {
     local id=$1
 
     # Check id depending on the scheduler
     local sched=`determine_scheduler`
+    local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
-            check_if_slurm_jid_exists $id
+            slurm_jid_exists $id
+            exit_code=$?
+            return ${exit_code}
         ;;
         *) # Use built-in scheduler
-            check_if_pid_exists $id
+            pid_exists $id
+            exit_code=$?
+            return ${exit_code}
         ;;
     esac
 }
@@ -1730,11 +1739,9 @@ check_step_is_in_progress()
 {
     local dirname=$1
     local stepname=$2
-
     local stepid=`read_step_id_from_file $dirname $stepname`
-    local stepid_exists=`check_if_id_exists $stepid`
 
-    if [ ${stepid_exists} -eq 1 ]; then
+    if id_exists $stepid; then
         return 0
     else
         return 1
@@ -1849,6 +1856,55 @@ get_step_status()
     else
         echo "${TODO_STEP_STATUS}"
         return ${TODO_STEP_STATUS_EXIT_CODE}
+    fi
+}
+
+########
+array_task_is_finished()
+{
+    local script_filename=$1
+    local task_id=$2
+    local finished_step_file=${script_filename}.${FINISHED_STEP_FEXT}
+    
+    if [ ! -f  ${finished_step_file} ]; then
+        return 1
+    fi
+
+    local found=`${AWK} -v id=${task_id} '{if($4==id) print "yes"}' ${finished_step_file}`
+
+    if [ "${found}" = "yes" ]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+########
+get_array_task_status()
+{
+    local dirname=$1
+    local stepname=$2
+    local taskid=$3
+    local stepdirname=`get_step_outdir ${dirname} ${stepname}`
+    local script_filename=`get_script_filename $dirname $stepname`
+    local array_taskid_file=${script_filename}_${taskid}.${ARRAY_TASKID_FEXT}
+    
+    if [ ! -f ${array_taskid_file} ]; then
+        # Task is not started
+        echo ${TODO_TASK_STATUS}
+    else
+        # Task was started
+        if array_task_is_finished ${script_filename} ${taskid}; then
+            echo ${FINISHED_TASK_STATUS}
+        else
+            local pid=`cat ${array_taskid_file}`
+            # Task is not finished
+            if pid_exists $pid; then
+                echo ${INPROGRESS_TASK_STATUS}
+            else
+                echo ${FAILED_TASK_STATUS}
+            fi
+        fi
     fi
 }
 

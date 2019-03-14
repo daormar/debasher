@@ -18,7 +18,8 @@ BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
 # GLOBAL VARIABLES #
 ####################
 
-# Declare builtin scheduler-related variables
+# Declare built-in scheduler-related variables
+declare -A BUILTIN_SCHED_STEP_SCRIPT_FILENAME
 declare -A BUILTIN_SCHED_STEP_SPEC
 declare -A BUILTIN_SCHED_STEP_DEPS
 declare -A BUILTIN_SCHED_STEP_ARRAY_SIZE
@@ -909,6 +910,7 @@ builtin_sched_init_step_info()
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            local script_filename=`get_script_filename ${dirname} ${stepname}`
             local status=`get_step_status ${dirname} ${stepname}`
             local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
             local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
@@ -941,6 +943,7 @@ builtin_sched_init_step_info()
             builtin_sched_mem_within_limit ${full_throttle_mem} || { echo "Error: amount of memory for step $stepname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
             # Register step information
+            BUILTIN_SCHED_STEP_SCRIPT_FILENAME[${stepname}]=${script_filename}
             BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}   
             BUILTIN_SCHED_STEP_SPEC[${stepname}]="${stepspec}"
             BUILTIN_SCHED_STEP_DEPS[${stepname}]=${stepdeps}
@@ -983,6 +986,19 @@ builtin_sched_get_step_mem()
 }
 
 ########
+builtin_sched_get_step_mem_given_throttle()
+{
+    local stepname=$1
+    local throttle=$2
+
+    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
+        echo ${BUILTIN_SCHED_STEP_MEM[${stepname}]}
+    else
+        echo `expr ${BUILTIN_SCHED_STEP_MEM[${stepname}]} \* ${throttle}`
+    fi
+}
+
+########
 builtin_sched_reserve_mem()
 {
     local stepname=$1
@@ -1004,12 +1020,112 @@ builtin_sched_get_step_cpus()
 }
 
 ########
+builtin_sched_get_step_cpus_given_throttle()
+{
+    local stepname=$1
+    local throttle=$2
+
+    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
+        echo ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
+    else
+        echo `expr ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} \* ${throttle}`
+    fi
+}
+
+########
 builtin_sched_reserve_cpus()
 {
     local stepname=$1
     local step_cpus=`builtin_sched_get_step_cpus ${stepname}`
     BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} + ${step_cpus}`
     BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_cpus}
+}
+
+########
+builtin_sched_get_failed_array_taskids()
+{
+    local dirname=$1
+    local stepname=$2
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local result
+
+    for taskid in `seq ${array_size}`; do
+        local task_status=`get_array_task_status $dirname $stepname $taskid`
+        if [ ${task_status} = ${FAILED_TASK_STATUS} ]; then
+            if [ ${result} = "" ]; then
+                result=$taskid
+            else
+                result="$result $taskid"
+            fi
+        fi
+    done
+}
+
+########
+builtin_sched_get_finished_array_taskids()
+{
+    local dirname=$1
+    local stepname=$2
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local result
+
+    for taskid in `seq ${array_size}`; do
+        local task_status=`get_array_task_status $dirname $stepname $taskid`
+        if [ ${task_status} = ${FINISHED_TASK_STATUS} ]; then
+            if [ ${result} = "" ]; then
+                result=$taskid
+            else
+                result="$result $taskid"
+            fi
+        fi
+    done
+}
+
+########
+builtin_sched_get_max_throttle_for_step()
+{
+    local dirname=$1
+    local stepname=$2
+
+    local failed_tasks=`builtin_sched_get_failed_array_taskids $dirname $stepname`
+    local num_failed_tasks=`get_num_words_in_string ${failed_tasks}`
+
+    local finished_tasks=`builtin_sched_get_finished_array_taskids $dirname $stepname`
+    local num_finished_tasks=`get_num_words_in_string ${finished_tasks}`
+
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    echo `expr ${array_size} - ${num_failed_tasks} - ${num_finished_tasks}`
+}
+
+########
+builtin_sched_revise_array_mem()
+{
+    local dirname=$1
+    local stepname=$2
+
+    max_step_throttle=`builtin_sched_get_max_throttle_for_step ${dirname} ${stepname}`
+    step_throttle=${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}
+
+    if [ ${max_step_throttle} -lt ${step_throttle} ]; then
+        step_revised_mem=`builtin_sched_get_step_mem_given_throttle ${stepname} ${max_step_throttle}`
+        BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]} + ${step_revised_mem}`
+        BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${step_revised_mem}
+    fi
+}
+
+########
+builtin_sched_revise_array_cpus()
+{
+    local stepname=$1
+
+    max_step_throttle=`builtin_sched_get_max_throttle_for_step ${stepname}`
+    step_throttle=${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}
+
+    if [ ${max_step_throttle} -lt ${step_throttle} ]; then
+        step_revised_cpus=`builtin_sched_get_step_cpus_given_throttle ${stepname} ${max_step_throttle}`
+        BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]} + ${step_revised_cpus}`
+        BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_revised_cpus}
+    fi
 }
 
 ########
@@ -1042,6 +1158,8 @@ builtin_sched_get_updated_step_status()
 ########
 builtin_sched_update_comp_resources()
 {
+    local dirname=$1
+    
     # Iterate over steps
     local stepname
     for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
@@ -1058,6 +1176,12 @@ builtin_sched_update_comp_resources()
             if [ ${prev_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
                 builtin_sched_reserve_mem $stepname
                 builtin_sched_reserve_cpus $stepname
+            fi
+
+            # Check if resources of job array should be revised
+            if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -gt 1 -a ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
+                builtin_sched_revise_array_mem $dirname $stepname
+                builtin_sched_revise_array_cpus $dirname $stepname
             fi
         fi
     done
@@ -1284,7 +1408,7 @@ builtin_sched_select_steps_to_be_exec()
     builtin_sched_get_updated_step_status $dirname
 
     # Update computational resources depending on changes
-    builtin_sched_update_comp_resources
+    builtin_sched_update_comp_resources $dirname
 
     # Set updated status as current one
     builtin_sched_fix_updated_step_status
@@ -1355,7 +1479,7 @@ builtin_sched_exec_steps()
     fi
     
     # Update computational resources after execution
-    builtin_sched_update_comp_resources
+    builtin_sched_update_comp_resources $dirname
 
     # Set updated status as current one
     builtin_sched_fix_updated_step_status
