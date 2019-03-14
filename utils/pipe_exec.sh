@@ -1059,6 +1059,8 @@ builtin_sched_get_failed_array_taskids()
             fi
         fi
     done
+
+    echo $result
 }
 
 ########
@@ -1079,6 +1081,8 @@ builtin_sched_get_finished_array_taskids()
             fi
         fi
     done
+
+    echo $result
 }
 
 ########
@@ -1088,10 +1092,10 @@ builtin_sched_get_max_throttle_for_step()
     local stepname=$2
 
     local failed_tasks=`builtin_sched_get_failed_array_taskids $dirname $stepname`
-    local num_failed_tasks=`get_num_words_in_string ${failed_tasks}`
+    local num_failed_tasks=`get_num_words_in_string "${failed_tasks}"`
 
     local finished_tasks=`builtin_sched_get_finished_array_taskids $dirname $stepname`
-    local num_finished_tasks=`get_num_words_in_string ${finished_tasks}`
+    local num_finished_tasks=`get_num_words_in_string "${finished_tasks}"`
 
     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
     echo `expr ${array_size} - ${num_failed_tasks} - ${num_finished_tasks}`
@@ -1105,7 +1109,7 @@ builtin_sched_revise_array_mem()
 
     max_step_throttle=`builtin_sched_get_max_throttle_for_step ${dirname} ${stepname}`
     step_throttle=${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}
-
+    
     if [ ${max_step_throttle} -lt ${step_throttle} ]; then
         step_revised_mem=`builtin_sched_get_step_mem_given_throttle ${stepname} ${max_step_throttle}`
         BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]} + ${step_revised_mem}`
