@@ -878,6 +878,7 @@ get_slurm_dependency_opt()
 ########
 get_list_of_pending_jobs_in_array()
 {
+    # NOTE: a pending job here is just one that is not finished
     local array_size=$1
     local file=$2
 
