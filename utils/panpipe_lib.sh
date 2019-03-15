@@ -13,6 +13,7 @@ FUNCT_NOT_FOUND="_FUNCT_NOT_FOUND_"
 INVALID_SID="_INVALID_SID_"
 INVALID_JID="_INVALID_JID_"
 INVALID_PID="_INVALID_PID_"
+INVALID_ARRAY_TID="_INVALID_ARRAY_TID_"
 VOID_VALUE="_VOID_VALUE_"
 GENERAL_OPT_CATEGORY="GENERAL"
 
@@ -450,23 +451,6 @@ get_job_array_size_for_step()
 }
 
 ########
-get_job_array_task_varname()
-{
-    local arrayname=$1
-    local taskid=$2
-    
-    echo "BUILTIN_SCHED_ARRAY_TASK_${arrayname}_${taskid}"
-}
-
-########
-get_job_array_task_throttle_varname()
-{
-    local arrayname=$1
-
-    echo "BUILTIN_SCHED_ARRAY_TASK_THROTTLE_${arrayname}"
-}
-
-########
 execute_funct_plus_postfunct()
 {
     local num_scripts=$1
@@ -498,124 +482,6 @@ execute_funct_plus_postfunct()
 
     # Signal step completion
     signal_step_completion ${fname} ${taskid} ${num_scripts}
-}
-
-########
-job_array_throttle_wait()
-{
-    local num_concurrent_tasks=$1
-    local throttle=$2
-
-    if [ ${num_concurrent_tasks} -ge ${throttle} ]; then
-        wait || exit 1
-        return 1
-    else
-        return 0
-    fi
-}
-
-########
-print_task_header_builtin_sched()
-{
-    local fname=$1
-    local step_name=$2
-    
-    echo "PANPIPE_TASK_FILENAME=${fname}"
-    echo "PANPIPE_STEP_NAME=${step_name}"
-    echo "NUM_CONCURRENT_PIPE_TASKS=0"
-}
-
-########
-print_task_body_builtin_sched()
-{
-    # Initialize variables
-    local num_scripts=$1
-    local fname=$2
-    local base_fname=`$BASENAME $fname`
-    local taskid=$3
-    local funct=$4
-    local post_funct=$5
-    local script_opts=$6
-
-    # Write start of code block
-    echo "{"
-    
-    # Write treatment for task id
-    if [ ${num_scripts} -gt 1 ]; then
-        local varname=`get_job_array_task_varname ${base_fname} ${taskid}`
-        echo "if [ \"\${${varname}}\" -eq 1 ]; then"
-    fi
-
-    # Write function to be executed
-    echo "execute_funct_plus_postfunct ${num_scripts} ${fname} ${taskid} ${funct} ${post_funct} \"${script_opts}\" &"
-
-    # Store pid for task id
-    if [ ${num_scripts} -gt 1 ]; then
-        echo "echo \$! > ${fname}_${taskid}.${STEPID_FEXT}"
-    fi
-    
-    # Add code related to job array task throttle
-    echo "NUM_CONCURRENT_PIPE_TASKS=\`expr \${NUM_CONCURRENT_PIPE_TASKS} + 1\`"
-
-    # Close if statement
-    if [ ${num_scripts} -gt 1 ]; then
-        echo "fi" 
-    fi
-
-    local throttle_varname=`get_job_array_task_throttle_varname ${base_fname}`
-    echo "job_array_throttle_wait \${NUM_CONCURRENT_PIPE_TASKS} \${${throttle_varname}} || NUM_CONCURRENT_PIPE_TASKS=0"
-
-    # Write end of code block with redirection
-    if [ ${num_scripts} -gt 1 ]; then
-        echo "} > ${fname}_${taskid}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
-    else
-        echo "} > ${fname}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
-    fi
-}
-
-########
-print_task_foot_builtin_sched()
-{
-    echo "wait"
-}
-
-########
-create_builtin_scheduler_script()
-{
-    # Init variables
-    local fname=$1
-    local funct=$2
-    local post_funct=$3
-    local opts_array_name=$4[@]
-    local opts_array=("${!opts_array_name}")
-    
-    # Write bash shebang
-    local BASH_SHEBANG=`init_bash_shebang_var`
-    echo ${BASH_SHEBANG} > ${fname} || return 1
-    
-    # Write environment variables
-    set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
-
-    # Print header
-    print_task_header_builtin_sched ${fname} ${funct} >> ${fname} || return 1
-    
-    # Iterate over options array
-    local lineno=1
-    local num_scripts=${#opts_array[@]}
-    local script_opts
-    for script_opts in "${opts_array[@]}"; do
-
-        print_task_body_builtin_sched ${num_scripts} ${fname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
-
-        lineno=`expr $lineno + 1`
-
-    done
-
-    # Print foot
-    print_task_foot_builtin_sched >> ${fname} || return 1
-    
-    # Give execution permission
-    chmod u+x ${fname} || return 1
 }
 
 ########
@@ -1117,48 +983,6 @@ get_exit_code()
 }
 
 ########
-wait_for_deps_builtin_scheduler()
-{
-    # Initialize variables
-    local stepdeps=$1
-
-    # Iterate over dependencies
-    local stepdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
-    local dep
-    for dep in ${stepdeps_blanks}; do
-        # Extract information from dependency
-        local deptype=`get_deptype_part_in_dep ${dep}`
-        local pid=`get_id_part_in_dep ${dep}`
-
-        # Wait for process to finish (except for "after" dependency
-        # types)
-        if [ ${deptype} != ${AFTER_STEPDEP_TYPE} ]; then
-            get_exit_code $pid _exit_code
-            local exit_code=${_exit_code}
-            
-            # Process exit code
-            case ${deptype} in
-                ${AFTEROK_STEPDEP_TYPE})
-                    if [ ${exit_code} -ne 0 ]; then
-                        return 1
-                    fi
-                ;;
-                ${AFTERNOTOK_STEPDEP_TYPE})
-                    if [ ${exit_code} -eq 0 ]; then
-                        return 1
-                    fi 
-                ;;
-                ${AFTERANY_STEPDEP_TYPE})
-                # No actions required
-                    :
-                ;;
-            esac
-        fi
-    done
-    return 0
-}
-
-########
 check_job_array_elem_is_range()
 {
     local elem=$1
@@ -1210,47 +1034,6 @@ get_scheduler_throttle()
     else
         echo ${stepspec_throttle}
     fi
-}
-
-########
-builtin_scheduler_launch()
-{
-    # Initialize variables
-    local file=$1
-    local job_array_list=$2
-    local stepspec=$3
-    local outvar=$4
-    local base_fname=`$BASENAME $file`
-
-    # Export task throttle variable
-    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
-    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
-    local throttle_varname=`get_job_array_task_throttle_varname ${base_fname}`
-    export ${throttle_varname}=${sched_throttle}
-
-    # Determine which jobs from the array will be executed
-    local job_array_list_blanks=`replace_str_elem_sep_with_blank "," ${job_array_list}`
-    local elem
-    for elem in ${job_array_list_blanks}; do
-        if check_job_array_elem_is_range $elem; then
-            local start_id=`get_start_id_in_range $elem`
-            local end_id=`get_end_id_in_range $elem`
-            local id=${start_id}
-            while [ ${id} -le ${end_id} ]; do
-                local task_varname=`get_job_array_task_varname ${base_fname} ${id}`
-                export ${task_varname}=1
-                id=`expr $id + 1`
-            done
-        else
-            local task_varname=`get_job_array_task_varname ${base_fname} ${elem}`
-            export ${task_varname}=1
-        fi
-    done
-
-    # Execute file
-    ${file} &
-    local pid=$!
-    eval "${outvar}='${pid}'"
 }
 
 ########
@@ -1312,10 +1095,6 @@ launch()
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
             slurm_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
-            ;;
-
-        *) # Built-in scheduler will be used
-            builtin_scheduler_launch ${file} "${job_array_list}" "${stepspec}" ${outvar} || return 1
             ;;
     esac
 }
@@ -1663,13 +1442,34 @@ read_step_id_from_file()
 {
     local dirname=$1
     local stepname=$2
-    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
 
+    # Return id for step
+    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
     if [ -f $filename ]; then
         cat $filename
     else
         echo ${INVALID_SID}
     fi
+}
+
+########
+read_ids_from_files()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Return id for step
+    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
+    if [ -f $filename ]; then
+        cat $filename
+    else
+        echo ${INVALID_SID}
+    fi
+
+    # Return ids for array tasks if any
+    for taskid_file in $dirname/scripts/$stepname_*.${ARRAY_TASKID_FEXT}; do
+        cat $taskid_file
+    done            
 }
 
 ########
@@ -1739,13 +1539,16 @@ check_step_is_in_progress()
 {
     local dirname=$1
     local stepname=$2
-    local stepid=`read_step_id_from_file $dirname $stepname`
+    local ids=`read_ids_from_files $dirname $stepname`
 
-    if id_exists $stepid; then
-        return 0
-    else
-        return 1
-    fi
+    # Iterate over ids
+    for id in ${ids}; do
+        if id_exists $id; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 ########
