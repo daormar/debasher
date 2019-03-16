@@ -313,27 +313,27 @@ def print_deps(ordered_step_entries,stepdeps_map):
         print sname,":",depstr
 
 ##################################################
-def sname_not_correct(sname):
+def sname_valid(sname):
     for c in sname:
         if not(c.isalpha() or c=="_"):
-            return 1
-    return 0
+            return 0
+    return 1
     
 ##################################################
-def snames_not_correct(stepdeps_map):
+def snames_valid(stepdeps_map):
     for sname in stepdeps_map:
-        if(sname_not_correct(sname)):
+        if(not sname_valid(sname)):
             print >> sys.stderr, "Error: step name",sname,"contains not allowed characters (only letters and underscores are allowed)"
-            return 1
-    return 0
+            return 0
+    return 1
     
 ##################################################
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
     entries_lineno,step_entries=extract_step_entries(values["pfile"])
     stepdeps_map=create_stepdeps_map(step_entries)
-    if(snames_not_correct(stepdeps_map)):
-       print >> sys.stderr, "Step names are not correct"
+    if(not snames_valid(stepdeps_map)):
+       print >> sys.stderr, "Step names are not valid"
        return 1
     ordered_step_entries=[]
     if(stepdeps_correct(entries_lineno,step_entries,stepdeps_map,ordered_step_entries)):
