@@ -729,14 +729,14 @@ execute_step()
         update_step_completion_signal ${status} ${script_filename} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
         clean_step_log_files ${array_size} ${script_filename} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
         clean_step_id_files ${array_size} ${script_filename} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
-        local remove=0
         if [ ${array_size} -eq 1 ]; then
-            remove=1
+            prepare_outdir_for_step ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
+        else
+            prepare_outdir_for_step_array ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
         fi
-        prepare_outdir_for_step ${dirname} ${stepname} ${remove} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
         prepare_fifos_owned_by_step ${stepname}
         
-        # Execute script
+        # Launch script
         local job_array_list=`get_job_array_list ${array_size} ${script_filename}`
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
