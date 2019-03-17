@@ -1477,9 +1477,11 @@ read_ids_from_files()
     fi
 
     # Return ids for array tasks if any
-    for taskid_file in $dirname/scripts/$stepname_*.${ARRAY_TASKID_FEXT}; do
-        cat $taskid_file
-    done            
+    for taskid_file in $dirname/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+        if [ -f ${taskid_file} ]; then
+            cat ${taskid_file}
+        fi
+    done
 }
 
 ########
@@ -1624,7 +1626,7 @@ check_step_is_finished()
     local dirname=$1
     local stepname=$2
     local script_filename=`get_script_filename ${dirname} ${stepname}`
-
+    
     if [ -f ${script_filename}.${FINISHED_STEP_FEXT} ]; then
         # Check that all sub-steps are finished
         local num_array_tasks_finished=`get_num_array_tasks_finished ${script_filename}`
@@ -1652,18 +1654,17 @@ get_step_status()
             echo "${REEXEC_STEP_STATUS}"
             return ${REEXEC_STEP_STATUS_EXIT_CODE}
         fi
-        
-        if check_step_is_finished $dirname $stepname; then
-            echo "${FINISHED_STEP_STATUS}"
-            return ${FINISHED_STEP_STATUS_EXIT_CODE}
-        fi
-        
-        # Determine if step is unfinished or in progress
+
         if check_step_is_in_progress $dirname $stepname; then
             echo "${INPROGRESS_STEP_STATUS}"
             return ${INPROGRESS_STEP_STATUS_EXIT_CODE}
         fi
 
+        if check_step_is_finished $dirname $stepname; then
+            echo "${FINISHED_STEP_STATUS}"
+            return ${FINISHED_STEP_STATUS_EXIT_CODE}
+        fi
+        
         echo "${UNFINISHED_STEP_STATUS}"
         return ${UNFINISHED_STEP_STATUS_EXIT_CODE}
     else
