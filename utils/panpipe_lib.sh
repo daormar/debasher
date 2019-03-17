@@ -1355,15 +1355,24 @@ prepare_outdir_for_step()
 {
     local dirname=$1
     local stepname=$2
-    local remove=$3
     local outd=`get_step_outdir ${dirname} ${stepname}`
 
     if [ -d ${outd} ]; then
-        if [ ${remove} -eq 1 ]; then
-           echo "Warning: ${stepname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
-           rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
-        fi
+        echo "Warning: ${stepname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
+        rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
     else
+        mkdir ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
+    fi
+}
+
+########
+prepare_outdir_for_step_array() 
+{
+    local dirname=$1
+    local stepname=$2
+    local outd=`get_step_outdir ${dirname} ${stepname}`
+
+    if [ ! -d ${outd} ]; then
         mkdir ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     fi
 }
@@ -1635,10 +1644,10 @@ get_step_status()
 {
     local dirname=$1
     local stepname=$2
-    local stepdirname=`get_step_outdir ${dirname} ${stepname}`
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
 
-    # Check if output directory was created
-    if [ -d ${stepdirname} ]; then
+    # Check script file for step was created
+    if [ -f ${script_filename} ]; then
         if check_step_should_be_reexec $stepname; then
             echo "${REEXEC_STEP_STATUS}"
             return ${REEXEC_STEP_STATUS_EXIT_CODE}

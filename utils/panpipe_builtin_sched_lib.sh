@@ -22,6 +22,7 @@ declare -A BUILTIN_SCHED_STEP_MEM
 declare -A BUILTIN_SCHED_STEP_ALLOC_MEM
 declare -A BUILTIN_SCHED_CURR_STEP_STATUS
 declare BUILTIN_SCHED_SELECTED_STEPS
+declare BUILTIN_SCHED_LAUNCHED_TASKS
 declare BUILTIN_SCHED_CPUS=1
 declare BUILTIN_SCHED_MEM=256
 declare BUILTIN_SCHED_ALLOC_CPUS=0
@@ -495,15 +496,45 @@ builtin_sched_step_can_be_executed()
 }
 
 ########
-get_pending_task_ids()
+builtin_sched_get_pending_task_ids()
 {
-    local stepname=$1
-    # TBD
+    local dirname=$1
+    local stepname=$2
+    local throttle=$3
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+
+    local result
+    local num_added_tasks=0
+    local id=1
+    while [ ${id} -le ${array_size} ]; do
+        task_status=`get_array_task_status $dirname $stepname $id`
+        # Check if task is pending
+        if [ ${task_status} = ${TODO_TASK_STATUS} ]; then
+            # Task is pending
+            if [ "${result}" = "" ]; then
+                result=${id}
+            else
+                result="${result} ${id}"
+            fi
+            # Update number of added tasks
+            num_added_tasks=`expr ${num_added_tasks} + 1`
+            # Check if number of added tasks has reached the throttle
+            # value
+            if [ ${num_added_tasks} -eq ${throttle} ]; then
+                break
+            fi
+        fi
+        id=`expr ${id} + 1`
+    done
+
+    echo $result
 }
 
 ########
 builtin_sched_get_executable_steps()
-{    
+{
+    local dirname=$1
+    
     # Iterate over steps
     local stepname
     for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
@@ -520,7 +551,7 @@ builtin_sched_get_executable_steps()
             # step is an array
             if [ ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
                 if builtin_sched_step_can_be_executed ${stepname}; then
-                    pending_task_ids=`get_pending_task_ids ${stepname}`
+                    pending_task_ids=`builtin_sched_get_pending_task_ids ${dirname} ${stepname} ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
                     BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${pending_task_ids}
                 fi
             fi
@@ -642,7 +673,7 @@ builtin_sched_select_steps_to_be_exec()
 
     # Obtain set of steps that can be executed
     local -A BUILTIN_SCHED_EXECUTABLE_STEPS
-    builtin_sched_get_executable_steps
+    builtin_sched_get_executable_steps $dirname
 
     if [ ${builtinsched_debug} -eq 1 ]; then
         local step_status=""
@@ -803,6 +834,7 @@ builtin_sched_execute_step()
     local dirname=$2
     local stepname=$3
     local taskid=$4
+    local launched_tasks=${#BUILTIN_SCHED_LAUNCHED_TASKS[${stepname}]}
     
     # Execute step
 
@@ -817,27 +849,42 @@ builtin_sched_execute_step()
     define_opts_for_script "${cmdline}" "${stepspec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
-    builtin_sched_create_script ${script_filename} ${step_function} "${step_function_post}" "script_opts_array"
-
-    # Archive script
-    archive_script ${script_filename}
-
-    # Prepare files and directories for step
-    local remove=0
-    if [ ${array_size} -eq 1 ]; then
-        remove=1
+    if [ "${launched_tasks}" = "" ]; then
+        builtin_sched_create_script ${script_filename} ${step_function} "${step_function_post}" "script_opts_array"
     fi
-    prepare_outdir_for_step ${dirname} ${stepname} ${remove} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
-    prepare_fifos_owned_by_step ${stepname}
-        
-    # Execute script
+    
+    # Archive script
+    if [ "${launched_tasks}" = "" ]; then
+        archive_script ${script_filename}
+    fi
+
+    # Launch script
     local job_array_list=${taskid}
     builtin_sched_launch ${script_filename} "${taskid}" || { echo "Error while launching step!" >&2 ; return 1; }
         
     # Write id to file
     write_step_id_to_file ${dirname} ${stepname} ${!stepname_id}
 
-    # TBD: avoid multiple creation of scripts for job arrays
+    # Update register of launched tasks
+    if [ "${launched_tasks}" = "" ]; then
+        ${BUILTIN_SCHED_LAUNCHED_TASKS[${stepname}]}=$taskid
+    else
+        ${BUILTIN_SCHED_LAUNCHED_TASKS[${stepname}]}="${BUILTIN_SCHED_LAUNCHED_TASKS[${stepname}]} $taskid"
+    fi
+}
+
+########
+builtinsched_extract_name_from_stepinfo()
+{
+    local stepname_info=$1
+    echo ${stepname_info} | ${SED} 's/_[0-9]\+$//'
+}
+
+########
+builtinsched_extract_tid_from_stepinfo()
+{
+    local stepname_info=$1
+    echo ${stepname_info} | ${SED} 's/\(.*\)_\([0-9]\+$\)/\2/'
 }
 
 ########
@@ -849,8 +896,8 @@ builtin_sched_exec_steps_and_update_status()
     local stepname_info
     for stepname_info in ${BUILTIN_SCHED_SELECTED_STEPS}; do
         # Extract step name and task id
-        stepname= #TBD
-        taskid= #TBD
+        stepname=`builtinsched_extract_name_from_stepinfo ${stepname_info}`
+        taskid=`builtinsched_extract_tid_from_stepinfo ${stepname_info}`
         
         # Execute step
         builtin_sched_execute_step "${cmdline}" ${dirname} ${stepname} ${taskid} || return 1
@@ -883,6 +930,40 @@ builtin_sched_exec_steps()
 }
 
 ########
+prepare_files_and_dirs_for_step()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local status=`get_step_status ${dirname} ${stepname}`
+    
+    # Prepare files for step
+    update_step_completion_signal ${status} ${script_filename} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
+    clean_step_log_files ${array_size} ${script_filename} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
+    clean_step_id_files ${array_size} ${script_filename} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
+    prepare_fifos_owned_by_step ${stepname}
+
+    # Prepare output directory
+    if [ ${array_size} -eq 1 ]; then
+        prepare_outdir_for_step ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
+    else
+        prepare_outdir_for_step_array ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
+    fi
+}
+
+########
+prepare_files_and_dirs_for_steps()
+{
+    local dirname=$1
+
+    local stepname
+    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
+        prepare_files_and_dirs_for_step $dirname $stepname
+    done
+}
+
+########
 execute_pipeline_steps_builtin()
 {
     # Read input parameters
@@ -910,6 +991,9 @@ execute_pipeline_steps_builtin()
 
     # Initialize current step status
     builtin_sched_init_curr_comp_resources || return 1
+
+    # Prepare files and directories for steps
+    prepare_files_and_dirs_for_steps ${dirname}
     
     # Execute scheduling loop
     local end=0
