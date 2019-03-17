@@ -284,13 +284,13 @@ step_f()
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
 
     # Activate conda environment
-    conda_activate py27
+    conda activate py27
 
     # Write string to FIFO
     python --version > ${step_outd}/python_ver.txt 2>&1
 
     # Deactivate conda environment
-    conda_deactivate
+    conda deactivate
     
     # sleep some time
     sleep 10
