@@ -267,22 +267,6 @@ builtin_sched_get_inprogress_array_taskids()
     echo $result
 }
 
-# ########
-# builtin_sched_get_max_throttle_for_step()
-# {
-#     local dirname=$1
-#     local stepname=$2
-
-#     local failed_tasks=`builtin_sched_get_failed_array_taskids $dirname $stepname`
-#     local num_failed_tasks=`get_num_words_in_string "${failed_tasks}"`
-
-#     local finished_tasks=`builtin_sched_get_finished_array_taskids $dirname $stepname`
-#     local num_finished_tasks=`get_num_words_in_string "${finished_tasks}"`
-
-#     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
-#     echo `expr ${array_size} - ${num_failed_tasks} - ${num_finished_tasks}`
-# }
-
 ########
 builtin_sched_revise_array_mem()
 {
@@ -492,11 +476,22 @@ builtin_sched_step_can_be_executed()
 }
 
 ########
+builtin_sched_get_max_num_tasks()
+{
+    local stepname=$1
+    local throttle=${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}
+    local inprogress_tasks=`builtin_sched_get_inprogress_array_taskids $dirname $stepname`
+    local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
+    local result=`expr ${throttle} - ${num_inprogress_tasks}`
+    echo ${result}
+}
+
+########
 builtin_sched_get_pending_task_ids()
 {
     local dirname=$1
     local stepname=$2
-    local throttle=$3
+    local max_task_num=$3
     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
 
     local result
@@ -514,9 +509,9 @@ builtin_sched_get_pending_task_ids()
             fi
             # Update number of added tasks
             num_added_tasks=`expr ${num_added_tasks} + 1`
-            # Check if number of added tasks has reached the throttle
-            # value
-            if [ ${num_added_tasks} -eq ${throttle} ]; then
+            # Check if number of added tasks has reached the given
+            # maximum number of tasks
+            if [ ${num_added_tasks} -eq ${max_task_num} ]; then
                 break
             fi
         fi
@@ -524,6 +519,38 @@ builtin_sched_get_pending_task_ids()
     done
 
     echo $result
+}
+
+########
+builtin_sched_process_executable_non_array_step()
+{
+    local stepname=$1
+    local status=$2
+
+    if [ ${status} != ${INPROGRESS_STEP_STATUS} -a ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+        if builtin_sched_step_can_be_executed ${stepname}; then
+            BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${BUILTIN_SCHED_NO_ARRAY_TASK}
+        fi
+    fi
+}
+
+########
+builtin_sched_process_executable_array_step()
+{
+    local stepname=$1
+    local status=$2
+    
+    if [ ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+        if builtin_sched_step_can_be_executed ${stepname}; then
+            max_task_num=`builtin_sched_get_max_num_tasks ${stepname}`
+            if [ ${max_task_num} -gt 0 ]; then
+                pending_task_ids=`builtin_sched_get_pending_task_ids ${dirname} ${stepname} ${max_task_num}`
+                if [ "${pending_task_ids}" != "" ]; then
+                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${pending_task_ids}
+                fi
+            fi
+        fi
+    fi    
 }
 
 ########
@@ -538,19 +565,10 @@ builtin_sched_get_executable_steps()
         local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
         if [ ${array_size} -eq 1 ]; then
             # step is not an array
-            if [ ${status} != ${INPROGRESS_STEP_STATUS} -a ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
-                if builtin_sched_step_can_be_executed ${stepname}; then
-                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=1
-                fi
-            fi
+            builtin_sched_process_executable_non_array_step ${stepname} ${status}
         else
             # step is an array
-            if [ ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
-                if builtin_sched_step_can_be_executed ${stepname}; then
-                    pending_task_ids=`builtin_sched_get_pending_task_ids ${dirname} ${stepname} ${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}`
-                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${pending_task_ids}
-                fi
-            fi
+            builtin_sched_process_executable_array_step ${stepname} ${status}
         fi
     done
 }
@@ -986,9 +1004,9 @@ builtin_sched_execute_pipeline_steps()
     echo "- Available CPUS: ${BUILTIN_SCHED_CPUS}" >&2
     echo "- Available memory: ${BUILTIN_SCHED_MEM}" >&2
     echo "" >&2
-    
-    echo "* Executing pipeline steps..." >&2
-    
+
+    echo "* Initializing data structures..." >&2
+
     # Initialize step status
     builtin_sched_init_step_info "${cmdline}" ${dirname} ${pfile} || return 1
 
@@ -997,7 +1015,11 @@ builtin_sched_execute_pipeline_steps()
 
     # Prepare files and directories for steps
     builtin_sched_prepare_files_and_dirs_for_steps ${dirname}
-    
+
+    echo "" >&2
+
+    echo "* Executing pipeline steps..." >&2
+
     # Execute scheduling loop
     local end=0
     local sleep_time=5
