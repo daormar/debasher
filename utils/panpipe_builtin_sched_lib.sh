@@ -956,7 +956,8 @@ builtin_sched_execute_step()
 builtinsched_extract_step_from_knapsack_name()
 {
     local knapsack_name=$1
-    echo ${knapsack_name} | ${AWK} -F "_" '{print $1}'
+    local step_idx=`echo ${knapsack_name} | ${AWK} -F "_" '{print $1}'`
+    echo ${BUILTIN_SCHED_IDX_TO_STEPNAME[${step_idx}]}
 }
 
 ########
