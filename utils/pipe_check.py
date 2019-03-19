@@ -315,7 +315,7 @@ def print_deps(ordered_step_entries,stepdeps_map):
 ##################################################
 def sname_valid(sname):
     for c in sname:
-        if not(c.isalpha() or c.isnumeric() or c=="_"):
+        if not(c.isalpha() or c.isdigit() or c=="_"):
             return 0
     return 1
     
