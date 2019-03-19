@@ -66,11 +66,11 @@ builtin_sched_mem_within_limit()
 }
 
 ########
-update_stepname_to_idx_maps()
+builtin_sched_update_stepname_to_idx_info()
 {
     local stepname=$1
     if [ ${BUILTIN_SCHED_STEPNAME_TO_IDX[${stepname}]} = ""]; then
-        local len=${#BUILTIN_SCHED_STEPNAME_TO_IDX}
+        local len=${#BUILTIN_SCHED_STEPNAME_TO_IDX[@]}
         BUILTIN_SCHED_STEPNAME_TO_IDX[${stepname}]=${len}
         BUILTIN_SCHED_IDX_TO_STEPNAME[${len}]=${stepname}
     fi
@@ -124,7 +124,7 @@ builtin_sched_init_step_info()
             builtin_sched_mem_within_limit ${full_throttle_mem} || { echo "Error: amount of memory for step $stepname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
             # Register step information
-            update_stepname_to_idx_map ${stepname}
+            builtin_sched_update_stepname_to_idx_info ${stepname}
             BUILTIN_SCHED_STEP_SCRIPT_FILENAME[${stepname}]=${script_filename}
             BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}   
             BUILTIN_SCHED_STEP_SPEC[${stepname}]="${stepspec}"
