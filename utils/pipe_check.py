@@ -315,7 +315,7 @@ def print_deps(ordered_step_entries,stepdeps_map):
 ##################################################
 def sname_valid(sname):
     for c in sname:
-        if not(c.isalpha() or c=="_"):
+        if not(c.isalpha() or c.isnumeric() or c=="_"):
             return 0
     return 1
     
@@ -323,7 +323,7 @@ def sname_valid(sname):
 def snames_valid(stepdeps_map):
     for sname in stepdeps_map:
         if(not sname_valid(sname)):
-            print >> sys.stderr, "Error: step name",sname,"contains not allowed characters (only letters and underscores are allowed)"
+            print >> sys.stderr, "Error: step name",sname,"contains not allowed characters (only letters, numbers and underscores are allowed)"
             return 0
     return 1
     
