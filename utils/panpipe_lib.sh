@@ -596,9 +596,6 @@ create_script()
         ${SLURM_SCHEDULER})
             create_slurm_script $fname $funct "${post_funct}" ${opts_array_name}
             ;;
-        ${BUILTIN_SCHEDULER})
-            create_builtin_scheduler_script $fname $funct "${post_funct}" ${opts_array_name}
-            ;;
     esac
 }
 
@@ -1537,8 +1534,8 @@ id_exists()
             slurm_jid_exists $id
             exit_code=$?
             return ${exit_code}
-        ;;
-        *) # Use built-in scheduler
+            ;;
+        ${BUILTIN_SCHEDULER})
             pid_exists $id
             exit_code=$?
             return ${exit_code}
