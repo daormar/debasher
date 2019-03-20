@@ -485,7 +485,7 @@ execute_funct_plus_postfunct()
 }
 
 ########
-print_task_header_slurm_sched()
+print_script_header_slurm_sched()
 {
     local step_name=$1
     
@@ -493,7 +493,7 @@ print_task_header_slurm_sched()
 }
 
 ########
-print_task_body_slurm_sched()
+print_script_body_slurm_sched()
 {
     # Initialize variables
     local num_scripts=$1
@@ -530,7 +530,7 @@ print_task_body_slurm_sched()
 }
 
 ########
-print_task_foot_slurm_sched()
+print_script_foot_slurm_sched()
 {
     :
 }
@@ -562,21 +562,21 @@ create_slurm_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    print_task_header_slurm_sched ${funct} >> ${fname} || return 1
+    print_script_header_slurm_sched ${funct} >> ${fname} || return 1
 
     # Iterate over options array
     local lineno=1
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        print_task_body_slurm_sched ${num_scripts} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        print_script_body_slurm_sched ${num_scripts} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
         
     done
 
     # Print foot
-    print_task_foot_builtin_sched >> ${fname} || return 1
+    print_script_foot_builtin_sched >> ${fname} || return 1
 
     # Give execution permission
     chmod u+x ${fname} || return 1
