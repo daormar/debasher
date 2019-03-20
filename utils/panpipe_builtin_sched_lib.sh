@@ -784,13 +784,22 @@ builtin_sched_select_steps_to_be_exec()
 }
 
 ########
-builtin_sched_print_task_header()
+builtin_sched_print_pid_to_file()
+{
+    if [ "${BUILTIN_SCHED_PID_FILENAME}" != "" ]; then
+        echo $$ > ${BUILTIN_SCHED_PID_FILENAME}
+    fi
+}
+
+########
+builtin_sched_print_script_header()
 {
     local fname=$1
     local step_name=$2
     
     echo "PANPIPE_TASK_FILENAME=${fname}"
     echo "PANPIPE_STEP_NAME=${step_name}"
+    echo "builtin_sched_print_pid_to_file"
 }
 
 ########
@@ -803,7 +812,7 @@ builtin_sched_get_job_array_task_varname()
 }
 
 ########
-builtin_sched_print_task_body()
+builtin_sched_print_script_body()
 {
     # Initialize variables
     local num_scripts=$1
@@ -834,7 +843,7 @@ builtin_sched_print_task_body()
 }
 
 ########
-builtin_sched_print_task_foot()
+builtin_sched_print_script_foot()
 {
     :
 }
@@ -857,7 +866,7 @@ builtin_sched_create_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    builtin_sched_print_task_header ${fname} ${funct} >> ${fname} || return 1
+    builtin_sched_print_script_header ${fname} ${funct} >> ${fname} || return 1
     
     # Iterate over options array
     local lineno=1
@@ -865,14 +874,14 @@ builtin_sched_create_script()
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        builtin_sched_print_task_body ${num_scripts} ${fname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        builtin_sched_print_script_body ${num_scripts} ${fname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
 
     done
 
     # Print foot
-    builtin_sched_print_task_foot >> ${fname} || return 1
+    builtin_sched_print_script_foot >> ${fname} || return 1
     
     # Give execution permission
     chmod u+x ${fname} || return 1
@@ -892,19 +901,22 @@ builtin_sched_launch()
         export ${task_varname}=1
     fi
 
+    # Set variable indicating name of file storing PID
+    if [ ${taskid} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
+        export BUILTIN_SCHED_PID_FILENAME=${file}.${STEPID_FEXT}
+    else
+        export BUILTIN_SCHED_PID_FILENAME=${file}_${taskid}.${ARRAY_TASKID_FEXT}
+    fi
+
     # Execute file
     ${file} &
     local pid=$!
-    if [ ${taskid} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        echo $pid > ${file}.${STEPID_FEXT}
-    else
-        echo $pid > ${file}_${taskid}.${ARRAY_TASKID_FEXT}
-    fi
     
-    # Unset variable to avoid unwanted re-executions of tasks
+    # Unset variables
     if [ ${taskid} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
         unset ${task_varname}
     fi
+    unset BUILTIN_SCHED_PID_FILENAME
 }
 
 ########
