@@ -658,7 +658,7 @@ get_stepdeps_from_detailed_spec()
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
         local step=`get_stepname_part_in_dep ${dep_spec}`
         
-        # Check if there is a id for the step
+        # Check if there is an id for the step
         local step_id=${step}_id
         if [ ! -z "${!step_id}" ]; then
             if [ -z "${sdeps}" ]; then
