@@ -1625,16 +1625,24 @@ array_step_has_only_finished_tasks()
 get_num_array_tasks_finished()
 {
     local script_filename=$1
-
-    echo `$WC -l ${script_filename}.${FINISHED_STEP_FEXT} | $AWK '{print $1}'`
+    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
+    if [ -f  ${finished_filename} ]; then
+        echo `$WC -l ${finished_filename} | $AWK '{print $1}'`
+    else
+        echo 0
+    fi
 }
 
 ########
 get_num_array_tasks_to_finish()
 {
     local script_filename=$1
-
-    echo `$HEAD -1 ${script_filename}.${FINISHED_STEP_FEXT} | $AWK '{print $NF}'`
+    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
+    if [ -f  ${finished_filename} ]; then
+        echo `$HEAD -1 ${finished_filename} | $AWK '{print $NF}'`
+    else
+        echo 0
+    fi
 }
 
 ########
