@@ -506,7 +506,7 @@ print_script_body_slurm_sched()
 
     # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
-        echo "if [ \${SLURM_ARRAY_TASK_IDX} -eq $taskidx ]; then"
+        echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskidx ]; then"
     fi
 
     # Write function to be executed
