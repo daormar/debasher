@@ -19,15 +19,17 @@ GENERAL_OPT_CATEGORY="GENERAL"
 
 # STEP STATUSES AND EXIT CODES
 FINISHED_STEP_STATUS="FINISHED"
-FINISHED_STEP_STATUS_EXIT_CODE=0
+FINISHED_STEP_EXIT_CODE=0
 INPROGRESS_STEP_STATUS="IN-PROGRESS"
-INPROGRESS_STEP_STATUS_EXIT_CODE=1
+INPROGRESS_STEP_EXIT_CODE=1
+PARTIALLY_EXECUTED_ARRAY_STEP_STATUS="PARTIALLY_EXECUTED_ARRAY"
+PARTIALLY_EXECUTED_ARRAY_STEP_EXIT_CODE=2
 UNFINISHED_STEP_STATUS="UNFINISHED"
-UNFINISHED_STEP_STATUS_EXIT_CODE=2
+UNFINISHED_STEP_EXIT_CODE=3
 REEXEC_STEP_STATUS="REEXECUTE"
-REEXEC_STEP_STATUS_EXIT_CODE=3
+REEXEC_STEP_EXIT_CODE=4
 TODO_STEP_STATUS="TO-DO"
-TODO_STEP_STATUS_EXIT_CODE=4
+TODO_STEP_EXIT_CODE=5
 
 # ARRAY TASK STATUSES
 FINISHED_TASK_STATUS="FINISHED"
@@ -270,7 +272,7 @@ serialize_string_array()
 }
 
 ########
-check_func_exists()
+func_exists()
 {
     local funcname=$1
     
@@ -456,7 +458,7 @@ execute_funct_plus_postfunct()
     local num_scripts=$1
     local fname=$2
     local base_fname=`$BASENAME $fname`
-    local taskid=$3
+    local taskidx=$3
     local funct=$4
     local post_funct=$5
     local script_opts=$6
@@ -481,7 +483,7 @@ execute_funct_plus_postfunct()
     fi
 
     # Signal step completion
-    signal_step_completion ${fname} ${taskid} ${num_scripts}
+    signal_step_completion ${fname} ${taskidx} ${num_scripts}
 }
 
 ########
@@ -497,14 +499,14 @@ print_script_body_slurm_sched()
 {
     # Initialize variables
     local num_scripts=$1
-    local taskid=$2
+    local taskidx=$2
     local funct=$3
     local post_funct=$4
     local script_opts=$5
 
-    # Write treatment for task id
+    # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
-        echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskid ]; then"
+        echo "if [ \${SLURM_ARRAY_TASK_IDX} -eq $taskidx ]; then"
     fi
 
     # Write function to be executed
@@ -718,7 +720,7 @@ get_name_of_step_function_post()
 
     local step_function_post="${stepname_wo_suffix}_post"
 
-    if check_func_exists ${step_function_post}; then
+    if func_exists ${step_function_post}; then
         echo ${step_function_post}
     else
         echo ${FUNCT_NOT_FOUND}
@@ -734,7 +736,7 @@ get_name_of_step_function_outdir()
 
     local step_function_outdir="${stepname_wo_suffix}_outdir_basename"
 
-    if check_func_exists ${step_function_outdir}; then
+    if func_exists ${step_function_outdir}; then
         echo ${step_function_outdir}
     else
         echo ${FUNCT_NOT_FOUND}
@@ -894,16 +896,16 @@ get_list_of_pending_jobs_in_array()
     
     # Create string enumerating pending jobs
     local pending_jobs=""
-    local id=1
-    while [ $id -le ${array_size} ]; do
-        if [ -z "${completed_jobs[${id}]}" ]; then
+    local idx=1
+    while [ $idx -le ${array_size} ]; do
+        if [ -z "${completed_jobs[${idx}]}" ]; then
             if [ -z "${pending_jobs}" ]; then
-                pending_jobs=${id}
+                pending_jobs=${idx}
             else
-                pending_jobs="${pending_jobs},${id}"
+                pending_jobs="${pending_jobs},${idx}"
             fi
         fi
-        id=`expr $id + 1`
+        idx=`expr $idx + 1`
     done
     
     echo ${pending_jobs}    
@@ -981,7 +983,7 @@ get_exit_code()
 }
 
 ########
-check_job_array_elem_is_range()
+job_array_elem_is_range()
 {
     local elem=$1
     local array
@@ -995,7 +997,7 @@ check_job_array_elem_is_range()
 }
 
 ########
-get_start_id_in_range()
+get_start_idx_in_range()
 {
     local elem=$1
     local array
@@ -1009,7 +1011,7 @@ get_start_id_in_range()
 }
 
 ########
-get_end_id_in_range()
+get_end_idx_in_range()
 {
     local elem=$1
     local array
@@ -1101,18 +1103,20 @@ launch()
 launch_step()
 {
     # Initialize variables
-    local stepname=$1
-    local job_array_list=$2
-    local stepspec=$3
-    local stepdeps=$4
-    local opts_array_name=$5
-    local id=$6
+    local dirname=$1
+    local stepname=$2
+    local job_array_list=$3
+    local stepspec=$4
+    local stepdeps=$5
+    local opts_array_name=$6
+    local id=$7
 
     # Create script
-    create_script ${tmpdir}/scripts/${stepname} ${stepname} ${opts_array_name} || return 1
+    script_filename=`get_script_filename $dirname $stepname`
+    create_script ${script_filename} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
-    launch ${tmpdir}/scripts/${stepname} ${job_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
+    launch ${script_filename} ${job_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
 }
 
 ########
@@ -1403,9 +1407,9 @@ clean_step_log_files()
         local pending_jobs=`get_list_of_pending_jobs_in_array ${array_size} ${script_filename}`
         if [ "${pending_jobs}" != "" ]; then
             local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
-            for id in ${pending_jobs_blanks}; do
-                rm -f ${script_filename}_${id}.${BUILTIN_SCHED_LOG_FEXT}
-                rm -f ${script_filename}_${id}.${SLURM_SCHED_LOG_FEXT}
+            for idx in ${pending_jobs_blanks}; do
+                rm -f ${script_filename}_${idx}.${BUILTIN_SCHED_LOG_FEXT}
+                rm -f ${script_filename}_${idx}.${SLURM_SCHED_LOG_FEXT}
             done
         fi
     fi
@@ -1426,8 +1430,8 @@ clean_step_id_files()
         local pending_jobs=`get_list_of_pending_jobs_in_array ${array_size} ${script_filename}`
         if [ "${pending_jobs}" != "" ]; then
             local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
-            for id in ${pending_jobs_blanks}; do
-                rm -f ${script_filename}_${id}.${STEPID_FEXT}
+            for idx in ${pending_jobs_blanks}; do
+                rm -f ${script_filename}_${idx}.${STEPID_FEXT}
             done
         fi
     fi
@@ -1439,7 +1443,7 @@ write_step_id_to_file()
     local dirname=$1
     local stepname=$2
     local id=$3
-    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
+    local filename=${dirname}/scripts/$stepname.${STEPID_FEXT}
 
     echo $id > $filename
 }
@@ -1451,7 +1455,7 @@ read_step_id_from_file()
     local stepname=$2
 
     # Return id for step
-    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
+    local filename=${dirname}/scripts/$stepname.${STEPID_FEXT}
     if [ -f $filename ]; then
         cat $filename
     else
@@ -1466,15 +1470,13 @@ read_ids_from_files()
     local stepname=$2
 
     # Return id for step
-    local filename=$dirname/scripts/$stepname.${STEPID_FEXT}
+    local filename=${dirname}/scripts/$stepname.${STEPID_FEXT}
     if [ -f $filename ]; then
         cat $filename
-    else
-        echo ${INVALID_SID}
     fi
 
     # Return ids for array tasks if any
-    for taskid_file in $dirname/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f ${taskid_file} ]; then
             cat ${taskid_file}
         fi
@@ -1544,7 +1546,7 @@ id_exists()
 }
 
 ########
-check_step_is_in_progress()
+step_is_in_progress()
 {
     local dirname=$1
     local stepname=$2
@@ -1558,6 +1560,65 @@ check_step_is_in_progress()
     done
 
     return 1
+}
+
+########
+get_finished_array_task_indices()
+{
+    local dirname=$1
+    local stepname=$2
+
+    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
+    if [ -f ${finished_filename} ]; then
+        ${AWK} '{print $4}' ${finished_filename}
+    fi
+}
+
+########
+array_task_is_finished()
+{
+    local dirname=$1
+    local stepname=$2
+    local idx=$3
+
+    # Check file with finished tasks info exists
+    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
+    if [ ! -f ${finished_filename} ]; then
+        return 1
+    fi
+    
+    # Check that task is in file
+    local task_in_file=1
+    ${GREP} "idx: ${idx} ;" ${finished_filename} > /dev/null || task_in_file=0
+    if [ ${task_in_file} -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+array_step_has_only_finished_tasks()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Get .id files of finished tasks
+    indices=`get_finished_array_task_indices $dirname $stepname`
+    local -A finished_id_files
+    for idx in ${indices}; do
+        local array_taskid_file=${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
+        finished_id_files[${array_taskid_file}]=1
+    done
+
+    # Look for .id files of unfinished tasks
+    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+        if [ "${finished_id_files[${taskid_file}]}" = "" ]; then
+            return 1
+        fi
+    done
+    
+    return 0
 }
 
 ########
@@ -1606,7 +1667,7 @@ get_reexec_steps_as_string()
 }
 
 ########
-check_step_should_be_reexec()
+step_should_be_reexec()
 {
     local stepname=$1
 
@@ -1618,7 +1679,7 @@ check_step_should_be_reexec()
 }
 
 ########
-check_step_is_finished()
+step_is_finished()
 {
     local dirname=$1
     local stepname=$2
@@ -1627,8 +1688,8 @@ check_step_is_finished()
     if [ -f ${script_filename}.${FINISHED_STEP_FEXT} ]; then
         # Check that all sub-steps are finished
         local num_array_tasks_finished=`get_num_array_tasks_finished ${script_filename}`
-        local num_array_tasks=`get_num_array_tasks_to_finish ${script_filename}`
-        if [ ${num_array_tasks_finished} -eq ${num_array_tasks} ]; then
+        local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
+        if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
             return 0
         else
             return 1
@@ -1636,6 +1697,21 @@ check_step_is_finished()
     else
         return 1
     fi     
+}
+
+########
+step_is_array()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
+
+    if [ ${num_array_tasks_to_finish} -gt 1 ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 ########
@@ -1647,47 +1723,32 @@ get_step_status()
 
     # Check script file for step was created
     if [ -f ${script_filename} ]; then
-        if check_step_should_be_reexec $stepname; then
+        if step_should_be_reexec $stepname; then
             echo "${REEXEC_STEP_STATUS}"
-            return ${REEXEC_STEP_STATUS_EXIT_CODE}
+            return ${REEXEC_STEP_EXIT_CODE}
         fi
 
-        if check_step_is_in_progress $dirname $stepname; then
+        if step_is_in_progress $dirname $stepname; then
             echo "${INPROGRESS_STEP_STATUS}"
-            return ${INPROGRESS_STEP_STATUS_EXIT_CODE}
+            return ${INPROGRESS_STEP_EXIT_CODE}
         fi
 
-        if check_step_is_finished $dirname $stepname; then
+        if step_is_finished $dirname $stepname; then
             echo "${FINISHED_STEP_STATUS}"
-            return ${FINISHED_STEP_STATUS_EXIT_CODE}
+            return ${FINISHED_STEP_EXIT_CODE}
+        else
+            if step_is_array $dirname $stepname -a array_step_has_only_finished_tasks $dirname $stepname; then
+                echo "${PARTIALLY_EXECUTED_ARRAY_STEP_STATUS}"
+                return ${PARTIALLY_EXECUTED_ARRAY_STEP_EXIT_CODE}
+            fi
         fi
         
         echo "${UNFINISHED_STEP_STATUS}"
-        return ${UNFINISHED_STEP_STATUS_EXIT_CODE}
+        return ${UNFINISHED_STEP_EXIT_CODE}
     else
         echo "${TODO_STEP_STATUS}"
-        return ${TODO_STEP_STATUS_EXIT_CODE}
+        return ${TODO_STEP_EXIT_CODE}
     fi
-}
-
-########
-array_task_is_finished()
-{
-    local script_filename=$1
-    local task_id=$2
-    local finished_step_file=${script_filename}.${FINISHED_STEP_FEXT}
-    
-    if [ ! -f  ${finished_step_file} ]; then
-        return 1
-    fi
-
-    local found=`${AWK} -v id=${task_id} '{if($4==id) print "yes"}' ${finished_step_file}`
-
-    if [ "${found}" = "yes" ]; then
-        return 0
-    fi
-    
-    return 1
 }
 
 ########
@@ -1695,22 +1756,22 @@ get_array_task_status()
 {
     local dirname=$1
     local stepname=$2
-    local taskid=$3
+    local taskidx=$3
     local stepdirname=`get_step_outdir ${dirname} ${stepname}`
     local script_filename=`get_script_filename $dirname $stepname`
-    local array_taskid_file=${script_filename}_${taskid}.${ARRAY_TASKID_FEXT}
+    local array_taskid_file=${script_filename}_${taskidx}.${ARRAY_TASKID_FEXT}
     
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
         echo ${TODO_TASK_STATUS}
     else
         # Task was started
-        if array_task_is_finished ${script_filename} ${taskid}; then
+        if array_task_is_finished ${dirname} ${stepname} ${taskidx}; then
             echo ${FINISHED_TASK_STATUS}
         else
-            local pid=`cat ${array_taskid_file}`
+            local id=`cat ${array_taskid_file}`
             # Task is not finished
-            if pid_exists $pid; then
+            if id_exists $id; then
                 echo ${INPROGRESS_TASK_STATUS}
             else
                 echo ${FAILED_TASK_STATUS}
@@ -1736,7 +1797,7 @@ signal_step_completion()
 {
     # Initialize variables
     local script_filename=$1
-    local id=$2
+    local idx=$2
     local total=$3
 
     # Signal completion
@@ -1744,7 +1805,7 @@ signal_step_completion()
     # since echo is atomic when writing short lines (for safety, up to
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
-    echo "Finished step id: $id ; Total: $total" >> ${script_filename}.${FINISHED_STEP_FEXT}
+    echo "Finished task idx: $idx ; Total: $total" >> ${script_filename}.${FINISHED_STEP_FEXT}
 }
 
 ###############################
