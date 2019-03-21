@@ -578,7 +578,7 @@ create_slurm_script()
     done
 
     # Print foot
-    print_script_foot_builtin_sched >> ${fname} || return 1
+    print_script_foot_slurm_sched >> ${fname} || return 1
 
     # Give execution permission
     chmod u+x ${fname} || return 1
