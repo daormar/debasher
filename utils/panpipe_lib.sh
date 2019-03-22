@@ -1064,91 +1064,6 @@ get_array_task_status()
     fi
 }
 
-###############################
-# PPL FILES-RELATED FUNCTIONS #
-###############################
-
-########
-pipeline_stepspec_is_comment()
-{
-    local stepspec=$1
-    local fields=( $stepspec )
-    if [[ "${fields[0]}" = \#* ]]; then
-        echo "yes"
-    else
-        echo "no"
-    fi
-}
-
-########
-pipeline_stepspec_is_ok()
-{
-    local stepspec=$1
-
-    local fieldno=1
-    local field
-    for field in $stepspec; do
-        if [[ ${field} = "stepdeps="* ]]; then
-            if [ $fieldno -ge 2 ]; then
-                echo "yes"
-                return 0
-            fi
-        fi
-        fieldno=`expr ${fieldno} + 1`
-    done
-
-    echo "no"
-}
-
-########
-extract_attr_from_stepspec()
-{
-    local stepspec=$1
-    local attrname=$2
-
-    local field
-    for field in $stepspec; do
-        if [[ "${field}" = "${attrname}="* ]]; then
-            local attrname_len=${#attrname}
-            local start=`expr ${attrname_len} + 1`
-            local attr_val=${field:${start}}
-            echo ${attr_val}
-            return 0
-        fi
-    done
-
-    echo ${ATTR_NOT_FOUND}
-}
-
-########
-extract_stepname_from_stepspec()
-{
-    local stepspec=$1
-    local fields=( $stepspec )
-    echo ${fields[0]}
-}
-
-########
-extract_stepdeps_from_stepspec()
-{
-    local stepspec=$1
-    extract_attr_from_stepspec "${stepspec}" "stepdeps"    
-}
-
-########
-extract_cpus_from_stepspec()
-{
-    local stepspec=$1
-    extract_attr_from_stepspec "${stepspec}" "cpus"
-}
-
-########
-extract_mem_from_stepspec()
-{
-    local stepspec=$1
-    extract_attr_from_stepspec "${stepspec}" "mem"
-}
-
 ############################
 # STEP EXECUTION FUNCTIONS #
 ############################
@@ -1673,6 +1588,91 @@ display_begin_step_message()
 display_end_step_message()
 {
     echo "Step finished at `date`" >&2
+}
+
+###############################
+# PPL FILES-RELATED FUNCTIONS #
+###############################
+
+########
+pipeline_stepspec_is_comment()
+{
+    local stepspec=$1
+    local fields=( $stepspec )
+    if [[ "${fields[0]}" = \#* ]]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
+########
+pipeline_stepspec_is_ok()
+{
+    local stepspec=$1
+
+    local fieldno=1
+    local field
+    for field in $stepspec; do
+        if [[ ${field} = "stepdeps="* ]]; then
+            if [ $fieldno -ge 2 ]; then
+                echo "yes"
+                return 0
+            fi
+        fi
+        fieldno=`expr ${fieldno} + 1`
+    done
+
+    echo "no"
+}
+
+########
+extract_attr_from_stepspec()
+{
+    local stepspec=$1
+    local attrname=$2
+
+    local field
+    for field in $stepspec; do
+        if [[ "${field}" = "${attrname}="* ]]; then
+            local attrname_len=${#attrname}
+            local start=`expr ${attrname_len} + 1`
+            local attr_val=${field:${start}}
+            echo ${attr_val}
+            return 0
+        fi
+    done
+
+    echo ${ATTR_NOT_FOUND}
+}
+
+########
+extract_stepname_from_stepspec()
+{
+    local stepspec=$1
+    local fields=( $stepspec )
+    echo ${fields[0]}
+}
+
+########
+extract_stepdeps_from_stepspec()
+{
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "stepdeps"    
+}
+
+########
+extract_cpus_from_stepspec()
+{
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "cpus"
+}
+
+########
+extract_mem_from_stepspec()
+{
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "mem"
 }
 
 ############################
