@@ -915,42 +915,6 @@ array_task_is_finished()
 }
 
 ########
-array_step_has_only_finished_tasks()
-{
-    local dirname=$1
-    local stepname=$2
-
-    # Get .id files of finished tasks
-    indices=`get_finished_array_task_indices $dirname $stepname`
-    local -A finished_id_files
-    for idx in ${indices}; do
-        local array_taskid_file=${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
-        finished_id_files[${array_taskid_file}]=1
-    done
-
-    # Look for .id files of unfinished tasks
-    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
-        if [ "${finished_id_files[${taskid_file}]}" = "" ]; then
-            return 1
-        fi
-    done
-    
-    return 0
-}
-
-########
-get_num_array_tasks_finished()
-{
-    local script_filename=$1
-    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
-    if [ -f  ${finished_filename} ]; then
-        echo `$WC -l ${finished_filename} | $AWK '{print $1}'`
-    else
-        echo 0
-    fi
-}
-
-########
 get_num_finished_array_tasks_from_finished_file()
 {
     local finished_filename=$1
