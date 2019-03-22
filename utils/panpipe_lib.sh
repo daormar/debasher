@@ -885,7 +885,7 @@ get_finished_array_task_indices()
     local dirname=$1
     local stepname=$2
 
-    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     if [ -f ${finished_filename} ]; then
         ${AWK} '{print $4}' ${finished_filename}
     fi
@@ -899,7 +899,7 @@ array_task_is_finished()
     local idx=$3
 
     # Check file with finished tasks info exists
-    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     if [ ! -f ${finished_filename} ]; then
         return 1
     fi
@@ -960,7 +960,7 @@ step_is_partially_executed_array()
     indices=`get_finished_array_task_indices $dirname $stepname`
     local -A finished_id_files
     for idx in ${indices}; do
-        local array_taskid_file=${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
+        local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${idx}`
         finished_id_files[${array_taskid_file}]=1
     done
 
@@ -1068,6 +1068,35 @@ get_script_filename()
     local stepname=$2
     
     echo ${dirname}/scripts/${stepname}
+}
+
+########
+get_stepid_filename() 
+{
+    local dirname=$1
+    local stepname=$2
+
+    echo ${dirname}/scripts/$stepname.${STEPID_FEXT}
+}
+
+########
+get_array_taskid_filename() 
+{
+    local dirname=$1
+    local stepname=$2
+    local idx=$3
+    
+    echo ${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
+}
+
+
+########
+get_step_finished_filename() 
+{
+    local dirname=$1
+    local stepname=$2
+
+    echo ${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
 }
 
 ########
@@ -1474,7 +1503,7 @@ write_step_id_to_file()
     local dirname=$1
     local stepname=$2
     local id=$3
-    local filename=${dirname}/scripts/$stepname.${STEPID_FEXT}
+    local filename=`get_stepid_filename ${dirname} ${stepname}`
 
     echo $id > $filename
 }
@@ -1486,7 +1515,7 @@ read_step_id_from_file()
     local stepname=$2
 
     # Return id for step
-    local filename=${dirname}/scripts/$stepname.${STEPID_FEXT}
+    local filename=`get_stepid_filename ${dirname} ${stepname}`
     if [ -f $filename ]; then
         cat $filename
     else
@@ -1501,7 +1530,7 @@ read_ids_from_files()
     local stepname=$2
 
     # Return id for step
-    local filename=${dirname}/scripts/$stepname.${STEPID_FEXT}
+    local filename=`get_stepid_filename ${dirname} ${stepname}`
     if [ -f $filename ]; then
         cat $filename
     fi
