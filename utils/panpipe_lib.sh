@@ -10,12 +10,14 @@ ATTR_NOT_FOUND="_ATTR_NOT_FOUND_"
 OPT_NOT_FOUND="_OPT_NOT_FOUND_"
 DEP_NOT_FOUND="_DEP_NOT_FOUND_"
 FUNCT_NOT_FOUND="_FUNCT_NOT_FOUND_"
+VOID_VALUE="_VOID_VALUE_"
+GENERAL_OPT_CATEGORY="GENERAL"
+
+# INVALID IDENTIFIERS
 INVALID_SID="_INVALID_SID_"
 INVALID_JID="_INVALID_JID_"
 INVALID_PID="_INVALID_PID_"
 INVALID_ARRAY_TID="_INVALID_ARRAY_TID_"
-VOID_VALUE="_VOID_VALUE_"
-GENERAL_OPT_CATEGORY="GENERAL"
 
 # STEP STATUSES AND EXIT CODES
 FINISHED_STEP_STATUS="FINISHED"
@@ -372,9 +374,9 @@ get_num_words_in_string()
     echo "${str}" | ${WC} -w
 }
 
-############################
-# STEP EXECUTION FUNCTIONS #
-############################
+#######################
+# SCHEDULER FUNCTIONS #
+#######################
 
 ########
 set_panpipe_outdir()
@@ -447,7 +449,6 @@ get_job_array_size_for_step()
     local cmdline=$1
     local stepspec=$2
 
-    local stepname=`extract_stepname_from_stepspec "$stepspec"`
     define_opts_for_script "${cmdline}" "${stepspec}" || return 1
     echo ${#SCRIPT_OPT_LIST_ARRAY[@]}
 }
@@ -602,13 +603,6 @@ create_script()
 }
 
 ########
-get_file_timestamp()
-{
-    local file=$1
-    ${PYTHON} -c "import os; t=os.path.getmtime('${file}'); print int(t)"
-}
-
-########
 get_slurm_cpus_opt()
 {
     local cpus=$1
@@ -683,6 +677,481 @@ get_slurm_partition_opt()
         echo "--partition=${partition}"
     fi
 }
+
+########
+get_slurm_dependency_opt()
+{
+    local stepdeps=$1
+
+    # Create dependency option
+    if [ "${stepdeps}" = ${ATTR_NOT_FOUND} -o "${stepdeps}" = "" ]; then
+        echo ""
+    else
+        echo "--dependency=${stepdeps}"
+    fi
+}
+
+########
+get_slurm_job_array_opt()
+{
+    local file=$1
+    local job_array_list=$2
+    local throttle=$3
+
+    if [ ${job_array_list} = "1-1" -o ${job_array_list} = "1" ]; then
+        echo ""
+    else
+        echo "--array=${job_array_list}%${throttle}"
+    fi
+}
+
+########
+get_scheduler_throttle()
+{
+    local stepspec_throttle=$1
+
+    if [ "${stepspec_throttle}" = ${ATTR_NOT_FOUND} ]; then
+        echo ${PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE}
+    else
+        echo ${stepspec_throttle}
+    fi
+}
+
+########
+slurm_launch()
+{
+    # Initialize variables
+    local file=$1
+    local job_array_list=$2
+    local stepspec=$3
+    local stepdeps=$4
+    local outvar=$5
+
+    # Retrieve specification
+    local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
+    local mem=`extract_attr_from_stepspec "$stepspec" "mem"`
+    local time=`extract_attr_from_stepspec "$stepspec" "time"`
+    local account=`extract_attr_from_stepspec "$stepspec" "account"`
+    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
+    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
+    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
+
+    # Define options for sbatch
+    local cpus_opt=`get_slurm_cpus_opt ${cpus}`
+    local mem_opt=`get_slurm_mem_opt ${mem}`
+    local time_opt=`get_slurm_time_opt ${time}`
+    local account_opt=`get_slurm_account_opt ${account}`
+    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`get_slurm_partition_opt ${partition}`
+    local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
+    local jobarray_opt=`get_slurm_job_array_opt ${file} ${job_array_list} ${sched_throttle}`
+    
+    # Submit job
+    local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
+    local exit_code=$?
+    
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})"
+        echo "Error while launching step with sbatch (${command})" >&2
+        return 1
+    fi
+
+    eval "${outvar}='${jid}'"
+}
+
+########
+launch()
+{
+    # Initialize variables
+    local file=$1
+    local job_array_list=$2
+    local stepspec=$3
+    local stepdeps=$4
+    local outvar=$5
+    
+    # Launch file
+    local sched=`determine_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER}) ## Launch using slurm
+            slurm_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
+            ;;
+    esac
+}
+
+########
+launch_step()
+{
+    # Initialize variables
+    local dirname=$1
+    local stepname=$2
+    local job_array_list=$3
+    local stepspec=$4
+    local stepdeps=$5
+    local opts_array_name=$6
+    local id=$7
+
+    # Create script
+    script_filename=`get_script_filename $dirname $stepname`
+    create_script ${script_filename} ${stepname} ${opts_array_name} || return 1
+
+    # Launch script
+    launch ${script_filename} ${job_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
+}
+
+########
+pid_exists()
+{
+    local pid=$1
+
+    kill -0 $pid  > /dev/null 2>&1 || return 1
+
+    return 0
+}
+
+########
+get_slurm_state_code()
+{
+    local jid=$1
+    ${SQUEUE} -j $jid -h -o "%t" 2>/dev/null
+}
+
+########
+slurm_jid_exists()
+{
+    local jid=$1
+
+    # Use squeue to get job status
+    local squeue_success=1
+    ${SQUEUE} -j $jid > /dev/null 2>&1 || squeue_success=0
+
+    if [ ${squeue_success} -eq 1 ]; then
+        # If squeue succeeds, determine if it returns a state code
+        local job_state_code=`get_slurm_state_code $jid`
+        if [ -z "${job_state_code}" ]; then
+            return 1
+        else
+            return 0
+        fi
+    else
+        # Since squeue has failed, the job is not being executed
+        return 1
+    fi
+}
+
+########
+id_exists()
+{
+    local id=$1
+
+    # Check id depending on the scheduler
+    local sched=`determine_scheduler`
+    local exit_code
+    case $sched in
+        ${SLURM_SCHEDULER})
+            slurm_jid_exists $id
+            exit_code=$?
+            return ${exit_code}
+            ;;
+        ${BUILTIN_SCHEDULER})
+            pid_exists $id
+            exit_code=$?
+            return ${exit_code}
+        ;;
+    esac
+}
+
+########
+step_is_in_progress()
+{
+    local dirname=$1
+    local stepname=$2
+    local ids=`read_ids_from_files $dirname $stepname`
+
+    # Iterate over ids
+    for id in ${ids}; do
+        if id_exists $id; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+########
+get_finished_array_task_indices()
+{
+    local dirname=$1
+    local stepname=$2
+
+    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
+    if [ -f ${finished_filename} ]; then
+        ${AWK} '{print $4}' ${finished_filename}
+    fi
+}
+
+########
+array_task_is_finished()
+{
+    local dirname=$1
+    local stepname=$2
+    local idx=$3
+
+    # Check file with finished tasks info exists
+    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
+    if [ ! -f ${finished_filename} ]; then
+        return 1
+    fi
+    
+    # Check that task is in file
+    local task_in_file=1
+    ${GREP} "idx: ${idx} ;" ${finished_filename} > /dev/null || task_in_file=0
+    if [ ${task_in_file} -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+array_step_has_only_finished_tasks()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Get .id files of finished tasks
+    indices=`get_finished_array_task_indices $dirname $stepname`
+    local -A finished_id_files
+    for idx in ${indices}; do
+        local array_taskid_file=${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
+        finished_id_files[${array_taskid_file}]=1
+    done
+
+    # Look for .id files of unfinished tasks
+    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+        if [ "${finished_id_files[${taskid_file}]}" = "" ]; then
+            return 1
+        fi
+    done
+    
+    return 0
+}
+
+########
+get_num_array_tasks_finished()
+{
+    local script_filename=$1
+    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
+    if [ -f  ${finished_filename} ]; then
+        echo `$WC -l ${finished_filename} | $AWK '{print $1}'`
+    else
+        echo 0
+    fi
+}
+
+########
+get_num_array_tasks_to_finish()
+{
+    local script_filename=$1
+    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
+    if [ -f  ${finished_filename} ]; then
+        echo `$HEAD -1 ${finished_filename} | $AWK '{print $NF}'`
+    else
+        echo 0
+    fi
+}
+
+########
+step_is_finished()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    
+    if [ -f ${script_filename}.${FINISHED_STEP_FEXT} ]; then
+        # Check that all sub-steps are finished
+        local num_array_tasks_finished=`get_num_array_tasks_finished ${script_filename}`
+        local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
+        if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi     
+}
+
+########
+step_is_array()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
+
+    if [ ${num_array_tasks_to_finish} -gt 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+get_step_status()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+
+    # Check script file for step was created
+    if [ -f ${script_filename} ]; then
+        if step_should_be_reexec $stepname; then
+            echo "${REEXEC_STEP_STATUS}"
+            return ${REEXEC_STEP_EXIT_CODE}
+        fi
+
+        if step_is_in_progress $dirname $stepname; then
+            echo "${INPROGRESS_STEP_STATUS}"
+            return ${INPROGRESS_STEP_EXIT_CODE}
+        fi
+
+        if step_is_finished $dirname $stepname; then
+            echo "${FINISHED_STEP_STATUS}"
+            return ${FINISHED_STEP_EXIT_CODE}
+        else
+            if step_is_array $dirname $stepname -a array_step_has_only_finished_tasks $dirname $stepname; then
+                echo "${PARTIALLY_EXECUTED_ARRAY_STEP_STATUS}"
+                return ${PARTIALLY_EXECUTED_ARRAY_STEP_EXIT_CODE}
+            fi
+        fi
+        
+        echo "${UNFINISHED_STEP_STATUS}"
+        return ${UNFINISHED_STEP_EXIT_CODE}
+    else
+        echo "${TODO_STEP_STATUS}"
+        return ${TODO_STEP_EXIT_CODE}
+    fi
+}
+
+########
+get_array_task_status()
+{
+    local dirname=$1
+    local stepname=$2
+    local taskidx=$3
+    local stepdirname=`get_step_outdir ${dirname} ${stepname}`
+    local script_filename=`get_script_filename $dirname $stepname`
+    local array_taskid_file=${script_filename}_${taskidx}.${ARRAY_TASKID_FEXT}
+    
+    if [ ! -f ${array_taskid_file} ]; then
+        # Task is not started
+        echo ${TODO_TASK_STATUS}
+    else
+        # Task was started
+        if array_task_is_finished ${dirname} ${stepname} ${taskidx}; then
+            echo ${FINISHED_TASK_STATUS}
+        else
+            local id=`cat ${array_taskid_file}`
+            # Task is not finished
+            if id_exists $id; then
+                echo ${INPROGRESS_TASK_STATUS}
+            else
+                echo ${FAILED_TASK_STATUS}
+            fi
+        fi
+    fi
+}
+
+###############################
+# PPL FILES-RELATED FUNCTIONS #
+###############################
+
+########
+pipeline_stepspec_is_comment()
+{
+    local stepspec=$1
+    local fields=( $stepspec )
+    if [[ "${fields[0]}" = \#* ]]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
+########
+pipeline_stepspec_is_ok()
+{
+    local stepspec=$1
+
+    local fieldno=1
+    local field
+    for field in $stepspec; do
+        if [[ ${field} = "stepdeps="* ]]; then
+            if [ $fieldno -ge 2 ]; then
+                echo "yes"
+                return 0
+            fi
+        fi
+        fieldno=`expr ${fieldno} + 1`
+    done
+
+    echo "no"
+}
+
+########
+extract_attr_from_stepspec()
+{
+    local stepspec=$1
+    local attrname=$2
+
+    local field
+    for field in $stepspec; do
+        if [[ "${field}" = "${attrname}="* ]]; then
+            local attrname_len=${#attrname}
+            local start=`expr ${attrname_len} + 1`
+            local attr_val=${field:${start}}
+            echo ${attr_val}
+            return 0
+        fi
+    done
+
+    echo ${ATTR_NOT_FOUND}
+}
+
+########
+extract_stepname_from_stepspec()
+{
+    local stepspec=$1
+    local fields=( $stepspec )
+    echo ${fields[0]}
+}
+
+########
+extract_stepdeps_from_stepspec()
+{
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "stepdeps"    
+}
+
+########
+extract_cpus_from_stepspec()
+{
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "cpus"
+}
+
+########
+extract_mem_from_stepspec()
+{
+    local stepspec=$1
+    extract_attr_from_stepspec "${stepspec}" "mem"
+}
+
+############################
+# STEP EXECUTION FUNCTIONS #
+############################
 
 ########
 get_script_filename() 
@@ -862,19 +1331,6 @@ apply_deptype_to_stepids()
 }
 
 ########
-get_slurm_dependency_opt()
-{
-    local stepdeps=$1
-
-    # Create dependency option
-    if [ "${stepdeps}" = ${ATTR_NOT_FOUND} -o "${stepdeps}" = "" ]; then
-        echo ""
-    else
-        echo "--dependency=${stepdeps}"
-    fi
-}
-
-########
 get_list_of_pending_jobs_in_array()
 {
     # NOTE: a pending job here is just one that is not finished
@@ -927,20 +1383,6 @@ get_job_array_list()
 }
 
 ########
-get_slurm_job_array_opt()
-{
-    local file=$1
-    local job_array_list=$2
-    local throttle=$3
-
-    if [ ${job_array_list} = "1-1" -o ${job_array_list} = "1" ]; then
-        echo ""
-    else
-        echo "--array=${job_array_list}%${throttle}"
-    fi
-}
-
-########
 get_deptype_part_in_dep()
 {
     local dep=$1
@@ -963,23 +1405,6 @@ get_id_part_in_dep()
 {
     local dep=$1
     echo ${dep} | $AWK -F ":" '{print $2}'
-}
-
-########
-get_exit_code()
-{
-    local pid=$1
-    local outvar=$2
-
-    # Search for exit code in associative array
-    if [ -z "${EXIT_CODE[$pid]}" ]; then
-        wait $pid
-        local exit_code=$?
-        EXIT_CODE[$pid]=${exit_code}
-        eval "${outvar}='${exit_code}'"
-    else
-        eval "${outvar}='${EXIT_CODE[$pid]}'"
-    fi
 }
 
 ########
@@ -1021,308 +1446,6 @@ get_end_idx_in_range()
         echo ${array[1]}
     else
         echo "-1"
-    fi
-}
-
-########
-get_scheduler_throttle()
-{
-    local stepspec_throttle=$1
-
-    if [ "${stepspec_throttle}" = ${ATTR_NOT_FOUND} ]; then
-        echo ${PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE}
-    else
-        echo ${stepspec_throttle}
-    fi
-}
-
-########
-slurm_launch()
-{
-    # Initialize variables
-    local file=$1
-    local job_array_list=$2
-    local stepspec=$3
-    local stepdeps=$4
-    local outvar=$5
-
-    # Retrieve specification
-    local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
-    local mem=`extract_attr_from_stepspec "$stepspec" "mem"`
-    local time=`extract_attr_from_stepspec "$stepspec" "time"`
-    local account=`extract_attr_from_stepspec "$stepspec" "account"`
-    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
-    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
-    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
-    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
-
-    # Define options for sbatch
-    local cpus_opt=`get_slurm_cpus_opt ${cpus}`
-    local mem_opt=`get_slurm_mem_opt ${mem}`
-    local time_opt=`get_slurm_time_opt ${time}`
-    local account_opt=`get_slurm_account_opt ${account}`
-    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
-    local partition_opt=`get_slurm_partition_opt ${partition}`
-    local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
-    local jobarray_opt=`get_slurm_job_array_opt ${file} ${job_array_list} ${sched_throttle}`
-    
-    # Submit job
-    local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
-    local exit_code=$?
-    
-    # Check for errors
-    if [ ${exit_code} -ne 0 ]; then
-        local command="$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})"
-        echo "Error while launching step with sbatch (${command})" >&2
-        return 1
-    fi
-
-    eval "${outvar}='${jid}'"
-}
-
-########
-launch()
-{
-    # Initialize variables
-    local file=$1
-    local job_array_list=$2
-    local stepspec=$3
-    local stepdeps=$4
-    local outvar=$5
-    
-    # Launch file
-    local sched=`determine_scheduler`
-    case $sched in
-        ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
-            ;;
-    esac
-}
-
-########
-launch_step()
-{
-    # Initialize variables
-    local dirname=$1
-    local stepname=$2
-    local job_array_list=$3
-    local stepspec=$4
-    local stepdeps=$5
-    local opts_array_name=$6
-    local id=$7
-
-    # Create script
-    script_filename=`get_script_filename $dirname $stepname`
-    create_script ${script_filename} ${stepname} ${opts_array_name} || return 1
-
-    # Launch script
-    launch ${script_filename} ${job_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
-}
-
-########
-get_step_info()
-{
-    local stepname=$1
-    local infofile=$2
-
-    $AWK -v stepname=${stepname} '{if($1==stepname) print $0}' ${infofile}
-}
-
-########
-pipeline_stepspec_is_comment()
-{
-    local stepspec=$1
-    local fields=( $stepspec )
-    if [[ "${fields[0]}" = \#* ]]; then
-        echo "yes"
-    else
-        echo "no"
-    fi
-}
-
-########
-pipeline_stepspec_is_ok()
-{
-    local stepspec=$1
-
-    local fieldno=1
-    local field
-    for field in $stepspec; do
-        if [[ ${field} = "stepdeps="* ]]; then
-            if [ $fieldno -ge 2 ]; then
-                echo "yes"
-                return 0
-            fi
-        fi
-        fieldno=`expr ${fieldno} + 1`
-    done
-
-    echo "no"
-}
-
-########
-extract_attr_from_stepspec()
-{
-    local stepspec=$1
-    local attrname=$2
-
-    local field
-    for field in $stepspec; do
-        if [[ "${field}" = "${attrname}="* ]]; then
-            local attrname_len=${#attrname}
-            local start=`expr ${attrname_len} + 1`
-            local attr_val=${field:${start}}
-            echo ${attr_val}
-            return 0
-        fi
-    done
-
-    echo ${ATTR_NOT_FOUND}
-}
-
-########
-extract_stepname_from_stepspec()
-{
-    local stepspec=$1
-    local fields=( $stepspec )
-    echo ${fields[0]}
-}
-
-########
-extract_stepdeps_from_stepspec()
-{
-    local stepspec=$1
-    extract_attr_from_stepspec "${stepspec}" "stepdeps"    
-}
-
-########
-extract_cpus_from_stepspec()
-{
-    local stepspec=$1
-    extract_attr_from_stepspec "${stepspec}" "cpus"
-}
-
-########
-extract_mem_from_stepspec()
-{
-    local stepspec=$1
-    extract_attr_from_stepspec "${stepspec}" "mem"
-}
-
-########
-get_pipeline_modules()
-{
-    local pfile=$1
-    local modules=`$AWK '{if($1=="#import") {$1=""; printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) printf"%s",$i}'` ; pipe_fail || return 1
-    echo ${modules}
-}
-
-
-########
-search_mod_in_dirs()
-{
-    local module=$1
-    
-    # Search module in directories listed in PANPIPE_MOD_DIR
-    local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_MOD_DIR}`
-    local dir
-    local fullmodname
-    for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
-        if [ -f ${dir}/${module} ]; then
-            fullmodname=${dir}/${module}
-            break
-        fi
-    done
-    
-    # Fallback to package bindir
-    if [ -z "${fullmodname}" ]; then
-        fullmodname=${panpipe_bindir}/${module}
-    fi
-
-    echo $fullmodname
-}
-
-########
-determine_full_module_name()
-{
-    local module=$1
-    if is_absolute_path $file; then
-        fullmodname=${module}
-    else
-        fullmodname=`search_mod_in_dirs ${module}`
-    fi
-
-    echo $fullmodname
-}
-
-########
-load_pipeline_module()
-{
-    local module=$1
-
-    # Determine full module name
-    local fullmodname=`determine_full_module_name $module`
-
-    echo "Loading module $module (${fullmodname})..." >&2
-
-    # Check that module file exists
-    if [ -f ${fullmodname} ]; then
-        . ${fullmodname} || return 1
-        # Store module name in associative array
-        PIPELINE_MODULES[${fullmodname}]=1        
-    else
-        echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
-        return 1
-    fi
-}
-
-########
-load_pipeline_modules()
-{
-    local pfile=$1
-
-    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
-    
-    local comma_sep_modules=`get_pipeline_modules $pfile`
-    
-    if [ -z "${comma_sep_modules}" ]; then
-        echo "Error: no pipeline modules were given" >&2
-        return 1
-    else
-        # Load modules
-        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
-        local mod
-        for mod in ${blank_sep_modules}; do
-            load_pipeline_module $mod || { echo "Error while loading ${mod}" >&2 ; return 1; }
-        done
-    fi
-}
-
-########
-get_pipeline_fullmodnames()
-{
-    local pfile=$1
-
-    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
-    
-    local comma_sep_modules=`get_pipeline_modules $pfile`
-    
-    if [ -z "${comma_sep_modules}" ]; then
-        echo "Warning: no pipeline modules were given" >&2
-    else
-        # Get names
-        local fullmodnames
-        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
-        local mod
-        for mod in ${blank_sep_modules}; do
-            local fullmodname=`determine_full_module_name $mod`
-            if [ -z "${fullmodnames}" ]; then
-                fullmodnames=${fullmodname}
-            else
-                fullmodnames="${fullmodnames} ${fullmodname}"
-            fi
-        done
-        echo "${fullmodnames}"
     fi
 }
 
@@ -1484,168 +1607,6 @@ read_ids_from_files()
 }
 
 ########
-pid_exists()
-{
-    local pid=$1
-
-    kill -0 $pid  > /dev/null 2>&1 || return 1
-
-    return 0
-}
-
-########
-get_slurm_state_code()
-{
-    local jid=$1
-    ${SQUEUE} -j $jid -h -o "%t" 2>/dev/null
-}
-
-########
-slurm_jid_exists()
-{
-    local jid=$1
-
-    # Use squeue to get job status
-    local squeue_success=1
-    ${SQUEUE} -j $jid > /dev/null 2>&1 || squeue_success=0
-
-    if [ ${squeue_success} -eq 1 ]; then
-        # If squeue succeeds, determine if it returns a state code
-        local job_state_code=`get_slurm_state_code $jid`
-        if [ -z "${job_state_code}" ]; then
-            return 1
-        else
-            return 0
-        fi
-    else
-        # Since squeue has failed, the job is not being executed
-        return 1
-    fi
-}
-
-########
-id_exists()
-{
-    local id=$1
-
-    # Check id depending on the scheduler
-    local sched=`determine_scheduler`
-    local exit_code
-    case $sched in
-        ${SLURM_SCHEDULER})
-            slurm_jid_exists $id
-            exit_code=$?
-            return ${exit_code}
-            ;;
-        ${BUILTIN_SCHEDULER})
-            pid_exists $id
-            exit_code=$?
-            return ${exit_code}
-        ;;
-    esac
-}
-
-########
-step_is_in_progress()
-{
-    local dirname=$1
-    local stepname=$2
-    local ids=`read_ids_from_files $dirname $stepname`
-
-    # Iterate over ids
-    for id in ${ids}; do
-        if id_exists $id; then
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-########
-get_finished_array_task_indices()
-{
-    local dirname=$1
-    local stepname=$2
-
-    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
-    if [ -f ${finished_filename} ]; then
-        ${AWK} '{print $4}' ${finished_filename}
-    fi
-}
-
-########
-array_task_is_finished()
-{
-    local dirname=$1
-    local stepname=$2
-    local idx=$3
-
-    # Check file with finished tasks info exists
-    local finished_filename=${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
-    if [ ! -f ${finished_filename} ]; then
-        return 1
-    fi
-    
-    # Check that task is in file
-    local task_in_file=1
-    ${GREP} "idx: ${idx} ;" ${finished_filename} > /dev/null || task_in_file=0
-    if [ ${task_in_file} -eq 1 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-array_step_has_only_finished_tasks()
-{
-    local dirname=$1
-    local stepname=$2
-
-    # Get .id files of finished tasks
-    indices=`get_finished_array_task_indices $dirname $stepname`
-    local -A finished_id_files
-    for idx in ${indices}; do
-        local array_taskid_file=${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
-        finished_id_files[${array_taskid_file}]=1
-    done
-
-    # Look for .id files of unfinished tasks
-    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
-        if [ "${finished_id_files[${taskid_file}]}" = "" ]; then
-            return 1
-        fi
-    done
-    
-    return 0
-}
-
-########
-get_num_array_tasks_finished()
-{
-    local script_filename=$1
-    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
-    if [ -f  ${finished_filename} ]; then
-        echo `$WC -l ${finished_filename} | $AWK '{print $1}'`
-    else
-        echo 0
-    fi
-}
-
-########
-get_num_array_tasks_to_finish()
-{
-    local script_filename=$1
-    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
-    if [ -f  ${finished_filename} ]; then
-        echo `$HEAD -1 ${finished_filename} | $AWK '{print $NF}'`
-    else
-        echo 0
-    fi
-}
-
-########
 mark_step_as_reexec()
 {
     local stepname=$1
@@ -1687,105 +1648,19 @@ step_should_be_reexec()
 }
 
 ########
-step_is_finished()
+signal_step_completion()
 {
-    local dirname=$1
-    local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
-    
-    if [ -f ${script_filename}.${FINISHED_STEP_FEXT} ]; then
-        # Check that all sub-steps are finished
-        local num_array_tasks_finished=`get_num_array_tasks_finished ${script_filename}`
-        local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
-        if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
-            return 0
-        else
-            return 1
-        fi
-    else
-        return 1
-    fi     
-}
+    # Initialize variables
+    local script_filename=$1
+    local idx=$2
+    local total=$3
 
-########
-step_is_array()
-{
-    local dirname=$1
-    local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
-    local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
-
-    if [ ${num_array_tasks_to_finish} -gt 1 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-get_step_status()
-{
-    local dirname=$1
-    local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
-
-    # Check script file for step was created
-    if [ -f ${script_filename} ]; then
-        if step_should_be_reexec $stepname; then
-            echo "${REEXEC_STEP_STATUS}"
-            return ${REEXEC_STEP_EXIT_CODE}
-        fi
-
-        if step_is_in_progress $dirname $stepname; then
-            echo "${INPROGRESS_STEP_STATUS}"
-            return ${INPROGRESS_STEP_EXIT_CODE}
-        fi
-
-        if step_is_finished $dirname $stepname; then
-            echo "${FINISHED_STEP_STATUS}"
-            return ${FINISHED_STEP_EXIT_CODE}
-        else
-            if step_is_array $dirname $stepname -a array_step_has_only_finished_tasks $dirname $stepname; then
-                echo "${PARTIALLY_EXECUTED_ARRAY_STEP_STATUS}"
-                return ${PARTIALLY_EXECUTED_ARRAY_STEP_EXIT_CODE}
-            fi
-        fi
-        
-        echo "${UNFINISHED_STEP_STATUS}"
-        return ${UNFINISHED_STEP_EXIT_CODE}
-    else
-        echo "${TODO_STEP_STATUS}"
-        return ${TODO_STEP_EXIT_CODE}
-    fi
-}
-
-########
-get_array_task_status()
-{
-    local dirname=$1
-    local stepname=$2
-    local taskidx=$3
-    local stepdirname=`get_step_outdir ${dirname} ${stepname}`
-    local script_filename=`get_script_filename $dirname $stepname`
-    local array_taskid_file=${script_filename}_${taskidx}.${ARRAY_TASKID_FEXT}
-    
-    if [ ! -f ${array_taskid_file} ]; then
-        # Task is not started
-        echo ${TODO_TASK_STATUS}
-    else
-        # Task was started
-        if array_task_is_finished ${dirname} ${stepname} ${taskidx}; then
-            echo ${FINISHED_TASK_STATUS}
-        else
-            local id=`cat ${array_taskid_file}`
-            # Task is not finished
-            if id_exists $id; then
-                echo ${INPROGRESS_TASK_STATUS}
-            else
-                echo ${FAILED_TASK_STATUS}
-            fi
-        fi
-    fi
+    # Signal completion
+    # NOTE: A file lock is not necessary for the following operation
+    # since echo is atomic when writing short lines (for safety, up to
+    # 512 bytes, source:
+    # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
+    echo "Finished task idx: $idx ; Total: $total" >> ${script_filename}.${FINISHED_STEP_FEXT}
 }
 
 ########
@@ -1800,20 +1675,125 @@ display_end_step_message()
     echo "Step finished at `date`" >&2
 }
 
-########
-signal_step_completion()
-{
-    # Initialize variables
-    local script_filename=$1
-    local idx=$2
-    local total=$3
+############################
+# MODULE-RELATED FUNCTIONS #
+############################
 
-    # Signal completion
-    # NOTE: A file lock is not necessary for the following operation
-    # since echo is atomic when writing short lines (for safety, up to
-    # 512 bytes, source:
-    # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
-    echo "Finished task idx: $idx ; Total: $total" >> ${script_filename}.${FINISHED_STEP_FEXT}
+########
+get_pipeline_modules()
+{
+    local pfile=$1
+    local modules=`$AWK '{if($1=="#import") {$1=""; printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) printf"%s",$i}'` ; pipe_fail || return 1
+    echo ${modules}
+}
+
+
+########
+search_mod_in_dirs()
+{
+    local module=$1
+    
+    # Search module in directories listed in PANPIPE_MOD_DIR
+    local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_MOD_DIR}`
+    local dir
+    local fullmodname
+    for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
+        if [ -f ${dir}/${module} ]; then
+            fullmodname=${dir}/${module}
+            break
+        fi
+    done
+    
+    # Fallback to package bindir
+    if [ -z "${fullmodname}" ]; then
+        fullmodname=${panpipe_bindir}/${module}
+    fi
+
+    echo $fullmodname
+}
+
+########
+determine_full_module_name()
+{
+    local module=$1
+    if is_absolute_path $file; then
+        fullmodname=${module}
+    else
+        fullmodname=`search_mod_in_dirs ${module}`
+    fi
+
+    echo $fullmodname
+}
+
+########
+load_pipeline_module()
+{
+    local module=$1
+
+    # Determine full module name
+    local fullmodname=`determine_full_module_name $module`
+
+    echo "Loading module $module (${fullmodname})..." >&2
+
+    # Check that module file exists
+    if [ -f ${fullmodname} ]; then
+        . ${fullmodname} || return 1
+        # Store module name in associative array
+        PIPELINE_MODULES[${fullmodname}]=1        
+    else
+        echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
+        return 1
+    fi
+}
+
+########
+load_pipeline_modules()
+{
+    local pfile=$1
+
+    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
+    
+    local comma_sep_modules=`get_pipeline_modules $pfile`
+    
+    if [ -z "${comma_sep_modules}" ]; then
+        echo "Error: no pipeline modules were given" >&2
+        return 1
+    else
+        # Load modules
+        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
+        local mod
+        for mod in ${blank_sep_modules}; do
+            load_pipeline_module $mod || { echo "Error while loading ${mod}" >&2 ; return 1; }
+        done
+    fi
+}
+
+########
+get_pipeline_fullmodnames()
+{
+    local pfile=$1
+
+    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
+    
+    local comma_sep_modules=`get_pipeline_modules $pfile`
+    
+    if [ -z "${comma_sep_modules}" ]; then
+        echo "Warning: no pipeline modules were given" >&2
+    else
+        # Get names
+        local fullmodnames
+        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
+        local mod
+        for mod in ${blank_sep_modules}; do
+            local fullmodname=`determine_full_module_name $mod`
+            if [ -z "${fullmodnames}" ]; then
+                fullmodnames=${fullmodname}
+            else
+                fullmodnames="${fullmodnames} ${fullmodname}"
+            fi
+        done
+        echo "${fullmodnames}"
+    fi
 }
 
 ###############################
