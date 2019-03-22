@@ -951,15 +951,17 @@ get_num_array_tasks_finished()
 }
 
 ########
-get_num_array_tasks_to_finish()
+get_num_finished_array_tasks_from_finished_file()
 {
-    local script_filename=$1
-    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
-    if [ -f  ${finished_filename} ]; then
-        echo `$HEAD -1 ${finished_filename} | $AWK '{print $NF}'`
-    else
-        echo 0
-    fi
+    local finished_filename=$1
+    $WC -l ${finished_filename} | $AWK '{print $1}'
+}
+
+########
+get_num_array_tasks_from_finished_file()
+{
+    local finished_filename=$1
+    $HEAD -1 ${finished_filename} | $AWK '{print $NF}'
 }
 
 ########
@@ -968,11 +970,12 @@ step_is_finished()
     local dirname=$1
     local stepname=$2
     local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
     
-    if [ -f ${script_filename}.${FINISHED_STEP_FEXT} ]; then
+    if [ -f ${finished_filename} ]; then
         # Check that all sub-steps are finished
-        local num_array_tasks_finished=`get_num_array_tasks_finished ${script_filename}`
-        local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
+        local num_array_tasks_finished=`get_num_finished_array_tasks_from_finished_file ${finished_filename}`
+        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file ${finished_filename}`
         if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
             return 0
         else
@@ -984,17 +987,43 @@ step_is_finished()
 }
 
 ########
-step_is_array()
+step_is_partially_executed_array()
 {
     local dirname=$1
     local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
-    local num_array_tasks_to_finish=`get_num_array_tasks_to_finish ${script_filename}`
 
-    if [ ${num_array_tasks_to_finish} -gt 1 ]; then
-        return 0
-    else
+    # Get .id files of finished tasks
+    indices=`get_finished_array_task_indices $dirname $stepname`
+    local -A finished_id_files
+    for idx in ${indices}; do
+        local array_taskid_file=${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
+        finished_id_files[${array_taskid_file}]=1
+    done
+
+    # If no finished array tasks were found, step is not array or it is
+    # not a partially executed one
+    num_finished_tasks=${#finished_id_files[@]}
+    if [ ${num_finished_tasks} -eq 0 ]; then
         return 1
+    else
+        # Step is array with some tasks already executed, but others may
+        # be unfinished
+
+        # Check that not all array tasks are finished
+        local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
+        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file ${finished_filename}`
+        if [ ${num_finished_tasks} -eq ${num_array_tasks_to_finish} ]; then
+            return 1
+        fi
+        
+        # Look for .id files of unfinished tasks
+        for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+            if [ "${finished_id_files[${taskid_file}]}" = "" ]; then
+                return 1
+            fi
+        done
+        # No unfinished tasks were found
+        return 0
     fi
 }
 
@@ -1021,7 +1050,7 @@ get_step_status()
             echo "${FINISHED_STEP_STATUS}"
             return ${FINISHED_STEP_EXIT_CODE}
         else
-            if step_is_array $dirname $stepname -a array_step_has_only_finished_tasks $dirname $stepname; then
+            if step_is_partially_executed_array $dirname $stepname; then
                 echo "${PARTIALLY_EXECUTED_ARRAY_STEP_STATUS}"
                 return ${PARTIALLY_EXECUTED_ARRAY_STEP_EXIT_CODE}
             fi
