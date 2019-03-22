@@ -501,7 +501,7 @@ builtin_sched_get_max_num_tasks()
 }
 
 ########
-builtin_sched_get_pending_task_ids()
+builtin_sched_get_pending_task_indices()
 {
     local dirname=$1
     local stepname=$2
@@ -510,16 +510,16 @@ builtin_sched_get_pending_task_ids()
 
     local result
     local num_added_tasks=0
-    local id=1
-    while [ ${id} -le ${array_size} ]; do
-        task_status=`get_array_task_status $dirname $stepname $id`
+    local idx=1
+    while [ ${idx} -le ${array_size} ]; do
+        task_status=`get_array_task_status $dirname $stepname $idx`
         # Check if task is pending
         if [ ${task_status} = ${TODO_TASK_STATUS} ]; then
             # Task is pending
             if [ "${result}" = "" ]; then
-                result=${id}
+                result=${idx}
             else
-                result="${result} ${id}"
+                result="${result} ${idx}"
             fi
             # Update number of added tasks
             num_added_tasks=`expr ${num_added_tasks} + 1`
@@ -529,7 +529,7 @@ builtin_sched_get_pending_task_ids()
                 break
             fi
         fi
-        id=`expr ${id} + 1`
+        idx=`expr ${idx} + 1`
     done
 
     echo $result
@@ -558,9 +558,9 @@ builtin_sched_process_executable_array_step()
         if builtin_sched_step_can_be_executed ${stepname}; then
             max_task_num=`builtin_sched_get_max_num_tasks ${stepname}`
             if [ ${max_task_num} -gt 0 ]; then
-                pending_task_ids=`builtin_sched_get_pending_task_ids ${dirname} ${stepname} ${max_task_num}`
-                if [ "${pending_task_ids}" != "" ]; then
-                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${pending_task_ids}
+                pending_task_indices=`builtin_sched_get_pending_task_indices ${dirname} ${stepname} ${max_task_num}`
+                if [ "${pending_task_indices}" != "" ]; then
+                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${pending_task_indices}
                 fi
             fi
         fi
