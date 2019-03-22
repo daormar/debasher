@@ -937,7 +937,7 @@ step_is_finished()
     local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
     
     if [ -f ${finished_filename} ]; then
-        # Check that all sub-steps are finished
+        # Check that all tasks are finished
         local num_array_tasks_finished=`get_num_finished_array_tasks_from_finished_file ${finished_filename}`
         local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file ${finished_filename}`
         if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
@@ -951,7 +951,7 @@ step_is_finished()
 }
 
 ########
-step_is_partially_executed_array()
+step_is_partially_executed_array_builtin_sched()
 {
     local dirname=$1
     local stepname=$2
@@ -989,6 +989,30 @@ step_is_partially_executed_array()
         # No unfinished tasks were found
         return 0
     fi
+}
+
+########
+step_is_partially_executed_array()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Check id depending on the scheduler
+    local sched=`determine_scheduler`
+    local exit_code
+    case $sched in
+        ${SLURM_SCHEDULER})
+            # PARTIALLY_EXECUTED_ARRAY_STEP_STATUS status is not
+            # considered for SLURM scheduler, since task arrays are
+            # executed as a single job
+            return 1
+            ;;
+        ${BUILTIN_SCHEDULER})
+            step_is_partially_executed_array_builtin_sched ${dirname} ${stepname}
+            exit_code=$?
+            return ${exit_code}
+        ;;
+    esac
 }
 
 ########
