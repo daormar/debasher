@@ -1028,35 +1028,6 @@ get_step_status()
     fi
 }
 
-########
-get_array_task_status()
-{
-    local dirname=$1
-    local stepname=$2
-    local taskidx=$3
-    local stepdirname=`get_step_outdir ${dirname} ${stepname}`
-    local script_filename=`get_script_filename $dirname $stepname`
-    local array_taskid_file=${script_filename}_${taskidx}.${ARRAY_TASKID_FEXT}
-    
-    if [ ! -f ${array_taskid_file} ]; then
-        # Task is not started
-        echo ${TODO_TASK_STATUS}
-    else
-        # Task was started
-        if array_task_is_finished ${dirname} ${stepname} ${taskidx}; then
-            echo ${FINISHED_TASK_STATUS}
-        else
-            local id=`cat ${array_taskid_file}`
-            # Task is not finished
-            if id_exists $id; then
-                echo ${INPROGRESS_TASK_STATUS}
-            else
-                echo ${FAILED_TASK_STATUS}
-            fi
-        fi
-    fi
-}
-
 ############################
 # STEP EXECUTION FUNCTIONS #
 ############################

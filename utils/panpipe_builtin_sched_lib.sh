@@ -216,6 +216,35 @@ builtin_sched_reserve_cpus()
 }
 
 ########
+builtin_sched_get_array_task_status()
+{
+    local dirname=$1
+    local stepname=$2
+    local taskidx=$3
+    local stepdirname=`get_step_outdir ${dirname} ${stepname}`
+    local script_filename=`get_script_filename $dirname $stepname`
+    local array_taskid_file=${script_filename}_${taskidx}.${ARRAY_TASKID_FEXT}
+    
+    if [ ! -f ${array_taskid_file} ]; then
+        # Task is not started
+        echo ${TODO_TASK_STATUS}
+    else
+        # Task was started
+        if array_task_is_finished ${dirname} ${stepname} ${taskidx}; then
+            echo ${FINISHED_TASK_STATUS}
+        else
+            local id=`cat ${array_taskid_file}`
+            # Task is not finished
+            if id_exists $id; then
+                echo ${INPROGRESS_TASK_STATUS}
+            else
+                echo ${FAILED_TASK_STATUS}
+            fi
+        fi
+    fi
+}
+
+########
 builtin_sched_get_failed_array_task_indices()
 {
     local dirname=$1
@@ -224,7 +253,7 @@ builtin_sched_get_failed_array_task_indices()
     local result
 
     for taskidx in `seq ${array_size}`; do
-        local task_status=`get_array_task_status $dirname $stepname $taskidx`
+        local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
         if [ ${task_status} = ${FAILED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
@@ -246,7 +275,7 @@ builtin_sched_get_finished_array_task_indices()
     local result
 
     for taskidx in `seq ${array_size}`; do
-        local task_status=`get_array_task_status $dirname $stepname $taskidx`
+        local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
         if [ ${task_status} = ${FINISHED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
@@ -268,7 +297,7 @@ builtin_sched_get_inprogress_array_task_indices()
     local result
 
     for taskidx in `seq ${array_size}`; do
-        local task_status=`get_array_task_status $dirname $stepname $taskidx`
+        local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
         if [ ${task_status} = ${INPROGRESS_STEP_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
@@ -512,7 +541,7 @@ builtin_sched_get_pending_task_indices()
     local num_added_tasks=0
     local idx=1
     while [ ${idx} -le ${array_size} ]; do
-        task_status=`get_array_task_status $dirname $stepname $idx`
+        task_status=`builtin_sched_get_array_task_status $dirname $stepname $idx`
         # Check if task is pending
         if [ ${task_status} = ${TODO_TASK_STATUS} ]; then
             # Task is pending
