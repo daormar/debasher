@@ -444,7 +444,7 @@ determine_scheduler()
 }
 
 ########
-get_job_array_size_for_step()
+get_task_array_size_for_step()
 {
     local cmdline=$1
     local stepspec=$2
@@ -692,16 +692,16 @@ get_slurm_dependency_opt()
 }
 
 ########
-get_slurm_job_array_opt()
+get_slurm_task_array_opt()
 {
     local file=$1
-    local job_array_list=$2
+    local task_array_list=$2
     local throttle=$3
 
-    if [ ${job_array_list} = "1-1" -o ${job_array_list} = "1" ]; then
+    if [ ${task_array_list} = "1-1" -o ${task_array_list} = "1" ]; then
         echo ""
     else
-        echo "--array=${job_array_list}%${throttle}"
+        echo "--array=${task_array_list}%${throttle}"
     fi
 }
 
@@ -722,7 +722,7 @@ slurm_launch()
 {
     # Initialize variables
     local file=$1
-    local job_array_list=$2
+    local task_array_list=$2
     local stepspec=$3
     local stepdeps=$4
     local outvar=$5
@@ -745,7 +745,7 @@ slurm_launch()
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
-    local jobarray_opt=`get_slurm_job_array_opt ${file} ${job_array_list} ${sched_throttle}`
+    local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     
     # Submit job
     local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
@@ -766,7 +766,7 @@ launch()
 {
     # Initialize variables
     local file=$1
-    local job_array_list=$2
+    local task_array_list=$2
     local stepspec=$3
     local stepdeps=$4
     local outvar=$5
@@ -775,7 +775,7 @@ launch()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${file} "${job_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
+            slurm_launch ${file} "${task_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
             ;;
     esac
 }
@@ -786,7 +786,7 @@ launch_step()
     # Initialize variables
     local dirname=$1
     local stepname=$2
-    local job_array_list=$3
+    local task_array_list=$3
     local stepspec=$4
     local stepdeps=$5
     local opts_array_name=$6
@@ -797,7 +797,7 @@ launch_step()
     create_script ${script_filename} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
-    launch ${script_filename} ${job_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
+    launch ${script_filename} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
 }
 
 ########
@@ -1268,7 +1268,7 @@ apply_deptype_to_stepids()
 }
 
 ########
-get_list_of_pending_jobs_in_array()
+get_list_of_pending_tasks_in_array()
 {
     # NOTE: a pending job here is just one that is not finished
     local array_size=$1
@@ -1305,14 +1305,14 @@ get_list_of_pending_jobs_in_array()
 }
 
 ########
-get_job_array_list()
+get_task_array_list()
 {
     local array_size=$1
     local file=$2
 
     if [ -f ${file}.${FINISHED_STEP_FEXT} ]; then
         # Some jobs were completed, return list containing pending ones
-        get_list_of_pending_jobs_in_array ${array_size} ${file}
+        get_list_of_pending_tasks_in_array ${array_size} ${file}
     else
         # No jobs were completed, return list containing all of them
         echo "1-${array_size}"
@@ -1345,7 +1345,7 @@ get_id_part_in_dep()
 }
 
 ########
-job_array_elem_is_range()
+task_array_elem_is_range()
 {
     local elem=$1
     local array
@@ -1464,7 +1464,7 @@ clean_step_log_files()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_jobs=`get_list_of_pending_jobs_in_array ${array_size} ${script_filename}`
+        local pending_jobs=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
         if [ "${pending_jobs}" != "" ]; then
             local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
             for idx in ${pending_jobs_blanks}; do
@@ -1487,7 +1487,7 @@ clean_step_id_files()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_jobs=`get_list_of_pending_jobs_in_array ${array_size} ${script_filename}`
+        local pending_jobs=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
         if [ "${pending_jobs}" != "" ]; then
             local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
             for idx in ${pending_jobs_blanks}; do

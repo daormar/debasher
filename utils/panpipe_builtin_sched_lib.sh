@@ -96,7 +96,7 @@ builtin_sched_init_step_info()
             local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
             local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
             local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
-            local array_size=`get_job_array_size_for_step "${cmdline}" "${stepspec}"`
+            local array_size=`get_task_array_size_for_step "${cmdline}" "${stepspec}"`
 
             # Get cpus info
             local cpus=`extract_cpus_from_stepspec "$stepspec"`
@@ -803,12 +803,12 @@ builtin_sched_print_script_header()
 }
 
 ########
-builtin_sched_get_job_array_task_varname()
+builtin_sched_get_task_array_task_varname()
 {
     local arrayname=$1
     local taskidx=$2
     
-    echo "BUILTIN_SCHED_ARRAY_TASK_${arrayname}_${taskidx}"
+    echo "BUILTIN_SCHED_TASK_ARRAY_${arrayname}_${taskidx}"
 }
 
 ########
@@ -825,7 +825,7 @@ builtin_sched_print_script_body()
 
     # Write treatment for task id
     if [ ${num_scripts} -gt 1 ]; then
-        local varname=`builtin_sched_get_job_array_task_varname ${base_fname} ${taskidx}`
+        local varname=`builtin_sched_get_task_array_task_varname ${base_fname} ${taskidx}`
         echo "if [ \"\${${varname}}\" = 1 ]; then"
     fi
 
@@ -897,7 +897,7 @@ builtin_sched_launch()
 
     # Enable execution of specific task id
     if [ ${taskidx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        local task_varname=`builtin_sched_get_job_array_task_varname ${base_fname} ${taskidx}`
+        local task_varname=`builtin_sched_get_task_array_task_varname ${base_fname} ${taskidx}`
         export ${task_varname}=1
     fi
 
@@ -953,7 +953,7 @@ builtin_sched_execute_step()
     fi
 
     # Launch script
-    local job_array_list=${taskidx}
+    local task_array_list=${taskidx}
     builtin_sched_launch ${script_filename} "${taskidx}" || { echo "Error while launching step!" >&2 ; return 1; }
         
     # Update register of launched tasks

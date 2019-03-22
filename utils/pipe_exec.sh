@@ -737,11 +737,11 @@ execute_step()
         prepare_fifos_owned_by_step ${stepname}
         
         # Launch script
-        local job_array_list=`get_job_array_list ${array_size} ${script_filename}`
+        local task_array_list=`get_task_array_list ${array_size} ${script_filename}`
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
         local stepname_id=${stepname}_id
-        launch ${script_filename} "${job_array_list}" "${stepspec}" "${stepdeps}" ${stepname_id} || { echo "Error while launching step!" >&2 ; return 1; }
+        launch ${script_filename} "${task_array_list}" "${stepspec}" "${stepdeps}" ${stepname_id} || { echo "Error while launching step!" >&2 ; return 1; }
         
         # Update variables storing ids
         step_ids="${step_ids}:${!stepname_id}"
