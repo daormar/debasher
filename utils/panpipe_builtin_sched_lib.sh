@@ -4,8 +4,15 @@
 # CONSTANTS #
 #############
 
+# MISC CONSTANTS
 BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
 BUILTIN_SCHED_NO_ARRAY_TASK="NO_ARRAY_TASK"
+
+# ARRAY TASK STATUSES
+BUILTIN_SCHED_FINISHED_TASK_STATUS="FINISHED"
+BUILTIN_SCHED_INPROGRESS_TASK_STATUS="IN-PROGRESS"
+BUILTIN_SCHED_FAILED_TASK_STATUS="FAILED"
+BUILTIN_SCHED_TODO_TASK_STATUS="TO-DO"
 
 ####################
 # GLOBAL VARIABLES #
@@ -227,18 +234,18 @@ builtin_sched_get_array_task_status()
     
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
-        echo ${TODO_TASK_STATUS}
+        echo ${BUILTIN_SCHED_TODO_TASK_STATUS}
     else
         # Task was started
         if array_task_is_finished ${dirname} ${stepname} ${taskidx}; then
-            echo ${FINISHED_TASK_STATUS}
+            echo ${BUILTIN_SCHED_FINISHED_TASK_STATUS}
         else
             local id=`cat ${array_taskid_file}`
             # Task is not finished
             if id_exists $id; then
-                echo ${INPROGRESS_TASK_STATUS}
+                echo ${BUILTIN_SCHED_INPROGRESS_TASK_STATUS}
             else
-                echo ${FAILED_TASK_STATUS}
+                echo ${BUILTIN_SCHED_FAILED_TASK_STATUS}
             fi
         fi
     fi
@@ -254,7 +261,7 @@ builtin_sched_get_failed_array_task_indices()
 
     for taskidx in `seq ${array_size}`; do
         local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
-        if [ ${task_status} = ${FAILED_TASK_STATUS} ]; then
+        if [ ${task_status} = ${BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
             else
@@ -276,7 +283,7 @@ builtin_sched_get_finished_array_task_indices()
 
     for taskidx in `seq ${array_size}`; do
         local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
-        if [ ${task_status} = ${FINISHED_TASK_STATUS} ]; then
+        if [ ${task_status} = ${BUILTIN_SCHED_FINISHED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
             else
@@ -299,6 +306,50 @@ builtin_sched_get_inprogress_array_task_indices()
     for taskidx in `seq ${array_size}`; do
         local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
         if [ ${task_status} = ${INPROGRESS_STEP_STATUS} ]; then
+            if [ "${result}" = "" ]; then
+                result=$taskidx
+            else
+                result="$result $taskidx"
+            fi
+        fi
+    done
+
+    echo $result
+}
+
+########
+builtin_sched_get_todo_array_task_indices()
+{
+    local dirname=$1
+    local stepname=$2
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local result
+
+    for taskidx in `seq ${array_size}`; do
+        local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
+        if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} ]; then
+            if [ "${result}" = "" ]; then
+                result=$taskidx
+            else
+                result="$result $taskidx"
+            fi
+        fi
+    done
+
+    echo $result
+}
+
+########
+builtin_sched_get_pending_array_task_indices()
+{
+    local dirname=$1
+    local stepname=$2
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local result
+
+    for taskidx in `seq ${array_size}`; do
+        local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
+        if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} -o ${task_status} = ${BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
             else
@@ -530,41 +581,6 @@ builtin_sched_get_max_num_tasks()
 }
 
 ########
-builtin_sched_get_pending_task_indices()
-{
-    local dirname=$1
-    local stepname=$2
-    local max_task_num=$3
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
-
-    local result
-    local num_added_tasks=0
-    local idx=1
-    while [ ${idx} -le ${array_size} ]; do
-        task_status=`builtin_sched_get_array_task_status $dirname $stepname $idx`
-        # Check if task is pending
-        if [ ${task_status} = ${TODO_TASK_STATUS} ]; then
-            # Task is pending
-            if [ "${result}" = "" ]; then
-                result=${idx}
-            else
-                result="${result} ${idx}"
-            fi
-            # Update number of added tasks
-            num_added_tasks=`expr ${num_added_tasks} + 1`
-            # Check if number of added tasks has reached the given
-            # maximum number of tasks
-            if [ ${num_added_tasks} -eq ${max_task_num} ]; then
-                break
-            fi
-        fi
-        idx=`expr ${idx} + 1`
-    done
-
-    echo $result
-}
-
-########
 builtin_sched_process_executable_non_array_step()
 {
     local stepname=$1
@@ -587,9 +603,10 @@ builtin_sched_process_executable_array_step()
         if builtin_sched_step_can_be_executed ${stepname}; then
             max_task_num=`builtin_sched_get_max_num_tasks ${stepname}`
             if [ ${max_task_num} -gt 0 ]; then
-                pending_task_indices=`builtin_sched_get_pending_task_indices ${dirname} ${stepname} ${max_task_num}`
-                if [ "${pending_task_indices}" != "" ]; then
-                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${pending_task_indices}
+                todo_task_indices=`builtin_sched_get_todo_array_task_indices ${dirname} ${stepname}`
+                todo_task_indices_truncated=`get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num}`
+                if [ "${todo_task_indices_truncated}" != "" ]; then
+                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${todo_task_indices_truncated}
                 fi
             fi
         fi
@@ -1056,6 +1073,56 @@ builtin_sched_exec_steps()
 }
 
 ########
+builtin_sched_clean_step_log_files()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+
+    # Remove log files depending on array size
+    if [ ${array_size} -eq 1 ]; then
+        rm -f ${script_filename}.${BUILTIN_SCHED_LOG_FEXT}
+        rm -f ${script_filename}.${SLURM_SCHED_LOG_FEXT}
+    else
+        # If array size is greater than 1, remove only those log files
+        # related to unfinished array tasks
+        local pending_tasks=`builtin_sched_get_pending_array_task_indices ${dirname} ${stepname}`
+        if [ "${pending_tasks}" != "" ]; then
+            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
+            for idx in ${pending_tasks_blanks}; do
+                rm -f ${script_filename}_${idx}.${BUILTIN_SCHED_LOG_FEXT}
+                rm -f ${script_filename}_${idx}.${SLURM_SCHED_LOG_FEXT}
+            done
+        fi
+    fi
+}
+
+########
+builtin_sched_clean_step_id_files()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+
+    # Remove log files depending on array size
+    if [ ${array_size} -eq 1 ]; then
+        rm -f ${script_filename}.${STEPID_FEXT}
+    else
+        # If array size is greater than 1, remove only those log files
+        # related to unfinished array tasks
+        local pending_tasks=`builtin_sched_get_pending_array_task_indices ${dirname} ${stepname}`
+        if [ "${pending_tasks}" != "" ]; then
+            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
+            for idx in ${pending_tasks_blanks}; do
+                rm -f ${script_filename}_${idx}.${STEPID_FEXT}
+            done
+        fi
+    fi
+}
+
+########
 builtin_sched_prepare_files_and_dirs_for_step()
 {
     local dirname=$1
@@ -1066,8 +1133,8 @@ builtin_sched_prepare_files_and_dirs_for_step()
     
     # Prepare files for step
     update_step_completion_signal ${status} ${script_filename} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
-    clean_step_log_files ${array_size} ${script_filename} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
-    clean_step_id_files ${array_size} ${script_filename} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
+    builtin_sched_clean_step_log_files ${dirname} ${stepname} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
+    builtin_sched_clean_step_id_files ${dirname} ${stepname} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
     prepare_fifos_owned_by_step ${stepname}
 
     # Prepare output directory

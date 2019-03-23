@@ -33,12 +33,6 @@ REEXEC_STEP_EXIT_CODE=4
 TODO_STEP_STATUS="TO-DO"
 TODO_STEP_EXIT_CODE=5
 
-# ARRAY TASK STATUSES
-FINISHED_TASK_STATUS="FINISHED"
-INPROGRESS_TASK_STATUS="IN-PROGRESS"
-FAILED_TASK_STATUS="FAILED"
-TODO_TASK_STATUS="TO-DO"
-
 # REEXEC REASONS
 FORCED_REEXEC_REASON="forced"
 OUTDATED_CODE_REEXEC_REASON="outdated_code"
@@ -372,6 +366,30 @@ get_num_words_in_string()
 {
     local str=$1
     echo "${str}" | ${WC} -w
+}
+
+########
+get_first_n_fields_of_str()
+{
+    local str=$1
+    local n_val=$2
+
+    local result
+    for field in ${str}; do
+        if [ ${n_val} -eq 0 ]; then
+            break
+        else
+            n_val=`expr ${n_val} - 1`
+        fi
+        
+        if [ "${result}" = "" ]; then
+            result=$field
+        else
+            result="${result} ${field}"
+        fi
+    done
+
+    echo $result
 }
 
 #######################
@@ -1265,38 +1283,38 @@ apply_deptype_to_stepids()
 ########
 get_list_of_pending_tasks_in_array()
 {
-    # NOTE: a pending job here is just one that is not finished
+    # NOTE: a pending task here is just one that is not finished
     local array_size=$1
     local file=$2
 
     # Create associative map containing completed jobs
-    local -A completed_jobs
+    local -A completed_tasks
     if [ -f ${file}.${FINISHED_STEP_FEXT} ]; then
         while read line; do
             local fields=( $line )
             local num_fields=${#fields[@]}
             if [ ${num_fields} -eq 7 ]; then
                 local id=${fields[3]}
-                completed_jobs[${id}]="1"
+                completed_tasks[${id}]="1"
             fi
         done < ${file}.${FINISHED_STEP_FEXT}
     fi
     
-    # Create string enumerating pending jobs
-    local pending_jobs=""
+    # Create string enumerating pending tasks
+    local pending_tasks=""
     local idx=1
     while [ $idx -le ${array_size} ]; do
-        if [ -z "${completed_jobs[${idx}]}" ]; then
-            if [ -z "${pending_jobs}" ]; then
-                pending_jobs=${idx}
+        if [ -z "${completed_tasks[${idx}]}" ]; then
+            if [ -z "${pending_tasks}" ]; then
+                pending_tasks=${idx}
             else
-                pending_jobs="${pending_jobs},${idx}"
+                pending_tasks="${pending_tasks},${idx}"
             fi
         fi
         idx=`expr $idx + 1`
     done
     
-    echo ${pending_jobs}    
+    echo ${pending_tasks}    
 }
 
 ########
@@ -1459,10 +1477,10 @@ clean_step_log_files()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_jobs=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
-        if [ "${pending_jobs}" != "" ]; then
-            local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
-            for idx in ${pending_jobs_blanks}; do
+        local pending_tasks=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
+        if [ "${pending_tasks}" != "" ]; then
+            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
+            for idx in ${pending_tasks_blanks}; do
                 rm -f ${script_filename}_${idx}.${BUILTIN_SCHED_LOG_FEXT}
                 rm -f ${script_filename}_${idx}.${SLURM_SCHED_LOG_FEXT}
             done
@@ -1482,10 +1500,10 @@ clean_step_id_files()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_jobs=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
-        if [ "${pending_jobs}" != "" ]; then
-            local pending_jobs_blanks=`replace_str_elem_sep_with_blank "," ${pending_jobs}`
-            for idx in ${pending_jobs_blanks}; do
+        local pending_tasks=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
+        if [ "${pending_tasks}" != "" ]; then
+            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
+            for idx in ${pending_tasks_blanks}; do
                 rm -f ${script_filename}_${idx}.${STEPID_FEXT}
             done
         fi
