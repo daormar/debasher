@@ -756,11 +756,13 @@ get_scheduler_throttle()
 slurm_launch()
 {
     # Initialize variables
-    local file=$1
-    local task_array_list=$2
-    local stepspec=$3
-    local stepdeps=$4
-    local outvar=$5
+    local dirname=$1
+    local stepname=$2
+    local file=`get_script_filename ${dirname} ${stepname}`
+    local task_array_list=$3
+    local stepspec=$4
+    local stepdeps=$5
+    local outvar=$6
 
     # Retrieve specification
     local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
@@ -800,17 +802,18 @@ slurm_launch()
 launch()
 {
     # Initialize variables
-    local file=$1
-    local task_array_list=$2
-    local stepspec=$3
-    local stepdeps=$4
-    local outvar=$5
+    local dirname=$1
+    local stepname=$2
+    local task_array_list=$3
+    local stepspec=$4
+    local stepdeps=$5
+    local outvar=$6
     
     # Launch file
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${file} "${task_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
+            slurm_launch ${dirname} ${stepname} "${task_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
             ;;
     esac
 }
@@ -828,11 +831,10 @@ launch_step()
     local id=$7
 
     # Create script
-    script_filename=`get_script_filename $dirname $stepname`
-    create_script ${script_filename} ${stepname} ${opts_array_name} || return 1
+    create_script ${dirname} ${stepname} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
-    launch ${script_filename} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
+    launch ${dirname} ${stepname} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
 }
 
 ########
@@ -912,6 +914,21 @@ step_is_in_progress()
     done
 
     return 1
+}
+
+########
+get_launched_array_task_ids()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Return ids for array tasks if any
+    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+        if [ -f ${taskid_file} ]; then
+            cat ${taskid_file}
+        fi
+    done
+
 }
 
 ########
@@ -998,16 +1015,15 @@ step_is_unfinished_but_runnable_builtin_sched()
     local stepname=$2
 
     # Get .id files of finished tasks
-    indices=`get_launched_array_task_indices $dirname $stepname`
-    local -A launched_idx_to_tid
-    for idx in ${indices}; do
-        local id=`get_array_taskid ${dirname} ${stepname} ${idx}`
-        launched_idx_to_tid[${idx}]=$id
+    ids=`get_launched_array_task_ids $dirname $stepname`
+    local -A launched_array_tids
+    for id in ${ids}; do
+        launched_array_tids[${id}]=1
     done
 
     # If no launched array tasks were found, step is not array or it is
     # not an unfinished one
-    num_launched_tasks=${#launched_idx_to_tid[@]}
+    num_launched_tasks=${#launched_array_tids[@]}
     if [ ${num_launched_tasks} -eq 0 ]; then
         return 1
     else
@@ -1021,10 +1037,7 @@ step_is_unfinished_but_runnable_builtin_sched()
         fi
         
         # Check there are no tasks in progress
-        # TBD
-        for idx in ${!launched_idx_to_tid[@]}; do
-            local id=${launched_idx_to_tid[idx]}
-            
+        for id in ${!launched_array_tids[@]}; do
             if id_exists $id; then
                 return 1
             fi

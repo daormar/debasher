@@ -229,7 +229,6 @@ builtin_sched_get_array_task_status()
     local stepname=$2
     local taskidx=$3
     local stepdirname=`get_step_outdir ${dirname} ${stepname}`
-    local script_filename=`get_script_filename $dirname $stepname`
     local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${taskidx}`
     
     if [ ! -f ${array_taskid_file} ]; then
@@ -325,6 +324,7 @@ builtin_sched_get_todo_array_task_indices()
     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
     local result
 
+    local taskidx
     for taskidx in `seq ${array_size}`; do
         local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
         if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} ]; then
@@ -347,6 +347,7 @@ builtin_sched_get_pending_array_task_indices()
     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
     local result
 
+    local taskidx
     for taskidx in `seq ${array_size}`; do
         local task_status=`builtin_sched_get_array_task_status $dirname $stepname $taskidx`
         if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} -o ${task_status} = ${BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
@@ -367,9 +368,9 @@ builtin_sched_revise_array_mem()
     local dirname=$1
     local stepname=$2
 
-    inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices ${dirname} ${stepname}`
+    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices ${dirname} ${stepname}`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`    
-    step_revised_mem=`builtin_sched_get_step_mem_given_num_tasks ${stepname} ${num_inprogress_tasks}`
+    local step_revised_mem=`builtin_sched_get_step_mem_given_num_tasks ${stepname} ${num_inprogress_tasks}`
     BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]} + ${step_revised_mem}`
     BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${step_revised_mem}
 }
@@ -380,9 +381,9 @@ builtin_sched_revise_array_cpus()
     local dirname=$1
     local stepname=$2
 
-    inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices ${dirname} ${stepname}`
+    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices ${dirname} ${stepname}`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`    
-    step_revised_cpus=`builtin_sched_get_step_cpus_given_num_tasks ${stepname} ${num_inprogress_tasks}`
+    local step_revised_cpus=`builtin_sched_get_step_cpus_given_num_tasks ${stepname} ${num_inprogress_tasks}`
     BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]} + ${step_revised_cpus}`
     BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_revised_cpus}
 }
