@@ -687,16 +687,6 @@ get_stepdeps()
 }
 
 ########
-archive_script()
-{
-    local script_filename=$1
-        
-    # Archive script with date info
-    local curr_date=`date '+%Y_%m_%d'`
-    cp ${script_filename} ${script_filename}.${curr_date}
-}
-
-########
 execute_step()
 {
     # Initialize variables
@@ -714,21 +704,20 @@ execute_step()
     ## Decide whether the step should be executed
     if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
         # Create script
-        local script_filename=`get_script_filename ${dirname} ${stepname}`
         local step_function=`get_name_of_step_function ${stepname}`
         local step_function_post=`get_name_of_step_function_post ${stepname}`
         define_opts_for_script "${cmdline}" "${stepspec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
         local array_size=${#script_opts_array[@]}
-        create_script ${script_filename} ${step_function} "${step_function_post}" "script_opts_array"
+        create_script ${dirname} ${stepname} ${step_function} "${step_function_post}" "script_opts_array"
 
         # Archive script
-        archive_script ${script_filename}
+        archive_script ${dirname} ${stepname}
 
         # Prepare files and directories for step
-        update_step_completion_signal ${status} ${script_filename} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
-        clean_step_log_files ${array_size} ${script_filename} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
-        clean_step_id_files ${array_size} ${script_filename} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
+        update_step_completion_signal ${dirname} ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
+        clean_step_log_files ${dirname} ${stepname} ${array_size} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
+        clean_step_id_files ${dirname} ${stepname} ${array_size} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
         if [ ${array_size} -eq 1 ]; then
             prepare_outdir_for_step ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
         else
@@ -737,7 +726,7 @@ execute_step()
         prepare_fifos_owned_by_step ${stepname}
         
         # Launch script
-        local task_array_list=`get_task_array_list ${array_size} ${script_filename}`
+        local task_array_list=`get_task_array_list ${dirname} ${stepname} ${array_size}`
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
         local stepname_id=${stepname}_id

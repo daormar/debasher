@@ -230,7 +230,7 @@ builtin_sched_get_array_task_status()
     local taskidx=$3
     local stepdirname=`get_step_outdir ${dirname} ${stepname}`
     local script_filename=`get_script_filename $dirname $stepname`
-    local array_taskid_file=${script_filename}_${taskidx}.${ARRAY_TASKID_FEXT}
+    local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${taskidx}`
     
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
@@ -458,7 +458,7 @@ builtin_sched_fix_updated_step_status()
         prev_status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
         updated_status=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
         if [ "${updated_status}" != "" ]; then
-            if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${PARTIALLY_EXECUTED_ARRAY_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
+            if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${UNFINISHED_BUT_RUNNABLE_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
                 BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
             else
                 BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
@@ -739,7 +739,7 @@ builtin_sched_end_condition_reached()
     local stepname
     for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
         status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        if [ ${status} = ${INPROGRESS_STEP_STATUS} -o ${status} = ${PARTIALLY_EXECUTED_ARRAY_STEP_STATUS} -o ${status} = ${TODO_STEP_STATUS} -o ${status} = ${UNFINISHED_STEP_STATUS} ]; then
+        if [ ${status} = ${INPROGRESS_STEP_STATUS} -o ${status} = ${UNFINISHED_BUT_RUNNABLE_STEP_STATUS} -o ${status} = ${TODO_STEP_STATUS} -o ${status} = ${UNFINISHED_STEP_STATUS} ]; then
             return 1
         fi        
     done
@@ -862,24 +862,24 @@ builtin_sched_print_script_body()
 {
     # Initialize variables
     local num_scripts=$1
-    local fname=$2
-    local base_fname=`$BASENAME $fname`
-    local taskidx=$3
-    local funct=$4
-    local post_funct=$5
-    local script_opts=$6
+    local dirname=$2
+    local stepname=$3
+    local taskidx=$4
+    local funct=$5
+    local post_funct=$6
+    local script_opts=$7
 
     # Write treatment for task id
     if [ ${num_scripts} -gt 1 ]; then
-        local varname=`builtin_sched_get_task_array_task_varname ${base_fname} ${taskidx}`
+        local varname=`builtin_sched_get_task_array_task_varname ${stepname} ${taskidx}`
         echo "if [ \"\${${varname}}\" = 1 ]; then"
     fi
 
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
-        echo "execute_funct_plus_postfunct ${num_scripts} ${fname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${fname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
+        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${fname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
     else
-        echo "execute_funct_plus_postfunct ${num_scripts} ${fname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${fname}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
+        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${fname}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
     fi
     
     # Close if statement
@@ -898,10 +898,12 @@ builtin_sched_print_script_foot()
 builtin_sched_create_script()
 {
     # Init variables
-    local fname=$1
-    local funct=$2
-    local post_funct=$3
-    local opts_array_name=$4[@]
+    local dirname=$1
+    local stepname=$2
+    local fname=`get_script_filename ${dirname} ${stepname}`
+    local funct=$3
+    local post_funct=$4
+    local opts_array_name=$5[@]
     local opts_array=("${!opts_array_name}")
     
     # Write bash shebang
@@ -920,7 +922,7 @@ builtin_sched_create_script()
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        builtin_sched_print_script_body ${num_scripts} ${fname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        builtin_sched_print_script_body ${num_scripts} ${dirname} ${stepname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
 
@@ -937,21 +939,24 @@ builtin_sched_create_script()
 builtin_sched_launch()
 {
     # Initialize variables
-    local file=$1
-    local taskidx=$2
-    local base_fname=`$BASENAME $file`
+    local dirname=$1
+    local stepname=$2
+    local taskidx=$3
+    local file=`get_script_filename ${dirname} ${stepname}`
 
     # Enable execution of specific task id
     if [ ${taskidx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        local task_varname=`builtin_sched_get_task_array_task_varname ${base_fname} ${taskidx}`
+        local task_varname=`builtin_sched_get_task_array_task_varname ${stepname} ${taskidx}`
         export ${task_varname}=1
     fi
 
     # Set variable indicating name of file storing PID
     if [ ${taskidx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        export BUILTIN_SCHED_PID_FILENAME=${file}.${STEPID_FEXT}
+        local stepid_file=`get_stepid_filename ${dirname} ${stepname}`
+        export BUILTIN_SCHED_PID_FILENAME=${stepid_file}
     else
-        export BUILTIN_SCHED_PID_FILENAME=${file}_${taskidx}.${ARRAY_TASKID_FEXT}
+        local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${taskidx}`
+        export BUILTIN_SCHED_PID_FILENAME=${array_taskid_file}
     fi
 
     # Execute file
@@ -983,24 +988,23 @@ builtin_sched_execute_step()
     echo "STEP: ${stepname} (TASKIDX: ${taskidx}) ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
     
     # Create script
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
     local step_function=`get_name_of_step_function ${stepname}`
     local step_function_post=`get_name_of_step_function_post ${stepname}`
     define_opts_for_script "${cmdline}" "${stepspec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
     if [ "${launched_tasks}" = "" ]; then
-        builtin_sched_create_script ${script_filename} ${step_function} "${step_function_post}" "script_opts_array"
+        builtin_sched_create_script ${dirname} ${stepname} ${step_function} "${step_function_post}" "script_opts_array"
     fi
     
     # Archive script
     if [ "${launched_tasks}" = "" ]; then
-        archive_script ${script_filename}
+        archive_script ${dirname} ${stepname}
     fi
 
     # Launch script
     local task_array_list=${taskidx}
-    builtin_sched_launch ${script_filename} "${taskidx}" || { echo "Error while launching step!" >&2 ; return 1; }
+    builtin_sched_launch ${dirname} ${stepname} "${taskidx}" || { echo "Error while launching step!" >&2 ; return 1; }
         
     # Update register of launched tasks
     if [ "${launched_tasks}" = "" ]; then
@@ -1108,7 +1112,8 @@ builtin_sched_clean_step_id_files()
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        rm -f ${script_filename}.${STEPID_FEXT}
+        local stepid_file=`get_stepid_filename ${dirname} ${stepname}`
+        rm -f ${stepid_file}
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
@@ -1116,7 +1121,8 @@ builtin_sched_clean_step_id_files()
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                rm -f ${script_filename}_${idx}.${STEPID_FEXT}
+                local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${idx}`
+                rm -f ${array_taskid_file}
             done
         fi
     fi
@@ -1132,7 +1138,7 @@ builtin_sched_prepare_files_and_dirs_for_step()
     local status=`get_step_status ${dirname} ${stepname}`
     
     # Prepare files for step
-    update_step_completion_signal ${status} ${script_filename} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
+    update_step_completion_signal ${dirname} ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
     builtin_sched_clean_step_log_files ${dirname} ${stepname} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
     builtin_sched_clean_step_id_files ${dirname} ${stepname} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
     prepare_fifos_owned_by_step ${stepname}

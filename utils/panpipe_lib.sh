@@ -24,8 +24,8 @@ FINISHED_STEP_STATUS="FINISHED"
 FINISHED_STEP_EXIT_CODE=0
 INPROGRESS_STEP_STATUS="IN-PROGRESS"
 INPROGRESS_STEP_EXIT_CODE=1
-PARTIALLY_EXECUTED_ARRAY_STEP_STATUS="PARTIALLY_EXECUTED_ARRAY"
-PARTIALLY_EXECUTED_ARRAY_STEP_EXIT_CODE=2
+UNFINISHED_BUT_RUNNABLE_STEP_STATUS="UNFINISHED_BUT_RUNNABLE"
+UNFINISHED_BUT_RUNNABLE_STEP_EXIT_CODE=2
 UNFINISHED_STEP_STATUS="UNFINISHED"
 UNFINISHED_STEP_EXIT_CODE=3
 REEXEC_STEP_STATUS="REEXECUTE"
@@ -475,8 +475,8 @@ get_task_array_size_for_step()
 execute_funct_plus_postfunct()
 {
     local num_scripts=$1
-    local fname=$2
-    local base_fname=`$BASENAME $fname`
+    local dirname=$2
+    local stepname=$3
     local taskidx=$3
     local funct=$4
     local post_funct=$5
@@ -502,7 +502,7 @@ execute_funct_plus_postfunct()
     fi
 
     # Signal step completion
-    signal_step_completion ${fname} ${taskidx} ${num_scripts}
+    signal_step_completion ${dirname} ${stepname} ${taskidx} ${num_scripts}
 }
 
 ########
@@ -518,10 +518,12 @@ print_script_body_slurm_sched()
 {
     # Initialize variables
     local num_scripts=$1
-    local taskidx=$2
-    local funct=$3
-    local post_funct=$4
-    local script_opts=$5
+    local dirname=$2
+    local stepname=$3
+    local taskidx=$4
+    local funct=$5
+    local post_funct=$6
+    local script_opts=$7
 
     # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
@@ -542,7 +544,7 @@ print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
         
     # Write command to signal step completion
-    echo "signal_step_completion ${fname} ${lineno} ${num_scripts}" 
+    echo "signal_step_completion ${dirname} ${stepname} ${lineno} ${num_scripts}" 
 
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
@@ -560,10 +562,12 @@ print_script_foot_slurm_sched()
 create_slurm_script()
 {
     # Init variables
-    local fname=$1
-    local funct=$2
-    local post_funct=$3
-    local opts_array_name=$4[@]
+    local dirname=$1
+    local stepname=$2
+    local fname=`get_script_filename ${dirname} ${stepname}`
+    local funct=$3
+    local post_funct=$4
+    local opts_array_name=$5[@]
     local opts_array=("${!opts_array_name}")
     local num_scripts=${#opts_array[@]}
 
@@ -590,7 +594,7 @@ create_slurm_script()
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        print_script_body_slurm_sched ${num_scripts} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        print_script_body_slurm_sched ${num_scripts} ${dirname} ${stepname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=`expr $lineno + 1`
         
@@ -607,17 +611,30 @@ create_slurm_script()
 create_script()
 {
     # Init variables
-    local fname=$1
-    local funct=$2
-    local post_funct=$3
-    local opts_array_name=$4
+    local dirname=$1
+    local stepname=$2
+    local funct=$3
+    local post_funct=$4
+    local opts_array_name=$5
 
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script $fname $funct "${post_funct}" ${opts_array_name}
+            create_slurm_script $dirname $stepname $funct "${post_funct}" ${opts_array_name}
             ;;
     esac
+}
+
+########
+archive_script()
+{
+    local dirname=$1
+    local stepname=$2
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+
+    # Archive script with date info
+    local curr_date=`date '+%Y_%m_%d'`
+    cp ${script_filename} ${script_filename}.${curr_date}
 }
 
 ########
@@ -952,7 +969,7 @@ step_is_finished()
     local dirname=$1
     local stepname=$2
     local script_filename=`get_script_filename ${dirname} ${stepname}`
-    local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     
     if [ -f ${finished_filename} ]; then
         # Check that all tasks are finished
@@ -969,64 +986,73 @@ step_is_finished()
 }
 
 ########
-step_is_partially_executed_array_builtin_sched()
+step_is_unfinished_but_runnable_builtin_sched()
 {
+    # Steps where the following is true are assigned this status:
+    #  - step is an array of tasks
+    #  - there are no tasks in progress
+    #  - at least one task has been launched
+    #  - at least one task can start execution
+    
     local dirname=$1
     local stepname=$2
 
     # Get .id files of finished tasks
-    indices=`get_finished_array_task_indices $dirname $stepname`
-    local -A finished_id_files
+    indices=`get_launched_array_task_indices $dirname $stepname`
+    local -A launched_idx_to_tid
     for idx in ${indices}; do
-        local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${idx}`
-        finished_id_files[${array_taskid_file}]=1
+        local id=`get_array_taskid ${dirname} ${stepname} ${idx}`
+        launched_idx_to_tid[${idx}]=$id
     done
 
-    # If no finished array tasks were found, step is not array or it is
-    # not a partially executed one
-    num_finished_tasks=${#finished_id_files[@]}
-    if [ ${num_finished_tasks} -eq 0 ]; then
+    # If no launched array tasks were found, step is not array or it is
+    # not an unfinished one
+    num_launched_tasks=${#launched_idx_to_tid[@]}
+    if [ ${num_launched_tasks} -eq 0 ]; then
         return 1
     else
-        # Step is array with some tasks already executed, but others may
-        # be unfinished
+        # Step is array with some tasks already launched
 
-        # Check that not all array tasks are finished
-        local finished_filename=${script_filename}.${FINISHED_STEP_FEXT}
+        # Check that not all array tasks were launched
+        local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
         local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file ${finished_filename}`
-        if [ ${num_finished_tasks} -eq ${num_array_tasks_to_finish} ]; then
+        if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
             return 1
         fi
         
-        # Look for .id files of unfinished tasks
-        for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
-            if [ "${finished_id_files[${taskid_file}]}" = "" ]; then
+        # Check there are no tasks in progress
+        # TBD
+        for idx in ${!launched_idx_to_tid[@]}; do
+            local id=${launched_idx_to_tid[idx]}
+            
+            if id_exists $id; then
                 return 1
             fi
         done
-        # No unfinished tasks were found
+        
+        # All conditions satisfied
         return 0
     fi
 }
 
 ########
-step_is_partially_executed_array()
+step_is_unfinished_but_runnable()
 {
     local dirname=$1
     local stepname=$2
 
-    # Check id depending on the scheduler
+    # Check status depending on the scheduler
     local sched=`determine_scheduler`
     local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
-            # PARTIALLY_EXECUTED_ARRAY_STEP_STATUS status is not
+            # UNFINISHED_BUT_RUNNABLE_STEP_STATUS status is not
             # considered for SLURM scheduler, since task arrays are
             # executed as a single job
             return 1
             ;;
         ${BUILTIN_SCHEDULER})
-            step_is_partially_executed_array_builtin_sched ${dirname} ${stepname}
+            step_is_unfinished_but_runnable_builtin_sched ${dirname} ${stepname}
             exit_code=$?
             return ${exit_code}
         ;;
@@ -1056,9 +1082,9 @@ get_step_status()
             echo "${FINISHED_STEP_STATUS}"
             return ${FINISHED_STEP_EXIT_CODE}
         else
-            if step_is_partially_executed_array $dirname $stepname; then
-                echo "${PARTIALLY_EXECUTED_ARRAY_STEP_STATUS}"
-                return ${PARTIALLY_EXECUTED_ARRAY_STEP_EXIT_CODE}
+            if step_is_unfinished_but_runnable $dirname $stepname; then
+                echo "${UNFINISHED_BUT_RUNNABLE_STEP_STATUS}"
+                return ${UNFINISHED_BUT_RUNNABLE_STEP_EXIT_CODE}
             fi
         fi
         
@@ -1102,9 +1128,23 @@ get_array_taskid_filename()
     echo ${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
 }
 
+########
+get_array_taskid()
+{
+    local dirname=$1
+    local stepname=$2
+    local idx=$3
+
+    file=`get_array_taskid_filename ${dirname} ${stepname} ${idx}`
+    if [ -f ${file} ]; then
+        cat $file
+    else
+        echo ${INVALID_ARRAY_TID}
+    fi
+}
 
 ########
-get_step_finished_filename() 
+get_step_finished_filename()
 {
     local dirname=$1
     local stepname=$2
@@ -1284,12 +1324,14 @@ apply_deptype_to_stepids()
 get_list_of_pending_tasks_in_array()
 {
     # NOTE: a pending task here is just one that is not finished
-    local array_size=$1
-    local file=$2
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
 
     # Create associative map containing completed jobs
     local -A completed_tasks
-    if [ -f ${file}.${FINISHED_STEP_FEXT} ]; then
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    if [ -f ${finished_filename} ]; then
         while read line; do
             local fields=( $line )
             local num_fields=${#fields[@]}
@@ -1297,7 +1339,7 @@ get_list_of_pending_tasks_in_array()
                 local id=${fields[3]}
                 completed_tasks[${id}]="1"
             fi
-        done < ${file}.${FINISHED_STEP_FEXT}
+        done < ${finished_filename}
     fi
     
     # Create string enumerating pending tasks
@@ -1320,12 +1362,14 @@ get_list_of_pending_tasks_in_array()
 ########
 get_task_array_list()
 {
-    local array_size=$1
-    local file=$2
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
 
-    if [ -f ${file}.${FINISHED_STEP_FEXT} ]; then
+    if [ -f ${finished_filename} ]; then
         # Some jobs were completed, return list containing pending ones
-        get_list_of_pending_tasks_in_array ${array_size} ${file}
+        get_list_of_pending_tasks_in_array ${dirname} ${stepname} ${array_size}
     else
         # No jobs were completed, return list containing all of them
         echo "1-${array_size}"
@@ -1454,22 +1498,26 @@ prepare_outdir_for_step_array()
 ########
 update_step_completion_signal()
 {
-    local status=$1
-    local script_filename=$2
+    local dirname=$1
+    local stepname=$2
+    local status=$3
 
     # If step will be reexecuted, file signaling step completion
     # should be removed
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     if [ "${status}" = "${REEXEC_STEP_STATUS}" ]; then
-        rm -f ${script_filename}.${FINISHED_STEP_FEXT}
+        rm -f ${finished_filename}
     fi
 }
 
 ########
 clean_step_log_files()
 {
-    local array_size=$1
-    local script_filename=$2
-
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
         rm -f ${script_filename}.${BUILTIN_SCHED_LOG_FEXT}
@@ -1477,7 +1525,7 @@ clean_step_log_files()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
+        local pending_tasks=`get_list_of_pending_tasks_in_array ${dirname} ${stepname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
@@ -1491,20 +1539,23 @@ clean_step_log_files()
 ########
 clean_step_id_files()
 {
-    local array_size=$1
-    local script_filename=$2
-
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+    
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        rm -f ${script_filename}.${STEPID_FEXT}
+        local stepid_file=`get_stepid_filename ${dirname} ${stepname}`
+        rm -f ${stepid_file}
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`get_list_of_pending_tasks_in_array ${array_size} ${script_filename}`
+        local pending_tasks=`get_list_of_pending_tasks_in_array ${dirname} ${stepname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                rm -f ${script_filename}_${idx}.${STEPID_FEXT}
+                local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${idx}`
+                rm -f ${array_taskid_file}
             done
         fi
     fi
@@ -1601,16 +1652,18 @@ step_should_be_reexec()
 signal_step_completion()
 {
     # Initialize variables
-    local script_filename=$1
-    local idx=$2
-    local total=$3
+    local dirname=$1
+    local stepname=$2
+    local idx=$3
+    local total=$4
 
     # Signal completion
     # NOTE: A file lock is not necessary for the following operation
     # since echo is atomic when writing short lines (for safety, up to
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
-    echo "Finished task idx: $idx ; Total: $total" >> ${script_filename}.${FINISHED_STEP_FEXT}
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    echo "Finished task idx: $idx ; Total: $total" >> ${finished_filename}
 }
 
 ########
