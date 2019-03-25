@@ -775,8 +775,8 @@ builtin_sched_get_debug_sel_steps_info()
     local knapsack_name
     for knapsack_name in ${BUILTIN_SCHED_SELECTED_STEPS}; do
         sname=`builtinsched_extract_step_from_knapsack_name ${knapsack_name}`
-        tid=`builtinsched_extract_tid_from_knapsack_name ${knapsack_name}`
-        sel_steps="${sel_steps} ${knapsack_name} -> ${sname},${tid};"
+        tidx=`builtinsched_extract_taskidx_from_knapsack_name ${knapsack_name}`
+        sel_steps="${sel_steps} ${knapsack_name} -> ${sname},${tidx};"
     done
     echo $sel_steps
 }
@@ -1019,14 +1019,14 @@ builtinsched_extract_step_from_knapsack_name()
 }
 
 ########
-builtinsched_extract_tid_from_knapsack_name()
+builtinsched_extract_taskidx_from_knapsack_name()
 {
     local knapsack_name=$1
-    local tid=`echo ${knapsack_name} | ${AWK} -F "_" '{print $2}'`    
-    if [ "${tid}" = "" ]; then
+    local tidx=`echo ${knapsack_name} | ${AWK} -F "_" '{print $2}'`    
+    if [ "${tidx}" = "" ]; then
         echo ${BUILTIN_SCHED_NO_ARRAY_TASK}
     else
-        echo ${tid}
+        echo ${tidx}
     fi
 }
 
@@ -1040,7 +1040,7 @@ builtin_sched_exec_steps_and_update_status()
     for knapsack_name in ${BUILTIN_SCHED_SELECTED_STEPS}; do
         # Extract step name and task id
         stepname=`builtinsched_extract_step_from_knapsack_name ${knapsack_name}`
-        taskidx=`builtinsched_extract_tid_from_knapsack_name ${knapsack_name}`
+        taskidx=`builtinsched_extract_taskidx_from_knapsack_name ${knapsack_name}`
         
         # Execute step
         builtin_sched_execute_step "${cmdline}" ${dirname} ${stepname} ${taskidx} || return 1
