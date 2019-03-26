@@ -576,11 +576,14 @@ create_slurm_script()
     echo ${BASH_SHEBANG} > ${fname} || return 1
 
     # Set SLURM options
+    
     echo "#SBATCH --job-name=${funct}" >> ${fname} || return 1
     if [ ${num_scripts} -eq 1 ]; then
-        echo "#SBATCH --output=${fname}.${SLURM_SCHED_LOG_FEXT}" >> ${fname} || return 1
+        local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
+        echo "#SBATCH --output=${slurm_log_filename}" >> ${fname} || return 1
     else
-        echo "#SBATCH --output=${fname}_%a.${SLURM_SCHED_LOG_FEXT}" >> ${fname} || return 1
+        local slurm_task_template_log_filename=`get_task_template_log_filename_slurm ${dirname} ${stepname}`
+        echo "#SBATCH --output=${slurm_task_template_log_filename}" >> ${fname} || return 1
     fi
     
     # Write environment variables
@@ -1164,6 +1167,53 @@ get_step_finished_filename()
 }
 
 ########
+get_step_log_filename_builtin()
+{
+    local dirname=$1
+    local stepname=$2
+
+    echo ${dirname}/scripts/${stepname}.${BUILTIN_SCHED_LOG_FEXT}
+}
+
+########
+get_task_log_filename_builtin()
+{
+    local dirname=$1
+    local stepname=$2
+    local taskidx=$3
+    
+    echo ${dirname}/scripts/${stepname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}
+}
+
+########
+get_step_log_filename_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+
+    echo ${dirname}/scripts/${stepname}.${SLURM_SCHED_LOG_FEXT}
+}
+
+########
+get_task_log_filename_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+    local taskidx=$3
+    
+    echo ${dirname}/scripts/${stepname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}
+}
+
+########
+get_task_template_log_filename_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+    
+    echo ${dirname}/scripts/${stepname}_%a.${SLURM_SCHED_LOG_FEXT}
+}
+
+########
 remove_suffix_from_stepname()
 {
     local stepname=$1
@@ -1527,12 +1577,13 @@ clean_step_log_files()
     local dirname=$1
     local stepname=$2
     local array_size=$3
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
+    local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
     
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        rm -f ${script_filename}.${BUILTIN_SCHED_LOG_FEXT}
-        rm -f ${script_filename}.${SLURM_SCHED_LOG_FEXT}
+        rm -f ${builtin_log_filename}
+        rm -f ${slurm_log_filename}
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
@@ -1540,8 +1591,10 @@ clean_step_log_files()
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                rm -f ${script_filename}_${idx}.${BUILTIN_SCHED_LOG_FEXT}
-                rm -f ${script_filename}_${idx}.${SLURM_SCHED_LOG_FEXT}
+                local builtin_task_log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${idx}`
+                local slurm_task_log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${idx}`
+                rm -f ${builtin_task_log_filename}
+                rm -f ${slurm_task_log_filename}
             done
         fi
     fi

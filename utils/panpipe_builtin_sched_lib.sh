@@ -878,9 +878,11 @@ builtin_sched_print_script_body()
 
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
-        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${fname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
+        local builtin_task_log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${taskidx}`
+        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_task_log_filename} 2>&1"
     else
-        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${fname}.${BUILTIN_SCHED_LOG_FEXT} 2>&1"
+        local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
+        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_log_filename} 2>&1"
     fi
     
     # Close if statement
@@ -1080,13 +1082,14 @@ builtin_sched_clean_step_log_files()
 {
     local dirname=$1
     local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
+    local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        rm -f ${script_filename}.${BUILTIN_SCHED_LOG_FEXT}
-        rm -f ${script_filename}.${SLURM_SCHED_LOG_FEXT}
+        rm -f ${builtin_log_filename}
+        rm -f ${slurm_log_filename}
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
@@ -1094,8 +1097,10 @@ builtin_sched_clean_step_log_files()
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                rm -f ${script_filename}_${idx}.${BUILTIN_SCHED_LOG_FEXT}
-                rm -f ${script_filename}_${idx}.${SLURM_SCHED_LOG_FEXT}
+                local builtin_task_log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${idx}`
+                local slurm_task_log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${idx}`
+                rm -f ${builtin_task_log_filename}
+                rm -f ${slurm_task_log_filename}
             done
         fi
     fi
