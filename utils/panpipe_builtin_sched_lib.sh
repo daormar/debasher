@@ -902,9 +902,9 @@ builtin_sched_create_script()
     local dirname=$1
     local stepname=$2
     local fname=`get_script_filename ${dirname} ${stepname}`
-    local funct=$3
-    local post_funct=$4
-    local opts_array_name=$5[@]
+    local funct=`get_name_of_step_function ${stepname}`
+    local post_funct=`get_name_of_step_function_post ${stepname}`
+    local opts_array_name=$3[@]
     local opts_array=("${!opts_array_name}")
     
     # Write bash shebang
@@ -989,13 +989,11 @@ builtin_sched_execute_step()
     echo "STEP: ${stepname} (TASKIDX: ${taskidx}) ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
     
     # Create script
-    local step_function=`get_name_of_step_function ${stepname}`
-    local step_function_post=`get_name_of_step_function_post ${stepname}`
     define_opts_for_script "${cmdline}" "${stepspec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
     if [ "${launched_tasks}" = "" ]; then
-        builtin_sched_create_script ${dirname} ${stepname} ${step_function} "${step_function_post}" "script_opts_array"
+        builtin_sched_create_script ${dirname} ${stepname} "script_opts_array"
     fi
     
     # Archive script

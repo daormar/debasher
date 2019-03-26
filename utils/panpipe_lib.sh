@@ -565,9 +565,9 @@ create_slurm_script()
     local dirname=$1
     local stepname=$2
     local fname=`get_script_filename ${dirname} ${stepname}`
-    local funct=$3
-    local post_funct=$4
-    local opts_array_name=$5[@]
+    local funct=`get_name_of_step_function ${stepname}`
+    local post_funct=`get_name_of_step_function_post ${stepname}`
+    local opts_array_name=$3[@]
     local opts_array=("${!opts_array_name}")
     local num_scripts=${#opts_array[@]}
 
@@ -613,14 +613,12 @@ create_script()
     # Init variables
     local dirname=$1
     local stepname=$2
-    local funct=$3
-    local post_funct=$4
-    local opts_array_name=$5
+    local opts_array_name=$3
 
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script $dirname $stepname $funct "${post_funct}" ${opts_array_name}
+            create_slurm_script $dirname $stepname ${opts_array_name}
             ;;
     esac
 }
@@ -831,7 +829,7 @@ launch_step()
     local id=$7
 
     # Create script
-    create_script ${dirname} ${stepname} ${stepname} ${opts_array_name} || return 1
+    create_script ${dirname} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
     launch ${dirname} ${stepname} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
