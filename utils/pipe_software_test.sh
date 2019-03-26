@@ -67,7 +67,6 @@ step_b_explain_cmdline_opts()
     # -b option
     description="Value to write to file in data directory"
     explain_cmdline_req_opt "-b" "<int>" "$description"
-
 }
 
 ########
