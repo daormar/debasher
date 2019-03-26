@@ -477,10 +477,10 @@ execute_funct_plus_postfunct()
     local num_scripts=$1
     local dirname=$2
     local stepname=$3
-    local taskidx=$3
-    local funct=$4
-    local post_funct=$5
-    local script_opts=$6
+    local taskidx=$4
+    local funct=$5
+    local post_funct=$6
+    local script_opts=$7
 
     # Execute step function
     $funct ${script_opts}
