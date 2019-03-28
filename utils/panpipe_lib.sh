@@ -261,7 +261,7 @@ serialize_string_array()
             result="${result}${sep}${str}"
         fi
 
-        num_elem=`expr ${num_elem} + 1`
+        num_elem=$((num_elem + 1))
     done
 
     echo $result
@@ -331,7 +331,7 @@ convert_mem_value_to_mb()
     local mem_value=$1
 
     local len=${#mem_value}
-    local len_m_one=`expr $len - 1`
+    local len_m_one=$((len - 1))
     local mem_value_suff="${mem_value:${len_m_one}:1}"
     case ${mem_value_suff} in
         "K") local mem_value_wo_suff=${mem_value:0:${len_m_one}}
@@ -379,7 +379,7 @@ get_first_n_fields_of_str()
         if [ ${n_val} -eq 0 ]; then
             break
         else
-            n_val=`expr ${n_val} - 1`
+            n_val=$((n_val - 1))
         fi
         
         if [ "${result}" = "" ]; then
@@ -599,7 +599,7 @@ create_slurm_script()
 
         print_script_body_slurm_sched ${num_scripts} ${dirname} ${stepname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
-        lineno=`expr $lineno + 1`
+        lineno=$((lineno + 1))
         
     done
 
@@ -1414,7 +1414,7 @@ get_list_of_pending_tasks_in_array()
                 pending_tasks="${pending_tasks},${idx}"
             fi
         fi
-        idx=`expr $idx + 1`
+        idx=$((idx + 1))
     done
     
     echo ${pending_tasks}    
@@ -1772,7 +1772,7 @@ pipeline_stepspec_is_ok()
                 return 0
             fi
         fi
-        fieldno=`expr ${fieldno} + 1`
+        fieldno=$((fieldno + 1))
     done
 
     echo "no"
@@ -1788,7 +1788,7 @@ extract_attr_from_stepspec()
     for field in $stepspec; do
         if [[ "${field}" = "${attrname}="* ]]; then
             local attrname_len=${#attrname}
-            local start=`expr ${attrname_len} + 1`
+            local start=$((attrname_len + 1))
             local attr_val=${field:${start}}
             echo ${attr_val}
             return 0
@@ -2241,7 +2241,7 @@ print_pipeline_opts()
             fi
         done
 
-        lineno=`expr ${lineno} + 1`
+        lineno=$((lineno + 1))
     done
 }
 

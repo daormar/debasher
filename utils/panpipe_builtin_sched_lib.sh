@@ -117,7 +117,7 @@ builtin_sched_init_step_info()
             # Obtain full throttle cpus value
             local full_throttle_cpus=${cpus}
             if [ $array_size -gt 1 ]; then
-                full_throttle_cpus=`expr ${cpus} \* ${sched_throttle}`
+                full_throttle_cpus=$((cpus * sched_throttle))
             fi
             # Check full_throttle_cpus value
             builtin_sched_cpus_within_limit ${full_throttle_cpus} || { echo "Error: number of cpus for step $stepname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
@@ -125,7 +125,7 @@ builtin_sched_init_step_info()
             # Obtain full throttle mem value
             local full_throttle_mem=${mem}
             if [ $array_size -gt 1 ]; then
-                full_throttle_mem=`expr ${mem} \* ${sched_throttle}`
+                full_throttle_mem=$((mem * sched_throttle))
             fi
             # Check mem value
             builtin_sched_mem_within_limit ${full_throttle_mem} || { echo "Error: amount of memory for step $stepname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
@@ -151,7 +151,7 @@ builtin_sched_release_mem()
 {
     local stepname=$1
     
-    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]}`
+    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]}))
     BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=0
 }
 
@@ -160,7 +160,7 @@ builtin_sched_release_cpus()
 {
     local stepname=$1
     
-    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]}`
+    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]}))
     BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=0
 }
 
@@ -181,7 +181,7 @@ builtin_sched_get_step_mem_given_num_tasks()
     if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
         echo ${BUILTIN_SCHED_STEP_MEM[${stepname}]}
     else
-        echo `expr ${BUILTIN_SCHED_STEP_MEM[${stepname}]} \* ${ntasks}`
+        echo $((${BUILTIN_SCHED_STEP_MEM[${stepname}]} * ntasks))
     fi
 }
 
@@ -190,7 +190,7 @@ builtin_sched_reserve_mem()
 {
     local stepname=$1
     local step_mem=`builtin_sched_get_step_mem ${stepname}`
-    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} + ${step_mem}`
+    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM + step_mem))
     BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${step_mem}
 }
 
@@ -211,7 +211,7 @@ builtin_sched_get_step_cpus_given_num_tasks()
     if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
         echo ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
     else
-        echo `expr ${BUILTIN_SCHED_STEP_CPUS[${stepname}]} \* ${ntasks}`
+        echo $((${BUILTIN_SCHED_STEP_CPUS[${stepname}]} * ntasks))
     fi
 }
 
@@ -220,7 +220,7 @@ builtin_sched_reserve_cpus()
 {
     local stepname=$1
     local step_cpus=`builtin_sched_get_step_cpus ${stepname}`
-    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} + ${step_cpus}`
+    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS + step_cpus))
     BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_cpus}
 }
 
@@ -373,7 +373,7 @@ builtin_sched_revise_array_mem()
     local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices ${dirname} ${stepname}`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`    
     local step_revised_mem=`builtin_sched_get_step_mem_given_num_tasks ${stepname} ${num_inprogress_tasks}`
-    BUILTIN_SCHED_ALLOC_MEM=`expr ${BUILTIN_SCHED_ALLOC_MEM} - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]} + ${step_revised_mem}`
+    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]} + step_revised_mem))
     BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${step_revised_mem}
 }
 
@@ -386,7 +386,7 @@ builtin_sched_revise_array_cpus()
     local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices ${dirname} ${stepname}`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`    
     local step_revised_cpus=`builtin_sched_get_step_cpus_given_num_tasks ${stepname} ${num_inprogress_tasks}`
-    BUILTIN_SCHED_ALLOC_CPUS=`expr ${BUILTIN_SCHED_ALLOC_CPUS} - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]} + ${step_revised_cpus}`
+    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]} + step_revised_cpus))
     BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_revised_cpus}
 }
 
@@ -485,7 +485,7 @@ builtin_sched_get_available_cpus()
     if [ ${BUILTIN_SCHED_CPUS} -eq 0 ]; then
         echo 0
     else
-        echo `expr ${BUILTIN_SCHED_CPUS} - ${BUILTIN_SCHED_ALLOC_CPUS}`
+        echo $((BUILTIN_SCHED_CPUS - BUILTIN_SCHED_ALLOC_CPUS))
     fi
 }
 
@@ -495,7 +495,7 @@ builtin_sched_get_available_mem()
     if [ ${BUILTIN_SCHED_MEM} -eq 0 ]; then
         echo 0
     else
-        echo `expr ${BUILTIN_SCHED_MEM} - ${BUILTIN_SCHED_ALLOC_MEM}`
+        echo $((BUILTIN_SCHED_MEM - BUILTIN_SCHED_ALLOC_MEM))
     fi
 }
 
@@ -588,7 +588,7 @@ builtin_sched_get_max_num_tasks()
     local throttle=${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}
     local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices $dirname $stepname`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
-    local result=`expr ${throttle} - ${num_inprogress_tasks}`
+    local result=$((throttle - num_inprogress_tasks))
     echo ${result}
 }
 
@@ -938,7 +938,7 @@ builtin_sched_create_script()
 
         builtin_sched_print_script_body ${num_scripts} ${dirname} ${stepname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
-        lineno=`expr $lineno + 1`
+        lineno=$((lineno + 1))
 
     done
 
@@ -960,7 +960,7 @@ wait_until_file_exists()
         if [ -f ${pid_file} ]; then
             return 0
         fi
-        iterno=`expr ${iterno} + 1`
+        iterno=$((iterno + 1))
     done
 
     return 1
@@ -1253,6 +1253,6 @@ builtin_sched_execute_pipeline_steps()
             end=1
         fi
 
-        iterno=`expr $iterno + 1`
+        iterno=$((iterno + 1))
     done
 }

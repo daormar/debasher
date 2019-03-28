@@ -89,10 +89,10 @@ wait_simul_exec_reduction()
 
             case ${exit_code} in
                 ${PIPELINE_FINISHED_EXIT_CODE})
-                    num_finished_pipelines=`expr ${num_finished_pipelines} + 1`
+                    num_finished_pipelines=$((num_finished_pipelines+1))
                     ;;
                 ${PIPELINE_UNFINISHED_EXIT_CODE})
-                    num_unfinished_pipelines=`expr ${num_unfinished_pipelines} + 1`                    
+                    num_unfinished_pipelines=$((num_unfinished_pipelines+1))
                     ;;
             esac
         done
@@ -111,7 +111,7 @@ wait_simul_exec_reduction()
         fi
         
         # Obtain number of pending pipelines
-        local pending_pipelines=`expr ${num_active_pipelines} - ${num_finished_pipelines}`
+        local pending_pipelines=$((num_active_pipelines - num_finished_pipelines))
 
         # Wait if number of pending pipelines is equal or greater than
         # maximum
@@ -303,7 +303,7 @@ execute_batches()
         fi
         
         # Increase lineno
-        lineno=`expr $lineno + 1`
+        lineno=$((lineno+1))
         
     done < ${file}
 

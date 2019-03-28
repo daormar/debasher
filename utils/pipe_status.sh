@@ -240,7 +240,7 @@ process_status_for_pfile()
         fi
         
         # Increase lineno
-        lineno=`expr $lineno + 1`
+        lineno=$((lineno+1))
         
     done < ${pfile}
 
