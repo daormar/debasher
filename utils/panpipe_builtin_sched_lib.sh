@@ -950,6 +950,23 @@ builtin_sched_create_script()
 }
 
 ########
+wait_until_file_exists()
+{
+    local pid_file=$1
+    local max_num_iters=$2
+    local iterno=1
+
+    while [ ${iterno} -le ${max_num_iters} ]; do
+        if [ -f ${pid_file} ]; then
+            return 0
+        fi
+        iterno=`expr ${iterno} + 1`
+    done
+
+    return 1
+}
+
+########
 builtin_sched_launch()
 {
     # Initialize variables
@@ -966,16 +983,20 @@ builtin_sched_launch()
 
     # Set variable indicating name of file storing PID
     if [ ${taskidx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        local stepid_file=`get_stepid_filename ${dirname} ${stepname}`
-        export BUILTIN_SCHED_PID_FILENAME=${stepid_file}
+        local pid_file=`get_stepid_filename ${dirname} ${stepname}`
+        export BUILTIN_SCHED_PID_FILENAME=${pid_file}
     else
-        local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${taskidx}`
-        export BUILTIN_SCHED_PID_FILENAME=${array_taskid_file}
+        local pid_file=`get_array_taskid_filename ${dirname} ${stepname} ${taskidx}`
+        export BUILTIN_SCHED_PID_FILENAME=${pid_file}
     fi
 
     # Execute file
     ${file} &
     local pid=$!
+
+    # Wait for PID file to be created
+    local max_num_iters=10000
+    wait_until_file_exists ${pid_file} ${max_num_iters} || return 1
     
     # Unset variables
     if [ ${taskidx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
