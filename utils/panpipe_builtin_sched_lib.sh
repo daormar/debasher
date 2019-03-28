@@ -139,7 +139,9 @@ builtin_sched_init_step_info()
             BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]=${array_size}
             BUILTIN_SCHED_STEP_THROTTLE[${stepname}]=${sched_throttle}
             BUILTIN_SCHED_STEP_CPUS[${stepname}]=${cpus}
+            BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=0
             BUILTIN_SCHED_STEP_MEM[${stepname}]=${mem}
+            BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=0
         fi
     done < ${pfile}
 }
@@ -429,6 +431,9 @@ builtin_sched_update_comp_resources()
         prev_status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
         updated_status=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
         if [ "${updated_status}" != "" ]; then
+            # Store array size in variable
+            step_array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+            
             # Check if resources should be released
             if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} ]; then
                 builtin_sched_release_mem $stepname
@@ -437,12 +442,18 @@ builtin_sched_update_comp_resources()
 
             # Check if resources should be reserved
             if [ ${prev_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
-                builtin_sched_reserve_mem $stepname
-                builtin_sched_reserve_cpus $stepname
+                if [ ${step_array_size} -eq 1 ]; then
+                    builtin_sched_reserve_mem $stepname
+                    builtin_sched_reserve_cpus $stepname
+                else
+                    # step is an array
+                    builtin_sched_revise_array_mem $dirname $stepname
+                    builtin_sched_revise_array_cpus $dirname $stepname
+                fi
             fi
 
             # Check if resources of job array should be revised
-            if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -gt 1 -a ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
+            if [ ${step_array_size} -gt 1 -a ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
                 builtin_sched_revise_array_mem $dirname $stepname
                 builtin_sched_revise_array_cpus $dirname $stepname
             fi
