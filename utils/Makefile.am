@@ -40,6 +40,7 @@ SUFFIXES= .sh .py .r .R
 	echo "BASENAME="$(BASENAME) >> $@
 	echo "DIRNAME="$(DIRNAME) >> $@
 	echo "SPLIT="$(SPLIT) >> $@
+	echo "CUT="$(CUT) >> $@
 	echo "HEAD="$(HEAD) >> $@
 	echo "TAIL="$(TAIL) >> $@
 	echo "DIFF="$(DIFF) >> $@
