@@ -111,7 +111,7 @@ wait_simul_exec_reduction()
         fi
         
         # Obtain number of pending pipelines
-        local pending_pipelines=$((num_active_pipelines - num_finished_pipelines))
+        local pending_pipelines=$((num_active_pipelines - num_finished_pipelines - num_unfinished_pipelines))
 
         # Wait if number of pending pipelines is equal or greater than
         # maximum
@@ -316,6 +316,16 @@ execute_batches()
     echo "* Final update of array of active pipelines..." >&2
     update_active_pipelines "${outd}" || return 1
     echo "" >&2
+
+    # Check if there are active pipelines
+    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
+    if [ ${num_active_pipelines} -eq 0 ]; then
+        echo "All pipelines were successfully executed" >&2
+        echo "" >&2
+    else
+        echo "Warning: ${num_active_pipelines} pipelines did not complete execution" >&2
+        echo "" >&2
+    fi
 }
 
 ########
