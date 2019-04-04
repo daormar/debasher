@@ -249,7 +249,7 @@ check_ppl_complete()
         # Check pipeline status
         ${panpipe_bindir}/pipe_status -d ${destdir} > /dev/null 2>&1
         exit_code=$?
-        if [ ${exit_code} -eq 0 ]; then
+        if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
             echo "yes"
         else
             echo "no"
