@@ -210,50 +210,39 @@ wait_until_pending_ppls_finish()
 }
 
 ########
-check_ppl_complete()
+ppl_is_completed()
 {
     local pipe_exec_cmd=$1
     local outd=$2
-    
-    if [ -z ${outd} ]; then
-        # Results are not being moved to another directory, check if
-        # pipeline has completed execution
-        
-        # Extract output directory from command
-        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
-        if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
-            return 1
-        fi
 
-        # Check pipeline status
-        ${panpipe_bindir}/pipe_status -d ${pipe_cmd_outd} > /dev/null 2>&1
-        exit_code=$?
-        if [ ${exit_code} -eq 0 ]; then
-            echo "yes"
-        else
-            echo "no"
-        fi
-    else
-        # Check if complete pipeline was already moved to output
-        # directory
+    # Extract output directory from command
+    local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
+    if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
+        return 1
+    fi
 
-        # Extract output directory from command
-        local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
-        if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
-            return 1
-        fi
+    # If output directory exists, store it in destdir variable
+    local destdir
+    if [ -d ${pipe_cmd_outd} ]; then
+        destdir=${pipe_cmd_outd}        
+    fi
 
+    # Check if final output directory was provided
+    if [ "${outd}" != "" ]; then
         # Get pipeline directory after moving
-        local destdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
-
-        # Check pipeline status
-        ${panpipe_bindir}/pipe_status -d ${destdir} > /dev/null 2>&1
-        exit_code=$?
-        if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
-            echo "yes"
-        else
-            echo "no"
+        local final_outdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
+        if [ -d ${final_outdir} ]; then
+            destdir=${final_outdir}
         fi
+    fi
+    
+    # Check pipeline status
+    ${panpipe_bindir}/pipe_status -d ${destdir} > /dev/null 2>&1
+    exit_code=$?
+    if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
+        echo "yes"
+    else
+        echo "no"
     fi
 }
 
@@ -285,7 +274,7 @@ execute_batches()
         echo "" >&2
 
         echo "** Check if pipeline is already completed..." >&2
-        ppl_complete=`check_ppl_complete "${pipe_exec_cmd}" ${outd}` || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
+        ppl_complete=`ppl_is_completed "${pipe_exec_cmd}" ${outd}` || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
         echo ${ppl_complete}
         echo "" >&2
         
