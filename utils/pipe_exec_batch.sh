@@ -106,7 +106,7 @@ ppl_is_completed()
             return ${PPL_IS_NOT_COMPLETED}
         fi
     else
-        return ${PPL_HAS_WRONG_OUTDIR}
+        return ${PPL_IS_NOT_COMPLETED}
     fi
 }
 
@@ -133,13 +133,13 @@ wait_simul_exec_reduction()
             ppl_is_completed "${pipe_exec_cmd}" ${outd}
             local exit_code=$?
             case $exit_code in
-            ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
-                                     return 1
+                ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
+                                         return 1
+                                         ;;
+                ${PPL_IS_COMPLETED}) num_finished_pipelines=$((num_finished_pipelines+1))
                                      ;;
-            ${PPL_IS_COMPLETED}) num_finished_pipelines=$((num_finished_pipelines+1))
-                                 ;;
-            ${PPL_IS_NOT_COMPLETED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
-                                     ;;
+                ${PPL_IS_NOT_COMPLETED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
+                                         ;;
             esac
         done
         
