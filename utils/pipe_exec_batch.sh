@@ -241,7 +241,7 @@ update_active_pipelines()
         # Retrieve pipe command
         local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
 
-        update_active_pipeline ${pipe_exec_cmd} ${outd} || return 1
+        update_active_pipeline "${pipe_exec_cmd}" ${outd} || return 1
     done
 
     local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
