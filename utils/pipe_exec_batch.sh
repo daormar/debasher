@@ -9,7 +9,8 @@
 
 PPL_IS_COMPLETED=0
 PPL_HAS_WRONG_OUTDIR=1
-PPL_IS_NOT_COMPLETED=2
+PPL_IS_UNFINISHED=2
+PPL_IS_NOT_COMPLETED=3
 
 ########
 print_desc()
@@ -76,7 +77,7 @@ read_pars()
 }
 
 ########
-ppl_is_completed()
+get_ppl_status()
 {
     local pipe_exec_cmd=$1
     local outd=$2
@@ -100,11 +101,15 @@ ppl_is_completed()
     if [ -d ${pipe_cmd_outd} ]; then
         ${panpipe_bindir}/pipe_status -d ${pipe_cmd_outd} > /dev/null 2>&1
         exit_code=$?
-        if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
-            return ${PPL_IS_COMPLETED}
-        else
-            return ${PPL_IS_NOT_COMPLETED}
-        fi
+
+        case $exit_code in
+            ${PIPELINE_FINISHED_EXIT_CODE}) return ${PPL_IS_COMPLETED}
+                                            ;;
+            ${PIPELINE_UNFINISHED_EXIT_CODE}) return ${PPL_IS_UNFINISHED}
+                                              ;;
+            *) return ${PPL_IS_NOT_COMPLETED}
+               ;;
+        esac
     else
         return ${PPL_IS_NOT_COMPLETED}
     fi
@@ -130,7 +135,7 @@ wait_simul_exec_reduction()
             local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
 
             # Check if pipeline has finished execution
-            ppl_is_completed "${pipe_exec_cmd}" ${outd}
+            get_ppl_status "${pipe_exec_cmd}" ${outd}
             local exit_code=$?
             case $exit_code in
                 ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
@@ -138,8 +143,8 @@ wait_simul_exec_reduction()
                                          ;;
                 ${PPL_IS_COMPLETED}) num_finished_pipelines=$((num_finished_pipelines+1))
                                      ;;
-                ${PPL_IS_NOT_COMPLETED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
-                                         ;;
+                ${PPL_IS_UNFINISHED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
+                                      ;;
             esac
         done
         
@@ -209,7 +214,7 @@ update_active_pipeline()
     local outd=$2
 
     # Check if pipeline has finished execution
-    ppl_is_completed "${pipe_exec_cmd}" ${outd}
+    get_ppl_status "${pipe_exec_cmd}" ${outd}
     local exit_code=$?
     
     case $exit_code in
@@ -299,7 +304,7 @@ execute_batches()
         echo "" >&2
 
         echo "** Check if pipeline is already completed..." >&2
-        ppl_is_completed "${pipe_exec_cmd}" ${outd}
+        get_ppl_status "${pipe_exec_cmd}" ${outd}
         local exit_code=$?
         case $exit_code in
             ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
