@@ -3,6 +3,14 @@
 # INCLUDE BASH LIBRARY
 . ${panpipe_bindir}/panpipe_lib || exit 1
 
+#############
+# CONSTANTS #
+#############
+
+PPL_IS_COMPLETED=0
+PPL_HAS_WRONG_OUTDIR=1
+PPL_IS_NOT_COMPLETED=2
+
 ########
 print_desc()
 {
@@ -68,6 +76,41 @@ read_pars()
 }
 
 ########
+ppl_is_completed()
+{
+    local pipe_exec_cmd=$1
+    local outd=$2
+
+    # Extract output directory from command
+    local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
+    if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
+        return ${PPL_HAS_WRONG_OUTDIR}
+    fi
+
+    # Check if final output directory was provided
+    if [ "${outd}" != "" ]; then
+        # Get pipeline directory after moving
+        local final_outdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
+        if [ -d ${final_outdir} ]; then
+            return ${PPL_IS_COMPLETED}
+        fi        
+    fi
+
+    # If original output directory exists then check pipeline status
+    if [ -d ${pipe_cmd_outd} ]; then
+        ${panpipe_bindir}/pipe_status -d ${pipe_cmd_outd} > /dev/null 2>&1
+        exit_code=$?
+        if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
+            return ${PPL_IS_COMPLETED}
+        else
+            return ${PPL_IS_NOT_COMPLETED}
+        fi
+    else
+        return ${PPL_HAS_WRONG_OUTDIR}
+    fi
+}
+
+########
 wait_simul_exec_reduction()
 {
     # Example of passing associative array as function parameter
@@ -83,17 +126,20 @@ wait_simul_exec_reduction()
         local num_finished_pipelines=0
         local num_unfinished_pipelines=0
         for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
-            # Check if pipeline has finished execution
-            ${panpipe_bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
-            local exit_code=$?
+            # Retrieve pipe command
+            local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
 
-            case ${exit_code} in
-                ${PIPELINE_FINISHED_EXIT_CODE})
-                    num_finished_pipelines=$((num_finished_pipelines+1))
-                    ;;
-                ${PIPELINE_UNFINISHED_EXIT_CODE})
-                    num_unfinished_pipelines=$((num_unfinished_pipelines+1))
-                    ;;
+            # Check if pipeline has finished execution
+            ppl_is_completed "${pipe_exec_cmd}" ${outd}
+            local exit_code=$?
+            case $exit_code in
+            ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
+                                     return 1
+                                     ;;
+            ${PPL_IS_COMPLETED}) num_finished_pipelines=$((num_finished_pipelines+1))
+                                 ;;
+            ${PPL_IS_NOT_COMPLETED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
+                                     ;;
             esac
         done
         
@@ -157,6 +203,32 @@ move_dir()
 }
 
 ########
+update_active_pipeline()
+{
+    local pipe_exec_cmd=$1
+    local outd=$2
+
+    # Check if pipeline has finished execution
+    ppl_is_completed "${pipe_exec_cmd}" ${outd}
+    local exit_code=$?
+    
+    case $exit_code in
+        ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
+                                 return 1
+                                 ;;
+        ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
+                             # Remove pipeline from array of active pipelines
+                             unset PIPELINE_COMMANDS[${pipeline_outd}]
+                             # Move directory if requested
+                             if [ ! -z "${outd}" ]; then
+                                 echo "Moving ${pipeline_outd} directory to ${outd}" >&2
+                                 move_dir ${pipeline_outd} ${outd} || return 1
+                             fi
+                             ;;
+    esac
+}
+
+########
 update_active_pipelines()
 {
     local outd=$1
@@ -166,20 +238,10 @@ update_active_pipelines()
     
     # Iterate over active pipelines
     for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
-        # Check if pipeline has finished execution
-        ${panpipe_bindir}/pipe_status -d ${pipeline_outd} > /dev/null 2>&1
-        local exit_code=$?
-        
-        if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
-            echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
-            # Remove pipeline from array of active pipelines
-            unset PIPELINE_COMMANDS[${pipeline_outd}]
-            # Move directory if requested
-            if [ ! -z "${outd}" ]; then
-                echo "Moving ${pipeline_outd} directory to ${outd}" >&2
-                move_dir ${pipeline_outd} ${outd} || return 1
-            fi
-        fi
+        # Retrieve pipe command
+        local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
+
+        update_active_pipeline ${pipe_exec_cmd} ${outd} || return 1
     done
 
     local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
@@ -210,43 +272,6 @@ wait_until_pending_ppls_finish()
 }
 
 ########
-ppl_is_completed()
-{
-    local pipe_exec_cmd=$1
-    local outd=$2
-
-    # Extract output directory from command
-    local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
-    if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
-        return 1
-    fi
-
-    # If output directory exists, store it in destdir variable
-    local destdir
-    if [ -d ${pipe_cmd_outd} ]; then
-        destdir=${pipe_cmd_outd}        
-    fi
-
-    # Check if final output directory was provided
-    if [ "${outd}" != "" ]; then
-        # Get pipeline directory after moving
-        local final_outdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
-        if [ -d ${final_outdir} ]; then
-            destdir=${final_outdir}
-        fi
-    fi
-    
-    # Check pipeline status
-    ${panpipe_bindir}/pipe_status -d ${destdir} > /dev/null 2>&1
-    exit_code=$?
-    if [ ${exit_code} -eq ${PIPELINE_FINISHED_EXIT_CODE} ]; then
-        echo "yes"
-    else
-        echo "no"
-    fi
-}
-
-########
 execute_batches()
 {
     # Read file with pipe_exec commands
@@ -274,11 +299,20 @@ execute_batches()
         echo "" >&2
 
         echo "** Check if pipeline is already completed..." >&2
-        ppl_complete=`ppl_is_completed "${pipe_exec_cmd}" ${outd}` || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
-        echo ${ppl_complete}
+        ppl_is_completed "${pipe_exec_cmd}" ${outd}
+        local exit_code=$?
+        case $exit_code in
+            ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
+                                     return 1
+                                     ;;
+            ${PPL_IS_COMPLETED}) echo "yes">&2
+                                 ;;
+            ${PPL_IS_NOT_COMPLETED}) echo "no">&2
+                                     ;;
+        esac
         echo "" >&2
         
-        if [ ${ppl_complete} = "no" ]; then
+        if [ ${exit_code} -eq ${PPL_IS_NOT_COMPLETED} ]; then
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
             echo ${pipe_exec_cmd} >&2
