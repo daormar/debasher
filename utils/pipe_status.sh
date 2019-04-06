@@ -195,13 +195,19 @@ process_status_for_pfile()
     
     # Read information about the steps to be executed
     lineno=1
-    pipeline_finished=1
-    pipeline_in_progress=1
-    pipeline_one_or_more_steps_in_progress=0
+    num_steps=0
+    num_finished=0
+    num_inprogress=0
+    num_unfinished=0
+    num_unfinished_but_runnable=0
+    num_todo=0
     while read stepspec; do
         local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
         local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
+            # Increase number of steps
+            num_steps=$((num_steps + 1))
+            
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
@@ -217,21 +223,20 @@ process_status_for_pfile()
             # Print status
             echo "STEP: $stepname ; STATUS: $status"
 
-            # Revise value of pipeline_finished variable
-            if [ "${status}" != "${FINISHED_STEP_STATUS}" ]; then
-                pipeline_finished=0
-            fi
-
-            # Revise value of pipeline_in_progress variable
-            if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
-                pipeline_in_progress=0
-            fi
-
-            # Revise value of pipeline_in_progress variable
-            if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
-                pipeline_one_or_more_steps_in_progress=1
-            fi
-            
+            # Treat step status
+            case $status in
+                ${FINISHED_STEP_STATUS}) num_finished=$((num_finished + 1))
+                                         ;;
+                ${INPROGRESS_STEP_STATUS}) num_inprogress=$((num_inprogress + 1))
+                                           ;;
+                ${UNFINISHED_STEP_STATUS}) num_unfinished=$((num_unfinished + 1))
+                                           ;;
+                ${UNFINISHED_BUT_RUNNABLE_STEP_STATUS}) num_unfinished_but_runnable=$((num_unfinished_but_runnable + 1))
+                                                        ;;
+                ${TODO_STEP_STATUS}) num_todo=$((num_todo + 1))
+                                     ;;
+            esac
+                        
         else
             if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "no" ]; then
                 echo "Error: incorrect step specification at line $lineno of ${pfile}" >&2
@@ -244,18 +249,17 @@ process_status_for_pfile()
         
     done < ${pfile}
 
+    # Print summary
+    echo "* SUMMARY: stepno= ${num_steps} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2
+    
     # Return error if pipeline is not finished
-    if [ ${pipeline_finished} -eq 1 ]; then
+    if [ ${num_finished} -eq ${num_steps} ]; then
         return ${PIPELINE_FINISHED_EXIT_CODE}
     else
-        if [ ${pipeline_in_progress} -eq 1 ]; then
+        if [ ${num_inprogress} -gt 0 ]; then
             return ${PIPELINE_IN_PROGRESS_EXIT_CODE}
         else
-            if [ ${pipeline_one_or_more_steps_in_progress} -eq 1 ]; then
-                return ${PIPELINE_ONE_OR_MORE_STEPS_IN_PROGRESS_EXIT_CODE}
-            else
-                return ${PIPELINE_UNFINISHED_EXIT_CODE}
-            fi
+            return ${PIPELINE_UNFINISHED_EXIT_CODE}
         fi
     fi
 }
