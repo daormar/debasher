@@ -22,15 +22,18 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>]"
+    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>] [-u <int>]"
     echo "                          [--help]"
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"
     echo "                          per line)"
-    echo "-m <string>               Maximum number of pipelines executed simultaneously"
+    echo "-m <int>                  Maximum number of pipelines executed simultaneously"
     echo "-o <string>               Output directory where the pipeline output should be"
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
+    echo "-u <int>                  Maximum percentage of unfinished steps that is"
+    echo "                          allowed when evaluating if pipeline execution is"
+    echo "                          complete (0 by default)"
     echo "--help                    Display this help and exit"
 }
 
@@ -40,6 +43,8 @@ read_pars()
     f_given=0
     m_given=0
     o_given=0
+    u_given=0
+    max_unfinish_step_perc=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -63,9 +68,22 @@ read_pars()
                       o_given=1
                   fi
                   ;;
+            "-u") shift
+                  if [ $# -ne 0 ]; then
+                      max_unfinish_step_perc=$1
+                      u_given=1
+                  fi
+                  ;;
         esac
         shift
     done   
+}
+
+########
+get_unfinished_step_perc()
+{
+    local pipe_status_output_file=$1
+    $AWK '{if ($1=="*") printf"%d",$13*100/$4}' ${pipe_status_output_file}
 }
 
 ########
@@ -93,13 +111,24 @@ get_ppl_status()
 
     # If original output directory exists then check pipeline status
     if [ -d ${pipe_cmd_outd} ]; then
-        ${panpipe_bindir}/pipe_status -d ${pipe_cmd_outd} > /dev/null 2>&1
+        # Obtain pipeline status
+        tmpfile=`${MKTEMP}`
+        ${panpipe_bindir}/pipe_status -d ${pipe_cmd_outd} > ${tmpfile} 2>&1
         exit_code=$?
 
+        # Obtain percentage of unfinished steps
+        local unfinish_step_perc=`get_unfinished_step_perc ${tmpfile}`
+        rm ${tmpfile}
+        
+        # Evaluate exit code of pipe_status
         case $exit_code in
             ${PIPELINE_FINISHED_EXIT_CODE}) return ${PPL_IS_COMPLETED}
                                             ;;
-            ${PIPELINE_UNFINISHED_EXIT_CODE}) return ${PPL_IS_UNFINISHED}
+            ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinish_step_perc} -gt ${max_unfinish_step_perc} ]; then
+                                                  return ${PPL_IS_UNFINISHED}
+                                              else
+                                                  return ${PPL_IS_COMPLETED}
+                                              fi
                                               ;;
             *) return ${PPL_IS_NOT_COMPLETED}
                ;;
