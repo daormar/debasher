@@ -32,8 +32,7 @@ usage()
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
     echo "-c                        Clear content of destination directory of each"
-    echo "                          pipeline"
-    echo "                          when moving data (-o option should be given)"
+    echo "                          pipeline when moving data (-o option should be given)"
     echo "--help                    Display this help and exit"
 }
 
@@ -94,7 +93,7 @@ get_ppl_status()
         local final_outdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
         if [ -d ${final_outdir} ]; then
             return ${PPL_IS_COMPLETED}
-        fi        
+        fi
     fi
 
     # If original output directory exists then check pipeline status
