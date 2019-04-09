@@ -22,7 +22,7 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_exec_batch           -f <string> -m <int> [-o <string> [-c]]"
+    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>]"
     echo "                          [--help]"
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"
@@ -31,8 +31,6 @@ usage()
     echo "-o <string>               Output directory where the pipeline output should be"
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
-    echo "-c                        Clear content of destination directory of each"
-    echo "                          pipeline when moving data (-o option should be given)"
     echo "--help                    Display this help and exit"
 }
 
@@ -42,7 +40,6 @@ read_pars()
     f_given=0
     m_given=0
     o_given=0
-    c_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -64,10 +61,6 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       outd=$1
                       o_given=1
-                  fi
-                  ;;
-            "-c") if [ $# -ne 0 ]; then
-                      c_given=1
                   fi
                   ;;
         esac
@@ -92,6 +85,8 @@ get_ppl_status()
         # Get pipeline directory after moving
         local final_outdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
         if [ -d ${final_outdir} ]; then
+            # If output directory exists, it is assumed that the
+            # pipeline was completed
             return ${PPL_IS_COMPLETED}
         fi
     fi
@@ -189,14 +184,6 @@ move_dir()
     local outd=$2    
     destdir=`get_dest_dir_for_ppl ${pipeline_outd} ${outd}`
     
-    # Remove destination directory if requested
-    if [ ${c_given} -eq 1 ]; then
-        if [ -d ${destdir} ]; then
-            echo "Warning: removing ${destdir} directory" >&2
-            rm -rf ${destdir} || return 1
-        fi
-    fi
-
     # Move directory
     if [ -d ${destdir} ]; then
         echo "Error: ${destdir} exists" >&2
@@ -378,11 +365,6 @@ check_pars()
             echo "Error! output directory does not exist" >&2 
             exit 1
         fi
-    fi
-
-    if [ ${c_given} -eq 1 -a ${o_given} -eq 0 ]; then
-        echo "Error! -c option cannot be given without -o option" >&2 
-        exit 1
     fi
 }
 
