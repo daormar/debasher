@@ -1744,6 +1744,72 @@ display_end_step_message()
     echo "Step finished at `date`" >&2
 }
 
+################################
+# STEP DOCUMENTATION FUNCTIONS #
+################################
+
+########
+get_document_funcname()
+{
+    local stepname=$1
+
+    local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
+
+    echo ${stepname_wo_suffix}_document
+}
+
+########
+step_description()
+{
+    local desc=$1
+    echo $desc
+}
+
+########
+document_step_opts()
+{
+    local opts=$1
+    for opt in ${opts}; do
+        if [ "${PIPELINE_OPT_REQ[${opt}]}" != "" ]; then
+            reqflag=" (required) "
+        else
+            reqflag=" "
+        fi
+        # Print option
+        if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
+            echo "\`${opt}\` ${PIPELINE_OPT_DESC[$opt]}${reqflag}"
+        else
+            echo "\`${opt}\` ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}${reqflag}"
+        fi
+    done
+}
+
+########
+document_step()
+{
+    local stepname=$1
+    local doc_options=$2
+    
+    # Print header
+    echo "# ${stepname}"
+    echo ""
+    
+    # Print body
+    echo "## Description"
+    local document_funcname=`get_document_funcname ${stepname}`
+    ${document_funcname}
+    echo ""
+
+    if [ ${doc_options} -eq 1 ]; then
+        echo "## Options"
+        DIFFERENTIAL_CMDLINE_OPT_STR=""
+        local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${stepname}`
+        ${explain_cmdline_opts_funcname}
+        document_step_opts "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+        echo ""
+    fi
+}
+
 ###############################
 # PPL FILES-RELATED FUNCTIONS #
 ###############################
@@ -2499,7 +2565,7 @@ define_indir_opt()
 }
 
 ########
-get_shrdirs_func_name()
+get_shrdirs_funcname()
 {
     local absmodname=$1
 
@@ -2515,8 +2581,8 @@ create_pipeline_shdirs()
     # modules
     local absmodname
     for absmodname in "${!PIPELINE_MODULES[@]}"; do
-        shrdirs_func_name=`get_shrdirs_func_name ${absmodname}`
-        ${shrdirs_func_name}
+        shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
+        ${shrdirs_funcname}
     done
     
     # Create shared directories
@@ -2530,7 +2596,7 @@ create_pipeline_shdirs()
 }
 
 ########
-get_fifos_func_name()
+get_fifos_funcname()
 {
     local absmodname=$1
 
@@ -2545,8 +2611,8 @@ register_pipeline_fifos()
     # Populate associative array of FIFOS for the loaded modules
     local absmodname
     for absmodname in "${!PIPELINE_MODULES[@]}"; do
-        fifos_func_name=`get_fifos_func_name ${absmodname}`
-        ${fifos_func_name}
+        fifos_funcname=`get_fifos_funcname ${absmodname}`
+        ${fifos_funcname}
     done
 }
 
