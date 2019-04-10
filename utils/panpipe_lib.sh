@@ -1781,6 +1781,7 @@ document_step_opts()
         else
             echo "\`${opt}\` ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}${reqflag}"
         fi
+        echo ""
     done
 }
 
@@ -1806,7 +1807,6 @@ document_step()
         local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${stepname}`
         ${explain_cmdline_opts_funcname}
         document_step_opts "${DIFFERENTIAL_CMDLINE_OPT_STR}"
-        echo ""
     fi
 }
 
