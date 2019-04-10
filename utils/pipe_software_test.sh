@@ -27,7 +27,7 @@ pipe_software_test_fifos()
 ########
 step_a_document()
 {
-    step_description "Sleeps a given number of seconds and exits"
+    step_description "Sleeps a given number of seconds and exits."
 }
 
 ########
@@ -70,7 +70,7 @@ step_a()
 ########
 step_b_document()
 {
-    step_description "Writes a given value to the file \`step_b.out\` in data directory"
+    step_description "Writes a given value to the file \`step_b.out\` in data directory."
 }
 
 ########
@@ -123,7 +123,7 @@ step_b()
 ########
 step_c_document()
 {
-    step_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index"
+    step_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
 }
 
 ########
@@ -191,7 +191,7 @@ step_c_post()
 ########
 step_d_document()
 {
-    step_description "Prints a string to a FIFO"
+    step_description "Prints a string to a FIFO."
 }
 
 ########
@@ -238,7 +238,7 @@ step_d()
 ########
 step_e_document()
 {
-    step_description "Reads a string from a FIFO"
+    step_description "Reads a string from a FIFO."
 }
 
 ########
@@ -285,7 +285,7 @@ step_e()
 ########
 step_f_document()
 {
-    step_description "Prints Python version to file \`python_ver.txt\`"
+    step_description "Prints Python version to file \`python_ver.txt\`."
 }
 
 ########
