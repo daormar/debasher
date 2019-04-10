@@ -25,6 +25,12 @@ pipe_software_test_fifos()
 ###################################
 
 ########
+step_a_document()
+{
+    step_description "Sleeps a given number of seconds and exits"
+}
+
+########
 step_a_explain_cmdline_opts()
 {
     # -a option
@@ -59,6 +65,12 @@ step_a()
     sleep ${sleep_time}
 
     display_end_step_message
+}
+
+########
+step_b_document()
+{
+    step_description "Writes a given value to the file \`step_b.out\` in data directory"
 }
 
 ########
@@ -106,6 +118,12 @@ step_b()
     echo "$value" > ${datadir}/step_b.out
     
     display_end_step_message
+}
+
+########
+step_c_document()
+{
+    step_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index"
 }
 
 ########
@@ -171,6 +189,12 @@ step_c_post()
 }
 
 ########
+step_d_document()
+{
+    step_description "Prints a string to a FIFO"
+}
+
+########
 step_d_explain_cmdline_opts()
 {
     :
@@ -212,6 +236,12 @@ step_d()
 }
 
 ########
+step_e_document()
+{
+    step_description "Reads a string from a FIFO"
+}
+
+########
 step_e_explain_cmdline_opts()
 {
     :
@@ -250,6 +280,12 @@ step_e()
     sleep 10
 
     display_end_step_message
+}
+
+########
+step_f_document()
+{
+    step_description "Prints Python version to file \`python_ver.txt\`"
 }
 
 ########
