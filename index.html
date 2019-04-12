@@ -1,0 +1,299 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Panpipe Workflow Manager</title>
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <!-- begin TOC stuff -->
+    <link rel="stylesheet" href="stylesheets/toc.css">
+    <script src="javascripts/jquery-2.1.3.min.js"></script>
+    <script src="javascripts/jquery.toc.min.js"></script>
+    <script>
+      $(function(){
+        $('#toc').toc({'container': 'section'});
+      });
+    </script>
+    <!-- end TOC stuff -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <p style="text-align:left;">  <IMG SRC="images/my_logo_panpipe.png" Alt="Panpipe Workflow Manager" WIDTH=210> </p>
+        <p> <font size="2">PanPipe Workflow Manager</font></p> 
+        <div id="toc"></div>
+        <p class="view"><a href="https://github.com/daormar/panpipe">View the Project on GitHub <small>daormar/panpipe</small></a></p>
+
+      </header>
+      <section>
+        <p style="font-size:30px; font-weight:bold; color:black">Panpipe Workflow Manager</p>
+
+<h2>
+<a id="introduction" class="anchor" href="#introduction" aria-hidden="true"><span class="octicon octicon-link"></span></a>Introduction</h2>
+
+<p>TBD.</p>
+
+<p>The Panpipe workflow manager was created
+by <a href="http://daormar.github.io/">Daniel Ortiz-Martínez</a>. Daniel
+has a long career as a researcher in the area of machine learning and
+also holds an MSc degree in Bioinformatics.</p>
+
+<!-- <h2> -->
+<!-- <a id="news" class="anchor" href="#news" aria-hidden="true"><span class="octicon octicon-link"></span></a>News</h2> -->
+<!-- <p>A new version of the toolkit has been released with several improvements and new features: -->
+<!-- <ul> -->
+<!-- <li>Ability to force translations for specific phrases of the source sentence</li> -->
+<!-- <li>Capability to access language and translation models from disk</li>   -->
+<!-- <li>Added functionality to use multiple language and translation models</li>   -->
+<!-- <li>Added tool to create empty models useful to perform online learning from scratch</li>   -->
+<!-- <li>Portability increased</li> -->
+<!-- <li>The Thot manual has been extended and revised</li> -->
+<!-- </ul> -->
+
+<h2>
+<a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Features</h2>
+
+<p>The package incorporates the following features:</p>
+
+<ul>
+<li>TBD.</li>
+</ul>
+
+<h2>
+<a id="distribution-details" class="anchor" href="#distribution-details" aria-hidden="true"><span class="octicon octicon-link"></span></a>Distribution Details</h2>
+
+<p>PanPipe has been coded using shell-scripting. PanPipe is
+known to compile on Unix-like and Windows (using Cygwin) systems. See
+the "Documentation and Support" section of these instructions if you
+experience problems during compilation.</p>
+
+<p>It is released under the <a href="http://www.gnu.org/copyleft/lgpl.html">GNU Lesser General Public License (LGPL)</a>.</p>
+
+<h2>
+<a id="installation" class="anchor" href="#installation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installation</h2>
+
+<h4>
+<a id="basic-installation-procedure" class="anchor" href="#basic-installation-procedure" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic Installation Procedure</h4>
+
+<p>To install PanPipe, first you need to install the autotools
+(autoconf, autoconf-archive, automake and libtool packages in
+Ubuntu). If you are planning to use PanPipe on a Windows
+platform, you also need to install
+the <a href="https://www.cygwin.com/">Cygwin</a>
+environment. Alternatively, the tool can also be installed on Mac OS X
+systems using <a href="https://www.macports.org/">MacPorts</a>.</p>
+
+<p>Once the autotools are available (as well as other required software
+such as Cygwin or MacPorts), you can proceed with the installation of
+the tool by following the next sequence of steps:</p>
+
+<ol>
+<li>
+<p>Obtain the package using git:</p>
+
+<pre><code>$ git clone https://github.com/daormar/panpipe.git
+</code></pre>
+
+<p>Or <a href="https://github.com/daormar/panpipe/archive/master.zip">download it in a zip file</a></p>
+</li>
+<li><p><code>cd</code> to the directory containing the package's source code and type
+<code>./reconf</code>.</p></li>
+<li><p>Type <code>./configure</code> to configure the package.</p></li>
+<li><p>Type <code>make</code> to compile the package.</p></li>
+<li><p>Type <code>make install</code> to install the programs and any data files and
+documentation.</p></li>
+<li><p>You can remove the program binaries and object files from the source
+code directory by typing <code>make clean</code>.</p></li>
+</ol>
+
+<p>By default the files are installed under the /usr/local/ directory (or
+similar, depending on the OS you use); however, since Step 5 requires
+root privileges, another directory can be specified during Step 3 by
+typing:</p>
+
+<pre><code> $ configure --prefix=&lt;absolute-installation-path&gt;
+</code></pre>
+
+<p>For example, if "user1" wants to install the PanPipe package in
+the directory /home/user1/panpipe, the sequence of commands to
+execute should be the following:</p>
+
+<pre><code> $ ./reconf
+ $ configure --prefix=/home/user1/panpipe
+ $ make
+ $ make install
+</code></pre>
+
+<p>The installation directory can be the same directory where the
+PanPipe package was decompressed.</p>
+
+<!-- <h4 id="checking-package-installation">Checking Package Installation</h4> -->
+
+<!-- <p>Once the package has been installed, it is possible to perform basic -->
+<!-- checkings in an automatic manner so as to detect portability errors. For -->
+<!-- this purpose, the following command can be used:</p> -->
+
+<!-- <pre><code> $ make installcheck</code></pre> -->
+
+<!-- <p>The tests performed by the previous command involve the execution of -->
+<!-- the main tasks present in a typical SMT pipeline, including training and -->
+<!-- tuning of model parameters as well as generating translations using the -->
+<!-- estimated models (see more on this in the Thot manual). The command -->
+<!-- internally uses the toy corpus provided with the Thot package to carry -->
+<!-- out the checkings.</p> -->
+
+<!-- <h4> -->
+<!-- <a id="third-party-software" class="anchor" href="#third-party-software" -->
+<!-- aria-hidden="true"><span class="octicon octicon-link"></span></a>Third -->
+<!-- Party Software</h4> -->
+
+<!-- TBD. -->
+
+<!-- <h5>CPLEX</h5> -->
+
+<!-- <p>Flux Capacitor internally -->
+<!-- uses <a href="https://www-01.ibm.com/software/commerce/optimization/cplex-optimizer/">CPLEX</a> -->
+<!-- as a mathematical solver to obtain the solutions required by FBA and FVA -->
+<!-- procedures. Therefore, users also need to install this package to be -->
+<!-- able to access most of the functionality of the toolkit.</p> -->
+
+
+<h2>
+<a id="current-status" class="anchor" href="#current-status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Current Status</h2>
+
+<p> The PanPipe package is under development. Basic usage
+  instructions are being added.
+  
+<!-- <p>Finally, here is a list of known issues with the Thot toolkit that are -->
+<!-- currently being addressed:</p> -->
+
+<!-- <ul> -->
+<!-- <li><p>Phrase model training is based on HMM-based word alignment models -->
+<!-- estimated by means of incremental EM. The current implementation is slow -->
+<!-- and currently constitutes a bottleneck when training phrase models from -->
+<!-- large corpora. One already implemented solution is to carry out the -->
+<!-- estimation in multiple processors.  Another solution is to replace -->
+<!-- HMM-based models by IBM 2 Models, which can be estimated very -->
+<!-- efficiently. However, we are also investigating alternative optimization -->
+<!-- techniques to efficiently execute the estimation process of HMM-based -->
+<!-- models in a single processor <small><b>[STATUS: under development -->
+<!-- although code is much faster now]</b></small></p></li> -->
+<!-- <li><p>Log-linear model weight adjustment is carried out by means of the -->
+<!-- downhill simplex algorithm, which is slow. Downhill simplex will be -->
+<!-- replaced by a more efficient technique <small><b>[STATUS: issue -->
+<!-- solved]</b></small></p></li> -->
+<!-- <li><p>Non-monotonic translation is not yet sufficiently tested, -->
+<!-- specially with complex corpora such as Europarl <small><b>[STATUS: under -->
+<!-- development]</b></small></p></li> -->
+<!-- </ul> -->
+
+<h2>
+<a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Documentation and Support</h2>
+
+<p>Project documentation is being developed. Such documentation includes:</p>
+
+<ul>
+<li>These instructions.</li>
+<li>A set
+of <a href="http://daormar.github.io/panpipe/docsupport/slides.pdf">slides</a>
+("slides.pdf" under the "doc" directory).</li>
+</ul>
+
+<p>If you need additional help, you can:</p>
+
+<ul>
+<li>use the <a href="https://github.com/daormar/panpipe/issues">github issue tracker</a>.
+</li>
+<li><a href="mailto:daniel.ortiz.phd@gmail.com">send an e-mail to the author</a>.</li>
+</li>
+</ul>
+
+<!-- <p>Additional information about the theoretical foundations of Thot can be -->
+<!-- found in [Ortiz-Martínez, 2011]. One interesting feature of Thot, -->
+<!-- incremental (or online) estimation of statistical models, is also -->
+<!-- described in [Ortiz-Martínez et al., 2010]. Finally, phrase-level -->
+<!-- alignment generation functionality implemented in Thot was proposed in -->
+<!-- [Ortiz-Martínez et al., 2008].</p> -->
+
+<!-- <h2> -->
+<!-- <a id="citation" class="anchor" href="#citation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Citation</h2> -->
+
+<!-- <p>You are welcome to use the code under the terms of the license for -->
+<!-- research or commercial purposes, however please acknowledge its use with -->
+<!-- a citation:</p> -->
+
+<!-- <p>Daniel Ortiz-Martínez, Francisco Casacuberta. -->
+<!-- <em>"The New Thot Toolkit for Fully Automatic and Interactive Statistical Machine Translation"</em>. -->
+<!-- In Proc. of the European Association for Computational Linguistics (EACL): System Demonstrations, -->
+<!-- Gothenburg, Sweden, April 2014. pp. 45-48.</p> -->
+
+<!-- <p>Here is a BiBTeX entry:</p> -->
+
+<!-- <pre> -->
+<!-- @InProceedings{Ortiz2014, -->
+<!--   author    = {Daniel Ortiz-Mart\'{\i}nez and Francisco Casacuberta}, -->
+<!--   title     = {The New Thot Toolkit for Fully Automatic and Interactive Statistical Machine Translation}, -->
+<!--   booktitle = {Proc. of the European Association for Computational Linguistics (EACL): System Demonstrations}, -->
+<!--   year      = {2014}, -->
+<!--   month     = {April}, -->
+<!--   address   = {Gothenburg, Sweden}, -->
+<!--   pages     = "45--48", -->
+<!-- } -->
+<!-- </pre> -->
+
+<!-- <h2> -->
+<!-- <a id="literature" class="anchor" href="#literature" aria-hidden="true"><span class="octicon octicon-link"></span></a>Literature</h2> -->
+
+<!-- <p> Shlomi, T., M. N. Cabili, M. J. Herrgård, B. Ø. Palsson, and Eytan -->
+<!-- Ruppin (2008). “Network-based prediction of human tissue-specific -->
+<!-- metabolism”. In: Nat. Biotechnol. 26(9), pp. 1003–10.</p> -->
+
+<!-- <p>Gudmundsson, S. and I. Thiele (2010). “Computationally efficient flux -->
+<!-- variability analy- sis”. In: BMC Bioinformatics 11, p. 489.</p> -->
+  
+<!-- <p> Hebenstreit, D., M. Fang, M. Gu, V. Charoensawan, A. van -->
+<!-- Oudenaarden, and S. A. Teichmann (2011). “RNA sequencing reveals two -->
+<!-- major classes of gene expression levels in metazoan cells”. In: -->
+<!-- Mol. Syst. Biol. 7, p. 497.</p> -->
+
+<!-- <p> Erdrich, P., R. Steuer, and S. Klamt (2015). “An algorithm for the -->
+<!-- reduction of genome-scale metabolic network models to -->
+<!-- meaningful core models”. In: BMC Syst Biol 9, p. 48.</p> -->
+
+<!-- <h2> -->
+<!-- <a id="sponsors" class="anchor" href="#sponsors" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sponsors</h2> -->
+
+<!-- <p>Thot has been supported by the European Union under the <a href="http://www.casmacat.eu/">CasMaCat -->
+<!-- research project</a>. Thot has also received support from the Spanish -->
+<!-- Government in a number of research projects, such as the <a href="http://miprcv.iti.upv.es/">MIPRCV -->
+<!-- project</a> that belonged to the prestigious CONSOLIDER programme</a>.</p> -->
+
+<!--  <ul class="partner-logos"> -->
+<!--     <li><a href="http://cordis.europa.eu/fp7/home_en.html"><img src="http://daormar.github.io/thot/images/jaune.jpg" alt="EU" height="50" /></a></li> -->
+<!--     <li><a href="http://www.micinn.es/"><img src="http://daormar.github.io/thot/images/logo-mci.jpg" alt="MCINN" /></a></li> -->
+<!--     <li><a href="http://www.vlc-campus.com"><img height="50" src="http://daormar.github.io/thot/images/vlc-campus.png" alt="VLC-CAMPUS" /></a></li> -->
+<!--     <li><a href="http://www.upv.es"><img src="http://daormar.github.io/thot/images/logo-upv-hor.png" alt="UPV" height="50" /></a></li> -->
+<!--   </ul> -->
+
+<!-- <p>Last updated: 25 July 2017</p> -->
+<!--       </section> -->
+<!--     </div> -->
+<!--     <script src="javascripts/scale.fix.js"></script> -->
+<!--               <script type="text/javascript"> -->
+<!--             var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www."); -->
+<!--             document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E")); -->
+<!--           </script> -->
+<!--           <script type="text/javascript"> -->
+<!--             try { -->
+<!--               var pageTracker = _gat._getTracker("UA-60880705-1"); -->
+<!--             pageTracker._trackPageview(); -->
+<!--             } catch(err) {} -->
+<!--           </script> -->
+
+  </body>
+</html>
