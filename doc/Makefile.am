@@ -1,1 +1,1 @@
-EXTRA_DIST = manual.pdf
+EXTRA_DIST = slides.pdf
