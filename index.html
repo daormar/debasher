@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <title>Panpipe Workflow Manager</title>
+    <title>PanPipe Workflow Manager</title>
     <link rel="stylesheet" href="stylesheets/styles.css">
     <link rel="stylesheet" href="stylesheets/pygment_trac.css">
     <!-- begin TOC stuff -->
@@ -24,19 +24,24 @@
   <body>
     <div class="wrapper">
       <header>
-        <p style="text-align:left;">  <IMG SRC="images/my_logo_panpipe.png" Alt="Panpipe Workflow Manager" WIDTH=165> </p>
+        <p style="text-align:left;">  <IMG SRC="images/my_logo_panpipe.png" Alt="PanPipe Workflow Manager" WIDTH=165> </p>
         <p> <font size="2">PanPipe Workflow Manager</font></p> 
         <div id="toc"></div>
         <p class="view"><a href="https://github.com/daormar/panpipe">View the Project on GitHub <small>daormar/panpipe</small></a></p>
 
       </header>
       <section>
-        <p style="font-size:30px; font-weight:bold; color:black">Panpipe Workflow Manager</p>
+        <p style="font-size:30px; font-weight:bold; color:black">PanPipe Workflow Manager</p>
 
 <h2>
 <a id="introduction" class="anchor" href="#introduction" aria-hidden="true"><span class="octicon octicon-link"></span></a>Introduction</h2>
 
-<p>TBD.</p>
+<p>PanPipe is a software package implementing a general workflow
+manager. PanPipe follows the flow-based programming paradigm, where
+networks of black box processes with well defined data exchange
+connections are executed. PanPipe is characterized by a strong
+orientation towards the definition of software components or
+modules.</p>
 
 <p>The Panpipe workflow manager was created
 by <a href="http://daormar.github.io/">Daniel Ortiz-Martínez</a>. Daniel
@@ -61,14 +66,19 @@ also holds an MSc degree in Bioinformatics.</p>
 <p>The package incorporates the following features:</p>
 
 <ul>
-<li>TBD.</li>
+<li>Definition of complex pipelines composed of several steps.</li>
+<li>Framework to define pipelines and pipeline steps using Bash shell scripting.</li>  
+<li>Concurrent execution of steps depending on detailed step dependencies.</li>
+<li>Reexecution of only those steps that are pending or whose execution failed.</li>
+<li>Integration with workload schedulers such as Slurm.</li>
+<li>Generation of graphical representations of pipelines as directed acyclic graphs.</li>
 </ul>
 
 <h2>
 <a id="distribution-details" class="anchor" href="#distribution-details" aria-hidden="true"><span class="octicon octicon-link"></span></a>Distribution Details</h2>
 
-<p>PanPipe has been coded using shell-scripting. PanPipe is
-known to compile on Unix-like and Windows (using Cygwin) systems. See
+<p>PanPipe has been coded using Bash shell-scripting and Python. PanPipe
+is known to compile on Unix-like and Windows (using Cygwin) systems. See
 the "Documentation and Support" section of these instructions if you
 experience problems during compilation.</p>
 
@@ -82,11 +92,15 @@ experience problems during compilation.</p>
 
 <p>To install PanPipe, first you need to install the autotools
 (autoconf, autoconf-archive, automake and libtool packages in
-Ubuntu). If you are planning to use PanPipe on a Windows
-platform, you also need to install
-the <a href="https://www.cygwin.com/">Cygwin</a>
+Ubuntu). PanPipe requires Bash 4.0 or above as well as Python 2.x to
+work. If you are planning to use PanPipe on a Windows platform, you also
+need to install the <a href="https://www.cygwin.com/">Cygwin</a>
 environment. Alternatively, the tool can also be installed on Mac OS X
 systems using <a href="https://www.macports.org/">MacPorts</a>.</p>
+
+<p>On the other hand, some of the functionality incorporated by PanPipe
+requires the previous installation of third-party software
+(<a href="#third-party-software">see below</a>).</p>
 
 <p>Once the autotools are available (as well as other required software
 such as Cygwin or MacPorts), you can proceed with the installation of
@@ -147,21 +161,17 @@ PanPipe package was decompressed.</p>
 <!-- internally uses the toy corpus provided with the Thot package to carry -->
 <!-- out the checkings.</p> -->
 
-<!-- <h4> -->
-<!-- <a id="third-party-software" class="anchor" href="#third-party-software" -->
-<!-- aria-hidden="true"><span class="octicon octicon-link"></span></a>Third -->
-<!-- Party Software</h4> -->
+<h4>
+<a id="third-party-software" class="anchor" href="#third-party-software"
+aria-hidden="true"><span class="octicon octicon-link"></span></a>Third
+Party Software</h4>
 
-<!-- TBD. -->
+<h5>Slurm</h5>
 
-<!-- <h5>CPLEX</h5> -->
-
-<!-- <p>Flux Capacitor internally -->
-<!-- uses <a href="https://www-01.ibm.com/software/commerce/optimization/cplex-optimizer/">CPLEX</a> -->
-<!-- as a mathematical solver to obtain the solutions required by FBA and FVA -->
-<!-- procedures. Therefore, users also need to install this package to be -->
-<!-- able to access most of the functionality of the toolkit.</p> -->
-
+<p>Panpipe can be configured to
+use <a href="https://slurm.schedmd.com/">Slurm</a> as a workload
+scheduler. Slurm is particularly indicated to execute large pipelines or
+to execute pipelines in high performanc computing environments.</p>
 
 <h2>
 <a id="current-status" class="anchor" href="#current-status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Current Status</h2>
