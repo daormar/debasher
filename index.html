@@ -71,6 +71,7 @@ also holds an MSc degree in Bioinformatics.</p>
 <li>Concurrent execution of steps depending on detailed step dependencies.</li>
 <li>Reexecution of only those steps that are pending or whose execution failed.</li>
 <li>Integration with workload schedulers such as Slurm.</li>
+<li>Support for Conda environments.</li>
 <li>Generation of graphical representations of pipelines as directed acyclic graphs.</li>
 </ul>
 
@@ -183,31 +184,23 @@ modules.</p>
 <h2>
 <a id="current-status" class="anchor" href="#current-status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Current Status</h2>
 
-<p> The PanPipe package is under development. Basic usage
-  instructions are being added.
+<p> The PanPipe package is under development. Basic usage instructions
+  are being added. Below there is a list of features that will be
+  incorporated in a near future:</p>
   
-<!-- <p>Finally, here is a list of known issues with the Thot toolkit that are -->
-<!-- currently being addressed:</p> -->
+<ul>
+<li>Enable use of the well-known SGE workload scheduler.</li>
+<li>Incorporate support for docker containers.</li>
+</ul>
 
-<!-- <ul> -->
-<!-- <li><p>Phrase model training is based on HMM-based word alignment models -->
-<!-- estimated by means of incremental EM. The current implementation is slow -->
-<!-- and currently constitutes a bottleneck when training phrase models from -->
-<!-- large corpora. One already implemented solution is to carry out the -->
-<!-- estimation in multiple processors.  Another solution is to replace -->
-<!-- HMM-based models by IBM 2 Models, which can be estimated very -->
-<!-- efficiently. However, we are also investigating alternative optimization -->
-<!-- techniques to efficiently execute the estimation process of HMM-based -->
-<!-- models in a single processor <small><b>[STATUS: under development -->
-<!-- although code is much faster now]</b></small></p></li> -->
-<!-- <li><p>Log-linear model weight adjustment is carried out by means of the -->
-<!-- downhill simplex algorithm, which is slow. Downhill simplex will be -->
-<!-- replaced by a more efficient technique <small><b>[STATUS: issue -->
-<!-- solved]</b></small></p></li> -->
-<!-- <li><p>Non-monotonic translation is not yet sufficiently tested, -->
-<!-- specially with complex corpora such as Europarl <small><b>[STATUS: under -->
-<!-- development]</b></small></p></li> -->
-<!-- </ul> -->
+<h2>
+<a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sample Projects Using PanPipe</h2>
+<p></p>
+<ul>
+<li><p><a href="https://daormar.github.io/bio-panpipe/">Bio-PanPipe</a>:
+Bio-PanPipe is a bioinformatics software project implementing PanPipe
+modules related to genome variant calling.</p></li>
+</ul>
 
 <h2>
 <a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Documentation and Support</h2>
