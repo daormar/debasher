@@ -853,10 +853,10 @@ builtin_sched_print_pid_to_file()
 builtin_sched_print_script_header()
 {
     local fname=$1
-    local step_name=$2
+    local stepname=$2
     
     echo "PANPIPE_TASK_FILENAME=${fname}"
-    echo "PANPIPE_STEP_NAME=${step_name}"
+    echo "PANPIPE_STEP_NAME=${stepname}"
     echo "builtin_sched_print_pid_to_file"
 }
 
@@ -928,7 +928,7 @@ builtin_sched_create_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    builtin_sched_print_script_header ${fname} ${funct} >> ${fname} || return 1
+    builtin_sched_print_script_header ${fname} ${stepname} >> ${fname} || return 1
     
     # Iterate over options array
     local lineno=1

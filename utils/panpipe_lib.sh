@@ -510,9 +510,9 @@ execute_funct_plus_postfunct()
 ########
 print_script_header_slurm_sched()
 {
-    local step_name=$1
+    local stepname=$1
     
-    echo "PANPIPE_STEP_NAME=${step_name}"
+    echo "PANPIPE_STEP_NAME=${stepname}"
 }
 
 ########
@@ -592,7 +592,7 @@ create_slurm_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    print_script_header_slurm_sched ${funct} >> ${fname} || return 1
+    print_script_header_slurm_sched ${stepname} >> ${fname} || return 1
 
     # Iterate over options array
     local lineno=1
