@@ -250,7 +250,7 @@ process_status_for_pfile()
     done < ${pfile}
 
     # Print summary
-    echo "* SUMMARY: stepno= ${num_steps} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2
+    echo "* SUMMARY: num_steps= ${num_steps} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2
     
     # Return error if pipeline is not finished
     if [ ${num_finished} -eq ${num_steps} ]; then
