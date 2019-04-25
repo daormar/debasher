@@ -9,8 +9,7 @@
 
 PPL_IS_COMPLETED=0
 PPL_HAS_WRONG_OUTDIR=1
-PPL_IS_UNFINISHED=2
-PPL_IS_NOT_COMPLETED=3
+PPL_IS_NOT_COMPLETED=2
 
 ########
 print_desc()
@@ -125,7 +124,7 @@ get_ppl_status()
             ${PIPELINE_FINISHED_EXIT_CODE}) return ${PPL_IS_COMPLETED}
                                             ;;
             ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinish_step_perc} -gt ${max_unfinish_step_perc} ]; then
-                                                  return ${PPL_IS_UNFINISHED}
+                                                  return ${PPL_IS_NOT_COMPLETED}
                                               else
                                                   return ${PPL_IS_COMPLETED}
                                               fi
@@ -166,7 +165,7 @@ wait_simul_exec_reduction()
                                          ;;
                 ${PPL_IS_COMPLETED}) num_finished_pipelines=$((num_finished_pipelines+1))
                                      ;;
-                ${PPL_IS_UNFINISHED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
+                ${PPL_IS_NOT_COMPLETED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
                                       ;;
             esac
         done
