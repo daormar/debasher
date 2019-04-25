@@ -9,7 +9,8 @@
 
 PPL_IS_COMPLETED=0
 PPL_HAS_WRONG_OUTDIR=1
-PPL_IS_NOT_COMPLETED=2
+PPL_FAILED=2
+PPL_IS_NOT_COMPLETED=3
 
 ########
 print_desc()
@@ -124,7 +125,7 @@ get_ppl_status()
             ${PIPELINE_FINISHED_EXIT_CODE}) return ${PPL_IS_COMPLETED}
                                             ;;
             ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinish_step_perc} -gt ${max_unfinish_step_perc} ]; then
-                                                  return ${PPL_IS_NOT_COMPLETED}
+                                                  return ${PPL_FAILED}
                                               else
                                                   return ${PPL_IS_COMPLETED}
                                               fi
@@ -151,7 +152,7 @@ wait_simul_exec_reduction()
     while [ ${end} -eq 0 ] ; do
         # Iterate over active pipelines
         local num_finished_pipelines=0
-        local num_unfinished_pipelines=0
+        local num_failed_pipelines=0
         for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
             # Retrieve pipe command
             local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
@@ -165,26 +166,26 @@ wait_simul_exec_reduction()
                                          ;;
                 ${PPL_IS_COMPLETED}) num_finished_pipelines=$((num_finished_pipelines+1))
                                      ;;
-                ${PPL_IS_NOT_COMPLETED}) num_unfinished_pipelines=$((num_unfinished_pipelines+1))
-                                      ;;
+                ${PPL_FAILED}) num_failed_pipelines=$((num_failed_pipelines+1))
+                               ;;
             esac
         done
         
         # Sanity check: if maximum number of active pipelines has been
         # reached and all pipelines are unfinished, then it is not
         # possible to continue execution
-        if [ ${num_active_pipelines} -ge ${maxp} -a ${num_unfinished_pipelines} -eq ${num_active_pipelines} ]; then
+        if [ ${num_active_pipelines} -ge ${maxp} -a ${num_failed_pipelines} -eq ${num_active_pipelines} ]; then
             if [ ${maxp} -gt 0 ]; then
-                echo "Error: all active pipelines are unfinished and it is not possible to execute new ones" >&2
+                echo "Error: all active pipelines failed and it is not possible to execute new ones" >&2
                 return 1
             else
-                echo "Error: all active pipelines are unfinished" >&2
+                echo "Error: all active pipelines failed" >&2
                 return 1
             fi
         fi
         
         # Obtain number of pending pipelines
-        local pending_pipelines=$((num_active_pipelines - num_finished_pipelines - num_unfinished_pipelines))
+        local pending_pipelines=$((num_active_pipelines - num_finished_pipelines - num_failed_pipelines))
 
         # Wait if number of pending pipelines is equal or greater than
         # maximum
@@ -326,12 +327,14 @@ execute_batches()
                                      ;;
             ${PPL_IS_COMPLETED}) echo "yes">&2
                                  ;;
+            ${PPL_FAILED}) echo "no">&2
+                           ;;
             ${PPL_IS_NOT_COMPLETED}) echo "no">&2
                                      ;;
         esac
         echo "" >&2
         
-        if [ ${exit_code} -eq ${PPL_IS_NOT_COMPLETED} ]; then
+        if [ ${exit_code} -eq ${PPL_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PPL_FAILED} ]; then
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
             echo ${pipe_exec_cmd} >&2
