@@ -23,7 +23,7 @@ print_desc()
 usage()
 {
     echo "pipe_exec_batch           -f <string> -m <int> [-o <string>] [-u <int>]"
-    echo "                          [--help]"
+    echo "                          [-k <string>] [--help]"
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"
     echo "                          per line)"
@@ -34,6 +34,8 @@ usage()
     echo "-u <int>                  Maximum percentage of unfinished steps that is"
     echo "                          allowed when evaluating if pipeline execution is"
     echo "                          complete (0 by default)"
+    echo "-k <string>               Execute script implementing a software hook after"
+    echo "                          finishing the execution of each pipeline"
     echo "--help                    Display this help and exit"
 }
 
@@ -45,6 +47,7 @@ read_pars()
     o_given=0
     u_given=0
     max_unfinish_step_perc=0
+    k_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -72,6 +75,12 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       max_unfinish_step_perc=$1
                       u_given=1
+                  fi
+                  ;;
+            "-k") shift
+                  if [ $# -ne 0 ]; then
+                      k_val=$1
+                      k_given=1
                   fi
                   ;;
         esac
@@ -223,6 +232,26 @@ move_dir()
 }
 
 ########
+exec_hook()
+{
+    local outd=$1
+
+    # export variables
+    export PIPE_EXEC_BATCH_PPL_OUTD=${outd}
+    export PIPE_EXEC_BATCH_PPL_CMD=${PIPELINE_COMMANDS[${outd}]}
+
+    # Execute script
+    ${k_val}
+    local exit_code=$?
+
+    # unset variables
+    unset PPL_OUTD
+    unset PPL_CMD
+
+    return exit_code
+}
+
+########
 update_active_pipeline()
 {
     local pipe_exec_cmd=$1
@@ -237,6 +266,10 @@ update_active_pipeline()
                                  return 1
                                  ;;
         ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
+                             # Execute hook if requested
+                             if [ ${k_given} -eq 1 ]; then
+                                 exec_hook ${pipeline_outd} || echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2
+                             fi
                              # Remove pipeline from array of active pipelines
                              unset PIPELINE_COMMANDS[${pipeline_outd}]
                              # Move directory if requested
