@@ -268,13 +268,14 @@ update_active_pipeline()
         ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
                              # Execute hook if requested
                              if [ ${k_given} -eq 1 ]; then
+                                 echo "- Executing hook implemented in ${k_val}" >&2
                                  exec_hook ${pipeline_outd} || echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2
                              fi
                              # Remove pipeline from array of active pipelines
                              unset PIPELINE_COMMANDS[${pipeline_outd}]
                              # Move directory if requested
                              if [ ! -z "${outd}" ]; then
-                                 echo "Moving ${pipeline_outd} directory to ${outd}" >&2
+                                 echo "- Moving ${pipeline_outd} directory to ${outd}" >&2
                                  move_dir ${pipeline_outd} ${outd} || return 1
                              fi
                              ;;
