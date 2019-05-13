@@ -559,7 +559,8 @@ release_lock()
     # Drop lock
     $FLOCK -u $fd || return 1
 
-    # Acquire lock and remove associated file (if acquire was successful)
+    # Try to acquire lock and remove associated file (if acquisition was
+    # successful)
     $FLOCK -xn $fd && rm -f $file || return 1
 }
 
