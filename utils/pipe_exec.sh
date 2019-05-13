@@ -556,7 +556,10 @@ release_lock()
     local fd=$1
     local file=$2
 
+    # Drop lock
     $FLOCK -u $fd || return 1
+
+    # Acquire lock and remove associated file (if acquire was successful)
     $FLOCK -xn $fd && rm -f $file || return 1
 }
 
@@ -575,6 +578,7 @@ ensure_exclusive_execution()
 
     prepare_lock $LOCKFD $lockfile || return 1
 
+    # Try to acquire lock exclusively
     $FLOCK -xn $LOCKFD || return 1
 }
 
