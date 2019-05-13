@@ -556,8 +556,12 @@ release_lock()
     local fd=$1
     local file=$2
 
-    $FLOCK -u $fd
-    $FLOCK -xn $fd && rm -f $file
+    # Drop lock
+    $FLOCK -u $fd || return 1
+
+    # Try to acquire lock and remove associated file (if acquisition was
+    # successful)
+    $FLOCK -xn $fd && rm -f $file || return 1
 }
 
 ########
@@ -565,7 +569,7 @@ prepare_lock()
 {
     local fd=$1
     local file=$2
-    eval "exec $fd>\"$file\""; trap "release_lock $fd $file" EXIT;
+    eval "exec $fd>\"$file\"" && trap "release_lock $fd $file" EXIT;
 }
 
 ########
@@ -573,8 +577,9 @@ ensure_exclusive_execution()
 {
     local lockfile=${outd}/lock
 
-    prepare_lock $LOCKFD $lockfile
+    prepare_lock $LOCKFD $lockfile || return 1
 
+    # Try to acquire lock exclusively
     $FLOCK -xn $LOCKFD || return 1
 }
 
@@ -858,7 +863,7 @@ else
         check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
         
         # NOTE: exclusive execution should be ensured after creating the output directory
-        ensure_exclusive_execution || { echo "Error: exec_pipeline is being executed for the same output directory" ; exit 1; }
+        ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
         create_shared_dirs
 
