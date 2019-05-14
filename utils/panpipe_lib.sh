@@ -736,11 +736,7 @@ get_slurm_task_array_opt()
     local task_array_list=$2
     local throttle=$3
 
-    if [ ${task_array_list} = "1-1" -o ${task_array_list} = "1" ]; then
-        echo ""
-    else
-        echo "--array=${task_array_list}%${throttle}"
-    fi
+    echo "--array=${task_array_list}%${throttle}"
 }
 
 ########
@@ -762,10 +758,11 @@ slurm_launch()
     local dirname=$1
     local stepname=$2
     local file=`get_script_filename ${dirname} ${stepname}`
-    local task_array_list=$3
-    local stepspec=$4
-    local stepdeps=$5
-    local outvar=$6
+    local array_size=$3
+    local task_array_list=$4
+    local stepspec=$5
+    local stepdeps=$6
+    local outvar=$7
 
     # Retrieve specification
     local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
@@ -785,7 +782,9 @@ slurm_launch()
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
-    local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
+    if [ ${array_size} -gt 1 ]; then
+        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
+    fi
     
     # Submit job
     local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
@@ -807,16 +806,17 @@ launch()
     # Initialize variables
     local dirname=$1
     local stepname=$2
-    local task_array_list=$3
-    local stepspec=$4
-    local stepdeps=$5
-    local outvar=$6
+    local array_size=$3
+    local task_array_list=$4
+    local stepspec=$5
+    local stepdeps=$6
+    local outvar=$7
     
     # Launch file
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${dirname} ${stepname} "${task_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
+            slurm_launch ${dirname} ${stepname} ${array_size} "${task_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
             ;;
     esac
 }
@@ -827,17 +827,18 @@ launch_step()
     # Initialize variables
     local dirname=$1
     local stepname=$2
-    local task_array_list=$3
-    local stepspec=$4
-    local stepdeps=$5
-    local opts_array_name=$6
-    local id=$7
+    local array_size=$3
+    local task_array_list=$4
+    local stepspec=$5
+    local stepdeps=$6
+    local opts_array_name=$7
+    local id=$8
 
     # Create script
     create_script ${dirname} ${stepname} ${opts_array_name} || return 1
 
     # Launch script
-    launch ${dirname} ${stepname} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
+    launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
 }
 
 ########

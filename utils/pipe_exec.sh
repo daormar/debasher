@@ -723,7 +723,7 @@ execute_step()
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps="`get_stepdeps ${stepdeps_spec}`"
         local stepname_id=${stepname}_id
-        launch ${dirname} ${stepname} "${task_array_list}" "${stepspec}" "${stepdeps}" ${stepname_id} || { echo "Error while launching step!" >&2 ; return 1; }
+        launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" ${stepname_id} || { echo "Error while launching step!" >&2 ; return 1; }
         
         # Update variables storing ids
         step_ids="${step_ids}:${!stepname_id}"
