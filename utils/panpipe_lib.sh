@@ -1077,6 +1077,59 @@ step_is_unfinished_but_runnable()
 }
 
 ########
+get_step_start_date()
+{
+    log_filename=$1
+    if [ -f ${log_filename} ]; then
+        ${GREP} "^Step started at " ${log_filename} | ${AWK} '{for(i=5;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+    fi
+}
+
+########
+get_step_finish_date()
+{
+    log_filename=$1
+    if [ -f ${log_filename} ]; then
+        ${GREP} "^Step finished at " ${log_filename} | ${AWK} '{for(i=5;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+    fi
+}
+
+########
+get_elapsed_time_for_step()
+{
+    # TO-BE-DONE: add code to handle task arrays
+    local dirname=$1
+    local stepname=$2
+
+    # Get name of log file
+    local sched=`determine_scheduler`
+    local log_filename
+    case $sched in
+        ${SLURM_SCHEDULER})
+            log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
+            ;;
+        ${BUILTIN_SCHEDULER})
+            log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
+            ;;
+    esac
+
+    # Extract start and finish dates
+    local start_date=`get_step_start_date ${log_filename}`
+    local finish_date=`get_step_finish_date ${log_filename}`
+    
+    # Obtain difference
+    if [ ! -z "${start_date}" -a ! -z "${finish_date}" ]; then
+        local start_date_secs=`date -d "${finish_date}" +%s`
+        local finish_date_secs=`date -d "${start_date}" +%s`
+        echo $(( start_date_secs - finish_date_secs ))
+    else
+        echo "NA"
+    fi
+
+    # TBD
+}
+
+########
 get_step_status()
 {
     local dirname=$1
