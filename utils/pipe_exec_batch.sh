@@ -11,6 +11,7 @@ PPL_IS_COMPLETED=0
 PPL_HAS_WRONG_OUTDIR=1
 PPL_FAILED=2
 PPL_IS_NOT_COMPLETED=3
+POST_PPL_COMPL_ACTIONS_FINISHED_FILENAME=".post_ppl_compl_actions_finished"
 
 ########
 print_desc()
@@ -46,7 +47,7 @@ read_pars()
     m_given=0
     o_given=0
     u_given=0
-    max_unfinish_step_perc=0
+    max_unfinished_step_perc=0
     k_given=0
     while [ $# -ne 0 ]; do
         case $1 in
@@ -73,7 +74,7 @@ read_pars()
                   ;;
             "-u") shift
                   if [ $# -ne 0 ]; then
-                      max_unfinish_step_perc=$1
+                      max_unfinished_step_perc=$1
                       u_given=1
                   fi
                   ;;
@@ -126,14 +127,14 @@ get_ppl_status()
         exit_code=$?
 
         # Obtain percentage of unfinished steps
-        local unfinish_step_perc=`get_unfinished_step_perc ${tmpfile}`
+        local unfinished_step_perc=`get_unfinished_step_perc ${tmpfile}`
         rm ${tmpfile}
         
         # Evaluate exit code of pipe_status
         case $exit_code in
             ${PIPELINE_FINISHED_EXIT_CODE}) return ${PPL_IS_COMPLETED}
                                             ;;
-            ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinish_step_perc} -gt ${max_unfinish_step_perc} ]; then
+            ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinished_step_perc} -gt ${max_unfinished_step_perc} ]; then
                                                   return ${PPL_FAILED}
                                               else
                                                   return ${PPL_IS_COMPLETED}
@@ -252,10 +253,69 @@ exec_hook()
 }
 
 ########
+post_ppl_compl_actions_are_finished()
+{
+    local pipeline_outd=$1
+    local outd=$2
+
+    if [ -z "${outd}" ]; then
+        if [ -f ${pipeline_outd}/${POST_PPL_COMPL_ACTIONS_FINISHED_FILENAME} ]; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        destdir=`get_dest_dir_for_ppl ${pipeline_outd} ${outd}`
+        if [ -f ${destdir}/${POST_PPL_COMPL_ACTIONS_FINISHED_FILENAME} ]; then
+            return 0
+        else
+            return 1
+        fi
+    fi    
+}
+
+########
+signal_finish_of_post_ppl_compl_actions()
+{
+    local pipeline_outd=$1
+    local outd=$2
+
+    if [ -z "${outd}" ]; then
+        touch ${pipeline_outd}/${POST_PPL_COMPL_ACTIONS_FINISHED_FILENAME}
+    else
+        destdir=`get_dest_dir_for_ppl ${pipeline_outd} ${outd}`
+        touch ${destdir}/${POST_PPL_COMPL_ACTIONS_FINISHED_FILENAME}
+    fi
+}
+
+########
+exec_post_ppl_completion_actions()
+{
+    local pipeline_outd=$1
+    local outd=$2
+
+    # Execute hook if requested
+    if [ ${k_given} -eq 1 ]; then
+        echo "- Executing hook implemented in ${k_val}" >&2
+        exec_hook ${pipeline_outd} || echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2
+    fi
+    # Move directory if requested
+    if [ ! -z "${outd}" ]; then
+        echo "- Moving ${pipeline_outd} directory to ${outd}" >&2
+        move_dir ${pipeline_outd} ${outd} || return 1
+    fi
+    # Signal finish of post pipeline completion actions
+    signal_finish_of_post_ppl_compl_actions ${pipeline_outd} ${outd}
+}
+ 
+########
 update_active_pipeline()
 {
-    local pipe_exec_cmd=$1
+    local pipeline_outd=$1
     local outd=$2
+
+    # Retrieve pipe command
+    local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
 
     # Check if pipeline has finished execution
     get_ppl_status "${pipe_exec_cmd}" ${outd}
@@ -266,18 +326,9 @@ update_active_pipeline()
                                  return 1
                                  ;;
         ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
-                             # Execute hook if requested
-                             if [ ${k_given} -eq 1 ]; then
-                                 echo "- Executing hook implemented in ${k_val}" >&2
-                                 exec_hook ${pipeline_outd} || echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2
-                             fi
+                             exec_post_ppl_completion_actions ${pipeline_outd} ${outd}
                              # Remove pipeline from array of active pipelines
                              unset PIPELINE_COMMANDS[${pipeline_outd}]
-                             # Move directory if requested
-                             if [ ! -z "${outd}" ]; then
-                                 echo "- Moving ${pipeline_outd} directory to ${outd}" >&2
-                                 move_dir ${pipeline_outd} ${outd} || return 1
-                             fi
                              ;;
     esac
 }
@@ -292,14 +343,18 @@ update_active_pipelines()
     
     # Iterate over active pipelines
     for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
-        # Retrieve pipe command
-        local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
-
-        update_active_pipeline "${pipe_exec_cmd}" ${outd} || return 1
+        update_active_pipeline ${pipeline_outd} ${outd} || return 1
     done
 
     local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
     echo "Updated number of active pipelines: ${num_active_pipelines}" >&2
+}
+
+########
+extract_outd_from_command()
+{
+    local cmd=$1
+    echo `read_opt_value_from_line "${cmd}" "--outdir"`
 }
 
 ########
@@ -308,7 +363,7 @@ add_cmd_to_assoc_array()
     local cmd=$1
 
     # Extract output directory from command
-    local dir=`read_opt_value_from_line "${cmd}" "--outdir"`
+    local dir=`extract_outd_from_command "${cmd}"`
 
     # Add command to associative array if directory was sucessfully retrieved
     if [ ${dir} = ${OPT_NOT_FOUND} ]; then
@@ -323,6 +378,19 @@ add_cmd_to_assoc_array()
 wait_until_pending_ppls_finish()
 {
     wait_simul_exec_reduction 1 || return 1
+}
+
+########
+process_ppl_compl_actions_if_required()
+{
+    local cmd=$1
+    local outd=$2
+    
+    local pipeline_outd=`extract_outd_from_command "${cmd}"`
+    if ! post_ppl_compl_actions_are_finished ${pipeline_outd} ${outd}; then
+        echo "Warning, post pipeline completion actions were not finished, they will be executed now...">&2
+        exec_post_ppl_completion_actions ${pipeline_outd} ${outd}
+    fi
 }
 
 ########
@@ -360,6 +428,7 @@ execute_batches()
                                      return 1
                                      ;;
             ${PPL_IS_COMPLETED}) echo "yes">&2
+                                 process_ppl_compl_actions_if_required "${pipe_exec_cmd}" ${outd}
                                  ;;
             ${PPL_FAILED}) echo "no">&2
                            ;;
