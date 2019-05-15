@@ -1093,7 +1093,7 @@ get_step_finish_date()
 {
     log_filename=$1
     if [ -f ${log_filename} ]; then
-        ${GREP} "^Step finished at " ${log_filename} | ${AWK} '{for(i=5;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+        ${GREP} "^Step finished at " ${log_filename} | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
     fi
 }
 
@@ -1878,13 +1878,13 @@ signal_step_completion()
 ########
 display_begin_step_message()
 {
-    echo "Step started at `date`" >&2
+    echo "Step started at `date +"%D %T"`" >&2
 }
 
 ########
 display_end_step_message()
 {
-    echo "Step finished at `date`" >&2
+    echo "Step finished at `date +"%D %T"`" >&2
 }
 
 ################################
