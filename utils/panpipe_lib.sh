@@ -1774,19 +1774,28 @@ read_ids_from_files()
 {
     local dirname=$1
     local stepname=$2
-
+    local ids
+    
     # Return id for step
     local filename=`get_stepid_filename ${dirname} ${stepname}`
     if [ -f $filename ]; then
-        cat $filename
+        ids=`cat $filename`
     fi
 
     # Return ids for array tasks if any
+    local id
     for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f ${taskid_file} ]; then
-            cat ${taskid_file}
+            id=`cat ${taskid_file}`
+            if [ -z "${ids}" ]; then
+                ids=$id
+            else
+                ids="${ids} ${id}"
+            fi
         fi
     done
+
+    echo ${ids}
 }
 
 ########
