@@ -1095,25 +1095,9 @@ get_step_finish_date()
 }
 
 ########
-get_elapsed_time_for_step()
+get_elapsed_time_from_logfile()
 {
-    # TO-BE-DONE: add code to handle task arrays
-    local dirname=$1
-    local stepname=$2
-
-    # Get name of log file
-    local sched=`determine_scheduler`
-    local log_filename
-    case $sched in
-        ${SLURM_SCHEDULER})
-            log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
-            ;;
-        ${BUILTIN_SCHEDULER})
-            log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
-            ;;
-    esac
-
-    # Extract start and finish dates
+    local log_filename=$1
     local start_date=`get_step_start_date ${log_filename}`
     local finish_date=`get_step_finish_date ${log_filename}`
     
@@ -1123,10 +1107,88 @@ get_elapsed_time_for_step()
         local finish_date_secs=`date -d "${start_date}" +%s`
         echo $(( start_date_secs - finish_date_secs ))
     else
-        echo "NA"
+        echo "UNKNOWN"
     fi
+}
 
-    # TBD
+########
+get_elapsed_time_for_step_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Get number of array tasks
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local num_tasks=`get_num_array_tasks_from_finished_file ${finished_filename}`
+
+    # Extract difference time from log files
+    if [ ${num_tasks} -eq 1 ]; then
+        # Step is not a task array
+        log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
+        local difft=`get_elapsed_time_from_logfile ${log_filename}`
+        echo ${difft}
+    else
+        # Step is a task array
+        local result=""
+        local taskidx
+        for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
+            local log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${taskidx}`
+            local difft=`get_elapsed_time_from_logfile ${log_filename}`
+            if [ ! -z "${result}" ]; then
+                result="${result} "
+            fi
+            result="${result}${taskidx}->${difft} ;"
+        done
+        echo ${result}
+    fi
+}
+
+########
+get_elapsed_time_for_step_builtin()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Get number of array tasks
+    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local num_tasks=`get_num_array_tasks_from_finished_file ${finished_filename}`
+
+    # Extract difference time from log files
+    if [ ${num_tasks} -eq 1 ]; then
+        # Step is not a task array
+        log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
+        local difft=`get_elapsed_time_from_logfile ${log_filename}`
+        echo ${difft}
+    else
+        # Step is a task array
+        for id in `get_finished_array_task_indices ${dirname} ${stepname}`; do
+            local log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${taskidx}`
+            local difft=`get_elapsed_time_from_logfile ${log_filename}`
+            if [ ! -z "${result}" ]; then
+                result="${result} "
+            fi
+            result="${result}${taskidx}->${difft} ;"
+        done
+    fi    
+}
+
+########
+get_elapsed_time_for_step()
+{
+    local dirname=$1
+    local stepname=$2
+    
+    # Get name of log file
+    local sched=`determine_scheduler`
+    local log_filename
+    case $sched in
+        ${SLURM_SCHEDULER})
+            get_elapsed_time_for_step_slurm ${dirname} ${stepname}
+            ;;
+        ${BUILTIN_SCHEDULER})
+            get_elapsed_time_for_step_builtin ${dirname} ${stepname}
+            ;;
+    esac
 }
 
 ########

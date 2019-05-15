@@ -196,11 +196,6 @@ process_status_for_pfile()
     # Read information about the steps to be executed
     lineno=1
     num_steps=0
-    num_finished=0
-    num_inprogress=0
-    num_unfinished=0
-    num_unfinished_but_runnable=0
-    num_todo=0
     while read stepspec; do
         local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
         local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
@@ -224,8 +219,7 @@ process_status_for_pfile()
             elapsed_time=`get_elapsed_time_for_step ${absdirname} ${stepname}`
             
             # Print status
-            echo "STEP: $stepname ; STATUS: $status ; ELAPSED_TIME(s): ${elapsed_time}"
-                        
+            echo "STEP: $stepname ; STATUS: $status ; ELAPSED_TIME(s): ${elapsed_time}"                        
         else
             if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "no" ]; then
                 echo "Error: incorrect step specification at line $lineno of ${pfile}" >&2
