@@ -18,6 +18,7 @@ usage()
     echo ""
     echo "-d <string>               Directory where the pipeline steps are stored"
     echo "-s <string>               Step name whose status should be determined"
+    echo "-i                        Show scheduler ids for pipeline steps"
     echo "--help                    Display this help and exit"
 }
 
@@ -26,6 +27,7 @@ read_pars()
 {
     d_given=0
     s_given=0
+    i_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -41,6 +43,10 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       given_stepname=$1
                       s_given=1
+                  fi
+                  ;;
+            "-i") if [ $# -ne 0 ]; then
+                      i_given=1
                   fi
                   ;;
         esac
@@ -220,8 +226,18 @@ process_status_for_pfile()
             # Check step status
             local status=`get_step_status ${absdirname} ${stepname}`
 
+            # Obtain ids if requested
+            local ids_info
+            if [ ${i_given} -eq 1 ]; then
+                ids_info=`read_ids_from_files ${absdirname} ${stepname}`
+            fi
+            
             # Print status
-            echo "STEP: $stepname ; STATUS: $status"
+            if [ ${i_given} -eq 0 ]; then
+                echo "STEP: $stepname ; STATUS: $status"
+            else
+                echo "STEP: $stepname ; STATUS: $status ; SCHED_IDS: ${ids_info}"
+            fi
 
             # Treat step status
             case $status in
