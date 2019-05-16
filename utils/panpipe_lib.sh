@@ -1084,7 +1084,7 @@ get_step_start_date()
 {
     log_filename=$1
     if [ -f ${log_filename} ]; then
-        ${GREP} "^Step started at " ${log_filename} | ${AWK} '{for(i=5;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+        ${GREP} "^Step started at " ${log_filename} | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
     fi
 }
 
