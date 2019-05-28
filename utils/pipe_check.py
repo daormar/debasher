@@ -110,7 +110,19 @@ def extract_step_name(entry):
         return fields[0]
 
 ##################################################
-def extract_step_deps(entry):
+def get_dep_separator(sdeps_str):
+    if ',' in sdeps_str and '?' in sdeps_str:
+        return True,',?'
+    elif ',' in sdeps_str:
+        return False,','
+    elif '?' in sdeps_str:
+        return False,'?'
+    else:
+        return False,''
+    
+##################################################
+def extract_step_deps(entry_lineno,entry):
+    deps_syntax_ok=True
     # extract text field
     fields=entry.split()
     sdeps_str=""
@@ -121,23 +133,34 @@ def extract_step_deps(entry):
     # Return empty list of step dependencies if corresponding field was
     # not found
     if len(sdeps_str)==0:
-        return []
+        return deps_syntax_ok,[]
+
+    # Check that dependency separators (, and ?) are not mixed
+    seps_mixed,separator=get_dep_separator(sdeps_str)
+    if seps_mixed:
+        deps_syntax_ok=False
+        print >> sys.stderr, "Error: dependency separators mixed in step dependency (",sdeps_str,") at line number",entry_lineno
+        return deps_syntax_ok,[]
     
     # create list of step dependencies
     sdeps_list=[]
-    sdeps_fields=sdeps_str.split(",")
+    if(separator==''):
+        sdeps_fields=[sdeps_str]
+    else:
+        sdeps_fields=sdeps_str.split(separator)
     for sdep in sdeps_fields:
         if sdep!=NONE_STEP_DEP:
             sdep_fields=sdep.split(":")
-            if(len(sdep_fields)==2):
+            if(len(sdep_fields)==2 and sdep_fields[1]!=''):
                 data=stepdep_data()
                 data.deptype=sdep_fields[0]
                 data.stepname=sdep_fields[1]
                 sdeps_list.append(data)
             else:
-                print >> sys.stderr, "Error: incorrect definition of step dependency (",sdeps_str,")"
+                deps_syntax_ok=False
+                print >> sys.stderr, "Error: incorrect definition of step dependency (",sdeps_str,") at line number",entry_lineno
         
-    return sdeps_list
+    return deps_syntax_ok,sdeps_list
 
 ##################################################
 def extract_config_entries(pfile):
@@ -168,14 +191,17 @@ def extract_step_entries(pfile):
     return entries_lineno,step_entries
 
 ##################################################
-def create_stepdeps_map(step_entries):
+def create_stepdeps_map(entries_lineno,step_entries):
     stepdeps_map={}
-    for entry in step_entries:
-        fields=entry.split()
-        sname=extract_step_name(entry)
-        deps=extract_step_deps(entry)
+    deps_syntax_ok=True
+    for i in range(len(step_entries)):
+        fields=step_entries[i].split()
+        sname=extract_step_name(step_entries[i])
+        dep_syntax_ok,deps=extract_step_deps(entries_lineno[i],step_entries[i])
+        if(not dep_syntax_ok):
+            deps_syntax_ok=False
         stepdeps_map[sname]=deps
-    return stepdeps_map
+    return deps_syntax_ok,stepdeps_map
 
 ##################################################
 def stepnames_duplicated(entries_lineno,step_entries):
@@ -331,7 +357,10 @@ def snames_valid(stepdeps_map):
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
     entries_lineno,step_entries=extract_step_entries(values["pfile"])
-    stepdeps_map=create_stepdeps_map(step_entries)
+    deps_syntax_ok,stepdeps_map=create_stepdeps_map(entries_lineno,step_entries)
+    if(not deps_syntax_ok):
+       print >> sys.stderr, "Step dependencies are not syntactically correct"
+       return 1
     if(not snames_valid(stepdeps_map)):
        print >> sys.stderr, "Step names are not valid"
        return 1
