@@ -646,8 +646,13 @@ get_stepdeps_from_detailed_spec()
     local stepdeps_spec=$1
     local sdeps=""
 
-    # Iterate over the elements of the step specification: type1:stepname1,...,typen:stepnamen
-    local stepdeps_spec_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps_spec}`
+    # Iterate over the elements of the step specification: type1:stepname1,...,typen:stepnamen or type1:stepname1?...?typen:stepnamen
+    local separator=`get_stepdeps_separator ${stepdeps_spec}`
+    if [ "${separator}" = "" ]; then
+        local stepdeps_spec_blanks=${stepdeps_spec}
+    else
+        local stepdeps_spec_blanks=`replace_str_elem_sep_with_blank "${separator}" ${stepdeps_spec}`
+    fi
     local dep_spec
     for dep_spec in ${stepdeps_spec_blanks}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
@@ -659,7 +664,7 @@ get_stepdeps_from_detailed_spec()
             if [ -z "${sdeps}" ]; then
                 sdeps=${deptype}":"${!step_id}
             else
-                sdeps=${sdeps}","${deptype}":"${!step_id}
+                sdeps=${sdeps}"${separator}"${deptype}":"${!step_id}
             fi
         fi
     done

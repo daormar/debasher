@@ -530,7 +530,12 @@ builtin_sched_check_step_deps()
     local stepdeps=${BUILTIN_SCHED_STEP_DEPS[${stepname}]}
 
     # Iterate over dependencies
-    local stepdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
+    local separator=`get_stepdeps_separator ${stepdeps}`
+    if [ "${separator}" = "" ]; then
+        local stepdeps_blanks=${stepdeps}
+    else
+        local stepdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${stepdeps}`
+    fi
     local dep
     for dep in ${stepdeps_blanks}; do
         # Extract information from dependency
@@ -541,28 +546,45 @@ builtin_sched_check_step_deps()
         depstatus=${BUILTIN_SCHED_CURR_STEP_STATUS[${depsname}]}
             
         # Process exit code
+        local dep_ok=1
         case ${deptype} in
             ${AFTER_STEPDEP_TYPE})
                 if [ ${depstatus} = ${TODO_STEP_STATUS} -o  ${depstatus} = ${UNFINISHED_STEP_STATUS} ]; then
-                    return 1
+                    dep_ok=0
                 fi
                 ;;
             ${AFTEROK_STEPDEP_TYPE})
                 if [ ${depstatus} != ${FINISHED_STEP_STATUS} ]; then
-                    return 1
+                    dep_ok=0
                 fi
                 ;;
             ${AFTERNOTOK_STEPDEP_TYPE})
                 if [ ${depstatus} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
-                    return 1
+                    dep_ok=0
                 fi
                 ;;
             ${AFTERANY_STEPDEP_TYPE})
                 if [ ${depstatus} = ${FINISHED_STEP_STATUS} -o ${depstatus} = ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
-                    return 1
+                    dep_ok=0
                 fi 
                 ;;
+            ${AFTERCORR_STEPDEP_TYPE})
+                # NOTE: AFTERCORR_STEPDEP_TYPE dependency type currently
+                # treated in the same way as AFTEROK_STEPDEP_TYPE
+                # dependency
+                if [ ${depstatus} != ${FINISHED_STEP_STATUS} ]; then
+                    dep_ok=0
+                fi
+                ;;
         esac
+
+        if [ ${dep_ok} -eq 0 -a "${separator}" = "," ]; then
+            return 1
+        fi
+
+        if [ ${dep_ok} -eq 1 -a "${separator}" = "?" ]; then
+            return 0
+        fi
     done
 
     return 0

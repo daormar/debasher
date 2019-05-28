@@ -43,6 +43,7 @@ AFTER_STEPDEP_TYPE="after"
 AFTEROK_STEPDEP_TYPE="afterok"
 AFTERNOTOK_STEPDEP_TYPE="afternotok"
 AFTERANY_STEPDEP_TYPE="afterany"
+AFTERCORR_STEPDEP_TYPE="aftercorr"
 
 # STEP STATISTICS
 UNKNOWN_ELAPSED_TIME_FOR_STEP="UNKNOWN"
@@ -1442,13 +1443,33 @@ define_opts_for_script()
 }
 
 ########
+get_stepdeps_separator()
+{
+    local stepdeps=$1
+    if [[ "${stepdeps}" == *","* ]]; then
+        echo ","
+    else
+        if [[ "${stepdeps}" == *"?"* ]]; then
+            echo "?"
+        else
+            echo ""
+        fi
+    fi
+}
+
+########
 find_dependency_for_step()
 {
     local stepspec=$1
     local stepname_part=$2
 
     local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
-    local stepdeps_blanks=`replace_str_elem_sep_with_blank "," ${stepdeps}`
+    local separator=`get_stepdeps_separator ${stepdeps}`
+    if [ "${separator}" = "" ]; then
+        local stepdeps_blanks=${stepdeps}
+    else
+        local stepdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${stepdeps}`
+    fi
     local dep
     for dep in ${stepdeps_blanks}; do
         local stepname_part_in_dep=`get_stepname_part_in_dep ${dep}`
@@ -1504,13 +1525,18 @@ apply_deptype_to_stepids()
 
     # Apply deptype
     local result=""
-    local stepids_blanks=`replace_str_elem_sep_with_blank "," ${stepids}`
+    local separator=`get_stepdeps_separator ${stepids}`
+    if [ "${separator}" = "" ]; then
+        local stepids_blanks=${stepids}
+    else
+        local stepids_blanks=`replace_str_elem_sep_with_blank "${separator}" ${stepids}`
+    fi
     local id
     for id in ${stepids_blanks}; do
         if [ -z "" ]; then
             result=${deptype}:${id}
         else
-            result=${result}","${deptype}:${id}
+            result=${result}"${separator}"${deptype}:${id}
         fi
     done
 
