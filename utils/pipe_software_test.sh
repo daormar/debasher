@@ -338,3 +338,124 @@ step_f_conda_envs()
 {
     define_conda_env py27 py27.yml
 }
+
+########
+step_g_document()
+{
+    step_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
+}
+
+########
+step_g_explain_cmdline_opts()
+{
+    :
+}
+
+########
+step_g_define_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local stepspec=$2
+    local optlist=""
+
+    # Define the -step-outd option, the output directory for the step
+    local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
+    define_opt "-step-outd" ${step_outd} optlist || exit 1
+
+    # Save option list so as to execute step four times
+    for id in 1 2 3 4; do
+        local specific_optlist=${optlist}
+        define_opt "-id" $id specific_optlist || exit 1
+        save_opt_list specific_optlist
+    done
+}
+
+########
+step_g()
+{
+    display_begin_step_message
+
+    # Initialize variables
+    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local id=`read_opt_value_from_line "$*" "-id"`
+
+    # create auxiliary file
+    touch ${step_outd}/${id}_aux
+
+    # sleep some time
+    sleep 10
+    
+    # create file
+    touch ${step_outd}/$id
+
+    display_end_step_message
+}
+
+########
+step_g_post()
+{
+    logmsg "Cleaning directory..."
+    
+    # Initialize variables
+    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local id=`read_opt_value_from_line "$*" "-id"`
+
+    # Remove auxiliary file
+    rm ${step_outd}/${id}_aux    
+
+    logmsg "Cleaning finished"
+}
+
+########
+step_h_document()
+{
+    step_description "Writes a given value to the file \`step_h.out\` in data directory."
+}
+
+########
+step_h_explain_cmdline_opts()
+{
+    # -b option
+    description="Value to write to file in data directory"
+    explain_cmdline_req_opt "-h" "<int>" "$description"
+}
+
+########
+step_h_define_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local stepspec=$2
+    local optlist=""
+    
+    # -b option
+    define_cmdline_opt "$cmdline" "-h" optlist || exit 1
+
+    # Get absolute name of shared directory
+    abs_shrdir=`get_absolute_shdirname "data"`
+
+    # Define option for FIFO
+    define_opt "-datadir" ${abs_shrdir} optlist || exit 1
+
+    # Save option list
+    save_opt_list optlist
+}
+
+########
+step_h()
+{
+    display_begin_step_message
+
+    # Initialize variables
+    local value=`read_opt_value_from_line "$*" "-h"`
+    local datadir=`read_opt_value_from_line "$*" "-datadir"`
+
+    # sleep some time
+    sleep 10
+
+    # Write value to file
+    echo "$value" > ${datadir}/step_h.out
+    
+    display_end_step_message
+}
