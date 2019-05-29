@@ -578,13 +578,30 @@ builtin_sched_check_step_deps()
                 ;;
         esac
 
-        if [ ${dep_ok} -eq 0 -a "${separator}" = "," ]; then
-            return 1
-        fi
-
-        if [ ${dep_ok} -eq 1 -a "${separator}" = "?" ]; then
-            return 0
-        fi
+        # Return value depending on the dependency separator used
+        case "${separator}" in
+            ",")
+                # "," separator works as operator "and"
+                if [ ${dep_ok} -eq 0 ]; then
+                    return 1
+                fi
+            ;;
+            "?")
+                # "?" separator works as operator "or"
+                if [ ${dep_ok} -eq 1 ]; then
+                    return 0
+                fi
+            ;;
+            "")
+                # "" separator means that only one dependency was
+                # defined
+                if [ ${dep_ok} -eq 0 ]; then
+                    return 1
+                else
+                    return 0
+                fi
+            ;;
+        esac
     done
 
     return 0
