@@ -160,7 +160,7 @@ def extract_step_deps(entry_lineno,entry):
                 deps_syntax_ok=False
                 print >> sys.stderr, "Error: incorrect definition of step dependency (",sdeps_str,") at line number",entry_lineno
         
-    return deps_syntax_ok,sdeps_list
+    return deps_syntax_ok,separator,sdeps_list
 
 ##################################################
 def extract_config_entries(pfile):
@@ -191,17 +191,19 @@ def extract_step_entries(pfile):
     return entries_lineno,step_entries
 
 ##################################################
-def create_stepdeps_map(entries_lineno,step_entries):
+def extract_stepdeps_info(entries_lineno,step_entries):
     stepdeps_map={}
+    stepdeps_sep={}
     deps_syntax_ok=True
     for i in range(len(step_entries)):
         fields=step_entries[i].split()
         sname=extract_step_name(step_entries[i])
-        dep_syntax_ok,deps=extract_step_deps(entries_lineno[i],step_entries[i])
+        dep_syntax_ok,separator,deps=extract_step_deps(entries_lineno[i],step_entries[i])
         if(not dep_syntax_ok):
             deps_syntax_ok=False
+        stepdeps_sep[sname]=separator
         stepdeps_map[sname]=deps
-    return deps_syntax_ok,stepdeps_map
+    return deps_syntax_ok,stepdeps_sep,stepdeps_map
 
 ##################################################
 def stepnames_duplicated(entries_lineno,step_entries):
@@ -293,7 +295,16 @@ def print_entries(config_entries,step_entries):
         print e
 
 ##################################################
-def print_graph(ordered_step_entries,stepdeps_map):
+def get_graph_linestyle(separator):
+    if separator=="?":
+        return "dashed"
+    elif separator==",":
+        return "solid"        
+    elif separator=="":
+        return "solid"
+
+##################################################
+def print_graph(ordered_step_entries,stepdeps_sep,stepdeps_map):
     # Print header
     print "digraph G {"
     print "overlap=false;"
@@ -305,11 +316,12 @@ def print_graph(ordered_step_entries,stepdeps_map):
 
     # Process steps
     for step in stepdeps_map:
+        line_style=get_graph_linestyle(stepdeps_sep[step])
         if len(stepdeps_map[step])==0:
             print "start","->",step, "[ label= \"\" ,","color = black ];"            
         else:
             for elem in stepdeps_map[step]:
-                print elem.stepname,"->",step, "[ label= \""+elem.deptype+"\" ,","color = black ];"
+                print elem.stepname,"->",step, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];"
     
     # Print footer
     print "}"
@@ -357,7 +369,7 @@ def snames_valid(stepdeps_map):
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
     entries_lineno,step_entries=extract_step_entries(values["pfile"])
-    deps_syntax_ok,stepdeps_map=create_stepdeps_map(entries_lineno,step_entries)
+    deps_syntax_ok,stepdeps_sep,stepdeps_map=extract_stepdeps_info(entries_lineno,step_entries)
     if(not deps_syntax_ok):
        print >> sys.stderr, "Step dependencies are not syntactically correct"
        return 1
@@ -370,7 +382,7 @@ def process_pars(flags,values):
         if(flags["r_given"]):
             print_entries(config_entries,ordered_step_entries)
         elif(flags["g_given"]):
-            print_graph(ordered_step_entries,stepdeps_map)
+            print_graph(ordered_step_entries,stepdeps_sep,stepdeps_map)
         elif(flags["d_given"]):
             print_deps(ordered_step_entries,stepdeps_map)
     else:
