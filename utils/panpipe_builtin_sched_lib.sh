@@ -604,7 +604,14 @@ builtin_sched_check_step_deps()
         esac
     done
 
-    return 0
+    case "${separator}" in
+        ",")
+            return 0
+            ;;
+        "?")
+            return 1
+            ;;
+    esac
 }
 
 ########
