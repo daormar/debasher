@@ -656,15 +656,16 @@ get_stepdeps_from_detailed_spec()
     local dep_spec
     for dep_spec in ${stepdeps_spec_blanks}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
+        local mapped_deptype=`map_deptype_if_necessary ${deptype}`
         local step=`get_stepname_part_in_dep ${dep_spec}`
         
         # Check if there is an id for the step
         local step_id=${step}_id
         if [ ! -z "${!step_id}" ]; then
             if [ -z "${sdeps}" ]; then
-                sdeps=${deptype}":"${!step_id}
+                sdeps=${mapped_deptype}":"${!step_id}
             else
-                sdeps=${sdeps}"${separator}"${deptype}":"${!step_id}
+                sdeps=${sdeps}"${separator}"${mapped_deptype}":"${!step_id}
             fi
         fi
     done

@@ -61,6 +61,10 @@ PANPIPE_SCHEDULER=""
 BUILTIN_SCHEDULER="BUILTIN"
 SLURM_SCHEDULER="SLURM"
 
+# SLURM-RELATED CONSTANTS
+FIRST_SLURM_VERSION_WITH_AFTERCORR="16.05"
+AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=0
+
 # FILE EXTENSIONS
 BUILTIN_SCHED_LOG_FEXT="builtin_out"
 SLURM_SCHED_LOG_FEXT="slurm_out"
@@ -119,6 +123,14 @@ declare -A EXIT_CODE
 panpipe_version()
 {
     echo "${panpipe_pkgname} version: ${panpipe_version}" >&2
+}
+
+########
+version_to_number()
+{
+    local ver=$1
+    
+    echo $ver | ${AWK} -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 }
 
 ########
@@ -411,13 +423,49 @@ set_panpipe_outdir()
 }
 
 ########
+get_slurm_version()
+{
+    if [ "$SBATCH" = "" ]; then
+        echo "0"
+    else
+        $SBATCH --version | $AWK '{print $2}'
+    fi
+}
+
+########
+slurm_supports_aftercorr_deptype()
+{
+    local slurm_ver=`get_slurm_version`
+    local slurm_ver_num=`version_to_number ${slurm_ver}`
+    local slurm_ver_aftercorr_num=`version_to_number ${FIRST_SLURM_VERSION_WITH_AFTERCORR}`
+    if [ ${slurm_ver_num} -ge ${slurm_ver_aftercorr_num} ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 set_panpipe_scheduler()
 {
     local sched=$1
 
     case $sched in
         ${SLURM_SCHEDULER})
+            # Verify SLURM availability
+            if [ "$SBATCH" = "" ]; then
+                echo "Error: SLURM scheduler is not installed in your system"
+                return 1
+            fi
+            
             PANPIPE_SCHEDULER=${SLURM_SCHEDULER}
+
+            # Verify if aftercorr dependency type is supported by SLURM
+            if slurm_supports_aftercorr_deptype; then
+                AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=1
+            else
+                AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=0                
+            fi
             ;;
         ${BUILTIN_SCHEDULER})
             PANPIPE_SCHEDULER=${BUILTIN_SCHEDULER}
@@ -1245,6 +1293,40 @@ get_step_status()
         echo "${TODO_STEP_STATUS}"
         return ${TODO_STEP_EXIT_CODE}
     fi
+}
+
+########
+map_deptype_if_necessary_slurm()
+{
+    local deptype=$1
+    case $deptype in
+        ${AFTERCORR_STEPDEP_TYPE})
+            if [ ${AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM} -eq 1 ]; then
+                echo ${deptype}
+            else
+                echo ${AFTEROK_STEPDEP_TYPE}
+            fi
+            ;;
+        *)
+            echo $deptype
+            ;;
+    esac
+}
+
+########
+map_deptype_if_necessary()
+{
+    local deptype=$1
+
+    local sched=`determine_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER})
+            map_deptype_if_necessary_slurm ${deptype}
+            ;;
+        *)
+            echo ${deptype}
+            ;;
+    esac
 }
 
 ############################
