@@ -231,6 +231,10 @@ absolutize_file_paths()
     fi
 }
 
+####################################
+# GENERAL PIPE EXECUTION FUNCTIONS #
+####################################
+
 ########
 check_pipeline_file()
 {
@@ -241,9 +245,15 @@ check_pipeline_file()
     echo "" >&2
 }
 
-####################################
-# GENERAL PIPE EXECUTION FUNCTIONS #
-####################################
+########
+reorder_pipeline_file()
+{
+    echo "* Obtaining reordered pipeline file ($pfile)..." >&2
+
+    ${panpipe_bindir}/pipe_check -p ${pfile} -r 2> /dev/null || return 1
+
+    echo "" >&2
+}
 
 ########
 gen_stepdeps()
@@ -850,23 +860,26 @@ create_basic_dirs || exit 1
 
 check_pipeline_file || exit 1
 
+reordered_pfile=${outd}/reordered_pipeline.ppl
+reorder_pipeline_file > ${reordered_pfile} || exit 1
+
 stepdeps_file=${outd}/.stepdeps.txt
 gen_stepdeps > ${stepdeps_file} || exit 1
 
 configure_scheduler || exit 1
 
-load_modules ${pfile} || exit 1
+load_modules ${reordered_pfile} || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
-    show_pipeline_opts ${pfile} || exit 1
+    show_pipeline_opts ${reordered_pfile} || exit 1
 else
     augmented_cmdline=`obtain_augmented_cmdline "${command_line}"` || exit 1
     
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
+        check_pipeline_opts "${augmented_cmdline}" ${reordered_pfile} || exit 1
     else
         load_pipeline_modules=1
-        check_pipeline_opts "${augmented_cmdline}" ${pfile} || exit 1
+        check_pipeline_opts "${augmented_cmdline}" ${reordered_pfile} || exit 1
         
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
@@ -876,13 +889,13 @@ else
         register_fifos
 
         if [ ${conda_support_given} -eq 1 ]; then
-            process_conda_requirements ${pfile} || exit 1
+            process_conda_requirements ${reordered_pfile} || exit 1
         fi
 
-        define_forced_exec_steps ${pfile} || exit 1
+        define_forced_exec_steps ${reordered_pfile} || exit 1
 
         if [ ${reexec_outdated_steps_given} -eq 1 ]; then
-            define_reexec_steps_due_to_code_update ${outd} ${pfile} || exit 1
+            define_reexec_steps_due_to_code_update ${outd} ${reordered_pfile} || exit 1
         fi
         
         define_reexec_steps_due_to_deps ${stepdeps_file} || exit 1
@@ -890,12 +903,12 @@ else
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            execute_pipeline_steps_debug "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+            execute_pipeline_steps_debug "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
         else
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
-                builtin_sched_execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+                builtin_sched_execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
             else
-                execute_pipeline_steps "${augmented_cmdline}" ${outd} ${pfile} || exit 1
+                execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
             fi
         fi
     fi
