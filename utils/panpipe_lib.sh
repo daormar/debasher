@@ -830,27 +830,71 @@ slurm_launch()
 
     # Define options for sbatch
     local cpus_opt=`get_slurm_cpus_opt ${cpus}`
-    local mem_opt=`get_slurm_mem_opt ${mem}`
-    local time_opt=`get_slurm_time_opt ${time}`
     local account_opt=`get_slurm_account_opt ${account}`
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
-    local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
-    
-    # Submit job
-    local jid=$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
-    local exit_code=$?
-    
-    # Check for errors
-    if [ ${exit_code} -ne 0 ]; then
-        local command="$($SBATCH ${cpus_opt} ${mem_opt} ${time_opt} --parsable ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})"
-        echo "Error while launching step with sbatch (${command})" >&2
-        return 1
+
+    # Launch execution attempts TBD
+    local attempt_no=0
+    local prev_jid=""
+    local verifjob_deps=""
+    local time_blanks=`replace_str_elem_sep_with_blank "," ${time}`
+    for time_attempt in ${time_blanks}; do
+        # Obtain attempt-dependent options
+        local mem_opt=`get_slurm_mem_opt ${mem}`
+        local time_opt=`get_slurm_time_opt ${time_attempt}`
+        if [ "${prev_jid}" = "" ]; then
+            local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
+        else
+            local dependency_opt=`get_slurm_dependency_opt "afternotok:${prev_jid}"`
+        fi
+
+        # Submit job
+        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
+        local exit_code=$?
+
+        # Check for errors
+        if [ ${exit_code} -ne 0 ]; then
+            local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file}"
+            echo "Error while launching step with sbatch (${command})" >&2
+            return 1
+        fi
+
+        # Update dependencies of verification job
+        if [ "${verifjob_deps}" = "" ]; then
+            verifjob_deps="afterok:${jid}"
+        else
+            verifjob_deps="${verifjob_deps}?afterok:${jid}"            
+        fi
+                
+        prev_jid=${jid}
+        attempt_no=$((attempt_no + 1))
+    done
+
+    # If more than one attempt was requested, launch job to verify if
+    # any of the attempts were successful
+    if [ ${attempt_no} -gt 1 ]; then
+        # Define options
+        local cpus_opt=`get_slurm_cpus_opt 1`
+        local mem_opt=`get_slurm_mem_opt 16`
+        local time_opt=`get_slurm_time_opt 00:01:00`
+        local dependency_opt=`get_slurm_dependency_opt "${verifjob_deps}"`
+        # Submit job
+        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap "true")
+        local exit_code=$?
+
+        # Check for errors
+        if [ ${exit_code} -ne 0 ]; then
+            local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap \"true\""
+            echo "Error while launching verification job for step with sbatch (${command})" >&2
+            return 1
+        fi        
     fi
 
+    # Set output value
     eval "${outvar}='${jid}'"
 }
 
