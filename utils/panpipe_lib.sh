@@ -911,10 +911,12 @@ get_mem_attempt_value()
 
     # Return value for attempt
     local array_idx=$(( attempt_no - 1 ))
-    if [ ${array_idx} -lt ${#mem_array[@]} ]; then
+    local array_len=${#mem_array[@]}
+    if [ ${array_idx} -lt  ${array_len} ]; then
         echo ${mem_array[${array_idx}]}
     else
-        echo ${mem_array[-1]}
+        last_array_idx=$(( array_len - 1 ))
+        echo ${mem_array[${last_array_idx}]]}
     fi
 }
 
@@ -932,10 +934,12 @@ get_time_attempt_value()
 
     # Return value for attempt
     local array_idx=$(( attempt_no - 1 ))
-    if [ ${array_idx} -lt ${#time_array[@]} ]; then
+    local array_len=${#time_array[@]}
+    if [ ${array_idx} -lt ${array_len} ]; then
         echo ${time_array[${array_idx}]}
     else
-        echo ${time_array[-1]}
+        last_array_idx=$(( array_len - 1 ))
+        echo ${time_array[${last_array_idx}]}
     fi
 }
 
