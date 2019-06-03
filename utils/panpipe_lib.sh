@@ -244,6 +244,7 @@ replace_str_elem_sep_with_blank()
 {
     local sep=$1
     local str=$2
+    local str_array
     local result
 
     IFS="$sep" str_array=($str)
@@ -875,6 +876,70 @@ slurm_launch_verif_job()
 }
 
 ########
+get_num_attempts()
+{
+    # Initialize variables
+    local time=$1
+    local mem=$2
+    local time_array
+    local mem_array
+    local sep=","
+
+    # Obtain arrays for time and memory limits
+    IFS="$sep" time_array=($time)
+    IFS="$sep" mem_array=($mem)
+
+    # Return length of longest array
+    if [ ${#time_array[@]} -gt ${#mem_array[@]} ]; then
+        echo ${#time_array[@]} 
+    else
+        echo ${#mem_array[@]} 
+    fi
+}
+
+########
+get_mem_attempt_value()
+{
+    # Initialize variables
+    local mem=$1
+    local attempt_no=$2
+    local mem_array
+
+    # Obtain array for memory limits
+    local sep=","
+    IFS="$sep" mem_array=($mem)
+
+    # Return value for attempt
+    local array_idx=$(( attempt_no - 1 ))
+    if [ ${array_idx} -lt ${#mem_array[@]} ]; then
+        echo ${mem_array[${array_idx}]}
+    else
+        echo ${mem_array[-1]}
+    fi
+}
+
+########
+get_time_attempt_value()
+{
+    # Initialize variables
+    local time=$1
+    local attempt_no=$2
+    local time_array
+
+    # Obtain array for time limits
+    local sep=","
+    IFS="$sep" time_array=($time)
+
+    # Return value for attempt
+    local array_idx=$(( attempt_no - 1 ))
+    if [ ${array_idx} -lt ${#time_array[@]} ]; then
+        echo ${time_array[${array_idx}]}
+    else
+        echo ${time_array[-1]}
+    fi
+}
+
+########
 slurm_launch()
 {
     # Initialize variables
@@ -910,10 +975,13 @@ slurm_launch()
     local attempt_no=0
     local prev_jid=""
     local attempt_jids=""
-    local time_blanks=`replace_str_elem_sep_with_blank "," ${time}`
-    for time_attempt in ${time_blanks}; do
+    local num_attempts=`get_num_attempts ${time} ${mem}`
+    local attempt_no=1
+    while [ ${attempt_no} -le ${num_attempts} ]; do
         # Obtain attempt-dependent options
-        local mem_opt=`get_slurm_mem_opt ${mem}`
+        local mem_attempt=`get_mem_attempt_value ${mem} ${attempt_no}`
+        local mem_opt=`get_slurm_mem_opt ${mem_attempt}`
+        local time_attempt=`get_time_attempt_value ${time} ${attempt_no}`
         local time_opt=`get_slurm_time_opt ${time_attempt}`
         if [ "${prev_jid}" = "" ]; then
             local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
@@ -940,13 +1008,13 @@ slurm_launch()
         fi
 
         prev_jid=${jid}
-        attempt_no=$((attempt_no + 1))
+        attempt_no=$(( attempt_no + 1 ))
     done
 
     # If more than one attempt was requested, launch job to verify if
     # any of the attempts were successful (currently, verification
     # indeed requires to launch two jobs)
-    if [ ${attempt_no} -gt 1 ]; then
+    if [ ${num_attempts} -gt 1 ]; then
         jid=`slurm_launch_verif_job ${dirname} ${stepname} ${attempt_jids}` || return 1
     fi
 
