@@ -916,6 +916,40 @@ builtin_sched_get_task_array_task_varname()
 }
 
 ########
+builtin_sched_execute_funct_plus_postfunct()
+{
+    local num_scripts=$1
+    local dirname=$2
+    local stepname=$3
+    local taskidx=$4
+    local funct=$5
+    local post_funct=$6
+    local script_opts=$7
+
+    # Execute step function
+    $funct ${script_opts}
+    local funct_exit_code=$?
+    if [ ${funct_exit_code} -ne 0 ]; then
+        echo "Error: execution of ${funct} failed with exit code ${funct_exit_code}" >&2
+    else
+        echo "Function ${funct} successfully executed" >&2
+    fi
+
+    # Execute step post-function
+    if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
+        ${post_funct} ${script_opts} || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
+    fi
+
+    # Treat errors
+    if [ ${funct_exit_code} -ne 0 ]; then
+        return 1;
+    fi
+
+    # Signal step completion
+    signal_step_completion ${dirname} ${stepname} ${taskidx} ${num_scripts}
+}
+
+########
 builtin_sched_print_script_body()
 {
     # Initialize variables
@@ -936,10 +970,10 @@ builtin_sched_print_script_body()
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
         local builtin_task_log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${taskidx}`
-        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_task_log_filename} 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_task_log_filename} 2>&1"
     else
         local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
-        echo "execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_log_filename} 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_log_filename} 2>&1"
     fi
     
     # Close if statement
