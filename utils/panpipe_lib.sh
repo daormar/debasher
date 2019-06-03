@@ -601,7 +601,7 @@ print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
         
     # Write command to signal step completion
-    echo "signal_step_completion ${dirname} ${stepname} ${lineno} ${num_scripts}" 
+    echo "signal_step_completion ${dirname} ${stepname} ${taskidx} ${num_scripts}" 
 
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
