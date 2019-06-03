@@ -865,9 +865,9 @@ slurm_launch()
 
         # Update dependencies of verification job
         if [ "${verifjob_deps}" = "" ]; then
-            verifjob_deps="afterok:${jid}"
+            verifjob_deps="afternotok:${jid}"
         else
-            verifjob_deps="${verifjob_deps}?afterok:${jid}"            
+            verifjob_deps="${verifjob_deps},afternotok:${jid}"
         fi
                 
         prev_jid=${jid}
@@ -875,15 +875,24 @@ slurm_launch()
     done
 
     # If more than one attempt was requested, launch job to verify if
-    # any of the attempts were successful
+    # any of the attempts were successful (currently, verification
+    # indeed requires to launch two jobs)
     if [ ${attempt_no} -gt 1 ]; then
         # Define options
         local cpus_opt=`get_slurm_cpus_opt 1`
         local mem_opt=`get_slurm_mem_opt 16`
         local time_opt=`get_slurm_time_opt 00:01:00`
         local dependency_opt=`get_slurm_dependency_opt "${verifjob_deps}"`
-        # Submit job
-        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap "true")
+        # Submit preliminary verification job (the job will fail if all
+        # attempts fail)
+        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --kill-on-invalid-dep=yes --wrap "true")
+        local exit_code=$?
+
+        # Submit verification job (the job will succeed if preliminary
+        # verification job fails)
+        local verjob_deps="afternotok:${jid}"
+        local dependency_opt=`get_slurm_dependency_opt "${verjob_deps}"`
+        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --kill-on-invalid-dep=yes --wrap "true")
         local exit_code=$?
 
         # Check for errors
