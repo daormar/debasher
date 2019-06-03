@@ -806,6 +806,75 @@ get_scheduler_throttle()
 }
 
 ########
+slurm_get_attempt_deps()
+{
+    # Initialize variables
+    local attempt_jids=$1
+    local attempt_deps
+
+    # Iterate of attempt jids
+    local attempt_jids_blanks=`replace_str_elem_sep_with_blank "," ${attempt_jids}`
+    local attempt_jid
+    for attempt_jid in ${attempt_jids_blanks}; do
+        if [ "${attempt_deps}" = "" ]; then
+            attempt_deps="afternotok:${attempt_jid}"
+        else
+            attempt_deps="${attempt_deps},afternotok:${attempt_jid}"
+        fi
+    done
+
+    echo ${attempt_deps}
+}
+
+########
+slurm_launch_verif_job()
+{
+    # Initialize variables
+    local dirname=$1
+    local stepname=$2
+    local attempt_jids=$3
+
+    # Obtain dependencies for attempts
+    local attempt_deps=`slurm_get_attempt_deps ${attempt_jids}`
+    
+    # Define options
+    local cpus_opt=`get_slurm_cpus_opt 1`
+    local mem_opt=`get_slurm_mem_opt 16`
+    local time_opt=`get_slurm_time_opt 00:01:00`
+    local dependency_opt=`get_slurm_dependency_opt "${attempt_deps}"`
+    local preverif_logf=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
+
+    # Submit preliminary verification job (the job will fail if all
+    # attempts fail)
+    local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --job-name "${stepname}_preverif" --output ${preverif_logf} --kill-on-invalid-dep=yes --wrap "true")
+    local exit_code=$?
+
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap \"true\""
+        echo "Error while launching verification job for step with sbatch (${command})" >&2
+        return 1
+    fi
+
+    # Submit verification job (the job will succeed if preliminary
+    # verification job fails)
+    local verjob_deps="afternotok:${jid}"
+    local dependency_opt=`get_slurm_dependency_opt "${verjob_deps}"`
+    local verif_logf=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
+    local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --job-name "${stepname}_verif" --output ${verif_logf} --kill-on-invalid-dep=yes --wrap "true")
+    local exit_code=$?
+    
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap \"true\""
+        echo "Error while launching verification job for step with sbatch (${command})" >&2
+        return 1
+    fi
+
+    echo $jid
+}
+
+########
 slurm_launch()
 {
     # Initialize variables
@@ -837,10 +906,10 @@ slurm_launch()
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
 
-    # Launch execution attempts TBD
+    # Launch execution attempts
     local attempt_no=0
     local prev_jid=""
-    local verifjob_deps=""
+    local attempt_jids=""
     local time_blanks=`replace_str_elem_sep_with_blank "," ${time}`
     for time_attempt in ${time_blanks}; do
         # Obtain attempt-dependent options
@@ -864,12 +933,12 @@ slurm_launch()
         fi
 
         # Update dependencies of verification job
-        if [ "${verifjob_deps}" = "" ]; then
-            verifjob_deps="afternotok:${jid}"
+        if [ "${attempt_jids}" = "" ]; then
+            attempt_jids=${jid}
         else
-            verifjob_deps="${verifjob_deps},afternotok:${jid}"
+            attempt_jids="${attempt_jids},${jid}"
         fi
-                
+
         prev_jid=${jid}
         attempt_no=$((attempt_no + 1))
     done
@@ -878,29 +947,7 @@ slurm_launch()
     # any of the attempts were successful (currently, verification
     # indeed requires to launch two jobs)
     if [ ${attempt_no} -gt 1 ]; then
-        # Define options
-        local cpus_opt=`get_slurm_cpus_opt 1`
-        local mem_opt=`get_slurm_mem_opt 16`
-        local time_opt=`get_slurm_time_opt 00:01:00`
-        local dependency_opt=`get_slurm_dependency_opt "${verifjob_deps}"`
-        # Submit preliminary verification job (the job will fail if all
-        # attempts fail)
-        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --kill-on-invalid-dep=yes --wrap "true")
-        local exit_code=$?
-
-        # Submit verification job (the job will succeed if preliminary
-        # verification job fails)
-        local verjob_deps="afternotok:${jid}"
-        local dependency_opt=`get_slurm_dependency_opt "${verjob_deps}"`
-        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --kill-on-invalid-dep=yes --wrap "true")
-        local exit_code=$?
-
-        # Check for errors
-        if [ ${exit_code} -ne 0 ]; then
-            local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap \"true\""
-            echo "Error while launching verification job for step with sbatch (${command})" >&2
-            return 1
-        fi        
+        jid=`slurm_launch_verif_job ${dirname} ${stepname} ${attempt_jids}` || return 1
     fi
 
     # Set output value
@@ -1466,6 +1513,24 @@ get_step_log_filename_slurm()
     local stepname=$2
 
     echo ${dirname}/scripts/${stepname}.${SLURM_SCHED_LOG_FEXT}
+}
+
+########
+get_step_log_preverif_filename_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+
+    echo ${dirname}/scripts/${stepname}.preverif.${SLURM_SCHED_LOG_FEXT}
+}
+
+########
+get_step_log_verif_filename_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+
+    echo ${dirname}/scripts/${stepname}.verif.${SLURM_SCHED_LOG_FEXT}
 }
 
 ########
