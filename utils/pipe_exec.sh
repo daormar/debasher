@@ -12,6 +12,13 @@
 LOCKFD=99
 MAX_NUM_SCRIPT_OPTS_TO_DISPLAY=10
 
+####################
+# GLOBAL VARIABLES #
+####################
+
+# Declare associative arrays to store step ids
+declare -A PIPE_EXEC_STEP_IDS
+
 #############################
 # OPTION HANDLING FUNCTIONS #
 #############################
@@ -667,15 +674,13 @@ get_stepdeps_from_detailed_spec()
     for dep_spec in ${stepdeps_spec_blanks}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
         local mapped_deptype=`map_deptype_if_necessary ${deptype}`
-        local step=`get_stepname_part_in_dep ${dep_spec}`
-        
+        local stepname=`get_stepname_part_in_dep ${dep_spec}`
         # Check if there is an id for the step
-        local step_id=${step}_id
-        if [ ! -z "${!step_id}" ]; then
+        if [ ! -z "${PIPE_EXEC_STEP_IDS[${stepname}]}" ]; then
             if [ -z "${sdeps}" ]; then
-                sdeps=${mapped_deptype}":"${!step_id}
+                sdeps=${mapped_deptype}":"${PIPE_EXEC_STEP_IDS[${stepname}]}
             else
-                sdeps=${sdeps}"${separator}"${mapped_deptype}":"${!step_id}
+                sdeps=${sdeps}"${separator}"${mapped_deptype}":"${PIPE_EXEC_STEP_IDS[${stepname}]}
             fi
         fi
     done
@@ -686,9 +691,10 @@ get_stepdeps_from_detailed_spec()
 ########
 get_stepdeps()
 {
-    local stepdeps_spec=$1
+    local step_id_list=$1
+    local stepdeps_spec=$2
     case ${stepdeps_spec} in
-            "afterok:all") apply_deptype_to_stepids ${step_ids} afterok
+            "afterok:all") apply_deptype_to_stepids "${step_id_list}" afterok
                     ;;
             "none") echo ""
                     ;;
@@ -734,27 +740,27 @@ execute_step()
         fi
         prepare_fifos_owned_by_step ${stepname}
         
-        # Launch script
+        # Launch step
         local task_array_list=`get_task_array_list ${dirname} ${stepname} ${array_size}`
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
-        local stepdeps="`get_stepdeps ${stepdeps_spec}`"
-        local stepname_id=${stepname}_id
-        launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" ${stepname_id} || { echo "Error while launching step!" >&2 ; return 1; }
-        
-        # Update variables storing ids
-        step_ids="${step_ids}:${!stepname_id}"
+        local stepdeps=`get_stepdeps "${step_id_list}" ${stepdeps_spec}`
+        launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" "launch_outvar" || { echo "Error while launching step!" >&2 ; return 1; }
+
+        # Update variables storing id information
+        PIPE_EXEC_STEP_IDS[${stepname}]=`get_launch_outv_primary_id ${launch_outvar}`
+        step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
 
         # Write id to file
-        write_step_id_to_file ${dirname} ${stepname} ${!stepname_id}
+        local global_id=`get_launch_outv_global_id ${launch_outvar}`
+        write_step_id_to_file ${dirname} ${stepname} ${global_id}
     else
         # If step is in progress, its id should be retrieved so as to
         # correctly express dependencies
         if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
-            local stepname_id=${stepname}_id
             local sid=`read_step_id_from_file ${dirname} ${stepname}` || { echo "Error while retrieving id of in-progress step" >&2 ; return 1; }
-            eval "${stepname_id}='${sid}'"
-            step_ids="${step_ids}:${!stepname_id}"
-        fi        
+            PIPE_EXEC_STEP_IDS[${stepname}]=${sid}
+            step_id_list="${step_id_list}:${!stepname_id}"
+        fi
     fi
 }
 
@@ -768,8 +774,8 @@ execute_pipeline_steps()
     local dirname=$2
     local pfile=$3
         
-    # step_ids will store the step ids of the pipeline steps
-    local step_ids=""
+    # step_id_list will store the step ids of the pipeline steps
+    local step_id_list=""
     
     # Read information about the steps to be executed
     local stepspec
@@ -817,8 +823,8 @@ execute_pipeline_steps_debug()
     local dirname=$2
     local pfile=$3
         
-    # step_ids will store the step ids of the pipeline steps
-    local step_ids=""
+    # step_id_list will store the step ids of the pipeline steps
+    local step_id_list=""
     
     # Read information about the steps to be executed
     local stepspec

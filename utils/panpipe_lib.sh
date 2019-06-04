@@ -558,7 +558,7 @@ print_script_body_slurm_sched()
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
     
-    # Write function for cleaning if it was provided
+    # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
         echo "${post_funct} ${script_opts} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2 ;exit 1; }"
     fi
@@ -566,9 +566,6 @@ print_script_body_slurm_sched()
     # Return if function to execute failed
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
         
-    # Write command to signal step completion
-    echo "signal_step_completion ${dirname} ${stepname} ${taskidx} ${num_scripts}" 
-
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
         echo "fi" 
@@ -757,7 +754,11 @@ get_slurm_task_array_opt()
     local task_array_list=$2
     local throttle=$3
 
-    echo "--array=${task_array_list}%${throttle}"
+    if [ ${throttle} -eq 0 ]; then
+        echo "--array=${task_array_list}"
+    else
+        echo "--array=${task_array_list}%${throttle}"
+    fi
 }
 
 ########
@@ -770,6 +771,54 @@ get_scheduler_throttle()
     else
         echo ${stepspec_throttle}
     fi
+}
+
+########
+slurm_launch_attempt()
+{
+    # Initialize variables
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+    local task_array_list=$4
+    local stepspec=$5
+    local stepdeps=$6
+    local mem_attempt=$7
+    local time_attempt=$8
+
+    # Retrieve specification
+    local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
+    local account=`extract_attr_from_stepspec "$stepspec" "account"`
+    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
+    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
+    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
+
+    # Define options for sbatch
+    local cpus_opt=`get_slurm_cpus_opt ${cpus}`
+    local mem_opt=`get_slurm_mem_opt ${mem_attempt}`
+    local time_opt=`get_slurm_time_opt ${time_attempt}`
+    local account_opt=`get_slurm_account_opt ${account}`
+    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`get_slurm_partition_opt ${partition}`
+    local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
+    if [ ${array_size} -gt 1 ]; then
+        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
+    fi
+
+    # Submit job
+    local jid
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
+    local exit_code=$?
+
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file}"
+        echo "Error while launching attempt job for step ${stepname} (${command})" >&2
+        return 1
+    fi
+
+    echo $jid
 }
 
 ########
@@ -794,47 +843,131 @@ slurm_get_attempt_deps()
 }
 
 ########
-slurm_launch_verif_job()
+slurm_launch_preverif_job()
 {
     # Initialize variables
     local dirname=$1
     local stepname=$2
-    local attempt_jids=$3
+    local array_size=$3
+    local task_array_list=$4
+    local stepspec=$5
+    local attempt_jids=$6
 
     # Obtain dependencies for attempts
     local attempt_deps=`slurm_get_attempt_deps ${attempt_jids}`
     
+    # Retrieve specification
+    local account=`extract_attr_from_stepspec "$stepspec" "account"`
+    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
+    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
+
     # Define options
     local cpus_opt=`get_slurm_cpus_opt 1`
     local mem_opt=`get_slurm_mem_opt 16`
     local time_opt=`get_slurm_time_opt 00:01:00`
+    local account_opt=`get_slurm_account_opt ${account}`
+    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${attempt_deps}"`
     local preverif_logf=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
 
     # Submit preliminary verification job (the job will fail if all
     # attempts fail)
-    local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --job-name "${stepname}_preverif" --output ${preverif_logf} --kill-on-invalid-dep=yes --wrap "true")
+    local jid
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} --job-name "${stepname}_preverif" --output ${preverif_logf} --kill-on-invalid-dep=yes --wrap "true")
     local exit_code=$?
 
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
-        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap \"true\""
-        echo "Error while launching verification job for step with sbatch (${command})" >&2
+        echo "Error while launching preliminary verification job for step ${stepname}" >&2
         return 1
     fi
 
-    # Submit verification job (the job will succeed if preliminary
-    # verification job fails)
-    local verjob_deps="afternotok:${jid}"
+    echo $jid
+}
+
+########
+slurm_launch_verif_job()
+{
+    # Initialize variables
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+    local task_array_list=$4
+    local stepspec=$5
+    local preverif_jid=$6
+
+    # Retrieve specification
+    local account=`extract_attr_from_stepspec "$stepspec" "account"`
+    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
+    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
+
+    # Define options
+    local cpus_opt=`get_slurm_cpus_opt 1`
+    local mem_opt=`get_slurm_mem_opt 16`
+    local time_opt=`get_slurm_time_opt 00:01:00`
+    local account_opt=`get_slurm_account_opt ${account}`
+    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`get_slurm_partition_opt ${partition}`
+    local verjob_deps="afternotok:${preverif_jid}"
     local dependency_opt=`get_slurm_dependency_opt "${verjob_deps}"`
     local verif_logf=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
-    local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --job-name "${stepname}_verif" --output ${verif_logf} --kill-on-invalid-dep=yes --wrap "true")
+
+    # Submit verification job (the job will succeed if preliminary
+    # verification job fails)
+    local jid
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} --job-name "${stepname}_verif" --output ${verif_logf} --kill-on-invalid-dep=yes --wrap "true")
     local exit_code=$?
     
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
-        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${dependency_opt} --wrap \"true\""
-        echo "Error while launching verification job for step with sbatch (${command})" >&2
+        echo "Error while launching verification job for step ${stepname}" >&2
+        return 1
+    fi
+
+    echo $jid
+}
+
+########
+slurm_launch_signal_compl_job()
+{
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+    local task_array_list=$4
+    local stepspec=$5
+    local jid=$6
+
+    # Retrieve specification
+    local account=`extract_attr_from_stepspec "$stepspec" "account"`
+    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
+    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
+
+    # Define options for sbatch
+    local cpus_opt=`get_slurm_cpus_opt 1`
+    local mem_opt=`get_slurm_mem_opt 16`
+    local time_opt=`get_slurm_time_opt 00:01:00`
+    local account_opt=`get_slurm_account_opt ${account}`
+    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`get_slurm_partition_opt ${partition}`
+    local signcomp_logf=`get_step_log_singcomp_filename_slurm ${dirname} ${stepname}`
+    if [ ${array_size} -gt 1 ]; then
+        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} 0`
+        local scjob_deps="aftercorr:${jid}"
+    else
+        local scjob_deps="afterok:${jid}"
+    fi
+    local dependency_opt=`get_slurm_dependency_opt "${scjob_deps}"`
+
+    # Submit signal step completion job
+    local sign_step_completion_cmd=`get_signal_step_completion_cmd ${dirname} ${stepname} ${array_size}`
+    local jid
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name "${stepname}_signcomp" --output ${signcomp_logf} --kill-on-invalid-dep=yes --wrap "${sign_step_completion_cmd}")
+    local exit_code=$?
+    
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        echo "Error while launching signal completion job for step ${stepname}" >&2
         return 1
     fi
 
@@ -881,7 +1014,7 @@ get_mem_attempt_value()
     if [ ${array_idx} -lt  ${array_len} ]; then
         echo ${mem_array[${array_idx}]}
     else
-        last_array_idx=$(( array_len - 1 ))
+        local last_array_idx=$(( array_len - 1 ))
         echo ${mem_array[${last_array_idx}]]}
     fi
 }
@@ -922,53 +1055,26 @@ slurm_launch()
     local stepdeps=$6
     local outvar=$7
 
-    # Retrieve specification
-    local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
-    local mem=`extract_attr_from_stepspec "$stepspec" "mem"`
-    local time=`extract_attr_from_stepspec "$stepspec" "time"`
-    local account=`extract_attr_from_stepspec "$stepspec" "account"`
-    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
-    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
-    local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
-    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
-
-    # Define options for sbatch
-    local cpus_opt=`get_slurm_cpus_opt ${cpus}`
-    local account_opt=`get_slurm_account_opt ${account}`
-    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
-    local partition_opt=`get_slurm_partition_opt ${partition}`
-    if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
-    fi
-
     # Launch execution attempts
     local attempt_no=0
     local prev_jid=""
     local attempt_jids=""
+    local mem=`extract_attr_from_stepspec "$stepspec" "mem"`
+    local time=`extract_attr_from_stepspec "$stepspec" "time"`
     local num_attempts=`get_num_attempts ${time} ${mem}`
     local attempt_no=1
     while [ ${attempt_no} -le ${num_attempts} ]; do
-        # Obtain attempt-dependent options
+        # Obtain attempt-dependent parameters
         local mem_attempt=`get_mem_attempt_value ${mem} ${attempt_no}`
-        local mem_opt=`get_slurm_mem_opt ${mem_attempt}`
         local time_attempt=`get_time_attempt_value ${time} ${attempt_no}`
-        local time_opt=`get_slurm_time_opt ${time_attempt}`
         if [ "${prev_jid}" = "" ]; then
-            local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
+            local attempt_deps="${stepdeps}"
         else
-            local dependency_opt=`get_slurm_dependency_opt "afternotok:${prev_jid}"`
+            local attempt_deps="afternotok:${prev_jid}"
         fi
 
-        # Submit job
-        local jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
-        local exit_code=$?
-
-        # Check for errors
-        if [ ${exit_code} -ne 0 ]; then
-            local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file}"
-            echo "Error while launching step with sbatch (${command})" >&2
-            return 1
-        fi
+        # Launch attempt
+        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${attempt_deps}" ${mem_attempt} ${time_attempt}` || return 1
 
         # Update dependencies of verification job
         if [ "${attempt_jids}" = "" ]; then
@@ -981,15 +1087,21 @@ slurm_launch()
         attempt_no=$(( attempt_no + 1 ))
     done
 
-    # If more than one attempt was requested, launch job to verify if
-    # any of the attempts were successful (currently, verification
-    # indeed requires to launch two jobs)
+    # If more than one attempt was requested, verify if any of the
+    # attempts were successful (currently, verification requires to
+    # launch two jobs)
     if [ ${num_attempts} -gt 1 ]; then
-        jid=`slurm_launch_verif_job ${dirname} ${stepname} ${attempt_jids}` || return 1
+        preverif_jid=`slurm_launch_preverif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_jids}` || return 1
+        verif_jid=`slurm_launch_verif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${preverif_jid}` || return 1
+        sc_jid=`slurm_launch_signal_compl_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${verif_jid}` || return 1
+        # Set output value
+        eval "${outvar}='${attempt_jids},${preverif_jid},${verif_jid},${sc_jid}'"
+    else
+        # Only one attempt was requested
+        sc_jid=`slurm_launch_signal_compl_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${jid}` || return 1
+        # Set output value
+        eval "${outvar}='${jid},${sc_jid}'"
     fi
-
-    # Set output value
-    eval "${outvar}='${jid}'"
 }
 
 ########
@@ -1004,7 +1116,7 @@ launch()
     local stepdeps=$6
     local outvar=$7
     
-    # Launch file
+    # Launch step
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
@@ -1014,7 +1126,7 @@ launch()
 }
 
 ########
-launch_step()
+create_script_and_launch()
 {
     # Initialize variables
     local dirname=$1
@@ -1026,11 +1138,79 @@ launch_step()
     local opts_array_name=$7
     local id=$8
 
-    # Create script
+    # Create script for step
     create_script ${dirname} ${stepname} ${opts_array_name} || return 1
 
-    # Launch script
+    # Launch step
     launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
+}
+
+########
+get_launch_outv_primary_id_slurm()
+{
+    local launch_outvar=$1
+    local str_array
+    local sep=","
+    IFS="$sep" str_array=(${launch_outvar})
+    local array_len=${#str_array[@]}
+    if [ ${array_len} -eq 2 ]; then
+        # launch_outvar only has 2 ids, so only one attempt was executed
+        echo ${str_array[0]}
+    else
+        # launch_outvar only has more than 2 ids, so multiple attempts
+        # were executed. In this case, the global id is returned as the
+        # primary one
+        local last_array_idx=$(( array_len - 1 ))
+        echo ${str_array[${last_array_idx}]}
+    fi
+}
+
+########
+get_launch_outv_primary_id()
+{
+    # Returns the primary id of a step. The primary id is the
+    # job/process directly executing the step (additional jobs/processes
+    # may be necessary to complete step execution)
+    local launch_outvar=$1
+
+    local sched=`determine_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER}) ## Launch using slurm
+            get_launch_outv_primary_id_slurm ${launch_outvar}
+            ;;
+    esac
+}
+
+########
+get_launch_outv_global_id_slurm()
+{
+    # Initialize variables
+    local launch_outvar=$1
+    local str_array
+    local sep=","
+    IFS="$sep" str_array=(${launch_outvar})
+
+    # Return last id stored in launch output variable, which corresponds
+    # to the global id
+    local array_len=${#str_array[@]}
+    local last_array_idx=$(( array_len - 1 ))
+    echo ${str_array[${last_array_idx}]}
+}
+
+########
+get_launch_outv_global_id()
+{
+    # Returns the global id of a step. The global id is the job/process
+    # registering the step as finished. It is only executed when all of
+    # the others jobs/processes are completed
+    local launch_outvar=$1
+
+        local sched=`determine_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER}) ## Launch using slurm
+            get_launch_outv_global_id_slurm ${launch_outvar}
+            ;;
+    esac
 }
 
 ########
@@ -1569,6 +1749,15 @@ get_step_log_verif_filename_slurm()
     local stepname=$2
 
     echo ${dirname}/scripts/${stepname}.verif.${SLURM_SCHED_LOG_FEXT}
+}
+
+########
+get_step_log_singcomp_filename_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+
+    echo ${dirname}/scripts/${stepname}.signcomp.${SLURM_SCHED_LOG_FEXT}
 }
 
 ########
@@ -2139,6 +2328,26 @@ signal_step_completion()
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
     local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     echo "Finished task idx: $idx ; Total: $total" >> ${finished_filename}
+}
+
+########
+get_signal_step_completion_cmd()
+{
+    # Initialize variables
+    local dirname=$1
+    local stepname=$2
+    local total=$3
+
+    # Signal completion
+    # NOTE: A file lock is not necessary for the following operation
+    # since echo is atomic when writing short lines (for safety, up to
+    # 512 bytes, source:
+    # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
+    if [ ${total} -eq 1 ]; then 
+        echo "fname=`get_step_finished_filename ${dirname} ${stepname}`; echo \"Finished task idx: 1 ; Total: $total\" >> \${fname}"
+    else
+        echo "fname=`get_step_finished_filename ${dirname} ${stepname}`; echo \"Finished task idx: \${SLURM_ARRAY_TASK_ID} ; Total: $total\" >> \${fname}"
+    fi
 }
 
 ########
