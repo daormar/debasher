@@ -191,6 +191,52 @@ def extract_step_entries(pfile):
     return entries_lineno,step_entries
 
 ##################################################
+def extract_time_value(entry):
+    fields=entry.split()
+    i=0
+    found=False
+    value=""
+    while i<len(fields) and not found:
+        if fields[i].find("time=")==0:
+            found=True
+            value=fields[i][5:]
+        else:
+            i=i+1
+    return value
+
+##################################################
+def extract_mem_value(entry):
+    fields=entry.split()
+    i=0
+    found=False
+    value=""
+    while i<len(fields) and not found:
+        if fields[i].find("mem=")==0:
+            found=True
+            value=fields[i][4:]
+        else:
+            i=i+1
+    return value
+
+##################################################
+def str_contains_commas(str):
+    if(',' in str):
+        return True
+    else:
+        return False
+    
+##################################################
+def extract_steps_with_multiattempt(step_entries):
+    multiattempt_steps=set()
+    for i in range(len(step_entries)):
+        sname=extract_step_name(step_entries[i])
+        time_value=extract_time_value(step_entries[i])
+        mem_value=extract_mem_value(step_entries[i])
+        if(str_contains_commas(time_value) or str_contains_commas(mem_value)):
+            multiattempt_steps.add(sname)
+    return multiattempt_steps
+
+##################################################
 def extract_stepdeps_info(entries_lineno,step_entries):
     stepdeps_map={}
     stepdeps_sep={}
@@ -268,9 +314,26 @@ def order_step_entries(step_entries,stepdeps_map,ordered_step_entries):
             return ordered_step_entries
         
     return ordered_step_entries
+
+##################################################
+def after_dep_has_multatt_step(entries_lineno,multiattempt_steps,stepdeps_map):
+    found=False
+    for sname in stepdeps_map:
+        deplist=stepdeps_map[sname]
+        i=0
+        while i<len(deplist) and not found:
+            if(deplist[i].deptype=="after" and deplist[i].stepname in multiattempt_steps):
+                found=True
+                print >> sys.stderr, "Error:",sname,"step has an 'after' dependency with a multiple-attempt step (",deplist[i].stepname,")"
+            else:
+                i=i+1
+    if(found):
+        return True
+    else:
+        return False
     
 ##################################################
-def stepdeps_correct(entries_lineno,step_entries,stepdeps_map,ordered_step_entries):
+def stepdeps_correct(entries_lineno,step_entries,multiattempt_steps,stepdeps_map,ordered_step_entries):
 
     # Check existence of duplicated steps
     if(stepnames_duplicated(entries_lineno,step_entries)):
@@ -280,6 +343,9 @@ def stepdeps_correct(entries_lineno,step_entries,stepdeps_map,ordered_step_entri
     if(not depnames_correct(stepdeps_map)):
         return False
 
+    # Check "after" dependency type is not used over a multi-attempt step
+    if(after_dep_has_multatt_step(entries_lineno,multiattempt_steps,stepdeps_map)):
+        return False
     # Reorder step entries
     order_step_entries(step_entries,stepdeps_map,ordered_step_entries)
     if(len(step_entries)!=len(ordered_step_entries)):
@@ -369,6 +435,7 @@ def snames_valid(stepdeps_map):
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
     entries_lineno,step_entries=extract_step_entries(values["pfile"])
+    multiattempt_steps=extract_steps_with_multiattempt(step_entries)
     deps_syntax_ok,stepdeps_sep,stepdeps_map=extract_stepdeps_info(entries_lineno,step_entries)
     if(not deps_syntax_ok):
        print >> sys.stderr, "Step dependencies are not syntactically correct"
@@ -377,7 +444,7 @@ def process_pars(flags,values):
        print >> sys.stderr, "Step names are not valid"
        return 1
     ordered_step_entries=[]
-    if(stepdeps_correct(entries_lineno,step_entries,stepdeps_map,ordered_step_entries)):
+    if(stepdeps_correct(entries_lineno,step_entries,multiattempt_steps,stepdeps_map,ordered_step_entries)):
         print >> sys.stderr, "Pipeline file is correct"
         if(flags["r_given"]):
             print_entries(config_entries,ordered_step_entries)
