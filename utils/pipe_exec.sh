@@ -747,7 +747,8 @@ execute_step()
         launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" "launch_outvar" || { echo "Error while launching step!" >&2 ; return 1; }
 
         # Update variables storing id information
-        PIPE_EXEC_STEP_IDS[${stepname}]=`get_launch_outv_primary_id ${launch_outvar}`
+        local primary_id=`get_launch_outv_primary_id ${launch_outvar}`
+        PIPE_EXEC_STEP_IDS[${stepname}]=${primary_id}
         step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
 
         # Write id to file
