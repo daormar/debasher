@@ -950,7 +950,7 @@ slurm_launch_signal_compl_job()
     local account_opt=`get_slurm_account_opt ${account}`
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
-    local signcomp_logf=`get_step_log_singcomp_filename_slurm ${dirname} ${stepname}`
+    local signcomp_logf=`get_step_log_signcomp_filename_slurm ${dirname} ${stepname}`
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} 0`
         local scjob_deps="aftercorr:${jid}"
@@ -1752,7 +1752,7 @@ get_step_log_verif_filename_slurm()
 }
 
 ########
-get_step_log_singcomp_filename_slurm()
+get_step_log_signcomp_filename_slurm()
 {
     local dirname=$1
     local stepname=$2
@@ -2163,18 +2163,21 @@ update_step_completion_signal()
 }
 
 ########
-clean_step_log_files()
+clean_step_log_files_slurm()
 {
     local dirname=$1
     local stepname=$2
     local array_size=$3
-    local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
-    local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
-    
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        rm -f ${builtin_log_filename}
+        local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
         rm -f ${slurm_log_filename}
+        local slurm_log_preverif=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
+        rm -f ${slurm_log_preverif}
+        local slurm_log_verif=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
+        rm -f ${slurm_log_verif}
+        local slurm_log_signcomp=`get_step_log_signcomp_filename_slurm ${dirname} ${stepname}`
+        rm -f ${slurm_log_signcomp}
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
@@ -2182,13 +2185,26 @@ clean_step_log_files()
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                local builtin_task_log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${idx}`
                 local slurm_task_log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${idx}`
-                rm -f ${builtin_task_log_filename}
                 rm -f ${slurm_task_log_filename}
             done
         fi
     fi
+}
+
+########
+clean_step_log_files()
+{
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+
+    local sched=`determine_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER})
+            create_slurm_script $dirname $stepname $array_size
+            ;;
+    esac
 }
 
 ########
