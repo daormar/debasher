@@ -2202,7 +2202,7 @@ clean_step_log_files()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script $dirname $stepname $array_size
+            clean_step_log_files_slurm $dirname $stepname $array_size
             ;;
     esac
 }
