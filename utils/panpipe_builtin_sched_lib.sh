@@ -1195,13 +1195,11 @@ builtin_sched_clean_step_log_files()
     local dirname=$1
     local stepname=$2
     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
-    local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
-    local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
+        local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
         rm -f ${builtin_log_filename}
-        rm -f ${slurm_log_filename}
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
@@ -1210,9 +1208,7 @@ builtin_sched_clean_step_log_files()
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
                 local builtin_task_log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${idx}`
-                local slurm_task_log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${idx}`
                 rm -f ${builtin_task_log_filename}
-                rm -f ${slurm_task_log_filename}
             done
         fi
     fi
