@@ -782,9 +782,10 @@ slurm_launch_attempt()
     local array_size=$3
     local task_array_list=$4
     local stepspec=$5
-    local stepdeps=$6
-    local mem_attempt=$7
-    local time_attempt=$8
+    local attempt_no=$6
+    local stepdeps=$7
+    local mem_attempt=$8
+    local time_attempt=$9
 
     # Retrieve specification
     local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
@@ -806,18 +807,29 @@ slurm_launch_attempt()
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
 
-    # Submit job
+    # Submit job (initially put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file})
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} -H ${file})
     local exit_code=$?
 
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
-        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} ${file}"
+        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} -H ${file}"
         echo "Error while launching attempt job for step ${stepname} (${command})" >&2
         return 1
     fi
+    
+    # Release job
+    $($SCONTROL release $jid)
+    local exit_code=$?
 
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$SCONTROL release $jid"
+        echo "Error while launching attempt job for step ${stepname} (${command})" >&2
+        return 1
+    fi
+    
     echo $jid
 }
 
@@ -1074,7 +1086,7 @@ slurm_launch()
         fi
 
         # Launch attempt
-        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${attempt_deps}" ${mem_attempt} ${time_attempt}` || return 1
+        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_no} "${attempt_deps}" ${mem_attempt} ${time_attempt}` || return 1
 
         # Update dependencies of verification job
         if [ "${attempt_jids}" = "" ]; then
