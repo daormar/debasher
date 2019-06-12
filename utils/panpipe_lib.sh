@@ -565,7 +565,11 @@ print_script_body_slurm_sched()
 
     # Return if function to execute failed
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
-        
+
+    # Signal step completion
+    local sign_step_completion_cmd=`get_signal_step_completion_cmd ${dirname} ${stepname} ${num_scripts}`
+    echo "srun ${sign_step_completion_cmd}"
+
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
         echo "fi" 
@@ -941,52 +945,6 @@ slurm_launch_verif_job()
 }
 
 ########
-slurm_launch_signal_compl_job()
-{
-    local dirname=$1
-    local stepname=$2
-    local array_size=$3
-    local task_array_list=$4
-    local stepspec=$5
-    local jid=$6
-
-    # Retrieve specification
-    local account=`extract_attr_from_stepspec "$stepspec" "account"`
-    local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
-    local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
-
-    # Define options for sbatch
-    local cpus_opt=`get_slurm_cpus_opt 1`
-    local mem_opt=`get_slurm_mem_opt 16`
-    local time_opt=`get_slurm_time_opt 00:01:00`
-    local account_opt=`get_slurm_account_opt ${account}`
-    local nodes_opt=`get_slurm_nodes_opt ${nodes}`
-    local partition_opt=`get_slurm_partition_opt ${partition}`
-    local signcomp_logf=`get_step_log_signcomp_filename_slurm ${dirname} ${stepname}`
-    if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} 0`
-        local scjob_deps="aftercorr:${jid}"
-    else
-        local scjob_deps="afterok:${jid}"
-    fi
-    local dependency_opt=`get_slurm_dependency_opt "${scjob_deps}"`
-
-    # Submit signal step completion job
-    local sign_step_completion_cmd=`get_signal_step_completion_cmd ${dirname} ${stepname} ${array_size}`
-    local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name "${stepname}_signcomp" --output ${signcomp_logf} --kill-on-invalid-dep=yes --wrap "${sign_step_completion_cmd}")
-    local exit_code=$?
-    
-    # Check for errors
-    if [ ${exit_code} -ne 0 ]; then
-        echo "Error while launching signal completion job for step ${stepname}" >&2
-        return 1
-    fi
-
-    echo $jid
-}
-
-########
 get_num_attempts()
 {
     # Initialize variables
@@ -1105,14 +1063,10 @@ slurm_launch()
     if [ ${num_attempts} -gt 1 ]; then
         preverif_jid=`slurm_launch_preverif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_jids}` || return 1
         verif_jid=`slurm_launch_verif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${preverif_jid}` || return 1
-        sc_jid=`slurm_launch_signal_compl_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${verif_jid}` || return 1
         # Set output value
         eval "${outvar}='${attempt_jids},${preverif_jid},${verif_jid},${sc_jid}'"
     else
-        # Only one attempt was requested
-        sc_jid=`slurm_launch_signal_compl_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${jid}` || return 1
-        # Set output value
-        eval "${outvar}='${jid},${sc_jid}'"
+        eval "${outvar}='${jid}'"
     fi
 }
 
@@ -1217,7 +1171,7 @@ get_launch_outv_global_id()
     # the others jobs/processes are completed
     local launch_outvar=$1
 
-        local sched=`determine_scheduler`
+    local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
             get_launch_outv_global_id_slurm ${launch_outvar}
@@ -2372,9 +2326,9 @@ get_signal_step_completion_cmd()
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
     if [ ${total} -eq 1 ]; then 
-        echo "fname=`get_step_finished_filename ${dirname} ${stepname}`; echo \"Finished task idx: 1 ; Total: $total\" >> \${fname}"
+        echo "echo \"Finished task idx: 1 ; Total: $total\" >> `get_step_finished_filename ${dirname} ${stepname}`"
     else
-        echo "fname=`get_step_finished_filename ${dirname} ${stepname}`; echo \"Finished task idx: \${SLURM_ARRAY_TASK_ID} ; Total: $total\" >> \${fname}"
+        echo "echo \"Finished task idx: \${SLURM_ARRAY_TASK_ID} ; Total: $total\" >> `get_step_finished_filename ${dirname} ${stepname}`"
     fi
 }
 
