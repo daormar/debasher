@@ -813,7 +813,7 @@ slurm_launch_attempt()
 
     # Submit job (initially put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} -H ${file})
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --kill-on-invalid-dep=yes -H ${file})
     local exit_code=$?
 
     # Check for errors
