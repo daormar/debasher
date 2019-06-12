@@ -110,6 +110,7 @@ declare PANPIPE_SCHEDULER
 declare -A PANPIPE_REEXEC_STEPS
 declare PANPIPE_DEFAULT_NODES
 declare PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=1
+declare PANPIPE_ARRAY_TASK_NOTHROTTLE=0
 
 # Declare SLURM scheduler-related variables
 declare AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=0
@@ -247,7 +248,8 @@ replace_str_elem_sep_with_blank()
     local str_array
     local result
 
-    IFS="$sep" str_array=($str)
+    IFS="$sep" read -r -a str_array <<< "${str}"
+
     result=${str_array[@]}
     
     echo ${result}
@@ -560,7 +562,7 @@ print_script_body_slurm_sched()
     
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} ${script_opts} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2 ;exit 1; }"
+        echo "${post_funct} ${script_opts} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
     # Return if function to execute failed
@@ -568,7 +570,7 @@ print_script_body_slurm_sched()
 
     # Signal step completion
     local sign_step_completion_cmd=`get_signal_step_completion_cmd ${dirname} ${stepname} ${num_scripts}`
-    echo "srun ${sign_step_completion_cmd}"
+    echo "srun ${sign_step_completion_cmd} || { echo \"Error: step completion could not be signaled\" >&2; exit 1; }"
 
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
@@ -600,7 +602,6 @@ create_slurm_script()
     echo ${BASH_SHEBANG} > ${fname} || return 1
 
     # Set SLURM options
-    
     echo "#SBATCH --job-name=${funct}" >> ${fname} || return 1
     if [ ${num_scripts} -eq 1 ]; then
         local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
@@ -758,7 +759,7 @@ get_slurm_task_array_opt()
     local task_array_list=$2
     local throttle=$3
 
-    if [ ${throttle} -eq 0 ]; then
+    if [ ${throttle} -eq ${PANPIPE_ARRAY_TASK_NOTHROTTLE} ]; then
         echo "--array=${task_array_list}"
     else
         echo "--array=${task_array_list}%${throttle}"
@@ -775,6 +776,68 @@ get_scheduler_throttle()
     else
         echo ${stepspec_throttle}
     fi
+}
+
+########
+set_slurm_jobcorr_like_deps_for_listitem()
+{
+    local specified_jids=$1
+    local jid=$2
+    local deptype=$3
+    local listitem=$4
+
+    # Extract specified jids
+    local sep=","
+    local spec_jid_array
+    IFS="$sep" read -r -a spec_jid_array <<< "${specified_jids}"
+    
+    # Extract start and end indices
+    local sep="-"
+    local idx_array
+    IFS="$sep" read -r -a idx_array <<< "${listitem}"
+    local start=${idx_array[0]}
+    if [ ${#idx_array[@]} -eq 1 ]; then
+        local end=${idx_array[0]}  
+    else
+        local end=${idx_array[1]}
+    fi
+
+    # Process indices
+    local idx=${start}
+    while [ ${idx} -le ${end} ]; do
+        # Obtain dependencies
+        local dependencies=""
+        for specified_jid in ${spec_jid_array[@]}; do
+            if [ "${dependencies}" = "" ]; then
+                dependencies=${deptype}:${specified_jid}_${idx}
+            else
+                dependencies=${dependencies},${deptype}:${specified_jid}_${idx}
+            fi
+        done
+        # Update dependencies
+        ${SCONTROL} update jobid=${jid}_${idx} Dependency=${dependencies} || return 1
+        # Increase task index
+        idx=$(( idx + 1 ))
+    done
+}
+
+########
+set_slurm_jobcorr_like_deps()
+{
+    local specified_jids=$1
+    local jid=$2
+    local array_size=$3
+    local task_array_list=$4
+    local deptype=$5
+
+    # Iterate over task array list items
+    local sep=","
+    local array
+    IFS="$sep" read -r -a array <<< "${task_array_list}"
+    local listitem
+    for listitem in ${array[@]}; do
+        set_slurm_jobcorr_like_deps_for_listitem ${specified_jids} ${jid} ${deptype} ${listitem} || return 1
+    done
 }
 
 ########
@@ -811,7 +874,7 @@ slurm_launch_attempt()
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
 
-    # Submit job (initially put on hold)
+    # Submit job (initially it is put on hold)
     local jid
     jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --kill-on-invalid-dep=yes -H ${file})
     local exit_code=$?
@@ -821,6 +884,14 @@ slurm_launch_attempt()
         local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} -H ${file}"
         echo "Error while launching attempt job for step ${stepname} (${command})" >&2
         return 1
+    fi
+
+    # Update dependencies when executing job arrays for second or
+    # further attempts
+    if [ ${array_size} -gt 1 -a ${attempt_no} -ge 2 ]; then
+        local deptype="afternotok"
+        local prev_attempt_jid=`get_id_part_in_dep ${stepdeps}`
+        set_slurm_jobcorr_like_deps ${prev_attempt_jid} ${jid} ${array_size} ${task_array_list} ${deptype} || { return 1 ; echo "Error while launching attempt job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
     
     # Release job
@@ -885,17 +956,37 @@ slurm_launch_preverif_job()
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${attempt_deps}"`
+    if [ ${array_size} -gt 1 ]; then
+        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${PANPIPE_ARRAY_TASK_NOTHROTTLE}`
+    fi
     local preverif_logf=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
 
     # Submit preliminary verification job (the job will fail if all
-    # attempts fail)
+    # attempts fail, initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} --job-name "${stepname}_preverif" --output ${preverif_logf} --kill-on-invalid-dep=yes --wrap "true")
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name "${stepname}_preverif" --output ${preverif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
 
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
         echo "Error while launching preliminary verification job for step ${stepname}" >&2
+        return 1
+    fi
+
+    # Update dependencies when executing job arrays
+    if [ ${array_size} -gt 1 ]; then
+        local deptype="afternotok"
+        set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} || { return 1 ; echo "Error while launching preliminary verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
+    fi
+
+    # Release job
+    $($SCONTROL release $jid)
+    local exit_code=$?
+
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$SCONTROL release $jid"
+        echo "Error while launching attempt job for step ${stepname} (${command})" >&2
         return 1
     fi
 
@@ -927,17 +1018,37 @@ slurm_launch_verif_job()
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local verjob_deps="afternotok:${preverif_jid}"
     local dependency_opt=`get_slurm_dependency_opt "${verjob_deps}"`
+    if [ ${array_size} -gt 1 ]; then
+        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${PANPIPE_ARRAY_TASK_NOTHROTTLE}`
+    fi
     local verif_logf=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
 
     # Submit verification job (the job will succeed if preliminary
-    # verification job fails)
+    # verification job fails, initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} --job-name "${stepname}_verif" --output ${verif_logf} --kill-on-invalid-dep=yes --wrap "true")
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name "${stepname}_verif" --output ${verif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
     
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
         echo "Error while launching verification job for step ${stepname}" >&2
+        return 1
+    fi
+
+    # Update dependencies when executing job arrays
+    if [ ${array_size} -gt 1 ]; then
+        local deptype="afternotok"
+        set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} || { return 1 ; echo "Error while launching verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
+    fi
+
+    # Release job
+    $($SCONTROL release $jid)
+    local exit_code=$?
+
+    # Check for errors
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$SCONTROL release $jid"
+        echo "Error while launching attempt job for step ${stepname} (${command})" >&2
         return 1
     fi
 
@@ -950,13 +1061,13 @@ get_num_attempts()
     # Initialize variables
     local time=$1
     local mem=$2
+
+    # Obtain arrays for time and memory limits
     local time_array
     local mem_array
     local sep=","
-
-    # Obtain arrays for time and memory limits
-    IFS="$sep" time_array=($time)
-    IFS="$sep" mem_array=($mem)
+    IFS="$sep" read -r -a time_array <<< "${time}"
+    IFS="$sep" read -r -a mem_array <<< "${mem}"
 
     # Return length of longest array
     if [ ${#time_array[@]} -gt ${#mem_array[@]} ]; then
@@ -972,11 +1083,11 @@ get_mem_attempt_value()
     # Initialize variables
     local mem=$1
     local attempt_no=$2
-    local mem_array
 
     # Obtain array for memory limits
+    local mem_array
     local sep=","
-    IFS="$sep" mem_array=($mem)
+    IFS="$sep" read -r -a mem_array <<< "${mem}"
 
     # Return value for attempt
     local array_idx=$(( attempt_no - 1 ))
@@ -995,11 +1106,11 @@ get_time_attempt_value()
     # Initialize variables
     local time=$1
     local attempt_no=$2
-    local time_array
 
     # Obtain array for time limits
+    local time_array
     local sep=","
-    IFS="$sep" time_array=($time)
+    IFS="$sep" read -r -a time_array <<< "${time}"
 
     # Return value for attempt
     local array_idx=$(( attempt_no - 1 ))
@@ -1117,7 +1228,8 @@ get_launch_outv_primary_id_slurm()
     local launch_outvar=$1
     local str_array
     local sep=","
-    IFS="$sep" str_array=(${launch_outvar})
+    IFS="$sep" read -r -a str_array <<< "${launch_outvar}"
+
     local array_len=${#str_array[@]}
     if [ ${array_len} -eq 2 ]; then
         # launch_outvar only has 2 ids, so only one attempt was executed
@@ -1154,7 +1266,7 @@ get_launch_outv_global_id_slurm()
     local launch_outvar=$1
     local str_array
     local sep=","
-    IFS="$sep" str_array=(${launch_outvar})
+    IFS="$sep" read -r -a str_array <<< "${launch_outvar}"
 
     # Return last id stored in launch output variable, which corresponds
     # to the global id
@@ -1998,7 +2110,11 @@ get_task_array_list()
 get_deptype_part_in_dep()
 {
     local dep=$1
-    echo ${dep} | $AWK -F ":" '{print $1}'
+    local sep=":"
+    local str_array
+    IFS="$sep" read -r -a str_array <<< "${dep}"
+
+    echo ${str_array[0]}
 }
 
 ########
@@ -2008,7 +2124,10 @@ get_stepname_part_in_dep()
     if [ ${dep} = "none" ]; then
         echo ${dep}
     else
-        echo ${dep} | $AWK -F ":" '{print $2}'
+        local sep=":"
+        local str_array
+        IFS="$sep" read -r -a str_array <<< "${dep}"
+        echo ${str_array[1]}
     fi
 }
 
@@ -2016,7 +2135,10 @@ get_stepname_part_in_dep()
 get_id_part_in_dep()
 {
     local dep=$1
-    echo ${dep} | $AWK -F ":" '{print $2}'
+    local sep=":"
+    local str_array
+    IFS="$sep" read -r -a str_array <<< "${dep}"
+    echo ${str_array[1]}
 }
 
 ########
@@ -2667,6 +2789,7 @@ check_opt_given()
 {
     local line=$1
     local opt=$2
+
     # Convert string to array
     local array
     IFS=' ' read -r -a array <<< $line
