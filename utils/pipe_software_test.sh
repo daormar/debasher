@@ -34,7 +34,7 @@ step_a_document()
 step_a_explain_cmdline_opts()
 {
     # -a option
-    description="Sleep time in seconds for step_a"
+    description="Sleep time in seconds"
     explain_cmdline_req_opt "-a" "<int>" "$description"
 }
 
@@ -129,7 +129,9 @@ step_c_document()
 ########
 step_c_explain_cmdline_opts()
 {
-    :
+    # -c option
+    description="Sleep time in seconds"
+    explain_cmdline_req_opt "-c" "<int>" "$description"
 }
 
 ########
@@ -139,6 +141,9 @@ step_c_define_opts()
     local cmdline=$1
     local stepspec=$2
     local optlist=""
+
+    # -c option
+    define_cmdline_opt "$cmdline" "-c" optlist || exit 1
 
     # Define the -step-outd option, the output directory for the step
     local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
@@ -158,6 +163,7 @@ step_c()
     display_begin_step_message
 
     # Initialize variables
+    local sleep_time=`read_opt_value_from_line "$*" "-c"`
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
@@ -165,7 +171,7 @@ step_c()
     touch ${step_outd}/${id}_aux
 
     # sleep some time
-    sleep 10
+    sleep ${sleep_time}
     
     # create file
     touch ${step_outd}/$id
