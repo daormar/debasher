@@ -784,7 +784,8 @@ set_slurm_jobcorr_like_deps_for_listitem()
     local specified_jids=$1
     local jid=$2
     local deptype=$3
-    local listitem=$4
+    local additional_deps=$4
+    local listitem=$5
 
     # Extract specified jids
     local sep=","
@@ -806,7 +807,7 @@ set_slurm_jobcorr_like_deps_for_listitem()
     local idx=${start}
     while [ ${idx} -le ${end} ]; do
         # Obtain dependencies
-        local dependencies=""
+        local dependencies=${additional_deps}
         for specified_jid in ${spec_jid_array[@]}; do
             if [ "${dependencies}" = "" ]; then
                 dependencies=${deptype}:${specified_jid}_${idx}
@@ -829,15 +830,33 @@ set_slurm_jobcorr_like_deps()
     local array_size=$3
     local task_array_list=$4
     local deptype=$5
-
+    local additional_deps=$6
+    
     # Iterate over task array list items
     local sep=","
     local array
     IFS="$sep" read -r -a array <<< "${task_array_list}"
     local listitem
     for listitem in ${array[@]}; do
-        set_slurm_jobcorr_like_deps_for_listitem ${specified_jids} ${jid} ${deptype} ${listitem} || return 1
+        set_slurm_jobcorr_like_deps_for_listitem ${specified_jids} ${jid} ${deptype} "${additional_deps}" ${listitem} || return 1
     done
+}
+
+########
+combine_slurm_deps()
+{
+    local deps1=$1
+    local deps2=$2
+    
+    if [ "${deps1}" = "" ]; then
+        echo $deps2
+    else
+        if [ "${deps2}" = "" ]; then
+            echo $deps1
+        else
+            echo ${deps1},${deps2}
+        fi
+    fi
 }
 
 ########
@@ -851,8 +870,16 @@ slurm_launch_attempt()
     local stepspec=$5
     local attempt_no=$6
     local stepdeps=$7
-    local mem_attempt=$8
-    local time_attempt=$9
+    local prev_attempt_jid=$8
+    local mem_attempt=$9
+    local time_attempt=${10}
+
+    # Obtain augmented dependencies
+    local prev_attempt_deps=""
+    if [ "${prev_attempt_jid}" != "" ]; then
+        prev_attempt_deps="afternotok:${prev_attempt_jid}"
+    fi
+    local augmented_deps=`combine_slurm_deps ${stepdeps} ${prev_attempt_deps}`
 
     # Retrieve specification
     local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
@@ -869,7 +896,7 @@ slurm_launch_attempt()
     local account_opt=`get_slurm_account_opt ${account}`
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
-    local dependency_opt=`get_slurm_dependency_opt "${stepdeps}"`
+    local dependency_opt=`get_slurm_dependency_opt "${augmented_deps}"`
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
@@ -890,8 +917,7 @@ slurm_launch_attempt()
     # further attempts
     if [ ${array_size} -gt 1 -a ${attempt_no} -ge 2 ]; then
         local deptype="afternotok"
-        local prev_attempt_jid=`get_id_part_in_dep ${stepdeps}`
-        set_slurm_jobcorr_like_deps ${prev_attempt_jid} ${jid} ${array_size} ${task_array_list} ${deptype} || { return 1 ; echo "Error while launching attempt job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
+        set_slurm_jobcorr_like_deps ${prev_attempt_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${stepdeps}" || { return 1 ; echo "Error while launching attempt job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
     
     # Release job
@@ -976,7 +1002,8 @@ slurm_launch_preverif_job()
     # Update dependencies when executing job arrays
     if [ ${array_size} -gt 1 ]; then
         local deptype="afternotok"
-        set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} || { return 1 ; echo "Error while launching preliminary verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
+        local additional_deps=""
+        set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching preliminary verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
 
     # Release job
@@ -1038,7 +1065,8 @@ slurm_launch_verif_job()
     # Update dependencies when executing job arrays
     if [ ${array_size} -gt 1 ]; then
         local deptype="afternotok"
-        set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} || { return 1 ; echo "Error while launching verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
+        local additional_deps=""
+        set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
 
     # Release job
@@ -1148,14 +1176,9 @@ slurm_launch()
         # Obtain attempt-dependent parameters
         local mem_attempt=`get_mem_attempt_value ${mem} ${attempt_no}`
         local time_attempt=`get_time_attempt_value ${time} ${attempt_no}`
-        if [ "${prev_jid}" = "" ]; then
-            local attempt_deps="${stepdeps}"
-        else
-            local attempt_deps="afternotok:${prev_jid}"
-        fi
 
         # Launch attempt
-        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_no} "${attempt_deps}" ${mem_attempt} ${time_attempt}` || return 1
+        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_no} "${stepdeps}" "${prev_jid}" ${mem_attempt} ${time_attempt}` || return 1
 
         # Update dependencies of verification job
         if [ "${attempt_jids}" = "" ]; then
@@ -1443,8 +1466,12 @@ step_is_finished()
     local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     
     if [ -f ${finished_filename} ]; then
-        # Check that all tasks are finished
+        # Obtain number of finished tasks
         local num_array_tasks_finished=`get_num_finished_array_tasks_from_finished_file ${finished_filename}`
+        if [ ${num_array_tasks_finished} -eq 0 ]; then
+            return 1
+        fi
+        # Check that all tasks are finished
         local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file ${finished_filename}`
         if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
             return 0
