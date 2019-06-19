@@ -13,7 +13,7 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_status              -d <string> [-s <string>]"
+    echo "pipe_status               -d <string> [-s <string>]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Directory where the pipeline steps are stored"
