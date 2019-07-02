@@ -109,8 +109,11 @@ builtin_sched_init_step_info()
             local cpus=`extract_cpus_from_stepspec "$stepspec"`
             str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $stepname should be a natural number" >&2; return 1; }
 
-            # Get mem info
+            # Get mem info (NOTE: if multiple attempts specified, keep
+            # memory specification of the first one)
             local mem=`extract_mem_from_stepspec "$stepspec"`
+            local attempt_no=1
+            mem=`get_mem_attempt_value ${mem} ${attempt_no}`
             mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for step ${stepname}" >&2; return 1; }
             str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $stepname should be a natural number" >&2; return 1; }
 
