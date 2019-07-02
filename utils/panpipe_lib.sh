@@ -600,16 +600,6 @@ create_slurm_script()
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
     echo ${BASH_SHEBANG} > ${fname} || return 1
-
-    # Set SLURM options
-    echo "#SBATCH --job-name=${funct}" >> ${fname} || return 1
-    if [ ${num_scripts} -eq 1 ]; then
-        local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
-        echo "#SBATCH --output=${slurm_log_filename}" >> ${fname} || return 1
-    else
-        local slurm_task_template_log_filename=`get_task_template_log_filename_slurm ${dirname} ${stepname}`
-        echo "#SBATCH --output=${slurm_task_template_log_filename}" >> ${fname} || return 1
-    fi
     
     # Write environment variables
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
@@ -661,6 +651,46 @@ archive_script()
     # Archive script with date info
     local curr_date=`date '+%Y_%m_%d'`
     cp ${script_filename} ${script_filename}.${curr_date}
+}
+
+########
+get_slurm_attempt_suffix()
+{
+    local attempt_no=$1
+
+    if [ ${attempt_no} -eq 1 ]; then
+        echo ""
+    else
+        echo "__attempt${attempt_no}"
+    fi        
+}
+
+########
+get_slurm_jobname()
+{
+    local stepname=$1
+    local attempt_no=$2
+    local attempt_suffix=`get_slurm_attempt_suffix ${attempt_no}`
+    
+    echo ${stepname}${attempt_suffix}
+}
+
+########
+get_slurm_output()
+{
+    local dirname=$1
+    local stepname=$2
+    local array_size=$3
+    local attempt_no=$4
+    local attempt_suffix=`get_slurm_attempt_suffix ${attempt_no}`
+
+    if [ ${array_size} -eq 1 ]; then
+        local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
+        echo ${slurm_log_filename}${attempt_suffix}
+    else
+        local slurm_task_template_log_filename=`get_task_template_log_filename_slurm ${dirname} ${stepname}`
+        echo ${slurm_task_template_log_filename}${attempt_suffix}
+    fi
 }
 
 ########
@@ -890,6 +920,8 @@ slurm_launch_attempt()
     local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
 
     # Define options for sbatch
+    local jobname=`get_slurm_jobname $stepname $attempt_no`
+    local output=`get_slurm_output $dirname $stepname $array_size $attempt_no`
     local cpus_opt=`get_slurm_cpus_opt ${cpus}`
     local mem_opt=`get_slurm_mem_opt ${mem_attempt}`
     local time_opt=`get_slurm_time_opt ${time_attempt}`
@@ -900,10 +932,10 @@ slurm_launch_attempt()
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
-
+    
     # Submit job (initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --kill-on-invalid-dep=yes -H ${file})
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes -H ${file})
     local exit_code=$?
 
     # Check for errors
@@ -2286,7 +2318,7 @@ clean_step_log_files_slurm()
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
         local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
-        rm -f ${slurm_log_filename}
+        rm -f ${slurm_log_filename}*
         local slurm_log_preverif=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
         rm -f ${slurm_log_preverif}
         local slurm_log_verif=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
@@ -2301,7 +2333,7 @@ clean_step_log_files_slurm()
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
                 local slurm_task_log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${idx}`
-                rm -f ${slurm_task_log_filename}
+                rm -f ${slurm_task_log_filename}*
             done
         fi
     fi
