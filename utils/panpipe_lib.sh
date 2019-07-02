@@ -1280,19 +1280,19 @@ create_script_and_launch()
 }
 
 ########
-get_launch_outv_primary_id_slurm()
+get_primary_id_slurm()
 {
-    local launch_outvar=$1
+    local launch_id_info=$1
     local str_array
     local sep=","
-    IFS="$sep" read -r -a str_array <<< "${launch_outvar}"
+    IFS="$sep" read -r -a str_array <<< "${launch_id_info}"
 
     local array_len=${#str_array[@]}
     if [ ${array_len} -eq 1 ]; then
-        # launch_outvar has 1 id, so only one attempt was executed
+        # launch_id_info has 1 id, so only one attempt was executed
         echo ${str_array[0]}
     else
-        # launch_outvar has more than 1 id, so multiple attempts were
+        # launch_id_info has more than 1 id, so multiple attempts were
         # executed. In this case, the global id is returned as the
         # primary one
         local last_array_idx=$(( array_len - 1 ))
@@ -1301,29 +1301,32 @@ get_launch_outv_primary_id_slurm()
 }
 
 ########
-get_launch_outv_primary_id()
+get_primary_id()
 {
     # Returns the primary id of a step. The primary id is the
     # job/process directly executing the step (additional jobs/processes
     # may be necessary to complete step execution)
-    local launch_outvar=$1
+    local launch_id_info=$1
 
     local sched=`determine_scheduler`
     case $sched in
-        ${SLURM_SCHEDULER}) ## Launch using slurm
-            get_launch_outv_primary_id_slurm ${launch_outvar}
+        ${SLURM_SCHEDULER})
+            get_primary_id_slurm ${launch_id_info}
+            ;;
+        ${BUILTIN_SCHEDULER})
+            echo ${launch_id_info}
             ;;
     esac
 }
 
 ########
-get_launch_outv_global_id_slurm()
+get_global_id_slurm()
 {
     # Initialize variables
-    local launch_outvar=$1
+    local launch_id_info=$1
     local str_array
     local sep=","
-    IFS="$sep" read -r -a str_array <<< "${launch_outvar}"
+    IFS="$sep" read -r -a str_array <<< "${launch_id_info}"
 
     # Return last id stored in launch output variable, which corresponds
     # to the global id
@@ -1333,17 +1336,20 @@ get_launch_outv_global_id_slurm()
 }
 
 ########
-get_launch_outv_global_id()
+get_global_id()
 {
     # Returns the global id of a step. The global id is the job/process
     # registering the step as finished. It is only executed when all of
     # the others jobs/processes are completed
-    local launch_outvar=$1
+    local launch_id_info=$1
 
     local sched=`determine_scheduler`
     case $sched in
-        ${SLURM_SCHEDULER}) ## Launch using slurm
-            get_launch_outv_global_id_slurm ${launch_outvar}
+        ${SLURM_SCHEDULER})
+            get_global_id_slurm ${launch_id_info}
+            ;;
+        ${BUILTIN_SCHEDULER})
+            echo ${launch_id_info}
             ;;
     esac
 }
@@ -1421,7 +1427,7 @@ step_is_in_progress()
     for id in ${ids}; do
         # Get global id (when executing multiple attempts, multiple ids
         # will be associated to a given step)
-        local global_id=`get_launch_outv_global_id ${id}`
+        local global_id=`get_global_id ${id}`
         if id_exists ${global_id}; then
             return 0
         fi
@@ -1499,7 +1505,6 @@ step_is_finished()
 {
     local dirname=$1
     local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
     local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     
     if [ -f ${finished_filename} ]; then

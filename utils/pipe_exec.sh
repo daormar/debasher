@@ -747,20 +747,18 @@ execute_step()
         launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" "launch_outvar" || { echo "Error while launching step!" >&2 ; return 1; }
 
         # Update variables storing id information
-        local primary_id=`get_launch_outv_primary_id ${launch_outvar}`
+        local primary_id=`get_primary_id ${launch_outvar}`
         PIPE_EXEC_STEP_IDS[${stepname}]=${primary_id}
         step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
 
         # Write id to file
-        # local global_id=`get_launch_outv_global_id ${launch_outvar}`
-        # write_step_id_info_to_file ${dirname} ${stepname} ${global_id}
         write_step_id_info_to_file ${dirname} ${stepname} ${launch_outvar}
     else
         # If step is in progress, its id should be retrieved so as to
         # correctly express dependencies
         if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
             local sid_info=`read_step_id_info_from_file ${dirname} ${stepname}` || { echo "Error while retrieving id of in-progress step" >&2 ; return 1; }
-            local global_id=`get_launch_outv_global_id ${sid_info}`
+            local global_id=`get_global_id ${sid_info}`
             PIPE_EXEC_STEP_IDS[${stepname}]=${global_id}
             step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
         fi
