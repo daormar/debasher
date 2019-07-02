@@ -1007,6 +1007,8 @@ slurm_launch_preverif_job()
     local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
 
     # Define options
+    local jobname="${stepname}__preverif"
+    local preverif_logf=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
     local cpus_opt=`get_slurm_cpus_opt 1`
     local mem_opt=`get_slurm_mem_opt 16`
     local time_opt=`get_slurm_time_opt 00:01:00`
@@ -1017,12 +1019,11 @@ slurm_launch_preverif_job()
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${PANPIPE_ARRAY_TASK_NOTHROTTLE}`
     fi
-    local preverif_logf=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
 
     # Submit preliminary verification job (the job will fail if all
     # attempts fail, initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name "${stepname}_preverif" --output ${preverif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${preverif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
 
     # Check for errors
@@ -1069,6 +1070,8 @@ slurm_launch_verif_job()
     local nodes=`extract_attr_from_stepspec "$stepspec" "nodes"`
 
     # Define options
+    local jobname="${stepname}__verif"
+    local verif_logf=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
     local cpus_opt=`get_slurm_cpus_opt 1`
     local mem_opt=`get_slurm_mem_opt 16`
     local time_opt=`get_slurm_time_opt 00:01:00`
@@ -1080,12 +1083,11 @@ slurm_launch_verif_job()
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${PANPIPE_ARRAY_TASK_NOTHROTTLE}`
     fi
-    local verif_logf=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
 
     # Submit verification job (the job will succeed if preliminary
     # verification job fails, initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name "${stepname}_verif" --output ${verif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${verif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
     
     # Check for errors
@@ -1230,7 +1232,7 @@ slurm_launch()
         preverif_jid=`slurm_launch_preverif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_jids}` || return 1
         verif_jid=`slurm_launch_verif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${preverif_jid}` || return 1
         # Set output value
-        eval "${outvar}='${attempt_jids},${preverif_jid},${verif_jid},${sc_jid}'"
+        eval "${outvar}='${attempt_jids},${preverif_jid},${verif_jid}'"
     else
         eval "${outvar}='${jid}'"
     fi
@@ -1286,12 +1288,12 @@ get_launch_outv_primary_id_slurm()
     IFS="$sep" read -r -a str_array <<< "${launch_outvar}"
 
     local array_len=${#str_array[@]}
-    if [ ${array_len} -eq 2 ]; then
-        # launch_outvar only has 2 ids, so only one attempt was executed
+    if [ ${array_len} -eq 1 ]; then
+        # launch_outvar has 1 id, so only one attempt was executed
         echo ${str_array[0]}
     else
-        # launch_outvar only has more than 2 ids, so multiple attempts
-        # were executed. In this case, the global id is returned as the
+        # launch_outvar has more than 1 id, so multiple attempts were
+        # executed. In this case, the global id is returned as the
         # primary one
         local last_array_idx=$(( array_len - 1 ))
         echo ${str_array[${last_array_idx}]}
@@ -1417,7 +1419,10 @@ step_is_in_progress()
 
     # Iterate over ids
     for id in ${ids}; do
-        if id_exists $id; then
+        # Get global id (when executing multiple attempts, multiple ids
+        # will be associated to a given step)
+        local global_id=`get_launch_outv_global_id ${id}`
+        if id_exists ${global_id}; then
             return 0
         fi
     done
@@ -2380,18 +2385,18 @@ clean_step_id_files()
 }
 
 ########
-write_step_id_to_file()
+write_step_id_info_to_file()
 {
     local dirname=$1
     local stepname=$2
-    local id=$3
+    local id_info=$3
     local filename=`get_stepid_filename ${dirname} ${stepname}`
 
-    echo $id > $filename
+    echo ${id_info} > $filename
 }
 
 ########
-read_step_id_from_file()
+read_step_id_info_from_file()
 {
     local dirname=$1
     local stepname=$2
