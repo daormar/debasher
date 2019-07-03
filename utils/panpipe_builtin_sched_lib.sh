@@ -904,10 +904,12 @@ builtin_sched_print_script_header()
     local fname=$1
     local dirname=$2
     local stepname=$3
+    local num_scripts=$4
     
-    echo "PANPIPE_TASK_FILENAME=${fname}"
+    echo "PANPIPE_SCRIPT_FILENAME=${fname}"
     echo "PANPIPE_DIR_NAME=${dirname}"
     echo "PANPIPE_STEP_NAME=${stepname}"
+    echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
     echo "builtin_sched_print_pid_to_file"
 }
 
@@ -1004,6 +1006,7 @@ builtin_sched_create_script()
     local post_funct=`get_name_of_step_function_post ${stepname}`
     local opts_array_name=$3[@]
     local opts_array=("${!opts_array_name}")
+    local num_scripts=${#opts_array[@]}
     
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -1013,11 +1016,10 @@ builtin_sched_create_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    builtin_sched_print_script_header ${fname} ${dirname} ${stepname} >> ${fname} || return 1
+    builtin_sched_print_script_header ${fname} ${dirname} ${stepname} ${num_scripts} >> ${fname} || return 1
     
     # Iterate over options array
     local lineno=1
-    local num_scripts=${#opts_array[@]}
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 

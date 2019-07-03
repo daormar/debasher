@@ -533,11 +533,15 @@ get_task_array_size_for_step()
 ########
 print_script_header_slurm_sched()
 {
-    local dirname=$1
-    local stepname=$2
-    
+    local fname=$1
+    local dirname=$2
+    local stepname=$3
+    local num_scripts=$4
+
+    echo "PANPIPE_SCRIPT_FILENAME=${fname}"
     echo "PANPIPE_DIR_NAME=${dirname}"
     echo "PANPIPE_STEP_NAME=${stepname}"
+    echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
 }
 
 ########
@@ -607,7 +611,7 @@ create_slurm_script()
     set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
 
     # Print header
-    print_script_header_slurm_sched ${dirname} ${stepname} >> ${fname} || return 1
+    print_script_header_slurm_sched ${fname} ${dirname} ${stepname} ${num_scripts} >> ${fname} || return 1
 
     # Iterate over options array
     local lineno=1
