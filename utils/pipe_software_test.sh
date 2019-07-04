@@ -56,15 +56,11 @@ step_a_define_opts()
 ########
 step_a()
 {
-    display_begin_step_message
-
     # Initialize variables
     local sleep_time=`read_opt_value_from_line "$*" "-a"`
 
     # sleep some time
     sleep ${sleep_time}
-
-    display_end_step_message
 }
 
 ########
@@ -105,8 +101,6 @@ step_b_define_opts()
 ########
 step_b()
 {
-    display_begin_step_message
-
     # Initialize variables
     local value=`read_opt_value_from_line "$*" "-b"`
     local datadir=`read_opt_value_from_line "$*" "-datadir"`
@@ -116,8 +110,6 @@ step_b()
 
     # Write value to file
     echo "$value" > ${datadir}/step_b.out
-    
-    display_end_step_message
 }
 
 ########
@@ -160,8 +152,6 @@ step_c_define_opts()
 ########
 step_c()
 {
-    display_begin_step_message
-
     # Initialize variables
     local sleep_time=`read_opt_value_from_line "$*" "-c"`
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
@@ -175,8 +165,6 @@ step_c()
     
     # create file
     touch ${step_outd}/$id
-
-    display_end_step_message
 }
 
 ########
@@ -238,8 +226,6 @@ step_d_define_opts()
 ########
 step_d()
 {
-    display_begin_step_message
-
     # Initialize variables
     local fifo=`read_opt_value_from_line "$*" "-fifo"`
 
@@ -248,8 +234,6 @@ step_d()
     
     # sleep some time
     sleep 10
-
-    display_end_step_message
 }
 
 ########
@@ -285,8 +269,6 @@ step_e_define_opts()
 ########
 step_e()
 {
-    display_begin_step_message
-
     # Initialize variables
     local fifo=`read_opt_value_from_line "$*" "-fifo"`
 
@@ -295,8 +277,6 @@ step_e()
     
     # sleep some time
     sleep 10
-
-    display_end_step_message
 }
 
 ########
@@ -330,8 +310,6 @@ step_f_define_opts()
 ########
 step_f()
 {
-    display_begin_step_message
-
     # Initialize variables
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
 
@@ -346,8 +324,6 @@ step_f()
     
     # sleep some time
     sleep 10
-
-    display_end_step_message
 }
 
 ########
@@ -391,8 +367,6 @@ step_g_define_opts()
 ########
 step_g()
 {
-    display_begin_step_message
-
     # Initialize variables
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
@@ -405,8 +379,6 @@ step_g()
     
     # create file
     touch ${step_outd}/$id
-
-    display_end_step_message
 }
 
 ########
@@ -462,8 +434,6 @@ step_h_define_opts()
 ########
 step_h()
 {
-    display_begin_step_message
-
     # Initialize variables
     local value=`read_opt_value_from_line "$*" "-h"`
     local datadir=`read_opt_value_from_line "$*" "-datadir"`
@@ -473,6 +443,4 @@ step_h()
 
     # Write value to file
     echo "$value" > ${datadir}/step_h.out
-    
-    display_end_step_message
 }
