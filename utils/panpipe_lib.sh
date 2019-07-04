@@ -552,15 +552,27 @@ print_script_body_slurm_sched()
     local dirname=$2
     local stepname=$3
     local taskidx=$4
-    local funct=$5
-    local post_funct=$6
-    local script_opts=$7
+    local reset_funct=$5
+    local funct=$6
+    local post_funct=$7
+    local script_opts=$8
 
     # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
         echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskidx ]; then"
     fi
 
+    # Reset output directory
+    if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
+        if [ ${num_scripts} -eq 1 ]; then
+            echo "default_reset_outdir_for_step ${dirname} ${stepname}"
+        else
+            echo "default_reset_outdir_for_step_array ${dirname} ${stepname} ${taskidx}"
+        fi
+    else
+        echo "${reset_funct} ${script_opts}"
+    fi
+    
     # Write function to be executed
     echo "${funct} ${script_opts}"
     echo "funct_exit_code=\$?"
@@ -597,6 +609,7 @@ create_slurm_script()
     local dirname=$1
     local stepname=$2
     local fname=`get_script_filename ${dirname} ${stepname}`
+    local reset_funct=`get_name_of_step_function_reset ${stepname}`
     local funct=`get_name_of_step_function ${stepname}`
     local post_funct=`get_name_of_step_function_post ${stepname}`
     local opts_array_name=$3[@]
@@ -618,7 +631,7 @@ create_slurm_script()
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        print_script_body_slurm_sched ${num_scripts} ${dirname} ${stepname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        print_script_body_slurm_sched ${num_scripts} ${dirname} ${stepname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=$((lineno + 1))
         
@@ -1941,6 +1954,22 @@ remove_suffix_from_stepname()
 }
 
 ########
+get_name_of_step_function_reset()
+{
+    local stepname=$1
+
+    local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
+
+    local step_function_reset="${stepname_wo_suffix}_reset_outdir"
+
+    if func_exists ${step_function_reset}; then
+        echo ${step_function_reset}
+    else
+        echo ${FUNCT_NOT_FOUND}
+    fi
+}
+
+########
 get_name_of_step_function()
 {
     local stepname=$1
@@ -2284,7 +2313,7 @@ get_step_outdir()
 }
 
 ########
-prepare_outdir_for_step() 
+create_outdir_for_step() 
 {
     local dirname=$1
     local stepname=$2
@@ -2292,22 +2321,28 @@ prepare_outdir_for_step()
 
     if [ -d ${outd} ]; then
         echo "Warning: ${stepname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
-        rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
     else
         mkdir ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     fi
 }
 
 ########
-prepare_outdir_for_step_array() 
+default_reset_outdir_for_step() 
 {
     local dirname=$1
     local stepname=$2
     local outd=`get_step_outdir ${dirname} ${stepname}`
 
-    if [ ! -d ${outd} ]; then
-        mkdir ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
+    if [ -d ${outd} ]; then
+        echo "* Resetting output directory for step...">&2
+        rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
     fi
+}
+
+########
+default_reset_outdir_for_step_array() 
+{
+    :
 }
 
 ########

@@ -929,9 +929,21 @@ builtin_sched_execute_funct_plus_postfunct()
     local dirname=$2
     local stepname=$3
     local taskidx=$4
-    local funct=$5
-    local post_funct=$6
-    local script_opts=$7
+    local reset_funct=$5
+    local funct=$6
+    local post_funct=$7
+    local script_opts=$8
+
+    # Reset output directory
+    if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
+        if [ ${num_scripts} -eq 1 ]; then
+            default_reset_outdir_for_step ${dirname} ${stepname}
+        else
+            default_reset_outdir_for_step_array ${dirname} ${stepname} ${taskidx}
+        fi
+    else
+        ${reset_funct} ${script_opts}
+    fi
 
     # Execute step function
     $funct ${script_opts}
@@ -964,9 +976,10 @@ builtin_sched_print_script_body()
     local dirname=$2
     local stepname=$3
     local taskidx=$4
-    local funct=$5
-    local post_funct=$6
-    local script_opts=$7
+    local reset_funct=$5
+    local funct=$6
+    local post_funct=$7
+    local script_opts=$8
 
     # Write treatment for task id
     if [ ${num_scripts} -gt 1 ]; then
@@ -977,10 +990,10 @@ builtin_sched_print_script_body()
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
         local builtin_task_log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${taskidx}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_task_log_filename} 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_task_log_filename} 2>&1"
     else
         local builtin_log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_log_filename} 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} ${dirname} ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"${script_opts}\" > ${builtin_log_filename} 2>&1"
     fi
     
     # Close if statement
@@ -1002,6 +1015,7 @@ builtin_sched_create_script()
     local dirname=$1
     local stepname=$2
     local fname=`get_script_filename ${dirname} ${stepname}`
+    local reset_funct=`get_name_of_step_function_reset ${stepname}`
     local funct=`get_name_of_step_function ${stepname}`
     local post_funct=`get_name_of_step_function_post ${stepname}`
     local opts_array_name=$3[@]
@@ -1023,7 +1037,7 @@ builtin_sched_create_script()
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        builtin_sched_print_script_body ${num_scripts} ${dirname} ${stepname} ${lineno} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        builtin_sched_print_script_body ${num_scripts} ${dirname} ${stepname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
 
         lineno=$((lineno + 1))
 
@@ -1262,12 +1276,8 @@ builtin_sched_prepare_files_and_dirs_for_step()
     builtin_sched_clean_step_id_files ${dirname} ${stepname} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
     prepare_fifos_owned_by_step ${stepname}
 
-    # Prepare output directory
-    if [ ${array_size} -eq 1 ]; then
-        prepare_outdir_for_step ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
-    else
-        prepare_outdir_for_step_array ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
-    fi
+    # Create output directory
+    create_outdir_for_step ${dirname} ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
 }
 
 ########

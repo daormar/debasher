@@ -733,11 +733,7 @@ execute_step()
         update_step_completion_signal ${dirname} ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
         clean_step_log_files ${dirname} ${stepname} ${array_size} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
         clean_step_id_files ${dirname} ${stepname} ${array_size} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
-        if [ ${array_size} -eq 1 ]; then
-            prepare_outdir_for_step ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
-        else
-            prepare_outdir_for_step_array ${dirname} ${stepname} || { echo "Error when preparing output directory for step" >&2 ; return 1; }
-        fi
+        create_outdir_for_step ${dirname} ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
         prepare_fifos_owned_by_step ${stepname}
         
         # Launch step
