@@ -905,7 +905,8 @@ builtin_sched_print_script_header()
     local dirname=$2
     local stepname=$3
     local num_scripts=$4
-    
+
+    echo "display_begin_step_message"
     echo "PANPIPE_SCRIPT_FILENAME=${fname}"
     echo "PANPIPE_DIR_NAME=${dirname}"
     echo "PANPIPE_STEP_NAME=${stepname}"
@@ -1005,7 +1006,7 @@ builtin_sched_print_script_body()
 ########
 builtin_sched_print_script_foot()
 {
-    :
+    echo "display_end_step_message"
 }
 
 ########

@@ -538,6 +538,7 @@ print_script_header_slurm_sched()
     local stepname=$3
     local num_scripts=$4
 
+    echo "display_begin_step_message"
     echo "PANPIPE_SCRIPT_FILENAME=${fname}"
     echo "PANPIPE_DIR_NAME=${dirname}"
     echo "PANPIPE_STEP_NAME=${stepname}"
@@ -599,7 +600,7 @@ print_script_body_slurm_sched()
 ########
 print_script_foot_slurm_sched()
 {
-    :
+    echo "display_end_step_message"
 }
 
 ########
