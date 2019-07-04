@@ -195,6 +195,17 @@ step_c_post()
 }
 
 ########
+step_c_reset_outdir()
+{
+    # Initialize variables
+    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
+    local id=`read_opt_value_from_line "$*" "-id"`
+
+    # create auxiliary file
+    rm ${step_outd}/${id}*
+}
+
+########
 step_d_document()
 {
     step_description "Prints a string to a FIFO."
