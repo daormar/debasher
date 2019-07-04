@@ -190,7 +190,7 @@ step_c_reset_outdir()
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # create auxiliary file
-    rm ${step_outd}/${id}*
+    rm -f ${step_outd}/${id}*
 }
 
 ########
