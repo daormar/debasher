@@ -70,6 +70,7 @@ SLURM_SCHED_LOG_FEXT="slurm_out"
 FINISHED_STEP_FEXT="finished"
 STEPID_FEXT="id"
 ARRAY_TASKID_FEXT="id"
+SLURM_EXEC_ATTEMPT_FEXT_STRING="__attempt"
 
 ####################
 # GLOBAL VARIABLES #
@@ -681,7 +682,7 @@ get_slurm_attempt_suffix()
     if [ ${attempt_no} -eq 1 ]; then
         echo ""
     else
-        echo "__attempt${attempt_no}"
+        echo "${SLURM_EXEC_ATTEMPT_FEXT_STRING}${attempt_no}"
     fi        
 }
 
@@ -1666,7 +1667,7 @@ get_elapsed_time_for_step_slurm()
         # Extract difference time from log files
         if [ ${num_tasks} -eq 1 ]; then
             # Step is not a task array
-            log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
+            log_filename=`get_step_last_attempt_logf_slurm ${dirname} ${stepname}`
             local difft=`get_elapsed_time_from_logfile ${log_filename}`
             echo ${difft}
         else
@@ -1674,7 +1675,7 @@ get_elapsed_time_for_step_slurm()
             local result=""
             local taskidx
             for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
-                local log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${taskidx}`
+                local log_filename=`get_task_last_attempt_logf_slurm ${dirname} ${stepname} ${taskidx}`
                 local difft=`get_elapsed_time_from_logfile ${log_filename}`
                 if [ ! -z "${result}" ]; then
                     result="${result} "
@@ -1901,6 +1902,29 @@ get_step_log_filename_slurm()
 }
 
 ########
+get_step_last_attempt_logf_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+
+    # Obtain number of log files
+    local logfname=`get_step_log_filename_slurm $dirname $stepname`
+    local numlogf=0
+    for f in ${logfname}*; do
+        numlogf=$((numlogf + 1))
+    done
+
+    # Echo name of last attempt
+    if [ ${numlogf} -eq 0 ]; then
+        echo ${NOFILE}
+    else
+        local suff=`get_slurm_attempt_suffix ${numlogf}`
+        echo ${logfname}${suff}
+    fi
+    # TBD
+}
+
+########
 get_step_log_preverif_filename_slurm()
 {
     local dirname=$1
@@ -1935,6 +1959,30 @@ get_task_log_filename_slurm()
     local taskidx=$3
     
     echo ${dirname}/scripts/${stepname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}
+}
+
+########
+get_task_last_attempt_logf_slurm()
+{
+    local dirname=$1
+    local stepname=$2
+    local taskidx=$3
+
+    # Obtain number of log files
+    local logfname=`get_task_log_filename_slurm $dirname $stepname $taskidx`
+    local numlogf=0
+    for f in ${logfname}*; do
+        numlogf=$((numlogf + 1))
+    done
+
+    # Echo name of last attempt
+    if [ ${numlogf} -eq 0 ]; then
+        echo ${NOFILE}
+    else
+        local suff=`get_slurm_attempt_suffix ${numlogf}`
+        echo ${logfname}${suff}
+    fi
+    # TBD
 }
 
 ########
