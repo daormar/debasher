@@ -1663,27 +1663,29 @@ get_elapsed_time_for_step_slurm()
     if [ -f ${finished_filename} ]; then
         # Get number of array tasks
         local num_tasks=`get_num_array_tasks_from_finished_file ${finished_filename}`    
-    
-        # Extract difference time from log files
-        if [ ${num_tasks} -eq 1 ]; then
-            # Step is not a task array
-            log_filename=`get_step_last_attempt_logf_slurm ${dirname} ${stepname}`
-            local difft=`get_elapsed_time_from_logfile ${log_filename}`
-            echo ${difft}
-        else
-            # Step is a task array
-            local result=""
-            local taskidx
-            for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
-                local log_filename=`get_task_last_attempt_logf_slurm ${dirname} ${stepname} ${taskidx}`
+
+        case $num_tasks in
+            0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
+                ;;
+            1)  # Step is not a task array
+                log_filename=`get_step_last_attempt_logf_slurm ${dirname} ${stepname}`
                 local difft=`get_elapsed_time_from_logfile ${log_filename}`
-                if [ ! -z "${result}" ]; then
-                    result="${result} "
-                fi
-                result="${result}${taskidx}->${difft} ;"
-            done
-            echo ${result}
-        fi
+                echo ${difft}
+               ;;
+            *)  # Step is a task array
+                local result=""
+                local taskidx
+                for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
+                    local log_filename=`get_task_last_attempt_logf_slurm ${dirname} ${stepname} ${taskidx}`
+                    local difft=`get_elapsed_time_from_logfile ${log_filename}`
+                    if [ ! -z "${result}" ]; then
+                        result="${result} "
+                    fi
+                    result="${result}${taskidx}->${difft} ;"
+                done
+                echo ${result}
+                ;;
+        esac
     else
         echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
     fi    
@@ -1701,27 +1703,29 @@ get_elapsed_time_for_step_builtin()
     if [ -f ${finished_filename} ]; then
         # Get number of array tasks
         local num_tasks=`get_num_array_tasks_from_finished_file ${finished_filename}`    
-    
-        # Extract difference time from log files
-        if [ ${num_tasks} -eq 1 ]; then
-            # Step is not a task array
-            log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
-            local difft=`get_elapsed_time_from_logfile ${log_filename}`
-            echo ${difft}
-        else
-            # Step is a task array
-            local result=""
-            local taskidx
-            for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
-                local log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${taskidx}`
+
+        case $num_tasks in
+            0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
+                ;;
+            1)  # Step is not a task array
+                log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
                 local difft=`get_elapsed_time_from_logfile ${log_filename}`
-                if [ ! -z "${result}" ]; then
-                    result="${result} "
-                fi
-                result="${result}${taskidx}->${difft} ;"
-            done
-            echo ${result}
-        fi
+                echo ${difft}
+                ;;
+            *)  # Step is a task array
+                local result=""
+                local taskidx
+                for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
+                    local log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${taskidx}`
+                    local difft=`get_elapsed_time_from_logfile ${log_filename}`
+                    if [ ! -z "${result}" ]; then
+                        result="${result} "
+                    fi
+                    result="${result}${taskidx}->${difft} ;"
+                done
+                echo ${result}
+                ;;
+        esac
     else
         echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
     fi    
@@ -1921,7 +1925,6 @@ get_step_last_attempt_logf_slurm()
         local suff=`get_slurm_attempt_suffix ${numlogf}`
         echo ${logfname}${suff}
     fi
-    # TBD
 }
 
 ########
@@ -1982,7 +1985,6 @@ get_task_last_attempt_logf_slurm()
         local suff=`get_slurm_attempt_suffix ${numlogf}`
         echo ${logfname}${suff}
     fi
-    # TBD
 }
 
 ########
