@@ -921,14 +921,14 @@ slurm_launch_attempt()
     local stepspec=$5
     local attempt_no=$6
     local stepdeps=$7
-    local prev_attempt_jid=$8
+    local prev_attempt_jids=$8
     local mem_attempt=$9
     local time_attempt=${10}
 
     # Obtain augmented dependencies
     local prev_attempt_deps=""
-    if [ "${prev_attempt_jid}" != "" ]; then
-        prev_attempt_deps="afternotok:${prev_attempt_jid}"
+    if [ "${prev_attempt_jids}" != "" ]; then
+        prev_attempt_deps="afternotok:${prev_attempt_jids}"
     fi
     local augmented_deps=`combine_slurm_deps ${stepdeps} ${prev_attempt_deps}`
 
@@ -970,7 +970,7 @@ slurm_launch_attempt()
     # further attempts
     if [ ${array_size} -gt 1 -a ${attempt_no} -ge 2 ]; then
         local deptype="afternotok"
-        set_slurm_jobcorr_like_deps ${prev_attempt_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${stepdeps}" || { return 1 ; echo "Error while launching attempt job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
+        set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${stepdeps}" || { return 1 ; echo "Error while launching attempt job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
     
     # Release job
@@ -1221,7 +1221,6 @@ slurm_launch()
 
     # Launch execution attempts
     local attempt_no=0
-    local prev_jid=""
     local attempt_jids=""
     local mem=`extract_attr_from_stepspec "$stepspec" "mem"`
     local time=`extract_attr_from_stepspec "$stepspec" "time"`
@@ -1233,16 +1232,17 @@ slurm_launch()
         local time_attempt=`get_time_attempt_value ${time} ${attempt_no}`
 
         # Launch attempt
-        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_no} "${stepdeps}" "${prev_jid}" ${mem_attempt} ${time_attempt}` || return 1
+        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_no} "${stepdeps}" "${attempt_jids}" ${mem_attempt} ${time_attempt}` || return 1
 
-        # Update dependencies of verification job
+        # Update variable storing jids of previous attempts (after
+        # launching all attempts this variable is also useful to launch
+        # pre-verification job)
         if [ "${attempt_jids}" = "" ]; then
             attempt_jids=${jid}
         else
             attempt_jids="${attempt_jids},${jid}"
         fi
 
-        prev_jid=${jid}
         attempt_no=$(( attempt_no + 1 ))
     done
 
