@@ -16,7 +16,7 @@ usage()
     echo "pipe_stats                -d <string> [-s <string>]"
     echo "                          [--help]"
     echo ""
-    echo "-d <string>               Directory where the pipeline steps are stored"
+    echo "-d <string>               Output directory for pipeline steps"
     echo "-s <string>               Step name whose statistics should be obtained"
     echo "--help                    Display this help and exit"
 }
