@@ -1301,6 +1301,54 @@ create_script_and_launch()
 }
 
 ########
+slurm_stop_step()
+{
+    # Initialize variables
+    local ids_info=$1
+    
+    # Process ids information for step (each element in ids_info is an
+    # individual jid or a comma-separated list of them)
+    for jid_list in ${ids_info}; do
+        # Process comma separated list of job ids
+        local separator=","
+        local jid_list_blanks=`replace_str_elem_sep_with_blank "${separator}" ${jid_list}`
+        for jid in ${jid_list_blanks}; do
+            slurm_stop_jid $jid || { echo "Error while stopping job with id $jid" >&2 ; return 1; }
+        done
+    done
+}
+
+########
+builtin_sched_stop_step()
+{
+    # Initialize variables
+    local ids_info=$1
+
+    # Process ids information for step (each element in ids_info is a pid)
+    for id in ${ids_info}; do
+        stop_pid $id || { echo "Error while stopping process with id $id" >&2 ; return 1; }
+    done
+}
+
+########
+stop_step()
+{
+    # Initialize variables
+    local ids_info=$1
+    
+    # Launch step
+    local sched=`determine_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER}) ## Launch using slurm
+            slurm_stop_step ${ids_info} || return 1
+            ;;
+        ${BUILTIN_SCHEDULER})
+            builtin_sched_stop_step ${ids_info} || return 1
+            ;;
+    esac
+}
+
+########
 get_primary_id_slurm()
 {
     local launch_id_info=$1
@@ -1386,6 +1434,16 @@ pid_exists()
 }
 
 ########
+stop_pid()
+{
+    local pid=$1
+
+    kill -9 $pid  > /dev/null 2>&1 || return 1
+
+    return 0
+}
+
+########
 get_slurm_state_code()
 {
     local jid=$1
@@ -1413,6 +1471,16 @@ slurm_jid_exists()
         # Since squeue has failed, the job is not being executed
         return 1
     fi
+}
+
+########
+slurm_stop_jid()
+{
+    local jid=$1
+
+    ${SCANCEL} $jid  > /dev/null 2>&1 || return 1
+
+    return 0
 }
 
 ########
