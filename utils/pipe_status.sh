@@ -16,7 +16,7 @@ usage()
     echo "pipe_status               -d <string> [-s <string>]"
     echo "                          [--help]"
     echo ""
-    echo "-d <string>               Directory where the pipeline steps are stored"
+    echo "-d <string>               Output directory for pipeline steps"
     echo "-s <string>               Step name whose status should be determined"
     echo "-i                        Show scheduler ids for pipeline steps"
     echo "--help                    Display this help and exit"
