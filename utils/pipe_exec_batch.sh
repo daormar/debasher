@@ -296,7 +296,7 @@ exec_post_ppl_completion_actions()
 
     # Check that ${pipeline_outd} directory exists
     if [ ! -d "${pipeline_outd}" ]; then
-        echo "Warning: hook execution is not possible because ${pipeline_outd} directory no longer exists" >&2
+        echo "Warning: post pipeline completion actions cannot be executed because ${pipeline_outd} directory no longer exists" >&2
         return 1
     fi
 
