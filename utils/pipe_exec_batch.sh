@@ -294,16 +294,24 @@ exec_post_ppl_completion_actions()
     local pipeline_outd=$1
     local outd=$2
 
+    # Check that ${pipeline_outd} directory exists
+    if [ ! -d "${pipeline_outd}" ]; then
+        echo "Warning: hook execution is not possible because ${pipeline_outd} directory no longer exists" >&2
+        return 1
+    fi
+
     # Execute hook if requested
     if [ ${k_given} -eq 1 ]; then
         echo "- Executing hook implemented in ${k_val}" >&2
-        exec_hook ${pipeline_outd} || echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2
+        exec_hook ${pipeline_outd} || { echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2 ; return 1; }
     fi
+
     # Move directory if requested
     if [ ! -z "${outd}" ]; then
         echo "- Moving ${pipeline_outd} directory to ${outd}" >&2
         move_dir ${pipeline_outd} ${outd} || return 1
     fi
+
     # Signal finish of post pipeline completion actions
     signal_finish_of_post_ppl_compl_actions ${pipeline_outd} ${outd}
 }
