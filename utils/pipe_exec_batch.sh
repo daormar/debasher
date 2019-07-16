@@ -249,7 +249,7 @@ exec_hook()
     unset PPL_OUTD
     unset PPL_CMD
 
-    return exit_code
+    return ${exit_code}
 }
 
 ########
