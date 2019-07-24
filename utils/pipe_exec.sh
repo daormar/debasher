@@ -111,7 +111,7 @@ read_pars()
                   ;;
             "--sched") shift
                   if [ $# -ne 0 ]; then
-                      sched=$1
+                      sched_opt=$1
                       sched_given=1
                   fi
                   ;;
@@ -280,8 +280,8 @@ configure_scheduler()
 
     if [ ${sched_given} -eq 1 ]; then
         echo "** Setting scheduler type from value of \"--sched\" option..." >&2
-        set_panpipe_scheduler ${sched} || return 1
-        echo "scheduler: ${sched}" >&2
+        set_panpipe_scheduler ${sched_opt} || return 1
+        echo "scheduler: ${sched_opt}" >&2
         echo "" >&2
     else
         # If --sched option not given, scheduler is not set. As a
