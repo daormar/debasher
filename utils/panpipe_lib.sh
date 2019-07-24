@@ -3298,8 +3298,6 @@ define_cmdline_opt()
     local varname=$3
 
     # Get value for option
-    # local value
-    # value=`read_opt_value_from_line "$cmdline" $opt` || { errmsg "$opt option not found" ; return 1; }
     read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
     local value=${_OPT_VALUE_}
     
