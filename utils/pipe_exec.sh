@@ -427,7 +427,7 @@ process_conda_requirements()
             
             # Process conda envs information
             local conda_envs_funcname=`get_conda_envs_funcname ${stepname}`
-            if check_func_exists ${conda_envs_funcname}; then
+            if func_exists ${conda_envs_funcname}; then
                 step_conda_envs=`${conda_envs_funcname}` || exit 1
                 process_conda_requirements_for_step ${stepname} "${step_conda_envs}" || return 1
             fi
