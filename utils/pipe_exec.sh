@@ -283,6 +283,12 @@ configure_scheduler()
         set_panpipe_scheduler ${sched} || return 1
         echo "scheduler: ${sched}" >&2
         echo "" >&2
+    else
+        # If --sched option not given, scheduler is not set. As a
+        # result, it is determined based on information gathered during
+        # package configuration (see determine_scheduler function in
+        # panpipe_lib.sh)
+        :
     fi
 
     if [ ${dflt_nodes_given} -eq 1 ]; then
@@ -908,7 +914,7 @@ else
         if [ ${debug} -eq 1 ]; then
             execute_pipeline_steps_debug "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
         else
-            if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
+            if [ "${sched}" = ${BUILTIN_SCHEDULER} ]; then
                 builtin_sched_execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
             else
                 execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
