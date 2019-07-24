@@ -914,7 +914,8 @@ else
         if [ ${debug} -eq 1 ]; then
             execute_pipeline_steps_debug "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
         else
-            if [ "${sched}" = ${BUILTIN_SCHEDULER} ]; then
+            sched=`determine_scheduler`
+            if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
                 builtin_sched_execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
             else
                 execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
