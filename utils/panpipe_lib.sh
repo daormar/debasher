@@ -1743,14 +1743,17 @@ get_elapsed_time_for_step_slurm()
             *)  # Step is a task array
                 local result=""
                 local taskidx
+                local sum_difft=0
                 for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
                     local log_filename=`get_task_last_attempt_logf_slurm ${dirname} ${stepname} ${taskidx}`
                     local difft=`get_elapsed_time_from_logfile ${log_filename}`
+                    sum_difft=$((sum_difft + difft))
                     if [ ! -z "${result}" ]; then
                         result="${result} "
                     fi
                     result="${result}${taskidx}->${difft} ;"
                 done
+                result="${sum_difft} : ${result}"
                 echo ${result}
                 ;;
         esac
