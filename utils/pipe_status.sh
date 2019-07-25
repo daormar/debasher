@@ -111,7 +111,7 @@ get_cmdline()
 }
 
 ########
-get_pfile()
+get_cmdline_pfile()
 {
     local command_line_file=$1
     local cmdline=`$TAIL -1 ${command_line_file}`
@@ -174,8 +174,20 @@ process_status_for_pfile()
     # Extract information from command_line.sh file
     local orig_workdir=`get_orig_workdir ${command_line_file}` || return 1
     local cmdline=`get_cmdline ${command_line_file}` || return 1
-    local pfile=`get_pfile ${command_line_file}` || return 1
+    local cmdline_pfile=`get_cmdline_pfile ${command_line_file}` || return 1
     local sched=`get_sched ${command_line_file}` || return 1
+
+    # Set pipeline file
+    local pfile
+    if [ -f ${dirname}/${REORDERED_PIPELINE_BASENAME} ]; then
+        pfile=${dirname}/${REORDERED_PIPELINE_BASENAME}
+    else
+        if [ -f ${cmdline_pfile} ]; then
+            pfile=${cmdline_pfile}
+        else
+            echo "Error: unable to find pipeline file (${cmdline_pfile})" >&2
+        fi
+    fi
 
     # Change directory
     cd ${orig_workdir}
