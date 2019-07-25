@@ -72,6 +72,9 @@ STEPID_FEXT="id"
 ARRAY_TASKID_FEXT="id"
 SLURM_EXEC_ATTEMPT_FEXT_STRING="__attempt"
 
+# FILE NAMES
+REORDERED_PIPELINE_BASENAME="reordered_pipeline.ppl"
+
 ####################
 # GLOBAL VARIABLES #
 ####################

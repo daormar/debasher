@@ -869,7 +869,7 @@ create_basic_dirs || exit 1
 
 check_pipeline_file || exit 1
 
-reordered_pfile=${outd}/reordered_pipeline.ppl
+reordered_pfile=${outd}/${REORDERED_PIPELINE_BASENAME}
 reorder_pipeline_file > ${reordered_pfile} || exit 1
 
 stepdeps_file=${outd}/.stepdeps.txt
