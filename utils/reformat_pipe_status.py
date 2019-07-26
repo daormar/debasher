@@ -74,11 +74,14 @@ def extract_step_info():
 
 ##################################################
 def norm_str_len(str,normlen):
-    result=""
-    result += ' ' * normlen
-    result +=str
-    result=result[len(result)-normlen:]
-    return result
+    if len(str)>=normlen:
+        return str[0:normlen]
+    else:
+        result=""
+        result += ' ' * normlen
+        result +=str
+        result=result[len(result)-normlen:]
+        return result
 
 ##################################################
 def print_step_info(step_map,excl_steps_set,format,fieldlen):
