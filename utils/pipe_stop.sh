@@ -175,8 +175,8 @@ process_status_for_pfile()
 
     # Set pipeline file
     local pfile
-    if [ -f ${dirname}/${REORDERED_PIPELINE_BASENAME} ]; then
-        pfile=${dirname}/${REORDERED_PIPELINE_BASENAME}
+    if [ -f ${absdirname}/${REORDERED_PIPELINE_BASENAME} ]; then
+        pfile=${absdirname}/${REORDERED_PIPELINE_BASENAME}
     else
         if [ -f ${cmdline_pfile} ]; then
             pfile=${cmdline_pfile}
