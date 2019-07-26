@@ -2857,10 +2857,10 @@ extract_mem_from_stepspec()
 ############################
 
 ########
-get_pipeline_modules()
+get_commasep_ppl_modules()
 {
     local pfile=$1
-    local modules=`$AWK '{if($1=="#import") {$1=""; printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) printf"%s",$i}'` ; pipe_fail || return 1
+    local modules=`$AWK '{if($1=="#import") {$1=""; gsub(","," ",$0); printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) {if(i>1) printf","; printf"%s",$i}}'` ; pipe_fail || return 1
     echo ${modules}
 }
 
@@ -2930,7 +2930,7 @@ load_pipeline_modules()
 
     file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
     
-    local comma_sep_modules=`get_pipeline_modules $pfile`
+    local comma_sep_modules=`get_commasep_ppl_modules $pfile`
     
     if [ -z "${comma_sep_modules}" ]; then
         echo "Error: no pipeline modules were given" >&2
@@ -2952,7 +2952,7 @@ get_pipeline_fullmodnames()
 
     file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
     
-    local comma_sep_modules=`get_pipeline_modules $pfile`
+    local comma_sep_modules=`get_commasep_ppl_modules $pfile`
     
     if [ -z "${comma_sep_modules}" ]; then
         echo "Warning: no pipeline modules were given" >&2
