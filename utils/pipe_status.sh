@@ -6,7 +6,7 @@
 ########
 print_desc()
 {
-    echo "pipe_status get status of pipeline steps"
+    echo "pipe_status gets status of pipeline steps"
     echo "type \"pipe_status --help\" to get usage information"
 }
 

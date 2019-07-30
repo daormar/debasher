@@ -6,7 +6,7 @@
 ########
 print_desc()
 {
-    echo "pipe_stats get statistics about pipeline steps"
+    echo "pipe_stats gets statistics about pipeline steps"
     echo "type \"pipe_stats --help\" to get usage information"
 }
 
