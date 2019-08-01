@@ -284,11 +284,16 @@ configure_scheduler()
         echo "scheduler: ${sched_opt}" >&2
         echo "" >&2
     else
-        # If --sched option not given, scheduler is not set. As a
-        # result, it is determined based on information gathered during
-        # package configuration (see determine_scheduler function in
-        # panpipe_lib.sh)
-        :
+        # If --sched option not given, the scheduler is first determined
+        # based on information gathered during package configuration
+        # (see determine_scheduler function in panpipe_lib.sh). Once the
+        # scheduler is determined, it will be set using the
+        # set_panpipe_scheduler function
+        echo "** Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
+        local sched=`determine_scheduler`
+        set_panpipe_scheduler ${sched} || return 1
+        echo "scheduler: ${sched}" >&2
+        echo "" >&2
     fi
 
     if [ ${dflt_nodes_given} -eq 1 ]; then
