@@ -455,6 +455,17 @@ slurm_supports_aftercorr_deptype()
 }
 
 ########
+init_slurm_scheduler()
+{
+    # Verify if aftercorr dependency type is supported by SLURM
+    if slurm_supports_aftercorr_deptype; then
+        AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=1
+    else
+        AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=0
+    fi
+}
+
+########
 set_panpipe_scheduler()
 {
     local sched=$1
@@ -469,12 +480,7 @@ set_panpipe_scheduler()
             
             PANPIPE_SCHEDULER=${SLURM_SCHEDULER}
 
-            # Verify if aftercorr dependency type is supported by SLURM
-            if slurm_supports_aftercorr_deptype; then
-                AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=1
-            else
-                AFTERCORR_STEPDEP_TYPE_AVAILABLE_IN_SLURM=0                
-            fi
+            init_slurm_scheduler
             ;;
         ${BUILTIN_SCHEDULER})
             PANPIPE_SCHEDULER=${BUILTIN_SCHEDULER}
