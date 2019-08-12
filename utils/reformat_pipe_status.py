@@ -53,7 +53,7 @@ def print_help():
     print >> sys.stderr, "-f <int>             Output format:"
     print >> sys.stderr, "                     ",ROW_WITH_HEADER_FORMAT,"-> one row with header, plain text"
     print >> sys.stderr, "                     ",ROW_WO_HEADER_FORMAT,"-> one row without header, plain text"
-    print >> sys.stderr, "-l <int>             Field length:"
+    print >> sys.stderr, "-l <int>             Field length"
     print >> sys.stderr, "-e <string>          Comma-separated list of steps to be excluded"
 
 ##################################################
