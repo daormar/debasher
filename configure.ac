@@ -452,8 +452,6 @@ else
 fi
 AC_SUBST(DISABLE_SCHEDULERS,$disable_schedulers)
 
-# Process options given in shell variables
-
 # Change path of distribution include directory
 includedir=${prefix}/include/bam-utils
 
