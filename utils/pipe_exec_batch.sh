@@ -195,7 +195,7 @@ wait_simul_exec_reduction()
         fi
         
         # Obtain number of pending pipelines
-        local pending_pipelines=$((num_active_pipelines - num_finished_pipelines - num_failed_pipelines))
+        local pending_pipelines=$((num_active_pipelines - num_finished_pipelines))
 
         # Wait if number of pending pipelines is equal or greater than
         # maximum
