@@ -11,12 +11,14 @@ ROW_WO_HEADER_FORMAT=2
 def take_pars():
     flags={}
     values={}
+    flags["p_given"]=False
+    values["pstatus"]=""
     flags["f_given"]=False
     flags["l_given"]=False
     flags["e_given"]=False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:l:e:",["format=","fieldlen=","excl="])
+        opts, args = getopt.getopt(sys.argv[1:],"p:f:l:e:",["pstatus=","format=","fieldlen=","excl="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -25,7 +27,10 @@ def take_pars():
         sys.exit()
     else:
         for opt, arg in opts:
-            if opt in ("-f", "--spec"):
+            if opt in ("-p", "--pstatus"):
+                values["pstatus"] = arg
+                flags["p_given"]=True
+            elif opt in ("-f", "--spec"):
                 values["format"] = int(arg)
                 flags["f_given"]=True
             elif opt in ("-l", "--fieldlen"):
@@ -48,8 +53,10 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "reformat_pipe_status -f <int> -l <int> [-e <string>]"
+    print >> sys.stderr, "reformat_pipe_status [-p <string>] -f <int> -l <int> [-e <string>]"
     print >> sys.stderr, ""
+    print >> sys.stderr, "-p <string>          File with pipe_status output (if not given,"
+    print >> sys.stderr, "                     input is read from stdin)"
     print >> sys.stderr, "-f <int>             Output format:"
     print >> sys.stderr, "                     ",ROW_WITH_HEADER_FORMAT,"-> one row with header, plain text"
     print >> sys.stderr, "                     ",ROW_WO_HEADER_FORMAT,"-> one row without header, plain text"
@@ -57,10 +64,16 @@ def print_help():
     print >> sys.stderr, "-e <string>          Comma-separated list of steps to be excluded"
 
 ##################################################
-def extract_step_info():
+def extract_step_info(pstatus):
+    # Determine stream to be processed
+    if pstatus=="":
+        stream = sys.stdin
+    else:
+        stream = open(pstatus, 'r')
+
+    # Process stream
     step_map={}
-    # Read pipe_status output from standard input
-    for line in sys.stdin:
+    for line in stream:
         # Extract fields
         fields=line.split()
 
@@ -124,7 +137,7 @@ def extract_excl_step_info(excl_steps):
     
 ##################################################
 def process_pars(flags,values):
-    step_map=extract_step_info()
+    step_map=extract_step_info(values["pstatus"])
     excl_steps_set=set()
     if flags["e_given"]:
         excl_steps_set=extract_excl_step_info(values["excl"])
