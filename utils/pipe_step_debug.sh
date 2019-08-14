@@ -6,15 +6,8 @@
 ########
 print_desc()
 {
-    echo "pipe_step_debug executes a pipeline step"
-    echo "type \"pipe_step_debug --help\" to get usage information"
-}
-
-########
-usage()
-{
-    echo "pipe_step_debug  <pplfile> <stepname> <options>"
-    echo ""
+    echo "pipe_step_debug executes a pipeline step for debugging purposes"
+    echo "Usage: pipe_step_debug <pplfile> <stepname> <options>"
 }
 
 ########
