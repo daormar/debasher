@@ -38,7 +38,7 @@ usage()
     echo "                          allowed when evaluating if pipeline completed"
     echo "                          execution (0 by default)"
     echo "-k <string>               Execute script implementing a software hook after"
-    echo "                          finishing each pipeline"
+    echo "                          each pipeline reaches finished status"
     echo "--help                    Display this help and exit"
 }
 
