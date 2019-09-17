@@ -335,16 +335,16 @@ wait_simul_exec_reduction()
                 ${PPL_IS_COMPLETED}) num_completed_pipelines=$((num_completed_pipelines+1))
                                      ;;
                 ${PPL_REQUIRES_POST_FINISH_ACTIONS}) exec_post_ppl_finish_actions ${pipeline_outd} ${outd}
-                                                   local exit_code_post_comp_actions=$?
-                                                   case $exit_code_post_comp_actions in
-                                                       0) :
-                                                          ;;
-                                                       ${RESERVED_HOOK_EXIT_CODE}) :
-                                                                                   ;;
-                                                       *) return ${exit_code_post_comp_actions}
-                                                          ;;
-                                                   esac
-                                                   ;;
+                                                     local exit_code_post_comp_actions=$?
+                                                     case $exit_code_post_comp_actions in
+                                                         0) :
+                                                            ;;
+                                                         ${RESERVED_HOOK_EXIT_CODE}) :
+                                                                                     ;;
+                                                         *) return ${exit_code_post_comp_actions}
+                                                            ;;
+                                                     esac
+                                                     ;;
                 ${PPL_FAILED}) num_failed_pipelines=$((num_failed_pipelines+1))
                                ;;
             esac
