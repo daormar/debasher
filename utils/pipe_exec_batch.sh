@@ -303,7 +303,15 @@ exec_post_ppl_completion_actions()
     # Execute hook if requested
     if [ ${k_given} -eq 1 ]; then
         echo "- Executing hook implemented in ${k_val}" >&2
-        exec_hook ${pipeline_outd} || { echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2 ; return 1; }
+        exec_hook ${pipeline_outd}
+        local exit_code_hook=$?
+        case ${exit_code_hook} in
+            1) echo "Warning: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2
+               return 1
+               ;;
+            *) return ${exit_code_hook}
+               ;;
+        esac
     fi
 
     # Move directory if requested
@@ -335,15 +343,16 @@ update_active_pipeline()
                                  ;;
         ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
                              exec_post_ppl_completion_actions ${pipeline_outd} ${outd}
-                             local exit_code=$?
+                             local exit_code_post_comp_actions=$?
                              # If post pipeline completion actions were
                              # successfully executed, remove pipeline
                              # from array of active pipelines
-                             if [ ${exit_code} -eq 0 ]; then
-                                 unset PIPELINE_COMMANDS[${pipeline_outd}]
-                             else
-                                 return 1
-                             fi
+                             case $exit_code_post_comp_actions in
+                                 0) unset PIPELINE_COMMANDS[${pipeline_outd}]
+                                    ;;
+                                 1) return 1
+                                    ;;
+                             esac
                              ;;
     esac
 }
@@ -404,7 +413,11 @@ process_ppl_compl_actions_if_required()
     local pipeline_outd=`extract_outd_from_command "${cmd}"`
     if ! post_ppl_compl_actions_are_finished ${pipeline_outd} ${outd}; then
         echo "Warning, post pipeline completion actions were not finished, they will be executed now...">&2
-        exec_post_ppl_completion_actions ${pipeline_outd} ${outd} || return 1
+        exec_post_ppl_completion_actions ${pipeline_outd} ${outd}
+        local exit_code=$?
+        if [ ${exit_code} -ne 0 ]; then
+            return ${exit_code}
+        fi
     fi
 }
 
@@ -443,7 +456,11 @@ execute_batches()
                                      return 1
                                      ;;
             ${PPL_IS_COMPLETED}) echo "yes">&2
-                                 process_ppl_compl_actions_if_required "${pipe_exec_cmd}" ${outd} || return 1
+                                 process_ppl_compl_actions_if_required "${pipe_exec_cmd}" ${outd}
+                                 local exit_code_post_comp_actions=$?
+                                 if [ ${exit_code_post_comp_actions} -eq 1 ]; then
+                                     return 1
+                                 fi
                                  ;;
             ${PPL_FAILED}) echo "no">&2
                            ;;
