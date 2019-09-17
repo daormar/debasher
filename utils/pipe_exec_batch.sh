@@ -90,6 +90,60 @@ read_pars()
 }
 
 ########
+check_pars()
+{
+    if [ ${f_given} -eq 0 ]; then
+        echo "Error! -f parameter not given!" >&2
+        exit 1
+    else
+        if [ ! -f ${file} ]; then
+            echo "Error! file ${file} does not exist" >&2 
+            exit 1
+        fi
+    fi
+
+    if [ ${m_given} -eq 0 ]; then
+        echo "Error! -m parameter not given!" >&2
+        exit 1
+    fi
+
+    if [ ${o_given} -eq 1 ]; then
+        if [ ! -d ${outd} ]; then
+            echo "Error! output directory does not exist" >&2 
+            exit 1
+        fi
+    fi
+
+    if [ ${k_given} -eq 1 ]; then
+        if [ ! -f ${k_val} ]; then
+            echo "Error! file ${k_val} does not exist" >&2 
+            exit 1
+        fi
+
+        if [ ! -x ${k_val} ]; then
+            echo "Error! file ${k_val} is not executable" >&2 
+            exit 1
+        fi
+    fi
+}
+
+########
+absolutize_file_paths()
+{
+    if [ ${f_given} -eq 1 ]; then
+        file=`get_absolute_path ${file}`
+    fi
+
+    if [ ${o_given} -eq 1 ]; then   
+        outd=`get_absolute_path ${outd}`
+    fi
+
+    if [ ${k_given} -eq 1 ]; then   
+        k_val=`get_absolute_path ${k_val}`
+    fi
+}
+
+########
 get_unfinished_step_perc()
 {
     local pipe_status_output_file=$1
@@ -509,32 +563,6 @@ execute_batches()
 }
 
 ########
-check_pars()
-{
-    if [ ${f_given} -eq 0 ]; then
-        echo "Error! -f parameter not given!" >&2
-        exit 1
-    else
-        if [ ! -f ${file} ]; then
-            echo "Error! file ${file} does not exist" >&2 
-            exit 1
-        fi
-    fi
-
-    if [ ${m_given} -eq 0 ]; then
-        echo "Error! -m parameter not given!" >&2
-        exit 1
-    fi
-
-    if [ ${o_given} -eq 1 ]; then
-        if [ ! -d ${outd} ]; then
-            echo "Error! output directory does not exist" >&2 
-            exit 1
-        fi
-    fi
-}
-
-########
 
 if [ $# -eq 0 ]; then
     print_desc
@@ -544,5 +572,7 @@ fi
 read_pars $@ || exit 1
 
 check_pars || exit 1
+
+absolutize_file_paths || exit 1
 
 execute_batches || exit 1
