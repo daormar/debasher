@@ -181,13 +181,22 @@ get_absolute_path()
     if is_absolute_path $file; then
         echo $file
     else
-        local oldpwd=$PWD
-        local basetmp=`$BASENAME $PWD/$file`
-        local dirtmp=`$DIRNAME $PWD/$file`
-        cd $dirtmp
-        local result=${PWD}/${basetmp}
-        cd $oldpwd
-        echo $result
+        # Check if path corresponds to a directory
+        if [ -d $file ]; then
+            local oldpwd=$PWD
+            cd $file
+            local result=${PWD}
+            cd $oldpwd
+            echo $result
+        else
+            local oldpwd=$PWD
+            local basetmp=`$BASENAME $PWD/$file`
+            local dirtmp=`$DIRNAME $PWD/$file`
+            cd $dirtmp
+            local result=${PWD}/${basetmp}
+            cd $oldpwd
+            echo $result
+        fi
     fi
 }
 
