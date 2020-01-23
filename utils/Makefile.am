@@ -40,6 +40,7 @@ SUFFIXES= .sh .py .r .R
 	echo "UNIQ="$(UNIQ) >> $@
 	echo "GREP="$(GREP) >> $@
 	echo "SED="$(SED) >> $@
+	echo "TR="$(TR) >> $@
 	echo "BASENAME="$(BASENAME) >> $@
 	echo "DIRNAME="$(DIRNAME) >> $@
 	echo "SPLIT="$(SPLIT) >> $@
