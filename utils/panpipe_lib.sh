@@ -175,11 +175,14 @@ is_absolute_path()
 ########
 get_absolute_path()
 {
+    # IMPORTANT WARNING: This function just returns the given path if it
+    # does not correspond with a existing file or directory.
     local file=$1
     
     # Check if an absolute path was given
     if is_absolute_path $file; then
         echo $file
+        return 0
     else
         # Check if path corresponds to a directory
         if [ -d $file ]; then
@@ -188,14 +191,25 @@ get_absolute_path()
             local result=${PWD}
             cd $oldpwd
             echo $result
+            return 0
         else
+            # Path corresponds to a file
             local oldpwd=$PWD
             local basetmp=`$BASENAME $PWD/$file`
             local dirtmp=`$DIRNAME $PWD/$file`
-            cd $dirtmp
-            local result=${PWD}/${basetmp}
-            cd $oldpwd
-            echo $result
+            if [ -d $dirtmp ]; then
+                cd $dirtmp
+                local result=${PWD}/${basetmp}
+                cd $oldpwd
+                echo $result
+                return 0
+            else
+                # Directory containing the file does not exist, so it's
+                # not possible to obtain the absolute path
+                echo $file
+                echo "get_absolute_path: absolute path could not be determined!" >&2
+                return 1
+            fi
         fi
     fi
 }
