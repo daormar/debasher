@@ -215,6 +215,30 @@ get_absolute_path()
 }
 
 ########
+normalize_dirname()
+{
+    local dir=$1
+
+    echo `echo "${dir}/" | $TR -s "/"`
+}
+
+########
+dirnames_are_equal()
+{
+    local dir1=$1
+    local dir2=$2
+
+    norm_dir1=`normalize_dirname $dir1`
+    norm_dir2=`normalize_dirname $dir2`
+
+    if [ ${norm_dir1} = ${norm_dir2} ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 expand_tilde_in_word()
 {
     local word=$1
