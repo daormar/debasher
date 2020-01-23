@@ -82,18 +82,18 @@ get_orig_outdir()
     local command_line_file=$1
 
     # Extract information from command line file
-    local workdir=`$HEAD -1 ${command_line_file} | $AWK '{print $2}'` ; pipe_fail || return 1
-    local cmdline=`$TAIL -1 ${command_line_file}` || return 1
+    local workdir
+    workdir=`get_orig_workdir ${command_line_file}` || return 1
+    local cmdline
+    cmdline=`get_cmdline ${command_line_file}` || return 1
     local outdir=`read_opt_value_from_line "$cmdline" "--outdir"`
 
     # Retrieve original output directory
-    local oldpwd=$PWD
-    cd $workdir
-    local outdir_abspath=`get_absolute_path ${outdir}` || { cd $oldpwd; return 1; }
-    cd $oldpwd
-
-    # Print result
-    echo ${outdir_abspath}
+    if is_absolute_path $outdir; then
+        echo $outdir
+    else
+        echo ${workdir}/${outdir}
+    fi
 }
 
 ########
@@ -150,6 +150,26 @@ replace_outdir_in_cmdline()
 }
 
 ########
+get_pfile()
+{
+    local absdirname=$1
+    local cmdline_pfile=$2
+    
+    if [ -f ${absdirname}/${REORDERED_PIPELINE_BASENAME} ]; then
+        echo ${absdirname}/${REORDERED_PIPELINE_BASENAME}
+        return 0
+    else
+        if [ -f ${cmdline_pfile} ]; then
+            echo ${cmdline_pfile}
+            return 0
+        else
+            echo "Error: unable to find pipeline file (${cmdline_pfile})" >&2
+            return 1
+        fi
+    fi
+}
+
+########
 configure_scheduler()
 {
     local sched=$1
@@ -164,34 +184,26 @@ process_status_for_pfile()
     local dirname=$1
     local absdirname=`get_absolute_path ${dirname}`
     local command_line_file=${absdirname}/command_line.sh
-    
+
     # Extract information from command_line.sh file
-    local orig_workdir=`get_orig_workdir ${command_line_file}` || return 1
-    local cmdline=`get_cmdline ${command_line_file}` || return 1
-    local cmdline_pfile=`get_cmdline_pfile ${command_line_file}` || return 1
-    local sched=`get_sched ${command_line_file}` || return 1
+    local cmdline
+    cmdline=`get_cmdline ${command_line_file}` || return 1
+    local cmdline_pfile
+    cmdline_pfile=`get_cmdline_pfile ${command_line_file}` || return 1
+    local sched
+    sched=`get_sched ${command_line_file}` || return 1
 
     # Set pipeline file
     local pfile
-    if [ -f ${absdirname}/${REORDERED_PIPELINE_BASENAME} ]; then
-        pfile=${absdirname}/${REORDERED_PIPELINE_BASENAME}
-    else
-        if [ -f ${cmdline_pfile} ]; then
-            pfile=${cmdline_pfile}
-        else
-            echo "Error: unable to find pipeline file (${cmdline_pfile})" >&2
-        fi
-    fi
-
-    # Change directory
-    cd ${orig_workdir}
+    pfile=`get_pfile ${absdirname} ${cmdline_pfile}` || return 1
     
     # Get original output directory
-    local orig_outdir=`get_orig_outdir ${command_line_file}`
+    local orig_outdir
+    orig_outdir=`get_orig_outdir ${command_line_file}` || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
-    if [ ${orig_outdir} = ${absdirname} ]; then
+    if dirnames_are_equal ${orig_outdir} ${absdirname}; then
         local moved_outdir="no"        
     else
         echo "Warning: pipeline output directory was moved (original directory: ${orig_outdir})" >&2
