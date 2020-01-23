@@ -197,6 +197,8 @@ get_absolute_path()
             local oldpwd=$PWD
             local basetmp=`$BASENAME $PWD/$file`
             local dirtmp=`$DIRNAME $PWD/$file`
+
+            # Check if file containing directory exists
             if [ -d $dirtmp ]; then
                 cd $dirtmp
                 local result=${PWD}/${basetmp}
