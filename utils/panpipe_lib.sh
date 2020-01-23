@@ -968,6 +968,27 @@ combine_slurm_deps()
 }
 
 ########
+slurm_get_attempt_deps()
+{
+    # Initialize variables
+    local attempt_jids=$1
+    local attempt_deps
+
+    # Iterate of attempt jids
+    local attempt_jids_blanks=`replace_str_elem_sep_with_blank "," ${attempt_jids}`
+    local attempt_jid
+    for attempt_jid in ${attempt_jids_blanks}; do
+        if [ "${attempt_deps}" = "" ]; then
+            attempt_deps="afternotok:${attempt_jid}"
+        else
+            attempt_deps="${attempt_deps},afternotok:${attempt_jid}"
+        fi
+    done
+
+    echo ${attempt_deps}
+}
+
+########
 slurm_launch_attempt()
 {
     # Initialize variables
@@ -983,11 +1004,8 @@ slurm_launch_attempt()
     local time_attempt=${10}
 
     # Obtain augmented dependencies
-    local prev_attempt_deps=""
-    if [ "${prev_attempt_jids}" != "" ]; then
-        prev_attempt_deps="afternotok:${prev_attempt_jids}"
-    fi
-    local augmented_deps=`combine_slurm_deps ${stepdeps} ${prev_attempt_deps}`
+    local attempt_deps=`slurm_get_attempt_deps ${prev_attempt_jids}`
+    local augmented_deps=`combine_slurm_deps ${stepdeps} ${attempt_deps}`
 
     # Retrieve specification
     local cpus=`extract_attr_from_stepspec "$stepspec" "cpus"`
@@ -1042,27 +1060,6 @@ slurm_launch_attempt()
     fi
     
     echo $jid
-}
-
-########
-slurm_get_attempt_deps()
-{
-    # Initialize variables
-    local attempt_jids=$1
-    local attempt_deps
-
-    # Iterate of attempt jids
-    local attempt_jids_blanks=`replace_str_elem_sep_with_blank "," ${attempt_jids}`
-    local attempt_jid
-    for attempt_jid in ${attempt_jids_blanks}; do
-        if [ "${attempt_deps}" = "" ]; then
-            attempt_deps="afternotok:${attempt_jid}"
-        else
-            attempt_deps="${attempt_deps},afternotok:${attempt_jid}"
-        fi
-    done
-
-    echo ${attempt_deps}
 }
 
 ########
