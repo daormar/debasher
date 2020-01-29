@@ -309,9 +309,6 @@ get_ppl_status()
 ########
 wait_simul_exec_reduction()
 {
-    # Example of passing associative array as function parameter
-    # local _assoc_array=$(declare -p "$1")
-    # eval "local -A assoc_array="${_assoc_array#*=}
     local maxp=$1
     local SLEEP_TIME=100
     local end=0
