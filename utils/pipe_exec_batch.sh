@@ -352,8 +352,8 @@ wait_simul_exec_reduction()
 
         # Decide whether to wait or end the loop
         if [ ${num_pending_pipelines} -eq ${num_failed_pipelines} ]; then
-            if [ ${num_pending_pipelines} -eq ${num_active_pipelines}]; then
-                echo "Error: all active pipelines failed" >&2
+            if [ ${num_pending_pipelines} -ge ${maxp}]; then
+                echo "Error: all pending pipelines failed and maximum capacity was reached" >&2
                 return 1
             else
                 end=1
