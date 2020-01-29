@@ -347,29 +347,28 @@ wait_simul_exec_reduction()
             esac
         done
         
-        # Sanity check: if maximum number of active pipelines has been
-        # reached and all pipelines failed, then it is not possible to
-        # continue execution
-        if [ ${num_active_pipelines} -ge ${maxp} -a ${num_failed_pipelines} -eq ${num_active_pipelines} ]; then
-            if [ ${maxp} -gt 0 ]; then
-                echo "Error: all active pipelines failed and it is not possible to execute new ones" >&2
-                return 1
+        # Obtain number of pending pipelines
+        local num_pending_pipelines=$((num_active_pipelines - num_completed_pipelines))
+
+        # Decide whether to wait or exit
+        if [ ${num_pending_pipelines} -lt ${maxp} ]; then
+            end=1
+        else
+            # Number of pending pipelines has reached maximum
+            if [ ${num_pending_pipelines} -eq ${num_failed_pipelines} ]; then
+                # Since all pending pipelines have failed, we should exit
+                if [ ${num_pending_pipelines} -eq ${num_active_pipelines}]; then
+                    echo "Error: all active pipelines failed" >&2
+                    return 1
+                else
+                    end=1
+                fi
             else
-                echo "Error: all active pipelines failed" >&2
-                return 1
+                # Wait until some pending pipeline finishes
+                sleep ${SLEEP_TIME}
             fi
         fi
-        
-        # Obtain number of pending pipelines
-        local pending_pipelines=$((num_active_pipelines - num_completed_pipelines))
 
-        # Wait if number of pending pipelines is equal or greater than
-        # maximum
-        if [ ${pending_pipelines} -ge ${maxp} ]; then
-            sleep ${SLEEP_TIME}
-        else
-            end=1
-        fi
     done
 }
 
