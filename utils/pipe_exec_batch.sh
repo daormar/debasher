@@ -350,23 +350,23 @@ wait_simul_exec_reduction()
         # Obtain number of pending pipelines
         local num_pending_pipelines=$((num_active_pipelines - num_completed_pipelines))
 
-        # Decide whether to wait or exit
-        if [ ${num_pending_pipelines} -lt ${maxp} ]; then
-            end=1
-        else
-            # Number of pending pipelines has reached maximum
-            if [ ${num_pending_pipelines} -eq ${num_failed_pipelines} ]; then
-                # Since all pending pipelines have failed, we should exit
-                if [ ${num_pending_pipelines} -eq ${num_active_pipelines}]; then
-                    echo "Error: all active pipelines failed" >&2
-                    return 1
-                else
-                    end=1
-                fi
+        # Decide whether to wait or end the loop
+        if [ ${num_pending_pipelines} -eq ${num_failed_pipelines} ]; then
+            if [ ${num_pending_pipelines} -eq ${num_active_pipelines}]; then
+                echo "Error: all active pipelines failed" >&2
+                return 1
             else
-                # Wait until some pending pipeline finishes
-                sleep ${SLEEP_TIME}
+                end=1
             fi
+        else
+            if [ ${num_pending_pipelines} -lt ${maxp} ]; then
+                end=1
+            fi
+        fi
+
+        # Sleep if not end
+        if [ ${end} -eq 0 ]; then
+            sleep ${SLEEP_TIME}
         fi
 
     done
