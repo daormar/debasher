@@ -3613,7 +3613,7 @@ create_pipeline_shdirs()
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
         absdir=`get_absolute_shdirname $dirname`
         if [ ! -d ${absdir} ]; then
-           mkdir ${absdir} || exit 1
+           mkdir -p ${absdir} || exit 1
         fi
     done
 }
