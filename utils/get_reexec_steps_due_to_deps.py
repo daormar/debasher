@@ -49,19 +49,19 @@ def take_pars():
 ##################################################
 def check_pars(flags,values):
     if(flags["r_given"]==False):
-        print >> sys.stderr, "Error! -r parameter not given"
+        print("Error! -r parameter not given", file=sys.stderr)
         sys.exit(2)
 
     if(flags["d_given"]==False):
-        print >> sys.stderr, "Error! -d parameter not given"
+        print("Error! -d parameter not given", file=sys.stderr)
         sys.exit(2)
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "get_reexec_steps_due_to_deps -r <string> -d <string>"
-    print >> sys.stderr, ""
-    print >> sys.stderr, "-r <string>                  String with steps to be reexecuted"
-    print >> sys.stderr, "-d <string>                  File with dependency information"
+    print("get_reexec_steps_due_to_deps -r <string> -d <string>", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("-r <string>                  String with steps to be reexecuted", file=sys.stderr)
+    print("-d <string>                  File with dependency information", file=sys.stderr)
 
 ##################################################
 def process_r_opt(rexec_steps_str):
@@ -120,7 +120,7 @@ def get_reexec_steps_due_to_deps(initial_reexec_steps,dep_info):
 ##################################################
 def print_steps(reexec_steps):
     for step in reexec_steps:
-        print step
+        print(step)
     
 ##################################################
 def process_pars(flags,values):

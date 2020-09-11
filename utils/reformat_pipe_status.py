@@ -63,23 +63,23 @@ def take_pars():
 ##################################################
 def check_pars(flags,values):
     if(flags["f_given"]==False):
-        print >> sys.stderr, "Error! -f parameter not given"
+        print("Error! -f parameter not given", file=sys.stderr)
         sys.exit(2)
     if(flags["l_given"]==False):
-        print >> sys.stderr, "Error! -l parameter not given"
+        print("Error! -l parameter not given", file=sys.stderr)
         sys.exit(2)
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "reformat_pipe_status [-p <string>] -f <int> -l <int> [-e <string>]"
-    print >> sys.stderr, ""
-    print >> sys.stderr, "-p <string>          File with pipe_status output (if not given,"
-    print >> sys.stderr, "                     input is read from stdin)"
-    print >> sys.stderr, "-f <int>             Output format:"
-    print >> sys.stderr, "                     ",ROW_WITH_HEADER_FORMAT,"-> one row with header, plain text"
-    print >> sys.stderr, "                     ",ROW_WO_HEADER_FORMAT,"-> one row without header, plain text"
-    print >> sys.stderr, "-l <int>             Field length"
-    print >> sys.stderr, "-e <string>          Comma-separated list of steps to be excluded"
+    print("reformat_pipe_status [-p <string>] -f <int> -l <int> [-e <string>]", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("-p <string>          File with pipe_status output (if not given,", file=sys.stderr)
+    print("                     input is read from stdin)", file=sys.stderr)
+    print("-f <int>             Output format:", file=sys.stderr)
+    print("                     ",ROW_WITH_HEADER_FORMAT,"-> one row with header, plain text", file=sys.stderr)
+    print("                     ",ROW_WO_HEADER_FORMAT,"-> one row without header, plain text", file=sys.stderr)
+    print("-l <int>             Field length", file=sys.stderr)
+    print("-e <string>          Comma-separated list of steps to be excluded", file=sys.stderr)
 
 ##################################################
 def extract_step_info(pstatus):
@@ -124,7 +124,7 @@ def print_step_info(step_map,excl_steps_set,format,fieldlen):
                     header=norm_str_len(step,fieldlen)
                 else:
                     header=header+" "+norm_str_len(step,fieldlen)
-        print header
+        print(header)
 
         status=""
         for step in step_map:
@@ -133,7 +133,7 @@ def print_step_info(step_map,excl_steps_set,format,fieldlen):
                     status=norm_str_len(step_map[step],fieldlen)
                 else:
                     status=status+" "+norm_str_len(step_map[step],fieldlen)
-        print status
+        print(status)
         
     elif format==ROW_WO_HEADER_FORMAT:
         status=""
@@ -143,7 +143,7 @@ def print_step_info(step_map,excl_steps_set,format,fieldlen):
                     status=norm_str_len(step_map[step],fieldlen)
                 else:
                     status=status+" "+norm_str_len(step_map[step],fieldlen)
-        print status
+        print(status)
         
 ##################################################
 def extract_excl_step_info(excl_steps):

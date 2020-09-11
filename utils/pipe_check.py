@@ -66,30 +66,30 @@ def take_pars():
 ##################################################
 def check_pars(flags,values):
     if(flags["p_given"]==False):
-        print >> sys.stderr, "Error! -p parameter not given"
+        print("Error! -p parameter not given", file=sys.stderr)
         sys.exit(2)
 
     if(flags["r_given"] and flags["g_given"]):
-        print >> sys.stderr, "Error! -r and -g options cannot be given simultaneously"
+        print("Error! -r and -g options cannot be given simultaneously", file=sys.stderr)
         sys.exit(2)
 
     if(flags["r_given"] and flags["d_given"]):
-        print >> sys.stderr, "Error! -r and -d options cannot be given simultaneously"
+        print("Error! -r and -d options cannot be given simultaneously", file=sys.stderr)
         sys.exit(2)
 
     if(flags["g_given"] and flags["d_given"]):
-        print >> sys.stderr, "Error! -g and -d options cannot be given simultaneously"
+        print("Error! -g and -d options cannot be given simultaneously", file=sys.stderr)
         sys.exit(2)
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "pipe_check     -p <string> [-r|-g|-d] [-v]"
-    print >> sys.stderr, ""
-    print >> sys.stderr, "-p <string>    Pipeline file"
-    print >> sys.stderr, "-r             Print reordered pipeline"
-    print >> sys.stderr, "-g             Print pipeline in graphviz format"
-    print >> sys.stderr, "-d             Print dependencies for each step"
-    print >> sys.stderr, "-v             Verbose mode"
+    print("pipe_check     -p <string> [-r|-g|-d] [-v]", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("-p <string>    Pipeline file", file=sys.stderr)
+    print("-r             Print reordered pipeline", file=sys.stderr)
+    print("-g             Print pipeline in graphviz format", file=sys.stderr)
+    print("-d             Print dependencies for each step", file=sys.stderr)
+    print("-v             Verbose mode", file=sys.stderr)
 
 ##################################################
 def entry_is_comment(entry):
@@ -157,7 +157,7 @@ def extract_step_deps(entry_lineno,entry):
     seps_mixed,separator=get_dep_separator(sdeps_str)
     if seps_mixed:
         deps_syntax_ok=False
-        print >> sys.stderr, "Error: dependency separators mixed in step dependency (",sdeps_str,") at line number",entry_lineno
+        print("Error: dependency separators mixed in step dependency (",sdeps_str,") at line number",entry_lineno, file=sys.stderr)
         return deps_syntax_ok,[]
     
     # create list of step dependencies
@@ -176,7 +176,7 @@ def extract_step_deps(entry_lineno,entry):
                 sdeps_list.append(data)
             else:
                 deps_syntax_ok=False
-                print >> sys.stderr, "Error: incorrect definition of step dependency (",sdeps_str,") at line number",entry_lineno
+                print("Error: incorrect definition of step dependency (",sdeps_str,") at line number",entry_lineno, file=sys.stderr)
         
     return deps_syntax_ok,separator,sdeps_list
 
@@ -276,7 +276,7 @@ def stepnames_duplicated(entries_lineno,step_entries):
     for i in range(len(step_entries)):
         sname=extract_step_name(step_entries[i])
         if sname in stepnames:
-            print >> sys.stderr, "Error: step",sname,"in line",entries_lineno[i],"is duplicated"
+            print("Error: step",sname,"in line",entries_lineno[i],"is duplicated", file=sys.stderr)
             return True
         else:
             stepnames.add(sname)
@@ -296,7 +296,7 @@ def depnames_correct(stepdeps_map):
 
     for name in stepdepnames:
         if name not in stepnames:
-            print >> sys.stderr, "Error: unrecognized step dependency",name
+            print("Error: unrecognized step dependency",name, file=sys.stderr)
             return False
 
     return True
@@ -328,7 +328,7 @@ def order_step_entries(step_entries,stepdeps_map,ordered_step_entries):
                 ordered_step_entries.append(entry)
         # Check if no steps were added
         if(prev_proc_steps_len==len(processed_steps)):
-            print >> sys.stderr, "Error: the analysis file contains at least one cycle"
+            print("Error: the analysis file contains at least one cycle", file=sys.stderr)
             return ordered_step_entries
         
     return ordered_step_entries
@@ -342,7 +342,7 @@ def after_dep_has_multatt_step(entries_lineno,multiattempt_steps,stepdeps_map):
         while i<len(deplist) and not found:
             if(deplist[i].deptype=="after" and deplist[i].stepname in multiattempt_steps):
                 found=True
-                print >> sys.stderr, "Error:",sname,"step has an 'after' dependency with a multiple-attempt step (",deplist[i].stepname,")"
+                print("Error:",sname,"step has an 'after' dependency with a multiple-attempt step (",deplist[i].stepname,")", file=sys.stderr)
             else:
                 i=i+1
     if(found):
@@ -374,9 +374,9 @@ def stepdeps_correct(entries_lineno,step_entries,multiattempt_steps,stepdeps_map
 ##################################################
 def print_entries(config_entries,step_entries):
     for e in config_entries:
-        print e
+        print(e)
     for e in step_entries:
-        print e
+        print(e)
 
 ##################################################
 def get_graph_linestyle(separator):
@@ -390,25 +390,25 @@ def get_graph_linestyle(separator):
 ##################################################
 def print_graph(ordered_step_entries,stepdeps_sep,stepdeps_map):
     # Print header
-    print "digraph G {"
-    print "overlap=false;"
-    print "splines=true;"
-    print "K=1;"
+    print("digraph G {")
+    print("overlap=false;")
+    print("splines=true;")
+    print("K=1;")
 
     # Set representation for steps
-    print "node [shape = ellipse];"
+    print("node [shape = ellipse];")
 
     # Process steps
     for step in stepdeps_map:
         line_style=get_graph_linestyle(stepdeps_sep[step])
         if len(stepdeps_map[step])==0:
-            print "start","->",step, "[ label= \"\" ,","color = black ];"            
+            print("start","->",step, "[ label= \"\" ,","color = black ];")            
         else:
             for elem in stepdeps_map[step]:
-                print elem.stepname,"->",step, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];"
+                print(elem.stepname,"->",step, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];")
     
     # Print footer
-    print "}"
+    print("}")
 
 ##################################################
 def extract_all_deps_for_step(sname,stepdeps_map,result):
@@ -432,7 +432,7 @@ def print_deps(ordered_step_entries,stepdeps_map):
                 depstr=dep
             else:
                 depstr=depstr+" "+dep
-        print sname,":",depstr
+        print(sname,":",depstr)
 
 ##################################################
 def sname_valid(sname):
@@ -445,7 +445,7 @@ def sname_valid(sname):
 def snames_valid(stepdeps_map):
     for sname in stepdeps_map:
         if(not sname_valid(sname)):
-            print >> sys.stderr, "Error: step name",sname,"contains not allowed characters (only letters, numbers and underscores are allowed)"
+            print("Error: step name",sname,"contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
             return 0
     return 1
     
@@ -456,14 +456,14 @@ def process_pars(flags,values):
     multiattempt_steps=extract_steps_with_multiattempt(step_entries)
     deps_syntax_ok,stepdeps_sep,stepdeps_map=extract_stepdeps_info(entries_lineno,step_entries)
     if(not deps_syntax_ok):
-       print >> sys.stderr, "Step dependencies are not syntactically correct"
+       print("Step dependencies are not syntactically correct", file=sys.stderr)
        return 1
     if(not snames_valid(stepdeps_map)):
-       print >> sys.stderr, "Step names are not valid"
+       print("Step names are not valid", file=sys.stderr)
        return 1
     ordered_step_entries=[]
     if(stepdeps_correct(entries_lineno,step_entries,multiattempt_steps,stepdeps_map,ordered_step_entries)):
-        print >> sys.stderr, "Pipeline file is correct"
+        print("Pipeline file is correct", file=sys.stderr)
         if(flags["r_given"]):
             print_entries(config_entries,ordered_step_entries)
         elif(flags["g_given"]):
@@ -471,7 +471,7 @@ def process_pars(flags,values):
         elif(flags["d_given"]):
             print_deps(ordered_step_entries,stepdeps_map)
     else:
-        print >> sys.stderr, "Pipeline file is not correct"
+        print("Pipeline file is not correct", file=sys.stderr)
         return 1
         
 ##################################################

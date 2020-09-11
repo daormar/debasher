@@ -65,22 +65,22 @@ def take_pars():
 ##################################################
 def check_pars(flags,values):
     if(flags["s_given"]==False):
-        print >> sys.stderr, "Error! -s parameter not given"
+        print("Error! -s parameter not given", file=sys.stderr)
         sys.exit(2)
 
     if(flags["c_given"]==False):
-        print >> sys.stderr, "Error! -c parameter not given"
+        print("Error! -c parameter not given", file=sys.stderr)
         sys.exit(2)
 
 ##################################################
 def print_help():
-    print >> sys.stderr, "solve_knapsack_ga -s <string> -c <string> [-g <int>] [-p <int>] [-t <float>]"
-    print >> sys.stderr, ""
-    print >> sys.stderr, "-s <string>    Item weight and value specification"
-    print >> sys.stderr, "-c <string>    Comma-separated list of capacities"
-    print >> sys.stderr, "-g <int>       Number of generations (1000 by default)"
-    print >> sys.stderr, "-p <int>       Population size (100 by default)"
-    print >> sys.stderr, "-t <float>     Time limit in seconds (no limit by default)"
+    print("solve_knapsack_ga -s <string> -c <string> [-g <int>] [-p <int>] [-t <float>]", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("-s <string>    Item weight and value specification", file=sys.stderr)
+    print("-c <string>    Comma-separated list of capacities", file=sys.stderr)
+    print("-g <int>       Number of generations (1000 by default)", file=sys.stderr)
+    print("-p <int>       Population size (100 by default)", file=sys.stderr)
+    print("-t <float>     Time limit in seconds (no limit by default)", file=sys.stderr)
     
 ##################################################
 def extract_spec_info(specfile):
@@ -129,9 +129,9 @@ def solve(max_gen,pop_size,items,weights,values,capacities,time_limit):
     
 ##################################################
 def print_solution(items,computed_value,packed_items,packed_weights):
-    print "Value:",computed_value
-    print "Packed items:"," ".join(items[x] for x in packed_items)
-    print "Total weights:"," ".join(str(x) for x in packed_weights)
+    print("Value:",computed_value)
+    print("Packed items:"," ".join(items[x] for x in packed_items))
+    print("Total weights:"," ".join(str(x) for x in packed_weights))
 
 ##################################################
 def process_pars(flags,values):
