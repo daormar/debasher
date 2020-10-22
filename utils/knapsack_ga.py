@@ -150,7 +150,7 @@ def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacit
     random.seed(31415)
 
     # Get start time
-    start=time.clock()
+    start=time.time()
     
     # Compute generations
     generation = 1
@@ -159,7 +159,7 @@ def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacit
         population = sorted(population, key=lambda x: fitness(x,weights,values,capacities), reverse=True)
         population = evolve_population(population)
         generation += 1
-        curr=time.clock()-start
+        curr=time.time()-start
         if time_limit > 0 and curr > time_limit:
             break
 
