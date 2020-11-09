@@ -901,7 +901,7 @@ builtin_sched_select_steps_to_be_exec()
 
             return 0
         else
-            return 0
+            return 1
         fi
     fi
 }
