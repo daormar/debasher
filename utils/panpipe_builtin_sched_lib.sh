@@ -901,6 +901,7 @@ builtin_sched_select_steps_to_be_exec()
 
             return 0
         else
+            # No executable steps were found
             return 1
         fi
     fi
