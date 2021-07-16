@@ -28,6 +28,7 @@ DEP_NOT_FOUND="_DEP_NOT_FOUND_"
 FUNCT_NOT_FOUND="_FUNCT_NOT_FOUND_"
 VOID_VALUE="_VOID_VALUE_"
 GENERAL_OPT_CATEGORY="GENERAL"
+SPACE_SUBSTITUTE="__SPACE_SUBSTITUTE__"
 
 # INVALID IDENTIFIERS
 INVALID_SID="_INVALID_SID_"
@@ -196,17 +197,17 @@ get_absolute_path()
     local file=$1
     
     # Check if an absolute path was given
-    if is_absolute_path $file; then
+    if is_absolute_path "$file"; then
         echo $file
         return 0
     else
         # Check if path corresponds to a directory
-        if [ -d $file ]; then
+        if [ -d "$file" ]; then
             local oldpwd=$PWD
-            cd $file
+            cd "$file"
             local result=${PWD}
             cd $oldpwd
-            echo $result
+            echo "$result"
             return 0
         else
             # Path corresponds to a file
@@ -214,16 +215,16 @@ get_absolute_path()
             local basetmp=`$BASENAME $PWD/$file`
             local dirtmp=`$DIRNAME $PWD/$file`
             # Check if directory containing the file exists
-            if [ -d $dirtmp ]; then
-                cd $dirtmp
+            if [ -d "$dirtmp" ]; then
+                cd "$dirtmp"
                 local result=${PWD}/${basetmp}
-                cd $oldpwd
-                echo $result
+                cd "$oldpwd"
+                echo "$result"
                 return 0
             else
                 # Directory containing the file does not exist, so it's
                 # not possible to obtain the absolute path
-                echo $file
+                echo "$file"
                 echo "get_absolute_path: absolute path could not be determined!" >&2
                 return 1
             fi
@@ -3045,43 +3046,68 @@ get_pipeline_fullmodnames()
 ###############################
 
 ########
+replace_blank_with_word()
+{
+    local str=$1
+    local word=$2
+    echo ${str// /$word}
+}
+
+########
+replace_word_with_blank()
+{
+    local str=$1
+    local word=$2
+    echo ${str//$word/ }
+}
+
+########
 memoize_opts()
 {
-    shift
-    while [ $# -ne 0 ]; do
-        # Check if argument is an option
-        if [ ${1:0:1} = "-" -o ${1:0:2} = "--"  ]; then
-            # Argument is option
-            local opt=$1
-            shift
+    local cmdline=$1
 
-            # continue if option was already given
-            if [ "${MEMOIZED_OPTS[$opt]}" != "" ]; then
-                # If option has a value it is necessary to execute shift
-                if [ ${1:0:1} != "-" -a ${1:0:2} != "--"  ]; then
-                    shift
-                fi
-                continue
-            fi
-            
-            if [ $# -ne 0 ]; then
-                # Check if next argument is option
-                if [ ${1:0:1} = "-" -o ${1:0:2} = "--"  ]; then
-                    # Next argument is option
-                    MEMOIZED_OPTS[$opt]=${VOID_VALUE}
+    # Convert string to array
+    local preproc_cmdline
+    preproc_cmdline=`echo "${cmdline}" | ${SED} 's/ /\n/g'`
+    local array=()
+    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
+    
+    # Scan array
+    i=1
+    while [ $i -lt ${#array[@]} ]; do
+        # Check if option was found
+        if [ "${array[$i]:0:1}" = "-" -o "${array[$i]:0:2}" = "--" ]; then
+            opt="${array[$i]}"
+            i=$((i+1))
+            # Obtain value by appending all strings until next option or
+            # last string is reached
+            end=0
+            value=""
+            while [ ${end} -eq 0 ]; do
+                # Check if next token is an option
+                if [ $i -lt ${#array[@]} ]; then
+                    if [ "${array[$i]:0:1}" = "-" -o "${array[$i]:0:2}" = "--" ]; then
+                        end=1
+                    else
+                        if [ -z "${value}" ]; then
+                            value="${array[$i]}"
+                        else
+                            value="${value} ${array[$i]}"
+                        fi
+                        i=$((i+1))
+                    fi
                 else
-                    # Next argument is value
-                    value=$1
-                    MEMOIZED_OPTS[$opt]=$value
-                    shift
+                    end=1
                 fi
-            else
-                # There are no more arguments
+            done
+            if [ -z "${value}" ]; then
                 MEMOIZED_OPTS[$opt]=${VOID_VALUE}
+            else
+                MEMOIZED_OPTS[$opt]="$value"
             fi
         else
-            echo "Warning: unexpected argument ($1), skipping..." >&2
-            shift
+            echo "Warning: unexpected value ($1), skipping..." >&2
+            i=$((i+1))
         fi
     done
 }
@@ -3089,12 +3115,12 @@ memoize_opts()
 ########
 check_opt_given()
 {
-    local line=$1
+    local cmdline=$1
     local opt=$2
 
     # Convert string to array
     local array
-    IFS=' ' read -r -a array <<< $line
+    IFS=' ' read -r -a array <<< $cmdline
     # Scan array
     i=0
     while [ $i -lt ${#array[@]} ]; do
@@ -3124,18 +3150,18 @@ check_memoized_opt()
 ########
 check_opt_given_memoiz()
 {
-    local line=$1
+    local cmdline=$1
     local opt=$2
 
-    if [ "${LAST_PROC_LINE_MEMOPTS}" = "$line" ]; then
+    if [ "${LAST_PROC_LINE_MEMOPTS}" = "$cmdline" ]; then
         # Given line was previously processed, return memoized result
         check_memoized_opt $opt || return 1
     else
         # Process not memoized line
-        memoize_opts $line
+        memoize_opts "$cmdline"
         
         # Store processed line
-        LAST_PROC_LINE_MEMOPTS="$line"
+        LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
         check_memoized_opt $opt || return 1
@@ -3145,19 +3171,47 @@ check_opt_given_memoiz()
 ########
 read_opt_value_from_line()
 {
-    local line=$1
+    local cmdline=$1
     local opt=$2
-    
+
     # Convert string to array
-    local array
-    IFS=' ' read -r -a array <<< $line
+    local preproc_cmdline
+    preproc_cmdline=`echo "${cmdline}" | ${SED} 's/ /\n/g'`
+    local array=()
+    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
+    
     # Scan array
     i=0
     while [ $i -lt ${#array[@]} ]; do
-        if [ ${array[$i]} = "${opt}" ]; then
+        # Check if option was found
+        if [ "${array[$i]}" = "${opt}" ]; then
             i=$((i+1))
-            if [ $i -lt ${#array[@]} ]; then
-                echo ${array[$i]}
+            # Obtain value by appending all strings until next option or
+            # last string is reached
+            end=0
+            value=""
+            while [ ${end} -eq 0 ]; do
+                # Check if next token is an option
+                if [ $i -lt ${#array[@]} ]; then
+                    if [ "${array[$i]:0:1}" = "-" -o "${array[$i]:0:2}" = "--" ]; then
+                        end=1
+                    else
+                        if [ -z "${value}" ]; then
+                            value="${array[$i]}"
+                        else
+                            value="${value} ${array[$i]}"
+                        fi
+                        i=$((i+1))
+                    fi
+                else
+                    end=1
+                fi
+            done
+            if [ -z "${value}" ]; then
+                echo ${VOID_VALUE}
+                return 1
+            else
+                echo "${value}"
                 return 0
             fi
         fi
@@ -3187,18 +3241,18 @@ read_memoized_opt_value()
 ########
 read_opt_value_from_line_memoiz()
 {
-    local line=$1
+    local cmdline=$1
     local opt=$2
 
-    if [ "${LAST_PROC_LINE_MEMOPTS}" = "$line" ]; then
+    if [ "${LAST_PROC_LINE_MEMOPTS}" = "$cmdline" ]; then
         # Given line was previously processed, return memoized result
         _OPT_VALUE_=`read_memoized_opt_value $opt` || return 1
     else
         # Process not memoized line
-        memoize_opts $line
+        memoize_opts "$cmdline"
         
         # Store processed line
-        LAST_PROC_LINE_MEMOPTS="$line"
+        LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
         _OPT_VALUE_=`read_memoized_opt_value $opt` || return 1
