@@ -82,13 +82,6 @@ usage()
 }
 
 ########
-save_command_line()
-{
-    input_pars="$*"
-    command_name=$0
-}
-
-########
 read_pars()
 {
     pfile_given=0
