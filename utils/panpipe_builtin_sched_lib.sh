@@ -1045,7 +1045,7 @@ builtin_sched_create_script()
     echo ${BASH_SHEBANG} > ${fname} || return 1
     
     # Write environment variables
-    set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
+    set | exclude_readonly_vars >> ${fname} || return 1
 
     # Print header
     builtin_sched_print_script_header ${fname} ${dirname} ${stepname} ${num_scripts} >> ${fname} || return 1
