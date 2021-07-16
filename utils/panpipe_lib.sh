@@ -388,10 +388,10 @@ replace_tilde_by_homedir()
 {
     local file=$1
 
-    if [ ${file:0:1} = "~" ]; then
+    if [ "${file:0:1}" = "~" ]; then
         echo "$HOME${file:1}"
     else
-        echo $file
+        echo "$file"
     fi
 }
 
@@ -399,7 +399,7 @@ replace_tilde_by_homedir()
 file_exists()
 {
     local file=$1
-    if [ -f $file ]; then
+    if [ -f "$file" ]; then
         return 0
     else
         return 1
@@ -410,7 +410,7 @@ file_exists()
 dir_exists()
 {
     local dir=$1
-    if [ -d $dir ]; then
+    if [ -d "$dir" ]; then
         return 0
     else
         return 1
@@ -3076,7 +3076,7 @@ memoize_opts()
     local i=1
     while [ $i -lt ${#array[@]} ]; do
         # Check if option was found
-        if [ "${array[$i]:0:1}" = "-" -o "${array[$i]:0:2}" = "--" ]; then
+        if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
             local opt="${array[$i]}"
             i=$((i+1))
             # Obtain value by appending all strings until next option or
@@ -3086,7 +3086,7 @@ memoize_opts()
             while [ ${end} -eq 0 ]; do
                 # Check if next token is an option
                 if [ $i -lt ${#array[@]} ]; then
-                    if [ "${array[$i]:0:1}" = "-" -o "${array[$i]:0:2}" = "--" ]; then
+                    if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
                         end=1
                     else
                         if [ -z "${value}" ]; then
@@ -3193,7 +3193,7 @@ read_opt_value_from_line()
             while [ ${end} -eq 0 ]; do
                 # Check if next token is an option
                 if [ $i -lt ${#array[@]} ]; then
-                    if [ "${array[$i]:0:1}" = "-" -o "${array[$i]:0:2}" = "--" ]; then
+                    if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
                         end=1
                     else
                         if [ -z "${value}" ]; then
@@ -3233,7 +3233,7 @@ read_memoized_opt_value()
         echo ${OPT_NOT_FOUND}
         return 1
     else
-        echo ${MEMOIZED_OPTS[$opt]}
+        echo "${MEMOIZED_OPTS[$opt]}"
         return 0
     fi
 }
@@ -3426,10 +3426,10 @@ define_cmdline_opt()
 
     # Get value for option
     read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
-    local value=${_OPT_VALUE_}
+    local value="${_OPT_VALUE_}"
     
     # Add option
-    define_opt $opt $value $varname
+    define_opt $opt "$value" $varname
 }
 
 ########
@@ -3456,14 +3456,14 @@ define_cmdline_nonmandatory_opt()
 
     # Get value for option
     read_opt_value_from_line_memoiz "$cmdline" $opt
-    local value=${_OPT_VALUE_}
+    local value="${_OPT_VALUE_}"
 
-    if [ $value = ${OPT_NOT_FOUND} ]; then
+    if [ "$value" = ${OPT_NOT_FOUND} ]; then
         value=${default_value}
     fi
     
     # Add option
-    define_opt $opt $value $varname    
+    define_opt $opt "$value" $varname    
 }
 
 ########
@@ -3477,9 +3477,9 @@ define_cmdline_opt_if_given()
     read_opt_value_from_line_memoiz "$cmdline" $opt
     local value=${_OPT_VALUE_}
 
-    if [ $value != ${OPT_NOT_FOUND} ]; then
+    if [ "$value" != ${OPT_NOT_FOUND} ]; then
         # Add option
-        define_opt $opt $value $varname
+        define_opt $opt "$value" $varname
     fi
 }
 
@@ -3492,18 +3492,18 @@ define_cmdline_infile_opt()
 
     # Get value for option
     read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
-    local value=${_OPT_VALUE_}
+    local value="${_OPT_VALUE_}"
 
-    if [ $value != ${NOFILE} ]; then
+    if [ "$value" != ${NOFILE} ]; then
         # Check if file exists
-        file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+        file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
 
         # Absolutize path
-        value=`get_absolute_path ${value}`
+        value=`get_absolute_path "${value}"`
     fi
     
     # Add option
-    define_opt $opt $value $varname
+    define_opt $opt "$value" $varname
 }
 
 ########
@@ -3516,23 +3516,23 @@ define_cmdline_infile_nonmand_opt()
 
     # Get value for option
     read_opt_value_from_line_memoiz "$cmdline" $opt
-    local value=${_OPT_VALUE_}
+    local value="${_OPT_VALUE_}"
 
-    if [ $value = ${OPT_NOT_FOUND} ]; then
+    if [ "$value" = ${OPT_NOT_FOUND} ]; then
         value=${default_value}
     fi
 
-    if [ $value != ${NOFILE} ]; then
+    if [ "$value" != ${NOFILE} ]; then
         # Check if file exists
-        file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+        file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
         
         # Absolutize path
-        value=`get_absolute_path ${value}`
+        value=`get_absolute_path "${value}"`
     fi
 
 
     # Add option
-    define_opt $opt $value $varname
+    define_opt $opt "$value" $varname
 }
 
 ########
@@ -3603,10 +3603,10 @@ define_infile_opt()
     fi
 
     # Check if file exists
-    file_exists $value || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+    file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
-    value=`get_absolute_path ${value}`
+    value=`get_absolute_path "${value}"`
 
     if [ -z "${!varname}" ]; then
         eval "${varname}='${opt} ${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
@@ -3632,7 +3632,7 @@ define_indir_opt()
     dir_exists "$value" || { errmsg "directory $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
-    value=`get_absolute_path ${value}`
+    value=`get_absolute_path "${value}"`
 
     if [ -z "${!varname}" ]; then
         eval "${varname}='${opt} ${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
@@ -3666,8 +3666,8 @@ create_pipeline_shdirs()
     local dirname
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
         absdir=`get_absolute_shdirname $dirname`
-        if [ ! -d ${absdir} ]; then
-           mkdir -p ${absdir} || exit 1
+        if [ ! -d "${absdir}" ]; then
+           mkdir -p "${absdir}" || exit 1
         fi
     done
 }
@@ -3704,9 +3704,9 @@ prepare_fifos_owned_by_step()
     # Create FIFOS
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        if [ ${PIPELINE_FIFOS[${fifoname}]} = "${stepname}" ]; then         
-            rm -f ${fifodir}/${fifoname} || exit 1
-            $MKFIFO ${fifodir}/${fifoname} || exit 1
+        if [ ${PIPELINE_FIFOS["${fifoname}"]} = "${stepname}" ]; then         
+            rm -f "${fifodir}/${fifoname}" || exit 1
+            $MKFIFO "${fifodir}/${fifoname}" || exit 1
         fi
     done
 }
@@ -3715,20 +3715,20 @@ prepare_fifos_owned_by_step()
 get_absolute_shdirname()
 {
     local shdirname=$1
-    echo ${PIPELINE_OUTDIR}/${shdirname}
+    echo "${PIPELINE_OUTDIR}/${shdirname}"
 }
 
 ########
 get_absolute_fifoname()
 {
     local fifoname=$1
-    echo ${PIPELINE_OUTDIR}/.fifos/${fifoname}
+    echo "${PIPELINE_OUTDIR}/.fifos/${fifoname}"
 }
 
 ########
 get_absolute_condadir()
 {
-    echo ${PIPELINE_OUTDIR}/.conda
+    echo "${PIPELINE_OUTDIR}/.conda"
 }
 
 ########
@@ -3796,7 +3796,6 @@ define_conda_env()
 conda_env_exists()
 {
     local envname=$1
-
     local env_exists=1
     
     conda activate $envname > /dev/null 2>&1 || env_exists=0
@@ -3818,10 +3817,10 @@ conda_env_prepare()
 
     if is_absolute_path ${env_name}; then
         # Install packages given prefix name
-        conda env create -f ${abs_yml_fname} -p ${env_name} > ${condadir}/${env_name}.log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/${env_name}.log file for more information">&2 ; return 1; }
+        conda env create -f "${abs_yml_fname}" -p ${env_name} > "${condadir}"/${env_name}.log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/${env_name}.log file for more information">&2 ; return 1; }
     else    
         # Install packages given environment name
-        conda env create -f ${abs_yml_fname} -n ${env_name} > ${condadir}/${env_name}.log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/${env_name}.log file for more information">&2 ; return 1; }
+        conda env create -f "${abs_yml_fname}" -n ${env_name} > "${condadir}"/${env_name}.log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/${env_name}.log file for more information">&2 ; return 1; }
     fi
 }
 
@@ -3841,8 +3840,8 @@ get_abs_yml_fname()
     local dir
     local abs_yml_fname
     for dir in ${PANPIPE_YML_DIR_BLANKS}; do
-        if [ -f ${dir}/${yml_fname} ]; then
-            abs_yml_fname=${dir}/${yml_fname}
+        if [ -f "${dir}/${yml_fname}" ]; then
+            abs_yml_fname="${dir}/${yml_fname}"
             break
         fi
     done
@@ -3850,8 +3849,8 @@ get_abs_yml_fname()
     # Fallback to panpipe yml package
     if [ -z "${abs_yml_fname}" ]; then
         panpipe_yml_dir=`get_panpipe_yml_dir`
-        abs_yml_fname=${panpipe_yml_dir}/${yml_fname}
+        abs_yml_fname="${panpipe_yml_dir}/${yml_fname}"
     fi
 
-    echo ${abs_yml_fname}
+    echo "${abs_yml_fname}"
 }
