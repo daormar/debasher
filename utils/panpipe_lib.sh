@@ -3073,16 +3073,16 @@ memoize_opts()
     while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
     
     # Scan array
-    i=1
+    local i=1
     while [ $i -lt ${#array[@]} ]; do
         # Check if option was found
         if [ "${array[$i]:0:1}" = "-" -o "${array[$i]:0:2}" = "--" ]; then
-            opt="${array[$i]}"
+            local opt="${array[$i]}"
             i=$((i+1))
             # Obtain value by appending all strings until next option or
             # last string is reached
-            end=0
-            value=""
+            local end=0
+            local value=""
             while [ ${end} -eq 0 ]; do
                 # Check if next token is an option
                 if [ $i -lt ${#array[@]} ]; then
@@ -3106,7 +3106,7 @@ memoize_opts()
                 MEMOIZED_OPTS[$opt]="$value"
             fi
         else
-            echo "Warning: unexpected value ($1), skipping..." >&2
+            echo "Warning: unexpected value (${array[$i]}), skipping..." >&2
             i=$((i+1))
         fi
     done
@@ -3181,15 +3181,15 @@ read_opt_value_from_line()
     while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
     
     # Scan array
-    i=0
+    local i=0
     while [ $i -lt ${#array[@]} ]; do
         # Check if option was found
         if [ "${array[$i]}" = "${opt}" ]; then
             i=$((i+1))
             # Obtain value by appending all strings until next option or
             # last string is reached
-            end=0
-            value=""
+            local end=0
+            local value=""
             while [ ${end} -eq 0 ]; do
                 # Check if next token is an option
                 if [ $i -lt ${#array[@]} ]; then
