@@ -118,7 +118,7 @@ declare -a SCRIPT_OPT_LIST_ARRAY
 declare PIPELINE_OUTDIR
 
 # Declare associative array to store names of loaded modules
-declare -A PIPELINE_MODULES
+declare -a PIPELINE_MODULES
 
 # Declare associative array to store name of shared directories
 declare -A PIPELINE_SHDIRS
@@ -198,7 +198,7 @@ get_absolute_path()
     
     # Check if an absolute path was given
     if is_absolute_path "$file"; then
-        echo $file
+        echo "$file"
         return 0
     else
         # Check if path corresponds to a directory
@@ -206,14 +206,14 @@ get_absolute_path()
             local oldpwd=$PWD
             cd "$file"
             local result=${PWD}
-            cd $oldpwd
+            cd "$oldpwd"
             echo "$result"
             return 0
         else
             # Path corresponds to a file
             local oldpwd=$PWD
-            local basetmp=`$BASENAME $PWD/$file`
-            local dirtmp=`$DIRNAME $PWD/$file`
+            local basetmp=`$BASENAME "$PWD/$file"`
+            local dirtmp=`$DIRNAME "$PWD/$file"`
             # Check if directory containing the file exists
             if [ -d "$dirtmp" ]; then
                 cd "$dirtmp"
@@ -246,8 +246,8 @@ dirnames_are_equal()
     local dir1=$1
     local dir2=$2
 
-    norm_dir1=`normalize_dirname $dir1`
-    norm_dir2=`normalize_dirname $dir2`
+    norm_dir1=`normalize_dirname "$dir1"`
+    norm_dir2=`normalize_dirname "$dir2"`
 
     if [ ${norm_dir1} = ${norm_dir2} ]; then
         return 0
@@ -264,7 +264,7 @@ expand_tilde_in_word()
     case "$word" in
         "~/"*) echo "${HOME}/${word#"~/"}"
                ;;
-        *) echo $word
+        *) echo "$word"
            ;;
     esac
 }
@@ -321,7 +321,7 @@ replace_str_elem_sep_with_blank()
 
     result=${str_array[@]}
     
-    echo ${result}
+    echo "${result}"
 }
 
 ########
@@ -356,7 +356,7 @@ serialize_string_array()
         num_elem=$((num_elem + 1))
     done
 
-    echo $result
+    echo "$result"
 }
 
 ########
@@ -475,7 +475,7 @@ get_first_n_fields_of_str()
         fi
         
         if [ "${result}" = "" ]; then
-            result=$field
+            result="$field"
         else
             result="${result} ${field}"
         fi
@@ -694,30 +694,30 @@ create_slurm_script()
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
-    echo ${BASH_SHEBANG} > ${fname} || return 1
+    echo ${BASH_SHEBANG} > "${fname}" || return 1
     
     # Write environment variables
-    set | exclude_readonly_vars | exclude_bashisms >> ${fname} || return 1
+    set | exclude_readonly_vars >> "${fname}" || return 1
 
     # Print header
-    print_script_header_slurm_sched ${fname} ${dirname} ${stepname} ${num_scripts} >> ${fname} || return 1
+    print_script_header_slurm_sched "${fname}" "${dirname}" ${stepname} ${num_scripts} >> "${fname}" || return 1
 
     # Iterate over options array
     local lineno=1
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        print_script_body_slurm_sched ${num_scripts} ${dirname} ${stepname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> ${fname} || return 1
+        print_script_body_slurm_sched ${num_scripts} "${dirname}" ${stepname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> "${fname}" || return 1
 
         lineno=$((lineno + 1))
         
     done
 
     # Print foot
-    print_script_foot_slurm_sched >> ${fname} || return 1
+    print_script_foot_slurm_sched >> "${fname}" || return 1
 
     # Give execution permission
-    chmod u+x ${fname} || return 1
+    chmod u+x "${fname}" || return 1
 }
 
 ########
@@ -731,7 +731,7 @@ create_script()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script $dirname $stepname ${opts_array_name}
+            create_slurm_script "$dirname" $stepname ${opts_array_name}
             ;;
     esac
 }
@@ -741,11 +741,11 @@ archive_script()
 {
     local dirname=$1
     local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local script_filename=`get_script_filename "${dirname}" ${stepname}`
 
     # Archive script with date info
     local curr_date=`date '+%Y_%m_%d'`
-    cp ${script_filename} ${script_filename}.${curr_date}
+    cp ${script_filename} "${script_filename}.${curr_date}"
 }
 
 ########
@@ -780,10 +780,10 @@ get_slurm_output()
     local attempt_suffix=`get_slurm_attempt_suffix ${attempt_no}`
 
     if [ ${array_size} -eq 1 ]; then
-        local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
+        local slurm_log_filename=`get_step_log_filename_slurm "${dirname}" ${stepname}`
         echo ${slurm_log_filename}${attempt_suffix}
     else
-        local slurm_task_template_log_filename=`get_task_template_log_filename_slurm ${dirname} ${stepname}`
+        local slurm_task_template_log_filename=`get_task_template_log_filename_slurm "${dirname}" ${stepname}`
         echo ${slurm_task_template_log_filename}${attempt_suffix}
     fi
 }
@@ -1048,7 +1048,7 @@ slurm_launch_attempt()
     
     # Submit job (initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes -H ${file})
+    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes -H "${file}")
     local exit_code=$?
 
     # Check for errors
@@ -1100,7 +1100,7 @@ slurm_launch_preverif_job()
 
     # Define options
     local jobname="${stepname}__preverif"
-    local preverif_logf=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
+    local preverif_logf=`get_step_log_preverif_filename_slurm "${dirname}" ${stepname}`
     local cpus_opt=`get_slurm_cpus_opt 1`
     local mem_opt=`get_slurm_mem_opt 16`
     local time_opt=`get_slurm_time_opt 00:01:00`
@@ -1163,7 +1163,7 @@ slurm_launch_verif_job()
 
     # Define options
     local jobname="${stepname}__verif"
-    local verif_logf=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
+    local verif_logf=`get_step_log_verif_filename_slurm "${dirname}" ${stepname}`
     local cpus_opt=`get_slurm_cpus_opt 1`
     local mem_opt=`get_slurm_mem_opt 16`
     local time_opt=`get_slurm_time_opt 00:01:00`
@@ -1283,7 +1283,7 @@ slurm_launch()
     # Initialize variables
     local dirname=$1
     local stepname=$2
-    local file=`get_script_filename ${dirname} ${stepname}`
+    local file=`get_script_filename "${dirname}" ${stepname}`
     local array_size=$3
     local task_array_list=$4
     local stepspec=$5
@@ -1303,7 +1303,7 @@ slurm_launch()
         local time_attempt=`get_time_attempt_value ${time} ${attempt_no}`
 
         # Launch attempt
-        jid=`slurm_launch_attempt ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_no} "${stepdeps}" "${attempt_jids}" ${mem_attempt} ${time_attempt}` || return 1
+        jid=`slurm_launch_attempt "${dirname}" ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_no} "${stepdeps}" "${attempt_jids}" ${mem_attempt} ${time_attempt}` || return 1
 
         # Update variable storing jids of previous attempts (after
         # launching all attempts this variable is also useful to launch
@@ -1346,7 +1346,7 @@ launch()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch ${dirname} ${stepname} ${array_size} "${task_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
+            slurm_launch "${dirname}" ${stepname} ${array_size} "${task_array_list}" "${stepspec}" "${stepdeps}" ${outvar} || return 1
             ;;
     esac
 }
@@ -1365,10 +1365,10 @@ create_script_and_launch()
     local id=$8
 
     # Create script for step
-    create_script ${dirname} ${stepname} ${opts_array_name} || return 1
+    create_script "${dirname}" ${stepname} ${opts_array_name} || return 1
 
     # Launch step
-    launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
+    launch "${dirname}" ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${stepdeps} ${id} || return 1
 }
 
 ########
@@ -1603,7 +1603,7 @@ get_launched_array_task_ids()
     local stepname=$2
 
     # Return ids for array tasks if any
-    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in "${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}"; do
         if [ -f ${taskid_file} ]; then
             cat ${taskid_file}
         fi
@@ -1617,9 +1617,9 @@ get_finished_array_task_indices()
     local dirname=$1
     local stepname=$2
 
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
-    if [ -f ${finished_filename} ]; then
-        ${AWK} '{print $4}' ${finished_filename}
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
+    if [ -f "${finished_filename}" ]; then
+        ${AWK} '{print $4}' "${finished_filename}"
     fi
 }
 
@@ -1632,13 +1632,13 @@ array_task_is_finished()
 
     # Check file with finished tasks info exists
     local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
-    if [ ! -f ${finished_filename} ]; then
+    if [ ! -f "${finished_filename}" ]; then
         return 1
     fi
     
     # Check that task is in file
     local task_in_file=1
-    ${GREP} "idx: ${idx} ;" ${finished_filename} > /dev/null || task_in_file=0
+    ${GREP} "idx: ${idx} ;" "${finished_filename}" > /dev/null || task_in_file=0
     if [ ${task_in_file} -eq 1 ]; then
         return 0
     else
@@ -1650,14 +1650,14 @@ array_task_is_finished()
 get_num_finished_array_tasks_from_finished_file()
 {
     local finished_filename=$1
-    $WC -l ${finished_filename} | $AWK '{print $1}'
+    $WC -l "${finished_filename}" | $AWK '{print $1}'
 }
 
 ########
 get_num_array_tasks_from_finished_file()
 {
     local finished_filename=$1
-    $HEAD -1 ${finished_filename} | $AWK '{print $NF}'
+    $HEAD -1 "${finished_filename}" | $AWK '{print $NF}'
 }
 
 ########
@@ -1667,14 +1667,14 @@ step_is_finished()
     local stepname=$2
     local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
     
-    if [ -f ${finished_filename} ]; then
+    if [ -f "${finished_filename}" ]; then
         # Obtain number of finished tasks
-        local num_array_tasks_finished=`get_num_finished_array_tasks_from_finished_file ${finished_filename}`
+        local num_array_tasks_finished=`get_num_finished_array_tasks_from_finished_file "${finished_filename}"`
         if [ ${num_array_tasks_finished} -eq 0 ]; then
             return 1
         fi
         # Check that all tasks are finished
-        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file ${finished_filename}`
+        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file "${finished_filename}"`
         if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
             return 0
         else
@@ -1698,7 +1698,7 @@ step_is_unfinished_but_runnable_builtin_sched()
     local stepname=$2
 
     # Get .id files of finished tasks
-    ids=`get_launched_array_task_ids $dirname $stepname`
+    ids=`get_launched_array_task_ids "$dirname" $stepname`
     local -A launched_array_tids
     for id in ${ids}; do
         launched_array_tids[${id}]=1
@@ -1713,8 +1713,8 @@ step_is_unfinished_but_runnable_builtin_sched()
         # Step is array with some tasks already launched
 
         # Check that not all array tasks were launched
-        local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
-        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file ${finished_filename}`
+        local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
+        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file "${finished_filename}"`
         if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
             return 1
         fi
@@ -1748,7 +1748,7 @@ step_is_unfinished_but_runnable()
             return 1
             ;;
         ${BUILTIN_SCHEDULER})
-            step_is_unfinished_but_runnable_builtin_sched ${dirname} ${stepname}
+            step_is_unfinished_but_runnable_builtin_sched "${dirname}" ${stepname}
             exit_code=$?
             return ${exit_code}
         ;;
@@ -1759,8 +1759,8 @@ step_is_unfinished_but_runnable()
 get_step_start_date()
 {
     log_filename=$1
-    if [ -f ${log_filename} ]; then
-        ${GREP} "^Step started at " ${log_filename} | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+    if [ -f "${log_filename}" ]; then
+        ${GREP} "^Step started at " "${log_filename}" | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
     fi
 }
 
@@ -1768,8 +1768,8 @@ get_step_start_date()
 get_step_finish_date()
 {
     log_filename=$1
-    if [ -f ${log_filename} ]; then
-        ${GREP} "^Step finished at " ${log_filename} | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+    if [ -f "${log_filename}" ]; then
+        ${GREP} "^Step finished at " "${log_filename}" | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
     fi
 }
 
@@ -1777,8 +1777,8 @@ get_step_finish_date()
 get_elapsed_time_from_logfile()
 {
     local log_filename=$1
-    local start_date=`get_step_start_date ${log_filename}`
-    local finish_date=`get_step_finish_date ${log_filename}`
+    local start_date=`get_step_start_date "${log_filename}"`
+    local finish_date=`get_step_finish_date "${log_filename}"`
     
     # Obtain difference
     if [ ! -z "${start_date}" -a ! -z "${finish_date}" ]; then
@@ -1797,27 +1797,27 @@ get_elapsed_time_for_step_slurm()
     local stepname=$2
 
     # Obtain finished filename
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
 
-    if [ -f ${finished_filename} ]; then
+    if [ -f "${finished_filename}" ]; then
         # Get number of array tasks
-        local num_tasks=`get_num_array_tasks_from_finished_file ${finished_filename}`    
+        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`    
 
         case $num_tasks in
             0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
                 ;;
             1)  # Step is not a task array
-                log_filename=`get_step_last_attempt_logf_slurm ${dirname} ${stepname}`
-                local difft=`get_elapsed_time_from_logfile ${log_filename}`
+                log_filename=`get_step_last_attempt_logf_slurm "${dirname}" ${stepname}`
+                local difft=`get_elapsed_time_from_logfile "${log_filename}"`
                 echo ${difft}
                ;;
             *)  # Step is a task array
                 local result=""
                 local taskidx
                 local sum_difft=0
-                for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
-                    local log_filename=`get_task_last_attempt_logf_slurm ${dirname} ${stepname} ${taskidx}`
-                    local difft=`get_elapsed_time_from_logfile ${log_filename}`
+                for taskidx in `get_finished_array_task_indices "${dirname}" ${stepname}`; do
+                    local log_filename=`get_task_last_attempt_logf_slurm "${dirname}" ${stepname} ${taskidx}`
+                    local difft=`get_elapsed_time_from_logfile "${log_filename}"`
                     sum_difft=$((sum_difft + difft))
                     if [ ! -z "${result}" ]; then
                         result="${result} "
@@ -1840,26 +1840,26 @@ get_elapsed_time_for_step_builtin()
     local stepname=$2
 
     # Obtain finished filename
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
 
     if [ -f ${finished_filename} ]; then
         # Get number of array tasks
-        local num_tasks=`get_num_array_tasks_from_finished_file ${finished_filename}`    
+        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`    
 
         case $num_tasks in
             0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
                 ;;
             1)  # Step is not a task array
-                log_filename=`get_step_log_filename_builtin ${dirname} ${stepname}`
-                local difft=`get_elapsed_time_from_logfile ${log_filename}`
+                log_filename=`get_step_log_filename_builtin "${dirname}" ${stepname}`
+                local difft=`get_elapsed_time_from_logfile "${log_filename}"`
                 echo ${difft}
                 ;;
             *)  # Step is a task array
                 local result=""
                 local taskidx
-                for taskidx in `get_finished_array_task_indices ${dirname} ${stepname}`; do
-                    local log_filename=`get_task_log_filename_builtin ${dirname} ${stepname} ${taskidx}`
-                    local difft=`get_elapsed_time_from_logfile ${log_filename}`
+                for taskidx in `get_finished_array_task_indices "${dirname}" ${stepname}`; do
+                    local log_filename=`get_task_log_filename_builtin "${dirname}" ${stepname} ${taskidx}`
+                    local difft=`get_elapsed_time_from_logfile "${log_filename}"`
                     if [ ! -z "${result}" ]; then
                         result="${result} "
                     fi
@@ -1884,10 +1884,10 @@ get_elapsed_time_for_step()
     local log_filename
     case $sched in
         ${SLURM_SCHEDULER})
-            get_elapsed_time_for_step_slurm ${dirname} ${stepname}
+            get_elapsed_time_for_step_slurm "${dirname}" ${stepname}
             ;;
         ${BUILTIN_SCHEDULER})
-            get_elapsed_time_for_step_builtin ${dirname} ${stepname}
+            get_elapsed_time_for_step_builtin "${dirname}" ${stepname}
             ;;
     esac
 }
@@ -1897,25 +1897,25 @@ get_step_status()
 {
     local dirname=$1
     local stepname=$2
-    local script_filename=`get_script_filename ${dirname} ${stepname}`
+    local script_filename=`get_script_filename "${dirname}" ${stepname}`
 
     # Check script file for step was created
-    if [ -f ${script_filename} ]; then
+    if [ -f "${script_filename}" ]; then
         if step_should_be_reexec $stepname; then
             echo "${REEXEC_STEP_STATUS}"
             return ${REEXEC_STEP_EXIT_CODE}
         fi
 
-        if step_is_in_progress $dirname $stepname; then
+        if step_is_in_progress "$dirname" $stepname; then
             echo "${INPROGRESS_STEP_STATUS}"
             return ${INPROGRESS_STEP_EXIT_CODE}
         fi
 
-        if step_is_finished $dirname $stepname; then
+        if step_is_finished "$dirname" $stepname; then
             echo "${FINISHED_STEP_STATUS}"
             return ${FINISHED_STEP_EXIT_CODE}
         else
-            if step_is_unfinished_but_runnable $dirname $stepname; then
+            if step_is_unfinished_but_runnable "$dirname" $stepname; then
                 echo "${UNFINISHED_BUT_RUNNABLE_STEP_STATUS}"
                 return ${UNFINISHED_BUT_RUNNABLE_STEP_EXIT_CODE}
             fi
@@ -1973,7 +1973,7 @@ get_script_filename()
     local dirname=$1
     local stepname=$2
     
-    echo ${dirname}/scripts/${stepname}
+    echo "${dirname}/scripts/${stepname}"
 }
 
 ########
@@ -1982,7 +1982,7 @@ get_stepid_filename()
     local dirname=$1
     local stepname=$2
 
-    echo ${dirname}/scripts/$stepname.${STEPID_FEXT}
+    echo "${dirname}/scripts/$stepname.${STEPID_FEXT}"
 }
 
 ########
@@ -1992,7 +1992,7 @@ get_array_taskid_filename()
     local stepname=$2
     local idx=$3
     
-    echo ${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}
+    echo "${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}"
 }
 
 ########
@@ -2002,9 +2002,9 @@ get_array_taskid()
     local stepname=$2
     local idx=$3
 
-    file=`get_array_taskid_filename ${dirname} ${stepname} ${idx}`
-    if [ -f ${file} ]; then
-        cat $file
+    file=`get_array_taskid_filename "${dirname}" ${stepname} ${idx}`
+    if [ -f "${file}" ]; then
+        cat "$file"
     else
         echo ${INVALID_ARRAY_TID}
     fi
@@ -2016,7 +2016,7 @@ get_step_finished_filename()
     local dirname=$1
     local stepname=$2
 
-    echo ${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}
+    echo "${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}"
 }
 
 ########
@@ -2025,7 +2025,7 @@ get_step_log_filename_builtin()
     local dirname=$1
     local stepname=$2
 
-    echo ${dirname}/scripts/${stepname}.${BUILTIN_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}.${BUILTIN_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2035,7 +2035,7 @@ get_task_log_filename_builtin()
     local stepname=$2
     local taskidx=$3
     
-    echo ${dirname}/scripts/${stepname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2044,7 +2044,7 @@ get_step_log_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo ${dirname}/scripts/${stepname}.${SLURM_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2054,9 +2054,9 @@ get_step_last_attempt_logf_slurm()
     local stepname=$2
 
     # Obtain number of log files
-    local logfname=`get_step_log_filename_slurm $dirname $stepname`
+    local logfname=`get_step_log_filename_slurm "$dirname" $stepname`
     local numlogf=0
-    for f in ${logfname}*; do
+    for f in "${logfname}*"; do
         numlogf=$((numlogf + 1))
     done
 
@@ -2065,7 +2065,7 @@ get_step_last_attempt_logf_slurm()
         echo ${NOFILE}
     else
         local suff=`get_slurm_attempt_suffix ${numlogf}`
-        echo ${logfname}${suff}
+        echo "${logfname}${suff}"
     fi
 }
 
@@ -2075,7 +2075,7 @@ get_step_log_preverif_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo ${dirname}/scripts/${stepname}.preverif.${SLURM_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}.preverif.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2084,7 +2084,7 @@ get_step_log_verif_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo ${dirname}/scripts/${stepname}.verif.${SLURM_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}.verif.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2093,7 +2093,7 @@ get_step_log_signcomp_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo ${dirname}/scripts/${stepname}.signcomp.${SLURM_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}.signcomp.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2103,7 +2103,7 @@ get_task_log_filename_slurm()
     local stepname=$2
     local taskidx=$3
     
-    echo ${dirname}/scripts/${stepname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2114,9 +2114,9 @@ get_task_last_attempt_logf_slurm()
     local taskidx=$3
 
     # Obtain number of log files
-    local logfname=`get_task_log_filename_slurm $dirname $stepname $taskidx`
+    local logfname=`get_task_log_filename_slurm "$dirname" $stepname $taskidx`
     local numlogf=0
-    for f in ${logfname}*; do
+    for f in "${logfname}*"; do
         numlogf=$((numlogf + 1))
     done
 
@@ -2125,7 +2125,7 @@ get_task_last_attempt_logf_slurm()
         echo ${NOFILE}
     else
         local suff=`get_slurm_attempt_suffix ${numlogf}`
-        echo ${logfname}${suff}
+        echo "${logfname}${suff}"
     fi
 }
 
@@ -2135,7 +2135,7 @@ get_task_template_log_filename_slurm()
     local dirname=$1
     local stepname=$2
     
-    echo ${dirname}/scripts/${stepname}_%a.${SLURM_SCHED_LOG_FEXT}
+    echo "${dirname}/scripts/${stepname}_%a.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2295,12 +2295,12 @@ get_outd_for_dep()
         echo ""
     else
         # Get name of output directory
-        local outd=${PIPELINE_OUTDIR}
+        local outd="${PIPELINE_OUTDIR}"
 
         # Get stepname
         local stepname_part=`echo ${dep} | $AWK -F ":" '{print $2}'`
         
-        get_step_outdir ${outd} ${stepname_part}
+        get_step_outdir "${outd}" ${stepname_part}
     fi
 }
 
@@ -2315,7 +2315,7 @@ get_outd_for_dep_given_stepspec()
         return 1
     else
         local outd=`get_outd_for_dep "${dep}"`
-        echo ${outd}
+        echo "${outd}"
         return 0
     fi
 }
@@ -2357,8 +2357,8 @@ get_list_of_pending_tasks_in_array()
 
     # Create associative map containing completed jobs
     local -A completed_tasks
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
-    if [ -f ${finished_filename} ]; then
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
+    if [ -f "${finished_filename}" ]; then
         while read line; do
             local fields=( $line )
             local num_fields=${#fields[@]}
@@ -2366,7 +2366,7 @@ get_list_of_pending_tasks_in_array()
                 local id=${fields[3]}
                 completed_tasks[${id}]="1"
             fi
-        done < ${finished_filename}
+        done < "${finished_filename}"
     fi
     
     # Create string enumerating pending tasks
@@ -2392,9 +2392,9 @@ get_task_array_list()
     local dirname=$1
     local stepname=$2
     local array_size=$3
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
 
-    if [ -f ${finished_filename} ]; then
+    if [ -f "${finished_filename}" ]; then
         # Some jobs were completed, return list containing pending ones
         get_list_of_pending_tasks_in_array ${dirname} ${stepname} ${array_size}
     else
@@ -2485,7 +2485,7 @@ get_default_step_outdir()
 {
     local dirname=$1
     local stepname=$2
-    echo ${dirname}/${stepname}
+    echo "${dirname}/${stepname}"
 }
 
 ########
@@ -2497,11 +2497,11 @@ get_step_outdir()
     # Get name of step function to set output directory
     step_function_outdir=`get_name_of_step_function_outdir ${stepname}`
     
-    if [ ${step_function_outdir} = "${FUNCT_NOT_FOUND}" ]; then
-        get_default_step_outdir $dirname $stepname
+    if [ "${step_function_outdir}" = "${FUNCT_NOT_FOUND}" ]; then
+        get_default_step_outdir "$dirname" $stepname
     else
         outdir_basename=`step_function_outdir`
-        echo ${dirname}/${outdir_basename}
+        echo "${dirname}/${outdir_basename}"
     fi
 }
 
@@ -2510,12 +2510,12 @@ create_outdir_for_step()
 {
     local dirname=$1
     local stepname=$2
-    local outd=`get_step_outdir ${dirname} ${stepname}`
+    local outd=`get_step_outdir "${dirname}" ${stepname}`
 
     if [ -d ${outd} ]; then
         echo "Warning: ${stepname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
     else
-        mkdir ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
+        mkdir "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
     fi
 }
 
@@ -2524,11 +2524,11 @@ default_reset_outdir_for_step()
 {
     local dirname=$1
     local stepname=$2
-    local outd=`get_step_outdir ${dirname} ${stepname}`
+    local outd=`get_step_outdir "${dirname}" ${stepname}`
 
-    if [ -d ${outd} ]; then
+    if [ -d "${outd}" ]; then
         echo "* Resetting output directory for step...">&2
-        rm -rf ${outd}/* || { echo "Error! could not clear output directory" >&2; return 1; }
+        rm -rf "${outd}/*" || { echo "Error! could not clear output directory" >&2; return 1; }
     fi
 }
 
@@ -2547,9 +2547,9 @@ update_step_completion_signal()
 
     # If step will be reexecuted, file signaling step completion
     # should be removed
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
     if [ "${status}" = "${REEXEC_STEP_STATUS}" ]; then
-        rm -f ${finished_filename}
+        rm -f "${finished_filename}"
     fi
 }
 
@@ -2561,23 +2561,23 @@ clean_step_log_files_slurm()
     local array_size=$3
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        local slurm_log_filename=`get_step_log_filename_slurm ${dirname} ${stepname}`
-        rm -f ${slurm_log_filename}*
-        local slurm_log_preverif=`get_step_log_preverif_filename_slurm ${dirname} ${stepname}`
-        rm -f ${slurm_log_preverif}
-        local slurm_log_verif=`get_step_log_verif_filename_slurm ${dirname} ${stepname}`
-        rm -f ${slurm_log_verif}
-        local slurm_log_signcomp=`get_step_log_signcomp_filename_slurm ${dirname} ${stepname}`
-        rm -f ${slurm_log_signcomp}
+        local slurm_log_filename=`get_step_log_filename_slurm "${dirname}" ${stepname}`
+        rm -f "${slurm_log_filename}*"
+        local slurm_log_preverif=`get_step_log_preverif_filename_slurm "${dirname}" ${stepname}`
+        rm -f "${slurm_log_preverif}"
+        local slurm_log_verif=`get_step_log_verif_filename_slurm "${dirname}" ${stepname}`
+        rm -f "${slurm_log_verif}"
+        local slurm_log_signcomp=`get_step_log_signcomp_filename_slurm "${dirname}" ${stepname}`
+        rm -f "${slurm_log_signcomp}"
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`get_list_of_pending_tasks_in_array ${dirname} ${stepname} ${array_size}`
+        local pending_tasks=`get_list_of_pending_tasks_in_array "${dirname}" ${stepname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                local slurm_task_log_filename=`get_task_log_filename_slurm ${dirname} ${stepname} ${idx}`
-                rm -f ${slurm_task_log_filename}*
+                local slurm_task_log_filename=`get_task_log_filename_slurm "${dirname}" ${stepname} ${idx}`
+                rm -f "${slurm_task_log_filename}*"
             done
         fi
     fi
@@ -2593,7 +2593,7 @@ clean_step_log_files()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            clean_step_log_files_slurm $dirname $stepname $array_size
+            clean_step_log_files_slurm "$dirname" $stepname $array_size
             ;;
     esac
 }
@@ -2607,17 +2607,17 @@ clean_step_id_files()
     
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        local stepid_file=`get_stepid_filename ${dirname} ${stepname}`
-        rm -f ${stepid_file}
+        local stepid_file=`get_stepid_filename "${dirname}" ${stepname}`
+        rm -f "${stepid_file}"
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`get_list_of_pending_tasks_in_array ${dirname} ${stepname} ${array_size}`
+        local pending_tasks=`get_list_of_pending_tasks_in_array "${dirname}" ${stepname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                local array_taskid_file=`get_array_taskid_filename ${dirname} ${stepname} ${idx}`
-                rm -f ${array_taskid_file}
+                local array_taskid_file=`get_array_taskid_filename "${dirname}" ${stepname} ${idx}`
+                rm -f "${array_taskid_file}"
             done
         fi
     fi
@@ -2629,9 +2629,9 @@ write_step_id_info_to_file()
     local dirname=$1
     local stepname=$2
     local id_info=$3
-    local filename=`get_stepid_filename ${dirname} ${stepname}`
+    local filename=`get_stepid_filename "${dirname}" ${stepname}`
 
-    echo ${id_info} > $filename
+    echo ${id_info} > "$filename"
 }
 
 ########
@@ -2641,9 +2641,9 @@ read_step_id_info_from_file()
     local stepname=$2
 
     # Return id for step
-    local filename=`get_stepid_filename ${dirname} ${stepname}`
-    if [ -f $filename ]; then
-        cat $filename
+    local filename=`get_stepid_filename "${dirname}" ${stepname}`
+    if [ -f "$filename" ]; then
+        cat "$filename"
     else
         echo ${INVALID_SID}
     fi
@@ -2657,16 +2657,16 @@ read_ids_from_files()
     local ids
     
     # Return id for step
-    local filename=`get_stepid_filename ${dirname} ${stepname}`
-    if [ -f $filename ]; then
-        ids=`cat $filename`
+    local filename=`get_stepid_filename "${dirname}" ${stepname}`
+    if [ -f "$filename" ]; then
+        ids=`cat "$filename"`
     fi
 
     # Return ids for array tasks if any
     local id
-    for taskid_file in ${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
-        if [ -f ${taskid_file} ]; then
-            id=`cat ${taskid_file}`
+    for taskid_file in "${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}"; do
+        if [ -f "${taskid_file}" ]; then
+            id=`cat "${taskid_file}"`
             if [ -z "${ids}" ]; then
                 ids=$id
             else
@@ -2733,8 +2733,8 @@ signal_step_completion()
     # since echo is atomic when writing short lines (for safety, up to
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
-    echo "Finished task idx: $idx ; Total: $total" >> ${finished_filename}
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
+    echo "Finished task idx: $idx ; Total: $total" >> "${finished_filename}"
 }
 
 ########
@@ -2751,9 +2751,9 @@ get_signal_step_completion_cmd()
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
     if [ ${total} -eq 1 ]; then 
-        echo "echo \"Finished task idx: 1 ; Total: $total\" >> `get_step_finished_filename ${dirname} ${stepname}`"
+        echo "echo \"Finished task idx: 1 ; Total: $total\" >> `get_step_finished_filename "${dirname}" ${stepname}`"
     else
-        echo "echo \"Finished task idx: \${SLURM_ARRAY_TASK_ID} ; Total: $total\" >> `get_step_finished_filename ${dirname} ${stepname}`"
+        echo "echo \"Finished task idx: \${SLURM_ARRAY_TASK_ID} ; Total: $total\" >> `get_step_finished_filename "${dirname}" ${stepname}`"
     fi
 }
 
@@ -2929,7 +2929,7 @@ get_commasep_ppl_modules()
 {
     local pfile=$1
     local modules=`$AWK '{if($1=="#import") {$1=""; gsub(","," ",$0); printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) {if(i>1) printf","; printf"%s",$i}}'` ; pipe_fail || return 1
-    echo ${modules}
+    echo "${modules}"
 }
 
 
@@ -2943,15 +2943,15 @@ search_mod_in_dirs()
     local dir
     local fullmodname
     for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
-        if [ -f ${dir}/${module} ]; then
-            fullmodname=${dir}/${module}
+        if [ -f "${dir}/${module}" ]; then
+            fullmodname="${dir}/${module}"
             break
         fi
     done
     
     # Fallback to package bindir
     if [ -z "${fullmodname}" ]; then
-        fullmodname=${panpipe_bindir}/${module}
+        fullmodname="${panpipe_bindir}/${module}"
     fi
 
     echo $fullmodname
@@ -2961,13 +2961,13 @@ search_mod_in_dirs()
 determine_full_module_name()
 {
     local module=$1
-    if is_absolute_path $file; then
-        fullmodname=${module}
+    if is_absolute_path "$file"; then
+        fullmodname="${module}"
     else
-        fullmodname=`search_mod_in_dirs ${module}`
+        fullmodname=`search_mod_in_dirs "${module}"`
     fi
 
-    echo $fullmodname
+    echo "$fullmodname"
 }
 
 ########
@@ -2976,15 +2976,16 @@ load_pipeline_module()
     local module=$1
 
     # Determine full module name
-    local fullmodname=`determine_full_module_name $module`
+    local fullmodname=`determine_full_module_name "$module"`
 
     echo "Loading module $module (${fullmodname})..." >&2
 
     # Check that module file exists
-    if [ -f ${fullmodname} ]; then
-        . ${fullmodname} || return 1
+    if [ -f "${fullmodname}" ]; then
+        . "${fullmodname}" || return 1
         # Store module name in associative array
-        PIPELINE_MODULES[${fullmodname}]=1        
+        i=${#PIPELINE_MODULES[@]}
+        PIPELINE_MODULES[${i}]="${fullmodname}"
     else
         echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
         return 1
@@ -2996,19 +2997,19 @@ load_pipeline_modules()
 {
     local pfile=$1
 
-    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
+    file_exists "$pfile" || { echo "Error: file "$pfile" does not exist" >&2 ; return 1; }
     
-    local comma_sep_modules=`get_commasep_ppl_modules $pfile`
+    local comma_sep_modules=`get_commasep_ppl_modules "$pfile"`
     
     if [ -z "${comma_sep_modules}" ]; then
         echo "Error: no pipeline modules were given" >&2
         return 1
     else
         # Load modules
-        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
+        local blank_sep_modules=`replace_str_elem_sep_with_blank "," "${comma_sep_modules}"`
         local mod
         for mod in ${blank_sep_modules}; do
-            load_pipeline_module $mod || { echo "Error while loading ${mod}" >&2 ; return 1; }
+            load_pipeline_module "$mod" || { echo "Error while loading ${mod}" >&2 ; return 1; }
         done
     fi
 }
@@ -3018,9 +3019,9 @@ get_pipeline_fullmodnames()
 {
     local pfile=$1
 
-    file_exists $pfile || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
+    file_exists "$pfile" || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
     
-    local comma_sep_modules=`get_commasep_ppl_modules $pfile`
+    local comma_sep_modules=`get_commasep_ppl_modules "$pfile"`
     
     if [ -z "${comma_sep_modules}" ]; then
         echo "Warning: no pipeline modules were given" >&2
@@ -3657,7 +3658,7 @@ create_pipeline_shdirs()
     # Populate associative array of shared directories for the loaded
     # modules
     local absmodname
-    for absmodname in "${!PIPELINE_MODULES[@]}"; do
+    for absmodname in "${PIPELINE_MODULES[@]}"; do
         shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
         ${shrdirs_funcname}
     done
@@ -3687,7 +3688,7 @@ register_pipeline_fifos()
 {
     # Populate associative array of FIFOS for the loaded modules
     local absmodname
-    for absmodname in "${!PIPELINE_MODULES[@]}"; do
+    for absmodname in "${PIPELINE_MODULES[@]}"; do
         fifos_funcname=`get_fifos_funcname ${absmodname}`
         ${fifos_funcname}
     done
@@ -3827,7 +3828,7 @@ conda_env_prepare()
 ########
 get_panpipe_yml_dir()
 {
-    echo ${panpipe_datadir}/conda_envs
+    echo "${panpipe_datadir}/conda_envs"
 }
 
 ########
