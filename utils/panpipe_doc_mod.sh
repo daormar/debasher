@@ -17,7 +17,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${panpipe_bindir}/panpipe_lib || exit 1
+. "${panpipe_bindir}"/panpipe_lib || exit 1
 
 ########
 print_desc()
@@ -92,7 +92,7 @@ get_step_doc_funcnames()
 obtain_info_for_module()
 {
     # Load module
-    source ${module_fname}
+    source "${module_fname}"
 
     # Iterate over step documentation functions
     while read step_doc_func; do

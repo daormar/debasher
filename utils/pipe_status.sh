@@ -17,7 +17,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${panpipe_bindir}/panpipe_lib || exit 1
+. "${panpipe_bindir}"/panpipe_lib || exit 1
 
 ########
 print_desc()
@@ -77,12 +77,12 @@ check_pars()
         echo "Error! -d parameter not given!" >&2
         exit 1
     else
-        if [ ! -d ${pdir} ]; then
+        if [ ! -d "${pdir}" ]; then
             echo "Error! pipeline directory does not exist" >&2 
             exit 1
         fi
 
-        if [ ! -f ${pdir}/command_line.sh ]; then
+        if [ ! -f "${pdir}"/command_line.sh ]; then
             echo "Error! ${pdir}/command_line.sh file is missing" >&2 
             exit 1
         fi
@@ -105,16 +105,16 @@ get_orig_outdir()
 
     # Extract information from command line file
     local workdir
-    workdir=`get_orig_workdir ${command_line_file}` || return 1
+    workdir=`get_orig_workdir "${command_line_file}"` || return 1
     local cmdline
-    cmdline=`get_cmdline ${command_line_file}` || return 1
+    cmdline=`get_cmdline "${command_line_file}"` || return 1
     local outdir=`read_opt_value_from_line "$cmdline" "--outdir"`
 
     # Retrieve original output directory
-    if is_absolute_path $outdir; then
-        echo $outdir
+    if is_absolute_path "$outdir"; then
+        echo "$outdir"
     else
-        echo ${workdir}/${outdir}
+        echo "${workdir}/${outdir}"
     fi
 }
 
@@ -123,7 +123,7 @@ get_cmdline()
 {
     local command_line_file=$1
     local cmdline=`$TAIL -1 ${command_line_file}`
-    echo $cmdline
+    echo "$cmdline"
 }
 
 ########
@@ -132,14 +132,14 @@ get_cmdline_pfile()
     local command_line_file=$1
     local cmdline=`$TAIL -1 ${command_line_file}`
     local pfile=`read_opt_value_from_line "$cmdline" "--pfile"` || return 1
-    echo $pfile
+    echo "$pfile"
 }
 
 ########
 get_sched()
 {
     local command_line_file=$1
-    local cmdline=`$TAIL -1 ${command_line_file}`
+    local cmdline=`$TAIL -1 "${command_line_file}"`
     local sched=`read_opt_value_from_line "$cmdline" "--sched"` || return 1
     echo $sched
 }
@@ -150,7 +150,7 @@ replace_outdir_in_cmdline()
     local cmdline=$1
     local newdir=$2
 
-    echo $cmdline | $AWK -v newdir=$newdir 'BEGIN{
+    echo "$cmdline" | $AWK -v newdir="$newdir" 'BEGIN{
                                 replace=0
                                }
                                {
@@ -177,12 +177,12 @@ get_pfile()
     local absdirname=$1
     local cmdline_pfile=$2
     
-    if [ -f ${absdirname}/${REORDERED_PIPELINE_BASENAME} ]; then
-        echo ${absdirname}/${REORDERED_PIPELINE_BASENAME}
+    if [ -f "${absdirname}/${REORDERED_PIPELINE_BASENAME}" ]; then
+        echo "${absdirname}/${REORDERED_PIPELINE_BASENAME}"
         return 0
     else
-        if [ -f ${cmdline_pfile} ]; then
-            echo ${cmdline_pfile}
+        if [ -f "${cmdline_pfile}" ]; then
+            echo "${cmdline_pfile}"
             return 0
         else
             echo "Error: unable to find pipeline file (${cmdline_pfile})" >&2
@@ -204,37 +204,37 @@ configure_scheduler()
 process_status_for_pfile()
 {
     local dirname=$1
-    local absdirname=`get_absolute_path ${dirname}`
-    local command_line_file=${absdirname}/command_line.sh
+    local absdirname=`get_absolute_path "${dirname}"`
+    local command_line_file="${absdirname}"/command_line.sh
     
     # Extract information from command_line.sh file
     local cmdline
-    cmdline=`get_cmdline ${command_line_file}` || return 1
+    cmdline=`get_cmdline "${command_line_file}"` || return 1
     local cmdline_pfile
-    cmdline_pfile=`get_cmdline_pfile ${command_line_file}` || return 1
+    cmdline_pfile=`get_cmdline_pfile "${command_line_file}"` || return 1
     local sched
-    sched=`get_sched ${command_line_file}` || return 1
+    sched=`get_sched "${command_line_file}"` || return 1
 
     # Set pipeline file
     local pfile
-    pfile=`get_pfile ${absdirname} ${cmdline_pfile}` || return 1
+    pfile=`get_pfile "${absdirname}" "${cmdline_pfile}"` || return 1
     
     # Get original output directory
     local orig_outdir
-    orig_outdir=`get_orig_outdir ${command_line_file}` || return 1
+    orig_outdir=`get_orig_outdir "${command_line_file}"` || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
-    if dirnames_are_equal ${orig_outdir} ${absdirname}; then
+    if dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
         local moved_outdir="no"        
     else
         echo "Warning: pipeline output directory was moved (original directory: ${orig_outdir})" >&2
-        cmdline=`replace_outdir_in_cmdline "${cmdline}" ${absdirname}`
+        cmdline=`replace_outdir_in_cmdline "${cmdline}" "${absdirname}"`
         local moved_outdir="yes"
     fi
 
     # Load pipeline modules
-    load_pipeline_modules $pfile || return 1
+    load_pipeline_modules "$pfile" || return 1
 
     # Configure scheduler
     configure_scheduler $sched || return 1
@@ -264,12 +264,12 @@ process_status_for_pfile()
             fi
 
             # Check step status
-            local status=`get_step_status ${absdirname} ${stepname}`
+            local status=`get_step_status "${absdirname}" ${stepname}`
 
             # Obtain ids if requested
             local ids_info
             if [ ${i_given} -eq 1 ]; then
-                ids_info=`read_ids_from_files ${absdirname} ${stepname}`
+                ids_info=`read_ids_from_files "${absdirname}" ${stepname}`
             fi
             
             # Print status
@@ -327,10 +327,10 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-read_pars $@ || exit 1
+read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-process_status_for_pfile ${pdir} ${pfile}
+process_status_for_pfile "${pdir}" "${pfile}"
 
 exit $?

@@ -17,7 +17,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${panpipe_bindir}/panpipe_lib || exit 1
+. "${panpipe_bindir}"/panpipe_lib || exit 1
 
 #############
 # CONSTANTS #
@@ -114,7 +114,7 @@ check_pars()
         echo "Error! -f parameter not given!" >&2
         exit 1
     else
-        if [ ! -f ${file} ]; then
+        if [ ! -f "${file}" ]; then
             echo "Error! file ${file} does not exist" >&2 
             exit 1
         fi
@@ -126,7 +126,7 @@ check_pars()
     fi
 
     if [ ${o_given} -eq 1 ]; then
-        if [ ! -d ${outd} ]; then
+        if [ ! -d "${outd}" ]; then
             echo "Error! output directory does not exist" >&2 
             exit 1
         fi
@@ -149,11 +149,11 @@ check_pars()
 absolutize_file_paths()
 {
     if [ ${f_given} -eq 1 ]; then
-        file=`get_absolute_path ${file}`
+        file=`get_absolute_path "${file}"`
     fi
 
     if [ ${o_given} -eq 1 ]; then   
-        outd=`get_absolute_path ${outd}`
+        outd=`get_absolute_path "${outd}"`
     fi
 
     if [ ${k_given} -eq 1 ]; then   
@@ -165,7 +165,7 @@ absolutize_file_paths()
 get_unfinished_step_perc()
 {
     local pipe_status_output_file=$1
-    $AWK '{if ($1=="*") printf"%d",$13*100/$4}' ${pipe_status_output_file}
+    $AWK '{if ($1=="*") printf"%d",$13*100/$4}' "${pipe_status_output_file}"
 }
 
 ########
@@ -174,8 +174,8 @@ exec_hook()
     local outd=$1
 
     # export variables
-    export PIPE_EXEC_BATCH_PPL_OUTD=${outd}
-    export PIPE_EXEC_BATCH_PPL_CMD=${PIPELINE_COMMANDS[${outd}]}
+    export PIPE_EXEC_BATCH_PPL_OUTD="${outd}"
+    export PIPE_EXEC_BATCH_PPL_CMD=${PIPELINE_COMMANDS["${outd}"]}
 
     # Execute script
     ${k_val}
@@ -195,14 +195,14 @@ post_ppl_finish_actions_are_executed()
     local outd=$2
 
     if [ -z "${outd}" ]; then
-        if [ -f ${pipeline_outd}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME} ]; then
+        if [ -f "${pipeline_outd}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}" ]; then
             return 0
         else
             return 1
         fi
     else
-        destdir=`get_dest_dir_for_ppl ${pipeline_outd} ${outd}`
-        if [ -f ${destdir}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME} ]; then
+        destdir=`get_dest_dir_for_ppl "${pipeline_outd}" "${outd}"`
+        if [ -f "${destdir}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}" ]; then
             return 0
         else
             return 1
@@ -217,10 +217,10 @@ signal_execution_of_post_ppl_finish_actions()
     local outd=$2
 
     if [ -z "${outd}" ]; then
-        touch ${pipeline_outd}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}
+        touch "${pipeline_outd}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
     else
-        destdir=`get_dest_dir_for_ppl ${pipeline_outd} ${outd}`
-        touch ${destdir}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}
+        destdir=`get_dest_dir_for_ppl "${pipeline_outd}" "${outd}"`
+        touch "${destdir}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
     fi
 }
 
@@ -255,11 +255,11 @@ exec_post_ppl_finish_actions()
     # Move directory if requested
     if [ ! -z "${outd}" ]; then
         echo "- Moving ${pipeline_outd} directory to ${outd}" >&2
-        move_dir ${pipeline_outd} ${outd} || return 1
+        move_dir "${pipeline_outd}" "${outd}" || return 1
     fi
 
     # Signal execution of post pipeline finish actions
-    signal_execution_of_post_ppl_finish_actions ${pipeline_outd} ${outd}
+    signal_execution_of_post_ppl_finish_actions "${pipeline_outd}" "${outd}"
 }
 
 ########
@@ -270,15 +270,15 @@ get_ppl_status()
 
     # Extract output directory from command
     local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
-    if [ ${pipe_cmd_outd} = ${OPT_NOT_FOUND} ]; then
+    if [ "${pipe_cmd_outd}" = ${OPT_NOT_FOUND} ]; then
         return ${PPL_HAS_WRONG_OUTDIR}
     fi
 
     # Check if final output directory was provided
     if [ "${outd}" != "" ]; then
         # Get pipeline directory after moving
-        local final_outdir=`get_dest_dir_for_ppl ${pipe_cmd_outd} ${outd}`
-        if [ -d ${final_outdir} ]; then
+        local final_outdir=`get_dest_dir_for_ppl "${pipe_cmd_outd}" "${outd}"`
+        if [ -d "${final_outdir}" ]; then
             # If output directory exists, it is assumed that the
             # pipeline completed execution
             return ${PPL_IS_COMPLETED}
@@ -286,19 +286,19 @@ get_ppl_status()
     fi
 
     # If original output directory exists then check pipeline status
-    if [ -d ${pipe_cmd_outd} ]; then
+    if [ -d "${pipe_cmd_outd}" ]; then
         # Obtain pipeline status
         tmpfile=`${MKTEMP}`
-        ${panpipe_bindir}/pipe_status -d ${pipe_cmd_outd} > ${tmpfile} 2>&1
+        "${panpipe_bindir}"/pipe_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
         # Obtain percentage of unfinished steps
-        local unfinished_step_perc=`get_unfinished_step_perc ${tmpfile}`
-        rm ${tmpfile}
+        local unfinished_step_perc=`get_unfinished_step_perc "${tmpfile}"`
+        rm "${tmpfile}"
         
         # Evaluate exit code of pipe_status
         case $exit_code in
-            ${PIPELINE_FINISHED_EXIT_CODE}) if post_ppl_finish_actions_are_executed ${pipe_cmd_outd}; then
+            ${PIPELINE_FINISHED_EXIT_CODE}) if post_ppl_finish_actions_are_executed "${pipe_cmd_outd}"; then
                                                 return ${PPL_IS_COMPLETED}
                                             else
                                                 return ${PPL_REQUIRES_POST_FINISH_ACTIONS}
@@ -307,7 +307,7 @@ get_ppl_status()
             ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinished_step_perc} -gt ${max_unfinished_step_perc} ]; then
                                                   return ${PPL_FAILED}
                                               else
-                                                  if post_ppl_finish_actions_are_executed ${pipe_cmd_outd}; then
+                                                  if post_ppl_finish_actions_are_executed "${pipe_cmd_outd}"; then
                                                       return ${PPL_IS_COMPLETED}
                                                   else
                                                       return ${PPL_REQUIRES_POST_FINISH_ACTIONS}
@@ -336,10 +336,10 @@ wait_simul_exec_reduction()
         local num_failed_pipelines=0
         for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
             # Retrieve pipe command
-            local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
+            local pipe_exec_cmd=${PIPELINE_COMMANDS["${pipeline_outd}"]}
 
             # Check if pipeline has completed execution
-            get_ppl_status "${pipe_exec_cmd}" ${outd}
+            get_ppl_status "${pipe_exec_cmd}" "${outd}"
             local exit_code=$?
             case $exit_code in
                 ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
@@ -347,7 +347,7 @@ wait_simul_exec_reduction()
                                          ;;
                 ${PPL_IS_COMPLETED}) num_completed_pipelines=$((num_completed_pipelines+1))
                                      ;;
-                ${PPL_REQUIRES_POST_FINISH_ACTIONS}) exec_post_ppl_finish_actions ${pipeline_outd} ${outd}
+                ${PPL_REQUIRES_POST_FINISH_ACTIONS}) exec_post_ppl_finish_actions "${pipeline_outd}" "${outd}"
                                                      local exit_code_post_comp_actions=$?
                                                      case $exit_code_post_comp_actions in
                                                          0) :
@@ -393,8 +393,8 @@ get_dest_dir_for_ppl()
 {
     local pipeline_outd=$1
     local outd=$2    
-    basedir=`$BASENAME ${pipeline_outd}`
-    echo ${outd}/${basedir}
+    basedir=`$BASENAME "${pipeline_outd}"`
+    echo "${outd}/${basedir}"
 }
 
 ########
@@ -402,14 +402,14 @@ move_dir()
 {
     local pipeline_outd=$1
     local outd=$2    
-    destdir=`get_dest_dir_for_ppl ${pipeline_outd} ${outd}`
+    destdir=`get_dest_dir_for_ppl "${pipeline_outd}" "${outd}"`
     
     # Move directory
-    if [ -d ${destdir} ]; then
+    if [ -d "${destdir}" ]; then
         echo "Error: ${destdir} exists" >&2
         return 1
     else
-        mv ${pipeline_outd} ${outd} || return 1
+        mv "${pipeline_outd}" "${outd}" || return 1
     fi
 }
  
@@ -420,10 +420,10 @@ update_active_pipeline()
     local outd=$2
 
     # Retrieve pipe command
-    local pipe_exec_cmd=${PIPELINE_COMMANDS[${pipeline_outd}]}
+    local pipe_exec_cmd=${PIPELINE_COMMANDS["${pipeline_outd}"]}
 
     # Check pipeline status
-    get_ppl_status "${pipe_exec_cmd}" ${outd}
+    get_ppl_status "${pipe_exec_cmd}" "${outd}"
     local exit_code=$?
     
     case $exit_code in
@@ -431,7 +431,7 @@ update_active_pipeline()
                                  return 1
                                  ;;
         ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
-                             unset PIPELINE_COMMANDS[${pipeline_outd}]
+                             unset PIPELINE_COMMANDS["${pipeline_outd}"]
                              ;;
         ${PPL_REQUIRES_POST_FINISH_ACTIONS}) echo "Pipeline stored in ${pipeline_outd} has post-finish actions pending" >&2
                                            ;;
@@ -448,7 +448,7 @@ update_active_pipelines()
     
     # Iterate over active pipelines
     for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
-        update_active_pipeline ${pipeline_outd} ${outd} || return 1
+        update_active_pipeline "${pipeline_outd}" "${outd}" || return 1
     done
 
     local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
@@ -474,7 +474,7 @@ add_cmd_to_assoc_array()
     if [ ${dir} = ${OPT_NOT_FOUND} ]; then
         return 1
     else
-        PIPELINE_COMMANDS[${dir}]=${cmd}
+        PIPELINE_COMMANDS[${dir}]="${cmd}"
         return 0
     fi
 }
@@ -513,7 +513,7 @@ execute_batches()
         echo "" >&2
 
         echo "** Check if pipeline already completed execution..." >&2
-        get_ppl_status "${pipe_exec_cmd}" ${outd}
+        get_ppl_status "${pipe_exec_cmd}" "${outd}"
         local exit_code=$?
         case $exit_code in
             ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
@@ -537,8 +537,8 @@ execute_batches()
         if [ ${exit_code} -eq ${PPL_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PPL_FAILED} ]; then
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
-            echo ${pipe_exec_cmd} >&2
-            ${pipe_exec_cmd} || return 1
+            echo "${pipe_exec_cmd}" >&2
+            "${pipe_exec_cmd}" || return 1
             echo "**********************" >&2
             echo "" >&2
             
@@ -580,7 +580,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-read_pars $@ || exit 1
+read_pars "$@" || exit 1
 
 check_pars || exit 1
 

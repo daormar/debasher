@@ -17,8 +17,8 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARIES
-. ${panpipe_bindir}/panpipe_lib || exit 1
-. ${panpipe_bindir}/panpipe_builtin_sched_lib || exit 1
+. "${panpipe_bindir}"/panpipe_lib || exit 1
+. "${panpipe_bindir}"/panpipe_builtin_sched_lib || exit 1
 
 #############
 # CONSTANTS #
@@ -193,7 +193,7 @@ check_pars()
         echo "Error! --pfile parameter not given!" >&2
         exit 1
     else
-        if [ ! -f ${pfile} ]; then
+        if [ ! -f "${pfile}" ]; then
             echo "Error! file ${pfile} does not exist" >&2
             exit 1
         fi
@@ -203,13 +203,13 @@ check_pars()
         echo "Error! --outdir parameter not given!" >&2
         exit 1
     else
-        if [ -d ${outd} ]; then
+        if [ -d "${outd}" ]; then
             echo "Warning! output directory does exist" >&2 
         fi
     fi
 
     if [ ${cfgfile_given} -eq 1 ]; then
-        if [ ! -f ${cfgfile} ]; then
+        if [ ! -f "${cfgfile}" ]; then
             echo "Error: ${cfgfile} file does not exist" >&2
             exit 1
         fi
@@ -235,15 +235,15 @@ check_pars()
 absolutize_file_paths()
 {
     if [ ${pfile_given} -eq 1 ]; then   
-        pfile=`get_absolute_path ${pfile}`
+        pfile=`get_absolute_path "${pfile}"`
     fi
 
     if [ ${outdir_given} -eq 1 ]; then   
-        outd=`get_absolute_path ${outd}`
+        outd=`get_absolute_path "${outd}"`
     fi
 
     if [ ${cfgfile_given} -eq 1 ]; then   
-        cfgfile=`get_absolute_path ${cfgfile}`
+        cfgfile=`get_absolute_path "${cfgfile}"`
     fi
 }
 
@@ -256,7 +256,7 @@ check_pipeline_file()
 {
     echo "* Checking pipeline file ($pfile)..." >&2
 
-    ${panpipe_bindir}/pipe_check -p ${pfile} || return 1
+    "${panpipe_bindir}"/pipe_check -p "${pfile}" || return 1
 
     echo "" >&2
 }
@@ -266,7 +266,7 @@ reorder_pipeline_file()
 {
     echo "* Obtaining reordered pipeline file ($pfile)..." >&2
 
-    ${panpipe_bindir}/pipe_check -p ${pfile} -r 2> /dev/null || return 1
+    "${panpipe_bindir}"/pipe_check -p "${pfile}" -r 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -276,7 +276,7 @@ gen_stepdeps()
 {
     echo "* Generating step dependencies information ($pfile)..." >&2
 
-    ${panpipe_bindir}/pipe_check -p ${pfile} -d 2> /dev/null || return 1
+    "${panpipe_bindir}"/pipe_check -p "${pfile}" -d 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -325,7 +325,7 @@ load_modules()
 
     local pfile=$1
     
-    load_pipeline_modules ${pfile} || return 1
+    load_pipeline_modules "${pfile}" || return 1
 
     echo "" >&2
 }
@@ -351,7 +351,7 @@ show_pipeline_opts()
             ${explain_cmdline_opts_funcname} || exit 1
             update_opt_to_step_map ${stepname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
         fi
-    done < ${pfile}
+    done < "${pfile}"
 
     # Print options
     print_pipeline_opts
@@ -380,7 +380,7 @@ check_pipeline_opts()
             local serial_script_opts=`serialize_string_array "script_opts_array" " ||| " ${MAX_NUM_SCRIPT_OPTS_TO_DISPLAY}`
             echo "STEP: ${stepname} ; OPTIONS: ${serial_script_opts}" >&2
         fi
-    done < ${pfile}
+    done < "${pfile}"
 
     echo "" >&2
 }
@@ -392,16 +392,16 @@ process_conda_req_entry()
     local yml_fname=$2
 
     # Check if environment already exists
-    if conda_env_exists ${env_name}; then
+    if conda_env_exists "${env_name}"; then
         :
     else
         local condadir=`get_absolute_condadir`
 
         # Obtain absolute yml file name
-        local abs_yml_fname=`get_abs_yml_fname ${yml_fname}`
+        local abs_yml_fname=`get_abs_yml_fname "${yml_fname}"`
 
-        echo "Creating conda environment ${env_name} from file ${abs_yml_fname}..." >&2
-        conda_env_prepare ${env_name} ${abs_yml_fname} ${condadir} || return 1
+        echo "Creating conda environment "${env_name}" from file ${abs_yml_fname}..." >&2
+        conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
         echo "Package successfully installed"
     fi
 }
@@ -421,11 +421,11 @@ process_conda_requirements_for_step()
         if [ ${arraylen} -ge 2 ]; then
             local env_name=${array[0]}
             local yml_fname=${array[1]}
-            process_conda_req_entry ${env_name} ${yml_fname} || return 1
+            process_conda_req_entry "${env_name}" "${yml_fname}" || return 1
         else
             echo "Error: invalid conda entry for step ${stepname}; Entry: ${step_conda_envs}" >&2
         fi        
-    done < <(echo ${step_conda_envs})
+    done < <(echo "${step_conda_envs}")
 }
 
 ########
@@ -452,7 +452,7 @@ process_conda_requirements()
                 process_conda_requirements_for_step ${stepname} "${step_conda_envs}" || return 1
             fi
         fi
-    done < ${pfile}
+    done < "${pfile}"
 
     echo "Processing complete" >&2
 
@@ -480,7 +480,7 @@ define_forced_exec_steps()
                 mark_step_as_reexec $stepname ${FORCED_REEXEC_REASON}
             fi 
         fi
-    done < ${pfile}
+    done < "${pfile}"
 
     echo "Definition complete" >&2
 
@@ -494,18 +494,18 @@ check_script_is_older_than_modules()
     local fullmodnames=$2
     
     # Check if script exists
-    if [ -f ${script_filename} ]; then
+    if [ -f "${script_filename}" ]; then
         # script exists
         script_older=0
         local mod
         for mod in ${fullmodnames}; do
-            if [ ${script_filename} -ot ${mod} ]; then
+            if [ "${script_filename}" -ot ${mod} ]; then
                 script_older=1
                 echo "Warning: ${script_filename} is older than module ${mod}" >&2
             fi
         done
         # Return value
-        if [ ${script_older} -eq 1 ]; then
+        if [ "${script_older}" -eq 1 ]; then
             return 0
         else
             return 1
@@ -527,7 +527,7 @@ define_reexec_steps_due_to_code_update()
     local pfile=$2
 
     # Get names of pipeline modules
-    local fullmodnames=`get_pipeline_fullmodnames $pfile` || return 1
+    local fullmodnames=`get_pipeline_fullmodnames "$pfile"` || return 1
 
     # Read information about the steps to be executed
     local stepspec
@@ -537,24 +537,24 @@ define_reexec_steps_due_to_code_update()
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local status=`get_step_status ${dirname} ${stepname}`
-            local script_filename=`get_script_filename ${dirname} ${stepname}`
+            local status=`get_step_status "${dirname}" ${stepname}`
+            local script_filename=`get_script_filename "${dirname}" ${stepname}`
 
             # Handle checkings depending of step status
             if [ "${status}" = "${FINISHED_STEP_STATUS}" ]; then
-                if check_script_is_older_than_modules ${script_filename} "${fullmodnames}"; then
+                if check_script_is_older_than_modules "${script_filename}" "${fullmodnames}"; then
                     echo "Warning: last execution of step ${stepname} used outdated modules">&2
                     mark_step_as_reexec $stepname ${OUTDATED_CODE_REEXEC_REASON}
                 fi
             fi
 
             if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
-                if check_script_is_older_than_modules ${script_filename} "${fullmodnames}"; then
+                if check_script_is_older_than_modules "${script_filename}" "${fullmodnames}"; then
                     echo "Warning: current execution of step ${stepname} is using outdated modules">&2
                 fi
             fi
         fi
-    done < ${pfile}
+    done < "${pfile}"
 
     echo "Definition complete" >&2
 
@@ -570,8 +570,8 @@ define_reexec_steps_due_to_deps()
     
     # Obtain list of steps to be reexecuted due to dependencies
     local reexec_steps_string=`get_reexec_steps_as_string`
-    local reexec_steps_file=${outd}/.reexec_steps_due_to_deps.txt
-    ${panpipe_bindir}/get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d ${stepdeps_file} > ${reexec_steps_file} || return 1
+    local reexec_steps_file="${outd}"/.reexec_steps_due_to_deps.txt
+    "${panpipe_bindir}"/get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d "${stepdeps_file}" > "${reexec_steps_file}" || return 1
 
     # Read information about the steps to be re-executed due to
     # dependencies
@@ -580,7 +580,7 @@ define_reexec_steps_due_to_deps()
         if [ "${stepname}" != "" ]; then
             mark_step_as_reexec $stepname ${DEPS_REEXEC_REASON}
         fi
-    done < ${reexec_steps_file}
+    done < "${reexec_steps_file}"
 
     echo "Definition complete" >&2
 
@@ -598,7 +598,7 @@ release_lock()
 
     # Try to acquire lock and remove associated file (if acquisition was
     # successful)
-    $FLOCK -xn $fd && rm -f $file || return 1
+    $FLOCK -xn $fd && rm -f "$file" || return 1
 }
 
 ########
@@ -612,9 +612,9 @@ prepare_lock()
 ########
 ensure_exclusive_execution()
 {
-    local lockfile=${outd}/lock
+    local lockfile="${outd}"/lock
 
-    prepare_lock $LOCKFD $lockfile || return 1
+    prepare_lock $LOCKFD "$lockfile" || return 1
 
     # Try to acquire lock exclusively
     $FLOCK -xn $LOCKFD || return 1
@@ -624,16 +624,16 @@ ensure_exclusive_execution()
 create_basic_dirs()
 {
     mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
-    set_panpipe_outdir ${outd}
+    set_panpipe_outdir "${outd}"
     
-    mkdir -p ${outd}/scripts || { echo "Error! cannot create scripts directory" >&2; return 1; }
+    mkdir -p "${outd}"/scripts || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
     local fifodir=`get_absolute_fifoname`
-    mkdir -p ${fifodir} || { echo "Error! cannot create fifos directory" >&2; return 1; }
+    mkdir -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
 
     local condadir=`get_absolute_condadir`
     if [ ${conda_support_given} -eq 1 ]; then
-        mkdir -p ${condadir}
+        mkdir -p "${condadir}"
     fi
 }
 
@@ -658,8 +658,8 @@ register_fifos()
 ########
 print_command_line()
 {
-    echo "cd $PWD" > ${outd}/command_line.sh
-    echo ${command_line} >> ${outd}/command_line.sh
+    echo "cd $PWD" > "${outd}"/command_line.sh
+    echo "${command_line}" >> "${outd}"/command_line.sh
 }
 
 ########
@@ -669,11 +669,11 @@ obtain_augmented_cmdline()
     
     if [ ${cfgfile_given} -eq 1 ]; then
         echo "* Processing configuration file (${cfgfile})..." >&2
-        cfgfile_str=`cfgfile_to_string ${cfgfile}` || return 1
+        cfgfile_str=`cfgfile_to_string "${cfgfile}"` || return 1
         echo "${cmdline} ${cfgfile_str}"
         echo "" >&2
     else
-        echo $cmdline
+        echo "$cmdline"
     fi
 }
 
@@ -744,23 +744,23 @@ execute_step()
         define_opts_for_script "${cmdline}" "${stepspec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
         local array_size=${#script_opts_array[@]}
-        create_script ${dirname} ${stepname} "script_opts_array"
+        create_script "${dirname}" ${stepname} "script_opts_array"
 
         # Archive script
-        archive_script ${dirname} ${stepname}
+        archive_script "${dirname}" ${stepname}
 
         # Prepare files and directories for step
-        update_step_completion_signal ${dirname} ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
-        clean_step_log_files ${dirname} ${stepname} ${array_size} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
-        clean_step_id_files ${dirname} ${stepname} ${array_size} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
-        create_outdir_for_step ${dirname} ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
+        update_step_completion_signal "${dirname}" ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
+        clean_step_log_files "${dirname}" ${stepname} ${array_size} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
+        clean_step_id_files "${dirname}" ${stepname} ${array_size} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
+        create_outdir_for_step "${dirname}" ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
         prepare_fifos_owned_by_step ${stepname}
         
         # Launch step
-        local task_array_list=`get_task_array_list ${dirname} ${stepname} ${array_size}`
+        local task_array_list=`get_task_array_list "${dirname}" ${stepname} ${array_size}`
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
         local stepdeps=`get_stepdeps "${step_id_list}" ${stepdeps_spec}`
-        launch ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" "launch_outvar" || { echo "Error while launching step!" >&2 ; return 1; }
+        launch "${dirname}" ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" "launch_outvar" || { echo "Error while launching step!" >&2 ; return 1; }
 
         # Update variables storing id information
         local primary_id=`get_primary_id ${launch_outvar}`
@@ -768,12 +768,12 @@ execute_step()
         step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
 
         # Write id to file
-        write_step_id_info_to_file ${dirname} ${stepname} ${launch_outvar}
+        write_step_id_info_to_file "${dirname}" ${stepname} ${launch_outvar}
     else
         # If step is in progress, its id should be retrieved so as to
         # correctly express dependencies
         if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
-            local sid_info=`read_step_id_info_from_file ${dirname} ${stepname}` || { echo "Error while retrieving id of in-progress step" >&2 ; return 1; }
+            local sid_info=`read_step_id_info_from_file "${dirname}" ${stepname}` || { echo "Error while retrieving id of in-progress step" >&2 ; return 1; }
             local global_id=`get_global_id ${sid_info}`
             PIPE_EXEC_STEP_IDS[${stepname}]=${global_id}
             step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
@@ -803,9 +803,9 @@ execute_pipeline_steps()
             # Extract step name
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
-            execute_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1
+            execute_step "${cmdline}" "${dirname}" ${stepname} "${stepspec}" || return 1
         fi
-    done < ${pfile}
+    done < "${pfile}"
 
     echo "" >&2
 }
@@ -822,7 +822,7 @@ debug_step()
     # Debug step
 
     ## Obtain step status
-    local status=`get_step_status ${dirname} ${stepname}`
+    local status=`get_step_status "${dirname}" ${stepname}`
     echo "STEP: ${stepname} ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
 
     ## Obtain step options
@@ -852,9 +852,9 @@ execute_pipeline_steps_debug()
             # Extract step name
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
-            debug_step "${cmdline}" ${dirname} ${stepname} "${stepspec}" || return 1                
+            debug_step "${cmdline}" "${dirname}" ${stepname} "${stepspec}" || return 1                
         fi
-    done < ${pfile}
+    done < "${pfile}"
 
     echo "" >&2
 }
@@ -873,7 +873,7 @@ fi
 # Save command line
 command_line="$0 $*"
 
-read_pars $@ || exit 1
+read_pars "$@" || exit 1
 
 check_pars || exit 1
 
@@ -883,18 +883,18 @@ absolutize_file_paths || exit 1
 
 check_pipeline_file || exit 1
 
-reordered_pfile=${outd}/${REORDERED_PIPELINE_BASENAME}
-reorder_pipeline_file > ${reordered_pfile} || exit 1
+reordered_pfile="${outd}/${REORDERED_PIPELINE_BASENAME}"
+reorder_pipeline_file > "${reordered_pfile}" || exit 1
 
-stepdeps_file=${outd}/.stepdeps.txt
-gen_stepdeps > ${stepdeps_file} || exit 1
+stepdeps_file="${outd}"/.stepdeps.txt
+gen_stepdeps > "${stepdeps_file}" || exit 1
 
 configure_scheduler || exit 1
 
-load_modules ${reordered_pfile} || exit 1
+load_modules "${reordered_pfile}" || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
-    show_pipeline_opts ${reordered_pfile} || exit 1
+    show_pipeline_opts "${reordered_pfile}" || exit 1
 else
     augmented_cmdline=`obtain_augmented_cmdline "${command_line}"` || exit 1
     
@@ -912,27 +912,27 @@ else
         register_fifos
 
         if [ ${conda_support_given} -eq 1 ]; then
-            process_conda_requirements ${reordered_pfile} || exit 1
+            process_conda_requirements "${reordered_pfile}" || exit 1
         fi
 
-        define_forced_exec_steps ${reordered_pfile} || exit 1
+        define_forced_exec_steps "${reordered_pfile}" || exit 1
 
         if [ ${reexec_outdated_steps_given} -eq 1 ]; then
-            define_reexec_steps_due_to_code_update ${outd} ${reordered_pfile} || exit 1
+            define_reexec_steps_due_to_code_update "${outd}" "${reordered_pfile}" || exit 1
         fi
         
-        define_reexec_steps_due_to_deps ${stepdeps_file} || exit 1
+        define_reexec_steps_due_to_deps "${stepdeps_file}" || exit 1
 
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            execute_pipeline_steps_debug "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
+            execute_pipeline_steps_debug "${augmented_cmdline}" "${outd}" "${reordered_pfile}" || exit 1
         else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
-                builtin_sched_execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
+                builtin_sched_execute_pipeline_steps "${augmented_cmdline}" "${outd}" "${reordered_pfile}" || exit 1
             else
-                execute_pipeline_steps "${augmented_cmdline}" ${outd} ${reordered_pfile} || exit 1
+                execute_pipeline_steps "${augmented_cmdline}" "${outd}" "${reordered_pfile}" || exit 1
             fi
         fi
     fi

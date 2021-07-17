@@ -17,7 +17,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. ${panpipe_bindir}/panpipe_lib || exit 1
+. "${panpipe_bindir}"/panpipe_lib || exit 1
 
 ########
 print_desc()
@@ -45,7 +45,7 @@ check_pipeline_file()
 {
     echo "* Checking pipeline file ($pfile)..." >&2
 
-    ${panpipe_bindir}/pipe_check -p ${pfile} || return 1
+    "${panpipe_bindir}"/pipe_check -p "${pfile}" || return 1
 
     echo "" >&2
 }
@@ -57,7 +57,7 @@ load_modules()
 
     local pfile=$1
     
-    load_pipeline_modules ${pfile} || return 1
+    load_pipeline_modules "${pfile}" || return 1
 
     echo "" >&2
 }
@@ -71,7 +71,7 @@ execute_step()
     
     # Execute step
     echo "Executing: $stepname $opts" >&2
-    ${stepname} $opts
+    ${stepname} "${opts}"
 }
 
 ########
@@ -81,10 +81,10 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-read_pars $* || { echo "Error: wrong input parameters" >&2 ; exit 1; }
+read_pars "$*" || { echo "Error: wrong input parameters" >&2 ; exit 1; }
 
 check_pipeline_file || exit 1
 
-load_modules ${pfile} || exit 1
+load_modules "${pfile}" || exit 1
 
 execute_step ${stepname} "${opts}" || exit 1    
