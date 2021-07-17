@@ -133,12 +133,12 @@ check_pars()
     fi
 
     if [ ${k_given} -eq 1 ]; then
-        if [ ! -f ${k_val} ]; then
+        if [ ! -f "${k_val}" ]; then
             echo "Error! file ${k_val} does not exist" >&2 
             exit 1
         fi
 
-        if [ ! -x ${k_val} ]; then
+        if [ ! -x "${k_val}" ]; then
             echo "Error! file ${k_val} is not executable" >&2 
             exit 1
         fi
@@ -157,7 +157,7 @@ absolutize_file_paths()
     fi
 
     if [ ${k_given} -eq 1 ]; then   
-        k_val=`get_absolute_path ${k_val}`
+        k_val=`get_absolute_path "${k_val}"`
     fi
 }
 
@@ -178,7 +178,7 @@ exec_hook()
     export PIPE_EXEC_BATCH_PPL_CMD=${PIPELINE_COMMANDS["${outd}"]}
 
     # Execute script
-    ${k_val}
+    "${k_val}"
     local exit_code=$?
 
     # unset variables

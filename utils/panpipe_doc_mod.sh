@@ -75,7 +75,7 @@ check_pars()
         echo "Error! -m parameter not given!" >&2
         exit 1
     else
-        if [ ! -f ${module_fname} ]; then
+        if [ ! -f "${module_fname}" ]; then
             echo "Error! module file does not exist" >&2 
             exit 1
         fi
