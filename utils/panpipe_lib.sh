@@ -154,7 +154,7 @@ version_to_number()
 {
     local ver=$1
     
-    echo $ver | ${AWK} -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
+    echo $ver | "${AWK}" -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 }
 
 ########
@@ -212,8 +212,8 @@ get_absolute_path()
         else
             # Path corresponds to a file
             local oldpwd=$PWD
-            local basetmp=`$BASENAME "$PWD/$file"`
-            local dirtmp=`$DIRNAME "$PWD/$file"`
+            local basetmp=`"$BASENAME" "$PWD/$file"`
+            local dirtmp=`"$DIRNAME" "$PWD/$file"`
             # Check if directory containing the file exists
             if [ -d "$dirtmp" ]; then
                 cd "$dirtmp"
@@ -237,7 +237,7 @@ normalize_dirname()
 {
     local dir=$1
 
-    echo `echo "${dir}/" | $TR -s "/"`
+    echo `echo "${dir}/" | "$TR" -s "/"`
 }
 
 ########
@@ -290,7 +290,7 @@ expand_tildes()
 ########
 exclude_readonly_vars()
 {
-    $AWK -F "=" 'BEGIN{
+    "$AWK" -F "=" 'BEGIN{
                          readonlyvars["BASHOPTS"]=1
                          readonlyvars["BASH_VERSINFO"]=1
                          readonlyvars["EUID"]=1
@@ -306,7 +306,7 @@ exclude_readonly_vars()
 ########
 exclude_bashisms()
 {
-    $AWK '{if(index($1,"=(")==0) printf"%s\n",$0}'
+    "$AWK" '{if(index($1,"=(")==0) printf"%s\n",$0}'
 }
 
 ########
@@ -457,7 +457,7 @@ str_is_natural_number()
 get_num_words_in_string()
 {
     local str=$1
-    echo "${str}" | ${WC} -w
+    echo "${str}" | "${WC}" -w
 }
 
 ########
@@ -502,7 +502,7 @@ get_slurm_version()
     if [ "$SBATCH" = "" ]; then
         echo "0"
     else
-        $SBATCH --version | $AWK '{print $2}'
+        "$SBATCH" --version | "$AWK" '{print $2}'
     fi
 }
 
@@ -694,7 +694,7 @@ create_slurm_script()
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
-    echo ${BASH_SHEBANG} > "${fname}" || return 1
+    echo "${BASH_SHEBANG}" > "${fname}" || return 1
     
     # Write environment variables
     set | exclude_readonly_vars >> "${fname}" || return 1
@@ -745,7 +745,7 @@ archive_script()
 
     # Archive script with date info
     local curr_date=`date '+%Y_%m_%d'`
-    cp ${script_filename} "${script_filename}.${curr_date}"
+    cp "${script_filename}" "${script_filename}.${curr_date}"
 }
 
 ########
@@ -941,7 +941,7 @@ set_slurm_jobcorr_like_deps_for_listitem()
             fi
         done
         # Update dependencies
-        ${SCONTROL} update jobid=${jid}_${idx} Dependency=${dependencies} || return 1
+        "${SCONTROL}" update jobid=${jid}_${idx} Dependency=${dependencies} || return 1
         # Increase task index
         idx=$(( idx + 1 ))
     done
@@ -1048,7 +1048,7 @@ slurm_launch_attempt()
     
     # Submit job (initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes -H "${file}")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes -H "${file}")
     local exit_code=$?
 
     # Check for errors
@@ -1066,7 +1066,7 @@ slurm_launch_attempt()
     fi
     
     # Release job
-    $($SCONTROL release $jid)
+    $("$SCONTROL" release $jid)
     local exit_code=$?
 
     # Check for errors
@@ -1115,7 +1115,7 @@ slurm_launch_preverif_job()
     # Submit preliminary verification job (the job will fail if all
     # attempts fail, initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${preverif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${preverif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
 
     # Check for errors
@@ -1132,7 +1132,7 @@ slurm_launch_preverif_job()
     fi
 
     # Release job
-    $($SCONTROL release $jid)
+    $("$SCONTROL" release $jid)
     local exit_code=$?
 
     # Check for errors
@@ -1179,7 +1179,7 @@ slurm_launch_verif_job()
     # Submit verification job (the job will succeed if preliminary
     # verification job fails, initially it is put on hold)
     local jid
-    jid=$($SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${verif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${verif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
     
     # Check for errors
@@ -1196,7 +1196,7 @@ slurm_launch_verif_job()
     fi
 
     # Release job
-    $($SCONTROL release $jid)
+    $("$SCONTROL" release $jid)
     local exit_code=$?
 
     # Check for errors
@@ -1518,7 +1518,7 @@ stop_pid()
 get_slurm_state_code()
 {
     local jid=$1
-    ${SQUEUE} -j $jid -h -o "%t" 2>/dev/null
+    "${SQUEUE}" -j $jid -h -o "%t" 2>/dev/null
 }
 
 ########
@@ -1528,7 +1528,7 @@ slurm_jid_exists()
 
     # Use squeue to get job status
     local squeue_success=1
-    ${SQUEUE} -j $jid > /dev/null 2>&1 || squeue_success=0
+    "${SQUEUE}" -j $jid > /dev/null 2>&1 || squeue_success=0
 
     if [ ${squeue_success} -eq 1 ]; then
         # If squeue succeeds, determine if it returns a state code
@@ -1549,7 +1549,7 @@ slurm_stop_jid()
 {
     local jid=$1
 
-    ${SCANCEL} $jid  > /dev/null 2>&1 || return 1
+    "${SCANCEL}" $jid  > /dev/null 2>&1 || return 1
 
     return 0
 }
@@ -1619,7 +1619,7 @@ get_finished_array_task_indices()
 
     local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
     if [ -f "${finished_filename}" ]; then
-        ${AWK} '{print $4}' "${finished_filename}"
+        "${AWK}" '{print $4}' "${finished_filename}"
     fi
 }
 
@@ -1638,7 +1638,7 @@ array_task_is_finished()
     
     # Check that task is in file
     local task_in_file=1
-    ${GREP} "idx: ${idx} ;" "${finished_filename}" > /dev/null || task_in_file=0
+    "${GREP}" "idx: ${idx} ;" "${finished_filename}" > /dev/null || task_in_file=0
     if [ ${task_in_file} -eq 1 ]; then
         return 0
     else
@@ -1650,14 +1650,14 @@ array_task_is_finished()
 get_num_finished_array_tasks_from_finished_file()
 {
     local finished_filename=$1
-    $WC -l "${finished_filename}" | $AWK '{print $1}'
+    "$WC" -l "${finished_filename}" | "$AWK" '{print $1}'
 }
 
 ########
 get_num_array_tasks_from_finished_file()
 {
     local finished_filename=$1
-    $HEAD -1 "${finished_filename}" | $AWK '{print $NF}'
+    "$HEAD" -1 "${finished_filename}" | "$AWK" '{print $NF}'
 }
 
 ########
@@ -1760,7 +1760,7 @@ get_step_start_date()
 {
     log_filename=$1
     if [ -f "${log_filename}" ]; then
-        ${GREP} "^Step started at " "${log_filename}" | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+        "${GREP}" "^Step started at " "${log_filename}" | "${AWK}" '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
     fi
 }
 
@@ -1769,7 +1769,7 @@ get_step_finish_date()
 {
     log_filename=$1
     if [ -f "${log_filename}" ]; then
-        ${GREP} "^Step finished at " "${log_filename}" | ${AWK} '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
+        "${GREP}" "^Step finished at " "${log_filename}" | "${AWK}" '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
     fi
 }
 
@@ -2143,7 +2143,7 @@ remove_suffix_from_stepname()
 {
     local stepname=$1
     
-    echo ${stepname} | $AWK '{if(index($1,"__")==0){print $1} else{printf "%s\n",substr($1,1,index($1,"__")-1)}}'
+    echo ${stepname} | "$AWK" '{if(index($1,"__")==0){print $1} else{printf "%s\n",substr($1,1,index($1,"__")-1)}}'
 }
 
 ########
@@ -2298,7 +2298,7 @@ get_outd_for_dep()
         local outd="${PIPELINE_OUTDIR}"
 
         # Get stepname
-        local stepname_part=`echo ${dep} | $AWK -F ":" '{print $2}'`
+        local stepname_part=`echo ${dep} | "$AWK" -F ":" '{print $2}'`
         
         get_step_outdir "${outd}" ${stepname_part}
     fi
@@ -2928,7 +2928,7 @@ extract_mem_from_stepspec()
 get_commasep_ppl_modules()
 {
     local pfile=$1
-    local modules=`$AWK '{if($1=="#import") {$1=""; gsub(","," ",$0); printf "%s ",$0}}' $pfile | $AWK '{for(i=1;i<=NF;++i) {if(i>1) printf","; printf"%s",$i}}'` ; pipe_fail || return 1
+    local modules=`"$AWK" '{if($1=="#import") {$1=""; gsub(","," ",$0); printf "%s ",$0}}' $pfile | "$AWK" '{for(i=1;i<=NF;++i) {if(i>1) printf","; printf"%s",$i}}'` ; pipe_fail || return 1
     echo "${modules}"
 }
 

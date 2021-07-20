@@ -93,7 +93,7 @@ check_pars()
 get_orig_workdir()
 {
     local command_line_file=$1
-    local workdir=`$HEAD -1 ${command_line_file} | $AWK '{print $2}'` ; pipe_fail || return 1
+    local workdir=`$HEAD -1 ${command_line_file} | "$AWK" '{print $2}'` ; pipe_fail || return 1
     echo $workdir
 }
 
@@ -122,7 +122,7 @@ get_orig_outdir()
 get_cmdline()
 {
     local command_line_file=$1
-    local cmdline=`$TAIL -1 ${command_line_file}`
+    local cmdline=`"$TAIL" -1 ${command_line_file}`
     echo "$cmdline"
 }
 
@@ -130,7 +130,7 @@ get_cmdline()
 get_cmdline_pfile()
 {
     local command_line_file=$1
-    local cmdline=`$TAIL -1 ${command_line_file}`
+    local cmdline=`"$TAIL" -1 ${command_line_file}`
     local pfile=`read_opt_value_from_line "$cmdline" "--pfile"` || return 1
     echo "$pfile"
 }
@@ -139,7 +139,7 @@ get_cmdline_pfile()
 get_sched()
 {
     local command_line_file=$1
-    local cmdline=`$TAIL -1 "${command_line_file}"`
+    local cmdline=`"$TAIL" -1 "${command_line_file}"`
     local sched=`read_opt_value_from_line "$cmdline" "--sched"` || return 1
     echo $sched
 }
@@ -150,7 +150,7 @@ replace_outdir_in_cmdline()
     local cmdline=$1
     local newdir=$2
 
-    echo "$cmdline" | $AWK -v newdir="$newdir" 'BEGIN{
+    echo "$cmdline" | "$AWK" -v newdir="$newdir" 'BEGIN{
                                 replace=0
                                }
                                {

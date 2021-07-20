@@ -617,7 +617,7 @@ ensure_exclusive_execution()
     prepare_lock $LOCKFD "$lockfile" || return 1
 
     # Try to acquire lock exclusively
-    $FLOCK -xn $LOCKFD || return 1
+    "$FLOCK" -xn $LOCKFD || return 1
 }
 
 ########

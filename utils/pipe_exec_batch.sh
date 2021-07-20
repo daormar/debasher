@@ -165,7 +165,7 @@ absolutize_file_paths()
 get_unfinished_step_perc()
 {
     local pipe_status_output_file=$1
-    $AWK '{if ($1=="*") printf"%d",$13*100/$4}' "${pipe_status_output_file}"
+    "$AWK" '{if ($1=="*") printf"%d",$13*100/$4}' "${pipe_status_output_file}"
 }
 
 ########
@@ -288,7 +288,7 @@ get_ppl_status()
     # If original output directory exists then check pipeline status
     if [ -d "${pipe_cmd_outd}" ]; then
         # Obtain pipeline status
-        tmpfile=`${MKTEMP}`
+        tmpfile=`"${MKTEMP}"`
         "${panpipe_bindir}"/pipe_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
@@ -393,7 +393,7 @@ get_dest_dir_for_ppl()
 {
     local pipeline_outd=$1
     local outd=$2    
-    basedir=`$BASENAME "${pipeline_outd}"`
+    basedir=`"$BASENAME" "${pipeline_outd}"`
     echo "${outd}/${basedir}"
 }
 

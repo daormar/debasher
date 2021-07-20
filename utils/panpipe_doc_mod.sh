@@ -85,7 +85,7 @@ check_pars()
 ########
 get_step_doc_funcnames()
 {
-    declare -F | $AWK '{start=index($3,"_document"); if(start!=0 && start-1+length("_document")==length($3)) printf"%s\n",$3}'
+    declare -F | "$AWK" '{start=index($3,"_document"); if(start!=0 && start-1+length("_document")==length($3)) printf"%s\n",$3}'
 }
 
 ########

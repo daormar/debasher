@@ -800,7 +800,7 @@ builtin_sched_solve_knapsack()
     builtin_sched_print_knapsack_sol > ${knapsack_sol}
 
     # Store solution in output variable
-    BUILTIN_SCHED_SELECTED_STEPS=`${AWK} -F ": " '{if($1=="Packed items") print $2}' ${knapsack_sol}`
+    BUILTIN_SCHED_SELECTED_STEPS=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' ${knapsack_sol}`
 }
 
 ########
@@ -1170,7 +1170,7 @@ builtin_sched_execute_step()
 builtinsched_extract_step_from_knapsack_name()
 {
     local knapsack_name=$1
-    local step_idx=`echo "${knapsack_name}" | ${AWK} -F "_" '{print $1}'`
+    local step_idx=`echo "${knapsack_name}" | "${AWK}" -F "_" '{print $1}'`
     echo ${BUILTIN_SCHED_IDX_TO_STEPNAME[${step_idx}]}
 }
 
@@ -1178,7 +1178,7 @@ builtinsched_extract_step_from_knapsack_name()
 builtinsched_extract_taskidx_from_knapsack_name()
 {
     local knapsack_name=$1
-    local tidx=`echo "${knapsack_name}" | ${AWK} -F "_" '{print $2}'`    
+    local tidx=`echo "${knapsack_name}" | "${AWK}" -F "_" '{print $2}'`    
     if [ "${tidx}" = "" ]; then
         echo ${BUILTIN_SCHED_NO_ARRAY_TASK}
     else
