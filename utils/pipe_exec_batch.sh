@@ -538,7 +538,7 @@ execute_batches()
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
             echo "${pipe_exec_cmd}" >&2
-            "${pipe_exec_cmd}" || return 1
+            ${pipe_exec_cmd} || return 1
             echo "**********************" >&2
             echo "" >&2
             
@@ -550,7 +550,7 @@ execute_batches()
         # Increase lineno
         lineno=$((lineno+1))
         
-    done < ${file}
+    done < "${file}"
 
     # Wait for all pipelines to complete
     echo "* Waiting for pending pipelines to complete..." >&2
