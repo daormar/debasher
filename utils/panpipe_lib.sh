@@ -278,7 +278,7 @@ expand_tildes()
         for w in $str; do
             w=`expand_tilde_in_word $w`
             if [ "$result" = "" ]; then
-                result=$w
+                result="$w"
             else
                 result="${result} ${w}"
             fi
