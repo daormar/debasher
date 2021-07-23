@@ -266,25 +266,11 @@ extract_outd_from_pipe_exec_cmd()
 {
     local pipe_exec_cmd=$1
 
-    # Create temporary file
-    local tmpfile=`"${MKTEMP}"`
-
-    # Create command
-    echo "ARG_SEP=\"${ARG_SEP}\"" > "${tmpfile}" || return 1
-    declare -f serialize_args >> "${tmpfile}" || return 1
-    echo "${pipe_exec_cmd}" >> "${tmpfile}" || return 1
-    local lineno=`$WC -l ${tmpfile} | ${AWK} '{print $1}'`
-    "${SED}" -i -e "${lineno}s/^/serialize_args /" "${tmpfile}"
-    
-    # Execute command
-    local cmdline
-    cmdline=`"${BASH}" "${tmpfile}"` || return 1
+    # Obtain command line from command string
+    cmdline=`serialize_cmdexec "${pipe_exec_cmd}"`
 
     # Obtain out directory for pipe command
     local pipe_cmd_outd=`read_opt_value_from_line "${cmdline}" "--outdir"`
-
-    # Remove temporary file
-    rm ${tmpfile}
 
     echo ${pipe_cmd_outd}
 }

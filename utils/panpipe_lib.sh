@@ -3069,6 +3069,31 @@ serialize_args()
 }
 
 ########
+serialize_cmdexec()
+{
+    local pipe_exec_cmd=$1
+
+    # Create temporary file
+    local tmpfile=`"${MKTEMP}"`
+
+    # Create command
+    echo "ARG_SEP=\"${ARG_SEP}\"" > "${tmpfile}" || return 1
+    declare -f serialize_args >> "${tmpfile}" || return 1
+    echo "${pipe_exec_cmd}" >> "${tmpfile}" || return 1
+    local lineno=`$WC -l ${tmpfile} | ${AWK} '{print $1}'`
+    "${SED}" -i -e "${lineno}s/^/serialize_args /" "${tmpfile}"
+    
+    # Execute command
+    local cmdline
+    cmdline=`"${BASH}" "${tmpfile}"` || return 1
+
+    # Remove temporary file
+    rm ${tmpfile}
+
+    echo ${cmdline}
+}
+
+########
 replace_blank_with_word()
 {
     local str=$1
