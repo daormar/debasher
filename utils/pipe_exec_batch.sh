@@ -474,10 +474,6 @@ execute_batches()
 
     # Global variable declaration
     declare -A PIPELINE_COMMANDS
-
-    # Create temporary file
-    local tmpfile=`"${MKTEMP}"`
-    trap "rm -f ${tmpfile} 2>/dev/null" EXIT
     
     # Process pipeline execution commands...
     while read pipe_exec_cmd; do
@@ -536,8 +532,7 @@ execute_batches()
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
             echo "${pipe_exec_cmd}" >&2
-            echo "${pipe_exec_cmd}" > "${tmpfile}" || return 1
-            "${BASH}" "${tmpfile}" || return 1
+            eval "${pipe_exec_cmd}" || return 1
             echo "**********************" >&2
             echo "" >&2
             
