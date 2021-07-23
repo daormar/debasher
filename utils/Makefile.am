@@ -17,11 +17,6 @@ pipe_software_test.sh get_reexec_steps_due_to_deps.py			\
 reformat_pipe_status.py solve_knapsack_bb.py solve_knapsack_ga.py	\
 knapsack_ga.py
 
-# Build rules for libraries
-panpipe_lib: panpipe_lib.sh
-	rm -f $@
-	cat panpipe_lib.sh >> $@
-
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
 
