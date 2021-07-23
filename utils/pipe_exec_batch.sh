@@ -25,9 +25,8 @@
 
 PPL_IS_COMPLETED=0
 PPL_REQUIRES_POST_FINISH_ACTIONS=1
-PPL_HAS_WRONG_OUTDIR=2
-PPL_FAILED=3
-PPL_IS_NOT_COMPLETED=4
+PPL_FAILED=2
+PPL_IS_NOT_COMPLETED=3
 PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME=".ppl_post_finish_actions_signal"
 export RESERVED_HOOK_EXIT_CODE=200
 
@@ -165,7 +164,7 @@ absolutize_file_paths()
 get_unfinished_step_perc()
 {
     local pipe_status_output_file=$1
-    "$AWK" '{if ($1=="*") printf"%d",$13*100/$4}' "${pipe_status_output_file}"
+    "$AWK" '{if ($1=="*") printf"%d",$(13)*100/$4}' "${pipe_status_output_file}"
 }
 
 ########
@@ -263,16 +262,38 @@ exec_post_ppl_finish_actions()
 }
 
 ########
-get_ppl_status()
+extract_outd_from_pipe_exec_cmd()
 {
     local pipe_exec_cmd=$1
-    local outd=$2
 
-    # Extract output directory from command
-    local pipe_cmd_outd=`read_opt_value_from_line "${pipe_exec_cmd}" "--outdir"`
-    if [ "${pipe_cmd_outd}" = ${OPT_NOT_FOUND} ]; then
-        return ${PPL_HAS_WRONG_OUTDIR}
-    fi
+    # Create temporary file
+    local tmpfile=`"${MKTEMP}"`
+
+    # Create command
+    echo "ARG_SEP=\"${ARG_SEP}\"" > "${tmpfile}" || return 1
+    declare -f serialize_args >> "${tmpfile}" || return 1
+    echo "${pipe_exec_cmd}" >> "${tmpfile}" || return 1
+    local lineno=`$WC -l ${tmpfile} | ${AWK} '{print $1}'`
+    "${SED}" -i -e "${lineno}s/^/serialize_args /" "${tmpfile}"
+    
+    # Execute command
+    local cmdline
+    cmdline=`"${BASH}" "${tmpfile}"` || return 1
+
+    # Obtain out directory for pipe command
+    local pipe_cmd_outd=`read_opt_value_from_line "${cmdline}" "--outdir"`
+
+    # Remove temporary file
+    rm ${tmpfile}
+
+    echo ${pipe_cmd_outd}
+}
+
+########
+get_ppl_status()
+{
+    local pipe_cmd_outd=$1
+    local outd=$2
 
     # Check if final output directory was provided
     if [ "${outd}" != "" ]; then
@@ -335,16 +356,10 @@ wait_simul_exec_reduction()
         local num_completed_pipelines=0
         local num_failed_pipelines=0
         for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
-            # Retrieve pipe command
-            local pipe_exec_cmd=${PIPELINE_COMMANDS["${pipeline_outd}"]}
-
             # Check if pipeline has completed execution
-            get_ppl_status "${pipe_exec_cmd}" "${outd}"
+            get_ppl_status "${pipeline_outd}" "${outd}"
             local exit_code=$?
             case $exit_code in
-                ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
-                                         return 1
-                                         ;;
                 ${PPL_IS_COMPLETED}) num_completed_pipelines=$((num_completed_pipelines+1))
                                      ;;
                 ${PPL_REQUIRES_POST_FINISH_ACTIONS}) exec_post_ppl_finish_actions "${pipeline_outd}" "${outd}"
@@ -419,17 +434,11 @@ update_active_pipeline()
     local pipeline_outd=$1
     local outd=$2
 
-    # Retrieve pipe command
-    local pipe_exec_cmd=${PIPELINE_COMMANDS["${pipeline_outd}"]}
-
     # Check pipeline status
-    get_ppl_status "${pipe_exec_cmd}" "${outd}"
+    get_ppl_status "${pipeline_outd}" "${outd}"
     local exit_code=$?
     
     case $exit_code in
-        ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
-                                 return 1
-                                 ;;
         ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
                              unset PIPELINE_COMMANDS["${pipeline_outd}"]
                              ;;
@@ -456,27 +465,12 @@ update_active_pipelines()
 }
 
 ########
-extract_outd_from_command()
-{
-    local cmd=$1
-    echo `read_opt_value_from_line "${cmd}" "--outdir"`
-}
-
-########
 add_cmd_to_assoc_array()
 {
     local cmd=$1
+    local dir=$2
 
-    # Extract output directory from command
-    local dir=`extract_outd_from_command "${cmd}"`
-
-    # Add command to associative array if directory was sucessfully retrieved
-    if [ ${dir} = ${OPT_NOT_FOUND} ]; then
-        return 1
-    else
-        PIPELINE_COMMANDS[${dir}]="${cmd}"
-        return 0
-    fi
+    PIPELINE_COMMANDS["${dir}"]="${cmd}"
 }
 
 ########
@@ -516,13 +510,16 @@ execute_batches()
         update_active_pipelines "${outd}" || return 1
         echo "" >&2
 
+        echo "** Extract output directory for pipeline..." >&2
+        local pipe_cmd_outd
+        pipe_cmd_outd=`extract_outd_from_pipe_exec_cmd "${pipe_exec_cmd}"` || { echo "Error: pipeline command does not contain --outdir option">&2; return 1; }
+        echo "${pipe_cmd_outd}"
+        echo "" >&2
+
         echo "** Check if pipeline already completed execution..." >&2
-        get_ppl_status "${pipe_exec_cmd}" "${outd}"
+        get_ppl_status "${pipe_cmd_outd}" "${outd}"
         local exit_code=$?
         case $exit_code in
-            ${PPL_HAS_WRONG_OUTDIR}) echo "Error: pipeline command does not contain --outdir option">&2
-                                     return 1
-                                     ;;
             ${PPL_IS_COMPLETED}) echo "yes">&2
                                  ;;
             ${PPL_REQUIRES_POST_FINISH_ACTIONS}) echo "no">&2
@@ -535,20 +532,20 @@ execute_batches()
         echo "" >&2
 
         if [ ${exit_code} -eq ${PPL_REQUIRES_POST_FINISH_ACTIONS} ]; then
-            add_cmd_to_assoc_array "${pipe_exec_cmd}"
+            add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}"
         fi
         
         if [ ${exit_code} -eq ${PPL_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PPL_FAILED} ]; then
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
             echo "${pipe_exec_cmd}" >&2
-            echo "${pipe_exec_cmd}" > ${tmpfile} || return 1
-            ${BASH} ${tmpfile} || return 1
+            echo "${pipe_exec_cmd}" > "${tmpfile}" || return 1
+            "${BASH}" "${tmpfile}" || return 1
             echo "**********************" >&2
             echo "" >&2
             
             echo "** Add pipeline command to associative array..." >&2
-            add_cmd_to_assoc_array "${pipe_exec_cmd}" || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
+            add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}" || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
             echo "" >&2
         fi
         

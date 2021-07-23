@@ -29,6 +29,8 @@ FUNCT_NOT_FOUND="_FUNCT_NOT_FOUND_"
 VOID_VALUE="_VOID_VALUE_"
 GENERAL_OPT_CATEGORY="GENERAL"
 SPACE_SUBSTITUTE="__SPACE_SUBSTITUTE__"
+ARG_SEP="<_ARG_SEP_>"
+ARRAY_TASK_SEP=" ||| "
 
 # INVALID IDENTIFIERS
 INVALID_SID="_INVALID_SID_"
@@ -329,7 +331,7 @@ serialize_string_array()
 {
     local str_array_name=$1[@]
     local str_array=("${!str_array_name}")
-    local sep=$2
+    local array_task_sep=$2
     local max_elems=$3
     local result=""
     local num_elem=0
@@ -340,7 +342,7 @@ serialize_string_array()
         if [ ! -z "${max_elems}" ]; then
             if [ ${num_elem} -ge ${max_elems} ]; then
                 if [ ! -z "${result}" ]; then
-                    result="${result}${sep}..."
+                    result="${result}${array_task_sep}..."
                     break
                 fi
             fi
@@ -482,6 +484,12 @@ get_first_n_fields_of_str()
     done
 
     echo $result
+}
+
+########
+get_pipe_exec_path()
+{
+    echo "${panpipe_bindir}/pipe_exec"
 }
 
 #######################
@@ -1604,8 +1612,8 @@ get_launched_array_task_ids()
 
     # Return ids for array tasks if any
     for taskid_file in "${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}"; do
-        if [ -f ${taskid_file} ]; then
-            cat ${taskid_file}
+        if [ -f "${taskid_file}" ]; then
+            cat "${taskid_file}"
         fi
     done
 
@@ -3047,6 +3055,20 @@ get_pipeline_fullmodnames()
 ###############################
 
 ########
+serialize_args()
+{
+    local serial_args=""
+    for arg in "$@"; do
+        if [ -z "$serial_args" ]; then
+            serial_args=${arg}
+        else
+            serial_args=${serial_args}${ARG_SEP}${arg}
+        fi
+    done
+    echo "${serial_args}"
+}
+
+########
 replace_blank_with_word()
 {
     local str=$1
@@ -3069,7 +3091,7 @@ memoize_opts()
 
     # Convert string to array
     local preproc_cmdline
-    preproc_cmdline=`echo "${cmdline}" | ${SED} 's/ /\n/g'`
+    preproc_cmdline=`echo "${cmdline}" | ${SED} "s/${ARG_SEP}/\n/g"`
     local array=()
     while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
     
@@ -3080,27 +3102,19 @@ memoize_opts()
         if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
             local opt="${array[$i]}"
             i=$((i+1))
-            # Obtain value by appending all strings until next option or
-            # last string is reached
-            local end=0
+            # Obtain value if it exists
             local value=""
-            while [ ${end} -eq 0 ]; do
-                # Check if next token is an option
-                if [ $i -lt ${#array[@]} ]; then
-                    if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
-                        end=1
-                    else
-                        if [ -z "${value}" ]; then
-                            value="${array[$i]}"
-                        else
-                            value="${value} ${array[$i]}"
-                        fi
-                        i=$((i+1))
-                    fi
+            # Check if next token is an option
+            if [ $i -lt ${#array[@]} ]; then
+                if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
+                    :
                 else
-                    end=1
+                    value="${array[$i]}"
+                    i=$((i+1))
                 fi
-            done
+            fi
+
+            # Store option
             if [ -z "${value}" ]; then
                 MEMOIZED_OPTS[$opt]=${VOID_VALUE}
             else
@@ -3120,8 +3134,11 @@ check_opt_given()
     local opt=$2
 
     # Convert string to array
-    local array
-    IFS=' ' read -r -a array <<< $cmdline
+    local preproc_cmdline
+    preproc_cmdline=`echo "${cmdline}" | ${SED} "s/${ARG_SEP}/\n/g"`
+    local array=()
+    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
+
     # Scan array
     i=0
     while [ $i -lt ${#array[@]} ]; do
@@ -3177,7 +3194,7 @@ read_opt_value_from_line()
 
     # Convert string to array
     local preproc_cmdline
-    preproc_cmdline=`echo "${cmdline}" | ${SED} 's/ /\n/g'`
+    preproc_cmdline=`echo "${cmdline}" | ${SED} "s/${ARG_SEP}/\n/g"`
     local array=()
     while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
     
@@ -3187,27 +3204,19 @@ read_opt_value_from_line()
         # Check if option was found
         if [ "${array[$i]}" = "${opt}" ]; then
             i=$((i+1))
-            # Obtain value by appending all strings until next option or
-            # last string is reached
-            local end=0
+            # Obtain value if it exists
             local value=""
-            while [ ${end} -eq 0 ]; do
-                # Check if next token is an option
-                if [ $i -lt ${#array[@]} ]; then
-                    if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
-                        end=1
-                    else
-                        if [ -z "${value}" ]; then
-                            value="${array[$i]}"
-                        else
-                            value="${value} ${array[$i]}"
-                        fi
-                        i=$((i+1))
-                    fi
+            # Check if next token is an option
+            if [ $i -lt ${#array[@]} ]; then
+                if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
+                    :
                 else
-                    end=1
+                    value="${array[$i]}"
+                    i=$((i+1))
                 fi
-            done
+            fi
+
+            # Show value if it exists and return
             if [ -z "${value}" ]; then
                 echo ${VOID_VALUE}
                 return 1
@@ -3565,9 +3574,9 @@ define_opt()
     fi
 
     if [ -z "${!varname}" ]; then
-        eval "${varname}='${opt} ${value}'" || { errmsg "define_opt: execution error" ; return 1; }
+        eval "${varname}='${opt}${ARG_SEP}${value}'" || { errmsg "define_opt: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname} ${opt} ${value}'" || { errmsg "define_opt: execution error" ; return 1; }
+        eval "${varname}='${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}'" || { errmsg "define_opt: execution error" ; return 1; }
     fi
 }
 
@@ -3586,7 +3595,7 @@ define_opt_wo_value()
     if [ -z "${!varname}" ]; then
         eval "${varname}='${opt}'" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname} ${opt}'" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
+        eval "${varname}='${!varname}${ARG_SEP}${opt}'" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
     fi
 }
 
@@ -3610,9 +3619,9 @@ define_infile_opt()
     value=`get_absolute_path "${value}"`
 
     if [ -z "${!varname}" ]; then
-        eval "${varname}='${opt} ${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
+        eval "${varname}='${opt}${ARG_SEP}${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname} ${opt} ${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
+        eval "${varname}='${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
     fi
 }
 
@@ -3636,10 +3645,10 @@ define_indir_opt()
     value=`get_absolute_path "${value}"`
 
     if [ -z "${!varname}" ]; then
-        eval "${varname}='${opt} ${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
+        eval "${varname}='${opt}${ARG_SEP}${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname} ${opt} ${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
-    fi
+        eval "${varname}='${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
+    fi    
 }
 
 ########
@@ -3743,41 +3752,6 @@ save_opt_list()
 {
     local optlist_varname=$1
     SCRIPT_OPT_LIST_ARRAY+=("${!optlist_varname}")
-}
-
-########
-cfgfile_to_string()
-{
-    local cfgfile=$1
-    local str=""
-
-    # Check that the cfg file exists
-    if [ ! -f ${cfgfile} ]; then
-        return 1
-    fi
-
-    # Read cfg file line by line
-    local line
-    local field
-    while read line; do
-        for field in $line; do
-            # Stop processing line when finding a comment
-            if [[ $field = \#* ]]; then
-                break
-            fi
-
-            # Add field to string
-            if [ "${str}" = "" ]; then
-                str=$field
-            else
-                str="${str} ${field}"
-            fi
-        done
-    done < ${cfgfile}
-
-    echo ${str}
-
-    return 0
 }
 
 ###########################

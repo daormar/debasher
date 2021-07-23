@@ -52,8 +52,8 @@ usage()
     echo "pipe_exec                 --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
-    echo "                          [--cfgfile <string>] [--reexec-outdated-steps]"
-    echo "                          [--conda-support] [--showopts|--checkopts|--debug]"
+    echo "                          [--reexec-outdated-steps] [--conda-support]"
+    echo "                          [--showopts|--checkopts|--debug]"
     echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with pipeline steps to be performed (see manual"
@@ -69,8 +69,6 @@ usage()
     echo "                          means unlimited memory"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the pipeline"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
-    echo "--cfgfile <string>        File with options (options provided in command line"
-    echo "                          overwrite those given in the configuration file)"
     echo "--reexec-outdated-steps   Reexecute those steps with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--showopts                Show pipeline options"
@@ -91,7 +89,6 @@ read_pars()
     builtinsched_mem_given=0
     dflt_nodes_given=0
     dflt_throttle_given=0
-    cfgfile_given=0
     reexec_outdated_steps_given=0
     conda_support_given=0
     showopts_given=0
@@ -157,12 +154,6 @@ read_pars()
                       dflt_throttle_given=1
                   fi
                   ;;
-            "--cfgfile") shift
-                  if [ $# -ne 0 ]; then
-                      cfgfile=$1
-                      cfgfile_given=1
-                  fi
-                  ;;
             "--reexec-outdated-steps")
                   if [ $# -ne 0 ]; then
                       reexec_outdated_steps_given=1
@@ -208,13 +199,6 @@ check_pars()
         fi
     fi
 
-    if [ ${cfgfile_given} -eq 1 ]; then
-        if [ ! -f "${cfgfile}" ]; then
-            echo "Error: ${cfgfile} file does not exist" >&2
-            exit 1
-        fi
-    fi
-
     if [ ${showopts_given} -eq 1 -a ${checkopts_given} -eq 1 ]; then
         echo "Error! --showopts and --checkopts options cannot be given simultaneously"
         exit 1
@@ -240,10 +224,6 @@ absolutize_file_paths()
 
     if [ ${outdir_given} -eq 1 ]; then   
         outd=`get_absolute_path "${outd}"`
-    fi
-
-    if [ ${cfgfile_given} -eq 1 ]; then   
-        cfgfile=`get_absolute_path "${cfgfile}"`
     fi
 }
 
@@ -377,7 +357,7 @@ check_pipeline_opts()
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
             define_opts_for_script "${cmdline}" "${stepspec}" || return 1
             local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
-            local serial_script_opts=`serialize_string_array "script_opts_array" " ||| " ${MAX_NUM_SCRIPT_OPTS_TO_DISPLAY}`
+            local serial_script_opts=`serialize_string_array "script_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_SCRIPT_OPTS_TO_DISPLAY}`
             echo "STEP: ${stepname} ; OPTIONS: ${serial_script_opts}" >&2
         fi
     done < "${pfile}"
@@ -663,21 +643,6 @@ print_command_line()
 }
 
 ########
-obtain_augmented_cmdline()
-{
-    local cmdline=$1
-    
-    if [ ${cfgfile_given} -eq 1 ]; then
-        echo "* Processing configuration file (${cfgfile})..." >&2
-        cfgfile_str=`cfgfile_to_string "${cfgfile}"` || return 1
-        echo "${cmdline} ${cfgfile_str}"
-        echo "" >&2
-    else
-        echo "$cmdline"
-    fi
-}
-
-########
 get_stepdeps_from_detailed_spec()
 {
     local stepdeps_spec=$1
@@ -871,7 +836,7 @@ if [ $# -eq 0 ]; then
 fi
 
 # Save command line
-command_line="$0 $*"
+command_line=`serialize_args "$0" "$@"`
 
 read_pars "$@" || exit 1
 
@@ -896,13 +861,11 @@ load_modules "${reordered_pfile}" || exit 1
 if [ ${showopts_given} -eq 1 ]; then
     show_pipeline_opts "${reordered_pfile}" || exit 1
 else
-    augmented_cmdline=`obtain_augmented_cmdline "${command_line}"` || exit 1
-    
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${augmented_cmdline}" ${reordered_pfile} || exit 1
+        check_pipeline_opts "${command_line}" ${reordered_pfile} || exit 1
     else
         load_pipeline_modules=1
-        check_pipeline_opts "${augmented_cmdline}" ${reordered_pfile} || exit 1
+        check_pipeline_opts "${command_line}" ${reordered_pfile} || exit 1
         
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
@@ -926,13 +889,13 @@ else
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            execute_pipeline_steps_debug "${augmented_cmdline}" "${outd}" "${reordered_pfile}" || exit 1
+            execute_pipeline_steps_debug "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
         else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
-                builtin_sched_execute_pipeline_steps "${augmented_cmdline}" "${outd}" "${reordered_pfile}" || exit 1
+                builtin_sched_execute_pipeline_steps "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
             else
-                execute_pipeline_steps "${augmented_cmdline}" "${outd}" "${reordered_pfile}" || exit 1
+                execute_pipeline_steps "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
             fi
         fi
     fi
