@@ -281,8 +281,9 @@ get_ppl_status()
     local pipe_cmd_outd=$1
     local outd=$2
 
-    # Check if final output directory was provided
-    if [ "${outd}" != "" ]; then
+    # Check if final output directory was provided and also that these
+    # directory is not the same as the original output directory
+    if [ "${outd}" != "" -a "${outd}" ]; then
         # Get pipeline directory after moving
         local final_outdir=`get_dest_dir_for_ppl "${pipe_cmd_outd}" "${outd}"`
         if [ -d "${final_outdir}" ]; then
@@ -500,6 +501,16 @@ execute_batches()
         local pipe_cmd_outd
         pipe_cmd_outd=`extract_outd_from_pipe_exec_cmd "${pipe_exec_cmd}"` || { echo "Error: pipeline command does not contain --outdir option">&2; return 1; }
         echo "${pipe_cmd_outd}"
+        echo "" >&2
+
+        echo "** Check correctness of output directory..." >&2
+        local base_pipe_cmd_outd=`"${DIRNAME}" "${pipe_cmd_outd}"`
+        if dirnames_are_equal "${outd}" "${base_pipe_cmd_outd}"; then
+            echo "Error: final output directory is equal to the directory containing the output directory for pipeline">&2
+            return 1;
+        else
+            echo "yes" >&2
+        fi
         echo "" >&2
 
         echo "** Check if pipeline already completed execution..." >&2
