@@ -106,6 +106,9 @@ declare -A PIPELINE_OPT_CATEG
 declare -A PIPELINE_CATEG_MAP
 declare -A PIPELINE_OPT_STEP
 
+# Declare array to store deserialized arguments
+declare -a DESERIALIZED_ARGS
+
 # Declare associative array to memoize command line options
 declare -A MEMOIZED_OPTS
 
@@ -3069,6 +3072,21 @@ serialize_args()
 }
 
 ########
+deserialize_args()
+{
+    local serial_args=$1
+    local arrname=$2
+
+    # Prepare array to store deserialized arguments
+    DESERIALIZED_ARGS=()
+    
+    # Convert string to array
+    local preproc_serial_args
+    preproc_serial_args=`echo "${serial_args}" | ${SED} "s/${ARG_SEP}/\n/g"`
+    while IFS= read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_serial_args}"    
+}
+
+########
 serialize_cmdexec()
 {
     local pipe_exec_cmd=$1
@@ -3114,27 +3132,25 @@ memoize_opts()
 {
     local cmdline=$1
 
-    # Convert string to array
-    local preproc_cmdline
-    preproc_cmdline=`echo "${cmdline}" | ${SED} "s/${ARG_SEP}/\n/g"`
-    local array=()
-    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
+    # Convert string to array (result is placed into the
+    # DESERIALIZED_ARGS variable)
+    deserialize_args "${cmdline}"
     
-    # Scan array
+    # Scan DESERIALIZED_ARGS
     local i=1
-    while [ $i -lt ${#array[@]} ]; do
+    while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
         # Check if option was found
-        if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
-            local opt="${array[$i]}"
+        if [ "${DESERIALIZED_ARGS[$i]:0:1}" = "-" ] || [ "${DESERIALIZED_ARGS[$i]:0:2}" = "--" ]; then
+            local opt="${DESERIALIZED_ARGS[$i]}"
             i=$((i+1))
             # Obtain value if it exists
             local value=""
             # Check if next token is an option
-            if [ $i -lt ${#array[@]} ]; then
-                if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
+            if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
+                if [ "${DESERIALIZED_ARGS[$i]:0:1}" = "-" ] || [ "${DESERIALIZED_ARGS[$i]:0:2}" = "--" ]; then
                     :
                 else
-                    value="${array[$i]}"
+                    value="${DESERIALIZED_ARGS[$i]}"
                     i=$((i+1))
                 fi
             fi
@@ -3146,7 +3162,7 @@ memoize_opts()
                 MEMOIZED_OPTS[$opt]="$value"
             fi
         else
-            echo "Warning: unexpected value (${array[$i]}), skipping..." >&2
+            echo "Warning: unexpected value (${DESERIALIZED_ARGS[$i]}), skipping..." >&2
             i=$((i+1))
         fi
     done
@@ -3158,16 +3174,14 @@ check_opt_given()
     local cmdline=$1
     local opt=$2
 
-    # Convert string to array
-    local preproc_cmdline
-    preproc_cmdline=`echo "${cmdline}" | ${SED} "s/${ARG_SEP}/\n/g"`
-    local array=()
-    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
+    # Convert string to array (result is placed into the
+    # DESERIALIZED_ARGS variable)
+    deserialize_args "${cmdline}"
 
-    # Scan array
+    # Scan DESERIALIZED_ARGS
     i=0
-    while [ $i -lt ${#array[@]} ]; do
-        if [ ${array[$i]} = "${opt}" ]; then
+    while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
+        if [ ${DESERIALIZED_ARGS[$i]} = "${opt}" ]; then
             return 0
         fi
         i=$((i+1))
@@ -3217,26 +3231,24 @@ read_opt_value_from_line()
     local cmdline=$1
     local opt=$2
 
-    # Convert string to array
-    local preproc_cmdline
-    preproc_cmdline=`echo "${cmdline}" | ${SED} "s/${ARG_SEP}/\n/g"`
-    local array=()
-    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_cmdline}"
+    # Convert string to array (result is placed into the
+    # DESERIALIZED_ARGS variable)
+    deserialize_args "${cmdline}"
     
-    # Scan array
+    # Scan DESERIALIZED_ARGS
     local i=0
-    while [ $i -lt ${#array[@]} ]; do
+    while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
         # Check if option was found
-        if [ "${array[$i]}" = "${opt}" ]; then
+        if [ "${DESERIALIZED_ARGS[$i]}" = "${opt}" ]; then
             i=$((i+1))
             # Obtain value if it exists
             local value=""
             # Check if next token is an option
-            if [ $i -lt ${#array[@]} ]; then
-                if [ "${array[$i]:0:1}" = "-" ] || [ "${array[$i]:0:2}" = "--" ]; then
+            if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
+                if [ "${DESERIALIZED_ARGS[$i]:0:1}" = "-" ] || [ "${DESERIALIZED_ARGS[$i]:0:2}" = "--" ]; then
                     :
                 else
-                    value="${array[$i]}"
+                    value="${DESERIALIZED_ARGS[$i]}"
                     i=$((i+1))
                 fi
             fi
