@@ -30,6 +30,7 @@ VOID_VALUE="_VOID_VALUE_"
 GENERAL_OPT_CATEGORY="GENERAL"
 SPACE_SUBSTITUTE="__SPACE_SUBSTITUTE__"
 ARG_SEP="<_ARG_SEP_>"
+ARG_SEP_QUOTES="' '"
 ARRAY_TASK_SEP=" ||| "
 
 # INVALID IDENTIFIERS
@@ -3084,6 +3085,66 @@ deserialize_args()
     local preproc_serial_args
     preproc_serial_args=`echo "${serial_args}" | ${SED} "s/${ARG_SEP}/\n/g"`
     while IFS= read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_serial_args}"    
+}
+
+########
+sargs_to_sargsquotes()
+{
+    local sargs=$1
+
+    # Convert string to array
+    local preproc_sargs
+    preproc_sargs=`echo "${sargs}" | ${SED} "s/${ARG_SEP}/\n/g"`
+    local array=()
+    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargs}"    
+
+    # Process array
+    local i=0
+    local sargsquotes
+    while [ $i -lt ${#array[@]} ]; do
+        elem=${array[$i]}
+        elem=`${SED} -e "s/'/\'/" <<<"$elem"`
+        if [ -z "${sargsquotes}" ]; then
+            sargsquotes=${elem}
+        else
+            sargsquotes="${sargsquotes}${ARG_SEP_QUOTES}${elem}"
+        fi
+        i=$((i+1))
+    done
+    sargsquotes="'${sargsquotes}'"
+    
+    echo "${sargsquotes}"
+}
+
+########
+sargsquotes_to_sargs()
+{
+    local sargsquotes=$1
+
+    # Remove first and last quotes
+    sargsquotes=`${SED} -e "s/^'//" -e "s/'$//" <<<"$sargsquotes"`
+    
+    # Convert string to array
+    local preproc_sargs
+    preproc_sargsquotes=`echo "${sargsquotes}" | ${SED} "s/${ARG_SEP_QUOTES}/\n/g"`
+    local array=()
+    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargsquotes}"
+
+    # Process array
+    local i=0
+    local sargs
+    while [ $i -lt ${#array[@]} ]; do
+        elem=${array[$i]}
+        elem=`${SED} -e "s/\'/'/" <<<"$elem"`
+        if [ -z "${sargs}" ]; then
+            sargs=${elem}
+        else
+            sargs="${sargs}${ARG_SEP_QUOTES}${elem}"
+        fi
+        i=$((i+1))
+    done
+    
+    echo "${sargs}"
 }
 
 ########

@@ -639,7 +639,7 @@ register_fifos()
 print_command_line()
 {
     echo "cd $PWD" > "${outd}"/command_line.sh
-    echo "${command_line}" >> "${outd}"/command_line.sh
+    sargs_to_sargsquotes "${command_line}" >> "${outd}"/command_line.sh
 }
 
 ########

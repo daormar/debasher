@@ -119,7 +119,7 @@ get_cmdline()
 {
     local command_line_file=$1
     local cmdline=`"$TAIL" -1 ${command_line_file}`
-    echo "${cmdline}"
+    sargsquotes_to_sargs "$cmdline"
 }
 
 ########
