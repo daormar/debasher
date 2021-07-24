@@ -3083,7 +3083,7 @@ deserialize_args()
     
     # Convert string to array
     local preproc_serial_args
-    preproc_serial_args=`echo "${serial_args}" | ${SED} "s/${ARG_SEP}/\n/g"`
+    preproc_serial_args=$(echo "${serial_args}" | "${SED}" "s/${ARG_SEP}/\n/g")
     while IFS= read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_serial_args}"    
 }
 
@@ -3103,7 +3103,7 @@ sargs_to_sargsquotes()
     local sargsquotes
     while [ $i -lt ${#array[@]} ]; do
         elem=${array[$i]}
-        elem=`${SED} -e "s/'/\'/" <<<"$elem"`
+        elem=$("${SED}" "s/'/\\\'/g" <<<"$elem")
         if [ -z "${sargsquotes}" ]; then
             sargsquotes=${elem}
         else
@@ -3122,11 +3122,11 @@ sargsquotes_to_sargs()
     local sargsquotes=$1
 
     # Remove first and last quotes
-    sargsquotes=`${SED} -e "s/^'//" -e "s/'$//" <<<"$sargsquotes"`
+    sargsquotes=$("${SED}" "s/^'//" -e "s/'$//" <<<"$sargsquotes")
     
     # Convert string to array
     local preproc_sargs
-    preproc_sargsquotes=`echo "${sargsquotes}" | ${SED} "s/${ARG_SEP_QUOTES}/\n/g"`
+    preproc_sargsquotes=$(echo "${sargsquotes}" | "${SED}" "s/${ARG_SEP_QUOTES}/\n/g")
     local array=()
     while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargsquotes}"
 
@@ -3135,7 +3135,7 @@ sargsquotes_to_sargs()
     local sargs
     while [ $i -lt ${#array[@]} ]; do
         elem=${array[$i]}
-        elem=`${SED} -e "s/\'/'/" <<<"$elem"`
+        elem=$("${SED}" "s/\\\'/'/g" <<<"$elem")
         if [ -z "${sargs}" ]; then
             sargs=${elem}
         else
