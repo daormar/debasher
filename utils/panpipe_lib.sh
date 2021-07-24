@@ -3163,6 +3163,15 @@ serialize_cmdexec()
 }
 
 ########
+normalize_cmd()
+{
+    local args=$1
+    local sargs=`eval serialize_args "${args}"`
+    local sargsquotes=`sargs_to_sargsquotes "${sargs}"`
+    echo "${sargsquotes}"
+}
+
+########
 replace_blank_with_word()
 {
     local str=$1
