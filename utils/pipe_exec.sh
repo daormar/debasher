@@ -357,7 +357,7 @@ check_pipeline_opts()
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
             define_opts_for_script "${cmdline}" "${stepspec}" || return 1
             local script_opts_array=()
-            for script_opts in ${SCRIPT_OPT_LIST_ARRAY[@]}; do
+            for script_opts in "${SCRIPT_OPT_LIST_ARRAY[@]}"; do
                 # Obtain human-readable representation of script options
                 hr_script_opts=$(sargs_to_sargsquotes "${script_opts}")
                 script_opts_array+=("${hr_script_opts}")
