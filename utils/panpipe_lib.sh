@@ -3103,7 +3103,7 @@ sargs_to_sargsquotes()
     local sargsquotes
     while [ $i -lt ${#array[@]} ]; do
         elem=${array[$i]}
-        elem=$("${SED}" "s/'/\\\'/g" <<<"$elem")
+        elem=$("${SED}" "s/'/'\\\''/g" <<<"$elem")
         if [ -z "${sargsquotes}" ]; then
             sargsquotes=${elem}
         else
@@ -3135,7 +3135,7 @@ sargsquotes_to_sargs()
     local sargs
     while [ $i -lt ${#array[@]} ]; do
         elem=${array[$i]}
-        elem=$("${SED}" "s/\\\'/'/g" <<<"$elem")
+        elem=$("${SED}" "s/'\\\''/'/g" <<<"$elem")
         if [ -z "${sargs}" ]; then
             sargs=${elem}
         else
