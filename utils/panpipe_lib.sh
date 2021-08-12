@@ -3671,9 +3671,13 @@ define_opt()
     fi
 
     if [ -z "${!varname}" ]; then
-        eval "${varname}='${opt}${ARG_SEP}${value}'" || { errmsg "define_opt: execution error" ; return 1; }
+        local var=${varname}
+        local value="${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}'" || { errmsg "define_opt: execution error" ; return 1; }
+        local var=${varname}
+        local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
     fi
 }
 
@@ -3690,9 +3694,13 @@ define_opt_wo_value()
     fi
 
     if [ -z "${!varname}" ]; then
-        eval "${varname}='${opt}'" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
+        local var=${varname}
+        local value="${opt}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname}${ARG_SEP}${opt}'" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
+        local var=${varname}
+        local value="${!varname}${ARG_SEP}${opt}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
     fi
 }
 
@@ -3716,9 +3724,13 @@ define_infile_opt()
     value=`get_absolute_path "${value}"`
 
     if [ -z "${!varname}" ]; then
-        eval "${varname}='${opt}${ARG_SEP}${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
+        local var=${varname}
+        local value="${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_infile_opt: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}'" || { errmsg "define_infile_opt: execution error" ; return 1; }
+        local var=${varname}
+        local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_infile_opt: execution error" ; return 1; }
     fi
 }
 
@@ -3742,9 +3754,13 @@ define_indir_opt()
     value=`get_absolute_path "${value}"`
 
     if [ -z "${!varname}" ]; then
-        eval "${varname}='${opt}${ARG_SEP}${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
+        local var=${varname}
+        local value="${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_indir_opt: execution error" ; return 1; }
     else
-        eval "${varname}='${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}'" || { errmsg "define_indir_opt: execution error" ; return 1; }
+        local var=${varname}
+        local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$value" || { errmsg "define_indir_opt: execution error" ; return 1; }
     fi    
 }
 
