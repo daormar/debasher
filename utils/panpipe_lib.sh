@@ -356,7 +356,7 @@ serialize_string_array()
         if [ -z "${result}" ]; then
             result=${str}
         else
-            result="${result}${sep}${str}"
+            result="${result}${array_task_sep}${str}"
         fi
 
         num_elem=$((num_elem + 1))
