@@ -122,7 +122,7 @@ get_orig_outdir()
 get_cmdline()
 {
     local command_line_file=$1
-    local cmdline=`"$TAIL" -1 ${command_line_file}`
+    local cmdline=`"$TAIL" -1 "${command_line_file}"`
     sargsquotes_to_sargs "$cmdline"
 }
 
@@ -130,7 +130,7 @@ get_cmdline()
 get_cmdline_pfile()
 {
     local command_line_file=$1
-    local cmdline=`"$TAIL" -1 ${command_line_file}`
+    local cmdline=`"$TAIL" -1 "${command_line_file}"`
     local pfile=`read_opt_value_from_line "$cmdline" "--pfile"` || return 1
     echo "$pfile"
 }
