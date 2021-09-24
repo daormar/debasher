@@ -3122,7 +3122,7 @@ sargsquotes_to_sargs()
     local sargsquotes=$1
 
     # Remove first and last quotes
-    sargsquotes=$("${SED}" "s/^'//" -e "s/'$//" <<<"$sargsquotes")
+    sargsquotes=$("${SED}" -e "s/^'//" -e "s/'$//" <<<"$sargsquotes")
     
     # Convert string to array
     local preproc_sargs
