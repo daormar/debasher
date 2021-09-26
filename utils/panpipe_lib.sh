@@ -653,16 +653,16 @@ print_script_body_slurm_sched()
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ ${num_scripts} -eq 1 ]; then
-            echo "default_reset_outdir_for_step ${dirname} ${stepname}"
+            echo "default_reset_outdir_for_step \"${dirname}\" ${stepname}"
         else
-            echo "default_reset_outdir_for_step_array ${dirname} ${stepname} ${taskidx}"
+            echo "default_reset_outdir_for_step_array \"${dirname}\" ${stepname} ${taskidx}"
         fi
     else
         echo "${reset_funct} ${script_opts}"
     fi
     
     # Write function to be executed
-    echo "${funct} ${script_opts}"
+    echo "${funct} \"${script_opts}\""
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
     
