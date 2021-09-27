@@ -1008,10 +1008,10 @@ builtin_sched_print_script_body()
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
         local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${stepname} ${taskidx}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"${dirname}\" ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"${script_opts}\" > \"${builtin_task_log_filename}\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
     else
         local builtin_log_filename=`get_step_log_filename_builtin "${dirname}" ${stepname}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"${dirname}\" ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"${script_opts}\" > \"${builtin_log_filename}\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
     
     # Close if statement

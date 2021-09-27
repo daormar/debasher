@@ -267,7 +267,8 @@ expand_tildes()
 {
     local str=$1
     str="${str/#\~/$HOME}"
-    str="${str// \~/$HOME}"
+    str="${str// \~/ $HOME}"
+    echo "${str}"
 }
 
 ########
@@ -603,8 +604,8 @@ print_script_header_slurm_sched()
     local num_scripts=$4
 
     echo "display_begin_step_message"
-    echo "PANPIPE_SCRIPT_FILENAME=\"${fname}\""
-    echo "PANPIPE_DIR_NAME=\"${dirname}\""
+    echo "PANPIPE_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
+    echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
     echo "PANPIPE_STEP_NAME=${stepname}"
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
 }
@@ -630,22 +631,22 @@ print_script_body_slurm_sched()
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ ${num_scripts} -eq 1 ]; then
-            echo "default_reset_outdir_for_step \"${dirname}\" ${stepname}"
+            echo "default_reset_outdir_for_step \"$(esc_dq "${dirname}")\" ${stepname}"
         else
-            echo "default_reset_outdir_for_step_array \"${dirname}\" ${stepname} ${taskidx}"
+            echo "default_reset_outdir_for_step_array \"$(esc_dq "${dirname}")\" ${stepname} ${taskidx}"
         fi
     else
         echo "${reset_funct} ${script_opts}"
     fi
     
     # Write function to be executed
-    echo "${funct} \"${script_opts}\""
+    echo "${funct} \"$(esc_dq "${script_opts}")\""
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
     
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} ${script_opts} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
+        echo "${post_funct} \"$(esc_dq "${script_opts}")\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
     # Return if function to execute failed
@@ -3039,7 +3040,7 @@ get_pipeline_fullmodnames()
 esc_dq()
 {
     local escaped_str=${1//\"/\\\"};
-    echo ${escaped_str}
+    echo "${escaped_str}"
 }
 
 ########
