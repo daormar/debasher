@@ -29,13 +29,12 @@ print_desc()
 ########
 usage()
 {
-    echo "process_dataset        --pfile <string> --outdir <string>"
+    echo "process_dataset        --pfile <string>"
     echo "                       --sched <string> [--dflt-nodes <string>]"
     echo "                       --ppl-sopts <string> [--ppl-opts <string>]"
     echo "                       [--help]"
     echo ""
     echo "--pfile <string>       File with pipeline steps to be performed"
-    echo "--outdir <string>      Output directory"
     echo "--sched <string>       Scheduler used to execute the pipelines"
     echo "--dflt-nodes <string>  Default set of nodes used to execute the pipeline"
     echo "--ppl-sopts <string>   File containing a string with pipeline options per"
@@ -48,7 +47,6 @@ usage()
 read_pars()
 {
     pfile_given=0
-    outdir_given=0
     sched_given=0
     dflt_nodes_given=0
     ppl_sopts_given=0
@@ -62,12 +60,6 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       pfile=$1
                       pfile_given=1
-                  fi
-                  ;;
-            "--outdir") shift
-                  if [ $# -ne 0 ]; then
-                      outd=$1
-                      outdir_given=1
                   fi
                   ;;
             "--sched") shift
@@ -111,15 +103,6 @@ check_pars()
         fi
     fi
 
-    if [ ${outdir_given} -eq 0 ]; then
-        echo "Error! --outdir parameter not given!" >&2
-        exit 1
-    else
-        if [ -d "${outd}" ]; then
-            echo "Warning! output directory does exist" >&2 
-        fi
-    fi
-
     if [ ${sched_given} -eq 0 ]; then
         echo "Error, --sched option should be given" >&2
         exit 1
@@ -152,10 +135,6 @@ absolutize_file_paths()
         pfile=`get_absolute_path "${pfile}"`
     fi
 
-    if [ ${outdir_given} -eq 1 ]; then
-        outd=`get_absolute_path "${outd}"`
-    fi
-
     if [ ${ppl_sopts_given} -eq 1 ]; then
         ppl_sopts=`get_absolute_path "${ppl_sopts}"`
     fi
@@ -170,10 +149,6 @@ print_pars()
 {
     if [ ${pfile_given} -eq 1 ]; then
         echo "--pfile is ${pfile}" >&2
-    fi
-
-    if [ ${outdir_given} -eq 1 ]; then
-        echo "--outdir is ${outd}" >&2
     fi
 
     if [ ${sched_given} -eq 1 ]; then
@@ -240,7 +215,7 @@ process_pars()
         dflt_nodes_opt=`get_dflt_nodes_opt`
         
         # Print command to execute pipeline
-        normalize_cmd "\"$(esc_dq "${pipe_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --outdir \"$(esc_dq "${outd}/${id}")\" --sched ${sched} ${dflt_nodes_opt} ${ppl_sopts_str} ${ppl_opts_str}"
+        normalize_cmd "\"$(esc_dq "${pipe_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --sched ${sched} ${dflt_nodes_opt} ${ppl_sopts_str} ${ppl_opts_str}"
 
         entry_num=$((entry_num + 1))
         
