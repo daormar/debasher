@@ -3036,6 +3036,13 @@ get_pipeline_fullmodnames()
 ###############################
 
 ########
+esc_dq()
+{
+    local escaped_str=${1//\"/\\\"};
+    echo ${escaped_str}
+}
+
+########
 serialize_args()
 {
     local serial_args=""
