@@ -266,7 +266,8 @@ dirnames_are_equal()
 expand_tildes()
 {
     local str=$1
-    echo "${str//\~/$HOME}"
+    str="${str/#\~/$HOME}"
+    str="${str// \~/$HOME}"
 }
 
 ########
