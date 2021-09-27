@@ -1,6 +1,6 @@
 SCRIPTS_TO_BE_BUILT= panpipe_lib panpipe_builtin_sched_lib pipe_exec	\
 pipe_exec_batch pipe_check pipe_stop pipe_status pipe_stats		\
-pipe_step_debug panpipe_doc_mod pipe_software_test			\
+pipe_step_debug panpipe_doc_mod process_dataset pipe_software_test	\
 get_reexec_steps_due_to_deps reformat_pipe_status solve_knapsack_bb	\
 solve_knapsack_ga
 
@@ -12,7 +12,7 @@ python_PYTHON= knapsack_ga.py
 
 EXTRA_DIST = panpipe_lib.sh panpipe_builtin_sched_lib.sh pipe_exec.sh	\
 pipe_exec_batch.sh pipe_check.py pipe_stop.sh pipe_status.sh		\
-pipe_stats.sh pipe_step_debug.sh panpipe_doc_mod.sh			\
+pipe_stats.sh pipe_step_debug.sh panpipe_doc_mod.sh process_dataset.sh	\
 pipe_software_test.sh get_reexec_steps_due_to_deps.py			\
 reformat_pipe_status.py solve_knapsack_bb.py solve_knapsack_ga.py	\
 knapsack_ga.py
