@@ -1621,7 +1621,7 @@ array_task_is_finished()
     local idx=$3
 
     # Check file with finished tasks info exists
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
     if [ ! -f "${finished_filename}" ]; then
         return 1
     fi
