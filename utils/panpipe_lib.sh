@@ -674,7 +674,7 @@ create_slurm_script()
     # Init variables
     local dirname=$1
     local stepname=$2
-    local fname=`get_script_filename ${dirname} ${stepname}`
+    local fname=`get_script_filename "${dirname}" ${stepname}`
     local reset_funct=`get_name_of_step_function_reset ${stepname}`
     local funct=`get_name_of_step_function ${stepname}`
     local post_funct=`get_name_of_step_function_post ${stepname}`
@@ -1024,7 +1024,7 @@ slurm_launch_attempt()
 
     # Define options for sbatch
     local jobname=`get_slurm_jobname $stepname $attempt_no`
-    local output=`get_slurm_output $dirname $stepname $array_size $attempt_no`
+    local output=`get_slurm_output "$dirname" $stepname $array_size $attempt_no`
     local cpus_opt=`get_slurm_cpus_opt ${cpus}`
     local mem_opt=`get_slurm_mem_opt ${mem_attempt}`
     local time_opt=`get_slurm_time_opt ${time_attempt}`
@@ -1311,8 +1311,8 @@ slurm_launch()
     # attempts were successful (currently, verification requires to
     # launch two jobs)
     if [ ${num_attempts} -gt 1 ]; then
-        preverif_jid=`slurm_launch_preverif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_jids}` || return 1
-        verif_jid=`slurm_launch_verif_job ${dirname} ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${preverif_jid}` || return 1
+        preverif_jid=`slurm_launch_preverif_job "${dirname}" ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${attempt_jids}` || return 1
+        verif_jid=`slurm_launch_verif_job "${dirname}" ${stepname} ${array_size} ${task_array_list} "${stepspec}" ${preverif_jid}` || return 1
         # Set output value
         eval "${outvar}='${attempt_jids},${preverif_jid},${verif_jid}'"
     else
@@ -1571,7 +1571,7 @@ step_is_in_progress()
 {
     local dirname=$1
     local stepname=$2
-    local ids=`read_ids_from_files $dirname $stepname`
+    local ids=`read_ids_from_files "$dirname" $stepname`
 
     # Iterate over ids
     for id in ${ids}; do
@@ -1593,7 +1593,7 @@ get_launched_array_task_ids()
     local stepname=$2
 
     # Return ids for array tasks if any
-    for taskid_file in "${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}"; do
+    for taskid_file in "${dirname}"/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             cat "${taskid_file}"
         fi
@@ -1655,7 +1655,7 @@ step_is_finished()
 {
     local dirname=$1
     local stepname=$2
-    local finished_filename=`get_step_finished_filename ${dirname} ${stepname}`
+    local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
     
     if [ -f "${finished_filename}" ]; then
         # Obtain number of finished tasks
@@ -2046,7 +2046,7 @@ get_step_last_attempt_logf_slurm()
     # Obtain number of log files
     local logfname=`get_step_log_filename_slurm "$dirname" $stepname`
     local numlogf=0
-    for f in "${logfname}*"; do
+    for f in "${logfname}"*; do
         numlogf=$((numlogf + 1))
     done
 
@@ -2386,7 +2386,7 @@ get_task_array_list()
 
     if [ -f "${finished_filename}" ]; then
         # Some jobs were completed, return list containing pending ones
-        get_list_of_pending_tasks_in_array ${dirname} ${stepname} ${array_size}
+        get_list_of_pending_tasks_in_array "${dirname}" ${stepname} ${array_size}
     else
         # No jobs were completed, return list containing all of them
         echo "1-${array_size}"
@@ -2654,7 +2654,7 @@ read_ids_from_files()
 
     # Return ids for array tasks if any
     local id
-    for taskid_file in "${dirname}/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}"; do
+    for taskid_file in "${dirname}"/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             id=`cat "${taskid_file}"`
             if [ -z "${ids}" ]; then
@@ -3773,7 +3773,7 @@ create_pipeline_shdirs()
     # Create shared directories
     local dirname
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
-        absdir=`get_absolute_shdirname $dirname`
+        absdir=`get_absolute_shdirname "$dirname"`
         if [ ! -d "${absdir}" ]; then
            mkdir -p "${absdir}" || exit 1
         fi
