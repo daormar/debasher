@@ -923,7 +923,6 @@ builtin_sched_print_script_header()
     local stepname=$3
     local num_scripts=$4
 
-    echo "display_begin_step_message"
     echo "PANPIPE_SCRIPT_FILENAME=\"${fname}\""
     echo "PANPIPE_DIR_NAME=\"${dirname}\""
     echo "PANPIPE_STEP_NAME=${stepname}"
@@ -951,6 +950,8 @@ builtin_sched_execute_funct_plus_postfunct()
     local funct=$6
     local post_funct=$7
     local script_opts=$8
+
+    display_begin_step_message
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
@@ -983,7 +984,9 @@ builtin_sched_execute_funct_plus_postfunct()
     fi
 
     # Signal step completion
-    signal_step_completion "${dirname}" ${stepname} ${taskidx} ${num_scripts}
+    signal_step_completion "${dirname}" ${stepname} ${taskidx} ${num_scripts} || return 1
+
+    display_end_step_message
 }
 
 ########
@@ -1023,7 +1026,7 @@ builtin_sched_print_script_body()
 ########
 builtin_sched_print_script_foot()
 {
-    echo "display_end_step_message"
+    :
 }
 
 ########
