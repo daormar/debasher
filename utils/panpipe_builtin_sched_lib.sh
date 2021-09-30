@@ -797,10 +797,10 @@ builtin_sched_solve_knapsack()
     
     # Solve knapsack problem
     local knapsack_sol="${dirname}"/.knapsack_sol.txt
-    builtin_sched_print_knapsack_sol > ${knapsack_sol}
+    builtin_sched_print_knapsack_sol > "${knapsack_sol}"
 
     # Store solution in output variable
-    BUILTIN_SCHED_SELECTED_STEPS=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' ${knapsack_sol}`
+    BUILTIN_SCHED_SELECTED_STEPS=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
 }
 
 ########
