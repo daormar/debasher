@@ -23,6 +23,7 @@
 # MISC CONSTANTS
 BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
 BUILTIN_SCHED_NO_ARRAY_TASK="NO_ARRAY_TASK"
+BUILTIN_SCHED_SLEEP_TIME=5
 
 # ARRAY TASK STATUSES
 BUILTIN_SCHED_FINISHED_TASK_STATUS="FINISHED"
@@ -810,18 +811,18 @@ builtin_sched_count_executable_steps()
 }
 
 ########
-builtin_sched_end_condition_reached()
+builtin_sched_inprogress_steps_pending()
 {
     # Iterate over steps
     local stepname
     for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
         status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        if [ ${status} = ${INPROGRESS_STEP_STATUS} -o ${status} = ${UNFINISHED_BUT_RUNNABLE_STEP_STATUS} -o ${status} = ${TODO_STEP_STATUS} -o ${status} = ${UNFINISHED_STEP_STATUS} ]; then
-            return 1
-        fi        
+        if [ ${status} = ${INPROGRESS_STEP_STATUS} ]; then
+            return 0
+        fi
     done
-    
-    return 0
+
+    return 1
 }
 
 ########
@@ -885,25 +886,20 @@ builtin_sched_select_steps_to_be_exec()
         echo "[BUILTIN_SCHED] - BUILTIN_SCHED_EXECUTABLE_STEPS: ${exec_steps}" 2>&1
     fi
         
-    if builtin_sched_end_condition_reached; then
-        # End condition reached
-        return 1
-    else
-        # If there are executable steps, select which ones will be executed
-        num_exec_steps=${#BUILTIN_SCHED_EXECUTABLE_STEPS[@]}
-        if [ ${num_exec_steps} -gt 0 ]; then
-            builtin_sched_solve_knapsack "${dirname}"
+    # If there are executable steps, select which ones will be executed
+    num_exec_steps=${#BUILTIN_SCHED_EXECUTABLE_STEPS[@]}
+    if [ ${num_exec_steps} -gt 0 ]; then
+        builtin_sched_solve_knapsack "${dirname}"
 
-            if [ ${builtinsched_debug} -eq 1 ]; then
-                local sel_steps=`builtin_sched_get_debug_sel_steps_info` 
-                echo "[BUILTIN_SCHED] - BUILTIN_SCHED_SELECTED_STEPS: ${sel_steps}" 2>&1
-            fi
-
-            return 0
-        else
-            # No executable steps were found
-            return 1
+        if [ ${builtinsched_debug} -eq 1 ]; then
+            local sel_steps=`builtin_sched_get_debug_sel_steps_info`
+            echo "[BUILTIN_SCHED] - BUILTIN_SCHED_SELECTED_STEPS: ${sel_steps}" 2>&1
         fi
+
+        return 0
+    else
+        # No executable steps were found
+        return 1
     fi
 }
 
@@ -1350,7 +1346,6 @@ builtin_sched_execute_pipeline_steps()
 
     # Execute scheduling loop
     local end=0
-    local sleep_time=5
     while [ ${end} -eq 0 ]; do
         if [ ${builtinsched_debug} -eq 1 ]; then
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
@@ -1360,11 +1355,17 @@ builtin_sched_execute_pipeline_steps()
         if builtin_sched_select_steps_to_be_exec "${dirname}"; then
             # Execute steps
             builtin_sched_exec_steps "${cmdline}" "${dirname}"
-            
-            sleep ${sleep_time}
+
+            sleep ${BUILTIN_SCHED_SLEEP_TIME}
         else
             # There are no steps to be executed
-            end=1
+
+            # Wait for in-progress steps to finish
+            if builtin_sched_inprogress_steps_pending; then
+                sleep ${BUILTIN_SCHED_SLEEP_TIME}
+            else
+                end=1
+            fi
         fi
 
         iterno=$((iterno + 1))
