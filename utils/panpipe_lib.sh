@@ -3124,7 +3124,7 @@ sargsquotes_to_sargs()
         if [ -z "${sargs}" ]; then
             sargs=${elem}
         else
-            sargs="${sargs}${ARG_SEP_QUOTES}${elem}"
+            sargs="${sargs}${ARG_SEP}${elem}"
         fi
         i=$((i+1))
     done
