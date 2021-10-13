@@ -288,6 +288,17 @@ exclude_readonly_vars()
 }
 
 ########
+exclude_other_vars()
+{
+    "$AWK" -F "=" 'BEGIN{
+                         othervars["MEMOIZED_OPTS"]=1
+                        }
+                        {
+                         if(!($1 in othervars)) printf"%s\n",$0
+                        }'
+}
+
+########
 exclude_bashisms()
 {
     "$AWK" '{if(index($1,"=(")==0) printf"%s\n",$0}'
@@ -687,7 +698,7 @@ create_slurm_script()
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
     
     # Write environment variables
-    set | exclude_readonly_vars >> "${fname}" || return 1
+    set | exclude_readonly_vars | exclude_other_vars >> "${fname}" || return 1
 
     # Print header
     print_script_header_slurm_sched "${fname}" "${dirname}" ${stepname} ${num_scripts} >> "${fname}" || return 1
