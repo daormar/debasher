@@ -27,6 +27,7 @@
 # MISC. CONSTANTS
 LOCKFD=99
 MAX_NUM_SCRIPT_OPTS_TO_DISPLAY=10
+REEXEC_STEPS_LIST_FNAME=".reexec_steps_due_to_deps.txt"
 
 ####################
 # GLOBAL VARIABLES #
@@ -555,7 +556,7 @@ define_reexec_steps_due_to_deps()
     
     # Obtain list of steps to be reexecuted due to dependencies
     local reexec_steps_string=`get_reexec_steps_as_string`
-    local reexec_steps_file="${outd}"/.reexec_steps_due_to_deps.txt
+    local reexec_steps_file="${outd}/${REEXEC_STEPS_LIST_FNAME}"
     "${panpipe_bindir}"/get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d "${stepdeps_file}" > "${reexec_steps_file}" || return 1
 
     # Read information about the steps to be re-executed due to
