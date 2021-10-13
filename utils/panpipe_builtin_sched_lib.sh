@@ -1377,13 +1377,17 @@ builtin_sched_execute_pipeline_steps()
         if builtin_sched_select_steps_to_be_exec "${dirname}"; then
             # Execute steps
             builtin_sched_exec_steps "${cmdline}" "${dirname}"
+
+            # Wait before starting a new loop
+            builtin_sched_sleep
         else
             # There are no steps to be executed
 
-            # Wait for in-progress steps to finish
             if builtin_sched_inprogress_steps_pending; then
+                # Wait for in-progress steps to finish
                 builtin_sched_sleep
             else
+                # Finish loop
                 end=1
             fi
         fi
