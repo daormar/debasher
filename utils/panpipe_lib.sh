@@ -1901,13 +1901,15 @@ get_step_status()
     local stepname=$2
     local script_filename=`get_script_filename "${dirname}" ${stepname}`
 
-    # Check script file for step was created
-    if [ -f "${script_filename}" ]; then
-        if step_should_be_reexec $stepname; then
-            echo "${REEXEC_STEP_STATUS}"
-            return ${REEXEC_STEP_EXIT_CODE}
-        fi
+    # Check if step should be reexecuted (REEXEC status has priority
+    # over the rest)
+    if step_should_be_reexec $stepname; then
+        echo "${REEXEC_STEP_STATUS}"
+        return ${REEXEC_STEP_EXIT_CODE}
+    fi
 
+    # Check that script file for step was created
+    if [ -f "${script_filename}" ]; then
         if step_is_in_progress "$dirname" $stepname; then
             echo "${INPROGRESS_STEP_STATUS}"
             return ${INPROGRESS_STEP_EXIT_CODE}
