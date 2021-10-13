@@ -23,7 +23,9 @@
 # MISC CONSTANTS
 BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
 BUILTIN_SCHED_NO_ARRAY_TASK="NO_ARRAY_TASK"
-BUILTIN_SCHED_SLEEP_TIME=5
+BUILTIN_SCHED_SLEEP_TIME_LONG=5
+BUILTIN_SCHED_SLEEP_TIME_SHORT=1
+BUILTIN_SCHED_NSTEPS_SLEEP_THRESHOLD=10
 BUILTIN_SCHED_KNAPSACK_SPEC_FNAME=.knapsack_spec.txt
 BUILTIN_SCHED_KNAPSACK_SOL_FNAME=.knapsack_sol.txt
 
@@ -1315,6 +1317,20 @@ builtin_sched_prepare_files_and_dirs_for_steps()
 }
 
 ########
+builtin_sched_sleep()
+{
+    # Sleep a certain number of seconds depending on the number of
+    # pipeline steps
+    local num_steps=${#BUILTIN_SCHED_STEPNAME_TO_IDX[@]}
+
+    if [ ${num_steps} -le ${BUILTIN_SCHED_NSTEPS_SLEEP_THRESHOLD} ]; then
+        sleep ${BUILTIN_SCHED_SLEEP_TIME_SHORT}        
+    else
+        sleep ${BUILTIN_SCHED_SLEEP_TIME_LONG}
+    fi
+}
+
+########
 builtin_sched_execute_pipeline_steps()
 {
     # Read input parameters
@@ -1361,14 +1377,12 @@ builtin_sched_execute_pipeline_steps()
         if builtin_sched_select_steps_to_be_exec "${dirname}"; then
             # Execute steps
             builtin_sched_exec_steps "${cmdline}" "${dirname}"
-
-            sleep ${BUILTIN_SCHED_SLEEP_TIME}
         else
             # There are no steps to be executed
 
             # Wait for in-progress steps to finish
             if builtin_sched_inprogress_steps_pending; then
-                sleep ${BUILTIN_SCHED_SLEEP_TIME}
+                builtin_sched_sleep
             else
                 end=1
             fi
