@@ -493,6 +493,7 @@ builtin_sched_fix_updated_step_status()
         updated_status=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
         if [ "${updated_status}" != "" ]; then
             if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${UNFINISHED_BUT_RUNNABLE_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
+                # Status will be set to failed if previous status was in-progress and new status is unfinished
                 BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
             else
                 BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
