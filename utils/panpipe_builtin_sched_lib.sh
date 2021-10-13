@@ -1290,15 +1290,17 @@ builtin_sched_prepare_files_and_dirs_for_step()
     local script_filename=`get_script_filename "${dirname}" ${stepname}`
     local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
     local status=`get_step_status "${dirname}" ${stepname}`
-    
-    # Prepare files for step
-    update_step_completion_signal "${dirname}" ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
-    builtin_sched_clean_step_log_files "${dirname}" ${stepname} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
-    builtin_sched_clean_step_id_files "${dirname}" ${stepname} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
-    prepare_fifos_owned_by_step ${stepname}
 
-    # Create output directory
-    create_outdir_for_step "${dirname}" ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
+    if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
+        # Prepare files for step
+        update_step_completion_signal "${dirname}" ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
+        builtin_sched_clean_step_log_files "${dirname}" ${stepname} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
+        builtin_sched_clean_step_id_files "${dirname}" ${stepname} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
+        prepare_fifos_owned_by_step ${stepname}
+
+        # Create output directory
+        create_outdir_for_step "${dirname}" ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
+    fi
 }
 
 ########
