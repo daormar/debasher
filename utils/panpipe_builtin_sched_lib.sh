@@ -24,6 +24,8 @@
 BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
 BUILTIN_SCHED_NO_ARRAY_TASK="NO_ARRAY_TASK"
 BUILTIN_SCHED_SLEEP_TIME=5
+BUILTIN_SCHED_KNAPSACK_SPEC_FNAME=.knapsack_spec.txt
+BUILTIN_SCHED_KNAPSACK_SOL_FNAME=.knapsack_sol.txt
 
 # ARRAY TASK STATUSES
 BUILTIN_SCHED_FINISHED_TASK_STATUS="FINISHED"
@@ -792,12 +794,12 @@ builtin_sched_solve_knapsack()
     local dirname=$1
 
     # Create file with item and weight specification
-    specfile="${dirname}"/.knapsack_spec.txt
+    specfile="${dirname}/${BUILTIN_SCHED_KNAPSACK_SPEC_FNAME}"
     rm -f "${specfile}"
     builtin_sched_print_knapsack_spec > "${specfile}"
     
     # Solve knapsack problem
-    local knapsack_sol="${dirname}"/.knapsack_sol.txt
+    local knapsack_sol="${dirname}/${BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
     builtin_sched_print_knapsack_sol > "${knapsack_sol}"
 
     # Store solution in output variable
