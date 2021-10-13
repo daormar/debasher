@@ -334,7 +334,7 @@ get_ppl_status()
 wait_simul_exec_reduction()
 {
     local maxp=$1
-    local SLEEP_TIME=100
+    local SLEEP_TIME=60
     local end=0
     local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
     
