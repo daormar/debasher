@@ -135,6 +135,7 @@ declare -A PIPELINE_FIFOS
 # Declare general scheduler-related variables
 declare PANPIPE_SCHEDULER
 declare -A PANPIPE_REEXEC_STEPS
+declare -A PANPIPE_REEXEC_STEPS_WITH_UPDATED_COMPLETION
 declare PANPIPE_DEFAULT_NODES
 declare PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=1
 declare PANPIPE_ARRAY_TASK_NOTHROTTLE=0
@@ -2546,11 +2547,13 @@ update_step_completion_signal()
     local stepname=$2
     local status=$3
 
-    # If step will be reexecuted, file signaling step completion
-    # should be removed
+    # If step will be reexecuted, file signaling step completion should
+    # be removed. Additionally, this action should be registered in a
+    # specific associative array
     local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
     if [ "${status}" = "${REEXEC_STEP_STATUS}" ]; then
         rm -f "${finished_filename}"
+        PANPIPE_REEXEC_STEPS_WITH_UPDATED_COMPLETION[${stepname}]=1
     fi
 }
 
@@ -2716,7 +2719,11 @@ step_should_be_reexec()
     if [ "${PANPIPE_REEXEC_STEPS[${stepname}]}" = "" ]; then
         return 1
     else
-        return 0
+        if [ "${PANPIPE_REEXEC_STEPS_WITH_UPDATED_COMPLETION[${stepname}]}" = "" ]; then
+            return 0
+        else
+            return 1
+        fi
     fi
 }
 
