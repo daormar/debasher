@@ -94,6 +94,7 @@ SLURM_EXEC_ATTEMPT_FEXT_STRING="__attempt"
 
 # FILE NAMES
 REORDERED_PIPELINE_BASENAME="reordered_pipeline.ppl"
+PPL_COMMAND_LINE_BASENAME="command_line.sh"
 
 ####################
 # GLOBAL VARIABLES #

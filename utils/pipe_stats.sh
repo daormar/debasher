@@ -76,8 +76,8 @@ check_pars()
             exit 1
         fi
 
-        if [ ! -f "${pdir}"/command_line.sh ]; then
-            echo "Error! ${pdir}/command_line.sh file is missing" >&2 
+        if [ ! -f "${pdir}/${PPL_COMMAND_LINE_BASENAME}" ]; then
+            echo "Error! ${pdir}/${PPL_COMMAND_LINE_BASENAME} file is missing" >&2
             exit 1
         fi
     fi
@@ -199,9 +199,9 @@ process_status_for_pfile()
 {
     local dirname=$1
     local absdirname=`get_absolute_path "${dirname}"`
-    local command_line_file="${absdirname}"/command_line.sh
+    local command_line_file="${absdirname}/${PPL_COMMAND_LINE_BASENAME}"
 
-    # Extract information from command_line.sh file
+    # Extract information from PPL_COMMAND_LINE_BASENAME file
     local cmdline
     cmdline=`get_cmdline "${command_line_file}"` || return 1
     local cmdline_pfile
