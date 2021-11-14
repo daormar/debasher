@@ -2291,6 +2291,12 @@ find_dependency_for_step()
 }
 
 ########
+get_ppl_outd()
+{
+    echo "${PIPELINE_OUTDIR}"
+}
+
+########
 get_outd_for_dep()
 {
     local dep=$1
