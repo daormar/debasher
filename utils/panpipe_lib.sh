@@ -96,6 +96,13 @@ SLURM_EXEC_ATTEMPT_FEXT_STRING="__attempt"
 REORDERED_PIPELINE_BASENAME="reordered_pipeline.ppl"
 PPL_COMMAND_LINE_BASENAME="command_line.sh"
 
+# DIR_NAMES
+PANPIPE_SCRIPTS_DIRNAME="scripts"
+
+# LOGGING CONSTANTS
+PANPIPE_LOG_ERROR_MSG_START="Error:"
+PANPIPE_LOG_WARNING_MSG_START="Warning:"
+
 ####################
 # GLOBAL VARIABLES #
 ####################
@@ -162,7 +169,7 @@ version_to_number()
 {
     local ver=$1
     
-    echo $ver | "${AWK}" -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
+    echo "$ver" | "${AWK}" -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 }
 
 ########
@@ -257,7 +264,7 @@ dirnames_are_equal()
     norm_dir1=`normalize_dirname "$dir1"`
     norm_dir2=`normalize_dirname "$dir2"`
 
-    if [ ${norm_dir1} = ${norm_dir2} ]; then
+    if [ "${norm_dir1}" = "${norm_dir2}" ]; then
         return 0
     else
         return 1
@@ -345,7 +352,7 @@ serialize_string_array()
 
         # Add new element
         if [ -z "${result}" ]; then
-            result=${str}
+            result="${str}"
         else
             result="${result}${array_task_sep}${str}"
         fi
@@ -378,6 +385,66 @@ logmsg()
 {
     local msg=$1
     echo "$msg" >&2
+}
+
+########
+log_err_msg()
+{
+    local msg=$1
+    echo "${PANPIPE_LOG_ERR_MSG_START} $msg" >&2
+}
+
+########
+log_warning_msg()
+{
+    local msg=$1
+    echo "${PANPIPE_LOG_WARNING_MSG_START} $msg" >&2
+}
+
+########
+get_script_log_filenames()
+{
+    local scripts_dirname=`get_ppl_scripts_dir`
+
+    for filename in "${scripts_dirname}/"*.${BUILTIN_SCHED_LOG_FEXT}; do
+        if [ -f "${filename}" ]; then
+            echo "${filename}"
+        fi
+    done
+
+    for filename in "${scripts_dirname}/"*.${SLURM_SCHED_LOG_FEXT}; do
+        if [ -f "${filename}" ]; then
+            echo "${filename}"
+        fi
+    done
+}
+
+########
+filter_warnings_in_script_log_file()
+{
+    local log_filename=$1
+
+    "${GREP}" "${PANPIPE_LOG_WARNING_MSG_START}" "${log_filename}"
+}
+
+########
+filter_warnings_in_script_log_files()
+{
+    local scripts_dirname=`get_ppl_scripts_dir`
+    local i=0
+
+    while read filename; do
+        if [ ${i} -gt 0 ]; then
+            echo ""
+        fi
+
+        echo "File: ${filename}"
+        if ! filter_warnings_in_script_log_file "${filename}"; then
+            echo "NONE"
+        fi
+
+        i=$((i+1))
+    done < <(get_script_log_filenames)
 }
 
 ########
@@ -734,7 +801,7 @@ create_script()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script "$dirname" $stepname ${opts_array_name}
+            create_slurm_script "${dirname}" $stepname ${opts_array_name}
             ;;
     esac
 }
@@ -1606,7 +1673,7 @@ get_launched_array_task_ids()
     local stepname=$2
 
     # Return ids for array tasks if any
-    for taskid_file in "${dirname}"/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in "${dirname}"/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             cat "${taskid_file}"
         fi
@@ -1978,7 +2045,7 @@ get_script_filename()
     local dirname=$1
     local stepname=$2
     
-    echo "${dirname}/scripts/${stepname}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}"
 }
 
 ########
@@ -1987,7 +2054,7 @@ get_stepid_filename()
     local dirname=$1
     local stepname=$2
 
-    echo "${dirname}/scripts/$stepname.${STEPID_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/$stepname.${STEPID_FEXT}"
 }
 
 ########
@@ -1997,7 +2064,7 @@ get_array_taskid_filename()
     local stepname=$2
     local idx=$3
     
-    echo "${dirname}/scripts/${stepname}_${idx}.${ARRAY_TASKID_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_${idx}.${ARRAY_TASKID_FEXT}"
 }
 
 ########
@@ -2021,7 +2088,7 @@ get_step_finished_filename()
     local dirname=$1
     local stepname=$2
 
-    echo "${dirname}/scripts/${stepname}.${FINISHED_STEP_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}.${FINISHED_STEP_FEXT}"
 }
 
 ########
@@ -2030,7 +2097,7 @@ get_step_log_filename_builtin()
     local dirname=$1
     local stepname=$2
 
-    echo "${dirname}/scripts/${stepname}.${BUILTIN_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}.${BUILTIN_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2040,7 +2107,7 @@ get_task_log_filename_builtin()
     local stepname=$2
     local taskidx=$3
     
-    echo "${dirname}/scripts/${stepname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2049,7 +2116,7 @@ get_step_log_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo "${dirname}/scripts/${stepname}.${SLURM_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2080,7 +2147,7 @@ get_step_log_preverif_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo "${dirname}/scripts/${stepname}.preverif.${SLURM_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}.preverif.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2089,7 +2156,7 @@ get_step_log_verif_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo "${dirname}/scripts/${stepname}.verif.${SLURM_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}.verif.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2098,7 +2165,7 @@ get_step_log_signcomp_filename_slurm()
     local dirname=$1
     local stepname=$2
 
-    echo "${dirname}/scripts/${stepname}.signcomp.${SLURM_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}.signcomp.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2108,7 +2175,7 @@ get_task_log_filename_slurm()
     local stepname=$2
     local taskidx=$3
     
-    echo "${dirname}/scripts/${stepname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2140,7 +2207,7 @@ get_task_template_log_filename_slurm()
     local dirname=$1
     local stepname=$2
     
-    echo "${dirname}/scripts/${stepname}_%a.${SLURM_SCHED_LOG_FEXT}"
+    echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_%a.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -2295,6 +2362,12 @@ find_dependency_for_step()
 get_ppl_outd()
 {
     echo "${PIPELINE_OUTDIR}"
+}
+
+########
+get_ppl_scripts_dir()
+{
+    echo "${PIPELINE_OUTDIR}/${PANPIPE_SCRIPTS_DIRNAME}"
 }
 
 ########
@@ -2677,7 +2750,7 @@ read_ids_from_files()
 
     # Return ids for array tasks if any
     local id
-    for taskid_file in "${dirname}"/scripts/${stepname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in "${dirname}"/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             id=`cat "${taskid_file}"`
             if [ -z "${ids}" ]; then
