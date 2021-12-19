@@ -1066,9 +1066,9 @@ slurm_get_attempt_deps()
     local attempt_jid
     for attempt_jid in ${attempt_jids_blanks}; do
         if [ "${attempt_deps}" = "" ]; then
-            attempt_deps="afternotok:${attempt_jid}"
+            attempt_deps="${AFTERNOTOK_STEPDEP_TYPE}:${attempt_jid}"
         else
-            attempt_deps="${attempt_deps},afternotok:${attempt_jid}"
+            attempt_deps="${attempt_deps},${AFTERNOTOK_STEPDEP_TYPE}:${attempt_jid}"
         fi
     done
 
@@ -1131,7 +1131,7 @@ slurm_launch_attempt()
     # Update dependencies when executing job arrays for second or
     # further attempts
     if [ ${array_size} -gt 1 -a ${attempt_no} -ge 2 ]; then
-        local deptype="afternotok"
+        local deptype="${AFTERNOTOK_STEPDEP_TYPE}"
         set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${stepdeps}" || { return 1 ; echo "Error while launching attempt job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
     
@@ -1196,7 +1196,7 @@ slurm_launch_preverif_job()
 
     # Update dependencies when executing job arrays
     if [ ${array_size} -gt 1 ]; then
-        local deptype="afternotok"
+        local deptype="${AFTERNOTOK_STEPDEP_TYPE}"
         local additional_deps=""
         set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching preliminary verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
@@ -1240,7 +1240,7 @@ slurm_launch_verif_job()
     local account_opt=`get_slurm_account_opt ${account}`
     local nodes_opt=`get_slurm_nodes_opt ${nodes}`
     local partition_opt=`get_slurm_partition_opt ${partition}`
-    local verjob_deps="afternotok:${preverif_jid}"
+    local verjob_deps="${AFTERNOTOK_STEPDEP_TYPE}:${preverif_jid}"
     local dependency_opt=`get_slurm_dependency_opt "${verjob_deps}"`
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${PANPIPE_ARRAY_TASK_NOTHROTTLE}`
@@ -1260,7 +1260,7 @@ slurm_launch_verif_job()
 
     # Update dependencies when executing job arrays
     if [ ${array_size} -gt 1 ]; then
-        local deptype="afternotok"
+        local deptype="${AFTERNOTOK_STEPDEP_TYPE}"
         local additional_deps=""
         set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching verification job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
