@@ -405,7 +405,7 @@ def print_graph(ordered_step_entries,stepdeps_sep,stepdeps_map):
             print("start","->",step, "[ label= \"\" ,","color = black ];")            
         else:
             for elem in stepdeps_map[step]:
-                print(elem.stepname,"->",step, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];")
+                print('"'+elem.stepname+'"',"->",step, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];")
     
     # Print footer
     print("}")
