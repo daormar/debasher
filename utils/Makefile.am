@@ -23,15 +23,15 @@ SUFFIXES= .sh .py .r .R
 .sh :
 	rm -f $@
 	echo "#! " $(BASH) > $@
-	echo "panpipe_pkgname=\""$(PACKAGE_NAME)"\"" >> $@
-	echo "panpipe_version=\""$(PACKAGE_VERSION)"\"" >> $@
+	echo "panpipe_pkgname=\"$(PACKAGE_NAME)\"" >> $@
+	echo "panpipe_version=\"$(PACKAGE_VERSION)\"" >> $@
 	echo "panpipe_bindir=\"$(prefix)/bin\"" >> $@
 	echo "panpipe_datadir=\"$(datadir)/$(PACKAGE_NAME)\"" >> $@
 	echo "BASH=\"$(BASH)\"" >> $@
 	echo "AWK=\"$(AWK)\"" >> $@
 	echo "SORT=\"$(SORT)\"" >> $@
-	echo "sortpars=\""$(sortpars)"\"" >> $@
-	echo "sortT=\""$(sortT)"\"" >> $@
+	echo "sortpars=\"$(sortpars)\"" >> $@
+	echo "sortT=\"$(sortT)\"" >> $@
 	echo "UNIQ=\"$(UNIQ)\"" >> $@
 	echo "GREP=\"$(GREP)\"" >> $@
 	echo "SED=\"$(SED)\"" >> $@
@@ -49,11 +49,11 @@ SUFFIXES= .sh .py .r .R
 	echo "MKFIFO=\"$(MKFIFO)\"" >> $@
 	echo "FLOCK=\"$(FLOCK)\"" >> $@
 	echo "GZIP=\"$(GZIP)\"" >> $@
-	echo "QSUB=\""$(QSUB)"\"" >> $@
-	echo "QSUB_WORKS=\""$(QSUB_WORKS)"\"" >> $@
-	echo "QSUB_TERSE_OPT=\""$(QSUB_TERSE_OPT)"\"" >> $@
+	echo "QSUB=\"$(QSUB)\"" >> $@
+	echo "QSUB_WORKS=\"$(QSUB_WORKS)\"" >> $@
+	echo "QSUB_TERSE_OPT=\"$(QSUB_TERSE_OPT)\"" >> $@
 	echo "QSTAT=\"$(QSTAT)\"" >> $@
-	echo "QSTAT_J_OPT=\""$(QSTAT_J_OPT)"\"" >> $@
+	echo "QSTAT_J_OPT=\"$(QSTAT_J_OPT)\"" >> $@
 	echo "QRLS=\"$(QRLS)\"" >> $@
 	echo "SRUN=\"$(SRUN)\"" >> $@
 	echo "SCANCEL=\"$(SCANCEL)\"" >> $@
