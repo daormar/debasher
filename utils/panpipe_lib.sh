@@ -424,7 +424,7 @@ filter_errors_in_script_log_file()
 {
     local log_filename=$1
 
-    "${GREP}" "${PANPIPE_LOG_ERR_MSG_START}" "${log_filename}"
+    "${GREP}" "${PANPIPE_LOG_ERROR_MSG_START}" "${log_filename}"
 }
 
 ########
