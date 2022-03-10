@@ -1,19 +1,19 @@
 # PanPipe package
 # Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
-#  
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
-#  
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-#  
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program; If not, see <http://www.gnu.org/licenses/>.
-  
+
 # *- bash -*
 
 #############
@@ -168,7 +168,7 @@ panpipe_version()
 version_to_number()
 {
     local ver=$1
-    
+
     echo "$ver" | "${AWK}" -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 }
 
@@ -178,10 +178,10 @@ pipe_fail()
     # test if there is at least one command to exit with a non-zero status
     local pipestatus=${PIPESTATUS[*]}
     local pipe_status_elem
-    for pipe_status_elem in ${pipestatus}; do 
-        if test ${pipe_status_elem} -ne 0; then 
-            return 1; 
-        fi 
+    for pipe_status_elem in ${pipestatus}; do
+        if test ${pipe_status_elem} -ne 0; then
+            return 1;
+        fi
     done
     return 0
 }
@@ -210,7 +210,7 @@ get_absolute_path()
     # IMPORTANT WARNING: This function just returns the given path if it
     # does not correspond with a existing file or directory.
     local file=$1
-    
+
     # Check if an absolute path was given
     if is_absolute_path "$file"; then
         echo "$file"
@@ -324,7 +324,7 @@ replace_str_elem_sep_with_blank()
     IFS="$sep" read -r -a str_array <<< "${str}"
 
     result=${str_array[@]}
-    
+
     echo "${result}"
 }
 
@@ -367,7 +367,7 @@ serialize_string_array()
 func_exists()
 {
     local funcname=$1
-    
+
     type ${funcname} >/dev/null 2>&1 || return 1
 
     return 0
@@ -538,7 +538,7 @@ convert_mem_value_to_mb()
 str_is_natural_number()
 {
     local str=$1
-    
+
     case $str in
         ''|*[!0-9]*) return 1 ;;
         *) return 0 ;;
@@ -565,7 +565,7 @@ get_first_n_fields_of_str()
         else
             n_val=$((n_val - 1))
         fi
-        
+
         if [ "${result}" = "" ]; then
             result="$field"
         else
@@ -640,7 +640,7 @@ set_panpipe_scheduler()
                 echo "Error: SLURM scheduler is not installed in your system"
                 return 1
             fi
-            
+
             PANPIPE_SCHEDULER=${SLURM_SCHEDULER}
 
             init_slurm_scheduler
@@ -659,7 +659,7 @@ set_panpipe_scheduler()
 set_panpipe_default_nodes()
 {
     local value=$1
-    
+
     PANPIPE_DEFAULT_NODES=$value
 }
 
@@ -667,7 +667,7 @@ set_panpipe_default_nodes()
 set_panpipe_default_array_task_throttle()
 {
     local value=$1
-    
+
     PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE=$value
 }
 
@@ -746,19 +746,19 @@ print_script_body_slurm_sched()
     else
         echo "${reset_funct} ${script_opts}"
     fi
-    
+
     # Write function to be executed
     echo "${funct} \"$(esc_dq "${script_opts}")\""
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
-    
+
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
         echo "${post_funct} \"$(esc_dq "${script_opts}")\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
     # Return if function to execute failed
-    echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi" 
+    echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal step completion
     local sign_step_completion_cmd=`get_signal_step_completion_cmd ${dirname} ${stepname} ${num_scripts}`
@@ -766,7 +766,7 @@ print_script_body_slurm_sched()
 
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
-        echo "fi" 
+        echo "fi"
     fi
 }
 
@@ -793,7 +793,7 @@ create_slurm_script()
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
-    
+
     # Write environment variables
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" || return 1
 
@@ -808,7 +808,7 @@ create_slurm_script()
         print_script_body_slurm_sched ${num_scripts} "${dirname}" ${stepname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> "${fname}" || return 1
 
         lineno=$((lineno + 1))
-        
+
     done
 
     # Print foot
@@ -855,7 +855,7 @@ get_slurm_attempt_suffix()
         echo ""
     else
         echo "${SLURM_EXEC_ATTEMPT_FEXT_STRING}${attempt_no}"
-    fi        
+    fi
 }
 
 ########
@@ -864,7 +864,7 @@ get_slurm_jobname()
     local stepname=$1
     local attempt_no=$2
     local attempt_suffix=`get_slurm_attempt_suffix ${attempt_no}`
-    
+
     echo ${stepname}${attempt_suffix}
 }
 
@@ -1014,14 +1014,14 @@ set_slurm_jobcorr_like_deps_for_listitem()
     local sep=","
     local spec_jid_array
     IFS="$sep" read -r -a spec_jid_array <<< "${specified_jids}"
-    
+
     # Extract start and end indices
     local sep="-"
     local idx_array
     IFS="$sep" read -r -a idx_array <<< "${listitem}"
     local start=${idx_array[0]}
     if [ ${#idx_array[@]} -eq 1 ]; then
-        local end=${idx_array[0]}  
+        local end=${idx_array[0]}
     else
         local end=${idx_array[1]}
     fi
@@ -1054,7 +1054,7 @@ set_slurm_jobcorr_like_deps()
     local task_array_list=$4
     local deptype=$5
     local additional_deps=$6
-    
+
     # Iterate over task array list items
     local sep=","
     local array
@@ -1070,7 +1070,7 @@ combine_slurm_deps()
 {
     local deps1=$1
     local deps2=$2
-    
+
     if [ "${deps1}" = "" ]; then
         echo $deps2
     else
@@ -1143,7 +1143,7 @@ slurm_launch_attempt()
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
-    
+
     # Submit job (initially it is put on hold)
     local jid
     jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes -H "${file}")
@@ -1162,7 +1162,7 @@ slurm_launch_attempt()
         local deptype="${AFTERNOTOK_STEPDEP_TYPE}"
         set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${stepdeps}" || { return 1 ; echo "Error while launching attempt job for step ${stepname} (set_slurm_jobcorr_like_deps)" >&2; }
     fi
-    
+
     # Release job
     $("$SCONTROL" release $jid)
     local exit_code=$?
@@ -1173,7 +1173,7 @@ slurm_launch_attempt()
         echo "Error while launching attempt job for step ${stepname} (${command})" >&2
         return 1
     fi
-    
+
     echo $jid
 }
 
@@ -1190,7 +1190,7 @@ slurm_launch_preverif_job()
 
     # Obtain dependencies for attempts
     local attempt_deps=`slurm_get_attempt_deps ${attempt_jids}`
-    
+
     # Retrieve specification
     local account=`extract_attr_from_stepspec "$stepspec" "account"`
     local partition=`extract_attr_from_stepspec "$stepspec" "partition"`
@@ -1279,7 +1279,7 @@ slurm_launch_verif_job()
     local jid
     jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${verif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
-    
+
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
         echo "Error while launching verification job for step ${stepname}" >&2
@@ -1323,9 +1323,9 @@ get_num_attempts()
 
     # Return length of longest array
     if [ ${#time_array[@]} -gt ${#mem_array[@]} ]; then
-        echo ${#time_array[@]} 
+        echo ${#time_array[@]}
     else
-        echo ${#mem_array[@]} 
+        echo ${#mem_array[@]}
     fi
 }
 
@@ -1439,7 +1439,7 @@ launch()
     local stepspec=$5
     local stepdeps=$6
     local outvar=$7
-    
+
     # Launch step
     local sched=`determine_scheduler`
     case $sched in
@@ -1474,7 +1474,7 @@ slurm_stop_step()
 {
     # Initialize variables
     local ids_info=$1
-    
+
     # Process ids information for step (each element in ids_info is an
     # individual jid or a comma-separated list of them)
     for jid_list in ${ids_info}; do
@@ -1504,7 +1504,7 @@ stop_step()
 {
     # Initialize variables
     local ids_info=$1
-    
+
     # Launch step
     local sched=`determine_scheduler`
     case $sched in
@@ -1733,7 +1733,7 @@ array_task_is_finished()
     if [ ! -f "${finished_filename}" ]; then
         return 1
     fi
-    
+
     # Check that task is in file
     local task_in_file=1
     "${GREP}" "idx: ${idx} ;" "${finished_filename}" > /dev/null || task_in_file=0
@@ -1764,7 +1764,7 @@ step_is_finished()
     local dirname=$1
     local stepname=$2
     local finished_filename=`get_step_finished_filename "${dirname}" ${stepname}`
-    
+
     if [ -f "${finished_filename}" ]; then
         # Obtain number of finished tasks
         local num_array_tasks_finished=`get_num_finished_array_tasks_from_finished_file "${finished_filename}"`
@@ -1780,7 +1780,7 @@ step_is_finished()
         fi
     else
         return 1
-    fi     
+    fi
 }
 
 ########
@@ -1791,7 +1791,7 @@ step_is_unfinished_but_runnable_builtin_sched()
     #  - there are no tasks in progress
     #  - at least one task has been launched
     #  - at least one task can start execution
-    
+
     local dirname=$1
     local stepname=$2
 
@@ -1816,14 +1816,14 @@ step_is_unfinished_but_runnable_builtin_sched()
         if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
             return 1
         fi
-        
+
         # Check there are no tasks in progress
         for id in ${!launched_array_tids[@]}; do
             if id_exists $id; then
                 return 1
             fi
         done
-        
+
         # All conditions satisfied
         return 0
     fi
@@ -1877,7 +1877,7 @@ get_elapsed_time_from_logfile()
     local log_filename=$1
     local start_date=`get_step_start_date "${log_filename}"`
     local finish_date=`get_step_finish_date "${log_filename}"`
-    
+
     # Obtain difference
     if [ ! -z "${start_date}" -a ! -z "${finish_date}" ]; then
         local start_date_secs=`date -d "${finish_date}" +%s`
@@ -1899,7 +1899,7 @@ get_elapsed_time_for_step_slurm()
 
     if [ -f "${finished_filename}" ]; then
         # Get number of array tasks
-        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`    
+        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`
 
         case $num_tasks in
             0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
@@ -1928,7 +1928,7 @@ get_elapsed_time_for_step_slurm()
         esac
     else
         echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
-    fi    
+    fi
 }
 
 ########
@@ -1942,7 +1942,7 @@ get_elapsed_time_for_step_builtin()
 
     if [ -f ${finished_filename} ]; then
         # Get number of array tasks
-        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`    
+        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`
 
         case $num_tasks in
             0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
@@ -1968,7 +1968,7 @@ get_elapsed_time_for_step_builtin()
         esac
     else
         echo ${UNKNOWN_ELAPSED_TIME_FOR_STEP}
-    fi    
+    fi
 }
 
 ########
@@ -1976,7 +1976,7 @@ get_elapsed_time_for_step()
 {
     local dirname=$1
     local stepname=$2
-    
+
     # Get name of log file
     local sched=`determine_scheduler`
     local log_filename
@@ -2020,7 +2020,7 @@ get_step_status()
                 return ${UNFINISHED_BUT_RUNNABLE_STEP_EXIT_CODE}
             fi
         fi
-        
+
         echo "${UNFINISHED_STEP_STATUS}"
         return ${UNFINISHED_STEP_EXIT_CODE}
     else
@@ -2068,16 +2068,16 @@ map_deptype_if_necessary()
 ############################
 
 ########
-get_script_filename() 
+get_script_filename()
 {
     local dirname=$1
     local stepname=$2
-    
+
     echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}"
 }
 
 ########
-get_stepid_filename() 
+get_stepid_filename()
 {
     local dirname=$1
     local stepname=$2
@@ -2086,12 +2086,12 @@ get_stepid_filename()
 }
 
 ########
-get_array_taskid_filename() 
+get_array_taskid_filename()
 {
     local dirname=$1
     local stepname=$2
     local idx=$3
-    
+
     echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_${idx}.${ARRAY_TASKID_FEXT}"
 }
 
@@ -2134,7 +2134,7 @@ get_task_log_filename_builtin()
     local dirname=$1
     local stepname=$2
     local taskidx=$3
-    
+
     echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}"
 }
 
@@ -2202,7 +2202,7 @@ get_task_log_filename_slurm()
     local dirname=$1
     local stepname=$2
     local taskidx=$3
-    
+
     echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
 }
 
@@ -2234,7 +2234,7 @@ get_task_template_log_filename_slurm()
 {
     local dirname=$1
     local stepname=$2
-    
+
     echo "${dirname}/${PANPIPE_SCRIPTS_DIRNAME}/${stepname}_%a.${SLURM_SCHED_LOG_FEXT}"
 }
 
@@ -2242,7 +2242,7 @@ get_task_template_log_filename_slurm()
 remove_suffix_from_stepname()
 {
     local stepname=$1
-    
+
     echo ${stepname} | "$AWK" '{if(index($1,"__")==0){print $1} else{printf "%s\n",substr($1,1,index($1,"__")-1)}}'
 }
 
@@ -2268,7 +2268,7 @@ get_name_of_step_function()
     local stepname=$1
 
     local stepname_wo_suffix=`remove_suffix_from_stepname ${stepname}`
-    
+
     echo "${stepname_wo_suffix}"
 }
 
@@ -2340,7 +2340,7 @@ define_opts_for_script()
     local cmdline=$1
     local stepspec=$2
     local stepname=`extract_stepname_from_stepspec "$stepspec"`
-    
+
     clear_opt_list_array
     local define_opts_funcname=`get_define_opts_funcname ${stepname}`
     ${define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
@@ -2411,7 +2411,7 @@ get_outd_for_dep()
 
         # Get stepname
         local stepname_part=`echo ${dep} | "$AWK" -F ":" '{print $2}'`
-        
+
         get_step_outdir "${outd}" ${stepname_part}
     fi
 }
@@ -2421,7 +2421,7 @@ get_outd_for_dep_given_stepspec()
 {
     local stepspec=$1
     local depname=$2
-    
+
     local dep=`find_dependency_for_step "${stepspec}" $depname`
     if [ ${dep} = ${DEP_NOT_FOUND} ]; then
         return 1
@@ -2480,7 +2480,7 @@ get_list_of_pending_tasks_in_array()
             fi
         done < "${finished_filename}"
     fi
-    
+
     # Create string enumerating pending tasks
     local pending_tasks=""
     local idx=1
@@ -2494,8 +2494,8 @@ get_list_of_pending_tasks_in_array()
         fi
         idx=$((idx + 1))
     done
-    
-    echo ${pending_tasks}    
+
+    echo ${pending_tasks}
 }
 
 ########
@@ -2608,7 +2608,7 @@ get_step_outdir()
 
     # Get name of step function to set output directory
     step_function_outdir=`get_name_of_step_function_outdir ${stepname}`
-    
+
     if [ "${step_function_outdir}" = "${FUNCT_NOT_FOUND}" ]; then
         get_default_step_outdir "$dirname" $stepname
     else
@@ -2618,7 +2618,7 @@ get_step_outdir()
 }
 
 ########
-create_outdir_for_step() 
+create_outdir_for_step()
 {
     local dirname=$1
     local stepname=$2
@@ -2632,7 +2632,7 @@ create_outdir_for_step()
 }
 
 ########
-default_reset_outdir_for_step() 
+default_reset_outdir_for_step()
 {
     local dirname=$1
     local stepname=$2
@@ -2645,7 +2645,7 @@ default_reset_outdir_for_step()
 }
 
 ########
-default_reset_outdir_for_step_array() 
+default_reset_outdir_for_step_array()
 {
     :
 }
@@ -2718,7 +2718,7 @@ clean_step_id_files()
     local dirname=$1
     local stepname=$2
     local array_size=$3
-    
+
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
         local stepid_file=`get_stepid_filename "${dirname}" ${stepname}`
@@ -2769,7 +2769,7 @@ read_ids_from_files()
     local dirname=$1
     local stepname=$2
     local ids
-    
+
     # Return id for step
     local filename=`get_stepid_filename "${dirname}" ${stepname}`
     if [ -f "$filename" ]; then
@@ -2797,7 +2797,7 @@ mark_step_as_reexec()
 {
     local stepname=$1
     local reason=$2
-    
+
     if [ "${PANPIPE_REEXEC_STEPS[${stepname}]}" = "" ]; then
         PANPIPE_REEXEC_STEPS[${stepname}]=${reason}
     else
@@ -2868,7 +2868,7 @@ get_signal_step_completion_cmd()
     # since echo is atomic when writing short lines (for safety, up to
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
-    if [ ${total} -eq 1 ]; then 
+    if [ ${total} -eq 1 ]; then
         echo "echo \"Finished task idx: 1 ; Total: $total\" >> `get_step_finished_filename "${dirname}" ${stepname}`"
     else
         echo "echo \"Finished task idx: \${SLURM_ARRAY_TASK_ID} ; Total: $total\" >> `get_step_finished_filename "${dirname}" ${stepname}`"
@@ -2933,11 +2933,11 @@ document_step()
 {
     local stepname=$1
     local doc_options=$2
-    
+
     # Print header
     echo "# ${stepname}"
     echo ""
-    
+
     # Print body
     echo "## Description"
     local document_funcname=`get_document_funcname ${stepname}`
@@ -3021,7 +3021,7 @@ extract_stepname_from_stepspec()
 extract_stepdeps_from_stepspec()
 {
     local stepspec=$1
-    extract_attr_from_stepspec "${stepspec}" "stepdeps"    
+    extract_attr_from_stepspec "${stepspec}" "stepdeps"
 }
 
 ########
@@ -3055,7 +3055,7 @@ get_commasep_ppl_modules()
 search_mod_in_dirs()
 {
     local module=$1
-    
+
     # Search module in directories listed in PANPIPE_MOD_DIR
     local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_MOD_DIR}`
     local dir
@@ -3066,7 +3066,7 @@ search_mod_in_dirs()
             break
         fi
     done
-    
+
     # Fallback to package bindir
     if [ -z "${fullmodname}" ]; then
         fullmodname="${panpipe_bindir}/${module}"
@@ -3116,9 +3116,9 @@ load_pipeline_modules()
     local pfile=$1
 
     file_exists "$pfile" || { echo "Error: file "$pfile" does not exist" >&2 ; return 1; }
-    
+
     local comma_sep_modules=`get_commasep_ppl_modules "$pfile"`
-    
+
     if [ -z "${comma_sep_modules}" ]; then
         echo "Error: no pipeline modules were given" >&2
         return 1
@@ -3138,9 +3138,9 @@ get_pipeline_fullmodnames()
     local pfile=$1
 
     file_exists "$pfile" || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
-    
+
     local comma_sep_modules=`get_commasep_ppl_modules "$pfile"`
-    
+
     if [ -z "${comma_sep_modules}" ]; then
         echo "Warning: no pipeline modules were given" >&2
     else
@@ -3193,11 +3193,11 @@ deserialize_args()
 
     # Prepare array to store deserialized arguments
     DESERIALIZED_ARGS=()
-    
+
     # Convert string to array
     local preproc_serial_args
     preproc_serial_args=$(echo "${serial_args}" | "${SED}" "s/${ARG_SEP}/\n/g")
-    while IFS= read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_serial_args}"    
+    while IFS= read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_serial_args}"
 }
 
 ########
@@ -3209,7 +3209,7 @@ sargs_to_sargsquotes()
     local preproc_sargs
     preproc_sargs=`echo "${sargs}" | ${SED} "s/${ARG_SEP}/\n/g"`
     local array=()
-    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargs}"    
+    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargs}"
 
     # Process array
     local i=0
@@ -3225,7 +3225,7 @@ sargs_to_sargsquotes()
         i=$((i+1))
     done
     sargsquotes="'${sargsquotes}'"
-    
+
     echo "${sargsquotes}"
 }
 
@@ -3236,7 +3236,7 @@ sargsquotes_to_sargs()
 
     # Remove first and last quotes
     sargsquotes=$("${SED}" -e "s/^'//" -e "s/'$//" <<<"$sargsquotes")
-    
+
     # Convert string to array
     local preproc_sargs
     preproc_sargsquotes=$(echo "${sargsquotes}" | "${SED}" "s/${ARG_SEP_QUOTES}/\n/g")
@@ -3256,7 +3256,7 @@ sargsquotes_to_sargs()
         fi
         i=$((i+1))
     done
-    
+
     echo "${sargs}"
 }
 
@@ -3308,7 +3308,7 @@ memoize_opts()
     # Convert string to array (result is placed into the
     # DESERIALIZED_ARGS variable)
     deserialize_args "${cmdline}"
-    
+
     # Scan DESERIALIZED_ARGS
     local i=1
     while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
@@ -3389,13 +3389,13 @@ check_opt_given_memoiz()
     else
         # Process not memoized line
         memoize_opts "$cmdline"
-        
+
         # Store processed line
         LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
         check_memoized_opt $opt || return 1
-    fi    
+    fi
 }
 
 ########
@@ -3407,7 +3407,7 @@ read_opt_value_from_line()
     # Convert string to array (result is placed into the
     # DESERIALIZED_ARGS variable)
     deserialize_args "${cmdline}"
-    
+
     # Scan DESERIALIZED_ARGS
     local i=0
     while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
@@ -3470,7 +3470,7 @@ read_opt_value_from_line_memoiz()
     else
         # Process not memoized line
         memoize_opts "$cmdline"
-        
+
         # Store processed line
         LAST_PROC_LINE_MEMOPTS="$cmdline"
 
@@ -3560,7 +3560,7 @@ explain_cmdline_opt_wo_value()
     if [ "$categ" = "" ]; then
         categ=${GENERAL_OPT_CATEGORY}
     fi
-    
+
     # Store option in associative arrays
     PIPELINE_OPT_TYPE[$opt]=""
     PIPELINE_OPT_DESC[$opt]=$desc
@@ -3579,7 +3579,7 @@ explain_cmdline_opt_wo_value()
 print_pipeline_opts()
 {
     local lineno=0
-    
+
     # Iterate over option categories
     local categ
     for categ in ${!PIPELINE_CATEG_MAP[@]}; do
@@ -3598,7 +3598,7 @@ print_pipeline_opts()
                 else
                     reqflag=" "
                 fi
-                   
+
                 # Print option
                 if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
                     echo "${opt} ${PIPELINE_OPT_DESC[$opt]}${reqflag}[${PIPELINE_OPT_STEP[$opt]}]"
@@ -3647,7 +3647,7 @@ define_cmdline_opt()
     # Get value for option
     read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
     local value="${_OPT_VALUE_}"
-    
+
     # Add option
     define_opt $opt "$value" $varname
 }
@@ -3681,9 +3681,9 @@ define_cmdline_nonmandatory_opt()
     if [ "$value" = ${OPT_NOT_FOUND} ]; then
         value=${default_value}
     fi
-    
+
     # Add option
-    define_opt $opt "$value" $varname    
+    define_opt $opt "$value" $varname
 }
 
 ########
@@ -3721,7 +3721,7 @@ define_cmdline_infile_opt()
         # Absolutize path
         value=`get_absolute_path "${value}"`
     fi
-    
+
     # Add option
     define_opt $opt "$value" $varname
 }
@@ -3745,7 +3745,7 @@ define_cmdline_infile_nonmand_opt()
     if [ "$value" != ${NOFILE} ]; then
         # Check if file exists
         file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
-        
+
         # Absolutize path
         value=`get_absolute_path "${value}"`
     fi
@@ -3874,7 +3874,7 @@ define_indir_opt()
         local var=${varname}
         local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
         IFS= read -r "$var" <<<"$value" || { errmsg "define_indir_opt: execution error" ; return 1; }
-    fi    
+    fi
 }
 
 ########
@@ -3897,7 +3897,7 @@ create_pipeline_shdirs()
         shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
         ${shrdirs_funcname}
     done
-    
+
     # Create shared directories
     local dirname
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
@@ -3940,7 +3940,7 @@ prepare_fifos_owned_by_step()
     # Create FIFOS
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        if [ ${PIPELINE_FIFOS["${fifoname}"]} = "${stepname}" ]; then         
+        if [ ${PIPELINE_FIFOS["${fifoname}"]} = "${stepname}" ]; then
             rm -f "${fifodir}/${fifoname}" || exit 1
             $MKFIFO "${fifodir}/${fifoname}" || exit 1
         fi
@@ -3998,7 +3998,7 @@ conda_env_exists()
 {
     local envname=$1
     local env_exists=1
-    
+
     conda activate $envname > /dev/null 2>&1 || env_exists=0
 
     if [ ${env_exists} -eq 1 ]; then
@@ -4019,7 +4019,7 @@ conda_env_prepare()
     if is_absolute_path "${env_name}"; then
         # Install packages given prefix name
         conda env create -f "${abs_yml_fname}" -p "${env_name}" > "${condadir}"/"${env_name}".log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/"${env_name}".log file for more information">&2 ; return 1; }
-    else    
+    else
         # Install packages given environment name
         conda env create -f "${abs_yml_fname}" -n "${env_name}" > "${condadir}"/"${env_name}".log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/${env_name}.log file for more information">&2 ; return 1; }
     fi
@@ -4035,7 +4035,7 @@ get_panpipe_yml_dir()
 get_abs_yml_fname()
 {
     local yml_fname=$1
-    
+
     # Search module in directories listed in PANPIPE_YML_DIR
     local PANPIPE_YML_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_YML_DIR}`
     local dir
@@ -4046,7 +4046,7 @@ get_abs_yml_fname()
             break
         fi
     done
-    
+
     # Fallback to panpipe yml package
     if [ -z "${abs_yml_fname}" ]; then
         panpipe_yml_dir=`get_panpipe_yml_dir`
