@@ -428,6 +428,26 @@ filter_errors_in_script_log_file()
 }
 
 ########
+filter_errors_in_script_log_files()
+{
+    local scripts_dirname=`get_ppl_scripts_dir`
+    local i=0
+
+    while read filename; do
+        if [ ${i} -gt 0 ]; then
+            echo ""
+        fi
+
+        echo "File: ${filename}"
+        if ! filter_errors_in_script_log_file "${filename}"; then
+            echo "NONE"
+        fi
+
+        i=$((i+1))
+    done < <(get_script_log_filenames)
+}
+
+########
 filter_warnings_in_script_log_file()
 {
     local log_filename=$1
