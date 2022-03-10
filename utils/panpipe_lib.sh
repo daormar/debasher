@@ -420,6 +420,14 @@ get_script_log_filenames()
 }
 
 ########
+filter_errors_in_script_log_file()
+{
+    local log_filename=$1
+
+    "${GREP}" "${PANPIPE_LOG_ERR_MSG_START}" "${log_filename}"
+}
+
+########
 filter_warnings_in_script_log_file()
 {
     local log_filename=$1
