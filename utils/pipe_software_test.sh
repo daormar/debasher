@@ -1,19 +1,19 @@
 # PanPipe package
 # Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
-#  
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
-#  
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-#  
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program; If not, see <http://www.gnu.org/licenses/>.
-  
+
 # *- bash -*
 
 #############
@@ -61,7 +61,7 @@ step_a_define_opts()
     local cmdline=$1
     local stepspec=$2
     local optlist=""
-    
+
     # -a option
     define_cmdline_opt "$cmdline" "-a" optlist || exit 1
 
@@ -100,7 +100,7 @@ step_b_define_opts()
     local cmdline=$1
     local stepspec=$2
     local optlist=""
-    
+
     # -b option
     define_cmdline_opt "$cmdline" "-b" optlist || exit 1
 
@@ -178,7 +178,7 @@ step_c()
 
     # sleep some time
     sleep ${sleep_time}
-    
+
     # create file
     touch "${step_outd}"/$id
 }
@@ -187,13 +187,13 @@ step_c()
 step_c_post()
 {
     logmsg "Cleaning directory..."
-    
+
     # Initialize variables
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # Remove auxiliary file
-    rm "${step_outd}"/${id}_aux    
+    rm "${step_outd}"/${id}_aux
 
     logmsg "Cleaning finished"
 }
@@ -234,7 +234,7 @@ step_d_define_opts()
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || exit 1
-        
+
     # Save option list
     save_opt_list optlist
 }
@@ -247,7 +247,7 @@ step_d()
 
     # Write string to FIFO
     echo "Hello World" > "${fifo}"
-    
+
     # sleep some time
     sleep 10
 }
@@ -271,13 +271,13 @@ step_e_define_opts()
     local cmdline=$1
     local stepspec=$2
     local optlist=""
-    
+
     # Get absolute name of FIFO
     abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || exit 1
-        
+
     # Save option list
     save_opt_list optlist
 }
@@ -290,7 +290,7 @@ step_e()
 
     # Write string to FIFO
     cat < "${fifo}"
-    
+
     # sleep some time
     sleep 10
 }
@@ -318,7 +318,7 @@ step_f_define_opts()
     # Define the -step-outd option, the output directory for the step
     local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
     define_opt "-step-outd" "${step_outd}" optlist || exit 1
-        
+
     # Save option list
     save_opt_list optlist
 }
@@ -337,7 +337,7 @@ step_f()
 
     # Deactivate conda environment
     conda deactivate
-    
+
     # sleep some time
     sleep 10
 }
@@ -392,7 +392,7 @@ step_g()
 
     # sleep some time
     sleep 10
-    
+
     # create file
     touch "${step_outd}"/$id
 }
@@ -401,13 +401,13 @@ step_g()
 step_g_post()
 {
     logmsg "Cleaning directory..."
-    
+
     # Initialize variables
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # Remove auxiliary file
-    rm "${step_outd}"/${id}_aux    
+    rm "${step_outd}"/${id}_aux
 
     logmsg "Cleaning finished"
 }
@@ -433,7 +433,7 @@ step_h_define_opts()
     local cmdline=$1
     local stepspec=$2
     local optlist=""
-    
+
     # -b option
     define_cmdline_opt "$cmdline" "-h" optlist || exit 1
 

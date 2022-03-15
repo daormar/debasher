@@ -1,19 +1,19 @@
 # PanPipe package
 # Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
-#  
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
-#  
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-#  
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program; If not, see <http://www.gnu.org/licenses/>.
-  
+
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
@@ -88,13 +88,13 @@ read_pars()
                   ;;
         esac
         shift
-    done   
+    done
 }
 
 ########
 check_pars()
 {
-    if [ ${pfile_given} -eq 0 ]; then   
+    if [ ${pfile_given} -eq 0 ]; then
         echo "Error! --pfile parameter not given!" >&2
         exit 1
     else
@@ -107,7 +107,7 @@ check_pars()
         echo "Error, --sched option should be given" >&2
         exit 1
     fi
-    
+
     if [ ${ppl_sopts_given} -eq 0 ]; then
         echo "Error, --ppl-sopts option should be given" >&2
         exit 1
@@ -131,7 +131,7 @@ check_pars()
 ########
 absolutize_file_paths()
 {
-    if [ ${pfile_given} -eq 1 ]; then   
+    if [ ${pfile_given} -eq 1 ]; then
         pfile=`get_absolute_path "${pfile}"`
     fi
 
@@ -204,7 +204,7 @@ process_pars()
     # Get pipe_exec path
     local pipe_exec_path
     pipe_exec_path=`get_pipe_exec_path`
-    
+
     # Read metadata file
     local entry_num=1
     entry_num=1
@@ -213,12 +213,12 @@ process_pars()
 
         # Obtain --dflt-nodes option
         dflt_nodes_opt=`get_dflt_nodes_opt`
-        
+
         # Print command to execute pipeline
         normalize_cmd "\"$(esc_dq "${pipe_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --sched ${sched} ${dflt_nodes_opt} ${ppl_sopts_str} ${ppl_opts_str}"
 
         entry_num=$((entry_num + 1))
-        
+
     done < "${ppl_sopts}"
 }
 

@@ -1,19 +1,19 @@
 # PanPipe package
 # Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
-#  
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
-#  
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-#  
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program; If not, see <http://www.gnu.org/licenses/>.
-  
+
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
@@ -67,7 +67,7 @@ read_pars()
                   ;;
         esac
         shift
-    done   
+    done
 }
 
 ########
@@ -78,7 +78,7 @@ check_pars()
         exit 1
     else
         if [ ! -d "${pdir}" ]; then
-            echo "Error! pipeline directory does not exist" >&2 
+            echo "Error! pipeline directory does not exist" >&2
             exit 1
         fi
 
@@ -159,7 +159,7 @@ replace_outdir_in_cmdline()
                                  if(replace==0)
                                  {
                                   printf"%s",$i
-                                 } 
+                                 }
                                  else
                                  {
                                   printf"%s",newdir
@@ -176,7 +176,7 @@ get_pfile()
 {
     local absdirname=$1
     local cmdline_pfile=$2
-    
+
     if [ -f "${absdirname}/${REORDERED_PIPELINE_BASENAME}" ]; then
         echo "${absdirname}/${REORDERED_PIPELINE_BASENAME}"
         return 0
@@ -206,7 +206,7 @@ process_status_for_pfile()
     local dirname=$1
     local absdirname=`get_absolute_path "${dirname}"`
     local command_line_file="${absdirname}/${PPL_COMMAND_LINE_BASENAME}"
-    
+
     # Extract information from PPL_COMMAND_LINE_BASENAME file
     local cmdline
     cmdline=`get_cmdline "${command_line_file}"` || return 1
@@ -218,7 +218,7 @@ process_status_for_pfile()
     # Set pipeline file
     local pfile
     pfile=`get_pfile "${absdirname}" "${cmdline_pfile}"` || return 1
-    
+
     # Get original output directory
     local orig_outdir
     orig_outdir=`get_orig_outdir "${command_line_file}"` || return 1
@@ -226,7 +226,7 @@ process_status_for_pfile()
     # Show warning if directory provided as option is different than the
     # original working directory
     if dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
-        local moved_outdir="no"        
+        local moved_outdir="no"
     else
         echo "Warning: pipeline output directory was moved (original directory: ${orig_outdir})" >&2
         cmdline=`replace_outdir_in_cmdline "${cmdline}" "${absdirname}"`
@@ -238,7 +238,7 @@ process_status_for_pfile()
 
     # Configure scheduler
     configure_scheduler $sched || return 1
-    
+
     # Read information about the steps to be executed
     lineno=1
     num_steps=0
@@ -253,7 +253,7 @@ process_status_for_pfile()
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Increase number of steps
             num_steps=$((num_steps + 1))
-            
+
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
@@ -271,7 +271,7 @@ process_status_for_pfile()
             if [ ${i_given} -eq 1 ]; then
                 ids_info=`read_ids_from_files "${absdirname}" ${stepname}`
             fi
-            
+
             # Print status
             if [ ${i_given} -eq 0 ]; then
                 echo "STEP: $stepname ; STATUS: $status"
@@ -292,22 +292,22 @@ process_status_for_pfile()
                 ${TODO_STEP_STATUS}) num_todo=$((num_todo + 1))
                                      ;;
             esac
-                        
+
         else
             if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "no" ]; then
                 echo "Error: incorrect step specification at line $lineno of ${pfile}" >&2
                 return 1
             fi
         fi
-        
+
         # Increase lineno
         lineno=$((lineno+1))
-        
+
     done < ${pfile}
 
     # Print summary
     echo "* SUMMARY: num_steps= ${num_steps} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2
-    
+
     # Return error if pipeline is not finished
     if [ ${num_finished} -eq ${num_steps} ]; then
         return ${PIPELINE_FINISHED_EXIT_CODE}

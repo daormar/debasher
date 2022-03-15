@@ -1,19 +1,19 @@
 # PanPipe package
 # Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
-#  
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
-#  
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-#  
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program; If not, see <http://www.gnu.org/licenses/>.
-  
+
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
@@ -63,7 +63,7 @@ read_pars()
                   ;;
         esac
         shift
-    done   
+    done
 }
 
 ########
@@ -74,7 +74,7 @@ check_pars()
         exit 1
     else
         if [ ! -d "${pdir}" ]; then
-            echo "Error! pipeline directory does not exist" >&2 
+            echo "Error! pipeline directory does not exist" >&2
             exit 1
         fi
 
@@ -155,7 +155,7 @@ replace_outdir_in_cmdline()
                                  if(replace==0)
                                  {
                                   printf"%s",$i
-                                 } 
+                                 }
                                  else
                                  {
                                   printf"%s",newdir
@@ -172,7 +172,7 @@ get_pfile()
 {
     local absdirname=$1
     local cmdline_pfile=$2
-    
+
     if [ -f "${absdirname}/${REORDERED_PIPELINE_BASENAME}" ]; then
         echo "${absdirname}/${REORDERED_PIPELINE_BASENAME}"
         return 0
@@ -214,7 +214,7 @@ process_status_for_pfile()
     # Set pipeline file
     local pfile
     pfile=`get_pfile "${absdirname}" "${cmdline_pfile}"` || return 1
-    
+
     # Get original output directory
     local orig_outdir
     orig_outdir=`get_orig_outdir "${command_line_file}"` || return 1
@@ -234,7 +234,7 @@ process_status_for_pfile()
 
     # Configure scheduler
     configure_scheduler $sched || return 1
-    
+
     # Read information about the steps to be executed
     lineno=1
     num_steps=0
@@ -249,7 +249,7 @@ process_status_for_pfile()
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Increase number of steps
             num_steps=$((num_steps + 1))
-            
+
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
@@ -265,7 +265,7 @@ process_status_for_pfile()
             # Obtain ids
             local ids_info
             ids_info=`read_ids_from_files "${absdirname}" ${stepname}`
-            
+
             # Print status
             echo "STEP: $stepname ; STATUS: $status ; SCHED_IDS: ${ids_info} (Stopping...)"
             stop_step "${ids_info}"
@@ -275,10 +275,10 @@ process_status_for_pfile()
                 return 1
             fi
         fi
-        
+
         # Increase lineno
         lineno=$((lineno+1))
-        
+
     done < "${pfile}"
 }
 

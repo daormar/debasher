@@ -1,19 +1,19 @@
 # PanPipe package
 # Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
-#  
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
-#  
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-#  
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program; If not, see <http://www.gnu.org/licenses/>.
-  
+
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
@@ -103,7 +103,7 @@ read_pars()
                   ;;
         esac
         shift
-    done   
+    done
 }
 
 ########
@@ -114,7 +114,7 @@ check_pars()
         exit 1
     else
         if [ ! -f "${file}" ]; then
-            echo "Error! file ${file} does not exist" >&2 
+            echo "Error! file ${file} does not exist" >&2
             exit 1
         fi
     fi
@@ -126,19 +126,19 @@ check_pars()
 
     if [ ${o_given} -eq 1 ]; then
         if [ ! -d "${outd}" ]; then
-            echo "Error! output directory does not exist" >&2 
+            echo "Error! output directory does not exist" >&2
             exit 1
         fi
     fi
 
     if [ ${k_given} -eq 1 ]; then
         if [ ! -f "${k_val}" ]; then
-            echo "Error! file ${k_val} does not exist" >&2 
+            echo "Error! file ${k_val} does not exist" >&2
             exit 1
         fi
 
         if [ ! -x "${k_val}" ]; then
-            echo "Error! file ${k_val} is not executable" >&2 
+            echo "Error! file ${k_val} is not executable" >&2
             exit 1
         fi
     fi
@@ -151,11 +151,11 @@ absolutize_file_paths()
         file=`get_absolute_path "${file}"`
     fi
 
-    if [ ${o_given} -eq 1 ]; then   
+    if [ ${o_given} -eq 1 ]; then
         outd=`get_absolute_path "${outd}"`
     fi
 
-    if [ ${k_given} -eq 1 ]; then   
+    if [ ${k_given} -eq 1 ]; then
         k_val=`get_absolute_path "${k_val}"`
     fi
 }
@@ -206,7 +206,7 @@ post_ppl_finish_actions_are_executed()
         else
             return 1
         fi
-    fi    
+    fi
 }
 
 ########
@@ -303,7 +303,7 @@ get_ppl_status()
         # Obtain percentage of unfinished steps
         local unfinished_step_perc=`get_unfinished_step_perc "${tmpfile}"`
         rm "${tmpfile}"
-        
+
         # Evaluate exit code of pipe_status
         case $exit_code in
             ${PIPELINE_FINISHED_EXIT_CODE}) if post_ppl_finish_actions_are_executed "${pipe_cmd_outd}"; then
@@ -337,7 +337,7 @@ wait_simul_exec_reduction()
     local SLEEP_TIME=60
     local end=0
     local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
-    
+
     while [ ${end} -eq 0 ] ; do
         # Iterate over active pipelines
         local num_completed_pipelines=0
@@ -364,7 +364,7 @@ wait_simul_exec_reduction()
                                ;;
             esac
         done
-        
+
         # Obtain number of pending pipelines
         local num_pending_pipelines=$((num_active_pipelines - num_completed_pipelines))
 
@@ -394,7 +394,7 @@ wait_simul_exec_reduction()
 get_dest_dir_for_ppl()
 {
     local pipeline_outd=$1
-    local outd=$2    
+    local outd=$2
     basedir=`"$BASENAME" "${pipeline_outd}"`
     echo "${outd}/${basedir}"
 }
@@ -403,9 +403,9 @@ get_dest_dir_for_ppl()
 move_dir()
 {
     local pipeline_outd=$1
-    local outd=$2    
+    local outd=$2
     destdir=`get_dest_dir_for_ppl "${pipeline_outd}" "${outd}"`
-    
+
     # Move directory
     if [ -d "${destdir}" ]; then
         echo "Error: ${destdir} exists" >&2
@@ -414,7 +414,7 @@ move_dir()
         mv "${pipeline_outd}" "${outd}" || return 1
     fi
 }
- 
+
 ########
 update_active_pipeline()
 {
@@ -424,7 +424,7 @@ update_active_pipeline()
     # Check pipeline status
     get_ppl_status "${pipeline_outd}" "${outd}"
     local exit_code=$?
-    
+
     case $exit_code in
         ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
                              unset PIPELINE_COMMANDS["${pipeline_outd}"]
@@ -438,10 +438,10 @@ update_active_pipeline()
 update_active_pipelines()
 {
     local outd=$1
-    
+
     local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
     echo "Previous number of active pipelines: ${num_active_pipelines}" >&2
-    
+
     # Iterate over active pipelines
     for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
         update_active_pipeline "${pipeline_outd}" "${outd}" || return 1
@@ -474,21 +474,21 @@ execute_batches()
 
     # Global variable declaration
     declare -A PIPELINE_COMMANDS
-    
+
     # Process pipeline execution commands...
     while read pipe_exec_cmd; do
 
         # Execute built-in tilde expansion to avoid problems with "~"
         # symbol in file and directory paths
         pipe_exec_cmd=`expand_tildes "${pipe_exec_cmd}"`
-        
+
         echo "* Processing line ${lineno}..." >&2
         echo "" >&2
-        
+
         echo "** Wait until number of simultaneous executions is below the given maximum..." >&2
         wait_simul_exec_reduction ${maxp} || return 1
         echo "" >&2
-            
+
         echo "** Update array of active pipelines..." >&2
         update_active_pipelines "${outd}" || return 1
         echo "" >&2
@@ -527,7 +527,7 @@ execute_batches()
         if [ ${exit_code} -eq ${PPL_REQUIRES_POST_FINISH_ACTIONS} ]; then
             add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}"
         fi
-        
+
         if [ ${exit_code} -eq ${PPL_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PPL_FAILED} ]; then
             echo "**********************" >&2
             echo "** Execute pipeline..." >&2
@@ -535,15 +535,15 @@ execute_batches()
             eval "${pipe_exec_cmd}" || return 1
             echo "**********************" >&2
             echo "" >&2
-            
+
             echo "** Add pipeline command to associative array..." >&2
             add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}" || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
             echo "" >&2
         fi
-        
+
         # Increase lineno
         lineno=$((lineno+1))
-        
+
     done < "${file}"
 
     # Wait for all pipelines to complete
