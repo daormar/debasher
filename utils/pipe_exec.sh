@@ -1,19 +1,19 @@
 # PanPipe package
 # Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
-#  
+#
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
 # as published by the Free Software Foundation; either version 3
 # of the License, or (at your option) any later version.
-#  
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-#  
+#
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program; If not, see <http://www.gnu.org/licenses/>.
-  
+
 # *- bash -*
 
 # INCLUDE BASH LIBRARIES
@@ -86,7 +86,7 @@ read_pars()
     pfile_given=0
     outdir_given=0
     sched_given=0
-    builtinsched_cpus_given=0    
+    builtinsched_cpus_given=0
     builtinsched_mem_given=0
     dflt_nodes_given=0
     dflt_throttle_given=0
@@ -175,13 +175,13 @@ read_pars()
                                     ;;
         esac
         shift
-    done   
+    done
 }
 
 ########
 check_pars()
 {
-    if [ ${pfile_given} -eq 0 ]; then   
+    if [ ${pfile_given} -eq 0 ]; then
         echo "Error! --pfile parameter not given!" >&2
         exit 1
     else
@@ -190,13 +190,13 @@ check_pars()
             exit 1
         fi
     fi
-    
+
     if [ ${outdir_given} -eq 0 ]; then
         echo "Error! --outdir parameter not given!" >&2
         exit 1
     else
         if [ -d "${outd}" ]; then
-            echo "Warning! output directory does exist" >&2 
+            echo "Warning! output directory does exist" >&2
         fi
     fi
 
@@ -219,11 +219,11 @@ check_pars()
 ########
 absolutize_file_paths()
 {
-    if [ ${pfile_given} -eq 1 ]; then   
+    if [ ${pfile_given} -eq 1 ]; then
         pfile=`get_absolute_path "${pfile}"`
     fi
 
-    if [ ${outdir_given} -eq 1 ]; then   
+    if [ ${outdir_given} -eq 1 ]; then
         outd=`get_absolute_path "${outd}"`
     fi
 }
@@ -305,7 +305,7 @@ load_modules()
     echo "* Loading pipeline modules..." >&2
 
     local pfile=$1
-    
+
     load_pipeline_modules "${pfile}" || return 1
 
     echo "" >&2
@@ -344,11 +344,11 @@ show_pipeline_opts()
 check_pipeline_opts()
 {
     echo "* Checking pipeline options..." >&2
-    
+
     # Read input parameters
     local cmdline=$1
     local pfile=$2
-        
+
     # Read information about the steps to be executed
     while read stepspec; do
         local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
@@ -372,7 +372,7 @@ check_pipeline_opts()
 }
 
 ########
-process_conda_req_entry() 
+process_conda_req_entry()
 {
     local env_name=$1
     local yml_fname=$2
@@ -410,7 +410,7 @@ process_conda_requirements_for_step()
             process_conda_req_entry "${env_name}" "${yml_fname}" || return 1
         else
             echo "Error: invalid conda entry for step ${stepname}; Entry: ${step_conda_envs}" >&2
-        fi        
+        fi
     done < <(echo "${step_conda_envs}")
 }
 
@@ -430,7 +430,7 @@ process_conda_requirements()
         if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
             # Extract step information
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            
+
             # Process conda envs information
             local conda_envs_funcname=`get_conda_envs_funcname ${stepname}`
             if func_exists ${conda_envs_funcname}; then
@@ -464,7 +464,7 @@ define_forced_exec_steps()
             local step_forced=`extract_attr_from_stepspec "$stepspec" "force"`
             if [ ${step_forced} = "yes" ]; then
                 mark_step_as_reexec $stepname ${FORCED_REEXEC_REASON}
-            fi 
+            fi
         fi
     done < "${pfile}"
 
@@ -478,7 +478,7 @@ check_script_is_older_than_modules()
 {
     local script_filename=$1
     local fullmodnames=$2
-    
+
     # Check if script exists
     if [ -f "${script_filename}" ]; then
         # script exists
@@ -553,7 +553,7 @@ define_reexec_steps_due_to_deps()
     echo "* Defining steps to be reexecuted due to dependencies (if any)..." >&2
 
     local stepdeps_file=$1
-    
+
     # Obtain list of steps to be reexecuted due to dependencies
     local reexec_steps_string=`get_reexec_steps_as_string`
     local reexec_steps_file="${outd}/${REEXEC_STEPS_LIST_FNAME}"
@@ -611,7 +611,7 @@ create_basic_dirs()
 {
     mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     set_panpipe_outdir "${outd}"
-    
+
     mkdir -p "${outd}"/scripts || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
     local fifodir=`get_absolute_fifoname`
@@ -702,7 +702,7 @@ execute_step()
     local dirname=$2
     local stepname=$3
     local stepspec=$4
-    
+
     # Execute step
 
     ## Obtain step status
@@ -726,7 +726,7 @@ execute_step()
         clean_step_id_files "${dirname}" ${stepname} ${array_size} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
         create_outdir_for_step "${dirname}" ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
         prepare_fifos_owned_by_step ${stepname}
-        
+
         # Launch step
         local task_array_list=`get_task_array_list "${dirname}" ${stepname} ${array_size}`
         local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
@@ -761,10 +761,10 @@ execute_pipeline_steps()
     local cmdline=$1
     local dirname=$2
     local pfile=$3
-        
+
     # step_id_list will store the step ids of the pipeline steps
     local step_id_list=""
-    
+
     # Read information about the steps to be executed
     local stepspec
     while read stepspec; do
@@ -789,7 +789,7 @@ debug_step()
     local dirname=$2
     local stepname=$3
     local stepspec=$4
-    
+
     # Debug step
 
     ## Obtain step status
@@ -810,10 +810,10 @@ execute_pipeline_steps_debug()
     local cmdline=$1
     local dirname=$2
     local pfile=$3
-        
+
     # step_id_list will store the step ids of the pipeline steps
     local step_id_list=""
-    
+
     # Read information about the steps to be executed
     local stepspec
     while read stepspec; do
@@ -823,7 +823,7 @@ execute_pipeline_steps_debug()
             # Extract step name
             local stepname=`extract_stepname_from_stepspec "$stepspec"`
 
-            debug_step "${cmdline}" "${dirname}" ${stepname} "${stepspec}" || return 1                
+            debug_step "${cmdline}" "${dirname}" ${stepname} "${stepspec}" || return 1
         fi
     done < "${pfile}"
 
@@ -872,7 +872,7 @@ else
     else
         load_pipeline_modules=1
         check_pipeline_opts "${command_line}" ${reordered_pfile} || exit 1
-        
+
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
@@ -889,7 +889,7 @@ else
         if [ ${reexec_outdated_steps_given} -eq 1 ]; then
             define_reexec_steps_due_to_code_update "${outd}" "${reordered_pfile}" || exit 1
         fi
-        
+
         define_reexec_steps_due_to_deps "${stepdeps_file}" || exit 1
 
         print_command_line || exit 1
