@@ -574,6 +574,18 @@ define_reexec_steps_due_to_deps()
 }
 
 ########
+print_reexec_steps()
+{
+    local reexec_steps_string=`get_reexec_steps_as_string`
+
+    if [ ! -z "${reexec_steps_string}" ]; then
+        echo "* Printing list of steps to be reexecuted..." >&2
+        echo "${reexec_steps_string}" >&2
+        echo "" >&2
+    fi
+}
+
+########
 release_lock()
 {
     local fd=$1
@@ -891,6 +903,8 @@ else
         fi
 
         define_reexec_steps_due_to_deps "${stepdeps_file}" || exit 1
+
+        print_reexec_steps || exit 1
 
         print_command_line || exit 1
 
