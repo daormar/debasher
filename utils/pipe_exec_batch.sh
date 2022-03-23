@@ -281,7 +281,7 @@ get_ppl_status()
     local pipe_cmd_outd=$1
     local outd=$2
 
-    # Check if final output directory was provided and also that these
+    # Check if final output directory was provided and also that this
     # directory is not the same as the original output directory
     if [ "${outd}" != "" -a "${outd}" ]; then
         # Get pipeline directory after moving
