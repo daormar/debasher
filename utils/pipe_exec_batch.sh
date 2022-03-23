@@ -283,7 +283,7 @@ get_ppl_status()
 
     # Check if final output directory was provided and also that this
     # directory is not the same as the original output directory
-    if [ "${outd}" != "" -a "${outd}" ]; then
+    if [ "${outd}" != "" ]; then
         # Get pipeline directory after moving
         local final_outdir=`get_dest_dir_for_ppl "${pipe_cmd_outd}" "${outd}"`
         if [ -d "${final_outdir}" ]; then
@@ -328,6 +328,51 @@ get_ppl_status()
     else
         return ${PPL_IS_NOT_COMPLETED}
     fi
+}
+
+########
+ppl_has_steps_to_reexec()
+{
+    local pipe_exec_cmd=$1
+    local pipe_cmd_outd=$2
+    local outd=$3
+
+    # Check if final output directory was provided and also that this
+    # directory is not the same as the original output directory
+    if [ "${outd}" != "" ]; then
+        # Get pipeline directory after moving
+        local final_outdir=`get_dest_dir_for_ppl "${pipe_cmd_outd}" "${outd}"`
+        if [ -d "${final_outdir}" ]; then
+            # If output directory exists, it is assumed that the
+            # pipeline completed execution
+            return 1
+        fi
+    fi
+
+    # Check if pipe_exec reports steps to be re-executed
+    local reexec_steps_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${PANPIPE_REEXEC_STEPS_WARNING}")
+    if [ ! -z "${reexec_steps_warning}" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+get_initial_ppl_status()
+{
+    local pipe_exec_cmd=$1
+    local pipe_cmd_outd=$2
+    local outd=$3
+
+    # Check if pipeline has steps to re-execute (this is only necessary
+    # in the initial status check)
+    if ppl_has_steps_to_reexec "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
+        return ${PPL_IS_NOT_COMPLETED}
+    fi
+
+    # Get pipeline status
+    get_ppl_status "${pipe_cmd_outd}" "${outd}"
 }
 
 ########
@@ -510,7 +555,7 @@ execute_batches()
         echo "" >&2
 
         echo "** Check if pipeline already completed execution..." >&2
-        get_ppl_status "${pipe_cmd_outd}" "${outd}"
+        get_initial_ppl_status "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"
         local exit_code=$?
         case $exit_code in
             ${PPL_IS_COMPLETED}) echo "yes">&2
