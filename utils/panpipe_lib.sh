@@ -102,6 +102,7 @@ PANPIPE_SCRIPTS_DIRNAME="scripts"
 # LOGGING CONSTANTS
 PANPIPE_LOG_ERROR_MSG_START="Error:"
 PANPIPE_LOG_WARNING_MSG_START="Warning:"
+PANPIPE_REEXEC_STEPS_WARNING="Warning: there are steps to be re-executed!"
 
 ####################
 # GLOBAL VARIABLES #
