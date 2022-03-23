@@ -581,6 +581,7 @@ print_reexec_steps()
     if [ ! -z "${reexec_steps_string}" ]; then
         echo "* Printing list of steps to be reexecuted..." >&2
         echo "${reexec_steps_string}" >&2
+        echo "${PANPIPE_REEXEC_STEPS_WARNING}"
         echo "" >&2
     fi
 }
