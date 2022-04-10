@@ -63,7 +63,7 @@ step_a_define_opts()
     local optlist=""
 
     # -a option
-    define_cmdline_opt "$cmdline" "-a" optlist || exit 1
+    define_cmdline_opt "$cmdline" "-a" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -102,13 +102,13 @@ step_b_define_opts()
     local optlist=""
 
     # -b option
-    define_cmdline_opt "$cmdline" "-b" optlist || exit 1
+    define_cmdline_opt "$cmdline" "-b" optlist || return 1
 
     # Get absolute name of shared directory
     abs_shrdir=`get_absolute_shdirname "data"`
 
     # Define option for FIFO
-    define_opt "-datadir" "${abs_shrdir}" optlist || exit 1
+    define_opt "-datadir" "${abs_shrdir}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -151,16 +151,16 @@ step_c_define_opts()
     local optlist=""
 
     # -c option
-    define_cmdline_opt "$cmdline" "-c" optlist || exit 1
+    define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
     # Define the -step-outd option, the output directory for the step
     local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
-    define_opt "-step-outd" "${step_outd}" optlist || exit 1
+    define_opt "-step-outd" "${step_outd}" optlist || return 1
 
     # Save option list so as to execute step four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
-        define_opt "-id" $id specific_optlist || exit 1
+        define_opt "-id" $id specific_optlist || return 1
         save_opt_list specific_optlist
     done
 }
@@ -233,7 +233,7 @@ step_d_define_opts()
     abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
 
     # Define option for FIFO
-    define_opt "-fifo" "${abs_fifoname}" optlist || exit 1
+    define_opt "-fifo" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -276,7 +276,7 @@ step_e_define_opts()
     abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
 
     # Define option for FIFO
-    define_opt "-fifo" "${abs_fifoname}" optlist || exit 1
+    define_opt "-fifo" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -317,7 +317,7 @@ step_f_define_opts()
 
     # Define the -step-outd option, the output directory for the step
     local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
-    define_opt "-step-outd" "${step_outd}" optlist || exit 1
+    define_opt "-step-outd" "${step_outd}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -370,12 +370,12 @@ step_g_define_opts()
 
     # Define the -step-outd option, the output directory for the step
     local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
-    define_opt "-step-outd" "${step_outd}" optlist || exit 1
+    define_opt "-step-outd" "${step_outd}" optlist || return 1
 
     # Save option list so as to execute step four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
-        define_opt "-id" $id specific_optlist || exit 1
+        define_opt "-id" $id specific_optlist || return 1
         save_opt_list specific_optlist
     done
 }
@@ -435,13 +435,13 @@ step_h_define_opts()
     local optlist=""
 
     # -b option
-    define_cmdline_opt "$cmdline" "-h" optlist || exit 1
+    define_cmdline_opt "$cmdline" "-h" optlist || return 1
 
     # Get absolute name of shared directory
     abs_shrdir=`get_absolute_shdirname "data"`
 
     # Define option for FIFO
-    define_opt "-datadir" "${abs_shrdir}" optlist || exit 1
+    define_opt "-datadir" "${abs_shrdir}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
