@@ -182,15 +182,15 @@ def extract_step_deps(entry_lineno,entry):
 
 ##################################################
 def extract_config_entries(pfile):
-    step_entries=[]
+    config_entries=[]
     file = open(pfile, 'r')
     # read file entry by entry
     for entry in file:
         entry=entry.strip("\n")
         if entry_is_config(entry):
-            step_entries.append(entry)
+            config_entries.append(entry)
             
-    return step_entries
+    return config_entries
 
 ##################################################
 def extract_step_entries(pfile):
