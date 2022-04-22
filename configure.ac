@@ -1,11 +1,11 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.57)
-AC_INIT(panpipe, 1.0, daniel.ortiz@ub.edu)
+AC_PREREQ([2.71])
+AC_INIT([panpipe],[1.0],[daniel.ortiz@ub.edu])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
-dnl AC_CONFIG_HEADER(config.h)
+dnl AC_CONFIG_HEADERS([config.h])
 dnl AX_PREFIX_CONFIG_H([./src/snptools_config.h])
 AM_PATH_PYTHON([3])
 
@@ -397,9 +397,7 @@ AC_SUBST(ZLIB)
 LIBS=${libaux}
 
 # Checks for header files.
-AC_HEADER_STDC
 AC_CHECK_HEADERS([float.h limits.h])
-AC_HEADER_TIME
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
@@ -456,4 +454,5 @@ AC_SUBST(DISABLE_SCHEDULERS,$disable_schedulers)
 # Change path of distribution include directory
 includedir=${prefix}/include/bam-utils
 
-AC_OUTPUT(Makefile m4/Makefile utils/Makefile doc/Makefile examples/Makefile examples/ppl_files/Makefile examples/conda_envs/Makefile)
+AC_CONFIG_FILES([Makefile m4/Makefile utils/Makefile doc/Makefile examples/Makefile examples/ppl_files/Makefile examples/conda_envs/Makefile])
+AC_OUTPUT
