@@ -423,10 +423,32 @@ get_script_log_filenames()
 ########
 filter_errors_in_script_log_file()
 {
-    local log_filename=$1
-    local prefix=$2
+    local prefix=$1
+    local filename=$2
 
-    "${GREP}" "${PANPIPE_LOG_ERROR_MSG_START}" "${log_filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n",prefix,$0}' ; pipe_fail || return 1
+    "${GREP}" "${PANPIPE_LOG_ERROR_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; pipe_fail || return 1
+}
+
+########
+create_script_log_file_error_entry()
+{
+    local prefix=$1
+    local format=$2
+    local filename=$3
+
+    case "${format}" in
+        "md")
+            echo "[${filename}](file://${filename})"
+            echo ""
+            filter_errors_in_script_log_file "${prefix}" "${filename}"
+            ;;
+        *)
+            echo "File: ${filename}"
+            if ! filter_errors_in_script_log_file "${prefix}" "${filename}"; then
+                echo "NONE"
+            fi
+            ;;
+    esac
 }
 
 ########
@@ -442,20 +464,7 @@ filter_errors_in_script_log_files_pref()
             echo ""
         fi
 
-        case "${format}" in
-            "md")
-                echo "[${filename}](file://${filename})"
-                echo ""
-                filter_errors_in_script_log_file "${filename}" "${prefix}"
-                ;;
-            *)
-                echo "File: ${filename}"
-                if ! filter_errors_in_script_log_file "${filename}" "${prefix}"; then
-                    echo "NONE"
-                fi
-                ;;
-        esac
-
+        create_script_log_file_error_entry "${prefix}" "${format}" "${filename}"
 
         i=$((i+1))
     done < <(get_script_log_filenames)
@@ -470,10 +479,32 @@ filter_errors_in_script_log_files()
 ########
 filter_warnings_in_script_log_file()
 {
-    local log_filename=$1
-    local prefix=$2
+    local prefix=$1
+    local filename=$2
 
-    "${GREP}" "${PANPIPE_LOG_WARNING_MSG_START}" "${log_filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n",prefix,$0}' ; pipe_fail || return 1
+    "${GREP}" "${PANPIPE_LOG_WARNING_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; pipe_fail || return 1
+}
+
+########
+create_script_log_file_warning_entry()
+{
+    local prefix=$1
+    local format=$2
+    local filename=$3
+
+    case "${format}" in
+        "md")
+            echo "[${filename}](file://${filename})"
+            echo ""
+            filter_warnings_in_script_log_file "${prefix}" "${filename}"
+            ;;
+        *)
+            echo "File: ${filename}"
+            if ! filter_warnings_in_script_log_file "${prefix}" "${filename}"; then
+                echo "NONE"
+            fi
+            ;;
+    esac
 }
 
 ########
@@ -489,19 +520,7 @@ filter_warnings_in_script_log_files_pref()
             echo ""
         fi
 
-        case "${format}" in
-            "md")
-                echo "[${filename}](file://${filename})"
-                echo ""
-                filter_warnings_in_script_log_file "${filename}" "${prefix}"
-                ;;
-            *)
-                echo "File: ${filename}"
-                if ! filter_warnings_in_script_log_file "${filename}" "${prefix}"; then
-                    echo "NONE"
-                fi
-                ;;
-        esac
+        create_script_log_file_warning_entry "${prefix}" "${format}" "${filename}"
 
         i=$((i+1))
     done < <(get_script_log_filenames)
