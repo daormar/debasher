@@ -430,53 +430,6 @@ filter_errors_in_script_log_file()
 }
 
 ########
-create_script_log_file_error_entry()
-{
-    local prefix=$1
-    local format=$2
-    local filename=$3
-
-    case "${format}" in
-        "md")
-            echo "[${filename}](file://${filename})"
-            echo ""
-            filter_errors_in_script_log_file "${prefix}" "${filename}"
-            ;;
-        *)
-            echo "File: ${filename}"
-            if ! filter_errors_in_script_log_file "${prefix}" "${filename}"; then
-                echo "NONE"
-            fi
-            ;;
-    esac
-}
-
-########
-filter_errors_in_script_log_files_pref()
-{
-    local prefix=$1
-    local format=$2
-    local scripts_dirname=`get_ppl_scripts_dir`
-    local i=0
-
-    while read filename; do
-        if [ ${i} -gt 0 ]; then
-            echo ""
-        fi
-
-        create_script_log_file_error_entry "${prefix}" "${format}" "${filename}"
-
-        i=$((i+1))
-    done < <(get_script_log_filenames)
-}
-
-########
-filter_errors_in_script_log_files()
-{
-    filter_errors_in_script_log_files_pref "" "md"
-}
-
-########
 filter_warnings_in_script_log_file()
 {
     local prefix=$1
@@ -486,32 +439,37 @@ filter_warnings_in_script_log_file()
 }
 
 ########
-create_script_log_file_warning_entry()
+create_script_log_file_errwarn_entry()
 {
-    local prefix=$1
-    local format=$2
-    local filename=$3
+    local errpref=$1
+    local warnpref=$2
+    local format=$3
+    local filename=$4
 
     case "${format}" in
         "md")
             echo "[${filename}](file://${filename})"
             echo ""
-            filter_warnings_in_script_log_file "${prefix}" "${filename}"
+            filter_errors_in_script_log_file "${errpref}" "${filename}"
+            filter_warnings_in_script_log_file "${warnpref}" "${filename}"
             ;;
         *)
             echo "File: ${filename}"
-            if ! filter_warnings_in_script_log_file "${prefix}" "${filename}"; then
-                echo "NONE"
+            if ! filter_errors_in_script_log_file "${errpref}" "${filename}"; then
+                if ! filter_warnings_in_script_log_file "${warnpref}" "${filename}"; then
+                    echo "NONE"
+                fi
             fi
             ;;
     esac
 }
 
 ########
-filter_warnings_in_script_log_files_pref()
+filter_errwarns_in_script_log_files_pref()
 {
-    local prefix=$1
-    local format=$2
+    local errpref=$1
+    local warnpref=$2
+    local format=$3
     local scripts_dirname=`get_ppl_scripts_dir`
     local i=0
 
@@ -520,16 +478,16 @@ filter_warnings_in_script_log_files_pref()
             echo ""
         fi
 
-        create_script_log_file_warning_entry "${prefix}" "${format}" "${filename}"
+        create_script_log_file_errwarn_entry "${errpref}" "${warnpref}" "${format}" "${filename}"
 
         i=$((i+1))
     done < <(get_script_log_filenames)
 }
 
 ########
-filter_warnings_in_script_log_files()
+filter_errwarns_in_script_log_files()
 {
-    filter_warnings_in_script_log_files_pref "" "md"
+    filter_warnings_in_script_log_files_pref "" "" "md"
 }
 
 ########
