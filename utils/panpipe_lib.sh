@@ -3909,14 +3909,14 @@ create_pipeline_shdirs()
     # modules
     local absmodname
     for absmodname in "${PIPELINE_MODULES[@]}"; do
-        shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
-        ${shrdirs_funcname}
+        local shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
+        ${shrdirs_funcname} || exit 1
     done
 
     # Create shared directories
     local dirname
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
-        absdir=`get_absolute_shdirname "$dirname"`
+        local absdir=`get_absolute_shdirname "$dirname"`
         if [ ! -d "${absdir}" ]; then
            mkdir -p "${absdir}" || exit 1
         fi
