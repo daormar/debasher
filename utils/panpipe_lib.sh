@@ -2655,7 +2655,7 @@ default_reset_outdir_for_step()
 
     if [ -d "${outd}" ]; then
         echo "* Resetting output directory for step...">&2
-        rm -rf "${outd}/*" || { echo "Error! could not clear output directory" >&2; return 1; }
+        rm -rf "${outd}"/* || { echo "Error! could not clear output directory" >&2; return 1; }
     fi
 }
 
