@@ -208,6 +208,27 @@ is_absolute_path()
 ########
 get_absolute_path()
 {
+  local relative_path="$1"
+  local current_dir="$(pwd)"
+  local absolute_path=""
+
+  if [[ "$relative_path" == /* ]]; then
+    # If the relative path is already an absolute path
+    absolute_path="$relative_path"
+  else
+    # If the relative path is not absolute, make it absolute
+    absolute_path="$current_dir/$relative_path"
+  fi
+
+  # Normalize the path to handle any double slashes or dots
+  absolute_path=$("${REALPATH}" -e "$absolute_path")
+
+  echo "$absolute_path"
+}
+
+########
+get_absolute_path_existing()
+{
     # IMPORTANT WARNING: This function just returns the given path if it
     # does not correspond with a existing file or directory.
     local file=$1
