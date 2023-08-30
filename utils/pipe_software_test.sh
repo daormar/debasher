@@ -288,7 +288,7 @@ step_e()
     # Initialize variables
     local fifo=`read_opt_value_from_line "$*" "-fifo"`
 
-    # Write string to FIFO
+    # Read strings from FIFO
     cat < "${fifo}"
 
     # sleep some time
@@ -332,7 +332,7 @@ step_f()
     # Activate conda environment
     conda activate py27
 
-    # Write string to FIFO
+    # Write python version to file
     python --version > "${step_outd}"/python_ver.txt 2>&1
 
     # Deactivate conda environment
