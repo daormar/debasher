@@ -221,7 +221,7 @@ get_absolute_path()
   fi
 
   # Normalize the path to handle any double slashes or dots
-  absolute_path=$("${REALPATH}" -e "$absolute_path")
+  absolute_path=$("${REALPATH}" "$absolute_path")
 
   echo "$absolute_path"
 }
