@@ -197,7 +197,7 @@ init_bash_shebang_var()
 is_absolute_path()
 {
     file=$1
-    case $file in
+    case "$file" in
         /*) return 0
             ;;
         *) return 1
