@@ -861,9 +861,9 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-create_basic_dirs || exit 1
-
 absolutize_file_paths || exit 1
+
+create_basic_dirs || exit 1
 
 check_pipeline_file || exit 1
 
