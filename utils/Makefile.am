@@ -38,6 +38,7 @@ SUFFIXES= .sh .py .r .R
 	echo "TR=\"$(TR)\"" >> $@
 	echo "BASENAME=\"$(BASENAME)\"" >> $@
 	echo "DIRNAME=\"$(DIRNAME)\"" >> $@
+	echo "REALPATH=\"$(REALPATH)\"" >> $@
 	echo "SPLIT=\"$(SPLIT)\"" >> $@
 	echo "CUT=\"$(CUT)\"" >> $@
 	echo "HEAD=\"$(HEAD)\"" >> $@
