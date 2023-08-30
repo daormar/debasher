@@ -50,7 +50,7 @@ step_a_document()
 step_a_explain_cmdline_opts()
 {
     # -a option
-    description="Sleep time in seconds"
+    local description="Sleep time in seconds"
     explain_cmdline_req_opt "-a" "<int>" "$description"
 }
 
@@ -89,7 +89,7 @@ step_b_document()
 step_b_explain_cmdline_opts()
 {
     # -b option
-    description="Value to write to file in data directory"
+    local description="Value to write to file in data directory"
     explain_cmdline_req_opt "-b" "<int>" "$description"
 }
 
@@ -105,7 +105,7 @@ step_b_define_opts()
     define_cmdline_opt "$cmdline" "-b" optlist || return 1
 
     # Get absolute name of shared directory
-    abs_shrdir=`get_absolute_shdirname "data"`
+    local abs_shrdir=`get_absolute_shdirname "data"`
 
     # Define option for FIFO
     define_opt "-datadir" "${abs_shrdir}" optlist || return 1
@@ -138,7 +138,7 @@ step_c_document()
 step_c_explain_cmdline_opts()
 {
     # -c option
-    description="Sleep time in seconds"
+    local description="Sleep time in seconds"
     explain_cmdline_req_opt "-c" "<int>" "$description"
 }
 
@@ -230,7 +230,7 @@ step_d_define_opts()
     local optlist=""
 
     # Get absolute name of FIFO
-    abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
+    local abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
@@ -273,7 +273,7 @@ step_e_define_opts()
     local optlist=""
 
     # Get absolute name of FIFO
-    abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
+    local abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
@@ -422,7 +422,7 @@ step_h_document()
 step_h_explain_cmdline_opts()
 {
     # -b option
-    description="Value to write to file in data directory"
+    local description="Value to write to file in data directory"
     explain_cmdline_req_opt "-h" "<int>" "$description"
 }
 
@@ -438,7 +438,7 @@ step_h_define_opts()
     define_cmdline_opt "$cmdline" "-h" optlist || return 1
 
     # Get absolute name of shared directory
-    abs_shrdir=`get_absolute_shdirname "data"`
+    local abs_shrdir=`get_absolute_shdirname "data"`
 
     # Define option for FIFO
     define_opt "-datadir" "${abs_shrdir}" optlist || return 1
