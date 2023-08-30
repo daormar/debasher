@@ -107,7 +107,7 @@ step_b_define_opts()
     # Get absolute name of shared directory
     local abs_shrdir=`get_absolute_shdirname "data"`
 
-    # Define option for FIFO
+    # Define option for shared data dir
     define_opt "-datadir" "${abs_shrdir}" optlist || return 1
 
     # Save option list
@@ -440,7 +440,7 @@ step_h_define_opts()
     # Get absolute name of shared directory
     local abs_shrdir=`get_absolute_shdirname "data"`
 
-    # Define option for FIFO
+    # Define option for shared directory
     define_opt "-datadir" "${abs_shrdir}" optlist || return 1
 
     # Save option list
