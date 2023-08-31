@@ -3097,10 +3097,12 @@ search_mod_in_dirs()
     local dir
     local fullmodname
     for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
-        if [ -f "${dir}/${module}" ]; then
-            fullmodname="${dir}/${module}"
-            break
-        fi
+        for fname in "${dir}/${module}" "${dir}/${module}.sh"; do
+            if [ -f "${fname}" ]; then
+                fullmodname="${fname}"
+                break
+            fi
+        done
     done
 
     # Fallback to package bindir
@@ -3138,7 +3140,7 @@ load_pipeline_module()
     if [ -f "${fullmodname}" ]; then
         . "${fullmodname}" || return 1
         # Store module name in associative array
-        i=${#PIPELINE_MODULES[@]}
+        local i=${#PIPELINE_MODULES[@]}
         PIPELINE_MODULES[${i}]="${fullmodname}"
     else
         echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
@@ -3914,11 +3916,23 @@ define_indir_opt()
 }
 
 ########
+get_modname_from_absmodname()
+{
+    local absmodname=$1
+
+    local modname=`${BASENAME} "${absmodname}"`
+
+    modname="${modname%.sh}"
+
+    echo "${modname}"
+}
+
+########
 get_shrdirs_funcname()
 {
     local absmodname=$1
 
-    local modname=`$BASENAME ${absmodname}`
+    local modname=`get_modname_from_absmodname "${absmodname}"`
 
     echo "${modname}_shared_dirs"
 }
@@ -3949,7 +3963,7 @@ get_fifos_funcname()
 {
     local absmodname=$1
 
-    local modname=`$BASENAME ${absmodname}`
+    local modname=`get_modname_from_absmodname "${absmodname}"`
 
     echo "${modname}_fifos"
 }
