@@ -1384,7 +1384,7 @@ get_mem_attempt_value()
         echo ${mem_array[${array_idx}]}
     else
         local last_array_idx=$(( array_len - 1 ))
-        echo ${mem_array[${last_array_idx}]]}
+        echo ${mem_array[${last_array_idx}]}
     fi
 }
 
@@ -1431,6 +1431,7 @@ slurm_launch()
     local time=`extract_attr_from_stepspec "$stepspec" "time"`
     local num_attempts=`get_num_attempts ${time} ${mem}`
     local attempt_no=1
+
     while [ ${attempt_no} -le ${num_attempts} ]; do
         # Obtain attempt-dependent parameters
         local mem_attempt=`get_mem_attempt_value ${mem} ${attempt_no}`
