@@ -203,7 +203,7 @@ process_pars()
 
     # Get pipe_exec path
     local pipe_exec_path
-    pipe_exec_path=`get_pipe_exec_path`
+    panpipe_exec_path=`get_panpipe_exec_path`
 
     # Read metadata file
     local entry_num=1
@@ -215,7 +215,7 @@ process_pars()
         dflt_nodes_opt=`get_dflt_nodes_opt`
 
         # Print command to execute pipeline
-        normalize_cmd "\"$(esc_dq "${pipe_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --sched ${sched} ${dflt_nodes_opt} ${ppl_sopts_str} ${ppl_opts_str}"
+        normalize_cmd "\"$(esc_dq "${panpipe_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --sched ${sched} ${dflt_nodes_opt} ${ppl_sopts_str} ${ppl_opts_str}"
 
         entry_num=$((entry_num + 1))
 

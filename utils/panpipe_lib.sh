@@ -613,7 +613,7 @@ get_first_n_fields_of_str()
 }
 
 ########
-get_pipe_exec_path()
+get_panpipe_exec_path()
 {
     echo "${panpipe_bindir}/panpipe_exec"
 }
