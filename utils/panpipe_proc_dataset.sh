@@ -22,14 +22,14 @@
 ########
 print_desc()
 {
-    echo "process_dataset process samples of a given dataset"
-    echo "type \"process_dataset --help\" to get usage information"
+    echo "panpipe_proc_dataset process samples of a given dataset"
+    echo "type \"panpipe_proc_dataset --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "process_dataset        --pfile <string>"
+    echo "panpipe_proc_dataset   --pfile <string>"
     echo "                       --sched <string> [--dflt-nodes <string>]"
     echo "                       --ppl-sopts <string> [--ppl-opts <string>]"
     echo "                       [--help]"

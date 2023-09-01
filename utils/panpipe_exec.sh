@@ -43,14 +43,14 @@ declare -A PIPE_EXEC_STEP_IDS
 ########
 print_desc()
 {
-    echo "pipe_exec executes general purpose pipelines"
+    echo "panpipe_exec executes general purpose pipelines"
     echo "type \"pipe_exec --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "pipe_exec                 --pfile <string> --outdir <string> [--sched <string>]"
+    echo "panpipe_exec              --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--reexec-outdated-steps] [--conda-support]"

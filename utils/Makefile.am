@@ -1,21 +1,23 @@
-SCRIPTS_TO_BE_BUILT= panpipe_lib panpipe_builtin_sched_lib pipe_exec	\
-pipe_exec_batch pipe_check pipe_stop pipe_status pipe_stats		\
-pipe_step_debug panpipe_doc_mod process_dataset pipe_software_test	\
-get_reexec_steps_due_to_deps reformat_pipe_status solve_knapsack_bb	\
-solve_knapsack_ga
+SCRIPTS_TO_BE_BUILT= panpipe_lib panpipe_builtin_sched_lib panpipe_exec	\
+panpipe_exec_batch panpipe_check panpipe_stop panpipe_status		\
+panpipe_stats panpipe_step_debug panpipe_doc_mod panpipe_proc_dataset	\
+panpipe_software_test pp_get_reexec_steps_due_to_deps			\
+panpipe_reformat_status panpipe_solve_knapsack_bb			\
+panpipe_solve_knapsack_ga
 
 bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
 CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
 
-python_PYTHON= knapsack_ga.py
+python_PYTHON= panpipe_knapsack_ga.py
 
-EXTRA_DIST = panpipe_lib.sh panpipe_builtin_sched_lib.sh pipe_exec.sh	\
-pipe_exec_batch.sh pipe_check.py pipe_stop.sh pipe_status.sh		\
-pipe_stats.sh pipe_step_debug.sh panpipe_doc_mod.sh process_dataset.sh	\
-pipe_software_test.sh get_reexec_steps_due_to_deps.py			\
-reformat_pipe_status.py solve_knapsack_bb.py solve_knapsack_ga.py	\
-knapsack_ga.py
+EXTRA_DIST = panpipe_lib.sh panpipe_builtin_sched_lib.sh		\
+panpipe_exec.sh panpipe_exec_batch.sh panpipe_check.py panpipe_stop.sh	\
+panpipe_status.sh panpipe_stats.sh panpipe_step_debug.sh		\
+panpipe_doc_mod.sh panpipe_proc_dataset.sh panpipe_software_test.sh	\
+pp_get_reexec_steps_due_to_deps.py panpipe_reformat_status.py		\
+panpipe_solve_knapsack_bb.py panpipe_solve_knapsack_ga.py		\
+panpipe_knapsack_ga.py
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
@@ -74,7 +76,7 @@ SUFFIXES= .sh .py .r .R
 	rm -f $@
 	echo "#! " $(PYTHON) > $@
 	echo "import sys" >> $@
-	echo "sys.path.append(\"$(pythondir)\")" >> $@	
+	echo "sys.path.append(\"$(pythondir)\")" >> $@
 	cat $< >> $@
 	chmod ugo+x $@
 

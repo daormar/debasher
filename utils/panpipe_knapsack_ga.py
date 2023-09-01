@@ -1,21 +1,21 @@
 """
 PanPipe package
 Copyright 2019,2020 Daniel Ortiz-Mart\'inez
- 
+
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public License
 as published by the Free Software Foundation; either version 3
 of the License, or (at your option) any later version.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Lesser General Public License for more details.
- 
+
 You should have received a copy of the GNU Lesser General Public License
 along with this program; If not, see <http://www.gnu.org/licenses/>.
 """
- 
+
 # *- python -*
 
 # import modules
@@ -27,7 +27,7 @@ import random, time
 # Based on github code created by Edmilson Rocha
 # GitHub: https://github.com/edmilsonrobson
 ##############################################################################
-        
+
 ##################################################
 def fitness(target,weights,values,capacities):
     """
@@ -39,7 +39,7 @@ def fitness(target,weights,values,capacities):
     total_weights = []
     for i in range(len(weights)):
         total_weights.append(0)
-        
+
     # Compute total value
     for i in range(len(target)):
         if (target[i]==1):
@@ -49,7 +49,7 @@ def fitness(target,weights,values,capacities):
     for i in range(len(weights)):
         for j in range(len(weights[i])):
             if (target[j]==1):
-                total_weights[i]+=weights[i][j]        
+                total_weights[i]+=weights[i][j]
 
     # Verify capacities
     excess=0
@@ -64,7 +64,7 @@ def fitness(target,weights,values,capacities):
         return total_value
     else:
         return -excess
-    
+
 ##################################################
 def spawn_starting_population(amount,start_pop_with_zeroes,num_items):
     population=[]
@@ -89,7 +89,7 @@ def spawn_individual(start_pop_with_zeroes,num_items):
 def mutate(target):
     """
     Changes a random element of the permutation array from 0 -> 1 or from 1 -> 0.
-    """ 
+    """
     r = random.randint(0,len(target)-1)
     if target[r] == 1:
         target[r] = 0
@@ -124,7 +124,7 @@ def evolve_population(pop):
     desired_length = len(pop) - len(parents)
     while len(children) < desired_length :
         male = pop[random.randint(0,len(parents)-1)]
-        female = pop[random.randint(0,len(parents)-1)]        
+        female = pop[random.randint(0,len(parents)-1)]
         mixpoint=random.randint(0,len(parents))
         child = male[:mixpoint] + female[mixpoint:] # from start to mixpoint from father, from mixpoint to end from mother
         if mutation_chance > random.random():
@@ -143,7 +143,7 @@ def get_packed_items(chrom):
         if chrom[i]==1:
             packed_items.append(i)
     return packed_items
-            
+
 ##################################################
 def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities,time_limit=-1):
     # Set random number seed
@@ -151,7 +151,7 @@ def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacit
 
     # Get start time
     start=time.time()
-    
+
     # Compute generations
     generation = 1
     population = spawn_starting_population(pop_size,start_pop_with_zeroes,len(values))
@@ -165,10 +165,10 @@ def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacit
 
     # Sort final population
     population = sorted(population, key=lambda x: fitness(x,weights,values,capacities), reverse=True)
-    
+
     # Obtain solution
     best_fitted_chrom=population[0]
     computed_value=fitness(best_fitted_chrom,weights,values,capacities)
     packed_items=get_packed_items(best_fitted_chrom)
-    
+
     return computed_value,packed_items
