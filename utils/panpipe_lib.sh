@@ -780,7 +780,7 @@ print_script_body_slurm_sched()
             echo "default_reset_outdir_for_step_array \"$(esc_dq "${dirname}")\" ${stepname} ${taskidx}"
         fi
     else
-        echo "${reset_funct} ${script_opts}"
+        echo "${reset_funct} \"$(esc_dq "${script_opts}")\""
     fi
 
     # Write function to be executed
