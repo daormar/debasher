@@ -1,4 +1,4 @@
-#import pipe_software_test
+#import panpipe_software_test
 #
 step_a  cpus=1 mem=32 time=00:01:00,00:02:00,00:03:00 stepdeps=none
 step_b  cpus=1 mem=32 time=00:01:00 stepdeps=afterok:step_a
