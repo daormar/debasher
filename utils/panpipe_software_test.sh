@@ -25,13 +25,13 @@
 #################
 
 ########
-pipe_software_test_shared_dirs()
+panpipe_software_test_shared_dirs()
 {
     define_shared_dir "data"
 }
 
 ########
-pipe_software_test_fifos()
+panpipe_software_test_fifos()
 {
     define_fifo "step_d_fifo" step_d
 }

@@ -45,7 +45,7 @@ check_pipeline_file()
 {
     echo "* Checking pipeline file ($pfile)..." >&2
 
-    "${panpipe_bindir}"/pipe_check -p "${pfile}" || return 1
+    "${panpipe_bindir}"/panpipe_check -p "${pfile}" || return 1
 
     echo "" >&2
 }

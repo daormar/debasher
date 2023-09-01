@@ -789,7 +789,7 @@ builtin_sched_print_knapsack_sol()
     local available_cpus=`builtin_sched_get_available_cpus`
     local available_mem=`builtin_sched_get_available_mem`
     local time_limit=1
-    "${panpipe_bindir}"/solve_knapsack_ga -s "${specfile}" -c ${available_cpus},${available_mem} -t ${time_limit}
+    "${panpipe_bindir}"/panpipe_solve_knapsack_ga -s "${specfile}" -c ${available_cpus},${available_mem} -t ${time_limit}
 }
 
 ########

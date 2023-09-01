@@ -44,7 +44,7 @@ declare -A PIPE_EXEC_STEP_IDS
 print_desc()
 {
     echo "panpipe_exec executes general purpose pipelines"
-    echo "type \"pipe_exec --help\" to get usage information"
+    echo "type \"panpipe_exec --help\" to get usage information"
 }
 
 ########
@@ -237,7 +237,7 @@ check_pipeline_file()
 {
     echo "* Checking pipeline file ($pfile)..." >&2
 
-    "${panpipe_bindir}"/pipe_check -p "${pfile}" || return 1
+    "${panpipe_bindir}"/panpipe_check -p "${pfile}" || return 1
 
     echo "" >&2
 }
@@ -247,7 +247,7 @@ reorder_pipeline_file()
 {
     echo "* Obtaining reordered pipeline file ($pfile)..." >&2
 
-    "${panpipe_bindir}"/pipe_check -p "${pfile}" -r 2> /dev/null || return 1
+    "${panpipe_bindir}"/panpipe_check -p "${pfile}" -r 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -257,7 +257,7 @@ gen_stepdeps()
 {
     echo "* Generating step dependencies information ($pfile)..." >&2
 
-    "${panpipe_bindir}"/pipe_check -p "${pfile}" -d 2> /dev/null || return 1
+    "${panpipe_bindir}"/panpipe_check -p "${pfile}" -d 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -557,7 +557,7 @@ define_reexec_steps_due_to_deps()
     # Obtain list of steps to be reexecuted due to dependencies
     local reexec_steps_string=`get_reexec_steps_as_string`
     local reexec_steps_file="${outd}/${REEXEC_STEPS_LIST_FNAME}"
-    "${panpipe_bindir}"/get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d "${stepdeps_file}" > "${reexec_steps_file}" || return 1
+    "${panpipe_bindir}"/pp_get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d "${stepdeps_file}" > "${reexec_steps_file}" || return 1
 
     # Read information about the steps to be re-executed due to
     # dependencies

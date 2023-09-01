@@ -33,14 +33,14 @@ export RESERVED_HOOK_EXIT_CODE=200
 ########
 print_desc()
 {
-    echo "pipe_exec_batch executes a batch of pipelines"
+    echo "panpipe_exec_batch executes a batch of pipelines"
     echo "type \"pipe_exec_batch --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "pipe_exec_batch           -f <string> -m <int> [-o <string>] [-u <int>]"
+    echo "panpipe_exec_batch        -f <string> -m <int> [-o <string>] [-u <int>]"
     echo "                          [-k <string>] [--help]"
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"
@@ -297,7 +297,7 @@ get_ppl_status()
     if [ -d "${pipe_cmd_outd}" ]; then
         # Obtain pipeline status
         local tmpfile=`"${MKTEMP}"`
-        "${panpipe_bindir}"/pipe_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
+        "${panpipe_bindir}"/panpipe_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
         # Obtain percentage of unfinished steps

@@ -22,14 +22,14 @@
 ########
 print_desc()
 {
-    echo "pipe_status gets status of pipeline steps"
-    echo "type \"pipe_status --help\" to get usage information"
+    echo "panpipe_status gets status of pipeline steps"
+    echo "type \"panpipe_status --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "pipe_status               -d <string> [-s <string>] [-i]"
+    echo "panpipe_status            -d <string> [-s <string>] [-i]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for pipeline steps"
