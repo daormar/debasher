@@ -330,10 +330,10 @@ step_f()
     local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
 
     # Activate conda environment
-    conda activate py27
+    conda activate py27 || return 1
 
     # Write python version to file
-    python --version > "${step_outd}"/python_ver.txt 2>&1
+    python --version > "${step_outd}"/python_ver.txt 2>&1 || return 1
 
     # Deactivate conda environment
     conda deactivate
