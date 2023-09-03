@@ -625,7 +625,8 @@ create_basic_dirs()
     mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     set_panpipe_outdir "${outd}"
 
-    mkdir -p "${outd}"/scripts || { echo "Error! cannot create scripts directory" >&2; return 1; }
+    local scriptsdir=`get_ppl_scripts_dir`
+    mkdir -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
     local fifodir=`get_absolute_fifoname`
     mkdir -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
