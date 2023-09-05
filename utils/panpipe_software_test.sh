@@ -153,10 +153,6 @@ step_c_define_opts()
     # -c option
     define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
-    # Define the -step-outd option, the output directory for the step
-    local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
-    define_opt "-step-outd" "${step_outd}" optlist || return 1
-
     # Save option list so as to execute step four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
@@ -170,17 +166,16 @@ step_c()
 {
     # Initialize variables
     local sleep_time=`read_opt_value_from_line "$*" "-c"`
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # create auxiliary file
-    touch "${step_outd}"/${id}_aux
+    touch "${PANPIPE_STEP_OUTDIR}"/${id}_aux
 
     # sleep some time
     sleep ${sleep_time}
 
     # create file
-    touch "${step_outd}"/$id
+    touch "${PANPIPE_STEP_OUTDIR}"/$id
 }
 
 ########
@@ -189,11 +184,10 @@ step_c_post()
     logmsg "Cleaning directory..."
 
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # Remove auxiliary file
-    rm "${step_outd}"/${id}_aux
+    rm "${PANPIPE_STEP_OUTDIR}"/${id}_aux
 
     logmsg "Cleaning finished"
 }
@@ -202,11 +196,10 @@ step_c_post()
 step_c_reset_outdir()
 {
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # create auxiliary file
-    rm -f "${step_outd}"/${id}*
+    rm -f "${PANPIPE_STEP_OUTDIR}"/${id}*
 }
 
 ########
@@ -315,10 +308,6 @@ step_f_define_opts()
     local stepspec=$2
     local optlist=""
 
-    # Define the -step-outd option, the output directory for the step
-    local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
-    define_opt "-step-outd" "${step_outd}" optlist || return 1
-
     # Save option list
     save_opt_list optlist
 }
@@ -326,14 +315,11 @@ step_f_define_opts()
 ########
 step_f()
 {
-    # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
-
     # Activate conda environment
     conda activate py27 || return 1
 
     # Write python version to file
-    python --version > "${step_outd}"/python_ver.txt 2>&1 || return 1
+    python --version > "${PANPIPE_STEP_OUTDIR}"/python_ver.txt 2>&1 || return 1
 
     # Deactivate conda environment
     conda deactivate
@@ -368,10 +354,6 @@ step_g_define_opts()
     local stepspec=$2
     local optlist=""
 
-    # Define the -step-outd option, the output directory for the step
-    local step_outd=`get_step_outdir_given_stepspec "$stepspec"`
-    define_opt "-step-outd" "${step_outd}" optlist || return 1
-
     # Save option list so as to execute step four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
@@ -384,17 +366,16 @@ step_g_define_opts()
 step_g()
 {
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # create auxiliary file
-    touch "${step_outd}"/${id}_aux
+    touch "${PANPIPE_STEP_OUTDIR}"/${id}_aux
 
     # sleep some time
     sleep 10
 
     # create file
-    touch "${step_outd}"/$id
+    touch "${PANPIPE_STEP_OUTDIR}"/$id
 }
 
 ########
@@ -403,11 +384,10 @@ step_g_post()
     logmsg "Cleaning directory..."
 
     # Initialize variables
-    local step_outd=`read_opt_value_from_line "$*" "-step-outd"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # Remove auxiliary file
-    rm "${step_outd}"/${id}_aux
+    rm "${PANPIPE_STEP_OUTDIR}"/${id}_aux
 
     logmsg "Cleaning finished"
 }
