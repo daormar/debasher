@@ -751,6 +751,8 @@ print_script_header_slurm_sched()
     echo "PANPIPE_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
     echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
     echo "PANPIPE_STEP_NAME=${stepname}"
+    local outd=`get_step_outdir "${dirname}" "${stepname}"`
+    echo "PANPIPE_STEP_OUTDIR=\"$(esc_dq "${outd}")\""
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
 }
 

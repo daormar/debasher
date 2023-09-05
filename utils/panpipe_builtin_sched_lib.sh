@@ -928,6 +928,8 @@ builtin_sched_print_script_header()
     echo "PANPIPE_SCRIPT_FILENAME=\"${fname}\""
     echo "PANPIPE_DIR_NAME=\"${dirname}\""
     echo "PANPIPE_STEP_NAME=${stepname}"
+    local outd=`get_step_outdir \"${dirname}\" \"${stepname}\"`
+    echo "PANPIPE_STEP_OUTDIR=\"$(esc_dq "${outd}")\""
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
     echo "builtin_sched_print_pid_to_file"
 }
