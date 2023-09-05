@@ -107,8 +107,9 @@ step_b_define_opts()
     # Get absolute name of shared directory
     local abs_shrdir=`get_absolute_shdirname "data"`
 
-    # Define option for shared data dir
-    define_opt "-datadir" "${abs_shrdir}" optlist || return 1
+    # Define name of output file
+    local outf="${abs_shrdir}/step_b.out"
+    define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -119,13 +120,13 @@ step_b()
 {
     # Initialize variables
     local value=`read_opt_value_from_line "$*" "-b"`
-    local datadir=`read_opt_value_from_line "$*" "-datadir"`
+    local outf=`read_opt_value_from_line "$*" "-outf"`
 
     # sleep some time
     sleep 10
 
     # Write value to file
-    echo "$value" > "${datadir}"/step_b.out
+    echo "$value" > "${outf}"
 }
 
 ########
@@ -420,8 +421,9 @@ step_h_define_opts()
     # Get absolute name of shared directory
     local abs_shrdir=`get_absolute_shdirname "data"`
 
-    # Define option for shared directory
-    define_opt "-datadir" "${abs_shrdir}" optlist || return 1
+    # Define name of output file
+    local outf="${abs_shrdir}/step_h.out"
+    define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -432,11 +434,11 @@ step_h()
 {
     # Initialize variables
     local value=`read_opt_value_from_line "$*" "-h"`
-    local datadir=`read_opt_value_from_line "$*" "-datadir"`
+    local outf=`read_opt_value_from_line "$*" "-outf"`
 
     # sleep some time
     sleep 10
 
     # Write value to file
-    echo "$value" > "${datadir}"/step_h.out
+    echo "$value" > "${outf}"
 }
