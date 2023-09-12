@@ -1,21 +1,21 @@
 """
 PanPipe package
 Copyright 2019,2020 Daniel Ortiz-Mart\'inez
- 
+
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public License
 as published by the Free Software Foundation; either version 3
 of the License, or (at your option) any later version.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Lesser General Public License for more details.
- 
+
 You should have received a copy of the GNU Lesser General Public License
 along with this program; If not, see <http://www.gnu.org/licenses/>.
 """
- 
+
 # *- python -*
 
 # import modules
@@ -30,7 +30,7 @@ def take_pars():
     flags["c_given"]=False
     flags["t_given"]=False
     values["time"]=-1
-    
+
     try:
         opts, args = getopt.getopt(sys.argv[1:],"s:c:t:",["spec=","capacities=","time="])
     except getopt.GetoptError:
@@ -69,7 +69,7 @@ def print_help():
     print("-s <string>    Item weight and value specification", file=sys.stderr)
     print("-c <string>    Comma-separated list of capacities", file=sys.stderr)
     print("-t <float>     Time limit in seconds (no limit by default)", file=sys.stderr)
-    
+
 ##################################################
 def extract_spec_info(specfile):
     items=[]
@@ -91,7 +91,7 @@ def extract_spec_info(specfile):
             weights.append([])
         for i in range(2,len(fields)):
             weights[i-2].append(int(fields[i]))
-        
+
     return items,weights,values
 
 ##################################################
@@ -106,14 +106,14 @@ def get_capacities(capacities):
 def solve(items,weights,values,capacities,tlimit):
     # Create solver
     solver = pywrapknapsack_solver.KnapsackSolver(pywrapknapsack_solver.KnapsackSolver.KNAPSACK_MULTIDIMENSION_BRANCH_AND_BOUND_SOLVER,'problem')
-    
+
     # Initialize solver
     solver.Init(values, weights, capacities)
 
     # Set time limit if given
     if tlimit > 0:
         solver.set_time_limit(tlimit)
-    
+
     # Solve problem
     computed_value= solver.Solve()
 
@@ -141,7 +141,7 @@ def process_pars(flags,values):
     capacities=get_capacities(values["capacities"])
     computed_value,packed_items,packed_weights=solve(items,weights,vals,capacities,values["time"])
     print_solution(items,computed_value,packed_items,packed_weights)
-    
+
 ##################################################
 def main(argv):
     # take parameters
@@ -152,6 +152,6 @@ def main(argv):
 
     # process parameters
     process_pars(flags,values)
-    
+
 if __name__ == "__main__":
     main(sys.argv)

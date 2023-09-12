@@ -1,21 +1,21 @@
 """
 PanPipe package
 Copyright 2019,2020 Daniel Ortiz-Mart\'inez
- 
+
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public License
 as published by the Free Software Foundation; either version 3
 of the License, or (at your option) any later version.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Lesser General Public License for more details.
- 
+
 You should have received a copy of the GNU Lesser General Public License
 along with this program; If not, see <http://www.gnu.org/licenses/>.
 """
- 
+
 # *- python -*
 
 # import modules
@@ -34,7 +34,7 @@ def take_pars():
     values["popsize"]=100
     flags["t_given"]=False
     values["time"]=-1
-    
+
     try:
         opts, args = getopt.getopt(sys.argv[1:],"s:c:g:p:t:",["spec=","capacities=","maxgen=","popsize=","time="])
     except getopt.GetoptError:
@@ -81,7 +81,7 @@ def print_help():
     print("-g <int>       Number of generations (1000 by default)", file=sys.stderr)
     print("-p <int>       Population size (100 by default)", file=sys.stderr)
     print("-t <float>     Time limit in seconds (no limit by default)", file=sys.stderr)
-    
+
 ##################################################
 def extract_spec_info(specfile):
     items=[]
@@ -103,7 +103,7 @@ def extract_spec_info(specfile):
             weights.append([])
         for i in range(2,len(fields)):
             weights[i-2].append(int(fields[i]))
-        
+
     return items,weights,values
 
 ##################################################
@@ -126,7 +126,7 @@ def solve(max_gen,pop_size,items,weights,values,capacities,time_limit):
             packed_weights[j]+=weights[j][i]
 
     return computed_value,packed_items,packed_weights
-    
+
 ##################################################
 def print_solution(items,computed_value,packed_items,packed_weights):
     print("Value:",computed_value)
@@ -139,7 +139,7 @@ def process_pars(flags,values):
     capacities=get_capacities(values["capacities"])
     computed_value,packed_items,packed_weights=solve(values["maxgen"],values["popsize"],items,weights,vals,capacities,values["time"])
     print_solution(items,computed_value,packed_items,packed_weights)
-    
+
 ##################################################
 def main(argv):
     # take parameters
@@ -150,6 +150,6 @@ def main(argv):
 
     # process parameters
     process_pars(flags,values)
-    
+
 if __name__ == "__main__":
     main(sys.argv)
