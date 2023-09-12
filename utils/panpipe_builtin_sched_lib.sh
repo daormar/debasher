@@ -21,11 +21,11 @@
 #############
 
 # MISC CONSTANTS
-BUILTIN_SCHED_FAILED_STEP_STATUS="FAILED"
+BUILTIN_SCHED_FAILED_PROCESS_STATUS="FAILED"
 BUILTIN_SCHED_NO_ARRAY_TASK="NO_ARRAY_TASK"
 BUILTIN_SCHED_SLEEP_TIME_LONG=5
 BUILTIN_SCHED_SLEEP_TIME_SHORT=1
-BUILTIN_SCHED_NSTEPS_SLEEP_THRESHOLD=10
+BUILTIN_SCHED_NPROCESSES_SLEEP_THRESHOLD=10
 BUILTIN_SCHED_KNAPSACK_SPEC_FNAME=.knapsack_spec.txt
 BUILTIN_SCHED_KNAPSACK_SOL_FNAME=.knapsack_sol.txt
 
@@ -40,20 +40,20 @@ BUILTIN_SCHED_TODO_TASK_STATUS="TO-DO"
 ####################
 
 # Declare built-in scheduler-related variables
-declare -A BUILTIN_SCHED_STEPNAME_TO_IDX
-declare -A BUILTIN_SCHED_IDX_TO_STEPNAME
-declare -A BUILTIN_SCHED_STEP_SCRIPT_FILENAME
-declare -A BUILTIN_SCHED_STEP_SPEC
-declare -A BUILTIN_SCHED_STEP_DEPS
-declare -A BUILTIN_SCHED_STEP_ARRAY_SIZE
-declare -A BUILTIN_SCHED_STEP_THROTTLE
-declare -A BUILTIN_SCHED_STEP_CPUS
-declare -A BUILTIN_SCHED_STEP_ALLOC_CPUS
-declare -A BUILTIN_SCHED_STEP_MEM
-declare -A BUILTIN_SCHED_STEP_ALLOC_MEM
-declare -A BUILTIN_SCHED_STEP_LAUNCHED_TASKS
-declare -A BUILTIN_SCHED_CURR_STEP_STATUS
-declare BUILTIN_SCHED_SELECTED_STEPS
+declare -A BUILTIN_SCHED_PROCESSNAME_TO_IDX
+declare -A BUILTIN_SCHED_IDX_TO_PROCESSNAME
+declare -A BUILTIN_SCHED_PROCESS_SCRIPT_FILENAME
+declare -A BUILTIN_SCHED_PROCESS_SPEC
+declare -A BUILTIN_SCHED_PROCESS_DEPS
+declare -A BUILTIN_SCHED_PROCESS_ARRAY_SIZE
+declare -A BUILTIN_SCHED_PROCESS_THROTTLE
+declare -A BUILTIN_SCHED_PROCESS_CPUS
+declare -A BUILTIN_SCHED_PROCESS_ALLOC_CPUS
+declare -A BUILTIN_SCHED_PROCESS_MEM
+declare -A BUILTIN_SCHED_PROCESS_ALLOC_MEM
+declare -A BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS
+declare -A BUILTIN_SCHED_CURR_PROCESS_STATUS
+declare BUILTIN_SCHED_SELECTED_PROCESSES
 declare BUILTIN_SCHED_CPUS=1
 declare BUILTIN_SCHED_MEM=256
 declare BUILTIN_SCHED_ALLOC_CPUS=0
@@ -94,49 +94,49 @@ builtin_sched_mem_within_limit()
 }
 
 ########
-builtin_sched_update_stepname_to_idx_info()
+builtin_sched_update_processname_to_idx_info()
 {
-    local stepname=$1
-    if [ ${BUILTIN_SCHED_STEPNAME_TO_IDX[${stepname}]} = ""]; then
-        local len=${#BUILTIN_SCHED_STEPNAME_TO_IDX[@]}
-        BUILTIN_SCHED_STEPNAME_TO_IDX[${stepname}]=${len}
-        BUILTIN_SCHED_IDX_TO_STEPNAME[${len}]=${stepname}
+    local processname=$1
+    if [ ${BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]} = ""]; then
+        local len=${#BUILTIN_SCHED_PROCESSNAME_TO_IDX[@]}
+        BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]=${len}
+        BUILTIN_SCHED_IDX_TO_PROCESSNAME[${len}]=${processname}
     fi
 }
 
 ########
-builtin_sched_init_step_info()
+builtin_sched_init_process_info()
 {
     local cmdline=$1
     local dirname=$2
     local pfile=$3
 
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local script_filename=`get_script_filename "${dirname}" ${stepname}`
-            local status=`get_step_status "${dirname}" ${stepname}`
-            local stepdeps=`extract_stepdeps_from_stepspec "$stepspec"`
-            local spec_throttle=`extract_attr_from_stepspec "$stepspec" "throttle"`
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local script_filename=`get_script_filename "${dirname}" ${processname}`
+            local status=`get_process_status "${dirname}" ${processname}`
+            local processdeps=`extract_processdeps_from_process_spec "$process_spec"`
+            local spec_throttle=`extract_attr_from_process_spec "$process_spec" "throttle"`
             local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
-            local array_size=`get_task_array_size_for_step "${cmdline}" "${stepspec}"`
+            local array_size=`get_task_array_size_for_process "${cmdline}" "${process_spec}"`
 
             # Get cpus info
-            local cpus=`extract_cpus_from_stepspec "$stepspec"`
-            str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $stepname should be a natural number" >&2; return 1; }
+            local cpus=`extract_cpus_from_process_spec "$process_spec"`
+            str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $processname should be a natural number" >&2; return 1; }
 
             # Get mem info (NOTE: if multiple attempts specified, keep
             # memory specification of the first one)
-            local mem=`extract_mem_from_stepspec "$stepspec"`
+            local mem=`extract_mem_from_process_spec "$process_spec"`
             local attempt_no=1
             mem=`get_mem_attempt_value ${mem} ${attempt_no}`
-            mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for step ${stepname}" >&2; return 1; }
-            str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $stepname should be a natural number" >&2; return 1; }
+            mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }
+            str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $processname should be a natural number" >&2; return 1; }
 
             # Obtain full throttle cpus value
             local full_throttle_cpus=${cpus}
@@ -144,7 +144,7 @@ builtin_sched_init_step_info()
                 full_throttle_cpus=$((cpus * sched_throttle))
             fi
             # Check full_throttle_cpus value
-            builtin_sched_cpus_within_limit ${full_throttle_cpus} || { echo "Error: number of cpus for step $stepname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
+            builtin_sched_cpus_within_limit ${full_throttle_cpus} || { echo "Error: number of cpus for process $processname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
             # Obtain full throttle mem value
             local full_throttle_mem=${mem}
@@ -152,20 +152,20 @@ builtin_sched_init_step_info()
                 full_throttle_mem=$((mem * sched_throttle))
             fi
             # Check mem value
-            builtin_sched_mem_within_limit ${full_throttle_mem} || { echo "Error: amount of memory for step $stepname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
+            builtin_sched_mem_within_limit ${full_throttle_mem} || { echo "Error: amount of memory for process $processname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
-            # Register step information
-            builtin_sched_update_stepname_to_idx_info ${stepname}
-            BUILTIN_SCHED_STEP_SCRIPT_FILENAME[${stepname}]=${script_filename}
-            BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${status}
-            BUILTIN_SCHED_STEP_SPEC[${stepname}]="${stepspec}"
-            BUILTIN_SCHED_STEP_DEPS[${stepname}]=${stepdeps}
-            BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]=${array_size}
-            BUILTIN_SCHED_STEP_THROTTLE[${stepname}]=${sched_throttle}
-            BUILTIN_SCHED_STEP_CPUS[${stepname}]=${cpus}
-            BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=0
-            BUILTIN_SCHED_STEP_MEM[${stepname}]=${mem}
-            BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=0
+            # Register process information
+            builtin_sched_update_processname_to_idx_info ${processname}
+            BUILTIN_SCHED_PROCESS_SCRIPT_FILENAME[${processname}]=${script_filename}
+            BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${status}
+            BUILTIN_SCHED_PROCESS_SPEC[${processname}]="${process_spec}"
+            BUILTIN_SCHED_PROCESS_DEPS[${processname}]=${processdeps}
+            BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]=${array_size}
+            BUILTIN_SCHED_PROCESS_THROTTLE[${processname}]=${sched_throttle}
+            BUILTIN_SCHED_PROCESS_CPUS[${processname}]=${cpus}
+            BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]=0
+            BUILTIN_SCHED_PROCESS_MEM[${processname}]=${mem}
+            BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]=0
         fi
     done < "${pfile}"
 }
@@ -173,96 +173,96 @@ builtin_sched_init_step_info()
 ########
 builtin_sched_release_mem()
 {
-    local stepname=$1
+    local processname=$1
 
-    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]}))
-    BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=0
+    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM - ${BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]}))
+    BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]=0
 }
 
 ########
 builtin_sched_release_cpus()
 {
-    local stepname=$1
+    local processname=$1
 
-    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]}))
-    BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=0
+    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS - ${BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]}))
+    BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]=0
 }
 
 ########
-builtin_sched_get_step_mem()
+builtin_sched_get_process_mem()
 {
-    local stepname=$1
+    local processname=$1
 
-    echo ${BUILTIN_SCHED_STEP_MEM[${stepname}]}
+    echo ${BUILTIN_SCHED_PROCESS_MEM[${processname}]}
 }
 
 ########
-builtin_sched_get_step_mem_given_num_tasks()
+builtin_sched_get_process_mem_given_num_tasks()
 {
-    local stepname=$1
+    local processname=$1
     local ntasks=$2
 
-    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
-        echo ${BUILTIN_SCHED_STEP_MEM[${stepname}]}
+    if [ ${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]} -eq 1 ]; then
+        echo ${BUILTIN_SCHED_PROCESS_MEM[${processname}]}
     else
-        echo $((${BUILTIN_SCHED_STEP_MEM[${stepname}]} * ntasks))
+        echo $((${BUILTIN_SCHED_PROCESS_MEM[${processname}]} * ntasks))
     fi
 }
 
 ########
 builtin_sched_reserve_mem()
 {
-    local stepname=$1
-    local step_mem=`builtin_sched_get_step_mem ${stepname}`
-    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM + step_mem))
-    BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${step_mem}
+    local processname=$1
+    local process_mem=`builtin_sched_get_process_mem ${processname}`
+    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM + process_mem))
+    BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]=${process_mem}
 }
 
 ########
-builtin_sched_get_step_cpus()
+builtin_sched_get_process_cpus()
 {
-    local stepname=$1
+    local processname=$1
 
-    echo ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
+    echo ${BUILTIN_SCHED_PROCESS_CPUS[${processname}]}
 }
 
 ########
-builtin_sched_get_step_cpus_given_num_tasks()
+builtin_sched_get_process_cpus_given_num_tasks()
 {
-    local stepname=$1
+    local processname=$1
     local ntasks=$2
 
-    if [ ${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]} -eq 1 ]; then
-        echo ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
+    if [ ${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]} -eq 1 ]; then
+        echo ${BUILTIN_SCHED_PROCESS_CPUS[${processname}]}
     else
-        echo $((${BUILTIN_SCHED_STEP_CPUS[${stepname}]} * ntasks))
+        echo $((${BUILTIN_SCHED_PROCESS_CPUS[${processname}]} * ntasks))
     fi
 }
 
 ########
 builtin_sched_reserve_cpus()
 {
-    local stepname=$1
-    local step_cpus=`builtin_sched_get_step_cpus ${stepname}`
-    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS + step_cpus))
-    BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_cpus}
+    local processname=$1
+    local process_cpus=`builtin_sched_get_process_cpus ${processname}`
+    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS + process_cpus))
+    BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]=${process_cpus}
 }
 
 ########
 builtin_sched_get_array_task_status()
 {
     local dirname=$1
-    local stepname=$2
+    local processname=$2
     local taskidx=$3
-    local stepdirname=`get_step_outdir "${dirname}" ${stepname}`
-    local array_taskid_file=`get_array_taskid_filename "${dirname}" ${stepname} ${taskidx}`
+    local processdirname=`get_process_outdir "${dirname}" ${processname}`
+    local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${taskidx}`
 
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
         echo ${BUILTIN_SCHED_TODO_TASK_STATUS}
     else
         # Task was started
-        if array_task_is_finished "${dirname}" ${stepname} ${taskidx}; then
+        if array_task_is_finished "${dirname}" ${processname} ${taskidx}; then
             echo ${BUILTIN_SCHED_FINISHED_TASK_STATUS}
         else
             # Task is not finished
@@ -280,12 +280,12 @@ builtin_sched_get_array_task_status()
 builtin_sched_get_failed_array_task_indices()
 {
     local dirname=$1
-    local stepname=$2
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local processname=$2
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
     for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $stepname $taskidx`
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
         if [ ${task_status} = ${BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
@@ -302,12 +302,12 @@ builtin_sched_get_failed_array_task_indices()
 builtin_sched_get_finished_array_task_indices()
 {
     local dirname=$1
-    local stepname=$2
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local processname=$2
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
     for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $stepname $taskidx`
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
         if [ ${task_status} = ${BUILTIN_SCHED_FINISHED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
@@ -324,13 +324,13 @@ builtin_sched_get_finished_array_task_indices()
 builtin_sched_get_inprogress_array_task_indices()
 {
     local dirname=$1
-    local stepname=$2
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local processname=$2
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
     for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $stepname $taskidx`
-        if [ ${task_status} = ${INPROGRESS_STEP_STATUS} ]; then
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
+        if [ ${task_status} = ${INPROGRESS_PROCESS_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
             else
@@ -346,13 +346,13 @@ builtin_sched_get_inprogress_array_task_indices()
 builtin_sched_get_todo_array_task_indices()
 {
     local dirname=$1
-    local stepname=$2
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local processname=$2
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
     local taskidx
     for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $stepname $taskidx`
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
         if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
@@ -369,13 +369,13 @@ builtin_sched_get_todo_array_task_indices()
 builtin_sched_get_pending_array_task_indices()
 {
     local dirname=$1
-    local stepname=$2
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local processname=$2
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
     local taskidx
     for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $stepname $taskidx`
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
         if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} -o ${task_status} = ${BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$taskidx
@@ -392,54 +392,54 @@ builtin_sched_get_pending_array_task_indices()
 builtin_sched_revise_array_mem()
 {
     local dirname=$1
-    local stepname=$2
+    local processname=$2
 
-    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" ${stepname}`
+    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" ${processname}`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
-    local step_revised_mem=`builtin_sched_get_step_mem_given_num_tasks ${stepname} ${num_inprogress_tasks}`
-    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM - ${BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]} + step_revised_mem))
-    BUILTIN_SCHED_STEP_ALLOC_MEM[${stepname}]=${step_revised_mem}
+    local process_revised_mem=`builtin_sched_get_process_mem_given_num_tasks ${processname} ${num_inprogress_tasks}`
+    BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM - ${BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]} + process_revised_mem))
+    BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]=${process_revised_mem}
 }
 
 ########
 builtin_sched_revise_array_cpus()
 {
     local dirname=$1
-    local stepname=$2
+    local processname=$2
 
-    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" ${stepname}`
+    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" ${processname}`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
-    local step_revised_cpus=`builtin_sched_get_step_cpus_given_num_tasks ${stepname} ${num_inprogress_tasks}`
-    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS - ${BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]} + step_revised_cpus))
-    BUILTIN_SCHED_STEP_ALLOC_CPUS[${stepname}]=${step_revised_cpus}
+    local process_revised_cpus=`builtin_sched_get_process_cpus_given_num_tasks ${processname} ${num_inprogress_tasks}`
+    BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS - ${BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]} + process_revised_cpus))
+    BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]=${process_revised_cpus}
 }
 
 ########
 builtin_sched_init_curr_comp_resources()
 {
-    # Iterate over defined steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        if [ ${status} = ${INPROGRESS_STEP_STATUS} ]; then
-            builtin_sched_reserve_mem $stepname
-            builtin_sched_reserve_cpus $stepname
+    # Iterate over defined processes
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+        if [ ${status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+            builtin_sched_reserve_mem $processname
+            builtin_sched_reserve_cpus $processname
         fi
     done
 }
 
 ########
-builtin_sched_get_updated_step_status()
+builtin_sched_get_updated_process_status()
 {
     local dirname=$1
 
-    # Iterate over defined steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        status=${BUILTIN_SCHED_CURR_STEP_STATUS[$stepname]}
-        if [ ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} -a ${status} != ${FINISHED_STEP_STATUS} ]; then
-            local updated_status=`get_step_status "${dirname}" ${stepname}`
-            BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]=${updated_status}
+    # Iterate over defined processes
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[$processname]}
+        if [ ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a ${status} != ${FINISHED_PROCESS_STATUS} ]; then
+            local updated_status=`get_process_status "${dirname}" ${processname}`
+            BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${updated_status}
         fi
     done
 }
@@ -449,57 +449,57 @@ builtin_sched_update_comp_resources()
 {
     local dirname=$1
 
-    # Iterate over steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        prev_status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        updated_status=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
+    # Iterate over processes
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        prev_status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+        updated_status=${BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]}
         if [ "${updated_status}" != "" ]; then
             # Store array size in variable
-            step_array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+            process_array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
             # Check if resources should be released
-            if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} ]; then
-                builtin_sched_release_mem $stepname
-                builtin_sched_release_cpus $stepname
+            if [ ${prev_status} = ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${INPROGRESS_PROCESS_STATUS} ]; then
+                builtin_sched_release_mem $processname
+                builtin_sched_release_cpus $processname
             fi
 
             # Check if resources should be reserved
-            if [ ${prev_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
-                if [ ${step_array_size} -eq 1 ]; then
-                    builtin_sched_reserve_mem $stepname
-                    builtin_sched_reserve_cpus $stepname
+            if [ ${prev_status} != ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+                if [ ${process_array_size} -eq 1 ]; then
+                    builtin_sched_reserve_mem $processname
+                    builtin_sched_reserve_cpus $processname
                 else
-                    # step is an array
-                    builtin_sched_revise_array_mem "${dirname}" $stepname
-                    builtin_sched_revise_array_cpus "${dirname}" $stepname
+                    # process is an array
+                    builtin_sched_revise_array_mem "${dirname}" $processname
+                    builtin_sched_revise_array_cpus "${dirname}" $processname
                 fi
             fi
 
             # Check if resources of job array should be revised
-            if [ ${step_array_size} -gt 1 -a ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} = ${INPROGRESS_STEP_STATUS} ]; then
-                builtin_sched_revise_array_mem "${dirname}" $stepname
-                builtin_sched_revise_array_cpus "${dirname}" $stepname
+            if [ ${process_array_size} -gt 1 -a ${prev_status} = ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+                builtin_sched_revise_array_mem "${dirname}" $processname
+                builtin_sched_revise_array_cpus "${dirname}" $processname
             fi
         fi
     done
 }
 
 ########
-builtin_sched_fix_updated_step_status()
+builtin_sched_fix_updated_process_status()
 {
     # Copy updated status into current status
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        prev_status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        updated_status=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        prev_status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+        updated_status=${BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]}
         if [ "${updated_status}" != "" ]; then
-            if [ ${prev_status} = ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${INPROGRESS_STEP_STATUS} -a ${updated_status} != ${UNFINISHED_BUT_RUNNABLE_STEP_STATUS} -a ${updated_status} != ${FINISHED_STEP_STATUS} ]; then
+            if [ ${prev_status} = ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS} -a ${updated_status} != ${FINISHED_PROCESS_STATUS} ]; then
                 # Status will be set to failed if previous status was
                 # in-progress and new status is unfinished
-                BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_FAILED_STEP_STATUS}
+                BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${BUILTIN_SCHED_FAILED_PROCESS_STATUS}
             else
-                BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]=${BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]}
+                BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]}
             fi
         fi
     done
@@ -528,20 +528,20 @@ builtin_sched_get_available_mem()
 ########
 builtin_sched_check_comp_res()
 {
-    local stepname=$1
+    local processname=$1
 
     if [ ${BUILTIN_SCHED_CPUS} -gt 0 ]; then
         local available_cpus=`builtin_sched_get_available_cpus`
-        step_cpus=`builtin_sched_get_step_cpus ${stepname}`
-        if [ ${step_cpus} -gt ${available_cpus} ]; then
+        process_cpus=`builtin_sched_get_process_cpus ${processname}`
+        if [ ${process_cpus} -gt ${available_cpus} ]; then
             return 1
         fi
     fi
 
     if [ ${BUILTIN_SCHED_MEM} -gt 0 ]; then
         local available_mem=`builtin_sched_get_available_mem`
-        step_mem=`builtin_sched_get_step_mem ${stepname}`
-        if [ ${step_mem} -gt ${available_mem} ]; then
+        process_mem=`builtin_sched_get_process_mem ${processname}`
+        if [ ${process_mem} -gt ${available_mem} ]; then
             return 1
         fi
     fi
@@ -550,55 +550,55 @@ builtin_sched_check_comp_res()
 }
 
 ########
-builtin_sched_check_step_deps()
+builtin_sched_check_process_deps()
 {
-    local stepname=$1
-    local stepdeps=${BUILTIN_SCHED_STEP_DEPS[${stepname}]}
+    local processname=$1
+    local processdeps=${BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
 
     # Iterate over dependencies
-    local separator=`get_stepdeps_separator ${stepdeps}`
+    local separator=`get_processdeps_separator ${processdeps}`
     if [ "${separator}" = "" ]; then
-        local stepdeps_blanks=${stepdeps}
+        local processdeps_blanks=${processdeps}
     else
-        local stepdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${stepdeps}`
+        local processdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
     fi
     local dep
-    for dep in ${stepdeps_blanks}; do
+    for dep in ${processdeps_blanks}; do
         # Extract information from dependency
         local deptype=`get_deptype_part_in_dep ${dep}`
-        local depsname=`get_stepname_part_in_dep ${dep}`
+        local depsname=`get_processname_part_in_dep ${dep}`
 
         # Process dependency
-        depstatus=${BUILTIN_SCHED_CURR_STEP_STATUS[${depsname}]}
+        depstatus=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
 
         # Process exit code
         local dep_ok=1
         case ${deptype} in
-            ${AFTER_STEPDEP_TYPE})
-                if [ ${depstatus} = ${TODO_STEP_STATUS} -o  ${depstatus} = ${UNFINISHED_STEP_STATUS} ]; then
+            ${AFTER_PROCESSDEP_TYPE})
+                if [ ${depstatus} = ${TODO_PROCESS_STATUS} -o  ${depstatus} = ${UNFINISHED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTEROK_STEPDEP_TYPE})
-                if [ ${depstatus} != ${FINISHED_STEP_STATUS} ]; then
+            ${AFTEROK_PROCESSDEP_TYPE})
+                if [ ${depstatus} != ${FINISHED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTERNOTOK_STEPDEP_TYPE})
-                if [ ${depstatus} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+            ${AFTERNOTOK_PROCESSDEP_TYPE})
+                if [ ${depstatus} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTERANY_STEPDEP_TYPE})
-                if [ ${depstatus} = ${FINISHED_STEP_STATUS} -o ${depstatus} = ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
+            ${AFTERANY_PROCESSDEP_TYPE})
+                if [ ${depstatus} = ${FINISHED_PROCESS_STATUS} -o ${depstatus} = ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTERCORR_STEPDEP_TYPE})
-                # NOTE: AFTERCORR_STEPDEP_TYPE dependency type currently
-                # treated in the same way as AFTEROK_STEPDEP_TYPE
+            ${AFTERCORR_PROCESSDEP_TYPE})
+                # NOTE: AFTERCORR_PROCESSDEP_TYPE dependency type currently
+                # treated in the same way as AFTEROK_PROCESSDEP_TYPE
                 # dependency
-                if [ ${depstatus} != ${FINISHED_STEP_STATUS} ]; then
+                if [ ${depstatus} != ${FINISHED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
@@ -641,14 +641,14 @@ builtin_sched_check_step_deps()
 }
 
 ########
-builtin_sched_step_can_be_executed()
+builtin_sched_process_can_be_executed()
 {
-    local stepname=$1
+    local processname=$1
 
     # Check there are enough computational resources
-    builtin_sched_check_comp_res $stepname || return 1
-    # Check step dependencies are satisfied
-    builtin_sched_check_step_deps $stepname || return 1
+    builtin_sched_check_comp_res $processname || return 1
+    # Check process dependencies are satisfied
+    builtin_sched_check_process_deps $processname || return 1
 
     return 0
 }
@@ -656,41 +656,41 @@ builtin_sched_step_can_be_executed()
 ########
 builtin_sched_get_max_num_tasks()
 {
-    local stepname=$1
-    local throttle=${BUILTIN_SCHED_STEP_THROTTLE[${stepname}]}
-    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" $stepname`
+    local processname=$1
+    local throttle=${BUILTIN_SCHED_PROCESS_THROTTLE[${processname}]}
+    local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" $processname`
     local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
     local result=$((throttle - num_inprogress_tasks))
     echo ${result}
 }
 
 ########
-builtin_sched_process_executable_non_array_step()
+builtin_sched_process_executable_non_array_process()
 {
-    local stepname=$1
+    local processname=$1
     local status=$2
 
-    if [ ${status} != ${INPROGRESS_STEP_STATUS} -a ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
-        if builtin_sched_step_can_be_executed ${stepname}; then
-            BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${BUILTIN_SCHED_NO_ARRAY_TASK}
+    if [ ${status} != ${INPROGRESS_PROCESS_STATUS} -a ${status} != ${FINISHED_PROCESS_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
+        if builtin_sched_process_can_be_executed ${processname}; then
+            BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${BUILTIN_SCHED_NO_ARRAY_TASK}
         fi
     fi
 }
 
 ########
-builtin_sched_process_executable_array_step()
+builtin_sched_process_executable_array_process()
 {
-    local stepname=$1
+    local processname=$1
     local status=$2
 
-    if [ ${status} != ${FINISHED_STEP_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_STEP_STATUS} ]; then
-        if builtin_sched_step_can_be_executed ${stepname}; then
-            max_task_num=`builtin_sched_get_max_num_tasks ${stepname}`
+    if [ ${status} != ${FINISHED_PROCESS_STATUS} -a ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
+        if builtin_sched_process_can_be_executed ${processname}; then
+            max_task_num=`builtin_sched_get_max_num_tasks ${processname}`
             if [ ${max_task_num} -gt 0 ]; then
-                todo_task_indices=`builtin_sched_get_todo_array_task_indices "${dirname}" ${stepname}`
+                todo_task_indices=`builtin_sched_get_todo_array_task_indices "${dirname}" ${processname}`
                 todo_task_indices_truncated=`get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num}`
                 if [ "${todo_task_indices_truncated}" != "" ]; then
-                    BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]=${todo_task_indices_truncated}
+                    BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${todo_task_indices_truncated}
                 fi
             fi
         fi
@@ -698,44 +698,44 @@ builtin_sched_process_executable_array_step()
 }
 
 ########
-builtin_sched_get_executable_steps()
+builtin_sched_get_executable_processes()
 {
     local dirname=$1
 
-    # Iterate over steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        local status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    # Iterate over processes
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        local status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+        local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
         if [ ${array_size} -eq 1 ]; then
-            # step is not an array
-            builtin_sched_process_executable_non_array_step ${stepname} ${status}
+            # process is not an array
+            builtin_sched_process_executable_non_array_process ${processname} ${status}
         else
-            # step is an array
-            builtin_sched_process_executable_array_step ${stepname} ${status}
+            # process is an array
+            builtin_sched_process_executable_array_process ${processname} ${status}
         fi
     done
 }
 
 ########
-builtin_sched_get_knapsack_cpus_for_step()
+builtin_sched_get_knapsack_cpus_for_process()
 {
-    local stepname=$1
+    local processname=$1
 
     if [ ${BUILTIN_SCHED_CPUS} -gt 0 ]; then
-        echo ${BUILTIN_SCHED_STEP_CPUS[${stepname}]}
+        echo ${BUILTIN_SCHED_PROCESS_CPUS[${processname}]}
     else
         echo 0
     fi
 }
 
 ########
-builtin_sched_get_knapsack_mem_for_step()
+builtin_sched_get_knapsack_mem_for_process()
 {
-    local stepname=$1
+    local processname=$1
 
     if [ ${BUILTIN_SCHED_MEM} -gt 0 ]; then
-        echo ${BUILTIN_SCHED_STEP_MEM[${stepname}]}
+        echo ${BUILTIN_SCHED_PROCESS_MEM[${processname}]}
     else
         echo 0
     fi
@@ -744,40 +744,40 @@ builtin_sched_get_knapsack_mem_for_step()
 ########
 builtin_sched_get_knapsack_name()
 {
-    local stepname=$1
+    local processname=$1
     local taskidx=$2
 
     if [ "${taskidx}" = "" ]; then
-        echo "${BUILTIN_SCHED_STEPNAME_TO_IDX[${stepname}]}"
+        echo "${BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]}"
     else
-        echo "${BUILTIN_SCHED_STEPNAME_TO_IDX[${stepname}]}_${taskidx}"
+        echo "${BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]}_${taskidx}"
     fi
 }
 
 ########
 builtin_sched_print_knapsack_spec()
 {
-    local stepvalue=1
+    local processvalue=1
 
-    # Process each executable step
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_EXECUTABLE_STEPS[@]}"; do
+    # Process each executable process
+    local processname
+    for processname in "${!BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}"; do
         # Obtain array size
-        local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+        local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
         # Determine cpu requirements
-        cpus=`builtin_sched_get_knapsack_cpus_for_step ${stepname}`
+        cpus=`builtin_sched_get_knapsack_cpus_for_process ${processname}`
 
         # Determine memory requirements
-        mem=`builtin_sched_get_knapsack_mem_for_step ${stepname}`
+        mem=`builtin_sched_get_knapsack_mem_for_process ${processname}`
 
         if [ ${array_size} -eq 1 ]; then
-            local knapsack_name=`builtin_sched_get_knapsack_name ${stepname}`
-            echo "${knapsack_name} ${stepvalue} ${cpus} ${mem}"
+            local knapsack_name=`builtin_sched_get_knapsack_name ${processname}`
+            echo "${knapsack_name} ${processvalue} ${cpus} ${mem}"
         else
-            for id in ${BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]}; do
-                local knapsack_name=`builtin_sched_get_knapsack_name ${stepname} ${id}`
-                echo "${knapsack_name} ${stepvalue} ${cpus} ${mem}"
+            for id in ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}; do
+                local knapsack_name=`builtin_sched_get_knapsack_name ${processname} ${id}`
+                echo "${knapsack_name} ${processvalue} ${cpus} ${mem}"
             done
         fi
     done
@@ -807,23 +807,23 @@ builtin_sched_solve_knapsack()
     builtin_sched_print_knapsack_sol > "${knapsack_sol}"
 
     # Store solution in output variable
-    BUILTIN_SCHED_SELECTED_STEPS=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
+    BUILTIN_SCHED_SELECTED_PROCESSES=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
 }
 
 ########
-builtin_sched_count_executable_steps()
+builtin_sched_count_executable_processes()
 {
-    echo ${#BUILTIN_SCHED_EXECUTABLE_STEPS[@]}
+    echo ${#BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}
 }
 
 ########
-builtin_sched_inprogress_steps_pending()
+builtin_sched_inprogress_processes_pending()
 {
-    # Iterate over steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        status=${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]}
-        if [ ${status} = ${INPROGRESS_STEP_STATUS} ]; then
+    # Iterate over processes
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+        if [ ${status} = ${INPROGRESS_PROCESS_STATUS} ]; then
             return 0
         fi
     done
@@ -832,79 +832,79 @@ builtin_sched_inprogress_steps_pending()
 }
 
 ########
-builtin_sched_get_debug_step_status_info()
+builtin_sched_get_debug_process_status_info()
 {
-    local step_status
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        step_status="${step_status} ${stepname} -> ${BUILTIN_SCHED_CURR_STEP_STATUS[${stepname}]};"
+    local process_status
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        process_status="${process_status} ${processname} -> ${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]};"
     done
-    echo $step_status
+    echo $process_status
 }
 
 ########
-builtin_sched_get_debug_exec_steps_info()
+builtin_sched_get_debug_exec_processes_info()
 {
-    local exec_steps
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_EXECUTABLE_STEPS[@]}"; do
-        exec_steps="${exec_steps} ${stepname} -> ${BUILTIN_SCHED_EXECUTABLE_STEPS[${stepname}]};"
+    local exec_processes
+    local processname
+    for processname in "${!BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}"; do
+        exec_processes="${exec_processes} ${processname} -> ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]};"
     done
-    echo $exec_steps
+    echo $exec_processes
 }
 ########
-builtin_sched_get_debug_sel_steps_info()
+builtin_sched_get_debug_sel_processes_info()
 {
-    local sel_steps
+    local sel_processes
     local knapsack_name
-    for knapsack_name in ${BUILTIN_SCHED_SELECTED_STEPS}; do
-        sname=`builtinsched_extract_step_from_knapsack_name ${knapsack_name}`
+    for knapsack_name in ${BUILTIN_SCHED_SELECTED_PROCESSES}; do
+        sname=`builtinsched_extract_process_from_knapsack_name ${knapsack_name}`
         tidx=`builtinsched_extract_taskidx_from_knapsack_name ${knapsack_name}`
-        sel_steps="${sel_steps} ${knapsack_name} -> ${sname},${tidx};"
+        sel_processes="${sel_processes} ${knapsack_name} -> ${sname},${tidx};"
     done
-    echo $sel_steps
+    echo $sel_processes
 }
 
 ########
-builtin_sched_select_steps_to_be_exec()
+builtin_sched_select_processes_to_be_exec()
 {
     local dirname=$1
 
-    # Obtain updated status for steps
-    local -A BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED
-    builtin_sched_get_updated_step_status "${dirname}"
+    # Obtain updated status for processes
+    local -A BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED
+    builtin_sched_get_updated_process_status "${dirname}"
 
     # Update computational resources depending on changes
     builtin_sched_update_comp_resources "${dirname}"
 
     # Set updated status as current one
-    builtin_sched_fix_updated_step_status
+    builtin_sched_fix_updated_process_status
 
-    # Obtain set of steps that can be executed
-    local -A BUILTIN_SCHED_EXECUTABLE_STEPS
-    builtin_sched_get_executable_steps "${dirname}"
+    # Obtain set of processes that can be executed
+    local -A BUILTIN_SCHED_EXECUTABLE_PROCESSES
+    builtin_sched_get_executable_processes "${dirname}"
 
     if [ ${builtinsched_debug} -eq 1 ]; then
-        local step_status=`builtin_sched_get_debug_step_status_info`
-        echo "[BUILTIN_SCHED] - BUILTIN_SCHED_CURR_STEP_STATUS: ${step_status}"
+        local process_status=`builtin_sched_get_debug_process_status_info`
+        echo "[BUILTIN_SCHED] - BUILTIN_SCHED_CURR_PROCESS_STATUS: ${process_status}"
         echo "[BUILTIN_SCHED] - COMPUTATIONAL RESOURCES: total cpus= ${BUILTIN_SCHED_CPUS}, allocated cpus= ${BUILTIN_SCHED_ALLOC_CPUS}; total mem= ${BUILTIN_SCHED_MEM}, allocated mem= ${BUILTIN_SCHED_ALLOC_MEM}"
-        local exec_steps=`builtin_sched_get_debug_exec_steps_info`
-        echo "[BUILTIN_SCHED] - BUILTIN_SCHED_EXECUTABLE_STEPS: ${exec_steps}" 2>&1
+        local exec_processes=`builtin_sched_get_debug_exec_processes_info`
+        echo "[BUILTIN_SCHED] - BUILTIN_SCHED_EXECUTABLE_PROCESSES: ${exec_processes}" 2>&1
     fi
 
-    # If there are executable steps, select which ones will be executed
-    num_exec_steps=${#BUILTIN_SCHED_EXECUTABLE_STEPS[@]}
-    if [ ${num_exec_steps} -gt 0 ]; then
+    # If there are executable processes, select which ones will be executed
+    num_exec_processes=${#BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}
+    if [ ${num_exec_processes} -gt 0 ]; then
         builtin_sched_solve_knapsack "${dirname}"
 
         if [ ${builtinsched_debug} -eq 1 ]; then
-            local sel_steps=`builtin_sched_get_debug_sel_steps_info`
-            echo "[BUILTIN_SCHED] - BUILTIN_SCHED_SELECTED_STEPS: ${sel_steps}" 2>&1
+            local sel_processes=`builtin_sched_get_debug_sel_processes_info`
+            echo "[BUILTIN_SCHED] - BUILTIN_SCHED_SELECTED_PROCESSES: ${sel_processes}" 2>&1
         fi
 
         return 0
     else
-        # No executable steps were found
+        # No executable processes were found
         return 1
     fi
 }
@@ -922,14 +922,14 @@ builtin_sched_print_script_header()
 {
     local fname=$1
     local dirname=$2
-    local stepname=$3
+    local processname=$3
     local num_scripts=$4
 
     echo "PANPIPE_SCRIPT_FILENAME=\"${fname}\""
     echo "PANPIPE_DIR_NAME=\"${dirname}\""
-    echo "PANPIPE_STEP_NAME=${stepname}"
-    local outd=`get_step_outdir \"${dirname}\" \"${stepname}\"`
-    echo "PANPIPE_STEP_OUTDIR=\"$(esc_dq "${outd}")\""
+    echo "PANPIPE_PROCESS_NAME=${processname}"
+    local outd=`get_process_outdir "${dirname}" "${processname}"`
+    echo "PANPIPE_PROCESS_OUTDIR=\"$(esc_dq "${outd}")\""
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
     echo "builtin_sched_print_pid_to_file"
 }
@@ -948,27 +948,27 @@ builtin_sched_execute_funct_plus_postfunct()
 {
     local num_scripts=$1
     local dirname=$2
-    local stepname=$3
+    local processname=$3
     local taskidx=$4
     local reset_funct=$5
     local funct=$6
     local post_funct=$7
     local script_opts=$8
 
-    display_begin_step_message
+    display_begin_process_message
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ ${num_scripts} -eq 1 ]; then
-            default_reset_outdir_for_step "${dirname}" ${stepname}
+            default_reset_outdir_for_process "${dirname}" ${processname}
         else
-            default_reset_outdir_for_step_array "${dirname}" ${stepname} ${taskidx}
+            default_reset_outdir_for_process_array "${dirname}" ${processname} ${taskidx}
         fi
     else
         ${reset_funct} "${script_opts}"
     fi
 
-    # Execute step function
+    # Execute process function
     $funct "${script_opts}"
     local funct_exit_code=$?
     if [ ${funct_exit_code} -ne 0 ]; then
@@ -977,7 +977,7 @@ builtin_sched_execute_funct_plus_postfunct()
         echo "Function ${funct} successfully executed" >&2
     fi
 
-    # Execute step post-function
+    # Execute process post-function
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
         ${post_funct} "${script_opts}" || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
     fi
@@ -987,10 +987,10 @@ builtin_sched_execute_funct_plus_postfunct()
         return 1;
     fi
 
-    # Signal step completion
-    signal_step_completion "${dirname}" ${stepname} ${taskidx} ${num_scripts} || return 1
+    # Signal process completion
+    signal_process_completion "${dirname}" ${processname} ${taskidx} ${num_scripts} || return 1
 
-    display_end_step_message
+    display_end_process_message
 }
 
 ########
@@ -999,7 +999,7 @@ builtin_sched_print_script_body()
     # Initialize variables
     local num_scripts=$1
     local dirname=$2
-    local stepname=$3
+    local processname=$3
     local taskidx=$4
     local reset_funct=$5
     local funct=$6
@@ -1008,17 +1008,17 @@ builtin_sched_print_script_body()
 
     # Write treatment for task id
     if [ ${num_scripts} -gt 1 ]; then
-        local varname=`builtin_sched_get_task_array_task_varname ${stepname} ${taskidx}`
+        local varname=`builtin_sched_get_task_array_task_varname ${processname} ${taskidx}`
         echo "if [ \"\${${varname}}\" = 1 ]; then"
     fi
 
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
-        local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${stepname} ${taskidx}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
+        local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${processname} ${taskidx}`
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
     else
-        local builtin_log_filename=`get_step_log_filename_builtin "${dirname}" ${stepname}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${stepname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
+        local builtin_log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 
     # Close if statement
@@ -1038,11 +1038,11 @@ builtin_sched_create_script()
 {
     # Init variables
     local dirname=$1
-    local stepname=$2
-    local fname=`get_script_filename "${dirname}" ${stepname}`
-    local reset_funct=`get_name_of_step_function_reset ${stepname}`
-    local funct=`get_name_of_step_function ${stepname}`
-    local post_funct=`get_name_of_step_function_post ${stepname}`
+    local processname=$2
+    local fname=`get_script_filename "${dirname}" ${processname}`
+    local reset_funct=`get_name_of_process_function_reset ${processname}`
+    local funct=`get_name_of_process_function ${processname}`
+    local post_funct=`get_name_of_process_function_post ${processname}`
     local opts_array_name=$3[@]
     local opts_array=("${!opts_array_name}")
     local num_scripts=${#opts_array[@]}
@@ -1055,14 +1055,14 @@ builtin_sched_create_script()
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" || return 1
 
     # Print header
-    builtin_sched_print_script_header "${fname}" "${dirname}" ${stepname} ${num_scripts} >> "${fname}" || return 1
+    builtin_sched_print_script_header "${fname}" "${dirname}" ${processname} ${num_scripts} >> "${fname}" || return 1
 
     # Iterate over options array
     local lineno=1
     local script_opts
     for script_opts in "${opts_array[@]}"; do
 
-        builtin_sched_print_script_body ${num_scripts} "${dirname}" ${stepname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> "${fname}" || return 1
+        builtin_sched_print_script_body ${num_scripts} "${dirname}" ${processname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> "${fname}" || return 1
 
         lineno=$((lineno + 1))
 
@@ -1097,22 +1097,22 @@ builtin_sched_launch()
 {
     # Initialize variables
     local dirname=$1
-    local stepname=$2
+    local processname=$2
     local taskidx=$3
-    local file=`get_script_filename "${dirname}" ${stepname}`
+    local file=`get_script_filename "${dirname}" ${processname}`
 
     # Enable execution of specific task id
     if [ ${taskidx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        local task_varname=`builtin_sched_get_task_array_task_varname ${stepname} ${taskidx}`
+        local task_varname=`builtin_sched_get_task_array_task_varname ${processname} ${taskidx}`
         export ${task_varname}=1
     fi
 
     # Set variable indicating name of file storing PID
     if [ ${taskidx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        local pid_file=`get_stepid_filename "${dirname}" ${stepname}`
+        local pid_file=`get_processid_filename "${dirname}" ${processname}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
-        local pid_file=`get_array_taskid_filename "${dirname}" ${stepname} ${taskidx}`
+        local pid_file=`get_array_taskid_filename "${dirname}" ${processname} ${taskidx}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
@@ -1132,53 +1132,53 @@ builtin_sched_launch()
 }
 
 ########
-builtin_sched_execute_step()
+builtin_sched_execute_process()
 {
     # Initialize variables
     local cmdline=$1
     local dirname=$2
-    local stepname=$3
+    local processname=$3
     local taskidx=$4
-    local launched_tasks=${BUILTIN_SCHED_STEP_LAUNCHED_TASKS[${stepname}]}
-    local stepspec=${BUILTIN_SCHED_STEP_SPEC[${stepname}]}
+    local launched_tasks=${BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]}
+    local process_spec=${BUILTIN_SCHED_PROCESS_SPEC[${processname}]}
 
-    # Execute step
+    # Execute process
 
-    ## Obtain step status
-    local status=`get_step_status "${dirname}" ${stepname}`
-    echo "STEP: ${stepname} (TASKIDX: ${taskidx}) ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
+    ## Obtain process status
+    local status=`get_process_status "${dirname}" ${processname}`
+    echo "PROCESS: ${processname} (TASKIDX: ${taskidx}) ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Create script
-    define_opts_for_script "${cmdline}" "${stepspec}" || return 1
+    define_opts_for_script "${cmdline}" "${process_spec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
     if [ "${launched_tasks}" = "" ]; then
-        builtin_sched_create_script "${dirname}" ${stepname} "script_opts_array"
+        builtin_sched_create_script "${dirname}" ${processname} "script_opts_array"
     fi
 
     # Archive script
     if [ "${launched_tasks}" = "" ]; then
-        archive_script "${dirname}" ${stepname}
+        archive_script "${dirname}" ${processname}
     fi
 
     # Launch script
     local task_array_list=${taskidx}
-    builtin_sched_launch "${dirname}" ${stepname} "${taskidx}" || { echo "Error while launching step!" >&2 ; return 1; }
+    builtin_sched_launch "${dirname}" ${processname} "${taskidx}" || { echo "Error while launching process!" >&2 ; return 1; }
 
     # Update register of launched tasks
     if [ "${launched_tasks}" = "" ]; then
-        BUILTIN_SCHED_STEP_LAUNCHED_TASKS[${stepname}]=$taskidx
+        BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]=$taskidx
     else
-        BUILTIN_SCHED_STEP_LAUNCHED_TASKS[${stepname}]="${BUILTIN_SCHED_STEP_LAUNCHED_TASKS[${stepname}]} $taskidx"
+        BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]="${BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]} $taskidx"
     fi
 }
 
 ########
-builtinsched_extract_step_from_knapsack_name()
+builtinsched_extract_process_from_knapsack_name()
 {
     local knapsack_name=$1
-    local step_idx=`echo "${knapsack_name}" | "${AWK}" -F "_" '{print $1}'`
-    echo ${BUILTIN_SCHED_IDX_TO_STEPNAME[${step_idx}]}
+    local process_idx=`echo "${knapsack_name}" | "${AWK}" -F "_" '{print $1}'`
+    echo ${BUILTIN_SCHED_IDX_TO_PROCESSNAME[${process_idx}]}
 }
 
 ########
@@ -1194,66 +1194,66 @@ builtinsched_extract_taskidx_from_knapsack_name()
 }
 
 ########
-builtin_sched_exec_steps_and_update_status()
+builtin_sched_exec_processes_and_update_status()
 {
     local cmdline=$1
     local dirname=$2
 
     local knapsack_name
-    for knapsack_name in ${BUILTIN_SCHED_SELECTED_STEPS}; do
-        # Extract step name and task id
-        stepname=`builtinsched_extract_step_from_knapsack_name "${knapsack_name}"`
+    for knapsack_name in ${BUILTIN_SCHED_SELECTED_PROCESSES}; do
+        # Extract process name and task id
+        processname=`builtinsched_extract_process_from_knapsack_name "${knapsack_name}"`
         taskidx=`builtinsched_extract_taskidx_from_knapsack_name "${knapsack_name}"`
 
-        # Execute step
-        builtin_sched_execute_step "${cmdline}" "${dirname}" ${stepname} ${taskidx} || return 1
+        # Execute process
+        builtin_sched_execute_process "${cmdline}" "${dirname}" ${processname} ${taskidx} || return 1
 
-        # Update step status
-        BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED[${stepname}]=${INPROGRESS_STEP_STATUS}
+        # Update process status
+        BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${INPROGRESS_PROCESS_STATUS}
     done
 
     # Reset variable
-    BUILTIN_SCHED_SELECTED_STEPS=""
+    BUILTIN_SCHED_SELECTED_PROCESSES=""
 }
 
 ########
-builtin_sched_exec_steps()
+builtin_sched_exec_processes()
 {
     local cmdline=$1
     local dirname=$2
 
-    # Execute selected steps and update status accordingly
-    if [ "${BUILTIN_SCHED_SELECTED_STEPS}" != "" ]; then
-        local -A BUILTIN_SCHED_CURR_STEP_STATUS_UPDATED
-        builtin_sched_exec_steps_and_update_status "${cmdline}" "${dirname}"
+    # Execute selected processes and update status accordingly
+    if [ "${BUILTIN_SCHED_SELECTED_PROCESSES}" != "" ]; then
+        local -A BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED
+        builtin_sched_exec_processes_and_update_status "${cmdline}" "${dirname}"
     fi
 
     # Update computational resources after execution
     builtin_sched_update_comp_resources "${dirname}"
 
     # Set updated status as current one
-    builtin_sched_fix_updated_step_status
+    builtin_sched_fix_updated_process_status
 }
 
 ########
-builtin_sched_clean_step_log_files()
+builtin_sched_clean_process_log_files()
 {
     local dirname=$1
-    local stepname=$2
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local processname=$2
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        local builtin_log_filename=`get_step_log_filename_builtin "${dirname}" ${stepname}`
+        local builtin_log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
         rm -f "${builtin_log_filename}"
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${stepname}`
+        local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${processname}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${stepname} ${idx}`
+                local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${processname} ${idx}`
                 rm -f "${builtin_task_log_filename}"
             done
         fi
@@ -1261,25 +1261,25 @@ builtin_sched_clean_step_log_files()
 }
 
 ########
-builtin_sched_clean_step_id_files()
+builtin_sched_clean_process_id_files()
 {
     local dirname=$1
-    local stepname=$2
-    local script_filename=`get_script_filename "${dirname}" ${stepname}`
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
+    local processname=$2
+    local script_filename=`get_script_filename "${dirname}" ${processname}`
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        local stepid_file=`get_stepid_filename "${dirname}" ${stepname}`
-        rm -f "${stepid_file}"
+        local processid_file=`get_processid_filename "${dirname}" ${processname}`
+        rm -f "${processid_file}"
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${stepname}`
+        local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${processname}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
             for idx in ${pending_tasks_blanks}; do
-                local array_taskid_file=`get_array_taskid_filename "${dirname}" ${stepname} ${idx}`
+                local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
                 rm -f "${array_taskid_file}"
             done
         fi
@@ -1287,34 +1287,34 @@ builtin_sched_clean_step_id_files()
 }
 
 ########
-builtin_sched_prepare_files_and_dirs_for_step()
+builtin_sched_prepare_files_and_dirs_for_process()
 {
     local dirname=$1
-    local stepname=$2
-    local script_filename=`get_script_filename "${dirname}" ${stepname}`
-    local array_size=${BUILTIN_SCHED_STEP_ARRAY_SIZE[${stepname}]}
-    local status=`get_step_status "${dirname}" ${stepname}`
+    local processname=$2
+    local script_filename=`get_script_filename "${dirname}" ${processname}`
+    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
+    local status=`get_process_status "${dirname}" ${processname}`
 
-    if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
-        # Prepare files for step
-        update_step_completion_signal "${dirname}" ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
-        builtin_sched_clean_step_log_files "${dirname}" ${stepname} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
-        builtin_sched_clean_step_id_files "${dirname}" ${stepname} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
-        prepare_fifos_owned_by_step ${stepname}
+    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
+        # Prepare files for process
+        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
+        builtin_sched_clean_process_log_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
+        builtin_sched_clean_process_id_files "${dirname}" ${processname} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
+        prepare_fifos_owned_by_process ${processname}
 
         # Create output directory
-        create_outdir_for_step "${dirname}" ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
+        create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
     fi
 }
 
 ########
-builtin_sched_prepare_files_and_dirs_for_steps()
+builtin_sched_prepare_files_and_dirs_for_processes()
 {
     local dirname=$1
 
-    local stepname
-    for stepname in "${!BUILTIN_SCHED_CURR_STEP_STATUS[@]}"; do
-        builtin_sched_prepare_files_and_dirs_for_step "${dirname}" $stepname
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        builtin_sched_prepare_files_and_dirs_for_process "${dirname}" $processname
     done
 }
 
@@ -1322,10 +1322,10 @@ builtin_sched_prepare_files_and_dirs_for_steps()
 builtin_sched_sleep()
 {
     # Sleep a certain number of seconds depending on the number of
-    # pipeline steps
-    local num_steps=${#BUILTIN_SCHED_STEPNAME_TO_IDX[@]}
+    # pipeline processes
+    local num_processes=${#BUILTIN_SCHED_PROCESSNAME_TO_IDX[@]}
 
-    if [ ${num_steps} -le ${BUILTIN_SCHED_NSTEPS_SLEEP_THRESHOLD} ]; then
+    if [ ${num_processes} -le ${BUILTIN_SCHED_NPROCESSES_SLEEP_THRESHOLD} ]; then
         sleep ${BUILTIN_SCHED_SLEEP_TIME_SHORT}
     else
         sleep ${BUILTIN_SCHED_SLEEP_TIME_LONG}
@@ -1333,7 +1333,7 @@ builtin_sched_sleep()
 }
 
 ########
-builtin_sched_execute_pipeline_steps()
+builtin_sched_execute_pipeline_processes()
 {
     # Read input parameters
     local cmdline=$1
@@ -1355,18 +1355,18 @@ builtin_sched_execute_pipeline_steps()
 
     echo "* Initializing data structures..." >&2
 
-    # Initialize step status
-    builtin_sched_init_step_info "${cmdline}" "${dirname}" ${pfile} || return 1
+    # Initialize process status
+    builtin_sched_init_process_info "${cmdline}" "${dirname}" ${pfile} || return 1
 
-    # Initialize current step status
+    # Initialize current process status
     builtin_sched_init_curr_comp_resources || return 1
 
-    # Prepare files and directories for steps
-    builtin_sched_prepare_files_and_dirs_for_steps "${dirname}"
+    # Prepare files and directories for processes
+    builtin_sched_prepare_files_and_dirs_for_processes "${dirname}"
 
     echo "" >&2
 
-    echo "* Executing pipeline steps..." >&2
+    echo "* Executing pipeline processes..." >&2
 
     # Execute scheduling loop
     local end=0
@@ -1375,18 +1375,18 @@ builtin_sched_execute_pipeline_steps()
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
         fi
 
-        # Select steps that should be executed
-        if builtin_sched_select_steps_to_be_exec "${dirname}"; then
-            # Execute steps
-            builtin_sched_exec_steps "${cmdline}" "${dirname}"
+        # Select processes that should be executed
+        if builtin_sched_select_processes_to_be_exec "${dirname}"; then
+            # Execute processes
+            builtin_sched_exec_processes "${cmdline}" "${dirname}"
 
             # Wait before starting a new loop
             builtin_sched_sleep
         else
-            # There are no steps to be executed
+            # There are no processes to be executed
 
-            if builtin_sched_inprogress_steps_pending; then
-                # Wait for in-progress steps to finish
+            if builtin_sched_inprogress_processes_pending; then
+                # Wait for in-progress processes to finish
                 builtin_sched_sleep
             else
                 # Finish loop

@@ -49,7 +49,7 @@ usage()
     echo "-o <string>               Output directory where the pipeline output should be"
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
-    echo "-u <int>                  Maximum percentage of unfinished steps that is"
+    echo "-u <int>                  Maximum percentage of unfinished processes that is"
     echo "                          allowed when evaluating if pipeline completed"
     echo "                          execution (0 by default)"
     echo "-k <string>               Execute script implementing a software hook after"
@@ -64,7 +64,7 @@ read_pars()
     m_given=0
     o_given=0
     u_given=0
-    max_unfinished_step_perc=0
+    max_unfinished_process_perc=0
     k_given=0
     while [ $# -ne 0 ]; do
         case $1 in
@@ -91,7 +91,7 @@ read_pars()
                   ;;
             "-u") shift
                   if [ $# -ne 0 ]; then
-                      max_unfinished_step_perc=$1
+                      max_unfinished_process_perc=$1
                       u_given=1
                   fi
                   ;;
@@ -161,7 +161,7 @@ absolutize_file_paths()
 }
 
 ########
-get_unfinished_step_perc()
+get_unfinished_process_perc()
 {
     local pipe_status_output_file=$1
     "$AWK" '{if ($1=="*") printf"%d",$(13)*100/$4}' "${pipe_status_output_file}"
@@ -300,8 +300,8 @@ get_ppl_status()
         "${panpipe_bindir}"/panpipe_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
-        # Obtain percentage of unfinished steps
-        local unfinished_step_perc=`get_unfinished_step_perc "${tmpfile}"`
+        # Obtain percentage of unfinished processes
+        local unfinished_process_perc=`get_unfinished_process_perc "${tmpfile}"`
         rm "${tmpfile}"
 
         # Evaluate exit code of pipe_status
@@ -312,7 +312,7 @@ get_ppl_status()
                                                 return ${PPL_REQUIRES_POST_FINISH_ACTIONS}
                                             fi
                                             ;;
-            ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinished_step_perc} -gt ${max_unfinished_step_perc} ]; then
+            ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinished_process_perc} -gt ${max_unfinished_process_perc} ]; then
                                                   return ${PPL_FAILED}
                                               else
                                                   if post_ppl_finish_actions_are_executed "${pipe_cmd_outd}"; then
@@ -331,7 +331,7 @@ get_ppl_status()
 }
 
 ########
-ppl_has_steps_to_reexec()
+ppl_has_processes_to_reexec()
 {
     local pipe_exec_cmd=$1
     local pipe_cmd_outd=$2
@@ -349,9 +349,9 @@ ppl_has_steps_to_reexec()
         fi
     fi
 
-    # Check if pipe_exec reports steps to be re-executed
-    local reexec_steps_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${PANPIPE_REEXEC_STEPS_WARNING}")
-    if [ ! -z "${reexec_steps_warning}" ]; then
+    # Check if pipe_exec reports processes to be re-executed
+    local reexec_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${PANPIPE_REEXEC_PROCESSES_WARNING}")
+    if [ ! -z "${reexec_processes_warning}" ]; then
         return 0
     else
         return 1
@@ -365,9 +365,9 @@ get_initial_ppl_status()
     local pipe_cmd_outd=$2
     local outd=$3
 
-    # Check if pipeline has steps to re-execute (this is only necessary
+    # Check if pipeline has processes to re-execute (this is only necessary
     # in the initial status check)
-    if ppl_has_steps_to_reexec "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
+    if ppl_has_processes_to_reexec "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
         return ${PPL_IS_NOT_COMPLETED}
     fi
 

@@ -1,9 +1,9 @@
 SCRIPTS_TO_BE_BUILT= panpipe_lib panpipe_builtin_sched_lib panpipe_exec	\
 panpipe_exec_batch panpipe_check panpipe_stop panpipe_status		\
-panpipe_stats panpipe_step_debug panpipe_doc_mod panpipe_proc_dataset	\
-panpipe_software_test pp_get_reexec_steps_due_to_deps			\
-panpipe_reformat_status panpipe_solve_knapsack_bb			\
-panpipe_solve_knapsack_ga
+panpipe_stats panpipe_process_debug panpipe_doc_mod			\
+panpipe_proc_dataset panpipe_software_test				\
+pp_get_reexec_procs_due_to_deps panpipe_reformat_status			\
+panpipe_solve_knapsack_bb panpipe_solve_knapsack_ga
 
 bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
@@ -13,9 +13,9 @@ python_PYTHON= panpipe_knapsack_ga.py
 
 EXTRA_DIST = panpipe_lib.sh panpipe_builtin_sched_lib.sh		\
 panpipe_exec.sh panpipe_exec_batch.sh panpipe_check.py panpipe_stop.sh	\
-panpipe_status.sh panpipe_stats.sh panpipe_step_debug.sh		\
+panpipe_status.sh panpipe_stats.sh panpipe_process_debug.sh		\
 panpipe_doc_mod.sh panpipe_proc_dataset.sh panpipe_software_test.sh	\
-pp_get_reexec_steps_due_to_deps.py panpipe_reformat_status.py		\
+pp_get_reexec_procs_due_to_deps.py panpipe_reformat_status.py		\
 panpipe_solve_knapsack_bb.py panpipe_solve_knapsack_ga.py		\
 panpipe_knapsack_ga.py
 

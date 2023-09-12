@@ -33,7 +33,7 @@ usage()
     echo "                          [--showopts] [--help]"
     echo ""
     echo "-m <string>               Module file name"
-    echo "-s <string>               Step name whose information should be obtained"
+    echo "-s <string>               Process name whose information should be obtained"
     echo "--showopts                Show option information"
     echo "--help                    Display this help and exit"
 }
@@ -57,7 +57,7 @@ read_pars()
                   ;;
             "-s") shift
                   if [ $# -ne 0 ]; then
-                      given_stepname=$1
+                      given_processname=$1
                       s_given=1
                   fi
                   ;;
@@ -83,7 +83,7 @@ check_pars()
 }
 
 ########
-get_step_doc_funcnames()
+get_process_doc_funcnames()
 {
     declare -F | "$AWK" '{start=index($3,"_document"); if(start!=0 && start-1+length("_document")==length($3)) printf"%s\n",$3}'
 }
@@ -94,11 +94,11 @@ obtain_info_for_module()
     # Load module
     source "${module_fname}"
 
-    # Iterate over step documentation functions
-    while read step_doc_func; do
-        local stepname=${step_doc_func%"_document"}
-        document_step ${stepname} ${showopts_given}
-    done < <(get_step_doc_funcnames)
+    # Iterate over process documentation functions
+    while read process_doc_func; do
+        local processname=${process_doc_func%"_document"}
+        document_process ${processname} ${showopts_given}
+    done < <(get_process_doc_funcnames)
 }
 
 ########

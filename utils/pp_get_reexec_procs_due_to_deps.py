@@ -29,7 +29,7 @@ def take_pars():
     flags["d_given"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"r:d:",["reexec-steps=","depfile="])
+        opts, args = getopt.getopt(sys.argv[1:],"r:d:",["reexec-procs=","depfile="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -38,8 +38,8 @@ def take_pars():
         sys.exit()
     else:
         for opt, arg in opts:
-            if opt in ("-r", "--reexec-steps"):
-                values["rexec_steps"] = arg
+            if opt in ("-r", "--reexec-procs"):
+                values["rexec_procs"] = arg
                 flags["r_given"]=True
             elif opt in ("-d", "--depfile"):
                 values["depfile"] = arg
@@ -58,17 +58,17 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print("pp_get_reexec_steps_due_to_deps -r <string> -d <string>", file=sys.stderr)
+    print("pp_get_reexec_procs_due_to_deps -r <string> -d <string>", file=sys.stderr)
     print("", file=sys.stderr)
-    print("-r <string>                     String with steps to be reexecuted", file=sys.stderr)
+    print("-r <string>                     String with processes to be reexecuted", file=sys.stderr)
     print("-d <string>                     File with dependency information", file=sys.stderr)
 
 ##################################################
-def process_r_opt(rexec_steps_str):
+def process_r_opt(rexec_processes_str):
     result=set()
-    fields=rexec_steps_str.split(',')
-    for step in fields:
-        result.add(step)
+    fields=rexec_processes_str.split(',')
+    for process in fields:
+        result.add(process)
 
     return result
 
@@ -79,58 +79,58 @@ def load_dep_info(depfile):
     # read file entry by entry
     for entry in file:
         fields=entry.split()
-        stepname=fields[0]
+        processname=fields[0]
         deplist=[]
         for i in range(2,len(fields)):
             deplist.append(fields[i])
-        dep_info[stepname]=deplist
+        dep_info[processname]=deplist
 
     return dep_info
 
 ##################################################
-def step_should_reexec(reexec_steps,step_deplist):
-    for step in step_deplist:
-        if step in reexec_steps:
+def process_should_reexec(reexec_processes,process_deplist):
+    for process in process_deplist:
+        if process in reexec_processes:
             return True
     return False
 
 ##################################################
-def get_new_reexec_steps(reexec_steps,curr_reexec_steps,dep_info):
-    new_reexec_steps=set()
-    for step in dep_info:
-        if step not in reexec_steps and step_should_reexec(curr_reexec_steps,dep_info[step]):
-            new_reexec_steps.add(step)
+def get_new_reexec_processes(reexec_processes,curr_reexec_processes,dep_info):
+    new_reexec_processes=set()
+    for process in dep_info:
+        if process not in reexec_processes and process_should_reexec(curr_reexec_processes,dep_info[process]):
+            new_reexec_processes.add(process)
 
-    return new_reexec_steps
+    return new_reexec_processes
 
 ##################################################
-def get_reexec_steps_due_to_deps(initial_reexec_steps,dep_info):
-    curr_reexec_steps=initial_reexec_steps
-    reexec_steps=initial_reexec_steps
+def get_reexec_processes_due_to_deps(initial_reexec_processes,dep_info):
+    curr_reexec_processes=initial_reexec_processes
+    reexec_processes=initial_reexec_processes
     end=False
     while not end:
-        curr_reexec_steps=get_new_reexec_steps(reexec_steps,curr_reexec_steps,dep_info)
-        if (len(curr_reexec_steps)==0):
+        curr_reexec_processes=get_new_reexec_processes(reexec_processes,curr_reexec_processes,dep_info)
+        if (len(curr_reexec_processes)==0):
             end=True
         else:
-            reexec_steps=reexec_steps.union(curr_reexec_steps)
+            reexec_processes=reexec_processes.union(curr_reexec_processes)
 
-    return reexec_steps-initial_reexec_steps
+    return reexec_processes-initial_reexec_processes
 
 ##################################################
-def print_steps(reexec_steps):
-    for step in reexec_steps:
-        print(step)
+def print_processes(reexec_processes):
+    for process in reexec_processes:
+        print(process)
 
 ##################################################
 def process_pars(flags,values):
-    initial_reexec_steps=process_r_opt(values["rexec_steps"])
+    initial_reexec_processes=process_r_opt(values["rexec_procs"])
 
     dep_info=load_dep_info(values["depfile"])
 
-    reexec_steps_due_to_deps=get_reexec_steps_due_to_deps(initial_reexec_steps,dep_info)
+    reexec_processes_due_to_deps=get_reexec_processes_due_to_deps(initial_reexec_processes,dep_info)
 
-    print_steps(reexec_steps_due_to_deps)
+    print_processes(reexec_processes_due_to_deps)
 
 ##################################################
 def main(argv):

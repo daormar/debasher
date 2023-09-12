@@ -33,21 +33,21 @@ panpipe_software_test_shared_dirs()
 ########
 panpipe_software_test_fifos()
 {
-    define_fifo "step_d_fifo" step_d
+    define_fifo "process_d_fifo" process_d
 }
 
-###################################
-# PIPELINE SOFTWARE TESTING STEPS #
-###################################
+#######################################
+# PIPELINE SOFTWARE TESTING PROCESSES #
+#######################################
 
 ########
-step_a_document()
+process_a_document()
 {
-    step_description "Sleeps a given number of seconds and exits."
+    process_description "Sleeps a given number of seconds and exits."
 }
 
 ########
-step_a_explain_cmdline_opts()
+process_a_explain_cmdline_opts()
 {
     # -a option
     local description="Sleep time in seconds"
@@ -55,11 +55,11 @@ step_a_explain_cmdline_opts()
 }
 
 ########
-step_a_define_opts()
+process_a_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
     # -a option
@@ -70,7 +70,7 @@ step_a_define_opts()
 }
 
 ########
-step_a()
+process_a()
 {
     # Initialize variables
     local sleep_time=`read_opt_value_from_line "$*" "-a"`
@@ -80,13 +80,13 @@ step_a()
 }
 
 ########
-step_b_document()
+process_b_document()
 {
-    step_description "Writes a given value to the file \`step_b.out\` in data directory."
+    process_description "Writes a given value to the file \`process_b.out\` in data directory."
 }
 
 ########
-step_b_explain_cmdline_opts()
+process_b_explain_cmdline_opts()
 {
     # -b option
     local description="Value to write to file in data directory"
@@ -94,11 +94,11 @@ step_b_explain_cmdline_opts()
 }
 
 ########
-step_b_define_opts()
+process_b_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
     # -b option
@@ -108,7 +108,7 @@ step_b_define_opts()
     local abs_shrdir=`get_absolute_shdirname "data"`
 
     # Define name of output file
-    local outf="${abs_shrdir}/step_b.out"
+    local outf="${abs_shrdir}/process_b.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
@@ -116,7 +116,7 @@ step_b_define_opts()
 }
 
 ########
-step_b()
+process_b()
 {
     # Initialize variables
     local value=`read_opt_value_from_line "$*" "-b"`
@@ -130,13 +130,13 @@ step_b()
 }
 
 ########
-step_c_document()
+process_c_document()
 {
-    step_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
+    process_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
 }
 
 ########
-step_c_explain_cmdline_opts()
+process_c_explain_cmdline_opts()
 {
     # -c option
     local description="Sleep time in seconds"
@@ -144,17 +144,17 @@ step_c_explain_cmdline_opts()
 }
 
 ########
-step_c_define_opts()
+process_c_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
     # -c option
     define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
-    # Save option list so as to execute step four times
+    # Save option list so as to execute process four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
@@ -163,24 +163,24 @@ step_c_define_opts()
 }
 
 ########
-step_c()
+process_c()
 {
     # Initialize variables
     local sleep_time=`read_opt_value_from_line "$*" "-c"`
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # create auxiliary file
-    touch "${PANPIPE_STEP_OUTDIR}"/${id}_aux
+    touch "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
 
     # sleep some time
     sleep ${sleep_time}
 
     # create file
-    touch "${PANPIPE_STEP_OUTDIR}"/$id
+    touch "${PANPIPE_PROCESS_OUTDIR}"/$id
 }
 
 ########
-step_c_post()
+process_c_post()
 {
     logmsg "Cleaning directory..."
 
@@ -188,43 +188,43 @@ step_c_post()
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # Remove auxiliary file
-    rm "${PANPIPE_STEP_OUTDIR}"/${id}_aux
+    rm "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
 
     logmsg "Cleaning finished"
 }
 
 ########
-step_c_reset_outdir()
+process_c_reset_outdir()
 {
     # Initialize variables
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # create auxiliary file
-    rm -f "${PANPIPE_STEP_OUTDIR}"/${id}*
+    rm -f "${PANPIPE_PROCESS_OUTDIR}"/${id}*
 }
 
 ########
-step_d_document()
+process_d_document()
 {
-    step_description "Prints a string to a FIFO."
+    process_description "Prints a string to a FIFO."
 }
 
 ########
-step_d_explain_cmdline_opts()
+process_d_explain_cmdline_opts()
 {
     :
 }
 
 ########
-step_d_define_opts()
+process_d_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
     # Get absolute name of FIFO
-    local abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
+    local abs_fifoname=`get_absolute_fifoname "process_d_fifo"`
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
@@ -234,7 +234,7 @@ step_d_define_opts()
 }
 
 ########
-step_d()
+process_d()
 {
     # Initialize variables
     local fifo=`read_opt_value_from_line "$*" "-fifo"`
@@ -247,27 +247,27 @@ step_d()
 }
 
 ########
-step_e_document()
+process_e_document()
 {
-    step_description "Reads a string from a FIFO."
+    process_description "Reads a string from a FIFO."
 }
 
 ########
-step_e_explain_cmdline_opts()
+process_e_explain_cmdline_opts()
 {
     :
 }
 
 ########
-step_e_define_opts()
+process_e_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
     # Get absolute name of FIFO
-    local abs_fifoname=`get_absolute_fifoname "step_d_fifo"`
+    local abs_fifoname=`get_absolute_fifoname "process_d_fifo"`
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
@@ -277,7 +277,7 @@ step_e_define_opts()
 }
 
 ########
-step_e()
+process_e()
 {
     # Initialize variables
     local fifo=`read_opt_value_from_line "$*" "-fifo"`
@@ -290,23 +290,23 @@ step_e()
 }
 
 ########
-step_f_document()
+process_f_document()
 {
-    step_description "Prints Python version to file \`python_ver.txt\`."
+    process_description "Prints Python version to file \`python_ver.txt\`."
 }
 
 ########
-step_f_explain_cmdline_opts()
+process_f_explain_cmdline_opts()
 {
     :
 }
 
 ########
-step_f_define_opts()
+process_f_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
     # Save option list
@@ -314,13 +314,13 @@ step_f_define_opts()
 }
 
 ########
-step_f()
+process_f()
 {
     # Activate conda environment
     conda activate py27 || return 1
 
     # Write python version to file
-    python --version > "${PANPIPE_STEP_OUTDIR}"/python_ver.txt 2>&1 || return 1
+    python --version > "${PANPIPE_PROCESS_OUTDIR}"/python_ver.txt 2>&1 || return 1
 
     # Deactivate conda environment
     conda deactivate
@@ -330,32 +330,32 @@ step_f()
 }
 
 ########
-step_f_conda_envs()
+process_f_conda_envs()
 {
     define_conda_env py27 py27.yml
 }
 
 ########
-step_g_document()
+process_g_document()
 {
-    step_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
+    process_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
 }
 
 ########
-step_g_explain_cmdline_opts()
+process_g_explain_cmdline_opts()
 {
     :
 }
 
 ########
-step_g_define_opts()
+process_g_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
-    # Save option list so as to execute step four times
+    # Save option list so as to execute process four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
@@ -364,23 +364,23 @@ step_g_define_opts()
 }
 
 ########
-step_g()
+process_g()
 {
     # Initialize variables
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # create auxiliary file
-    touch "${PANPIPE_STEP_OUTDIR}"/${id}_aux
+    touch "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
 
     # sleep some time
     sleep 10
 
     # create file
-    touch "${PANPIPE_STEP_OUTDIR}"/$id
+    touch "${PANPIPE_PROCESS_OUTDIR}"/$id
 }
 
 ########
-step_g_post()
+process_g_post()
 {
     logmsg "Cleaning directory..."
 
@@ -388,19 +388,19 @@ step_g_post()
     local id=`read_opt_value_from_line "$*" "-id"`
 
     # Remove auxiliary file
-    rm "${PANPIPE_STEP_OUTDIR}"/${id}_aux
+    rm "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
 
     logmsg "Cleaning finished"
 }
 
 ########
-step_h_document()
+process_h_document()
 {
-    step_description "Writes a given value to the file \`step_h.out\` in data directory."
+    process_description "Writes a given value to the file \`process_h.out\` in data directory."
 }
 
 ########
-step_h_explain_cmdline_opts()
+process_h_explain_cmdline_opts()
 {
     # -b option
     local description="Value to write to file in data directory"
@@ -408,11 +408,11 @@ step_h_explain_cmdline_opts()
 }
 
 ########
-step_h_define_opts()
+process_h_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local optlist=""
 
     # -b option
@@ -422,7 +422,7 @@ step_h_define_opts()
     local abs_shrdir=`get_absolute_shdirname "data"`
 
     # Define name of output file
-    local outf="${abs_shrdir}/step_h.out"
+    local outf="${abs_shrdir}/process_h.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
@@ -430,7 +430,7 @@ step_h_define_opts()
 }
 
 ########
-step_h()
+process_h()
 {
     # Initialize variables
     local value=`read_opt_value_from_line "$*" "-h"`

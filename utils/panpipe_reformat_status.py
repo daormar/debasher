@@ -1,21 +1,21 @@
 """
 PanPipe package
 Copyright 2019,2020 Daniel Ortiz-Mart\'inez
- 
+
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public License
 as published by the Free Software Foundation; either version 3
 of the License, or (at your option) any later version.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Lesser General Public License for more details.
- 
+
 You should have received a copy of the GNU Lesser General Public License
 along with this program; If not, see <http://www.gnu.org/licenses/>.
 """
- 
+
 # *- python -*
 
 # import modules
@@ -34,7 +34,7 @@ def take_pars():
     flags["f_given"]=False
     flags["l_given"]=False
     flags["e_given"]=False
-    
+
     try:
         opts, args = getopt.getopt(sys.argv[1:],"p:f:l:e:",["pstatus=","format=","fieldlen=","excl="])
     except getopt.GetoptError:
@@ -79,10 +79,10 @@ def print_help():
     print("                     ",ROW_WITH_HEADER_FORMAT,"-> one row with header, plain text", file=sys.stderr)
     print("                     ",ROW_WO_HEADER_FORMAT,"-> one row without header, plain text", file=sys.stderr)
     print("-l <int>             Field length", file=sys.stderr)
-    print("-e <string>          Comma-separated list of steps to be excluded", file=sys.stderr)
+    print("-e <string>          Comma-separated list of processes to be excluded", file=sys.stderr)
 
 ##################################################
-def extract_step_info(pstatus):
+def extract_process_info(pstatus):
     # Determine stream to be processed
     if pstatus=="":
         stream = sys.stdin
@@ -90,18 +90,18 @@ def extract_step_info(pstatus):
         stream = open(pstatus, 'r')
 
     # Process stream
-    step_map={}
+    process_map={}
     for line in stream:
         # Extract fields
         fields=line.split()
 
-        # Extract step information
-        if fields[0]=="STEP:":
-            stepname=fields[1]
+        # Extract process information
+        if fields[0]=="PROCESS:":
+            processname=fields[1]
             status=fields[4]
-            step_map[stepname]=status
+            process_map[processname]=status
 
-    return step_map
+    return process_map
 
 ##################################################
 def norm_str_len(str,normlen):
@@ -115,51 +115,51 @@ def norm_str_len(str,normlen):
         return result
 
 ##################################################
-def print_step_info(step_map,excl_steps_set,format,fieldlen):
+def print_process_info(process_map,excl_processes_set,format,fieldlen):
     if format==ROW_WITH_HEADER_FORMAT:
         header=""
-        for step in step_map:
-            if step not in excl_steps_set:
+        for process in process_map:
+            if process not in excl_processes_set:
                 if header=="":
-                    header=norm_str_len(step,fieldlen)
+                    header=norm_str_len(process,fieldlen)
                 else:
-                    header=header+" "+norm_str_len(step,fieldlen)
+                    header=header+" "+norm_str_len(process,fieldlen)
         print(header)
 
         status=""
-        for step in step_map:
-            if step not in excl_steps_set:
+        for process in process_map:
+            if process not in excl_processes_set:
                 if status=="":
-                    status=norm_str_len(step_map[step],fieldlen)
+                    status=norm_str_len(process_map[process],fieldlen)
                 else:
-                    status=status+" "+norm_str_len(step_map[step],fieldlen)
+                    status=status+" "+norm_str_len(process_map[process],fieldlen)
         print(status)
         
     elif format==ROW_WO_HEADER_FORMAT:
         status=""
-        for step in step_map:
-            if step not in excl_steps_set:
+        for process in process_map:
+            if process not in excl_processes_set:
                 if status=="":
-                    status=norm_str_len(step_map[step],fieldlen)
+                    status=norm_str_len(process_map[process],fieldlen)
                 else:
-                    status=status+" "+norm_str_len(step_map[step],fieldlen)
+                    status=status+" "+norm_str_len(process_map[process],fieldlen)
         print(status)
         
 ##################################################
-def extract_excl_step_info(excl_steps):
-    fields=excl_steps.split(",")
-    excl_steps_set=set()
-    for step in fields:
-        excl_steps_set.add(step)
-    return excl_steps_set
+def extract_excl_process_info(excl_processes):
+    fields=excl_processes.split(",")
+    excl_processes_set=set()
+    for process in fields:
+        excl_processes_set.add(process)
+    return excl_processes_set
     
 ##################################################
 def process_pars(flags,values):
-    step_map=extract_step_info(values["pstatus"])
-    excl_steps_set=set()
+    process_map=extract_process_info(values["pstatus"])
+    excl_processes_set=set()
     if flags["e_given"]:
-        excl_steps_set=extract_excl_step_info(values["excl"])
-    print_step_info(step_map,excl_steps_set,values["format"],values["fieldlen"])
+        excl_processes_set=extract_excl_process_info(values["excl"])
+    print_process_info(process_map,excl_processes_set,values["format"],values["fieldlen"])
     
 ##################################################
 def main(argv):

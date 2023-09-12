@@ -34,7 +34,7 @@ usage()
     echo "                       --ppl-sopts <string> [--ppl-opts <string>]"
     echo "                       [--help]"
     echo ""
-    echo "--pfile <string>       File with pipeline steps to be performed"
+    echo "--pfile <string>       File with pipeline processes to be performed"
     echo "--sched <string>       Scheduler used to execute the pipelines"
     echo "--dflt-nodes <string>  Default set of nodes used to execute the pipeline"
     echo "--ppl-sopts <string>   File containing a string with pipeline options per"

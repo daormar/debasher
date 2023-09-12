@@ -27,14 +27,14 @@
 # MISC. CONSTANTS
 LOCKFD=99
 MAX_NUM_SCRIPT_OPTS_TO_DISPLAY=10
-REEXEC_STEPS_LIST_FNAME=".reexec_steps_due_to_deps.txt"
+REEXEC_PROCESSES_LIST_FNAME=".reexec_processes_due_to_deps.txt"
 
 ####################
 # GLOBAL VARIABLES #
 ####################
 
-# Declare associative arrays to store step ids
-declare -A PIPE_EXEC_STEP_IDS
+# Declare associative arrays to store process ids
+declare -A PIPE_EXEC_PROCESS_IDS
 
 #############################
 # OPTION HANDLING FUNCTIONS #
@@ -53,11 +53,11 @@ usage()
     echo "panpipe_exec              --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
-    echo "                          [--reexec-outdated-steps] [--conda-support]"
+    echo "                          [--reexec-outdated-procs] [--conda-support]"
     echo "                          [--showopts|--checkopts|--debug]"
     echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
-    echo "--pfile <string>          File with pipeline steps to be performed (see manual"
+    echo "--pfile <string>          File with pipeline processes to be performed (see manual"
     echo "                          for additional information)"
     echo "--outdir <string>         Output directory"
     echo "--sched <string>          Scheduler used to execute the pipeline (if not given,"
@@ -70,11 +70,11 @@ usage()
     echo "                          means unlimited memory"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the pipeline"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
-    echo "--reexec-outdated-steps   Reexecute those steps with outdated code"
+    echo "--reexec-outdated-procs   Reexecute those processes with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--showopts                Show pipeline options"
     echo "--checkopts               Check pipeline options"
-    echo "--debug                   Do everything except launching pipeline steps"
+    echo "--debug                   Do everything except launching pipeline processes"
     echo "--builtinsched-debug      Show debug information for built-in scheduler"
     echo "--version                 Display version information and exit"
     echo "--help                    Display this help and exit"
@@ -90,7 +90,7 @@ read_pars()
     builtinsched_mem_given=0
     dflt_nodes_given=0
     dflt_throttle_given=0
-    reexec_outdated_steps_given=0
+    reexec_outdated_processes_given=0
     conda_support_given=0
     showopts_given=0
     checkopts_given=0
@@ -155,9 +155,9 @@ read_pars()
                       dflt_throttle_given=1
                   fi
                   ;;
-            "--reexec-outdated-steps")
+            "--reexec-outdated-procs")
                   if [ $# -ne 0 ]; then
-                      reexec_outdated_steps_given=1
+                      reexec_outdated_processes_given=1
                   fi
                   ;;
             "--conda-support")
@@ -253,9 +253,9 @@ reorder_pipeline_file()
 }
 
 ########
-gen_stepdeps()
+gen_processdeps()
 {
-    echo "* Generating step dependencies information ($pfile)..." >&2
+    echo "* Generating process dependencies information ($pfile)..." >&2
 
     "${panpipe_bindir}"/panpipe_check -p "${pfile}" -d 2> /dev/null || return 1
 
@@ -319,18 +319,18 @@ show_pipeline_opts()
     # Read input parameters
     local pfile=$1
 
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${stepname}`
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
             DIFFERENTIAL_CMDLINE_OPT_STR=""
             ${explain_cmdline_opts_funcname} || exit 1
-            update_opt_to_step_map ${stepname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+            update_opt_to_process_map ${processname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
         fi
     done < "${pfile}"
 
@@ -349,14 +349,14 @@ check_pipeline_opts()
     local cmdline=$1
     local pfile=$2
 
-    # Read information about the steps to be executed
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            define_opts_for_script "${cmdline}" "${stepspec}" || return 1
+    # Read information about the processes to be executed
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            define_opts_for_script "${cmdline}" "${process_spec}" || return 1
             local script_opts_array=()
             for script_opts in "${SCRIPT_OPT_LIST_ARRAY[@]}"; do
                 # Obtain human-readable representation of script options
@@ -364,7 +364,7 @@ check_pipeline_opts()
                 script_opts_array+=("${hr_script_opts}")
             done
             local serial_script_opts=`serialize_string_array "script_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_SCRIPT_OPTS_TO_DISPLAY}`
-            echo "STEP: ${stepname} ; OPTIONS: ${serial_script_opts}" >&2
+            echo "PROCESS: ${processname} ; OPTIONS: ${serial_script_opts}" >&2
         fi
     done < "${pfile}"
 
@@ -393,10 +393,10 @@ process_conda_req_entry()
 }
 
 ########
-process_conda_requirements_for_step()
+process_conda_requirements_for_process()
 {
-    stepname=$1
-    step_conda_envs=$2
+    processname=$1
+    process_conda_envs=$2
 
     # Read information about conda environments
     while read conda_env_entry; do
@@ -409,9 +409,9 @@ process_conda_requirements_for_step()
             local yml_fname=${array[1]}
             process_conda_req_entry "${env_name}" "${yml_fname}" || return 1
         else
-            echo "Error: invalid conda entry for step ${stepname}; Entry: ${step_conda_envs}" >&2
+            echo "Error: invalid conda entry for process ${processname}; Entry: ${process_conda_envs}" >&2
         fi
-    done < <(echo "${step_conda_envs}")
+    done < <(echo "${process_conda_envs}")
 }
 
 ########
@@ -422,20 +422,20 @@ process_conda_requirements()
     # Read input parameters
     local pfile=$1
 
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
 
             # Process conda envs information
-            local conda_envs_funcname=`get_conda_envs_funcname ${stepname}`
+            local conda_envs_funcname=`get_conda_envs_funcname ${processname}`
             if func_exists ${conda_envs_funcname}; then
-                step_conda_envs=`${conda_envs_funcname}` || exit 1
-                process_conda_requirements_for_step ${stepname} "${step_conda_envs}" || return 1
+                process_conda_envs=`${conda_envs_funcname}` || exit 1
+                process_conda_requirements_for_process ${processname} "${process_conda_envs}" || return 1
             fi
         fi
     done < "${pfile}"
@@ -446,24 +446,24 @@ process_conda_requirements()
 }
 
 ########
-define_forced_exec_steps()
+define_forced_exec_processes()
 {
-    echo "* Defining steps forced to be reexecuted (if any)..." >&2
+    echo "* Defining processes forced to be reexecuted (if any)..." >&2
 
     # Read input parameters
     local pfile=$1
 
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local step_forced=`extract_attr_from_stepspec "$stepspec" "force"`
-            if [ ${step_forced} = "yes" ]; then
-                mark_step_as_reexec $stepname ${FORCED_REEXEC_REASON}
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local process_forced=`extract_attr_from_process_spec "$process_spec" "force"`
+            if [ ${process_forced} = "yes" ]; then
+                mark_process_as_reexec $processname ${FORCED_REEXEC_REASON}
             fi
         fi
     done < "${pfile}"
@@ -504,9 +504,9 @@ check_script_is_older_than_modules()
 }
 
 ########
-define_reexec_steps_due_to_code_update()
+define_reexec_processes_due_to_code_update()
 {
-    echo "* Defining steps to be reexecuted due to code updates (if any)..." >&2
+    echo "* Defining processes to be reexecuted due to code updates (if any)..." >&2
 
     # Read input parameters
     local dirname=$1
@@ -515,28 +515,28 @@ define_reexec_steps_due_to_code_update()
     # Get names of pipeline modules
     local fullmodnames=`get_pipeline_fullmodnames "$pfile"` || return 1
 
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
-            local status=`get_step_status "${dirname}" ${stepname}`
-            local script_filename=`get_script_filename "${dirname}" ${stepname}`
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local status=`get_process_status "${dirname}" ${processname}`
+            local script_filename=`get_script_filename "${dirname}" ${processname}`
 
-            # Handle checkings depending of step status
-            if [ "${status}" = "${FINISHED_STEP_STATUS}" ]; then
+            # Handle checkings depending of process status
+            if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
                 if check_script_is_older_than_modules "${script_filename}" "${fullmodnames}"; then
-                    echo "Warning: last execution of step ${stepname} used outdated modules">&2
-                    mark_step_as_reexec $stepname ${OUTDATED_CODE_REEXEC_REASON}
+                    echo "Warning: last execution of process ${processname} used outdated modules">&2
+                    mark_process_as_reexec $processname ${OUTDATED_CODE_REEXEC_REASON}
                 fi
             fi
 
-            if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
+            if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
                 if check_script_is_older_than_modules "${script_filename}" "${fullmodnames}"; then
-                    echo "Warning: current execution of step ${stepname} is using outdated modules">&2
+                    echo "Warning: current execution of process ${processname} is using outdated modules">&2
                 fi
             fi
         fi
@@ -548,25 +548,25 @@ define_reexec_steps_due_to_code_update()
 }
 
 ########
-define_reexec_steps_due_to_deps()
+define_reexec_processes_due_to_deps()
 {
-    echo "* Defining steps to be reexecuted due to dependencies (if any)..." >&2
+    echo "* Defining processes to be reexecuted due to dependencies (if any)..." >&2
 
-    local stepdeps_file=$1
+    local processdeps_file=$1
 
-    # Obtain list of steps to be reexecuted due to dependencies
-    local reexec_steps_string=`get_reexec_steps_as_string`
-    local reexec_steps_file="${outd}/${REEXEC_STEPS_LIST_FNAME}"
-    "${panpipe_bindir}"/pp_get_reexec_steps_due_to_deps -r "${reexec_steps_string}" -d "${stepdeps_file}" > "${reexec_steps_file}" || return 1
+    # Obtain list of processes to be reexecuted due to dependencies
+    local reexec_processes_string=`get_reexec_processes_as_string`
+    local reexec_processes_file="${outd}/${REEXEC_PROCESSES_LIST_FNAME}"
+    "${panpipe_bindir}"/pp_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -d "${processdeps_file}" > "${reexec_processes_file}" || return 1
 
-    # Read information about the steps to be re-executed due to
+    # Read information about the processes to be re-executed due to
     # dependencies
-    local stepname
-    while read stepname; do
-        if [ "${stepname}" != "" ]; then
-            mark_step_as_reexec $stepname ${DEPS_REEXEC_REASON}
+    local processname
+    while read processname; do
+        if [ "${processname}" != "" ]; then
+            mark_process_as_reexec $processname ${DEPS_REEXEC_REASON}
         fi
-    done < "${reexec_steps_file}"
+    done < "${reexec_processes_file}"
 
     echo "Definition complete" >&2
 
@@ -574,14 +574,14 @@ define_reexec_steps_due_to_deps()
 }
 
 ########
-print_reexec_steps()
+print_reexec_processes()
 {
-    local reexec_steps_string=`get_reexec_steps_as_string`
+    local reexec_processes_string=`get_reexec_processes_as_string`
 
-    if [ ! -z "${reexec_steps_string}" ]; then
-        echo "* Printing list of steps to be reexecuted..." >&2
-        echo "${reexec_steps_string}" >&2
-        echo "${PANPIPE_REEXEC_STEPS_WARNING}" >&2
+    if [ ! -z "${reexec_processes_string}" ]; then
+        echo "* Printing list of processes to be reexecuted..." >&2
+        echo "${reexec_processes_string}" >&2
+        echo "${PANPIPE_REEXEC_PROCESSES_WARNING}" >&2
         echo "" >&2
     fi
 }
@@ -640,7 +640,7 @@ create_basic_dirs()
 ########
 create_shared_dirs()
 {
-    # Create shared directories required by the pipeline steps
+    # Create shared directories required by the pipeline processes
     # IMPORTANT NOTE: the following function can only be executed after
     # loading pipeline modules
     create_pipeline_shdirs
@@ -649,7 +649,7 @@ create_shared_dirs()
 ########
 register_fifos()
 {
-    # Register FIFOs (named pipes) required by the pipeline steps
+    # Register FIFOs (named pipes) required by the pipeline processes
     # IMPORTANT NOTE: the following function can only be executed after
     # loading pipeline modules
     register_pipeline_fifos
@@ -663,29 +663,29 @@ print_command_line()
 }
 
 ########
-get_stepdeps_from_detailed_spec()
+get_processdeps_from_detailed_spec()
 {
-    local stepdeps_spec=$1
+    local processdeps_spec=$1
     local sdeps=""
 
-    # Iterate over the elements of the step specification: type1:stepname1,...,typen:stepnamen or type1:stepname1?...?typen:stepnamen
-    local separator=`get_stepdeps_separator ${stepdeps_spec}`
+    # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
+    local separator=`get_processdeps_separator ${processdeps_spec}`
     if [ "${separator}" = "" ]; then
-        local stepdeps_spec_blanks=${stepdeps_spec}
+        local processdeps_spec_blanks=${processdeps_spec}
     else
-        local stepdeps_spec_blanks=`replace_str_elem_sep_with_blank "${separator}" ${stepdeps_spec}`
+        local processdeps_spec_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec}`
     fi
     local dep_spec
-    for dep_spec in ${stepdeps_spec_blanks}; do
+    for dep_spec in ${processdeps_spec_blanks}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
         local mapped_deptype=`map_deptype_if_necessary ${deptype}`
-        local stepname=`get_stepname_part_in_dep ${dep_spec}`
-        # Check if there is an id for the step
-        if [ ! -z "${PIPE_EXEC_STEP_IDS[${stepname}]}" ]; then
+        local processname=`get_processname_part_in_dep ${dep_spec}`
+        # Check if there is an id for the process
+        if [ ! -z "${PIPE_EXEC_PROCESS_IDS[${processname}]}" ]; then
             if [ -z "${sdeps}" ]; then
-                sdeps=${mapped_deptype}":"${PIPE_EXEC_STEP_IDS[${stepname}]}
+                sdeps=${mapped_deptype}":"${PIPE_EXEC_PROCESS_IDS[${processname}]}
             else
-                sdeps=${sdeps}"${separator}"${mapped_deptype}":"${PIPE_EXEC_STEP_IDS[${stepname}]}
+                sdeps=${sdeps}"${separator}"${mapped_deptype}":"${PIPE_EXEC_PROCESS_IDS[${processname}]}
             fi
         fi
     done
@@ -694,101 +694,101 @@ get_stepdeps_from_detailed_spec()
 }
 
 ########
-get_stepdeps()
+get_processdeps()
 {
-    local step_id_list=$1
-    local stepdeps_spec=$2
-    case ${stepdeps_spec} in
-            "afterok:all") apply_deptype_to_stepids "${step_id_list}" afterok
+    local process_id_list=$1
+    local processdeps_spec=$2
+    case ${processdeps_spec} in
+            "afterok:all") apply_deptype_to_processids "${process_id_list}" afterok
                     ;;
             "none") echo ""
                     ;;
-            *) get_stepdeps_from_detailed_spec ${stepdeps_spec}
+            *) get_processdeps_from_detailed_spec ${processdeps_spec}
                ;;
     esac
 }
 
 ########
-execute_step()
+execute_process()
 {
     # Initialize variables
     local cmdline=$1
     local dirname=$2
-    local stepname=$3
-    local stepspec=$4
+    local processname=$3
+    local process_spec=$4
 
-    # Execute step
+    # Execute process
 
-    ## Obtain step status
-    local status=`get_step_status ${dirname} ${stepname}`
-    echo "STEP: ${stepname} ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
+    ## Obtain process status
+    local status=`get_process_status ${dirname} ${processname}`
+    echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
-    ## Decide whether the step should be executed
-    if [ "${status}" != "${FINISHED_STEP_STATUS}" -a "${status}" != "${INPROGRESS_STEP_STATUS}" ]; then
+    ## Decide whether the process should be executed
+    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
-        define_opts_for_script "${cmdline}" "${stepspec}" || return 1
+        define_opts_for_script "${cmdline}" "${process_spec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
         local array_size=${#script_opts_array[@]}
-        create_script "${dirname}" ${stepname} "script_opts_array"
+        create_script "${dirname}" ${processname} "script_opts_array"
 
         # Archive script
-        archive_script "${dirname}" ${stepname}
+        archive_script "${dirname}" ${processname}
 
-        # Prepare files and directories for step
-        update_step_completion_signal "${dirname}" ${stepname} ${status} || { echo "Error when updating step completion signal for step" >&2 ; return 1; }
-        clean_step_log_files "${dirname}" ${stepname} ${array_size} || { echo "Error when cleaning log files for step" >&2 ; return 1; }
-        clean_step_id_files "${dirname}" ${stepname} ${array_size} || { echo "Error when cleaning id files for step" >&2 ; return 1; }
-        create_outdir_for_step "${dirname}" ${stepname} || { echo "Error when creating output directory for step" >&2 ; return 1; }
-        prepare_fifos_owned_by_step ${stepname}
+        # Prepare files and directories for process
+        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
+        clean_process_log_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
+        clean_process_id_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
+        create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
+        prepare_fifos_owned_by_process ${processname}
 
-        # Launch step
-        local task_array_list=`get_task_array_list "${dirname}" ${stepname} ${array_size}`
-        local stepdeps_spec=`extract_stepdeps_from_stepspec "$stepspec"`
-        local stepdeps=`get_stepdeps "${step_id_list}" ${stepdeps_spec}`
-        launch "${dirname}" ${stepname} ${array_size} ${task_array_list} "${stepspec}" "${stepdeps}" "launch_outvar" || { echo "Error while launching step!" >&2 ; return 1; }
+        # Launch process
+        local task_array_list=`get_task_array_list "${dirname}" ${processname} ${array_size}`
+        local processdeps_spec=`extract_processdeps_from_process_spec "$process_spec"`
+        local processdeps=`get_processdeps "${process_id_list}" ${processdeps_spec}`
+        launch "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
         local primary_id=`get_primary_id ${launch_outvar}`
-        PIPE_EXEC_STEP_IDS[${stepname}]=${primary_id}
-        step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
+        PIPE_EXEC_PROCESS_IDS[${processname}]=${primary_id}
+        process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
 
         # Write id to file
-        write_step_id_info_to_file "${dirname}" ${stepname} ${launch_outvar}
+        write_process_id_info_to_file "${dirname}" ${processname} ${launch_outvar}
     else
-        # If step is in progress, its id should be retrieved so as to
+        # If process is in progress, its id should be retrieved so as to
         # correctly express dependencies
-        if [ "${status}" = "${INPROGRESS_STEP_STATUS}" ]; then
-            local sid_info=`read_step_id_info_from_file "${dirname}" ${stepname}` || { echo "Error while retrieving id of in-progress step" >&2 ; return 1; }
+        if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
+            local sid_info=`read_process_id_info_from_file "${dirname}" ${processname}` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
             local global_id=`get_global_id ${sid_info}`
-            PIPE_EXEC_STEP_IDS[${stepname}]=${global_id}
-            step_id_list="${step_id_list}:${PIPE_EXEC_STEP_IDS[${stepname}]}"
+            PIPE_EXEC_PROCESS_IDS[${processname}]=${global_id}
+            process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
         fi
     fi
 }
 
 ########
-execute_pipeline_steps()
+execute_pipeline_processes()
 {
-    echo "* Executing pipeline steps..." >&2
+    echo "* Executing pipeline processes..." >&2
 
     # Read input parameters
     local cmdline=$1
     local dirname=$2
     local pfile=$3
 
-    # step_id_list will store the step ids of the pipeline steps
-    local step_id_list=""
+    # process_id_list will store the process ids of the pipeline processes
+    local process_id_list=""
 
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step name
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            execute_step "${cmdline}" "${dirname}" ${stepname} "${stepspec}" || return 1
+            execute_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
         fi
     done < "${pfile}"
 
@@ -796,48 +796,48 @@ execute_pipeline_steps()
 }
 
 ########
-debug_step()
+debug_process()
 {
     # Initialize variables
     local cmdline=$1
     local dirname=$2
-    local stepname=$3
-    local stepspec=$4
+    local processname=$3
+    local process_spec=$4
 
-    # Debug step
+    # Debug process
 
-    ## Obtain step status
-    local status=`get_step_status "${dirname}" ${stepname}`
-    echo "STEP: ${stepname} ; STATUS: ${status} ; STEPSPEC: ${stepspec}" >&2
+    ## Obtain process status
+    local status=`get_process_status "${dirname}" ${processname}`
+    echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
-    ## Obtain step options
-    local define_opts_funcname=`get_define_opts_funcname ${stepname}`
-    ${define_opts_funcname} "${cmdline}" "${stepspec}" || return 1
+    ## Obtain process options
+    local define_opts_funcname=`get_define_opts_funcname ${processname}`
+    ${define_opts_funcname} "${cmdline}" "${process_spec}" || return 1
 }
 
 ########
-execute_pipeline_steps_debug()
+execute_pipeline_processes_debug()
 {
-    echo "* Executing pipeline steps... (debug mode)" >&2
+    echo "* Executing pipeline processes... (debug mode)" >&2
 
     # Read input parameters
     local cmdline=$1
     local dirname=$2
     local pfile=$3
 
-    # step_id_list will store the step ids of the pipeline steps
-    local step_id_list=""
+    # process_id_list will store the process ids of the pipeline processes
+    local process_id_list=""
 
-    # Read information about the steps to be executed
-    local stepspec
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Extract step name
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            debug_step "${cmdline}" "${dirname}" ${stepname} "${stepspec}" || return 1
+            debug_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
         fi
     done < "${pfile}"
 
@@ -871,8 +871,8 @@ check_pipeline_file || exit 1
 reordered_pfile="${outd}/${REORDERED_PIPELINE_BASENAME}"
 reorder_pipeline_file > "${reordered_pfile}" || exit 1
 
-stepdeps_file="${outd}"/.stepdeps.txt
-gen_stepdeps > "${stepdeps_file}" || exit 1
+processdeps_file="${outd}"/.processdeps.txt
+gen_processdeps > "${processdeps_file}" || exit 1
 
 configure_scheduler || exit 1
 
@@ -898,26 +898,26 @@ else
             process_conda_requirements "${reordered_pfile}" || exit 1
         fi
 
-        define_forced_exec_steps "${reordered_pfile}" || exit 1
+        define_forced_exec_processes "${reordered_pfile}" || exit 1
 
-        if [ ${reexec_outdated_steps_given} -eq 1 ]; then
-            define_reexec_steps_due_to_code_update "${outd}" "${reordered_pfile}" || exit 1
+        if [ ${reexec_outdated_processes_given} -eq 1 ]; then
+            define_reexec_processes_due_to_code_update "${outd}" "${reordered_pfile}" || exit 1
         fi
 
-        define_reexec_steps_due_to_deps "${stepdeps_file}" || exit 1
+        define_reexec_processes_due_to_deps "${processdeps_file}" || exit 1
 
-        print_reexec_steps || exit 1
+        print_reexec_processes || exit 1
 
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            execute_pipeline_steps_debug "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
+            execute_pipeline_processes_debug "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
         else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
-                builtin_sched_execute_pipeline_steps "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
+                builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
             else
-                execute_pipeline_steps "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
+                execute_pipeline_processes "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
             fi
         fi
     fi

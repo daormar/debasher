@@ -1,34 +1,34 @@
 """
 PanPipe package
 Copyright 2019,2020 Daniel Ortiz-Mart\'inez
- 
+
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public License
 as published by the Free Software Foundation; either version 3
 of the License, or (at your option) any later version.
- 
+
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Lesser General Public License for more details.
- 
+
 You should have received a copy of the GNU Lesser General Public License
 along with this program; If not, see <http://www.gnu.org/licenses/>.
 """
- 
+
 # *- python -*
 
 # import modules
 import io, sys, getopt, operator
 
 # Constants
-NONE_STEP_DEP="none"
+NONE_PROCESS_DEP="none"
 
 ##################################################
-class stepdep_data:
+class processdep_data:
     def __init__(self):
         self.deptype=None
-        self.stepname=None
+        self.processname=None
 
 ##################################################
 def take_pars():
@@ -88,7 +88,7 @@ def print_help():
     print("-p <string>    Pipeline file", file=sys.stderr)
     print("-r             Print reordered pipeline", file=sys.stderr)
     print("-g             Print pipeline in graphviz format", file=sys.stderr)
-    print("-d             Print dependencies for each step", file=sys.stderr)
+    print("-d             Print dependencies for each process", file=sys.stderr)
     print("-v             Verbose mode", file=sys.stderr)
 
 ##################################################
@@ -120,7 +120,7 @@ def entry_is_empty(entry):
         return False
 
 ##################################################
-def extract_step_name(entry):
+def extract_process_name(entry):
     fields=entry.split()
     if len(fields)==0:
         return ""
@@ -128,85 +128,85 @@ def extract_step_name(entry):
         return fields[0]
 
 ##################################################
-def get_dep_separator(sdeps_str):
-    if ',' in sdeps_str and '?' in sdeps_str:
+def get_dep_separator(pdeps_str):
+    if ',' in pdeps_str and '?' in pdeps_str:
         return True,',?'
-    elif ',' in sdeps_str:
+    elif ',' in pdeps_str:
         return False,','
-    elif '?' in sdeps_str:
+    elif '?' in pdeps_str:
         return False,'?'
     else:
         return False,''
-    
+
 ##################################################
-def extract_step_deps(entry_lineno,entry):
+def extract_process_deps(entry_lineno,entry):
     deps_syntax_ok=True
     # extract text field
     fields=entry.split()
-    sdeps_str=""
+    pdeps_str=""
     for f in fields:
-        if f.find("stepdeps=")==0:
-            sdeps_str=f[9:]
+        if f.find("processdeps=")==0:
+            pdeps_str=f[len("processdeps="):]
 
-    # Return empty list of step dependencies if corresponding field was
+    # Return empty list of process dependencies if corresponding field was
     # not found
-    if len(sdeps_str)==0:
+    if len(pdeps_str)==0:
         return deps_syntax_ok,[]
 
     # Check that dependency separators (, and ?) are not mixed
-    seps_mixed,separator=get_dep_separator(sdeps_str)
+    seps_mixed,separator=get_dep_separator(pdeps_str)
     if seps_mixed:
         deps_syntax_ok=False
-        print("Error: dependency separators mixed in step dependency (",sdeps_str,") at line number",entry_lineno, file=sys.stderr)
+        print("Error: dependency separators mixed in process dependency (",pdeps_str,") at line number",entry_lineno, file=sys.stderr)
         return deps_syntax_ok,[]
-    
-    # create list of step dependencies
-    sdeps_list=[]
+
+    # create list of process dependencies
+    pdeps_list=[]
     if(separator==''):
-        sdeps_fields=[sdeps_str]
+        pdeps_fields=[pdeps_str]
     else:
-        sdeps_fields=sdeps_str.split(separator)
-    for sdep in sdeps_fields:
-        if sdep!=NONE_STEP_DEP:
-            sdep_fields=sdep.split(":")
-            if(len(sdep_fields)==2 and sdep_fields[1]!=''):
-                data=stepdep_data()
-                data.deptype=sdep_fields[0]
-                data.stepname=sdep_fields[1]
-                sdeps_list.append(data)
+        pdeps_fields=pdeps_str.split(separator)
+    for pdep in pdeps_fields:
+        if pdep!=NONE_PROCESS_DEP:
+            pdep_fields=pdep.split(":")
+            if(len(pdep_fields)==2 and pdep_fields[1]!=''):
+                data=processdep_data()
+                data.deptype=pdep_fields[0]
+                data.processname=pdep_fields[1]
+                pdeps_list.append(data)
             else:
                 deps_syntax_ok=False
-                print("Error: incorrect definition of step dependency (",sdeps_str,") at line number",entry_lineno, file=sys.stderr)
-        
-    return deps_syntax_ok,separator,sdeps_list
+                print("Error: incorrect definition of process dependency (",pdeps_str,") at line number",entry_lineno, file=sys.stderr)
+
+    return deps_syntax_ok,separator,pdeps_list
 
 ##################################################
 def extract_config_entries(pfile):
-    step_entries=[]
+    process_entries=[]
     file = open(pfile, 'r')
     # read file entry by entry
     for entry in file:
         entry=entry.strip("\n")
         if entry_is_config(entry):
-            step_entries.append(entry)
-            
-    return step_entries
+            process_entries.append(entry)
+
+    return process_entries
 
 ##################################################
-def extract_step_entries(pfile):
+def extract_process_entries(pfile):
     entries_lineno=[]
-    step_entries=[]
+    process_entries=[]
     file = open(pfile, 'r')
     # read file entry by entry
     lineno=1
     for entry in file:
         entry=entry.strip("\n")
         if not entry_is_comment(entry) and not entry_is_empty(entry):
-            step_entries.append(entry)
+            process_entries.append(entry)
             entries_lineno.append(lineno)
         lineno=lineno+1
-        
-    return entries_lineno,step_entries
+
+    return entries_lineno,process_entries
 
 ##################################################
 def extract_time_value(entry):
@@ -242,140 +242,140 @@ def str_contains_commas(str):
         return True
     else:
         return False
-    
-##################################################
-def extract_steps_with_multiattempt(step_entries):
-    multiattempt_steps=set()
-    for i in range(len(step_entries)):
-        sname=extract_step_name(step_entries[i])
-        time_value=extract_time_value(step_entries[i])
-        mem_value=extract_mem_value(step_entries[i])
-        if(str_contains_commas(time_value) or str_contains_commas(mem_value)):
-            multiattempt_steps.add(sname)
-    return multiattempt_steps
 
 ##################################################
-def extract_stepdeps_info(entries_lineno,step_entries):
-    stepdeps_map={}
-    stepdeps_sep={}
+def extract_processes_with_multiattempt(process_entries):
+    multiattempt_processes=set()
+    for i in range(len(process_entries)):
+        sname=extract_process_name(process_entries[i])
+        time_value=extract_time_value(process_entries[i])
+        mem_value=extract_mem_value(process_entries[i])
+        if(str_contains_commas(time_value) or str_contains_commas(mem_value)):
+            multiattempt_processes.add(sname)
+    return multiattempt_processes
+
+##################################################
+def extract_processdeps_info(entries_lineno,process_entries):
+    processdeps_map={}
+    processdeps_sep={}
     deps_syntax_ok=True
-    for i in range(len(step_entries)):
-        fields=step_entries[i].split()
-        sname=extract_step_name(step_entries[i])
-        dep_syntax_ok,separator,deps=extract_step_deps(entries_lineno[i],step_entries[i])
+    for i in range(len(process_entries)):
+        fields=process_entries[i].split()
+        sname=extract_process_name(process_entries[i])
+        dep_syntax_ok,separator,deps=extract_process_deps(entries_lineno[i],process_entries[i])
         if(not dep_syntax_ok):
             deps_syntax_ok=False
-        stepdeps_sep[sname]=separator
-        stepdeps_map[sname]=deps
-    return deps_syntax_ok,stepdeps_sep,stepdeps_map
+        processdeps_sep[sname]=separator
+        processdeps_map[sname]=deps
+    return deps_syntax_ok,processdeps_sep,processdeps_map
 
 ##################################################
-def stepnames_duplicated(entries_lineno,step_entries):
-    stepnames=set()
+def processnames_duplicated(entries_lineno,process_entries):
+    processnames=set()
     lineno=1
-    for i in range(len(step_entries)):
-        sname=extract_step_name(step_entries[i])
-        if sname in stepnames:
-            print("Error: step",sname,"in line",entries_lineno[i],"is duplicated", file=sys.stderr)
+    for i in range(len(process_entries)):
+        sname=extract_process_name(process_entries[i])
+        if sname in processnames:
+            print("Error: process",sname,"in line",entries_lineno[i],"is duplicated", file=sys.stderr)
             return True
         else:
-            stepnames.add(sname)
+            processnames.add(sname)
         lineno=lineno+1
     return False
-    
+
 ##################################################
-def depnames_correct(stepdeps_map):
-    stepnames=set()
-    stepdepnames=set()
+def depnames_correct(processdeps_map):
+    processnames=set()
+    processdepnames=set()
 
-    # Obtain sets of step names and names of step dependencies
-    for stepname in stepdeps_map:
-        stepnames.add(stepname)
-        for elem in stepdeps_map[stepname]:
-            stepdepnames.add(elem.stepname)
+    # Obtain sets of process names and names of process dependencies
+    for processname in processdeps_map:
+        processnames.add(processname)
+        for elem in processdeps_map[processname]:
+            processdepnames.add(elem.processname)
 
-    for name in stepdepnames:
-        if name not in stepnames:
-            print("Error: unrecognized step dependency",name, file=sys.stderr)
+    for name in processdepnames:
+        if name not in processnames:
+            print("Error: unrecognized process dependency",name, file=sys.stderr)
             return False
 
     return True
 
 ##################################################
-def stepname_can_be_added(sname,processed_steps,stepdeps_map):
-    # Check if step name has already been added
-    if sname in processed_steps:
+def processname_can_be_added(sname,processed_processes,processdeps_map):
+    # Check if process name has already been added
+    if sname in processed_processes:
         return False
 
-    # Check if all dependencies for step name were processed
-    for elem in stepdeps_map[sname]:
-        if(elem.stepname not in processed_steps):
+    # Check if all dependencies for process name were processed
+    for elem in processdeps_map[sname]:
+        if(elem.processname not in processed_processes):
             return False
-    
+
     return True
-    
-##################################################
-def order_step_entries(step_entries,stepdeps_map,ordered_step_entries):
-    processed_steps=set()
-    # Add steps to ordered steps list incrementally
-    while len(processed_steps)!=len(stepdeps_map):
-        prev_proc_steps_len=len(processed_steps)
-        # Explore list of step entries
-        for entry in step_entries:
-            sname=extract_step_name(entry)
-            if(stepname_can_be_added(sname,processed_steps,stepdeps_map)):
-                processed_steps.add(sname)
-                ordered_step_entries.append(entry)
-        # Check if no steps were added
-        if(prev_proc_steps_len==len(processed_steps)):
-            print("Error: the analysis file contains at least one cycle", file=sys.stderr)
-            return ordered_step_entries
-        
-    return ordered_step_entries
 
 ##################################################
-def after_dep_has_multatt_step(entries_lineno,multiattempt_steps,stepdeps_map):
+def order_process_entries(process_entries,processdeps_map,ordered_process_entries):
+    processed_processes=set()
+    # Add processes to ordered processes list incrementally
+    while len(processed_processes)!=len(processdeps_map):
+        prev_proc_processes_len=len(processed_processes)
+        # Explore list of process entries
+        for entry in process_entries:
+            sname=extract_process_name(entry)
+            if(processname_can_be_added(sname,processed_processes,processdeps_map)):
+                processed_processes.add(sname)
+                ordered_process_entries.append(entry)
+        # Check if no processes were added
+        if(prev_proc_processes_len==len(processed_processes)):
+            print("Error: the analysis file contains at least one cycle", file=sys.stderr)
+            return ordered_process_entries
+
+    return ordered_process_entries
+
+##################################################
+def after_dep_has_multatt_process(entries_lineno,multiattempt_processes,processdeps_map):
     found=False
-    for sname in stepdeps_map:
-        deplist=stepdeps_map[sname]
+    for sname in processdeps_map:
+        deplist=processdeps_map[sname]
         i=0
         while i<len(deplist) and not found:
-            if(deplist[i].deptype=="after" and deplist[i].stepname in multiattempt_steps):
+            if(deplist[i].deptype=="after" and deplist[i].processname in multiattempt_processes):
                 found=True
-                print("Error:",sname,"step has an 'after' dependency with a multiple-attempt step (",deplist[i].stepname,")", file=sys.stderr)
+                print("Error:",sname,"process has an 'after' dependency with a multiple-attempt process (",deplist[i].processname,")", file=sys.stderr)
             else:
                 i=i+1
     if(found):
         return True
     else:
         return False
-    
+
 ##################################################
-def stepdeps_correct(entries_lineno,step_entries,multiattempt_steps,stepdeps_map,ordered_step_entries):
+def processdeps_correct(entries_lineno,process_entries,multiattempt_processes,processdeps_map,ordered_process_entries):
 
-    # Check existence of duplicated steps
-    if(stepnames_duplicated(entries_lineno,step_entries)):
+    # Check existence of duplicated processes
+    if(processnames_duplicated(entries_lineno,process_entries)):
         return False
-    
+
     # Check dependency names
-    if(not depnames_correct(stepdeps_map)):
+    if(not depnames_correct(processdeps_map)):
         return False
 
-    # Check "after" dependency type is not used over a multi-attempt step
-    if(after_dep_has_multatt_step(entries_lineno,multiattempt_steps,stepdeps_map)):
+    # Check "after" dependency type is not used over a multi-attempt process
+    if(after_dep_has_multatt_process(entries_lineno,multiattempt_processes,processdeps_map)):
         return False
-    # Reorder step entries
-    order_step_entries(step_entries,stepdeps_map,ordered_step_entries)
-    if(len(step_entries)!=len(ordered_step_entries)):
+    # Reorder process entries
+    order_process_entries(process_entries,processdeps_map,ordered_process_entries)
+    if(len(process_entries)!=len(ordered_process_entries)):
         return False
-    
+
     return True
 
 ##################################################
-def print_entries(config_entries,step_entries):
+def print_entries(config_entries,process_entries):
     for e in config_entries:
         print(e)
-    for e in step_entries:
+    for e in process_entries:
         print(e)
 
 ##################################################
@@ -383,51 +383,51 @@ def get_graph_linestyle(separator):
     if separator=="?":
         return "dashed"
     elif separator==",":
-        return "solid"        
+        return "solid"
     elif separator=="":
         return "solid"
 
 ##################################################
-def print_graph(ordered_step_entries,stepdeps_sep,stepdeps_map):
+def print_graph(ordered_process_entries,processdeps_sep,processdeps_map):
     # Print header
     print("digraph G {")
     print("overlap=false;")
     print("splines=true;")
     print("K=1;")
 
-    # Set representation for steps
+    # Set representation for processes
     print("node [shape = ellipse];")
 
-    # Process steps
-    for step in stepdeps_map:
-        line_style=get_graph_linestyle(stepdeps_sep[step])
-        if len(stepdeps_map[step])==0:
-            print("start","->",step, "[ label= \"\" ,","color = black ];")            
+    # Process processes
+    for process in processdeps_map:
+        line_style=get_graph_linestyle(processdeps_sep[process])
+        if len(processdeps_map[process])==0:
+            print("start","->",process, "[ label= \"\" ,","color = black ];")
         else:
-            for elem in stepdeps_map[step]:
-                print('"'+elem.stepname+'"',"->",step, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];")
-    
+            for elem in processdeps_map[process]:
+                print('"'+elem.processname+'"',"->",process, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];")
+
     # Print footer
     print("}")
 
 ##################################################
-def extract_all_deps_for_step(sname,stepdeps_map,result):
-    if sname in stepdeps_map:
-        for stepdep in stepdeps_map[sname]:
-            result.add(stepdep.stepname)
-            extract_all_deps_for_step(stepdep.stepname,stepdeps_map,result)
+def extract_all_deps_for_process(sname,processdeps_map,result):
+    if sname in processdeps_map:
+        for processdep in processdeps_map[sname]:
+            result.add(processdep.processname)
+            extract_all_deps_for_process(processdep.processname,processdeps_map,result)
 
 ##################################################
-def print_deps(ordered_step_entries,stepdeps_map):
-    for entry in ordered_step_entries:
-        # Extract dependencies for step
-        sname=extract_step_name(entry)
-        stepdeps=set()
-        extract_all_deps_for_step(sname,stepdeps_map,stepdeps)
-        
-        # Print dependencies for step
+def print_deps(ordered_process_entries,processdeps_map):
+    for entry in ordered_process_entries:
+        # Extract dependencies for process
+        sname=extract_process_name(entry)
+        processdeps=set()
+        extract_all_deps_for_process(sname,processdeps_map,processdeps)
+
+        # Print dependencies for process
         depstr=""
-        for dep in stepdeps:
+        for dep in processdeps:
             if(depstr==""):
                 depstr=dep
             else:
@@ -440,40 +440,40 @@ def sname_valid(sname):
         if not(c.isalpha() or c.isdigit() or c=="_"):
             return 0
     return 1
-    
+
 ##################################################
-def snames_valid(stepdeps_map):
-    for sname in stepdeps_map:
+def snames_valid(processdeps_map):
+    for sname in processdeps_map:
         if(not sname_valid(sname)):
-            print("Error: step name",sname,"contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
+            print("Error: process name",sname,"contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
             return 0
     return 1
-    
+
 ##################################################
 def process_pars(flags,values):
     config_entries=extract_config_entries(values["pfile"])
-    entries_lineno,step_entries=extract_step_entries(values["pfile"])
-    multiattempt_steps=extract_steps_with_multiattempt(step_entries)
-    deps_syntax_ok,stepdeps_sep,stepdeps_map=extract_stepdeps_info(entries_lineno,step_entries)
+    entries_lineno,process_entries=extract_process_entries(values["pfile"])
+    multiattempt_processes=extract_processes_with_multiattempt(process_entries)
+    deps_syntax_ok,processdeps_sep,processdeps_map=extract_processdeps_info(entries_lineno,process_entries)
     if(not deps_syntax_ok):
-       print("Step dependencies are not syntactically correct", file=sys.stderr)
+       print("Process dependencies are not syntactically correct", file=sys.stderr)
        return 1
-    if(not snames_valid(stepdeps_map)):
-       print("Step names are not valid", file=sys.stderr)
+    if(not snames_valid(processdeps_map)):
+       print("Process names are not valid", file=sys.stderr)
        return 1
-    ordered_step_entries=[]
-    if(stepdeps_correct(entries_lineno,step_entries,multiattempt_steps,stepdeps_map,ordered_step_entries)):
+    ordered_process_entries=[]
+    if(processdeps_correct(entries_lineno,process_entries,multiattempt_processes,processdeps_map,ordered_process_entries)):
         print("Pipeline file is correct", file=sys.stderr)
         if(flags["r_given"]):
-            print_entries(config_entries,ordered_step_entries)
+            print_entries(config_entries,ordered_process_entries)
         elif(flags["g_given"]):
-            print_graph(ordered_step_entries,stepdeps_sep,stepdeps_map)
+            print_graph(ordered_process_entries,processdeps_sep,processdeps_map)
         elif(flags["d_given"]):
-            print_deps(ordered_step_entries,stepdeps_map)
+            print_deps(ordered_process_entries,processdeps_map)
     else:
         print("Pipeline file is not correct", file=sys.stderr)
         return 1
-        
+
 ##################################################
 def main(argv):
     # take parameters
@@ -486,6 +486,6 @@ def main(argv):
     success=process_pars(flags,values)
 
     exit(success)
-    
+
 if __name__ == "__main__":
     main(sys.argv)

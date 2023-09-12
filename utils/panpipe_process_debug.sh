@@ -22,8 +22,8 @@
 ########
 print_desc()
 {
-    echo "pipe_step_debug executes a pipeline step for debugging purposes"
-    echo "Usage: pipe_step_debug <pplfile> <stepname> <options>"
+    echo "panpipe_process_debug executes a pipeline process for debugging purposes"
+    echo "Usage: panpipe_process_debug <pplfile> <processname> <options>"
 }
 
 ########
@@ -35,7 +35,7 @@ read_pars()
 
     pfile=$1
     shift
-    stepname=$1
+    processname=$1
     shift
     opts=$*
 }
@@ -63,15 +63,15 @@ load_modules()
 }
 
 ########
-execute_step()
+execute_process()
 {
     # Initialize variables
-    local stepname=$1
+    local processname=$1
     local opts=$2
 
-    # Execute step
-    echo "Executing: $stepname $opts" >&2
-    ${stepname} "${opts}"
+    # Execute process
+    echo "Executing: $processname $opts" >&2
+    ${processname} "${opts}"
 }
 
 ########
@@ -87,4 +87,4 @@ check_pipeline_file || exit 1
 
 load_modules "${pfile}" || exit 1
 
-execute_step ${stepname} "${opts}" || exit 1
+execute_process ${processname} "${opts}" || exit 1

@@ -22,7 +22,7 @@
 ########
 print_desc()
 {
-    echo "panpipe_status gets status of pipeline steps"
+    echo "panpipe_status gets status of pipeline processes"
     echo "type \"panpipe_status --help\" to get usage information"
 }
 
@@ -32,9 +32,9 @@ usage()
     echo "panpipe_status            -d <string> [-s <string>] [-i]"
     echo "                          [--help]"
     echo ""
-    echo "-d <string>               Output directory for pipeline steps"
-    echo "-s <string>               Step name whose status should be determined"
-    echo "-i                        Show scheduler ids for pipeline steps"
+    echo "-d <string>               Output directory for pipeline processes"
+    echo "-s <string>               Process name whose status should be determined"
+    echo "-i                        Show scheduler ids for pipeline processes"
     echo "--help                    Display this help and exit"
 }
 
@@ -57,7 +57,7 @@ read_pars()
                   ;;
             "-s") shift
                   if [ $# -ne 0 ]; then
-                      given_stepname=$1
+                      given_processname=$1
                       s_given=1
                   fi
                   ;;
@@ -239,63 +239,63 @@ process_status_for_pfile()
     # Configure scheduler
     configure_scheduler $sched || return 1
 
-    # Read information about the steps to be executed
+    # Read information about the processes to be executed
     lineno=1
-    num_steps=0
+    num_processes=0
     num_finished=0
     num_inprogress=0
     num_unfinished=0
     num_unfinished_but_runnable=0
     num_todo=0
-    while read stepspec; do
-        local stepspec_comment=`pipeline_stepspec_is_comment "$stepspec"`
-        local stepspec_ok=`pipeline_stepspec_is_ok "$stepspec"`
-        if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "yes" ]; then
-            # Increase number of steps
-            num_steps=$((num_steps + 1))
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Increase number of processes
+            num_processes=$((num_processes + 1))
 
-            # Extract step information
-            local stepname=`extract_stepname_from_stepspec "$stepspec"`
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            # If s option was given, continue to next iteration if step
+            # If s option was given, continue to next iteration if process
             # name does not match with the given one
-            if [ ${s_given} -eq 1 -a "${given_stepname}" != $stepname ]; then
+            if [ ${s_given} -eq 1 -a "${given_processname}" != $processname ]; then
                 continue
             fi
 
-            # Check step status
-            local status=`get_step_status "${absdirname}" ${stepname}`
+            # Check process status
+            local status=`get_process_status "${absdirname}" ${processname}`
 
             # Obtain ids if requested
             local ids_info
             if [ ${i_given} -eq 1 ]; then
-                ids_info=`read_ids_from_files "${absdirname}" ${stepname}`
+                ids_info=`read_ids_from_files "${absdirname}" ${processname}`
             fi
 
             # Print status
             if [ ${i_given} -eq 0 ]; then
-                echo "STEP: $stepname ; STATUS: $status"
+                echo "PROCESS: $processname ; STATUS: $status"
             else
-                echo "STEP: $stepname ; STATUS: $status ; SCHED_IDS: ${ids_info}"
+                echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info}"
             fi
 
-            # Treat step status
+            # Treat process status
             case $status in
-                ${FINISHED_STEP_STATUS}) num_finished=$((num_finished + 1))
+                ${FINISHED_PROCESS_STATUS}) num_finished=$((num_finished + 1))
                                          ;;
-                ${INPROGRESS_STEP_STATUS}) num_inprogress=$((num_inprogress + 1))
+                ${INPROGRESS_PROCESS_STATUS}) num_inprogress=$((num_inprogress + 1))
                                            ;;
-                ${UNFINISHED_STEP_STATUS}) num_unfinished=$((num_unfinished + 1))
+                ${UNFINISHED_PROCESS_STATUS}) num_unfinished=$((num_unfinished + 1))
                                            ;;
-                ${UNFINISHED_BUT_RUNNABLE_STEP_STATUS}) num_unfinished_but_runnable=$((num_unfinished_but_runnable + 1))
+                ${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}) num_unfinished_but_runnable=$((num_unfinished_but_runnable + 1))
                                                         ;;
-                ${TODO_STEP_STATUS}) num_todo=$((num_todo + 1))
+                ${TODO_PROCESS_STATUS}) num_todo=$((num_todo + 1))
                                      ;;
             esac
 
         else
-            if [ ${stepspec_comment} = "no" -a ${stepspec_ok} = "no" ]; then
-                echo "Error: incorrect step specification at line $lineno of ${pfile}" >&2
+            if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "no" ]; then
+                echo "Error: incorrect process specification at line $lineno of ${pfile}" >&2
                 return 1
             fi
         fi
@@ -306,10 +306,10 @@ process_status_for_pfile()
     done < ${pfile}
 
     # Print summary
-    echo "* SUMMARY: num_steps= ${num_steps} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2
+    echo "* SUMMARY: num_processes= ${num_processes} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2
 
     # Return error if pipeline is not finished
-    if [ ${num_finished} -eq ${num_steps} ]; then
+    if [ ${num_finished} -eq ${num_processes} ]; then
         return ${PIPELINE_FINISHED_EXIT_CODE}
     else
         if [ ${num_inprogress} -gt 0 ]; then
