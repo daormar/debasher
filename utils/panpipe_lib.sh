@@ -3853,7 +3853,6 @@ define_cmdline_infile_nonmand_opt()
         value=`get_absolute_path "${value}"`
     fi
 
-
     # Add option
     define_opt $opt "$value" $varname
 }
@@ -3888,12 +3887,12 @@ define_opt()
 
     if [ -z "${!varname}" ]; then
         local var=${varname}
-        local value="${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
+        local val="${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$val" || { errmsg "define_opt: execution error" ; return 1; }
     else
         local var=${varname}
-        local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
+        local val="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
+        IFS= read -r "$var" <<<"$val" || { errmsg "define_opt: execution error" ; return 1; }
     fi
 }
 
