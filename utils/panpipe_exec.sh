@@ -886,7 +886,7 @@ else
     else
         load_pipeline_modules=1
         check_pipeline_opts "${command_line}" ${reordered_pfile} > "${outd}"/.ppl_opts.txt 2>&1 || exit 1
-        cat "${outd}"/.ppl_opts.txt >&2
+        cat "${outd}"/.ppl_opts.txt >&2 || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
