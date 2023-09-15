@@ -51,6 +51,7 @@ SUFFIXES= .sh .py .r .R
 	echo "MKTEMP=\"$(MKTEMP)\"" >> $@
 	echo "MKFIFO=\"$(MKFIFO)\"" >> $@
 	echo "FLOCK=\"$(FLOCK)\"" >> $@
+	echo "TEE=\"$(TEE)\"" >> $@
 	echo "GZIP=\"$(GZIP)\"" >> $@
 	echo "QSUB=\"$(QSUB)\"" >> $@
 	echo "QSUB_WORKS=\"$(QSUB_WORKS)\"" >> $@

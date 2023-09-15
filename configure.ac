@@ -42,6 +42,7 @@ AC_PATH_PROGS(REALPATH, realpath)
 AC_PATH_PROGS(MKTEMP, mktemp)
 AC_PATH_PROGS(MKFIFO, mkfifo)
 AC_PATH_PROGS(FLOCK, flock)
+AC_PATH_PROGS(TEE, tee)
 AC_PATH_PROGS(GZIP, gzip)
 AC_PATH_PROGS(SSH, ssh)
 AC_PATH_PROGS(QSUB, qsub)
@@ -77,13 +78,13 @@ else
   else
     AC_MSG_RESULT(no)
     AC_MSG_WARN([conda may not be available, check that there is a working conda installation])
-  fi      
+  fi
 fi
 
 # check that qsub works
 if test ! -z "$QSUB"; then
  echo -n "checking whether qsub works... "
- echo "" | ${QSUB} >/dev/null 2>&1 
+ echo "" | ${QSUB} >/dev/null 2>&1
  if test $? -eq 0; then
   QSUB_WORKS="yes"
   echo "yes"
