@@ -640,19 +640,35 @@ create_basic_dirs()
 ########
 create_shared_dirs()
 {
+    echo "* Creating shared directories... (if any)" >&2
+
     # Create shared directories required by the pipeline processes
     # IMPORTANT NOTE: the following function can only be executed after
     # loading pipeline modules
     create_pipeline_shdirs
+
+    show_pipeline_shdirs >&2
+
+    echo "Creation complete" >&2
+
+    echo "" >&2
 }
 
 ########
 register_fifos()
 {
+    echo "* Registering pipeline fifos... (if any)" >&2
+
     # Register FIFOs (named pipes) required by the pipeline processes
     # IMPORTANT NOTE: the following function can only be executed after
     # loading pipeline modules
     register_pipeline_fifos
+
+    show_pipeline_fifos >&2
+
+    echo "Registration complete" >&2
+
+    echo "" >&2
 }
 
 ########
@@ -891,9 +907,11 @@ else
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
-        create_shared_dirs
+        create_shared_dirs > "${outd}"/.shrdirs.txt 2>&1 || exit 1
+        cat "${outd}"/.shrdirs.txt >&2 || exit 1
 
-        register_fifos
+        register_fifos > "${outd}"/.fifos.txt 2>&1 || exit 1
+        cat "${outd}"/.fifos.txt >&2 || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
             process_conda_requirements "${reordered_pfile}" || exit 1
