@@ -4002,6 +4002,16 @@ get_shrdirs_funcname()
 }
 
 ########
+show_pipeline_shdirs()
+{
+    local dirname
+    for dirname in "${!PIPELINE_SHDIRS[@]}"; do
+        local absdir=`get_absolute_shdirname "$dirname"`
+        echo "${absdir}"
+    done
+}
+
+########
 create_pipeline_shdirs()
 {
     # Populate associative array of shared directories for the loaded
@@ -4040,6 +4050,15 @@ register_pipeline_fifos()
     for absmodname in "${PIPELINE_MODULES[@]}"; do
         fifos_funcname=`get_fifos_funcname ${absmodname}`
         ${fifos_funcname}
+    done
+}
+
+########
+show_pipeline_fifos()
+{
+    local fifoname
+    for fifoname in "${!PIPELINE_FIFOS[@]}"; do
+        echo ${PIPELINE_FIFOS["${fifoname}"]} "${fifoname}"
     done
 }
 
