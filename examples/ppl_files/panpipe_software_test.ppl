@@ -8,3 +8,4 @@ process_e  cpus=1 mem=32 time=00:01:00 processdeps=after:process_d
 process_f  cpus=1 mem=32 time=00:01:00 processdeps=none
 process_g  cpus=1 mem=32 time=00:01:00 throttle=4 processdeps=aftercorr:process_c
 process_h  cpus=1 mem=32 time=00:01:00 processdeps=afterok:process_a?afterok:process_f
+process_i  cpus=1 mem=32 time=00:01:00 processdeps=afterok:process_b
