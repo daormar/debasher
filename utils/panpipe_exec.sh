@@ -725,7 +725,54 @@ get_processdeps()
 }
 
 ########
-execute_process()
+prepare_files_and_dirs_for_process()
+{
+    # Read input parameters
+    local dirname=$1
+    local processname=$2
+    local process_spec=$3
+
+    ## Obtain process status
+    local status=`get_process_status ${dirname} ${processname}`
+
+    ## Decide whether the process should be executed
+    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
+        # Initialize array_size variable
+        define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+        local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
+        local array_size=${#script_opts_array[@]}
+
+        # Prepare files and directories for process
+        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
+        clean_process_log_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
+        clean_process_id_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
+        create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
+        prepare_fifos_owned_by_process ${processname}
+    fi
+}
+
+########
+prepare_files_and_dirs_for_processes()
+{
+    # Read input parameters
+    local dirname=$1
+    local pfile=$2
+
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            prepare_files_and_dirs_for_process "${dirname}" ${processname} "${process_spec}"
+        fi
+    done < "${pfile}"
+}
+
+########
+launch_process()
 {
     # Initialize variables
     local cmdline=$1
@@ -749,13 +796,6 @@ execute_process()
 
         # Archive script
         archive_script "${dirname}" ${processname}
-
-        # Prepare files and directories for process
-        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
-        clean_process_log_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
-        clean_process_id_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
-        create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
-        prepare_fifos_owned_by_process ${processname}
 
         # Launch process
         local task_array_list=`get_task_array_list "${dirname}" ${processname} ${array_size}`
@@ -783,6 +823,27 @@ execute_process()
 }
 
 ########
+launch_processes()
+{
+    # Read input parameters
+    local cmdline=$1
+    local dirname=$2
+    local pfile=$3
+
+    local process_spec
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            launch_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
+        fi
+    done < "${pfile}"
+}
+
+########
 execute_pipeline_processes()
 {
     echo "* Executing pipeline processes..." >&2
@@ -792,21 +853,14 @@ execute_pipeline_processes()
     local dirname=$2
     local pfile=$3
 
+    # Prepare files and directories for processes
+    prepare_files_and_dirs_for_processes "${dirname}" "${pfile}"
+
     # process_id_list will store the process ids of the pipeline processes
     local process_id_list=""
 
-    # Read information about the processes to be executed
-    local process_spec
-    while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
-            # Extract process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
-
-            execute_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
-        fi
-    done < "${pfile}"
+    # Launch processes
+    launch_processes "${cmdline}" "${dirname}" "${pfile}"
 
     echo "" >&2
 }
