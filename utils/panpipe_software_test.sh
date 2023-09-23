@@ -475,7 +475,8 @@ process_i_define_opts()
     define_opt "-valfile" "${valfile}" optlist || return 1
 
     # Define name of output file
-    local outf="${abs_shrdir}/process_i.out"
+    local process_outdir=`get_process_outdir process_i`
+    local outf="${process_outdir}/process_i.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
