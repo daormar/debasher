@@ -254,7 +254,7 @@ builtin_sched_get_array_task_status()
     local dirname=$1
     local processname=$2
     local taskidx=$3
-    local processdirname=`get_process_outdir "${dirname}" ${processname}`
+    local processdirname=`get_process_outdir_given_dirname "${dirname}" ${processname}`
     local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${taskidx}`
 
     if [ ! -f ${array_taskid_file} ]; then
@@ -928,7 +928,7 @@ builtin_sched_print_script_header()
     echo "PANPIPE_SCRIPT_FILENAME=\"${fname}\""
     echo "PANPIPE_DIR_NAME=\"${dirname}\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
-    local outd=`get_process_outdir "${dirname}" "${processname}"`
+    local outd=`get_process_outdir_given_dirname "${dirname}" "${processname}"`
     echo "PANPIPE_PROCESS_OUTDIR=\"$(esc_dq "${outd}")\""
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
     echo "builtin_sched_print_pid_to_file"
