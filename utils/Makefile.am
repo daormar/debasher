@@ -1,4 +1,4 @@
-SCRIPTS_TO_BE_BUILT= panpipe_lib panpipe_lib_general panpipe_lib_sched	\
+SCRIPTS_TO_BE_BUILT= panpipe_lib panpipe_lib_utils panpipe_lib_sched	\
 panpipe_lib_process_exec panpipe_lib_process_doc panpipe_lib_ppl_files	\
 panpipe_lib_modules panpipe_lib_opts panpipe_lib_conda			\
 panpipe_builtin_sched_lib panpipe_exec panpipe_exec_batch panpipe_check	\
@@ -13,7 +13,7 @@ CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
 
 python_PYTHON= panpipe_knapsack_ga.py
 
-EXTRA_DIST = panpipe_lib.sh panpipe_lib_general.sh panpipe_lib_sched.sh	\
+EXTRA_DIST = panpipe_lib.sh panpipe_lib_utils.sh panpipe_lib_sched.sh	\
 panpipe_lib_process_exec.sh panpipe_lib_process_doc.sh			\
 panpipe_lib_ppl_files.sh panpipe_lib_modules.sh panpipe_lib_opts.sh	\
 panpipe_lib_conda.sh panpipe_builtin_sched_lib.sh panpipe_exec.sh	\
@@ -25,9 +25,9 @@ panpipe_solve_knapsack_bb.py panpipe_solve_knapsack_ga.py		\
 panpipe_knapsack_ga.py
 
 # Build rules for bash files related to panpipe library
-panpipe_lib_general: panpipe_lib_general.sh
+panpipe_lib_utils: panpipe_lib_utils.sh
 	rm -f $@
-	cat panpipe_lib_general.sh >> $@
+	cat panpipe_lib_utils.sh >> $@
 
 panpipe_lib_sched: panpipe_lib_sched.sh
 	rm -f $@
