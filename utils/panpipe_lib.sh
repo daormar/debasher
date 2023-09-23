@@ -156,7 +156,7 @@ declare AFTERCORR_PROCESSDEP_TYPE_AVAILABLE_IN_SLURM=0
 declare -A EXIT_CODE
 
 # INCLUDE BASH FILES
-. "${panpipe_bindir}"/panpipe_lib_general
+. "${panpipe_bindir}"/panpipe_lib_utils
 . "${panpipe_bindir}"/panpipe_lib_sched
 . "${panpipe_bindir}"/panpipe_lib_process_exec
 . "${panpipe_bindir}"/panpipe_lib_process_doc
