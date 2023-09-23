@@ -1,8 +1,8 @@
 #import panpipe_software_test
 #
 process_a  cpus=1 mem=32 time=00:01:00,00:02:00,00:03:00 processdeps=none
-process_b  cpus=1 mem=32 time=00:01:00 processdeps=afterok:process_a
-process_c  cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2 processdeps=afterok:process_a
+process_b  cpus=1 mem=32 time=00:01:00 processdeps=none
+process_c  cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2 processdeps=none
 process_d  cpus=1 mem=32 time=00:01:00 processdeps=none
 process_e  cpus=1 mem=32 time=00:01:00 processdeps=after:process_d
 process_f  cpus=1 mem=32 time=00:01:00 processdeps=none
