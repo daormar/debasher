@@ -296,6 +296,21 @@ get_define_opts_funcname()
 }
 
 ########
+get_execute_funcname()
+{
+    local processname=$1
+
+    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
+
+    local process_execute_function="${processname_wo_suffix}_execute"
+    if func_exists ${process_execute_function}; then
+        echo ${process_execute_function}
+    else
+        echo ${FUNCT_NOT_FOUND}
+    fi
+}
+
+########
 get_conda_envs_funcname()
 {
     local processname=$1
@@ -798,6 +813,20 @@ read_ids_from_files()
 }
 
 ########
+mark_process_as_dont_execute()
+{
+    local processname=$1
+    local reason=$2
+
+    if [ "${PANPIPE_DONT_EXEC_PROCESSES[${processname}]}" = "" ]; then
+        PANPIPE_DONT_EXEC_PROCESSES[${processname}]=${reason}
+    else
+        local curr_val=PANPIPE_DONT_EXEC_PROCESSES[${processname}]
+        PANPIPE_DONT_EXEC_PROCESSES[${processname}]="${curr_val},${reason}"
+    fi
+}
+
+########
 mark_process_as_reexec()
 {
     local processname=$1
@@ -839,6 +868,18 @@ process_should_be_reexec()
         else
             return 1
         fi
+    fi
+}
+
+########
+process_should_not_be_exec()
+{
+    local processname=$1
+
+    if [ "${PANPIPE_DONT_EXEC_PROCESSES[${processname}]}" = "" ]; then
+        return 1
+    else
+        return 0
     fi
 }
 

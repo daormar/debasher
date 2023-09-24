@@ -446,6 +446,36 @@ process_conda_requirements()
 }
 
 ########
+define_dont_execute_processes()
+{
+    echo "* Define processes that should not be executed (if any)..." >&2
+
+    # Read input parameters
+    local cmdline=$1
+    local pfile=$2
+
+    # Read information about the processes to be executed
+    while read process_spec; do
+        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
+        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
+        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local execute_funcname=`get_execute_funcname ${processname}`
+            if [ "${execute_funcname}" != ${FUNCT_NOT_FOUND} ]; then
+                if ! ${execute_funcname} "${cmdline}" "${process_spec}"; then
+                    mark_process_as_dont_execute ${processname} "${EXECFUNCT_DONT_EXEC_REASON}"
+                fi
+            fi
+        fi
+    done < "${pfile}"
+
+    echo "Definition complete" >&2
+
+    echo "" >&2
+}
+
+########
 define_forced_exec_processes()
 {
     echo "* Defining processes forced to be reexecuted (if any)..." >&2
@@ -622,6 +652,8 @@ ensure_exclusive_execution()
 ########
 create_basic_dirs()
 {
+    echo "* Creating basic directories..." >&2
+
     mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     set_panpipe_outdir "${outd}"
 
@@ -635,6 +667,10 @@ create_basic_dirs()
     if [ ${conda_support_given} -eq 1 ]; then
         mkdir -p "${condadir}"
     fi
+
+    echo "Creation complete" >&2
+
+    echo "" >&2
 }
 
 ########
@@ -735,7 +771,9 @@ prepare_files_and_dirs_for_process()
     ## Obtain process status
     local status=`get_process_status ${dirname} ${processname}`
 
-    ## Decide whether the process should be executed
+    ## Decide whether the process should be executed (NOTE: for process
+    ## that should not be executed, files and directories are still
+    ## prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable
         define_opts_for_script "${cmdline}" "${process_spec}" || return 1
@@ -787,7 +825,7 @@ launch_process()
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     ## Decide whether the process should be executed
-    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
+    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" -a "${status}" != "${DONT_EXECUTE_PROCESS_STATUS}" ]; then
         # Create script
         define_opts_for_script "${cmdline}" "${process_spec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
@@ -952,10 +990,10 @@ if [ ${showopts_given} -eq 1 ]; then
     show_pipeline_opts "${reordered_pfile}" || exit 1
 else
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" ${reordered_pfile} || exit 1
+        check_pipeline_opts "${command_line}" "${reordered_pfile}" || exit 1
     else
         load_pipeline_modules=1
-        check_pipeline_opts "${command_line}" ${reordered_pfile} > "${outd}"/.ppl_opts.txt 2>&1 || exit 1
+        check_pipeline_opts "${command_line}" "${reordered_pfile}" > "${outd}"/.ppl_opts.txt 2>&1 || exit 1
         cat "${outd}"/.ppl_opts.txt >&2 || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
@@ -970,6 +1008,8 @@ else
         if [ ${conda_support_given} -eq 1 ]; then
             process_conda_requirements "${reordered_pfile}" || exit 1
         fi
+
+        define_dont_execute_processes "${command_line}" "${reordered_pfile}" || exit 1
 
         define_forced_exec_processes "${reordered_pfile}" || exit 1
 

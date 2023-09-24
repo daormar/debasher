@@ -1419,8 +1419,15 @@ get_process_status()
     local processname=$2
     local script_filename=`get_script_filename "${dirname}" ${processname}`
 
-    # Check if process should be reexecuted (REEXEC status has priority
-    # over the rest)
+    # Check if process should not be reexecuted (DONT_EXECUTE status has
+    # the highest priority)
+    if process_should_not_be_exec $processname; then
+        echo "${DONT_EXECUTE_PROCESS_STATUS}"
+        return ${DONT_EXECUTE_PROCESS_EXIT_CODE}
+    fi
+
+    # Check if process should be reexecuted (REEXEC status has the
+    # second highest priority level)
     if process_should_be_reexec $processname; then
         echo "${REEXEC_PROCESS_STATUS}"
         return ${REEXEC_PROCESS_EXIT_CODE}
