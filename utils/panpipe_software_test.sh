@@ -80,6 +80,24 @@ process_a()
 }
 
 ########
+process_a_execute()
+{
+    # Initialize variables
+    local cmdline=$1
+    local process_spec=$2
+
+    # Read sleep time
+    local sleep_time=`read_opt_value_from_line "${cmdline}" "-a"`
+
+    # Do not execute if sleep time is above 10 seconds
+    if [ "${sleep_time}" -gt 10 ]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+########
 process_b_document()
 {
     process_description "Writes a given value to the file \`process_b.out\` in data directory."
