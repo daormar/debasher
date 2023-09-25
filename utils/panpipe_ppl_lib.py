@@ -5,20 +5,21 @@ import io
 import sys
 
 # Constants
-NONE_PROCESS_DEP="none"
+NONE_PROCESS_DEP = "none"
+SUBPPL_ENTRY_PREFIX = "pplfile"
 
 ##################################################
 class processdep_data:
     def __init__(self):
-        self.deptype=None
-        self.processname=None
+        self.deptype = None
+        self.processname = None
 
 ##################################################
 def entry_is_comment(entry):
     fields=entry.split()
-    if len(fields)==0:
+    if len(fields) == 0:
         return False
-    elif fields[0][0]=="#":
+    elif fields[0][0] == "#":
         return True
     else:
         return False
@@ -26,9 +27,9 @@ def entry_is_comment(entry):
 ##################################################
 def entry_is_config(entry):
     fields=entry.split()
-    if len(fields)==0:
+    if len(fields) == 0:
         return False
-    elif fields[0]=="#import":
+    elif fields[0] == "#import":
         return True
     else:
         return False
@@ -36,7 +37,7 @@ def entry_is_config(entry):
 ##################################################
 def entry_is_empty(entry):
     fields=entry.split()
-    if len(fields)==0:
+    if len(fields) == 0:
         return True
     else:
         return False
@@ -44,7 +45,7 @@ def entry_is_empty(entry):
 ##################################################
 def extract_process_name(entry):
     fields=entry.split()
-    if len(fields)==0:
+    if len(fields) == 0:
         return ""
     else:
         return fields[0]
@@ -52,20 +53,20 @@ def extract_process_name(entry):
 ##################################################
 def get_dep_separator(pdeps_str):
     if ',' in pdeps_str and '?' in pdeps_str:
-        return True,',?'
+        return True, ',?'
     elif ',' in pdeps_str:
-        return False,','
+        return False, ','
     elif '?' in pdeps_str:
-        return False,'?'
+        return False, '?'
     else:
-        return False,''
+        return False, ''
 
 ##################################################
-def extract_process_deps(entry_lineno,entry):
-    deps_syntax_ok=True
+def extract_process_deps(entry_lineno, entry):
+    deps_syntax_ok = True
     # extract text field
-    fields=entry.split()
-    pdeps_str=""
+    fields = entry.split()
+    pdeps_str = ""
     for f in fields:
         if f.find("processdeps=")==0:
             pdeps_str=f[len("processdeps="):]
@@ -73,32 +74,32 @@ def extract_process_deps(entry_lineno,entry):
     # Return empty list of process dependencies if corresponding field was
     # not found
     if len(pdeps_str)==0:
-        return deps_syntax_ok,[]
+        return deps_syntax_ok, []
 
     # Check that dependency separators (, and ?) are not mixed
-    seps_mixed,separator=get_dep_separator(pdeps_str)
+    seps_mixed, separator=get_dep_separator(pdeps_str)
     if seps_mixed:
         deps_syntax_ok=False
-        print("Error: dependency separators mixed in process dependency (",pdeps_str,") at line number",entry_lineno, file=sys.stderr)
+        print("Error: dependency separators mixed in process dependency (", pdeps_str, ") at line number", entry_lineno, file=sys.stderr)
         return deps_syntax_ok,[]
 
     # create list of process dependencies
     pdeps_list=[]
-    if(separator==''):
+    if(separator == ''):
         pdeps_fields=[pdeps_str]
     else:
         pdeps_fields=pdeps_str.split(separator)
     for pdep in pdeps_fields:
         if pdep!=NONE_PROCESS_DEP:
             pdep_fields=pdep.split(":")
-            if(len(pdep_fields)==2 and pdep_fields[1]!=''):
+            if(len(pdep_fields) == 2 and pdep_fields[1] != ''):
                 data=processdep_data()
                 data.deptype=pdep_fields[0]
                 data.processname=pdep_fields[1]
                 pdeps_list.append(data)
             else:
                 deps_syntax_ok=False
-                print("Error: incorrect definition of process dependency (",pdeps_str,") at line number",entry_lineno, file=sys.stderr)
+                print("Error: incorrect definition of process dependency (", pdeps_str, ") at line number", entry_lineno, file=sys.stderr)
 
     return deps_syntax_ok,separator,pdeps_list
 
@@ -184,21 +185,21 @@ def extract_processdeps_info(entries_lineno,process_entries):
     for i in range(len(process_entries)):
         fields=process_entries[i].split()
         sname=extract_process_name(process_entries[i])
-        dep_syntax_ok,separator,deps=extract_process_deps(entries_lineno[i],process_entries[i])
+        dep_syntax_ok,separator,deps=extract_process_deps(entries_lineno[i], process_entries[i])
         if(not dep_syntax_ok):
             deps_syntax_ok=False
         processdeps_sep[sname]=separator
         processdeps_map[sname]=deps
-    return deps_syntax_ok,processdeps_sep,processdeps_map
+    return deps_syntax_ok, processdeps_sep, processdeps_map
 
 ##################################################
-def processnames_duplicated(entries_lineno,process_entries):
+def processnames_duplicated(entries_lineno, process_entries):
     processnames=set()
     lineno=1
     for i in range(len(process_entries)):
         sname=extract_process_name(process_entries[i])
         if sname in processnames:
-            print("Error: process",sname,"in line",entries_lineno[i],"is duplicated", file=sys.stderr)
+            print("Error: process", sname, "in line", entries_lineno[i], "is duplicated", file=sys.stderr)
             return True
         else:
             processnames.add(sname)
@@ -218,13 +219,13 @@ def depnames_correct(processdeps_map):
 
     for name in processdepnames:
         if name not in processnames:
-            print("Error: unrecognized process dependency",name, file=sys.stderr)
+            print("Error: unrecognized process dependency", name, file=sys.stderr)
             return False
 
     return True
 
 ##################################################
-def processname_can_be_added(sname,processed_processes,processdeps_map):
+def processname_can_be_added(sname, processed_processes, processdeps_map):
     # Check if process name has already been added
     if sname in processed_processes:
         return False
@@ -237,7 +238,7 @@ def processname_can_be_added(sname,processed_processes,processdeps_map):
     return True
 
 ##################################################
-def order_process_entries(process_entries,processdeps_map,ordered_process_entries):
+def order_process_entries(process_entries, processdeps_map, ordered_process_entries):
     processed_processes=set()
     # Add processes to ordered processes list incrementally
     while len(processed_processes)!=len(processdeps_map):
@@ -245,7 +246,7 @@ def order_process_entries(process_entries,processdeps_map,ordered_process_entrie
         # Explore list of process entries
         for entry in process_entries:
             sname=extract_process_name(entry)
-            if(processname_can_be_added(sname,processed_processes,processdeps_map)):
+            if(processname_can_be_added(sname, processed_processes, processdeps_map)):
                 processed_processes.add(sname)
                 ordered_process_entries.append(entry)
         # Check if no processes were added
@@ -256,7 +257,7 @@ def order_process_entries(process_entries,processdeps_map,ordered_process_entrie
     return ordered_process_entries
 
 ##################################################
-def after_dep_has_multatt_process(entries_lineno,multiattempt_processes,processdeps_map):
+def after_dep_has_multatt_process(entries_lineno, multiattempt_processes, processdeps_map):
     found=False
     for sname in processdeps_map:
         deplist=processdeps_map[sname]
@@ -264,7 +265,7 @@ def after_dep_has_multatt_process(entries_lineno,multiattempt_processes,processd
         while i<len(deplist) and not found:
             if(deplist[i].deptype=="after" and deplist[i].processname in multiattempt_processes):
                 found=True
-                print("Error:",sname,"process has an 'after' dependency with a multiple-attempt process (",deplist[i].processname,")", file=sys.stderr)
+                print("Error:", sname, "process has an 'after' dependency with a multiple-attempt process (", deplist[i].processname,")", file=sys.stderr)
             else:
                 i=i+1
     if(found):
@@ -273,10 +274,10 @@ def after_dep_has_multatt_process(entries_lineno,multiattempt_processes,processd
         return False
 
 ##################################################
-def processdeps_correct(entries_lineno,process_entries,multiattempt_processes,processdeps_map,ordered_process_entries):
+def processdeps_correct(entries_lineno, process_entries, multiattempt_processes, processdeps_map, ordered_process_entries):
 
     # Check existence of duplicated processes
-    if(processnames_duplicated(entries_lineno,process_entries)):
+    if(processnames_duplicated(entries_lineno, process_entries)):
         return False
 
     # Check dependency names
@@ -284,17 +285,17 @@ def processdeps_correct(entries_lineno,process_entries,multiattempt_processes,pr
         return False
 
     # Check "after" dependency type is not used over a multi-attempt process
-    if(after_dep_has_multatt_process(entries_lineno,multiattempt_processes,processdeps_map)):
+    if(after_dep_has_multatt_process(entries_lineno, multiattempt_processes, processdeps_map)):
         return False
     # Reorder process entries
-    order_process_entries(process_entries,processdeps_map,ordered_process_entries)
+    order_process_entries(process_entries, processdeps_map, ordered_process_entries)
     if(len(process_entries)!=len(ordered_process_entries)):
         return False
 
     return True
 
 ##################################################
-def print_entries(config_entries,process_entries):
+def print_entries(config_entries, process_entries):
     for e in config_entries:
         print(e)
     for e in process_entries:
@@ -310,7 +311,7 @@ def get_graph_linestyle(separator):
         return "solid"
 
 ##################################################
-def print_graph(ordered_process_entries,processdeps_sep,processdeps_map):
+def print_graph(ordered_process_entries, processdeps_sep, processdeps_map):
     # Print header
     print("digraph G {")
     print("overlap=false;")
@@ -324,20 +325,20 @@ def print_graph(ordered_process_entries,processdeps_sep,processdeps_map):
     for process in processdeps_map:
         line_style=get_graph_linestyle(processdeps_sep[process])
         if len(processdeps_map[process])==0:
-            print("start","->",process, "[ label= \"\" ,","color = black ];")
+            print("start", "->", process, "[ label= \"\" ,", "color = black ];")
         else:
             for elem in processdeps_map[process]:
-                print('"'+elem.processname+'"',"->",process, "[ label= \""+elem.deptype+"\" ,","style=",line_style,", color = black ];")
+                print('"'+elem.processname+'"', "->", process, "[ label= \""+elem.deptype+"\" ,","style=", line_style, ", color = black ];")
 
     # Print footer
     print("}")
 
 ##################################################
-def extract_all_deps_for_process(sname,processdeps_map,result):
+def extract_all_deps_for_process(sname, processdeps_map, result):
     if sname in processdeps_map:
         for processdep in processdeps_map[sname]:
             result.add(processdep.processname)
-            extract_all_deps_for_process(processdep.processname,processdeps_map,result)
+            extract_all_deps_for_process(processdep.processname, processdeps_map,result)
 
 ##################################################
 def print_deps(ordered_process_entries,processdeps_map):
@@ -345,7 +346,7 @@ def print_deps(ordered_process_entries,processdeps_map):
         # Extract dependencies for process
         sname=extract_process_name(entry)
         processdeps=set()
-        extract_all_deps_for_process(sname,processdeps_map,processdeps)
+        extract_all_deps_for_process(sname, processdeps_map, processdeps)
 
         # Print dependencies for process
         depstr=""
@@ -367,6 +368,21 @@ def sname_valid(sname):
 def snames_valid(processdeps_map):
     for sname in processdeps_map:
         if(not sname_valid(sname)):
-            print("Error: process name",sname,"contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
+            print("Error: process name", sname, "contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
             return 0
     return 1
+
+##################################################
+def is_sub_ppl_entry(entry):
+    if len(entry.split(" ")) > 1:
+        return False
+    else:
+        entry_fields = entry.split(":")
+        if len(entry_fields) == 2 and entry_fields[0] == SUBPPL_ENTRY_PREFIX:
+            return True
+        else:
+            return False
+
+##################################################
+def get_sub_ppl_fname(ppl_file_entry):
+    return ppl_file_entry.split(":")[1]
