@@ -19,7 +19,11 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 # *- python -*
 
 # import modules
-import io, sys, getopt, operator
+import io
+import sys
+import getopt
+import operator
+import os
 from panpipe_ppl_lib import *
 
 ##################################################
@@ -67,7 +71,7 @@ def should_be_augmented(config_entries, process_entries):
     return False
 
 ##################################################
-def get_augmented_ppl(ppl_fname):
+def get_augmented_ppl_rec(dependency_graph, ppl_fname):
     # Extract info from ppl file
     config_entries = extract_config_entries(ppl_fname)
     entries_lineno, process_entries = extract_process_entries(ppl_fname)
@@ -84,10 +88,14 @@ def get_augmented_ppl(ppl_fname):
                 # The entry represents a sub-pipeline
 
                 # Obtain sub-pipeline file name
-                iter_ppl_fname = get_sub_ppl_fname(process_entry)
+                iter_ppl_fname = os.path.abspath(get_sub_ppl_fname(process_entry))
+
+                # Update dependency graph
+                dependency_graph.add_vertex(iter_ppl_fname)
+                dependency_graph.add_edge(ppl_fname, iter_ppl_fname)
 
                 # Extract corresponding config and process entries
-                iter_cfg_entries, iter_process_entries = get_augmented_ppl(iter_ppl_fname)
+                iter_cfg_entries, iter_process_entries = get_augmented_ppl_rec(dependency_graph, iter_ppl_fname)
 
                 # Incorporate config entries
                 augm_config_entries = iter_cfg_entries + augm_config_entries
@@ -104,6 +112,14 @@ def get_augmented_ppl(ppl_fname):
     else:
         # No augmentation is needed
         return config_entries, process_entries
+
+##################################################
+def get_augmented_ppl(ppl_fname):
+    dependency_graph = DirectedGraph()
+    abs_ppl_fname = os.path.abspath(ppl_fname)
+    dependency_graph.add_vertex(abs_ppl_fname)
+    config_entries, process_entries = get_augmented_ppl_rec(dependency_graph, abs_ppl_fname)
+    return config_entries, process_entries
 
 ##################################################
 def process_pars(flags,values):
