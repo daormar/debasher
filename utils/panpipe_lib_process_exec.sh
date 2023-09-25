@@ -214,7 +214,7 @@ remove_suffix_from_processname()
 {
     local processname=$1
 
-    echo "${processname%%__*}"
+    echo "${processname%%${PROCESSNAME_SUFFIX_SEP}*}"
 }
 
 ########
