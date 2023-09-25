@@ -8,6 +8,12 @@ import sys
 NONE_PROCESS_DEP="none"
 
 ##################################################
+class processdep_data:
+    def __init__(self):
+        self.deptype=None
+        self.processname=None
+
+##################################################
 def entry_is_comment(entry):
     fields=entry.split()
     if len(fields)==0:
