@@ -214,7 +214,7 @@ remove_suffix_from_processname()
 {
     local processname=$1
 
-    echo ${processname} | "$AWK" '{if(index($1,"__")==0){print $1} else{printf "%s\n",substr($1,1,index($1,"__")-1)}}'
+    echo "${processname%%__*}"
 }
 
 ########
