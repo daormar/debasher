@@ -9,6 +9,42 @@ NONE_PROCESS_DEP = "none"
 SUBPPL_ENTRY_PREFIX = "pplfile"
 
 ##################################################
+class DirectedGraph:
+    def __init__(self):
+        self.graph = {}
+
+    def add_vertex(self, vertex):
+        if vertex not in self.graph:
+            self.graph[vertex] = []
+
+    def add_edge(self, from_vertex, to_vertex):
+        if from_vertex in self.graph and to_vertex in self.graph:
+            if to_vertex not in self.graph[from_vertex]:
+                self.graph[from_vertex].append(to_vertex)
+
+    def get_neighbors(self, vertex):
+        if vertex in self.graph:
+            return self.graph[vertex]
+        else:
+            return []
+
+    def get_num_vertices(self):
+        return len(self.graph())
+
+    def get_num_edges(self):
+        result = 0
+        for vertex in self.graph:
+            result += len(self.graph[vertex])
+        return result
+
+    def __str__(self):
+        result = ""
+        for vertex in self.graph:
+            neighbors = ", ".join(self.graph[vertex])
+            result += f"{vertex} -> [{neighbors}]\n"
+        return result
+
+##################################################
 class processdep_data:
     def __init__(self):
         self.deptype = None
