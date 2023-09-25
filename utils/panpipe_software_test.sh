@@ -60,8 +60,8 @@ process_a_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # -a option
@@ -75,7 +75,7 @@ process_a_define_opts()
 process_a()
 {
     # Initialize variables
-    local sleep_time=`read_opt_value_from_line "$*" "-a"`
+    local sleep_time=$(read_opt_value_from_line "$*" "-a")
 
     # sleep some time
     sleep ${sleep_time}
@@ -89,7 +89,7 @@ process_a_execute()
     local process_spec=$2
 
     # Read sleep time
-    local sleep_time=`read_opt_value_from_line "${cmdline}" "-a"`
+    local sleep_time=$(read_opt_value_from_line "${cmdline}" "-a")
 
     # Do not execute if sleep time is above 10 seconds
     if [ "${sleep_time}" -gt 10 ]; then
@@ -119,15 +119,15 @@ process_b_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # -b option
     define_cmdline_opt "$cmdline" "-b" optlist || return 1
 
     # Get absolute name of shared directory
-    local abs_shrdir=`get_absolute_shdirname "data"`
+    local abs_shrdir=$(get_absolute_shdirname "data")
 
     # Define name of output file
     local outf="${abs_shrdir}/process_b.out"
@@ -141,8 +141,8 @@ process_b_define_opts()
 process_b()
 {
     # Initialize variables
-    local value=`read_opt_value_from_line "$*" "-b"`
-    local outf=`read_opt_value_from_line "$*" "-outf"`
+    local value=$(read_opt_value_from_line "$*" "-b")
+    local outf=$(read_opt_value_from_line "$*" "-outf")
 
     # sleep some time
     sleep 10
@@ -171,8 +171,8 @@ process_c_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # -c option
@@ -190,8 +190,8 @@ process_c_define_opts()
 process_c()
 {
     # Initialize variables
-    local sleep_time=`read_opt_value_from_line "$*" "-c"`
-    local id=`read_opt_value_from_line "$*" "-id"`
+    local sleep_time=$(read_opt_value_from_line "$*" "-c")
+    local id=$(read_opt_value_from_line "$*" "-id")
 
     # create auxiliary file
     touch "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
@@ -209,7 +209,7 @@ process_c_post()
     logmsg "Cleaning directory..."
 
     # Initialize variables
-    local id=`read_opt_value_from_line "$*" "-id"`
+    local id=$(read_opt_value_from_line "$*" "-id")
 
     # Remove auxiliary file
     rm "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
@@ -221,7 +221,7 @@ process_c_post()
 process_c_reset_outdir()
 {
     # Initialize variables
-    local id=`read_opt_value_from_line "$*" "-id"`
+    local id=$(read_opt_value_from_line "$*" "-id")
 
     # create auxiliary file
     rm -f "${PANPIPE_PROCESS_OUTDIR}"/${id}*
@@ -245,12 +245,12 @@ process_d_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # Get absolute name of FIFO
-    local abs_fifoname=`get_absolute_fifoname "process_d_fifo"`
+    local abs_fifoname=$(get_absolute_fifoname "process_d_fifo")
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
@@ -263,7 +263,7 @@ process_d_define_opts()
 process_d()
 {
     # Initialize variables
-    local fifo=`read_opt_value_from_line "$*" "-fifo"`
+    local fifo=$(read_opt_value_from_line "$*" "-fifo")
 
     # Write string to FIFO
     echo "Hello World" > "${fifo}"
@@ -290,12 +290,12 @@ process_e_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # Get absolute name of FIFO
-    local abs_fifoname=`get_absolute_fifoname "process_d_fifo"`
+    local abs_fifoname=$(get_absolute_fifoname "process_d_fifo")
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
@@ -308,7 +308,7 @@ process_e_define_opts()
 process_e()
 {
     # Initialize variables
-    local fifo=`read_opt_value_from_line "$*" "-fifo"`
+    local fifo=$(read_opt_value_from_line "$*" "-fifo")
 
     # Read strings from FIFO
     cat < "${fifo}"
@@ -335,8 +335,8 @@ process_f_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # Save option list
@@ -383,8 +383,8 @@ process_g_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # Save option list so as to execute process four times
@@ -399,7 +399,7 @@ process_g_define_opts()
 process_g()
 {
     # Initialize variables
-    local id=`read_opt_value_from_line "$*" "-id"`
+    local id=$(read_opt_value_from_line "$*" "-id")
 
     # create auxiliary file
     touch "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
@@ -417,7 +417,7 @@ process_g_post()
     logmsg "Cleaning directory..."
 
     # Initialize variables
-    local id=`read_opt_value_from_line "$*" "-id"`
+    local id=$(read_opt_value_from_line "$*" "-id")
 
     # Remove auxiliary file
     rm "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
@@ -445,15 +445,15 @@ process_h_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # -b option
     define_cmdline_opt "$cmdline" "-h" optlist || return 1
 
     # Get absolute name of shared directory
-    local abs_shrdir=`get_absolute_shdirname "data"`
+    local abs_shrdir=$(get_absolute_shdirname "data")
 
     # Define name of output file
     local outf="${abs_shrdir}/process_h.out"
@@ -467,8 +467,8 @@ process_h_define_opts()
 process_h()
 {
     # Initialize variables
-    local value=`read_opt_value_from_line "$*" "-h"`
-    local outf=`read_opt_value_from_line "$*" "-outf"`
+    local value=$(read_opt_value_from_line "$*" "-h")
+    local outf=$(read_opt_value_from_line "$*" "-outf")
 
     # sleep some time
     sleep 10
@@ -495,15 +495,15 @@ process_i_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=`extract_processname_from_process_spec "$process_spec"`
-    local process_outdir=`get_process_outdir "${process_name}"`
+    local process_name=$(extract_processname_from_process_spec "$process_spec")
+    local process_outdir=$(get_process_outdir "${process_name}")
     local optlist=""
 
     # -b option
     define_cmdline_opt "$cmdline" "-h" optlist || return 1
 
     # Get absolute name of shared directory
-    local abs_shrdir=`get_absolute_shdirname "data"`
+    local abs_shrdir=$(get_absolute_shdirname "data")
 
     # Get name of file containing the value to be read
     local description="Value generated by b process"
@@ -522,11 +522,11 @@ process_i_define_opts()
 process_i()
 {
     # Initialize variables
-    local valfile=`read_opt_value_from_line "$*" "-valfile"`
-    local outf=`read_opt_value_from_line "$*" "-outf"`
+    local valfile=$(read_opt_value_from_line "$*" "-valfile")
+    local outf=$(read_opt_value_from_line "$*" "-outf")
 
     # Read value from file
-    value=`cat "${valfile}"`
+    value=$(cat "${valfile}")
 
     # Increment value by 1
     ((value++))
