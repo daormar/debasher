@@ -768,6 +768,7 @@ prepare_files_and_dirs_for_process()
         clean_process_log_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         clean_process_id_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
         create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
+        register_fifos_owned_by_process ${processname}
         prepare_fifos_owned_by_process ${processname}
     fi
 }
@@ -903,7 +904,8 @@ debug_process()
 
     ## Obtain process options
     local define_opts_funcname=`get_define_opts_funcname ${processname}`
-    ${define_opts_funcname} "${cmdline}" "${process_spec}" || return 1
+    local process_outdir=`get_process_outdir_given_dirname "${dirname}" "${process_name}"`
+    ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
 }
 
 ########
