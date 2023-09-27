@@ -333,11 +333,12 @@ define_opts_for_script()
 {
     local cmdline=$1
     local process_spec=$2
-    local processname=`extract_processname_from_process_spec "$process_spec"`
+    local processname=`extract_processname_from_process_spec "${process_spec}"`
+    local process_outdir=`get_process_outdir "${processname}"`
 
     clear_opt_list_array
     local define_opts_funcname=`get_define_opts_funcname ${processname}`
-    ${define_opts_funcname} "${cmdline}" "${process_spec}" || return 1
+    ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
 }
 
 ########
@@ -640,6 +641,21 @@ get_process_outdir()
     local outd=${PIPELINE_OUTDIR}
 
     get_process_outdir_given_dirname "${outd}" "${processname}"
+}
+
+########
+get_process_outdir_given_process_spec()
+{
+    local process_spec=$1
+
+    # Get full path of output directory
+    local outd=${PIPELINE_OUTDIR}
+
+    # Obtain output directory for process
+    local processname=`extract_processname_from_process_spec ${process_spec}`
+    local process_outd=`get_process_outdir_given_dirname ${outd} ${processname}`
+
+    echo ${process_outd}
 }
 
 ########
