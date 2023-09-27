@@ -454,7 +454,9 @@ print_pipeline_opts()
 define_fifo()
 {
     local fifoname=$1
-    local processname=$2
+
+    # Get process name
+    local processname="${FUNCNAME[1]}" # Get name of caller
 
     # Check if FIFO was previously defined
     if [ "${PIPELINE_FIFOS[${fifoname}]}" != "" ]; then
@@ -768,33 +770,24 @@ create_pipeline_shdirs()
 }
 
 ########
-get_fifos_funcname()
-{
-    local absmodname=$1
-
-    local modname=`get_modname_from_absmodname "${absmodname}"`
-
-    echo "${modname}_fifos"
-}
-
-########
-register_pipeline_fifos()
-{
-    # Populate associative array of FIFOS for the loaded modules
-    local absmodname
-    for absmodname in "${PIPELINE_MODULES[@]}"; do
-        fifos_funcname=`get_fifos_funcname ${absmodname}`
-        ${fifos_funcname}
-    done
-}
-
-########
 show_pipeline_fifos()
 {
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS[@]}"; do
         echo ${PIPELINE_FIFOS["${fifoname}"]} "${fifoname}"
     done
+}
+
+########
+register_fifos_owned_by_process()
+{
+    local processname=$1
+
+    local fifos_funcname=`get_fifos_funcname "${processname}"`
+
+    if [ "${fifos_funcname}" != ${FUNCT_NOT_FOUND} ]; then
+        ${fifos_funcname}
+    fi
 }
 
 ########
@@ -823,10 +816,19 @@ get_absolute_shdirname()
 }
 
 ########
+get_absolute_fifodir()
+{
+    echo "${PIPELINE_OUTDIR}/.fifos"
+}
+
+########
 get_absolute_fifoname()
 {
     local fifoname=$1
-    echo "${PIPELINE_OUTDIR}/.fifos/${fifoname}"
+
+    local fifodir=`get_absolute_fifodir`
+
+    echo "${fifodir}/${fifoname}"
 }
 
 ########

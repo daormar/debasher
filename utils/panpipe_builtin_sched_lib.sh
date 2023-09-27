@@ -1305,6 +1305,7 @@ builtin_sched_prepare_files_and_dirs_for_process()
         update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
         builtin_sched_clean_process_log_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         builtin_sched_clean_process_id_files "${dirname}" ${processname} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
+        register_fifos_owned_by_process ${processname}
         prepare_fifos_owned_by_process ${processname}
 
         # Create output directory

@@ -660,7 +660,7 @@ create_basic_dirs()
     local scriptsdir=`get_ppl_scripts_dir`
     mkdir -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
-    local fifodir=`get_absolute_fifoname`
+    local fifodir=`get_absolute_fifodir`
     mkdir -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
 
     local condadir=`get_absolute_condadir`
@@ -686,23 +686,6 @@ create_shared_dirs()
     show_pipeline_shdirs >&2
 
     echo "Creation complete" >&2
-
-    echo "" >&2
-}
-
-########
-register_fifos()
-{
-    echo "* Registering pipeline fifos... (if any)" >&2
-
-    # Register FIFOs (named pipes) required by the pipeline processes
-    # IMPORTANT NOTE: the following function can only be executed after
-    # loading pipeline modules
-    register_pipeline_fifos
-
-    show_pipeline_fifos >&2
-
-    echo "Registration complete" >&2
 
     echo "" >&2
 }
@@ -1001,9 +984,6 @@ else
 
         create_shared_dirs > "${outd}"/.shrdirs.txt 2>&1 || exit 1
         cat "${outd}"/.shrdirs.txt >&2 || exit 1
-
-        register_fifos > "${outd}"/.fifos.txt 2>&1 || exit 1
-        cat "${outd}"/.fifos.txt >&2 || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
             process_conda_requirements "${reordered_pfile}" || exit 1

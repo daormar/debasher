@@ -321,6 +321,14 @@ get_conda_envs_funcname()
 }
 
 ########
+get_fifos_funcname()
+{
+    local processname=$1
+
+    search_process_func "${processname}" "_fifos"
+}
+
+########
 define_opts_for_script()
 {
     local cmdline=$1

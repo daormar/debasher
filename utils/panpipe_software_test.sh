@@ -30,12 +30,6 @@ panpipe_software_test_shared_dirs()
     define_shared_dir "data"
 }
 
-########
-panpipe_software_test_fifos()
-{
-    define_fifo "process_d_fifo" process_d
-}
-
 #######################################
 # PIPELINE SOFTWARE TESTING PROCESSES #
 #######################################
@@ -270,6 +264,12 @@ process_d()
 
     # sleep some time
     sleep 10
+}
+
+########
+process_d_fifos()
+{
+    define_fifo "process_d_fifo"
 }
 
 ########
