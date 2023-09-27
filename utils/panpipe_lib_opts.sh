@@ -595,21 +595,6 @@ define_cmdline_infile_nonmand_opt()
 }
 
 ########
-get_process_outdir_given_process_spec()
-{
-    local process_spec=$1
-
-    # Get full path of output directory
-    local outd=${PIPELINE_OUTDIR}
-
-    # Obtain output directory for process
-    local processname=`extract_processname_from_process_spec ${process_spec}`
-    local process_outd=`get_process_outdir_given_dirname ${outd} ${processname}`
-
-    echo ${process_outd}
-}
-
-########
 define_opt()
 {
     local opt=$1
