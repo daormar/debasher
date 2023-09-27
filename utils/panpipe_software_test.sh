@@ -54,8 +54,8 @@ process_a_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # -a option
@@ -113,8 +113,8 @@ process_b_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # -b option
@@ -165,8 +165,8 @@ process_c_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # -c option
@@ -239,8 +239,8 @@ process_d_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # Get absolute name of FIFO
@@ -290,8 +290,8 @@ process_e_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # Get absolute name of FIFO
@@ -335,8 +335,8 @@ process_f_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # Save option list
@@ -383,8 +383,8 @@ process_g_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # Save option list so as to execute process four times
@@ -445,8 +445,8 @@ process_h_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # -b option
@@ -495,8 +495,8 @@ process_i_define_opts()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local process_name=$(extract_processname_from_process_spec "$process_spec")
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_name=$3
+    local process_outdir=$4
     local optlist=""
 
     # -b option
