@@ -218,19 +218,50 @@ remove_suffix_from_processname()
 }
 
 ########
+search_process_func()
+{
+    local processname=$1
+    local funcname_suffix=$2
+
+    # Check if function exists
+    local process_function_reset="${processname}${funcname_suffix}"
+    if func_exists ${process_function_reset}; then
+        echo ${process_function_reset}
+    else
+        # Check if function without suffix exists
+        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
+        process_function_reset="${processname_wo_suffix}${funcname_suffix}"
+        if func_exists ${process_function_reset}; then
+            echo ${process_function_reset}
+        else
+            echo ${FUNCT_NOT_FOUND}
+        fi
+    fi
+}
+
+########
+search_process_mandatory_func()
+{
+    local processname=$1
+    local funcname_suffix=$2
+
+    # Check if function exists
+    local process_function="${processname}${funcname_suffix}"
+    if func_exists ${process_function}; then
+        echo ${process_function}
+    else
+        # Return function name without suffix
+        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
+        echo "${processname_wo_suffix}${funcname_suffix}"
+    fi
+}
+
+########
 get_name_of_process_function_reset()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    local process_function_reset="${processname_wo_suffix}_reset_outdir"
-
-    if func_exists ${process_function_reset}; then
-        echo ${process_function_reset}
-    else
-        echo ${FUNCT_NOT_FOUND}
-    fi
+    search_process_func "${processname}" "_reset_outdir"
 }
 
 ########
@@ -238,9 +269,7 @@ get_name_of_process_function()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    echo "${processname_wo_suffix}"
+    search_process_mandatory_func "${processname}" ""
 }
 
 ########
@@ -248,15 +277,7 @@ get_name_of_process_function_post()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    local process_function_post="${processname_wo_suffix}_post"
-
-    if func_exists ${process_function_post}; then
-        echo ${process_function_post}
-    else
-        echo ${FUNCT_NOT_FOUND}
-    fi
+    search_process_func "${processname}" "_post"
 }
 
 ########
@@ -264,15 +285,7 @@ get_name_of_process_function_outdir()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    local process_function_outdir="${processname_wo_suffix}_outdir_basename"
-
-    if func_exists ${process_function_outdir}; then
-        echo ${process_function_outdir}
-    else
-        echo ${FUNCT_NOT_FOUND}
-    fi
+    search_process_func "${processname}" "_outdir_basename"
 }
 
 ########
@@ -280,9 +293,7 @@ get_explain_cmdline_opts_funcname()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    echo ${processname_wo_suffix}_explain_cmdline_opts
+    search_process_mandatory_func "${processname}" "_explain_cmdline_opts"
 }
 
 ########
@@ -290,9 +301,7 @@ get_define_opts_funcname()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    echo ${processname_wo_suffix}_define_opts
+    search_process_mandatory_func "${processname}" "_define_opts"
 }
 
 ########
@@ -300,14 +309,7 @@ get_execute_funcname()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    local process_execute_function="${processname_wo_suffix}_execute"
-    if func_exists ${process_execute_function}; then
-        echo ${process_execute_function}
-    else
-        echo ${FUNCT_NOT_FOUND}
-    fi
+    search_process_func "${processname}" "_execute"
 }
 
 ########
@@ -315,9 +317,7 @@ get_conda_envs_funcname()
 {
     local processname=$1
 
-    local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-
-    echo ${processname_wo_suffix}_conda_envs
+    search_process_func "${processname}" "_conda_envs"
 }
 
 ########
