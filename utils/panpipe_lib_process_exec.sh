@@ -305,11 +305,11 @@ get_define_opts_funcname()
 }
 
 ########
-get_execute_funcname()
+get_should_execute_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_execute"
+    search_process_func "${processname}" "_should_execute"
 }
 
 ########

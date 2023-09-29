@@ -76,7 +76,7 @@ process_a()
 }
 
 ########
-process_a_execute()
+process_a_should_execute()
 {
     # Initialize variables
     local cmdline=$1
