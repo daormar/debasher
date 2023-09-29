@@ -1,5 +1,5 @@
 #####################
-# GENERAL FUNCTIONS #
+# PANPIPE UTILITIES #
 #####################
 
 ########
