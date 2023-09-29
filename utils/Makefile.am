@@ -8,7 +8,7 @@ bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
 libexec_SCRIPTS = panpipe_builtin_sched_lib panpipe_lib_utils		\
 panpipe_lib_sched panpipe_lib_process_exec panpipe_lib_process_doc	\
-panpipe_lib_ppl_files panpipe_lib_modules panpipe_lib_opts		\
+panpipe_lib_workflows panpipe_lib_modules panpipe_lib_opts		\
 panpipe_lib_conda pp_get_reexec_procs_due_to_deps
 
 CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
