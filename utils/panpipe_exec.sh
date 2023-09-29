@@ -18,7 +18,7 @@
 
 # INCLUDE BASH LIBRARIES
 . "${panpipe_bindir}"/panpipe_lib || exit 1
-. "${panpipe_bindir}"/panpipe_builtin_sched_lib || exit 1
+. "${panpipe_libexecdir}"/panpipe_builtin_sched_lib || exit 1
 
 #############
 # CONSTANTS #
@@ -587,7 +587,7 @@ define_reexec_processes_due_to_deps()
     # Obtain list of processes to be reexecuted due to dependencies
     local reexec_processes_string=`get_reexec_processes_as_string`
     local reexec_processes_file="${outd}/${REEXEC_PROCESSES_LIST_FNAME}"
-    "${panpipe_bindir}"/pp_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -d "${processdeps_file}" > "${reexec_processes_file}" || return 1
+    "${panpipe_libexecdir}"/pp_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -d "${processdeps_file}" > "${reexec_processes_file}" || return 1
 
     # Read information about the processes to be re-executed due to
     # dependencies
