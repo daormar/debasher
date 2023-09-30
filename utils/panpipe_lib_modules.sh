@@ -3,6 +3,38 @@
 ############################
 
 ########
+get_modname_from_absmodname()
+{
+    local absmodname=$1
+
+    local modname=`${BASENAME} "${absmodname}"`
+
+    modname="${modname%.sh}"
+
+    echo "${modname}"
+}
+
+########
+get_shrdirs_funcname()
+{
+    local absmodname=$1
+
+    local modname=`get_modname_from_absmodname "${absmodname}"`
+
+    echo "${modname}_shared_dirs"
+}
+
+########
+get_pipeline_funcname()
+{
+    local absmodname=$1
+
+    local modname=`get_modname_from_absmodname "${absmodname}"`
+
+    echo "${modname}_pipeline"
+}
+
+########
 get_commasep_ppl_modules()
 {
     local pfile=$1
@@ -18,6 +50,7 @@ search_mod_in_dirs()
 
     # Search module in directories listed in PANPIPE_MOD_DIR
     local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_MOD_DIR}`
+    PANPIPE_MOD_DIR_BLANKS=". "${PANPIPE_MOD_DIR_BLANKS}
     local dir
     local fullmodname
     for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
@@ -41,13 +74,30 @@ search_mod_in_dirs()
 determine_full_module_name()
 {
     local module=$1
-    if is_absolute_path "$file"; then
+    if is_absolute_path "${module}"; then
         fullmodname="${module}"
     else
         fullmodname=`search_mod_in_dirs "${module}"`
     fi
 
     echo "$fullmodname"
+}
+
+########
+module_is_loaded()
+{
+    local fullmodname=$1
+
+    # Search module name in the array of loaded modules
+    local absmodname
+    for absmodname in "${PIPELINE_MODULES[@]}"; do
+        if [ "${absmodname}" = "${fullmodname}" ]; then
+            return 0
+        fi
+    done
+
+    # The given module name was not found
+    return 1
 }
 
 ########
@@ -62,10 +112,16 @@ load_pipeline_module()
 
     # Check that module file exists
     if [ -f "${fullmodname}" ]; then
-        . "${fullmodname}" || return 1
-        # Store module name in associative array
-        local i=${#PIPELINE_MODULES[@]}
-        PIPELINE_MODULES[${i}]="${fullmodname}"
+        # Check that module has not been loaded previously
+        if module_is_loaded "${fullmodname}"; then
+            :
+        else
+            # Load file
+            . "${fullmodname}" || return 1
+            # Store module name in array
+            local i=${#PIPELINE_MODULES[@]}
+            PIPELINE_MODULES[${i}]="${fullmodname}"
+        fi
     else
         echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
         return 1

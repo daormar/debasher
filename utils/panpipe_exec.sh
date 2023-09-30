@@ -232,22 +232,46 @@ absolutize_file_paths()
 # GENERAL PIPE EXECUTION FUNCTIONS #
 ####################################
 
-########
-check_pipeline_file()
+load_module()
 {
-    echo "* Checking pipeline file ($pfile)..." >&2
+    echo "* Loading module ($pfile)..." >&2
 
-    "${panpipe_bindir}"/panpipe_check -p "${pfile}" || return 1
+    # Import panpipe module containing the pipeline to be executed
+    load_pipeline_module "${pfile}" || exit 1
 
     echo "" >&2
 }
 
 ########
-reorder_pipeline_file()
+gen_ppl_file()
 {
-    echo "* Obtaining reordered pipeline file ($pfile)..." >&2
+    echo "* Generating .ppl file ($pfile)..." >&2
 
-    "${panpipe_bindir}"/panpipe_check -p "${pfile}" -r 2> /dev/null || return 1
+    exec_pipeline_func_for_module "${pfile}" || exit 1
+
+    echo "" >&2
+}
+
+########
+check_ppl_file()
+{
+    local ppl_file=$1
+
+    echo "* Checking pipeline file ($ppl_file)..." >&2
+
+    "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" || return 1
+
+    echo "" >&2
+}
+
+########
+reorder_ppl_file()
+{
+    local ppl_file=$1
+
+    echo "* Obtaining reordered pipeline file ($ppl_file)..." >&2
+
+    "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" -r 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -255,9 +279,11 @@ reorder_pipeline_file()
 ########
 gen_processdeps()
 {
-    echo "* Generating process dependencies information ($pfile)..." >&2
+    local ppl_file=$1
 
-    "${panpipe_bindir}"/panpipe_check -p "${pfile}" -d 2> /dev/null || return 1
+    echo "* Generating process dependencies information ($ppl_file)..." >&2
+
+    "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" -d 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -304,9 +330,9 @@ load_modules()
 {
     echo "* Loading pipeline modules..." >&2
 
-    local pfile=$1
+    local ppl_file=$1
 
-    load_pipeline_modules "${pfile}" || return 1
+    load_pipeline_modules "${ppl_file}" || return 1
 
     echo "" >&2
 }
@@ -317,7 +343,7 @@ show_pipeline_opts()
     echo "* Pipeline options..." >&2
 
     # Read input parameters
-    local pfile=$1
+    local ppl_file=$1
 
     # Read information about the processes to be executed
     local process_spec
@@ -332,7 +358,7 @@ show_pipeline_opts()
             ${explain_cmdline_opts_funcname} || exit 1
             update_opt_to_process_map ${processname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 
     # Print options
     print_pipeline_opts
@@ -347,7 +373,7 @@ check_pipeline_opts()
 
     # Read input parameters
     local cmdline=$1
-    local pfile=$2
+    local ppl_file=$2
 
     # Read information about the processes to be executed
     while read process_spec; do
@@ -366,7 +392,7 @@ check_pipeline_opts()
             local serial_script_opts=`serialize_string_array "script_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_SCRIPT_OPTS_TO_DISPLAY}`
             echo "PROCESS: ${processname} ; OPTIONS: ${serial_script_opts}" >&2
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 
     echo "" >&2
 }
@@ -420,7 +446,7 @@ process_conda_requirements()
     echo "* Processing conda requirements (if any)..." >&2
 
     # Read input parameters
-    local pfile=$1
+    local ppl_file=$1
 
     # Read information about the processes to be executed
     local process_spec
@@ -438,7 +464,7 @@ process_conda_requirements()
                 process_conda_requirements_for_process ${processname} "${process_conda_envs}" || return 1
             fi
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 
     echo "Processing complete" >&2
 
@@ -452,7 +478,7 @@ define_dont_execute_processes()
 
     # Read input parameters
     local cmdline=$1
-    local pfile=$2
+    local ppl_file=$2
 
     # Read information about the processes to be executed
     while read process_spec; do
@@ -461,14 +487,14 @@ define_dont_execute_processes()
         if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
-            local execute_funcname=`get_execute_funcname ${processname}`
-            if [ "${execute_funcname}" != ${FUNCT_NOT_FOUND} ]; then
-                if ! ${execute_funcname} "${cmdline}" "${process_spec}"; then
+            local should_execute_funcname=`get_should_execute_funcname ${processname}`
+            if [ "${should_execute_funcname}" != ${FUNCT_NOT_FOUND} ]; then
+                if ! ${should_execute_funcname} "${cmdline}" "${process_spec}"; then
                     mark_process_as_dont_execute ${processname} "${EXECFUNCT_DONT_EXEC_REASON}"
                 fi
             fi
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 
     echo "Definition complete" >&2
 
@@ -481,7 +507,7 @@ define_forced_exec_processes()
     echo "* Defining processes forced to be reexecuted (if any)..." >&2
 
     # Read input parameters
-    local pfile=$1
+    local ppl_file=$1
 
     # Read information about the processes to be executed
     local process_spec
@@ -496,7 +522,7 @@ define_forced_exec_processes()
                 mark_process_as_reexec $processname ${FORCED_REEXEC_REASON}
             fi
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 
     echo "Definition complete" >&2
 
@@ -540,10 +566,10 @@ define_reexec_processes_due_to_code_update()
 
     # Read input parameters
     local dirname=$1
-    local pfile=$2
+    local ppl_file=$2
 
     # Get names of pipeline modules
-    local fullmodnames=`get_pipeline_fullmodnames "$pfile"` || return 1
+    local fullmodnames=`get_pipeline_fullmodnames "$ppl_file"` || return 1
 
     # Read information about the processes to be executed
     local process_spec
@@ -570,7 +596,7 @@ define_reexec_processes_due_to_code_update()
                 fi
             fi
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 
     echo "Definition complete" >&2
 
@@ -674,18 +700,19 @@ create_basic_dirs()
 }
 
 ########
-create_shared_dirs()
+create_mod_shared_dirs()
 {
-    echo "* Creating shared directories... (if any)" >&2
+    echo "* Creating shared directories for modules... (if any)" >&2
 
     # Create shared directories required by the pipeline processes
     # IMPORTANT NOTE: the following function can only be executed after
     # loading pipeline modules
+    register_module_pipeline_shdirs
     create_pipeline_shdirs
 
     show_pipeline_shdirs >&2
 
-    echo "Creation complete" >&2
+    echo "Registration complete" >&2
 
     echo "" >&2
 }
@@ -758,12 +785,13 @@ prepare_files_and_dirs_for_process()
     ## that should not be executed, files and directories are still
     ## prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
-        # Initialize array_size variable
+        # Initialize array_size variable and populate array of shared directories
         define_opts_for_script "${cmdline}" "${process_spec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
         local array_size=${#script_opts_array[@]}
 
         # Prepare files and directories for process
+        create_pipeline_shdirs || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
         clean_process_log_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         clean_process_id_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
@@ -778,7 +806,7 @@ prepare_files_and_dirs_for_processes()
 {
     # Read input parameters
     local dirname=$1
-    local pfile=$2
+    local ppl_file=$2
 
     local process_spec
     while read process_spec; do
@@ -790,7 +818,7 @@ prepare_files_and_dirs_for_processes()
 
             prepare_files_and_dirs_for_process "${dirname}" ${processname} "${process_spec}"
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 }
 
 ########
@@ -850,7 +878,7 @@ launch_processes()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local pfile=$3
+    local ppl_file=$3
 
     local process_spec
     while read process_spec; do
@@ -862,7 +890,7 @@ launch_processes()
 
             launch_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 }
 
 ########
@@ -873,16 +901,16 @@ execute_pipeline_processes()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local pfile=$3
+    local ppl_file=$3
 
     # Prepare files and directories for processes
-    prepare_files_and_dirs_for_processes "${dirname}" "${pfile}"
+    prepare_files_and_dirs_for_processes "${dirname}" "${ppl_file}"
 
     # process_id_list will store the process ids of the pipeline processes
     local process_id_list=""
 
     # Launch processes
-    launch_processes "${cmdline}" "${dirname}" "${pfile}"
+    launch_processes "${cmdline}" "${dirname}" "${ppl_file}"
 
     echo "" >&2
 }
@@ -916,7 +944,7 @@ execute_pipeline_processes_debug()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local pfile=$3
+    local ppl_file=$3
 
     # process_id_list will store the process ids of the pipeline processes
     local process_id_list=""
@@ -932,7 +960,7 @@ execute_pipeline_processes_debug()
 
             debug_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
         fi
-    done < "${pfile}"
+    done < "${ppl_file}"
 
     echo "" >&2
 }
@@ -959,44 +987,48 @@ absolutize_file_paths || exit 1
 
 create_basic_dirs || exit 1
 
-check_pipeline_file || exit 1
+load_module || exit
 
-reordered_pfile="${outd}/${REORDERED_PIPELINE_BASENAME}"
-reorder_pipeline_file > "${reordered_pfile}" || exit 1
+original_ppl_file="${outd}/${ORIGINAL_PIPELINE_BASENAME}"
+gen_ppl_file > "${outd}/${ORIGINAL_PIPELINE_BASENAME}" || exit 1
+
+check_ppl_file "${outd}/${ORIGINAL_PIPELINE_BASENAME}" || exit 1
+
+reordered_ppl_file="${outd}/${REORDERED_PIPELINE_BASENAME}"
+reorder_ppl_file "${outd}/${ORIGINAL_PIPELINE_BASENAME}" > "${reordered_ppl_file}" || exit 1
 
 processdeps_file="${outd}"/.processdeps.txt
-gen_processdeps > "${processdeps_file}" || exit 1
+gen_processdeps "${reordered_ppl_file}" > "${processdeps_file}" || exit 1
 
 configure_scheduler || exit 1
 
-load_modules "${reordered_pfile}" || exit 1
+# load_modules "${reordered_ppl_file}" || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
-    show_pipeline_opts "${reordered_pfile}" || exit 1
+    show_pipeline_opts "${reordered_ppl_file}" || exit 1
 else
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" "${reordered_pfile}" || exit 1
+        check_pipeline_opts "${command_line}" "${reordered_ppl_file}" || exit 1
     else
-        load_pipeline_modules=1
-        check_pipeline_opts "${command_line}" "${reordered_pfile}" > "${outd}"/.ppl_opts.txt 2>&1 || exit 1
+        check_pipeline_opts "${command_line}" "${reordered_ppl_file}" > "${outd}"/.ppl_opts.txt 2>&1 || exit 1
         cat "${outd}"/.ppl_opts.txt >&2 || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
-        create_shared_dirs > "${outd}"/.shrdirs.txt 2>&1 || exit 1
-        cat "${outd}"/.shrdirs.txt >&2 || exit 1
+        create_mod_shared_dirs > "${outd}"/.modshrdirs.txt 2>&1 || exit 1
+        cat "${outd}"/.modshrdirs.txt >&2 || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
-            process_conda_requirements "${reordered_pfile}" || exit 1
+            process_conda_requirements "${reordered_ppl_file}" || exit 1
         fi
 
-        define_dont_execute_processes "${command_line}" "${reordered_pfile}" || exit 1
+        define_dont_execute_processes "${command_line}" "${reordered_ppl_file}" || exit 1
 
-        define_forced_exec_processes "${reordered_pfile}" || exit 1
+        define_forced_exec_processes "${reordered_ppl_file}" || exit 1
 
         if [ ${reexec_outdated_processes_given} -eq 1 ]; then
-            define_reexec_processes_due_to_code_update "${outd}" "${reordered_pfile}" || exit 1
+            define_reexec_processes_due_to_code_update "${outd}" "${reordered_ppl_file}" || exit 1
         fi
 
         define_reexec_processes_due_to_deps "${processdeps_file}" || exit 1
@@ -1006,13 +1038,13 @@ else
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            execute_pipeline_processes_debug "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
+            execute_pipeline_processes_debug "${command_line}" "${outd}" "${reordered_ppl_file}" || exit 1
         else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
-                builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
+                builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${reordered_ppl_file}" || exit 1
             else
-                execute_pipeline_processes "${command_line}" "${outd}" "${reordered_pfile}" || exit 1
+                execute_pipeline_processes "${command_line}" "${outd}" "${reordered_ppl_file}" || exit 1
             fi
         fi
     fi

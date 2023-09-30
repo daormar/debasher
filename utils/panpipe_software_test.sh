@@ -536,7 +536,7 @@ process_i()
 }
 
 ########
-panpipe_software_test_workflow()
+panpipe_software_test_pipeline()
 {
     add_panpipe_process "process_a" "cpus=1 mem=32 time=00:01:00,00:02:00,00:03:00" "processdeps=none"
     add_panpipe_process "process_b" "cpus=1 mem=32 time=00:01:00" "processdeps=none"

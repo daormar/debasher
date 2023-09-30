@@ -51,7 +51,7 @@ is_absolute_path()
 ########
 get_absolute_path()
 {
-  local relative_path="$1"
+  local relative_path=$1
   local current_dir="$(pwd)"
   local absolute_path=""
 
@@ -459,4 +459,57 @@ get_first_n_fields_of_str()
 get_panpipe_exec_path()
 {
     echo "${panpipe_bindir}/panpipe_exec"
+}
+
+########
+clear_pipeline_shdirs_array()
+{
+    declare -gA PIPELINE_SHDIRS
+}
+
+########
+remove_suffix_from_processname()
+{
+    local processname=$1
+
+    echo "${processname%%${PROCESSNAME_SUFFIX_SEP}*}"
+}
+
+########
+search_process_func()
+{
+    local processname=$1
+    local funcname_suffix=$2
+
+    # Check if function exists
+    local process_function_reset="${processname}${funcname_suffix}"
+    if func_exists ${process_function_reset}; then
+        echo ${process_function_reset}
+    else
+        # Check if function without suffix exists
+        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
+        process_function_reset="${processname_wo_suffix}${funcname_suffix}"
+        if func_exists ${process_function_reset}; then
+            echo ${process_function_reset}
+        else
+            echo ${FUNCT_NOT_FOUND}
+        fi
+    fi
+}
+
+########
+search_process_mandatory_func()
+{
+    local processname=$1
+    local funcname_suffix=$2
+
+    # Check if function exists
+    local process_function="${processname}${funcname_suffix}"
+    if func_exists ${process_function}; then
+        echo ${process_function}
+    else
+        # Return function name without suffix
+        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
+        echo "${processname_wo_suffix}${funcname_suffix}"
+    fi
 }

@@ -134,7 +134,7 @@ def print_process_info(process_map,excl_processes_set,format,fieldlen):
                 else:
                     status=status+" "+norm_str_len(process_map[process],fieldlen)
         print(status)
-        
+
     elif format==ROW_WO_HEADER_FORMAT:
         status=""
         for process in process_map:
@@ -144,7 +144,7 @@ def print_process_info(process_map,excl_processes_set,format,fieldlen):
                 else:
                     status=status+" "+norm_str_len(process_map[process],fieldlen)
         print(status)
-        
+
 ##################################################
 def extract_excl_process_info(excl_processes):
     fields=excl_processes.split(",")
@@ -152,7 +152,7 @@ def extract_excl_process_info(excl_processes):
     for process in fields:
         excl_processes_set.add(process)
     return excl_processes_set
-    
+
 ##################################################
 def process_pars(flags,values):
     process_map=extract_process_info(values["pstatus"])
@@ -160,7 +160,7 @@ def process_pars(flags,values):
     if flags["e_given"]:
         excl_processes_set=extract_excl_process_info(values["excl"])
     print_process_info(process_map,excl_processes_set,values["format"],values["fieldlen"])
-    
+
 ##################################################
 def main(argv):
     # take parameters
@@ -171,6 +171,6 @@ def main(argv):
 
     # process parameters
     process_pars(flags,values)
-    
+
 if __name__ == "__main__":
     main(sys.argv)

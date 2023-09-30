@@ -1297,11 +1297,17 @@ builtin_sched_prepare_files_and_dirs_for_process()
     local dirname=$1
     local processname=$2
     local script_filename=`get_script_filename "${dirname}" ${processname}`
-    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local status=`get_process_status "${dirname}" ${processname}`
+    local process_spec=${BUILTIN_SCHED_PROCESS_SPEC[${processname}]}
 
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
+        # Initialize array_size variable and populate array of shared directories
+        define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+        local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
+        local array_size=${#script_opts_array[@]}
+
         # Prepare files for process
+        create_pipeline_shdirs || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
         builtin_sched_clean_process_log_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         builtin_sched_clean_process_id_files "${dirname}" ${processname} || { echo "Error when cleaning id files for process" >&2 ; return 1; }

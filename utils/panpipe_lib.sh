@@ -33,6 +33,7 @@ ARG_SEP="<_ARG_SEP_>"
 ARG_SEP_QUOTES="' '"
 ARRAY_TASK_SEP=" ||| "
 PROCESSNAME_SUFFIX_SEP="__"
+PROCESSDEPS_SPEC="processdeps"
 
 # INVALID IDENTIFIERS
 INVALID_SID="_INVALID_SID_"
@@ -99,6 +100,7 @@ ARRAY_TASKID_FEXT="id"
 SLURM_EXEC_ATTEMPT_FEXT_STRING="__attempt"
 
 # FILE NAMES
+ORIGINAL_PIPELINE_BASENAME="original_pipeline.ppl"
 REORDERED_PIPELINE_BASENAME="reordered_pipeline.ppl"
 PPL_COMMAND_LINE_BASENAME="command_line.sh"
 
@@ -164,10 +166,9 @@ declare -A EXIT_CODE
 
 # INCLUDE BASH FILES
 . "${panpipe_libexecdir}"/panpipe_lib_utils
-. "${panpipe_libexecdir}"/panpipe_lib_sched
-. "${panpipe_libexecdir}"/panpipe_lib_process_exec
-. "${panpipe_libexecdir}"/panpipe_lib_process_doc
-. "${panpipe_libexecdir}"/panpipe_lib_ppl_files
+. "${panpipe_libexecdir}"/panpipe_lib_pipelines
 . "${panpipe_libexecdir}"/panpipe_lib_modules
+. "${panpipe_libexecdir}"/panpipe_lib_processes
 . "${panpipe_libexecdir}"/panpipe_lib_opts
+. "${panpipe_libexecdir}"/panpipe_lib_sched
 . "${panpipe_libexecdir}"/panpipe_lib_conda

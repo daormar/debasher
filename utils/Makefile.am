@@ -7,24 +7,26 @@ panpipe_solve_knapsack_ga
 bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
 libexec_SCRIPTS = panpipe_builtin_sched_lib panpipe_lib_utils		\
-panpipe_lib_sched panpipe_lib_process_exec panpipe_lib_process_doc	\
-panpipe_lib_workflows panpipe_lib_modules panpipe_lib_opts		\
-panpipe_lib_conda pp_get_reexec_procs_due_to_deps
+panpipe_lib_sched panpipe_lib_sched_slurm panpipe_lib_sched_builtin	\
+panpipe_lib_sched_procs panpipe_lib_processes panpipe_lib_pipelines	\
+panpipe_lib_modules panpipe_lib_opts panpipe_lib_conda			\
+pp_get_reexec_procs_due_to_deps
 
 CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
 
 python_PYTHON= panpipe_ppl_lib.py panpipe_knapsack_ga.py
 
 EXTRA_DIST = panpipe_lib.sh panpipe_lib_utils.sh panpipe_lib_sched.sh	\
-panpipe_lib_process_exec.sh panpipe_lib_process_doc.sh			\
-panpipe_lib_ppl_files.sh panpipe_lib_modules.sh panpipe_lib_opts.sh	\
-panpipe_lib_conda.sh panpipe_builtin_sched_lib.sh panpipe_exec.sh	\
-panpipe_exec_batch.sh panpipe_check.py panpipe_stop.sh			\
-panpipe_status.sh panpipe_stats.sh panpipe_process_debug.sh		\
-panpipe_doc_mod.sh panpipe_proc_dataset.sh panpipe_software_test.sh	\
-pp_get_reexec_procs_due_to_deps.py panpipe_reformat_status.py		\
-panpipe_solve_knapsack_bb.py panpipe_solve_knapsack_ga.py		\
-panpipe_knapsack_ga.py
+panpipe_lib_sched_procs.sh panpipe_lib_sched_slurm.sh			\
+panpipe_lib_sched_builtin panpipe_lib_process_exec.sh			\
+panpipe_lib_processes.sh panpipe_lib_pipelines.sh			\
+panpipe_lib_modules.sh panpipe_lib_opts.sh panpipe_lib_conda.sh		\
+panpipe_builtin_sched_lib.sh panpipe_exec.sh panpipe_exec_batch.sh	\
+panpipe_check.py panpipe_stop.sh panpipe_status.sh panpipe_stats.sh	\
+panpipe_process_debug.sh panpipe_doc_mod.sh panpipe_proc_dataset.sh	\
+panpipe_software_test.sh pp_get_reexec_procs_due_to_deps.py		\
+panpipe_reformat_status.py panpipe_solve_knapsack_bb.py			\
+panpipe_solve_knapsack_ga.py panpipe_knapsack_ga.py
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R

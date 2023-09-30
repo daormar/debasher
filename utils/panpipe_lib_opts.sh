@@ -702,28 +702,6 @@ define_indir_opt()
 }
 
 ########
-get_modname_from_absmodname()
-{
-    local absmodname=$1
-
-    local modname=`${BASENAME} "${absmodname}"`
-
-    modname="${modname%.sh}"
-
-    echo "${modname}"
-}
-
-########
-get_shrdirs_funcname()
-{
-    local absmodname=$1
-
-    local modname=`get_modname_from_absmodname "${absmodname}"`
-
-    echo "${modname}_shared_dirs"
-}
-
-########
 show_pipeline_shdirs()
 {
     local dirname
@@ -734,7 +712,7 @@ show_pipeline_shdirs()
 }
 
 ########
-create_pipeline_shdirs()
+register_module_pipeline_shdirs()
 {
     # Populate associative array of shared directories for the loaded
     # modules
@@ -743,7 +721,11 @@ create_pipeline_shdirs()
         local shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
         ${shrdirs_funcname} || exit 1
     done
+}
 
+########
+create_pipeline_shdirs()
+{
     # Create shared directories
     local dirname
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
@@ -797,6 +779,12 @@ prepare_fifos_owned_by_process()
 get_absolute_shdirname()
 {
     local shdirname=$1
+
+    # Register the name of the shared directory so as to enable its
+    # creation later
+    define_shared_dir "${shdirname}"
+
+    # Output absolute shared directory name
     echo "${PIPELINE_OUTDIR}/${shdirname}"
 }
 

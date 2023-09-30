@@ -90,108 +90,6 @@ check_pars()
 }
 
 ########
-get_orig_workdir()
-{
-    local command_line_file=$1
-    local workdir=`$HEAD -1 ${command_line_file} | "$AWK" '{print $2}'` ; pipe_fail || return 1
-    echo $workdir
-}
-
-########
-get_orig_outdir()
-{
-    # initialize variables
-    local command_line_file=$1
-
-    # Extract information from command line file
-    local workdir
-    workdir=`get_orig_workdir "${command_line_file}"` || return 1
-    local cmdline
-    cmdline=`get_cmdline "${command_line_file}"` || return 1
-    local outdir=`read_opt_value_from_line "$cmdline" "--outdir"`
-
-    # Retrieve original output directory
-    if is_absolute_path "$outdir"; then
-        echo "$outdir"
-    else
-        echo "${workdir}/${outdir}"
-    fi
-}
-
-########
-get_cmdline()
-{
-    local command_line_file=$1
-    local cmdline=`"$TAIL" -1 "${command_line_file}"`
-    sargsquotes_to_sargs "$cmdline"
-}
-
-########
-get_cmdline_pfile()
-{
-    local command_line_file=$1
-    local cmdline=`"$TAIL" -1 "${command_line_file}"`
-    local pfile=`read_opt_value_from_line "$cmdline" "--pfile"` || return 1
-    echo "$pfile"
-}
-
-########
-get_sched()
-{
-    local command_line_file=$1
-    local cmdline=`"$TAIL" -1 "${command_line_file}"`
-    local sched=`read_opt_value_from_line "$cmdline" "--sched"` || return 1
-    echo $sched
-}
-
-########
-replace_outdir_in_cmdline()
-{
-    local cmdline=$1
-    local newdir=$2
-
-    echo "$cmdline" | "$AWK" -v newdir="$newdir" 'BEGIN{
-                                replace=0
-                               }
-                               {
-                                for(i=1;i<=NF;++i)
-                                {
-                                 if(replace==0)
-                                 {
-                                  printf"%s",$i
-                                 }
-                                 else
-                                 {
-                                  printf"%s",newdir
-                                  replace=0
-                                 }
-                                 if($i=="--outdir") replace=1
-                                 if(i!=NF) printf" "
-                                }
-                               }'
-}
-
-########
-get_pfile()
-{
-    local absdirname=$1
-    local cmdline_pfile=$2
-
-    if [ -f "${absdirname}/${REORDERED_PIPELINE_BASENAME}" ]; then
-        echo "${absdirname}/${REORDERED_PIPELINE_BASENAME}"
-        return 0
-    else
-        if [ -f "${cmdline_pfile}" ]; then
-            echo "${cmdline_pfile}"
-            return 0
-        else
-            echo "Error: unable to find pipeline file (${cmdline_pfile})" >&2
-            return 1
-        fi
-    fi
-}
-
-########
 configure_scheduler()
 {
     local sched=$1
@@ -208,20 +106,14 @@ process_status_for_pfile()
     local command_line_file="${absdirname}/${PPL_COMMAND_LINE_BASENAME}"
 
     # Extract information from PPL_COMMAND_LINE_BASENAME file
-    local cmdline
-    cmdline=`get_cmdline "${command_line_file}"` || return 1
-    local cmdline_pfile
-    cmdline_pfile=`get_cmdline_pfile "${command_line_file}"` || return 1
-    local sched
-    sched=`get_sched "${command_line_file}"` || return 1
-
-    # Set pipeline file
     local pfile
-    pfile=`get_pfile "${absdirname}" "${cmdline_pfile}"` || return 1
+    pfile=`get_abspfile_from_command_line_file "${command_line_file}"` || return 1
+    local sched
+    sched=`get_sched_from_command_line_file "${command_line_file}"` || return 1
 
     # Get original output directory
     local orig_outdir
-    orig_outdir=`get_orig_outdir "${command_line_file}"` || return 1
+    orig_outdir=`get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
@@ -234,7 +126,7 @@ process_status_for_pfile()
     fi
 
     # Load pipeline modules
-    load_pipeline_modules "$pfile" || return 1
+    load_pipeline_module "$pfile" || return 1
 
     # Configure scheduler
     configure_scheduler $sched || return 1
@@ -303,7 +195,7 @@ process_status_for_pfile()
         # Increase lineno
         lineno=$((lineno+1))
 
-    done < ${pfile}
+    done < <(exec_pipeline_func_for_module "${pfile}")
 
     # Print summary
     echo "* SUMMARY: num_processes= ${num_processes} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2
