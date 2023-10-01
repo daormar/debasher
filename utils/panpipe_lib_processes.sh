@@ -248,10 +248,10 @@ get_processdeps_separator()
 {
     local processdeps=$1
     if [[ "${processdeps}" == *"${PROCESSDEPS_SEP_COMMA}"* ]]; then
-        echo ","
+        echo "${PROCESSDEPS_SEP_COMMA}"
     else
         if [[ "${processdeps}" == *"${PROCESSDEPS_SEP_INTERR}"* ]]; then
-            echo "?"
+            echo "${PROCESSDEPS_SEP_INTERR}"
         else
             echo ""
         fi
