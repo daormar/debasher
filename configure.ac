@@ -456,5 +456,5 @@ AC_SUBST(DISABLE_SCHEDULERS,$disable_schedulers)
 # Change path of distribution include directory
 includedir=${prefix}/include/bam-utils
 
-AC_CONFIG_FILES([Makefile m4/Makefile utils/Makefile doc/Makefile examples/Makefile examples/ppl_files/Makefile examples/conda_envs/Makefile])
+AC_CONFIG_FILES([Makefile m4/Makefile utils/Makefile doc/Makefile examples/Makefile examples/pipelines/Makefile examples/conda_envs/Makefile])
 AC_OUTPUT

@@ -1,1 +1,1 @@
-SUBDIRS= ppl_files conda_envs
+SUBDIRS= pipelines conda_envs
