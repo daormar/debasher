@@ -264,6 +264,7 @@ find_dependency_for_process()
     local process_spec=$1
     local processname_part=$2
 
+    # Obtain process dependencies separated by blanks
     local processdeps=`extract_processdeps_from_process_spec "$process_spec"`
     local separator=`get_processdeps_separator ${processdeps}`
     if [ "${separator}" = "" ]; then
@@ -271,6 +272,8 @@ find_dependency_for_process()
     else
         local processdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
     fi
+
+    # Process dependencies
     local dep
     for dep in ${processdeps_blanks}; do
         local processname_part_in_dep=`get_processname_part_in_dep ${dep}`
@@ -354,7 +357,7 @@ get_deptype_part_in_dep()
 get_processname_part_in_dep()
 {
     local dep=$1
-    if [ ${dep} = "none" ]; then
+    if [ ${dep} = "${NONE_PROCESSDEP_TYPE}" ]; then
         echo ${dep}
     else
         local sep=":"
