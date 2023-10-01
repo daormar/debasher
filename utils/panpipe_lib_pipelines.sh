@@ -158,34 +158,74 @@ add_panpipe_process()
 }
 
 ########
+apply_suffix_to_processdeps()
+{
+    local processdeps=$1
+    local suffix=$2
+
+    # Obtain process dependencies separated by blanks
+    local separator=`get_processdeps_separator ${processdeps}`
+    if [ "${separator}" = "" ]; then
+        local processdeps_blanks=${processdeps}
+    else
+        local processdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
+    fi
+
+    # Process dependencies
+    local dep
+    local result=""
+    for dep in ${processdeps_blanks}; do
+        # Extract dependency components
+        local processname=`get_processname_part_in_dep ${dep}`
+        local deptype=`get_deptype_part_in_dep ${dep}`
+        echo "$dep $processname $deptype" >&2
+        # Obtain modified dependency
+        if [ "${deptype}" = "${NONE_PROCESSDEP_TYPE}" ]; then
+            local modified_dep="${deptype}"
+        else
+            local modified_dep="${deptype}:${processname}${PROCESSNAME_SUFFIX_SEP}${suffix}"
+        fi
+        # Add modified dependency to result
+        if [ -z "${result}" ]; then
+            result="${modified_dep}"
+        else
+            result="${result}${separator}${modified_dep}"
+        fi
+    done
+
+    echo "${result}"
+}
+
+########
 apply_suffix_to_pipeline_entry()
 {
     local ppl_entry=$1
     local suffix=$2
 
-    echo "${ppl_entry}" | "${AWK}" -v sep="${PROCESSNAME_SUFFIX_SEP}" -v suffix="${suffix}" -v procdeps_spec="${PROCESSDEPS_SPEC}" \
-                                       'function is_prefix(string1, string2)
-                                        {
-                                         return substr(string2, 1, length(string1)) == string1
-                                        }
-                                        function add_suffix_to_deps(deps)
-                                        {
-                                         return deps
-                                        }
-                                        {
-                                         if(suffix == "") print $0
-                                         else
-                                         {
-                                          # Add suffix to process name
-                                          $1=$1 sep suffix
-                                          # Search for dependencies and process them
-                                          for(i=2; i<=NF; ++i)
-                                           if(is_prefix(procdeps_spec"=", $i))
-                                            $i = add_suffix_to_deps($i)
-                                          # print result
-                                          print $0
-                                         }
-                                        }'
+    # Read the string into an array using the IFS
+    local words
+    IFS=" " read -ra words <<< "$ppl_entry"
+
+    # Initialize a variable to store the concatenated words
+    local result=""
+
+    # Iterate over the indices of the words array
+    for i in "${!words[@]}"; do
+        if [ "${i}" -eq 0 ]; then
+            result="${words[$i]}${PROCESSNAME_SUFFIX_SEP}${suffix}"
+        else
+            if [[ "${words[$i]}" == "${PROCESSDEPS_SPEC}"* ]]; then
+                processdeps=`extract_processdeps_from_process_spec "${words[$i]}"`
+                processdeps_with_suffix=`apply_suffix_to_processdeps "${processdeps}" "${suffix}"`
+                result="${result} ${PROCESSDEPS_SPEC}=${processdeps_with_suffix}"
+            else
+                result="${result} ${words[$i]}"
+            fi
+        fi
+    done
+
+    # Print the concatenated result
+    echo "$result"
 }
 
 ########
