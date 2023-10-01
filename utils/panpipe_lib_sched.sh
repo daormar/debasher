@@ -134,9 +134,8 @@ get_num_attempts()
     # Obtain arrays for time and memory limits
     local time_array
     local mem_array
-    local sep=","
-    IFS="$sep" read -r -a time_array <<< "${time}"
-    IFS="$sep" read -r -a mem_array <<< "${mem}"
+    IFS="$ATTEMPT_SEP" read -r -a time_array <<< "${time}"
+    IFS="$ATTEMPT_SEP" read -r -a mem_array <<< "${mem}"
 
     # Return length of longest array
     if [ ${#time_array[@]} -gt ${#mem_array[@]} ]; then
@@ -155,8 +154,7 @@ get_mem_attempt_value()
 
     # Obtain array for memory limits
     local mem_array
-    local sep=","
-    IFS="$sep" read -r -a mem_array <<< "${mem}"
+    IFS="$ATTEMPT_SEP" read -r -a mem_array <<< "${mem}"
 
     # Return value for attempt
     local array_idx=$(( attempt_no - 1 ))
@@ -178,8 +176,7 @@ get_time_attempt_value()
 
     # Obtain array for time limits
     local time_array
-    local sep=","
-    IFS="$sep" read -r -a time_array <<< "${time}"
+    IFS="$ATTEMPT_SEP" read -r -a time_array <<< "${time}"
 
     # Return value for attempt
     local array_idx=$(( attempt_no - 1 ))

@@ -247,10 +247,10 @@ define_opts_for_script()
 get_processdeps_separator()
 {
     local processdeps=$1
-    if [[ "${processdeps}" == *","* ]]; then
+    if [[ "${processdeps}" == *"${PROCESSDEPS_SEP_COMMA}"* ]]; then
         echo ","
     else
-        if [[ "${processdeps}" == *"?"* ]]; then
+        if [[ "${processdeps}" == *"${PROCESSDEPS_SEP_INTERR}"* ]]; then
             echo "?"
         else
             echo ""
