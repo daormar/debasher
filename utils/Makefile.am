@@ -1,8 +1,7 @@
 SCRIPTS_TO_BE_BUILT= panpipe_lib panpipe_exec panpipe_exec_batch	\
 panpipe_check panpipe_stop panpipe_status panpipe_stats			\
 panpipe_process_debug panpipe_doc_mod panpipe_proc_dataset		\
-panpipe_software_test panpipe_reformat_status panpipe_solve_knapsack_bb	\
-panpipe_solve_knapsack_ga
+panpipe_software_test panpipe_reformat_status
 
 bin_SCRIPTS = $(SCRIPTS_TO_BE_BUILT)
 
@@ -10,7 +9,8 @@ libexec_SCRIPTS = panpipe_builtin_sched_lib panpipe_lib_utils		\
 panpipe_lib_sched panpipe_lib_sched_slurm panpipe_lib_sched_builtin	\
 panpipe_lib_sched_procs panpipe_lib_processes panpipe_lib_pipelines	\
 panpipe_lib_modules panpipe_lib_opts panpipe_lib_conda			\
-pp_get_reexec_procs_due_to_deps
+pp_get_reexec_procs_due_to_deps panpipe_solve_knapsack_bb		\
+panpipe_solve_knapsack_ga
 
 CLEANFILES = $(SCRIPTS_TO_BE_BUILT)
 
