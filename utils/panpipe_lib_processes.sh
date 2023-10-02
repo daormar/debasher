@@ -437,7 +437,7 @@ get_process_outdir_given_dirname()
     process_function_outdir=`get_name_of_process_function_outdir ${processname}`
 
     if [ "${process_function_outdir}" = "${FUNCT_NOT_FOUND}" ]; then
-        get_default_process_outdir_given_dirname "$dirname" $processname
+        get_default_process_outdir_given_dirname "$dirname" "$processname"
     else
         outdir_basename=`process_function_outdir`
         echo "${dirname}/${outdir_basename}"
@@ -453,6 +453,27 @@ get_process_outdir()
     local outd=${PIPELINE_OUTDIR}
 
     get_process_outdir_given_dirname "${outd}" "${processname}"
+}
+
+########
+get_process_outdir_adaptive()
+{
+    local processname=$1
+
+    # Get full path of output directory
+    local outd=${PIPELINE_OUTDIR}
+
+    # Get basic output directory
+    local basic_outd=`get_process_outdir_given_dirname "${outd}" "${processname}"`
+
+    # Get caller process name
+    local caller_processname=`$(get_processname_from_caller "${PROCESS_FUNC_SUFFIX_DEFINE_OPTS}")`
+
+    # Get suffix of caller process name
+    local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
+
+    # Append suffix to output directory
+    echo "${basic_outd}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
 }
 
 ########
