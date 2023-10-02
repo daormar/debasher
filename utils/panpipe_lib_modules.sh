@@ -21,7 +21,7 @@ get_shrdirs_funcname()
 
     local modname=`get_modname_from_absmodname "${absmodname}"`
 
-    echo "${modname}_shared_dirs"
+    echo "${modname}${MODULE_FUNC_SUFFIX_SHRDIRS}"
 }
 
 ########
@@ -31,7 +31,7 @@ get_pipeline_funcname()
 
     local modname=`get_modname_from_absmodname "${absmodname}"`
 
-    echo "${modname}_pipeline"
+    echo "${modname}${MODULE_FUNC_SUFFIX_PIPELINE}"
 }
 
 ########
