@@ -119,8 +119,8 @@ process_status_for_pfile()
         local moved_outdir="yes"
     fi
 
-    # Load pipeline modules
-    load_pipeline_module "$pfile" || return 1
+    # Load panpipe modules
+    load_panpipe_module "$pfile" || return 1
 
     # Configure scheduler
     configure_scheduler $sched || return 1

@@ -236,8 +236,8 @@ load_module()
 {
     echo "# Loading module ($pfile)..." >&2
 
-    # Import panpipe module containing the pipeline to be executed
-    load_pipeline_module "${pfile}" || exit 1
+    # Load panpipe module containing the pipeline to be executed
+    load_panpipe_module "${pfile}" || exit 1
 
     echo "" >&2
 }

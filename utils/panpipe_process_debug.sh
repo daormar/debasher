@@ -57,7 +57,7 @@ load_modules()
 
     local pfile=$1
 
-    load_pipeline_modules "${pfile}" || return 1
+    load_panpipe_modules "${pfile}" || return 1
 
     echo "" >&2
 }

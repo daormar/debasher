@@ -245,7 +245,7 @@ add_panpipe_pipeline()
     local suffix=$2
 
     # Load module
-    load_pipeline_module "${modname}"
+    load_panpipe_module "${modname}"
 
     # Execute pipeline function for module
     exec_pipeline_func_for_module "${modname}" | apply_sufix_to_pipeline_entries "${suffix}" ; pipe_fail || return 1

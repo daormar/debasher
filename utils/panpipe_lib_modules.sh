@@ -92,7 +92,7 @@ module_is_loaded()
 }
 
 ########
-load_pipeline_module()
+load_panpipe_module()
 {
     local module=$1
 
