@@ -468,6 +468,14 @@ clear_pipeline_shdirs_array()
 }
 
 ########
+get_suffix_from_processname()
+{
+    local processname=$1
+    suffix="${processname##*${PROCESSNAME_SUFFIX_SEP}}"
+    echo "${suffix}"
+}
+
+########
 remove_suffix_from_processname()
 {
     local processname=$1
