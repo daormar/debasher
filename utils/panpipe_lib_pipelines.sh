@@ -178,7 +178,6 @@ apply_suffix_to_processdeps()
         # Extract dependency components
         local processname=`get_processname_part_in_dep ${dep}`
         local deptype=`get_deptype_part_in_dep ${dep}`
-        echo "$dep $processname $deptype" >&2
         # Obtain modified dependency
         if [ "${deptype}" = "${NONE_PROCESSDEP_TYPE}" ]; then
             local modified_dep="${deptype}"
