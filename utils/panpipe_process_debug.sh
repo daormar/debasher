@@ -41,23 +41,13 @@ read_pars()
 }
 
 ########
-check_pipeline_file()
-{
-    echo "* Checking pipeline file ($pfile)..." >&2
-
-    "${panpipe_bindir}"/panpipe_check -p "${pfile}" || return 1
-
-    echo "" >&2
-}
-
-########
 load_modules()
 {
-    echo "* Loading pipeline modules..." >&2
+    echo "* Loading panpipe modules..." >&2
 
     local pfile=$1
 
-    load_panpipe_modules "${pfile}" || return 1
+    load_panpipe_module "${pfile}" || return 1
 
     echo "" >&2
 }
@@ -71,7 +61,7 @@ execute_process()
 
     # Execute process
     echo "Executing: $processname $opts" >&2
-    ${processname} "${opts}"
+    "${processname}" "${opts}"
 }
 
 ########
@@ -82,8 +72,6 @@ if [ $# -eq 0 ]; then
 fi
 
 read_pars "$*" || { echo "Error: wrong input parameters" >&2 ; exit 1; }
-
-check_pipeline_file || exit 1
 
 load_modules "${pfile}" || exit 1
 
