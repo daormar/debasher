@@ -234,7 +234,7 @@ absolutize_file_paths()
 
 load_module()
 {
-    echo "* Loading module ($pfile)..." >&2
+    echo "# Loading module ($pfile)..." >&2
 
     # Import panpipe module containing the pipeline to be executed
     load_pipeline_module "${pfile}" || exit 1
@@ -245,7 +245,7 @@ load_module()
 ########
 gen_ppl_file()
 {
-    echo "* Generating .ppl file ($pfile)..." >&2
+    echo "# Generating .ppl file ($pfile)..." >&2
 
     exec_pipeline_func_for_module "${pfile}" || exit 1
 
@@ -257,7 +257,7 @@ check_ppl_file()
 {
     local ppl_file=$1
 
-    echo "* Checking pipeline file ($ppl_file)..." >&2
+    echo "# Checking pipeline file ($ppl_file)..." >&2
 
     "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" || return 1
 
@@ -269,7 +269,7 @@ reorder_ppl_file()
 {
     local ppl_file=$1
 
-    echo "* Obtaining reordered pipeline file ($ppl_file)..." >&2
+    echo "# Obtaining reordered pipeline file ($ppl_file)..." >&2
 
     "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" -r 2> /dev/null || return 1
 
@@ -281,7 +281,7 @@ gen_processdeps()
 {
     local ppl_file=$1
 
-    echo "* Generating process dependencies information ($ppl_file)..." >&2
+    echo "# Generating process dependencies information ($ppl_file)..." >&2
 
     "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" -d 2> /dev/null || return 1
 
@@ -291,11 +291,11 @@ gen_processdeps()
 ########
 configure_scheduler()
 {
-    echo "* Configuring scheduler..." >&2
+    echo "# Configuring scheduler..." >&2
     echo "" >&2
 
     if [ ${sched_given} -eq 1 ]; then
-        echo "** Setting scheduler type from value of \"--sched\" option..." >&2
+        echo "## Setting scheduler type from value of \"--sched\" option..." >&2
         set_panpipe_scheduler ${sched_opt} || return 1
         echo "scheduler: ${sched_opt}" >&2
         echo "" >&2
@@ -305,7 +305,7 @@ configure_scheduler()
         # (see determine_scheduler function in panpipe_lib.sh). Once the
         # scheduler is determined, it will be set using the
         # set_panpipe_scheduler function
-        echo "** Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
+        echo "## Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
         local sched=`determine_scheduler`
         set_panpipe_scheduler ${sched} || return 1
         echo "scheduler: ${sched}" >&2
@@ -313,13 +313,13 @@ configure_scheduler()
     fi
 
     if [ ${dflt_nodes_given} -eq 1 ]; then
-        echo "** Setting default nodes for pipeline execution... (${dflt_nodes})" >&2
+        echo "## Setting default nodes for pipeline execution... (${dflt_nodes})" >&2
         set_panpipe_default_nodes ${dflt_nodes} || return 1
         echo "" >&2
     fi
 
     if [ ${dflt_throttle_given} -eq 1 ]; then
-        echo "** Setting default job array task throttle... (${dflt_throttle})" >&2
+        echo "## Setting default job array task throttle... (${dflt_throttle})" >&2
         set_panpipe_default_array_task_throttle ${dflt_throttle} || return 1
         echo "" >&2
     fi
@@ -328,7 +328,7 @@ configure_scheduler()
 ########
 load_modules()
 {
-    echo "* Loading pipeline modules..." >&2
+    echo "# Loading pipeline modules..." >&2
 
     local ppl_file=$1
 
@@ -340,7 +340,7 @@ load_modules()
 ########
 show_pipeline_opts()
 {
-    echo "* Pipeline options..." >&2
+    echo "# Pipeline options..." >&2
 
     # Read input parameters
     local ppl_file=$1
@@ -369,7 +369,7 @@ show_pipeline_opts()
 ########
 check_pipeline_opts()
 {
-    echo "* Checking pipeline options..." >&2
+    echo "# Checking pipeline options..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -443,7 +443,7 @@ process_conda_requirements_for_process()
 ########
 process_conda_requirements()
 {
-    echo "* Processing conda requirements (if any)..." >&2
+    echo "# Processing conda requirements (if any)..." >&2
 
     # Read input parameters
     local ppl_file=$1
@@ -474,7 +474,7 @@ process_conda_requirements()
 ########
 define_dont_execute_processes()
 {
-    echo "* Define processes that should not be executed (if any)..." >&2
+    echo "# Define processes that should not be executed (if any)..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -504,7 +504,7 @@ define_dont_execute_processes()
 ########
 define_forced_exec_processes()
 {
-    echo "* Defining processes forced to be reexecuted (if any)..." >&2
+    echo "# Defining processes forced to be reexecuted (if any)..." >&2
 
     # Read input parameters
     local ppl_file=$1
@@ -562,7 +562,7 @@ check_script_is_older_than_modules()
 ########
 define_reexec_processes_due_to_code_update()
 {
-    echo "* Defining processes to be reexecuted due to code updates (if any)..." >&2
+    echo "# Defining processes to be reexecuted due to code updates (if any)..." >&2
 
     # Read input parameters
     local dirname=$1
@@ -606,7 +606,7 @@ define_reexec_processes_due_to_code_update()
 ########
 define_reexec_processes_due_to_deps()
 {
-    echo "* Defining processes to be reexecuted due to dependencies (if any)..." >&2
+    echo "# Defining processes to be reexecuted due to dependencies (if any)..." >&2
 
     local processdeps_file=$1
 
@@ -635,7 +635,7 @@ print_reexec_processes()
     local reexec_processes_string=`get_reexec_processes_as_string`
 
     if [ ! -z "${reexec_processes_string}" ]; then
-        echo "* Printing list of processes to be reexecuted..." >&2
+        echo "# Printing list of processes to be reexecuted..." >&2
         echo "${reexec_processes_string}" >&2
         echo "${PANPIPE_REEXEC_PROCESSES_WARNING}" >&2
         echo "" >&2
@@ -678,7 +678,7 @@ ensure_exclusive_execution()
 ########
 create_basic_dirs()
 {
-    echo "* Creating basic directories..." >&2
+    echo "# Creating basic directories..." >&2
 
     mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     set_panpipe_outdir "${outd}"
@@ -702,7 +702,7 @@ create_basic_dirs()
 ########
 create_mod_shared_dirs()
 {
-    echo "* Creating shared directories for modules... (if any)" >&2
+    echo "# Creating shared directories for modules... (if any)" >&2
 
     # Create shared directories required by the pipeline processes
     # IMPORTANT NOTE: the following function can only be executed after
@@ -896,7 +896,7 @@ launch_processes()
 ########
 execute_pipeline_processes()
 {
-    echo "* Executing pipeline processes..." >&2
+    echo "# Executing pipeline processes..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -939,7 +939,7 @@ debug_process()
 ########
 execute_pipeline_processes_debug()
 {
-    echo "* Executing pipeline processes... (debug mode)" >&2
+    echo "# Executing pipeline processes... (debug mode)" >&2
 
     # Read input parameters
     local cmdline=$1
