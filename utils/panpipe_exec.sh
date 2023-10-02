@@ -326,18 +326,6 @@ configure_scheduler()
 }
 
 ########
-load_modules()
-{
-    echo "# Loading pipeline modules..." >&2
-
-    local ppl_file=$1
-
-    load_pipeline_modules "${ppl_file}" || return 1
-
-    echo "" >&2
-}
-
-########
 show_pipeline_opts()
 {
     echo "# Pipeline options..." >&2
@@ -533,17 +521,17 @@ define_forced_exec_processes()
 check_script_is_older_than_modules()
 {
     local script_filename=$1
-    local fullmodnames=$2
 
     # Check if script exists
     if [ -f "${script_filename}" ]; then
         # script exists
         script_older=0
         local mod
-        for mod in ${fullmodnames}; do
-            if [ "${script_filename}" -ot ${mod} ]; then
+        for mod in "${!PIPELINE_MODULES[@]}"; do
+            fullmod="${PIPELINE_MODULES[$mod]}"
+            if [ "${script_filename}" -ot ${fullmod} ]; then
                 script_older=1
-                echo "Warning: ${script_filename} is older than module ${mod}" >&2
+                echo "Warning: ${script_filename} is older than module ${fullmod}" >&2
             fi
         done
         # Return value
@@ -568,9 +556,6 @@ define_reexec_processes_due_to_code_update()
     local dirname=$1
     local ppl_file=$2
 
-    # Get names of pipeline modules
-    local fullmodnames=`get_pipeline_fullmodnames "$ppl_file"` || return 1
-
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
@@ -584,14 +569,14 @@ define_reexec_processes_due_to_code_update()
 
             # Handle checkings depending of process status
             if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
-                if check_script_is_older_than_modules "${script_filename}" "${fullmodnames}"; then
+                if check_script_is_older_than_modules "${script_filename}"; then
                     echo "Warning: last execution of process ${processname} used outdated modules">&2
                     mark_process_as_reexec $processname ${OUTDATED_CODE_REEXEC_REASON}
                 fi
             fi
 
             if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
-                if check_script_is_older_than_modules "${script_filename}" "${fullmodnames}"; then
+                if check_script_is_older_than_modules "${script_filename}"; then
                     echo "Warning: current execution of process ${processname} is using outdated modules">&2
                 fi
             fi
@@ -1002,22 +987,18 @@ gen_processdeps "${reordered_ppl_file}" > "${processdeps_file}" || exit 1
 
 configure_scheduler || exit 1
 
-# load_modules "${reordered_ppl_file}" || exit 1
-
 if [ ${showopts_given} -eq 1 ]; then
     show_pipeline_opts "${reordered_ppl_file}" || exit 1
 else
     if [ ${checkopts_given} -eq 1 ]; then
         check_pipeline_opts "${command_line}" "${reordered_ppl_file}" || exit 1
     else
-        check_pipeline_opts "${command_line}" "${reordered_ppl_file}" > "${outd}"/.ppl_opts.txt 2>&1 || exit 1
-        cat "${outd}"/.ppl_opts.txt >&2 || exit 1
+        check_pipeline_opts "${command_line}" "${reordered_ppl_file}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
-        create_mod_shared_dirs > "${outd}"/.modshrdirs.txt 2>&1 || exit 1
-        cat "${outd}"/.modshrdirs.txt >&2 || exit 1
+        create_mod_shared_dirs || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
             process_conda_requirements "${reordered_ppl_file}" || exit 1
