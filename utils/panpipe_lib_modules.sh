@@ -35,15 +35,6 @@ get_pipeline_funcname()
 }
 
 ########
-get_commasep_ppl_modules()
-{
-    local pfile=$1
-    local modules=`"$AWK" '{if($1=="#import") {$1=""; gsub(","," ",$0); printf "%s ",$0}}' $pfile | "$AWK" '{for(i=1;i<=NF;++i) {if(i>1) printf","; printf"%s",$i}}'` ; pipe_fail || return 1
-    echo "${modules}"
-}
-
-
-########
 search_mod_in_dirs()
 {
     local module=$1
@@ -125,33 +116,5 @@ load_pipeline_module()
     else
         echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
         return 1
-    fi
-}
-
-########
-get_pipeline_fullmodnames()
-{
-    local pfile=$1
-
-    file_exists "$pfile" || { echo "Error: file $pfile does not exist" >&2 ; return 1; }
-
-    local comma_sep_modules=`get_commasep_ppl_modules "$pfile"`
-
-    if [ -z "${comma_sep_modules}" ]; then
-        echo "Warning: no pipeline modules were given" >&2
-    else
-        # Get names
-        local fullmodnames
-        local blank_sep_modules=`replace_str_elem_sep_with_blank "," ${comma_sep_modules}`
-        local mod
-        for mod in ${blank_sep_modules}; do
-            local fullmodname=`determine_full_module_name $mod`
-            if [ -z "${fullmodnames}" ]; then
-                fullmodnames=${fullmodname}
-            else
-                fullmodnames="${fullmodnames} ${fullmodname}"
-            fi
-        done
-        echo "${fullmodnames}"
     fi
 }
