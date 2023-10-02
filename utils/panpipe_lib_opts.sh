@@ -719,7 +719,9 @@ register_module_pipeline_shdirs()
     local absmodname
     for absmodname in "${PIPELINE_MODULES[@]}"; do
         local shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
-        ${shrdirs_funcname} || exit 1
+        if func_exists "${shrdirs_funcname}"; then
+            ${shrdirs_funcname} || exit 1
+        fi
     done
 }
 
