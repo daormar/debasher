@@ -468,6 +468,22 @@ clear_pipeline_shdirs_array()
 }
 
 ########
+get_processname_from_caller()
+{
+    local caller_suffix=$1
+
+    for element in "${FUNCNAME[@]}"; do
+        if [[ "$element" == *"${caller_suffix}" ]]; then
+            local processname=${element%"${caller_suffix}"}
+            echo "${processname}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+########
 get_suffix_from_processname()
 {
     local processname=$1
