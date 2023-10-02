@@ -129,28 +129,6 @@ load_pipeline_module()
 }
 
 ########
-load_pipeline_modules()
-{
-    local pfile=$1
-
-    file_exists "$pfile" || { echo "Error: file "$pfile" does not exist" >&2 ; return 1; }
-
-    local comma_sep_modules=`get_commasep_ppl_modules "$pfile"`
-
-    if [ -z "${comma_sep_modules}" ]; then
-        echo "Error: no pipeline modules were given" >&2
-        return 1
-    else
-        # Load modules
-        local blank_sep_modules=`replace_str_elem_sep_with_blank "," "${comma_sep_modules}"`
-        local mod
-        for mod in ${blank_sep_modules}; do
-            load_pipeline_module "$mod" || { echo "Error while loading ${mod}" >&2 ; return 1; }
-        done
-    fi
-}
-
-########
 get_pipeline_fullmodnames()
 {
     local pfile=$1
