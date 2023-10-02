@@ -162,7 +162,7 @@ get_name_of_process_function_reset()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_reset_outdir"
+    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_RESET_OUTDIR}"
 }
 
 ########
@@ -170,7 +170,7 @@ get_name_of_process_function()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" ""
+    search_process_mandatory_func "${processname}" "${PROCESS_FUNC_SUFFIX_EXEC}"
 }
 
 ########
@@ -178,7 +178,7 @@ get_name_of_process_function_post()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_post"
+    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_POST}"
 }
 
 ########
@@ -186,7 +186,7 @@ get_name_of_process_function_outdir()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_outdir_basename"
+    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_OUTDIR}"
 }
 
 ########
@@ -194,7 +194,7 @@ get_explain_cmdline_opts_funcname()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "_explain_cmdline_opts"
+    search_process_mandatory_func "${processname}" "${PROCESS_FUNC_SUFFIX_EXPLAIN_CMDLINE_OPTS}"
 }
 
 ########
@@ -202,7 +202,7 @@ get_define_opts_funcname()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "_define_opts"
+    search_process_mandatory_func "${processname}" "${PROCESS_FUNC_SUFFIX_DEFINE_OPTS}"
 }
 
 ########
@@ -210,7 +210,7 @@ get_should_execute_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_should_execute"
+    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_SHOULD_EXECUTE}"
 }
 
 ########
@@ -218,7 +218,7 @@ get_conda_envs_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_conda_envs"
+    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_CONDA_ENVS}"
 }
 
 ########
@@ -226,7 +226,7 @@ get_fifos_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_fifos"
+    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_FIFOS}"
 }
 
 ########
