@@ -81,7 +81,7 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print("pipe_check     -p <string> [-r|-g|-d] [-v]", file=sys.stderr)
+    print("panpipe_check  -p <string> [-r|-g|-d] [-v]", file=sys.stderr)
     print("", file=sys.stderr)
     print("-p <string>    Pipeline file", file=sys.stderr)
     print("-r             Print reordered pipeline", file=sys.stderr)
