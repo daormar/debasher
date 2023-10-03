@@ -486,10 +486,14 @@ get_process_outdir_adaptive()
     local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
 
     # Get adaptive process name
-    local adaptive_processname="${basic_outd}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
+    local adaptive_processname="${processname}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
 
-    # Append suffix to output directory
-    echo "${adaptive_processname}"
+    # Return result depending on whether the process is defined
+    if process_is_defined "${adaptive_processname}"; then
+        echo "${basic_outd}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
+    else
+        get_process_outdir "${processname}"
+    fi
 }
 
 ########
