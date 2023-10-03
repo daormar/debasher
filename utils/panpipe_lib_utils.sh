@@ -557,3 +557,13 @@ search_process_mandatory_func()
         echo "${process_function}"
     fi
 }
+
+########
+get_module_funcname()
+{
+    local modname=$1
+    local method_name=$2
+
+    local mod_function="${modname}${method_name}"
+    echo ${mod_function}
+}

@@ -21,7 +21,7 @@ get_shrdirs_funcname()
 
     local modname=`get_modname_from_absmodname "${absmodname}"`
 
-    echo "${modname}${MODULE_METHOD_NAME_SHRDIRS}"
+    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_SHRDIRS}"
 }
 
 ########
@@ -31,7 +31,7 @@ get_pipeline_funcname()
 
     local modname=`get_modname_from_absmodname "${absmodname}"`
 
-    echo "${modname}${MODULE_METHOD_NAME_PIPELINE}"
+    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_PIPELINE}"
 }
 
 ########
