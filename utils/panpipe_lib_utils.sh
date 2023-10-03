@@ -500,21 +500,31 @@ remove_suffix_from_processname()
 }
 
 ########
+get_process_funcname()
+{
+    local processname=$1
+    local funcname_suffix=$2
+
+    local process_function="${processname}${funcname_suffix}"
+    echo ${process_function}
+}
+
+########
 search_process_func()
 {
     local processname=$1
     local funcname_suffix=$2
 
     # Check if function exists
-    local process_function_reset="${processname}${funcname_suffix}"
-    if func_exists ${process_function_reset}; then
-        echo ${process_function_reset}
+    local process_function=`get_process_funcname "${processname}" "${funcname_suffix}"`
+    if func_exists "${process_function}"; then
+        echo "${process_function}"
     else
         # Check if function without process suffix exists
         local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        process_function_reset="${processname_wo_proc_suffix}${funcname_suffix}"
-        if func_exists ${process_function_reset}; then
-            echo ${process_function_reset}
+        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${funcname_suffix}"`
+        if func_exists "${process_function}"; then
+            echo "${process_function}"
         else
             echo ${FUNCT_NOT_FOUND}
         fi
@@ -528,12 +538,13 @@ search_process_mandatory_func()
     local funcname_suffix=$2
 
     # Check if function exists
-    local process_function="${processname}${funcname_suffix}"
-    if func_exists ${process_function}; then
-        echo ${process_function}
+    local process_function=`get_process_funcname "${processname}" "${funcname_suffix}"`
+    if func_exists "${process_function}"; then
+        echo "${process_function}"
     else
         # Return function name without process suffix
         local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        echo "${processname_wo_proc_suffix}${funcname_suffix}"
+        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${funcname_suffix}"`
+        echo "${process_function}"
     fi
 }
