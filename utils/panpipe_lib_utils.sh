@@ -500,6 +500,15 @@ remove_suffix_from_processname()
 }
 
 ########
+get_processname_given_suffix()
+{
+    local processname=$1
+    local process_suffix=$2
+
+    echo "${processname}${PROCESSNAME_SUFFIX_SEP}${process_suffix}"
+}
+
+########
 get_process_funcname()
 {
     local processname=$1
