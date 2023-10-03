@@ -510,9 +510,9 @@ search_process_func()
     if func_exists ${process_function_reset}; then
         echo ${process_function_reset}
     else
-        # Check if function without suffix exists
-        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-        process_function_reset="${processname_wo_suffix}${funcname_suffix}"
+        # Check if function without process suffix exists
+        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
+        process_function_reset="${processname_wo_proc_suffix}${funcname_suffix}"
         if func_exists ${process_function_reset}; then
             echo ${process_function_reset}
         else
@@ -532,8 +532,8 @@ search_process_mandatory_func()
     if func_exists ${process_function}; then
         echo ${process_function}
     else
-        # Return function name without suffix
-        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-        echo "${processname_wo_suffix}${funcname_suffix}"
+        # Return function name without process suffix
+        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
+        echo "${processname_wo_proc_suffix}${funcname_suffix}"
     fi
 }
