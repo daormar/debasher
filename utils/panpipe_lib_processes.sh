@@ -230,6 +230,19 @@ get_fifos_funcname()
 }
 
 ########
+process_is_defined()
+{
+    local processname=$1
+    local funcname=`get_define_opts_funcname "${processname}"`
+
+    if func_exists "${funcname}"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 define_opts_for_script()
 {
     local cmdline=$1
@@ -472,8 +485,11 @@ get_process_outdir_adaptive()
     # Get suffix of caller process name
     local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
 
+    # Get adaptive process name
+    local adaptive_processname="${basic_outd}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
+
     # Append suffix to output directory
-    echo "${basic_outd}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
+    echo "${adaptive_processname}"
 }
 
 ########
