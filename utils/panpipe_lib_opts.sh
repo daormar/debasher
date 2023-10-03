@@ -454,6 +454,12 @@ print_pipeline_opts()
 define_fifo()
 {
     local fifoname=$1
+    local dependency=$2
+
+    # Check if a dependency was given
+    if [ -z "${dependency}" ]; then
+        dependency=${NONE_PROCESSDEP_TYPE}
+    fi
 
     # Get process name
     local processname=`get_processname_from_caller "${PROCESS_FUNC_SUFFIX_FIFOS}"`
@@ -465,6 +471,14 @@ define_fifo()
     else
         # Store name of FIFO in associative array
         PIPELINE_FIFOS[${fifoname}]=${processname}
+
+        # Store FIFO dependency type
+        if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}"]; then
+            FIFOS_DEPTYPES[${fifoname}]=${dependency}
+        else
+            errmsg "Error: dependency type for FIFO not valid (${dependency})"
+            return 1
+        fi
     fi
 }
 

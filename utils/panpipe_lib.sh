@@ -168,6 +168,9 @@ declare -A PIPELINE_SHDIRS
 # Declare associative array to store names of fifos
 declare -A PIPELINE_FIFOS
 
+# Declare associative array to store dependency types for fifos
+declare -A FIFOS_DEPTYPES
+
 # Declare general scheduler-related variables
 declare PANPIPE_SCHEDULER
 declare -A PANPIPE_REEXEC_PROCESSES
