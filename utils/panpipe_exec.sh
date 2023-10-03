@@ -259,7 +259,7 @@ check_ppl_file()
 
     echo "# Checking pipeline file ($ppl_file)..." >&2
 
-    "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${ppl_file}" || return 1
 
     echo "" >&2
 }
@@ -271,7 +271,7 @@ reorder_ppl_file()
 
     echo "# Obtaining reordered pipeline file ($ppl_file)..." >&2
 
-    "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" -r 2> /dev/null || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${ppl_file}" -r 2> /dev/null || return 1
 
     echo "" >&2
 }
@@ -283,7 +283,7 @@ gen_processdeps()
 
     echo "# Generating process dependencies information ($ppl_file)..." >&2
 
-    "${panpipe_bindir}"/panpipe_check -p "${ppl_file}" -d 2> /dev/null || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${ppl_file}" -d 2> /dev/null || return 1
 
     echo "" >&2
 }
