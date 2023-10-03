@@ -456,7 +456,7 @@ define_fifo()
     local fifoname=$1
 
     # Get process name
-    local processname="${FUNCNAME[1]}" # Get name of caller
+    local processname=`get_processname_from_caller "${PROCESS_FUNC_SUFFIX_FIFOS}"`
 
     # Check if FIFO was previously defined
     if [ "${PIPELINE_FIFOS[${fifoname}]}" != "" ]; then
