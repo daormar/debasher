@@ -182,7 +182,8 @@ apply_suffix_to_processdeps()
         if [ "${deptype}" = "${NONE_PROCESSDEP_TYPE}" ]; then
             local modified_dep="${deptype}"
         else
-            local modified_dep="${deptype}:${processname}${PROCESSNAME_SUFFIX_SEP}${suffix}"
+            local processname_with_suff=`get_processname_given_suffix "${processname}" "${suffix}"`
+            local modified_dep="${deptype}:${processname_with_suff}"
         fi
         # Add modified dependency to result
         if [ -z "${result}" ]; then
@@ -211,7 +212,8 @@ apply_suffix_to_pipeline_entry()
     # Iterate over the indices of the words array
     for i in "${!words[@]}"; do
         if [ "${i}" -eq 0 ]; then
-            result="${words[$i]}${PROCESSNAME_SUFFIX_SEP}${suffix}"
+            local processname_with_suff=`get_processname_given_suffix "${words[$i]}" "${suffix}"`
+            result="${processname_with_suff}"
         else
             if [[ "${words[$i]}" == "${PROCESSDEPS_SPEC}"* ]]; then
                 processdeps=`extract_processdeps_from_process_spec "${words[$i]}"`

@@ -470,11 +470,11 @@ clear_pipeline_shdirs_array()
 ########
 get_processname_from_caller()
 {
-    local caller_suffix=$1
+    local caller_method_name=$1
 
     for element in "${FUNCNAME[@]}"; do
-        if [[ "$element" == *"${caller_suffix}" ]]; then
-            local processname=${element%"${caller_suffix}"}
+        if [[ "$element" == *"${caller_method_name}" ]]; then
+            local processname=${element%"${caller_method_name}"}
             echo "${processname}"
             return 0
         fi
@@ -503,18 +503,18 @@ remove_suffix_from_processname()
 get_processname_given_suffix()
 {
     local processname=$1
-    local process_suffix=$2
+    local suffix=$2
 
-    echo "${processname}${PROCESSNAME_SUFFIX_SEP}${process_suffix}"
+    echo "${processname}${PROCESSNAME_SUFFIX_SEP}${suffix}"
 }
 
 ########
 get_process_funcname()
 {
     local processname=$1
-    local funcname_suffix=$2
+    local method_name=$2
 
-    local process_function="${processname}${funcname_suffix}"
+    local process_function="${processname}${method_name}"
     echo ${process_function}
 }
 
@@ -522,16 +522,16 @@ get_process_funcname()
 search_process_func()
 {
     local processname=$1
-    local funcname_suffix=$2
+    local method_name=$2
 
     # Check if function exists
-    local process_function=`get_process_funcname "${processname}" "${funcname_suffix}"`
+    local process_function=`get_process_funcname "${processname}" "${method_name}"`
     if func_exists "${process_function}"; then
         echo "${process_function}"
     else
         # Check if function without process suffix exists
         local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${funcname_suffix}"`
+        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${method_name}"`
         if func_exists "${process_function}"; then
             echo "${process_function}"
         else
@@ -544,16 +544,16 @@ search_process_func()
 search_process_mandatory_func()
 {
     local processname=$1
-    local funcname_suffix=$2
+    local method_name=$2
 
     # Check if function exists
-    local process_function=`get_process_funcname "${processname}" "${funcname_suffix}"`
+    local process_function=`get_process_funcname "${processname}" "${method_name}"`
     if func_exists "${process_function}"; then
         echo "${process_function}"
     else
         # Return function name without process suffix
         local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${funcname_suffix}"`
+        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${method_name}"`
         echo "${process_function}"
     fi
 }

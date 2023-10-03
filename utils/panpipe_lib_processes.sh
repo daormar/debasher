@@ -162,7 +162,7 @@ get_name_of_process_function_reset()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_RESET_OUTDIR}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_RESET_OUTDIR}"
 }
 
 ########
@@ -170,7 +170,7 @@ get_name_of_process_function()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "${PROCESS_FUNC_SUFFIX_EXEC}"
+    search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXEC}"
 }
 
 ########
@@ -178,7 +178,7 @@ get_name_of_process_function_post()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_POST}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_POST}"
 }
 
 ########
@@ -186,7 +186,7 @@ get_name_of_process_function_outdir()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_OUTDIR}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_OUTDIR}"
 }
 
 ########
@@ -194,7 +194,7 @@ get_explain_cmdline_opts_funcname()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "${PROCESS_FUNC_SUFFIX_EXPLAIN_CMDLINE_OPTS}"
+    search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
 }
 
 ########
@@ -202,7 +202,7 @@ get_define_opts_funcname()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "${PROCESS_FUNC_SUFFIX_DEFINE_OPTS}"
+    search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPTS}"
 }
 
 ########
@@ -210,7 +210,7 @@ get_should_execute_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_SHOULD_EXECUTE}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_SHOULD_EXECUTE}"
 }
 
 ########
@@ -218,7 +218,7 @@ get_conda_envs_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_CONDA_ENVS}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_CONDA_ENVS}"
 }
 
 ########
@@ -226,7 +226,7 @@ get_fifos_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_FUNC_SUFFIX_FIFOS}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_FIFOS}"
 }
 
 ########
@@ -480,17 +480,17 @@ get_process_outdir_adaptive()
     local basic_outd=`get_process_outdir_given_dirname "${outd}" "${processname}"`
 
     # Get caller process name
-    local caller_processname=`$(get_processname_from_caller "${PROCESS_FUNC_SUFFIX_DEFINE_OPTS}")`
+    local caller_processname=`$(get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}")`
 
     # Get suffix of caller process name
     local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
 
     # Get adaptive process name
-    local adaptive_processname="${processname}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
+    local adaptive_processname=`get_processname_given_suffix "${processname}" "${caller_suffix}"`
 
     # Return result depending on whether the process is defined
     if process_is_defined "${adaptive_processname}"; then
-        echo "${basic_outd}${PROCESSNAME_SUFFIX_SEP}${caller_suffix}"
+        get_process_outdir "${adaptive_processname}"
     else
         get_process_outdir "${processname}"
     fi
