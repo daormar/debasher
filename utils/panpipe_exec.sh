@@ -386,7 +386,7 @@ check_pipeline_opts()
 }
 
 ########
-process_conda_req_entry()
+get_conda_req_entry()
 {
     local env_name=$1
     local yml_fname=$2
@@ -407,7 +407,7 @@ process_conda_req_entry()
 }
 
 ########
-process_conda_requirements_for_process()
+get_conda_requirements_for_process()
 {
     processname=$1
     process_conda_envs=$2
@@ -421,7 +421,7 @@ process_conda_requirements_for_process()
         if [ ${arraylen} -ge 2 ]; then
             local env_name=${array[0]}
             local yml_fname=${array[1]}
-            process_conda_req_entry "${env_name}" "${yml_fname}" || return 1
+            get_conda_req_entry "${env_name}" "${yml_fname}" || return 1
         else
             echo "Error: invalid conda entry for process ${processname}; Entry: ${process_conda_envs}" >&2
         fi
@@ -429,7 +429,7 @@ process_conda_requirements_for_process()
 }
 
 ########
-process_conda_requirements()
+get_conda_requirements()
 {
     echo "# Processing conda requirements (if any)..." >&2
 
@@ -449,7 +449,7 @@ process_conda_requirements()
             local conda_envs_funcname=`get_conda_envs_funcname ${processname}`
             if func_exists ${conda_envs_funcname}; then
                 process_conda_envs=`${conda_envs_funcname}` || exit 1
-                process_conda_requirements_for_process ${processname} "${process_conda_envs}" || return 1
+                get_conda_requirements_for_process "${processname}" "${process_conda_envs}" || return 1
             fi
         fi
     done < "${ppl_file}"
@@ -1001,7 +1001,7 @@ else
         create_mod_shared_dirs || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
-            process_conda_requirements "${reordered_ppl_file}" || exit 1
+            get_conda_requirements "${reordered_ppl_file}" || exit 1
         fi
 
         define_dont_execute_processes "${command_line}" "${reordered_ppl_file}" || exit 1
