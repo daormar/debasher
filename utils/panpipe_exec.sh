@@ -386,7 +386,7 @@ check_pipeline_opts()
 }
 
 ########
-get_conda_req_entry()
+handle_conda_req_entry()
 {
     local env_name=$1
     local yml_fname=$2
@@ -407,7 +407,7 @@ get_conda_req_entry()
 }
 
 ########
-get_conda_requirements_for_process()
+handle_conda_requirements_for_process()
 {
     processname=$1
     process_conda_envs=$2
@@ -421,7 +421,7 @@ get_conda_requirements_for_process()
         if [ ${arraylen} -ge 2 ]; then
             local env_name=${array[0]}
             local yml_fname=${array[1]}
-            get_conda_req_entry "${env_name}" "${yml_fname}" || return 1
+            handle_conda_req_entry "${env_name}" "${yml_fname}" || return 1
         else
             echo "Error: invalid conda entry for process ${processname}; Entry: ${process_conda_envs}" >&2
         fi
@@ -429,9 +429,9 @@ get_conda_requirements_for_process()
 }
 
 ########
-get_conda_requirements()
+handle_conda_requirements()
 {
-    echo "# Processing conda requirements (if any)..." >&2
+    echo "# Handling conda requirements (if any)..." >&2
 
     # Read input parameters
     local ppl_file=$1
@@ -449,12 +449,12 @@ get_conda_requirements()
             local conda_envs_funcname=`get_conda_envs_funcname ${processname}`
             if func_exists ${conda_envs_funcname}; then
                 process_conda_envs=`${conda_envs_funcname}` || exit 1
-                get_conda_requirements_for_process "${processname}" "${process_conda_envs}" || return 1
+                handle_conda_requirements_for_process "${processname}" "${process_conda_envs}" || return 1
             fi
         fi
     done < "${ppl_file}"
 
-    echo "Processing complete" >&2
+    echo "Handling complete" >&2
 
     echo "" >&2
 }
@@ -697,7 +697,7 @@ create_mod_shared_dirs()
 
     show_pipeline_shdirs >&2
 
-    echo "Registration complete" >&2
+    echo "Creation complete" >&2
 
     echo "" >&2
 }
@@ -750,7 +750,7 @@ get_processdeps()
                     ;;
             "none") echo ""
                     ;;
-            *) get_processdeps_from_detailed_spec ${processdeps_spec}
+            *) get_processdeps_from_detailed_spec "${processdeps_spec}"
                ;;
     esac
 }
@@ -1001,7 +1001,7 @@ else
         create_mod_shared_dirs || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
-            get_conda_requirements "${reordered_ppl_file}" || exit 1
+            handle_conda_requirements "${reordered_ppl_file}" || exit 1
         fi
 
         define_dont_execute_processes "${command_line}" "${reordered_ppl_file}" || exit 1
