@@ -151,10 +151,10 @@ add_panpipe_process()
     # Initialize variables
     local processname=$1
     local process_computational_specs=$2
-    local process_dependencies=$3
+    local process_additional_specs=$3
 
     # Print process pipeline line
-    echo "${processname}" "${process_computational_specs}" "${process_dependencies}"
+    echo "${processname}" "${process_computational_specs}" "${process_additional_specs}"
 }
 
 ########
