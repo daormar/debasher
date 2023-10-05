@@ -85,7 +85,7 @@ check_pars()
 ########
 get_process_doc_funcnames()
 {
-    declare -F | "$AWK" '{start=index($3,"_document"); if(start!=0 && start-1+length("_document")==length($3)) printf"%s\n",$3}'
+    declare -F | "$AWK" -v method_doc="${PROCESS_METHOD_NAME_DOCUMENT}" '{start=index($3,method_doc); if(start!=0 && start-1+length(method_doc)==length($3)) printf"%s\n",$3}'
 }
 
 ########
@@ -96,8 +96,8 @@ obtain_info_for_module()
 
     # Iterate over process documentation functions
     while read process_doc_func; do
-        local processname=${process_doc_func%"_document"}
-        document_process ${processname} ${showopts_given}
+        local processname=${process_doc_func%"${PROCESS_METHOD_NAME_DOCUMENT}"}
+        document_process "${processname}" "${showopts_given}"
     done < <(get_process_doc_funcnames)
 }
 

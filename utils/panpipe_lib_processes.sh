@@ -7,7 +7,7 @@ get_document_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "_document"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCUMENT}"
 }
 
 ########
