@@ -464,22 +464,16 @@ define_fifo()
     # Get process name
     local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
 
-    # Check if FIFO was previously defined
-    if [ "${PIPELINE_FIFOS[${fifoname}]}" != "" ]; then
-        errmsg "Error: FIFO was previously defined (${fifoname})"
-        return 1
-    else
-        # Store name of FIFO in associative arrays
-        PIPELINE_FIFOS[${fifoname}]=${processname}
-        PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}
+    # Store name of FIFO in associative arrays
+    PIPELINE_FIFOS[${fifoname}]=${processname}
+    PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}
 
-        # Store FIFO dependency type
-        if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ]; then
-            FIFOS_DEPTYPES[${fifoname}]=${dependency}
-        else
-            errmsg "Error: dependency type for FIFO not valid (${dependency})"
-            return 1
-        fi
+    # Store FIFO dependency type
+    if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ]; then
+        FIFOS_DEPTYPES[${fifoname}]=${dependency}
+    else
+        errmsg "Error: dependency type for FIFO not valid (${dependency})"
+        return 1
     fi
 }
 
@@ -777,6 +771,15 @@ show_pipeline_fifos()
 }
 
 ########
+show_pipeline_fifos_def_opts()
+{
+    local fifoname
+    for fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
+        echo "${fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]}
+    done
+}
+
+########
 prepare_fifos_owned_by_process()
 {
     local processname=$1
@@ -799,10 +802,6 @@ get_absolute_shdirname()
 {
     local shdirname=$1
 
-    # Register the name of the shared directory so as to enable its
-    # creation later
-    define_shared_dir "${shdirname}"
-
     # Output absolute shared directory name
     echo "${PIPELINE_OUTDIR}/${shdirname}"
 }
@@ -824,22 +823,6 @@ get_absolute_fifoname()
 }
 
 ########
-get_absolute_fifoname_as_owner()
-{
-    local fifoname=$1
-    local deptype=$2
-
-    # Define FIFO
-    define_fifo "${fifoname}" "${deptype}"
-
-    # Obtain directory
-    local fifodir=`get_absolute_fifodir`
-
-    # Return name
-    echo "${fifodir}/${fifoname}"
-}
-
-########
 get_absolute_condadir()
 {
     echo "${PIPELINE_OUTDIR}/.conda"
@@ -848,12 +831,12 @@ get_absolute_condadir()
 ########
 clear_opt_list_array()
 {
-    unset SCRIPT_OPT_LIST_ARRAY
+    unset PROCESS_OPT_LIST_ARRAY
 }
 
 ########
 save_opt_list()
 {
     local optlist_varname=$1
-    SCRIPT_OPT_LIST_ARRAY+=("${!optlist_varname}")
+    PROCESS_OPT_LIST_ARRAY+=("${!optlist_varname}")
 }
