@@ -958,7 +958,7 @@ builtin_sched_execute_funct_plus_postfunct()
     local reset_funct=$5
     local funct=$6
     local post_funct=$7
-    local script_opts=$8
+    local process_opts=$8
 
     display_begin_process_message
 
@@ -970,11 +970,11 @@ builtin_sched_execute_funct_plus_postfunct()
             default_reset_outdir_for_process_array "${dirname}" ${processname} ${taskidx}
         fi
     else
-        ${reset_funct} "${script_opts}"
+        ${reset_funct} "${process_opts}"
     fi
 
     # Execute process function
-    $funct "${script_opts}"
+    $funct "${process_opts}"
     local funct_exit_code=$?
     if [ ${funct_exit_code} -ne 0 ]; then
         echo "Error: execution of ${funct} failed with exit code ${funct_exit_code}" >&2
@@ -984,7 +984,7 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Execute process post-function
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        ${post_funct} "${script_opts}" || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
+        ${post_funct} "${process_opts}" || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
     fi
 
     # Treat errors
@@ -1009,7 +1009,7 @@ builtin_sched_print_script_body()
     local reset_funct=$5
     local funct=$6
     local post_funct=$7
-    local script_opts=$8
+    local process_opts=$8
 
     # Write treatment for task id
     if [ ${num_scripts} -gt 1 ]; then
@@ -1020,10 +1020,10 @@ builtin_sched_print_script_body()
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
         local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${processname} ${taskidx}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
     else
         local builtin_log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${script_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 
     # Close if statement
@@ -1064,10 +1064,10 @@ builtin_sched_create_script()
 
     # Iterate over options array
     local lineno=1
-    local script_opts
-    for script_opts in "${opts_array[@]}"; do
+    local process_opts
+    for process_opts in "${opts_array[@]}"; do
 
-        builtin_sched_print_script_body ${num_scripts} "${dirname}" ${processname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> "${fname}" || return 1
+        builtin_sched_print_script_body ${num_scripts} "${dirname}" ${processname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${process_opts}" >> "${fname}" || return 1
 
         lineno=$((lineno + 1))
 
@@ -1155,10 +1155,10 @@ builtin_sched_execute_process()
 
     # Create script
     define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-    local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
-    local array_size=${#script_opts_array[@]}
+    local process_opts_array=("${PROCESS_OPT_LIST_ARRAY[@]}")
+    local array_size=${#process_opts_array[@]}
     if [ "${launched_tasks}" = "" ]; then
-        builtin_sched_create_script "${dirname}" ${processname} "script_opts_array"
+        builtin_sched_create_script "${dirname}" ${processname} "process_opts_array"
     fi
 
     # Archive script
@@ -1303,8 +1303,8 @@ builtin_sched_prepare_files_and_dirs_for_process()
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-        local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
-        local array_size=${#script_opts_array[@]}
+        local process_opts_array=("${PROCESS_OPT_LIST_ARRAY[@]}")
+        local array_size=${#process_opts_array[@]}
 
         # Prepare files for process
         create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
