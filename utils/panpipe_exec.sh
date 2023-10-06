@@ -26,7 +26,7 @@
 
 # MISC. CONSTANTS
 LOCKFD=99
-MAX_NUM_SCRIPT_OPTS_TO_DISPLAY=10
+MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
 REEXEC_PROCESSES_LIST_FNAME=".reexec_processes_due_to_deps.txt"
 
 ####################
@@ -362,12 +362,11 @@ check_pipeline_opts()
     # Read input parameters
     local cmdline=$1
     local procspec_file=$2
-    local outfile=$3
+    local out_opts_file=$3
+    local out_fifos_file=$4
 
-    # Remove output file if exists
-    if [ -f "${outfile}" ]; then
-        rm "${outfile}"
-    fi
+    # Remove output files
+    rm -f "${out_opts_file}" "${out_fifos_file}"
 
     # Read information about the processes to be executed
     while read process_spec; do
@@ -377,15 +376,19 @@ check_pipeline_opts()
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-            local script_opts_array=()
-            for script_opts in "${SCRIPT_OPT_LIST_ARRAY[@]}"; do
+            local process_opts_array=()
+            for process_opts in "${PROCESS_OPT_LIST_ARRAY[@]}"; do
                 # Obtain human-readable representation of script options
-                hr_script_opts=$(sargs_to_sargsquotes "${script_opts}")
-                script_opts_array+=("${hr_script_opts}")
+                hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
+                process_opts_array+=("${hr_process_opts}")
             done
-            local serial_script_opts=`serialize_string_array "script_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_SCRIPT_OPTS_TO_DISPLAY}`
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_script_opts}" >&2
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_script_opts}" >> "${outfile}"
+            # Generate info about options
+            local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}`
+            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >&2
+            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >> "${out_opts_file}"
+
+            # Generate info about fifos
+            show_pipeline_fifos_def_opts >> "${out_fifos_file}"
         fi
     done < "${procspec_file}"
 
@@ -779,8 +782,8 @@ prepare_files_and_dirs_for_process()
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-        local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
-        local array_size=${#script_opts_array[@]}
+        local process_opts_array=("${PROCESS_OPT_LIST_ARRAY[@]}")
+        local array_size=${#process_opts_array[@]}
 
         # Prepare files and directories for process
         create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
@@ -831,9 +834,9 @@ launch_process()
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" -a "${status}" != "${DONT_EXECUTE_PROCESS_STATUS}" ]; then
         # Create script
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-        local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
-        local array_size=${#script_opts_array[@]}
-        create_script "${dirname}" ${processname} "script_opts_array"
+        local process_opts_array=("${PROCESS_OPT_LIST_ARRAY[@]}")
+        local array_size=${#process_opts_array[@]}
+        create_script "${dirname}" ${processname} "process_opts_array"
 
         # Archive script
         archive_script "${dirname}" ${processname}
@@ -999,10 +1002,11 @@ if [ ${showopts_given} -eq 1 ]; then
     show_pipeline_opts "${reordered_procspec_file}" || exit 1
 else
     pipeline_opts_file="${ppl_file_pref}.${PPLOPTS_FEXT}"
+    pipeline_fifos_file="${ppl_file_pref}.${FIFOS_FEXT}"
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" "${reordered_procspec_file}" "${pipeline_opts_file}" || exit 1
+        check_pipeline_opts "${command_line}" "${reordered_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
     else
-        check_pipeline_opts "${command_line}" "${reordered_procspec_file}" "${pipeline_opts_file}" || exit 1
+        check_pipeline_opts "${command_line}" "${reordered_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
