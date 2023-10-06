@@ -773,9 +773,9 @@ prepare_files_and_dirs_for_process()
     ## Obtain process status
     local status=`get_process_status ${dirname} ${processname}`
 
-    ## Decide whether the process should be executed (NOTE: for process
-    ## that should not be executed, files and directories are still
-    ## prepared)
+    ## Decide whether the process should be executed (NOTE: for a
+    ## process that should not be executed, files and directories are
+    ## still prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
