@@ -772,7 +772,7 @@ show_pipeline_fifos()
 {
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        echo ${PIPELINE_FIFOS["${fifoname}"]} "${fifoname}"
+        echo "${fifoname}" ${PIPELINE_FIFOS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]}
     done
 }
 
