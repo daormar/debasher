@@ -64,7 +64,7 @@ print_script_body_slurm_sched()
     local reset_funct=$5
     local funct=$6
     local post_funct=$7
-    local script_opts=$8
+    local process_opts=$8
 
     # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
@@ -79,17 +79,17 @@ print_script_body_slurm_sched()
             echo "default_reset_outdir_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
         fi
     else
-        echo "${reset_funct} \"$(esc_dq "${script_opts}")\""
+        echo "${reset_funct} \"$(esc_dq "${process_opts}")\""
     fi
 
     # Write function to be executed
-    echo "${funct} \"$(esc_dq "${script_opts}")\""
+    echo "${funct} \"$(esc_dq "${process_opts}")\""
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
 
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} \"$(esc_dq "${script_opts}")\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
+        echo "${post_funct} \"$(esc_dq "${process_opts}")\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
     # Return if function to execute failed
@@ -137,10 +137,10 @@ create_slurm_script()
 
     # Iterate over options array
     local lineno=1
-    local script_opts
-    for script_opts in "${opts_array[@]}"; do
+    local process_opts
+    for process_opts in "${opts_array[@]}"; do
 
-        print_script_body_slurm_sched ${num_scripts} "${dirname}" ${processname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${script_opts}" >> "${fname}" || return 1
+        print_script_body_slurm_sched ${num_scripts} "${dirname}" ${processname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${process_opts}" >> "${fname}" || return 1
 
         lineno=$((lineno + 1))
 
