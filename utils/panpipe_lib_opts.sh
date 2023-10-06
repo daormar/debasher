@@ -832,7 +832,7 @@ get_absolute_condadir()
 clear_opt_list_array()
 {
     unset CURRENT_PROCESS_OPT_LIST
-    declare -g CURRENT_PROCESS_OPT_LIST=""
+    declare -ga CURRENT_PROCESS_OPT_LIST=""
 }
 
 ########

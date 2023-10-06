@@ -156,8 +156,9 @@ declare -A MEMOIZED_OPTS
 # memoizing options
 declare LAST_PROC_LINE_MEMOPTS=""
 
-# Declare string used to save option list for current process
-declare CURRENT_PROCESS_OPT_LIST=""
+# Declare array to save option lists for current process (an array is
+# needed to support multiple process executions)
+declare -a CURRENT_PROCESS_OPT_LIST
 
 # Declare associative array used to save option lists for all processes
 declare -A PROCESS_OPT_LIST
