@@ -39,7 +39,7 @@ def take_pars():
     values["verbose"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"p:rgdv",["pfile=","print-reord","print-graph","print-deps","verbose"])
+        opts, args = getopt.getopt(sys.argv[1:],"p:rgdv",["prefix=","print-reord","print-graph","print-deps","verbose"])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -49,7 +49,7 @@ def take_pars():
     else:
         for opt, arg in opts:
             if opt in ("-p", "--pfile"):
-                values["pfile"] = arg
+                values["prefix"] = arg
                 flags["p_given"]=True
             elif opt in ("-r", "--print-reord"):
                 flags["r_given"]=True
@@ -83,18 +83,18 @@ def check_pars(flags,values):
 def print_help():
     print("panpipe_check  -p <string> [-r|-g|-d] [-v]", file=sys.stderr)
     print("", file=sys.stderr)
-    print("-p <string>    Pipeline file", file=sys.stderr)
-    print("-r             Print reordered pipeline", file=sys.stderr)
+    print("-p <string>    Prefix of pipeline files", file=sys.stderr)
+    print("-r             Print reordered process specification", file=sys.stderr)
     print("-g             Print pipeline in graphviz format", file=sys.stderr)
     print("-d             Print dependencies for each process", file=sys.stderr)
     print("-v             Verbose mode", file=sys.stderr)
 
 ##################################################
 def process_pars(flags,values):
-    config_entries = extract_config_entries(values["pfile"])
-    entries_lineno,process_entries = extract_process_entries(values["pfile"])
+    procspec_file = get_procspec_fname(values["prefix"])
+    entries_lineno, process_entries = extract_process_entries(procspec_file)
     multiattempt_processes = extract_processes_with_multiattempt(process_entries)
-    deps_syntax_ok,processdeps_sep,processdeps_map = extract_processdeps_info(entries_lineno,process_entries)
+    deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno,process_entries)
     if(not deps_syntax_ok):
        print("Process dependencies are not syntactically correct", file=sys.stderr)
        return 1
@@ -102,16 +102,16 @@ def process_pars(flags,values):
        print("Process names are not valid", file=sys.stderr)
        return 1
     ordered_process_entries = []
-    if(processdeps_correct(entries_lineno,process_entries,multiattempt_processes,processdeps_map,ordered_process_entries)):
-        print("Pipeline file is correct", file=sys.stderr)
+    if(processdeps_correct(entries_lineno, process_entries, multiattempt_processes, processdeps_map, ordered_process_entries)):
+        print("Process specification is correct", file=sys.stderr)
         if(flags["r_given"]):
-            print_entries(config_entries,ordered_process_entries)
+            print_entries(ordered_process_entries)
         elif(flags["g_given"]):
-            print_graph(ordered_process_entries,processdeps_sep,processdeps_map)
+            print_graph(ordered_process_entries, processdeps_sep,processdeps_map)
         elif(flags["d_given"]):
-            print_deps(ordered_process_entries,processdeps_map)
+            print_deps(ordered_process_entries, processdeps_map)
     else:
-        print("Pipeline file is not correct", file=sys.stderr)
+        print("Process specification is not correct", file=sys.stderr)
         return 1
 
 ##################################################
