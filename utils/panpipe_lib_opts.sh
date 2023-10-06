@@ -831,12 +831,12 @@ get_absolute_condadir()
 ########
 clear_opt_list_array()
 {
-    unset PROCESS_OPT_LIST_ARRAY
+    unset CURRENT_PROCESS_OPT_LIST
 }
 
 ########
 save_opt_list()
 {
     local optlist_varname=$1
-    PROCESS_OPT_LIST_ARRAY+=("${!optlist_varname}")
+    CURRENT_PROCESS_OPT_LIST+=("${!optlist_varname}")
 }

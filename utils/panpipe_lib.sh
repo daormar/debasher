@@ -156,8 +156,8 @@ declare -A MEMOIZED_OPTS
 # memoizing options
 declare LAST_PROC_LINE_MEMOPTS=""
 
-# Declare array used to save option lists for processes
-declare -a PROCESS_OPT_LIST_ARRAY
+# Declare array used to save option lists for current process
+declare -a CURRENT_PROCESS_OPT_LIST
 
 # Declare variable to store name of output directory
 declare PIPELINE_OUTDIR
