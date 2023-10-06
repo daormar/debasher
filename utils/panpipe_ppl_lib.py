@@ -6,7 +6,8 @@ import sys
 
 # Constants
 NONE_PROCESS_DEP = "none"
-SUBPPL_ENTRY_PREFIX = "pplfile"
+PROCSPEC_FEXT = "procspec"
+PPLOPTS_FEXT = "opts"
 
 ##################################################
 class DirectedGraph:
@@ -51,21 +52,15 @@ class processdep_data:
         self.processname = None
 
 ##################################################
+def get_procspec_fname(prefix):
+    return prefix + "." + PROCSPEC_FEXT
+
+##################################################
 def entry_is_comment(entry):
     fields=entry.split()
     if len(fields) == 0:
         return False
     elif fields[0][0] == "#":
-        return True
-    else:
-        return False
-
-##################################################
-def entry_is_config(entry):
-    fields=entry.split()
-    if len(fields) == 0:
-        return False
-    elif fields[0] == "#import":
         return True
     else:
         return False
@@ -138,18 +133,6 @@ def extract_process_deps(entry_lineno, entry):
                 print("Error: incorrect definition of process dependency (", pdeps_str, ") at line number", entry_lineno, file=sys.stderr)
 
     return deps_syntax_ok,separator,pdeps_list
-
-##################################################
-def extract_config_entries(pfile):
-    process_entries=[]
-    file = open(pfile, 'r')
-    # read file entry by entry
-    for entry in file:
-        entry=entry.strip("\n")
-        if entry_is_config(entry):
-            process_entries.append(entry)
-
-    return process_entries
 
 ##################################################
 def extract_process_entries(pfile):
@@ -331,9 +314,7 @@ def processdeps_correct(entries_lineno, process_entries, multiattempt_processes,
     return True
 
 ##################################################
-def print_entries(config_entries, process_entries):
-    for e in config_entries:
-        print(e)
+def print_entries(process_entries):
     for e in process_entries:
         print(e)
 
@@ -407,18 +388,3 @@ def snames_valid(processdeps_map):
             print("Error: process name", sname, "contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
             return 0
     return 1
-
-##################################################
-def is_sub_ppl_entry(entry):
-    if len(entry.split(" ")) > 1:
-        return False
-    else:
-        entry_fields = entry.split(":")
-        if len(entry_fields) == 2 and entry_fields[0] == SUBPPL_ENTRY_PREFIX:
-            return True
-        else:
-            return False
-
-##################################################
-def get_sub_ppl_fname(ppl_file_entry):
-    return ppl_file_entry.split(":")[1]
