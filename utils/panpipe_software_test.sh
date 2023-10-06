@@ -243,8 +243,11 @@ process_d_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Get absolute name of FIFO as an owner
-    local abs_fifoname=$(get_absolute_fifoname_as_owner "process_d_fifo")
+    # Define FIFO
+    define_fifo "process_d_fifo"
+
+    # Get absolute name of FIFO
+    local abs_fifoname=$(get_absolute_fifoname "process_d_fifo")
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
