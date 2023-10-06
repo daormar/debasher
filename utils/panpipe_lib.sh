@@ -119,6 +119,7 @@ ARRAY_TASKID_FEXT="id"
 SLURM_EXEC_ATTEMPT_FEXT_STRING="__attempt"
 PROCSPEC_FEXT="procspec"
 PPLOPTS_FEXT="opts"
+FIFOS_FEXT="fifos"
 
 # FILE NAMES
 PPEXEC_ORIGINAL_PPL_PREF=".original_pipeline"
@@ -155,8 +156,8 @@ declare -A MEMOIZED_OPTS
 # memoizing options
 declare LAST_PROC_LINE_MEMOPTS=""
 
-# Declare array used to save option lists for scripts
-declare -a SCRIPT_OPT_LIST_ARRAY
+# Declare array used to save option lists for processes
+declare -a PROCESS_OPT_LIST_ARRAY
 
 # Declare variable to store name of output directory
 declare PIPELINE_OUTDIR
