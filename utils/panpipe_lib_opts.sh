@@ -837,6 +837,19 @@ clear_opt_list_array()
 ########
 save_opt_list()
 {
+    # Set option list for current process
     local optlist_varname=$1
     CURRENT_PROCESS_OPT_LIST+=("${!optlist_varname}")
+
+    # Store option list in associative array
+    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    PROCESS_OPT_LIST["${processname}"]=${CURRENT_PROCESS_OPT_LIST}
+}
+
+########
+show_opt_list_for_processes()
+{
+    for process in "${!PROCESS_OPT_LIST[@]}"; do
+        echo "PROCESS: ${process}, OPTIONS: ${PROCESS_OPT_LIST[${process}]}"
+    done
 }
