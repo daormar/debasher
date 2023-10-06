@@ -70,7 +70,6 @@ PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS="_explain_cmdline_opts"
 PROCESS_METHOD_NAME_DEFINE_OPTS="_define_opts"
 PROCESS_METHOD_NAME_SHOULD_EXECUTE="_should_execute"
 PROCESS_METHOD_NAME_CONDA_ENVS="_conda_envs"
-PROCESS_METHOD_NAME_FIFOS="_fifos"
 
 # MODULE METHOD NAMES
 MODULE_METHOD_NAME_SHRDIRS="_shared_dirs"
@@ -165,11 +164,17 @@ declare PIPELINE_OUTDIR
 # Declare associative array to store names of loaded modules
 declare -a PIPELINE_MODULES
 
-# Declare associative array to store name of shared directories
+# Declare associative arrays to store name of shared directories (the
+# one with the _DEF_OPTS suffix stores the shared directories of a
+# process immediately after calling its def_options method)
 declare -A PIPELINE_SHDIRS
+declare -A PIPELINE_SHDIRS_DEF_OPTS
 
-# Declare associative array to store names of fifos
+# Declare associative arrays to store names of fifos (the one with the
+# _DEF_OPTS suffix stores the fifos of a process immediately after
+# calling its def_options method)
 declare -A PIPELINE_FIFOS
+declare -A PIPELINE_FIFOS_DEF_OPTS
 
 # Declare associative array to store dependency types for fifos
 declare -A FIFOS_DEPTYPES

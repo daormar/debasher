@@ -783,12 +783,11 @@ prepare_files_and_dirs_for_process()
         local array_size=${#script_opts_array[@]}
 
         # Prepare files and directories for process
-        create_pipeline_shdirs || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
+        create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
         clean_process_log_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         clean_process_id_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
         create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
-        register_fifos_owned_by_process ${processname}
         prepare_fifos_owned_by_process ${processname}
     fi
 }

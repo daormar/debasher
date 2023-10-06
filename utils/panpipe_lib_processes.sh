@@ -222,14 +222,6 @@ get_conda_envs_funcname()
 }
 
 ########
-get_fifos_funcname()
-{
-    local processname=$1
-
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_FIFOS}"
-}
-
-########
 process_is_defined()
 {
     local processname=$1
@@ -251,7 +243,8 @@ define_opts_for_process()
     local process_outdir=`get_process_outdir "${processname}"`
 
     clear_opt_list_array
-    clear_pipeline_shdirs_array
+    clear_pipeline_shdirs_def_opts_array
+    clear_pipeline_fifos_def_opts_array
     local define_opts_funcname=`get_define_opts_funcname ${processname}`
     ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
 }

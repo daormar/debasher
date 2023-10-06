@@ -462,9 +462,15 @@ get_panpipe_exec_path()
 }
 
 ########
-clear_pipeline_shdirs_array()
+clear_pipeline_shdirs_def_opts_array()
 {
-    declare -gA PIPELINE_SHDIRS
+    declare -gA PIPELINE_SHDIRS_DEF_OPTS
+}
+
+########
+clear_pipeline_fifos_def_opts_array()
+{
+    declare -gA PIPELINE_FIFOS_DEF_OPTS
 }
 
 ########

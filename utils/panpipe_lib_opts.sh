@@ -462,15 +462,16 @@ define_fifo()
     fi
 
     # Get process name
-    local processname=`get_processname_from_caller "${PROCESS_FUNC_SUFFIX_FIFOS}"`
+    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
 
     # Check if FIFO was previously defined
     if [ "${PIPELINE_FIFOS[${fifoname}]}" != "" ]; then
         errmsg "Error: FIFO was previously defined (${fifoname})"
         return 1
     else
-        # Store name of FIFO in associative array
+        # Store name of FIFO in associative arrays
         PIPELINE_FIFOS[${fifoname}]=${processname}
+        PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}
 
         # Store FIFO dependency type
         if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ]; then
@@ -487,8 +488,9 @@ define_shared_dir()
 {
     local shared_dir=$1
 
-    # Store name of shared directory in associative array
+    # Store name of shared directory in associative arrays
     PIPELINE_SHDIRS[${shared_dir}]=1
+    PIPELINE_SHDIRS_DEF_OPTS[${shared_dir}]=1
 }
 
 ########
@@ -753,24 +755,25 @@ create_pipeline_shdirs()
 }
 
 ########
+create_shdirs_owned_by_process()
+{
+    # Create shared directories
+    local dirname
+    for dirname in "${!PIPELINE_SHDIRS_DEF_OPTS[@]}"; do
+        local absdir=`get_absolute_shdirname "$dirname"`
+        if [ ! -d "${absdir}" ]; then
+           mkdir -p "${absdir}" || exit 1
+        fi
+    done
+}
+
+########
 show_pipeline_fifos()
 {
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS[@]}"; do
         echo ${PIPELINE_FIFOS["${fifoname}"]} "${fifoname}"
     done
-}
-
-########
-register_fifos_owned_by_process()
-{
-    local processname=$1
-
-    local fifos_funcname=`get_fifos_funcname "${processname}"`
-
-    if [ "${fifos_funcname}" != ${FUNCT_NOT_FOUND} ]; then
-        ${fifos_funcname}
-    fi
 }
 
 ########
@@ -783,8 +786,8 @@ prepare_fifos_owned_by_process()
 
     # Create FIFOS
     local fifoname
-    for fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        if [ ${PIPELINE_FIFOS["${fifoname}"]} = "${processname}" ]; then
+    for fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
+        if [ ${PIPELINE_FIFOS_DEF_OPTS["${fifoname}"]} = "${processname}" ]; then
             rm -f "${fifodir}/${fifoname}" || exit 1
             $MKFIFO "${fifodir}/${fifoname}" || exit 1
         fi
@@ -817,6 +820,22 @@ get_absolute_fifoname()
 
     local fifodir=`get_absolute_fifodir`
 
+    echo "${fifodir}/${fifoname}"
+}
+
+########
+get_absolute_fifoname_as_owner()
+{
+    local fifoname=$1
+    local deptype=$2
+
+    # Define FIFO
+    define_fifo "${fifoname}" "${deptype}"
+
+    # Obtain directory
+    local fifodir=`get_absolute_fifodir`
+
+    # Return name
     echo "${fifodir}/${fifoname}"
 }
 
