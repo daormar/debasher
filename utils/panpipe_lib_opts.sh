@@ -473,7 +473,7 @@ define_fifo()
         PIPELINE_FIFOS[${fifoname}]=${processname}
 
         # Store FIFO dependency type
-        if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}"]; then
+        if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ]; then
             FIFOS_DEPTYPES[${fifoname}]=${dependency}
         else
             errmsg "Error: dependency type for FIFO not valid (${dependency})"
