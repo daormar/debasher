@@ -832,6 +832,7 @@ get_absolute_condadir()
 clear_opt_list_array()
 {
     unset CURRENT_PROCESS_OPT_LIST
+    declare -g CURRENT_PROCESS_OPT_LIST=""
 }
 
 ########
@@ -839,7 +840,7 @@ save_opt_list()
 {
     # Set option list for current process
     local optlist_varname=$1
-    CURRENT_PROCESS_OPT_LIST+=("${!optlist_varname}")
+    CURRENT_PROCESS_OPT_LIST=("${!optlist_varname}")
 
     # Store option list in associative array
     local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
