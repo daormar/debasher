@@ -1154,7 +1154,7 @@ builtin_sched_execute_process()
     echo "PROCESS: ${processname} (TASKIDX: ${taskidx}) ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Create script
-    define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+    define_opts_for_process "${cmdline}" "${process_spec}" || return 1
     local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
     local array_size=${#script_opts_array[@]}
     if [ "${launched_tasks}" = "" ]; then
@@ -1302,7 +1302,7 @@ builtin_sched_prepare_files_and_dirs_for_process()
 
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
-        define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
         local array_size=${#script_opts_array[@]}
 

@@ -243,7 +243,7 @@ process_is_defined()
 }
 
 ########
-define_opts_for_script()
+define_opts_for_process()
 {
     local cmdline=$1
     local process_spec=$2
@@ -351,7 +351,7 @@ get_task_array_size_for_process()
     local cmdline=$1
     local process_spec=$2
 
-    define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+    define_opts_for_process "${cmdline}" "${process_spec}" || return 1
     echo ${#SCRIPT_OPT_LIST_ARRAY[@]}
 }
 

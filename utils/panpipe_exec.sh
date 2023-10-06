@@ -376,7 +376,7 @@ check_pipeline_opts()
         if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
-            define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+            define_opts_for_process "${cmdline}" "${process_spec}" || return 1
             local script_opts_array=()
             for script_opts in "${SCRIPT_OPT_LIST_ARRAY[@]}"; do
                 # Obtain human-readable representation of script options
@@ -778,7 +778,7 @@ prepare_files_and_dirs_for_process()
     ## prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
-        define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
         local array_size=${#script_opts_array[@]}
 
@@ -831,7 +831,7 @@ launch_process()
     ## Decide whether the process should be executed
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" -a "${status}" != "${DONT_EXECUTE_PROCESS_STATUS}" ]; then
         # Create script
-        define_opts_for_script "${cmdline}" "${process_spec}" || return 1
+        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
         local script_opts_array=("${SCRIPT_OPT_LIST_ARRAY[@]}")
         local array_size=${#script_opts_array[@]}
         create_script "${dirname}" ${processname} "script_opts_array"
