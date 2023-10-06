@@ -159,6 +159,9 @@ declare LAST_PROC_LINE_MEMOPTS=""
 # Declare array used to save option lists for current process
 declare -a CURRENT_PROCESS_OPT_LIST
 
+# Declare associative array used to save option lists for all processes
+declare -A PROCESS_OPT_LIST
+
 # Declare variable to store name of output directory
 declare PIPELINE_OUTDIR
 
