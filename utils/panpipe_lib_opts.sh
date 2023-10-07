@@ -27,15 +27,16 @@ serialize_args()
 deserialize_args()
 {
     local serial_args=$1
-    local arrname=$2
-
-    # Prepare array to store deserialized arguments
-    DESERIALIZED_ARGS=()
-
-    # Convert string to array
-    local preproc_serial_args
-    preproc_serial_args=$(echo "${serial_args}" | "${SED}" "s/${ARG_SEP}/\n/g")
-    while IFS= read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_serial_args}"
+    if [ -z "${serial_args}" ]; then
+        unset DESERIALIZED_ARGS
+        declare -ga DESERIALIZED_ARGS
+    else
+        local new_sep=$'\n'
+        local preproc_sargs="${serial_args//${ARG_SEP}/$new_sep}"
+        unset DESERIALIZED_ARGS
+        declare -ga DESERIALIZED_ARGS
+        while IFS=${new_sep} read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_sargs}"
+    fi
 }
 
 ########
@@ -45,7 +46,7 @@ sargs_to_sargsquotes()
 
     # Convert string to array
     local preproc_sargs
-    preproc_sargs=`echo "${sargs}" | ${SED} "s/${ARG_SEP}/\n/g"`
+    preproc_sargs="${sargs//${ARG_SEP}/$'\n'}"
     local array=()
     while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargs}"
 
@@ -73,20 +74,22 @@ sargsquotes_to_sargs()
     local sargsquotes=$1
 
     # Remove first and last quotes
-    sargsquotes=$("${SED}" -e "s/^'//" -e "s/'$//" <<<"$sargsquotes")
+    local preproc_sargsquotes
+    preproc_sargsquotes="${sargsquotes%\'*}"
+    preproc_sargsquotes="${preproc_sargsquotes#\'*}"
 
     # Convert string to array
-    local preproc_sargs
-    preproc_sargsquotes=$(echo "${sargsquotes}" | "${SED}" "s/${ARG_SEP_QUOTES}/\n/g")
+    local new_sep=$'\n'
+    preproc_sargsquotes="${preproc_sargsquotes//${ARG_SEP_QUOTES}/$new_sep}"
     local array=()
-    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargsquotes}"
+    while IFS=$new_sep read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargsquotes}"
 
     # Process array
     local i=0
     local sargs
     while [ $i -lt ${#array[@]} ]; do
         elem=${array[$i]}
-        elem=$("${SED}" "s/'\\\''/'/g" <<<"$elem")
+        elem="${elem//\\\'/\'}"
         if [ -z "${sargs}" ]; then
             sargs=${elem}
         else
@@ -139,6 +142,28 @@ replace_word_with_blank()
 }
 
 ########
+str_is_option()
+{
+    local str=$1
+    if [ "${str:0:1}" = "-" ] || [ "${str:0:2}" = "--" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+str_is_output_option()
+{
+    local str=$1
+    if [ "${str:0:4}" = "-out" ] || [ "${str:0:5}" = "--out" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 memoize_opts()
 {
     local cmdline=$1
@@ -150,15 +175,14 @@ memoize_opts()
     # Scan DESERIALIZED_ARGS
     local i=1
     while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
-        # Check if option was found
-        if [ "${DESERIALIZED_ARGS[$i]:0:1}" = "-" ] || [ "${DESERIALIZED_ARGS[$i]:0:2}" = "--" ]; then
+        if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
             local opt="${DESERIALIZED_ARGS[$i]}"
             i=$((i+1))
             # Obtain value if it exists
             local value=""
             # Check if next token is an option
             if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
-                if [ "${DESERIALIZED_ARGS[$i]:0:1}" = "-" ] || [ "${DESERIALIZED_ARGS[$i]:0:2}" = "--" ]; then
+                if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
                     :
                 else
                     value="${DESERIALIZED_ARGS[$i]}"
@@ -829,10 +853,17 @@ get_absolute_condadir()
 }
 
 ########
-clear_opt_list_array()
+clear_curr_opt_list_array()
 {
     unset CURRENT_PROCESS_OPT_LIST
     declare -ga CURRENT_PROCESS_OPT_LIST
+}
+
+########
+clear_opt_list_assoc_array()
+{
+    unset PROCESS_OPT_LIST
+    declare -gA PROCESS_OPT_LIST
 }
 
 ########
@@ -841,16 +872,12 @@ save_opt_list()
     # Set option list for current process
     local optlist_varname=$1
     CURRENT_PROCESS_OPT_LIST+=("${!optlist_varname}")
-
-    # Store option list in associative array
-    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
-    PROCESS_OPT_LIST["${processname}"]=${CURRENT_PROCESS_OPT_LIST}
 }
 
 ########
 show_opt_list_for_processes()
 {
     for process in "${!PROCESS_OPT_LIST[@]}"; do
-        echo "PROCESS: ${process}, OPTIONS: ${PROCESS_OPT_LIST[${process}]}"
+        echo "${process} -> ${PROCESS_OPT_LIST[${process}]}"
     done
 }
