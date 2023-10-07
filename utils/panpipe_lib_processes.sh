@@ -64,19 +64,6 @@ document_process()
 }
 
 ########
-pipeline_process_spec_is_comment()
-{
-    local process_spec=$1
-
-    local fields=( $process_spec )
-    if [[ "${fields[0]}" = \#* ]]; then
-        echo "yes"
-    else
-        echo "no"
-    fi
-}
-
-########
 pipeline_process_spec_is_ok()
 {
     local process_spec=$1
@@ -86,14 +73,13 @@ pipeline_process_spec_is_ok()
     for field in $process_spec; do
         if [[ ${field} = "${PROCESSDEPS_SPEC}="* ]]; then
             if [ $fieldno -ge 2 ]; then
-                echo "yes"
                 return 0
             fi
         fi
         fieldno=$((fieldno + 1))
     done
 
-    echo "no"
+    return 1
 }
 
 ########
