@@ -126,42 +126,28 @@ process_status_for_pfile()
     configure_scheduler $sched || return 1
 
     # Read information about the processes to be executed
-    lineno=1
     num_processes=0
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
-            # Increase number of processes
-            num_processes=$((num_processes + 1))
+        # Increase number of processes
+        num_processes=$((num_processes + 1))
 
-            # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+        # Extract process information
+        local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            # If s option was given, continue to next iteration if process
-            # name does not match with the given one
-            if [ ${s_given} -eq 1 -a "${given_processname}" != $processname ]; then
-                continue
-            fi
-
-            # Check process status
-            local status=`get_process_status "${absdirname}" ${processname}`
-
-            # Get elapsed time if process finished
-            elapsed_time=`get_elapsed_time_for_process "${absdirname}" ${processname}`
-
-            # Print status
-            echo "PROCESS: $processname ; STATUS: $status ; ELAPSED_TIME(s): ${elapsed_time}"
-        else
-            if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "no" ]; then
-                echo "Error: incorrect process specification at line $lineno of ${pfile}" >&2
-                return 1
-            fi
+        # If s option was given, continue to next iteration if process
+        # name does not match with the given one
+        if [ ${s_given} -eq 1 -a "${given_processname}" != $processname ]; then
+            continue
         fi
 
-        # Increase lineno
-        lineno=$((lineno+1))
+        # Check process status
+        local status=`get_process_status "${absdirname}" ${processname}`
 
+        # Get elapsed time if process finished
+        elapsed_time=`get_elapsed_time_for_process "${absdirname}" ${processname}`
+
+        # Print status
+        echo "PROCESS: $processname ; STATUS: $status ; ELAPSED_TIME(s): ${elapsed_time}"
     done < <(exec_pipeline_func_for_module "${pfile}")
 }
 
