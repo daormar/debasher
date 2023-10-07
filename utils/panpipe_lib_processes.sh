@@ -467,6 +467,13 @@ get_end_idx_in_range()
 }
 
 ########
+get_procdeps_for_process()
+{
+    # TO-BE-DONE
+    echo "${PROCESSDEPS_SPEC}=${NONE_PROCESSDEP_TYPE}"
+}
+
+########
 get_default_process_outdir_given_dirname()
 {
     local dirname=$1
