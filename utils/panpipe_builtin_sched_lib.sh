@@ -109,14 +109,12 @@ builtin_sched_init_process_info()
 {
     local cmdline=$1
     local dirname=$2
-    local pfile=$3
+    local procspec_file=$3
 
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             local script_filename=`get_script_filename "${dirname}" ${processname}`
@@ -167,7 +165,7 @@ builtin_sched_init_process_info()
             BUILTIN_SCHED_PROCESS_MEM[${processname}]=${mem}
             BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]=0
         fi
-    done < "${pfile}"
+    done < "${procspec_file}"
 }
 
 ########
@@ -1349,7 +1347,7 @@ builtin_sched_execute_pipeline_processes()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local pfile=$3
+    local procspec_file=$3
     local iterno=1
 
     echo "* Configuring scheduler..." >&2
@@ -1367,7 +1365,7 @@ builtin_sched_execute_pipeline_processes()
     echo "* Initializing data structures..." >&2
 
     # Initialize process status
-    builtin_sched_init_process_info "${cmdline}" "${dirname}" ${pfile} || return 1
+    builtin_sched_init_process_info "${cmdline}" "${dirname}" "${procspec_file}" || return 1
 
     # Initialize current process status
     builtin_sched_init_curr_comp_resources || return 1
