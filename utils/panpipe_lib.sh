@@ -92,7 +92,9 @@ AFTEROK_PROCESSDEP_TYPE="afterok"
 AFTERNOTOK_PROCESSDEP_TYPE="afternotok"
 AFTERANY_PROCESSDEP_TYPE="afterany"
 AFTERCORR_PROCESSDEP_TYPE="aftercorr"
-FIFO_PROCESSDEP_TYPE="fifo"
+FIFONONE_PROCESSDEP_TYPE="fifonone"
+FIFOAFTER_PROCESSDEP_TYPE="fifoafter"
+FIFOAFTEROK_PROCESSDEP_TYPE="fifoafterok"
 
 # PROCESS STATISTICS
 UNKNOWN_ELAPSED_TIME_FOR_PROCESS="UNKNOWN"
@@ -165,6 +167,9 @@ declare -a CURRENT_PROCESS_OPT_LIST
 
 # Declare associative array used to save option lists for all processes
 declare -A PROCESS_OPT_LIST
+
+# Declare associative array used to save output values for all processes
+declare -A PROCESS_OUT_VALUES
 
 # Declare variable to store name of output directory
 declare PIPELINE_OUTDIR
