@@ -1,5 +1,4 @@
-# PanPipe package
-# Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
+# PanPipe package# Copyright (C) 2019,2020 Daniel Ortiz-Mart\'inez
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
@@ -243,9 +242,9 @@ load_module()
 }
 
 ########
-gen_procspec_file()
+gen_initial_procspec_file()
 {
-    echo "# Extracting process specification from $pfile..." >&2
+    echo "# Generating initial process specification from $pfile..." >&2
 
     exec_pipeline_func_for_module "${pfile}" || exit 1
 
@@ -253,7 +252,7 @@ gen_procspec_file()
 }
 
 ########
-check_procspec_file()
+check_pipeline()
 {
     local prefix_of_ppl_files=$1
 
@@ -265,13 +264,24 @@ check_procspec_file()
 }
 
 ########
-reorder_procspec_file()
+gen_final_procspec_file()
 {
-    local prefix_of_ppl_files=$1
+    local initial_procspec_file=$1
 
-    echo "# Writing process specification file..." >&2
+    echo "# Generating final process specification file..." >&2
 
-    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -r 2> /dev/null || return 1
+    # Iterate over process specifications
+    while read process_spec; do
+        # Extract process information
+        local processname=`extract_processname_from_process_spec "$process_spec"`
+
+        # Obtain process dependencies
+        procdeps=`get_procdeps_for_process ${processname}`
+
+        # Print process specification plus process dependencies
+        echo "${process_spec}" "${procdeps}"
+    done < "${initial_procspec_file}"
+
 
     echo "" >&2
 }
@@ -283,7 +293,7 @@ gen_processdeps()
 
     echo "# Generating process dependencies information..." >&2
 
-    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -d 2> /dev/null || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -d || return 1
 
     echo "" >&2
 }
@@ -336,16 +346,12 @@ show_pipeline_opts()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
-            # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
-            local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
-            DIFFERENTIAL_CMDLINE_OPT_STR=""
-            ${explain_cmdline_opts_funcname} || exit 1
-            update_opt_to_process_map ${processname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
-        fi
+        # Extract process information
+        local processname=`extract_processname_from_process_spec "$process_spec"`
+        local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
+        DIFFERENTIAL_CMDLINE_OPT_STR=""
+        ${explain_cmdline_opts_funcname} || exit 1
+        update_opt_to_process_map ${processname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
     done < "${procspec_file}"
 
     # Print options
@@ -370,26 +376,22 @@ check_pipeline_opts()
 
     # Read information about the processes to be executed
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
-            # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
-            define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-            local process_opts_array=()
-            for process_opts in "${CURRENT_PROCESS_OPT_LIST[@]}"; do
-                # Obtain human-readable representation of script options
-                hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
-                process_opts_array+=("${hr_process_opts}")
-            done
-            # Generate info about options
-            local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}`
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >&2
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >> "${out_opts_file}"
+        # Extract process information
+        local processname=`extract_processname_from_process_spec "$process_spec"`
+        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
+        local process_opts_array=()
+        for process_opts in "${CURRENT_PROCESS_OPT_LIST[@]}"; do
+            # Obtain human-readable representation of script options
+            hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
+            process_opts_array+=("${hr_process_opts}")
+        done
+        # Generate info about options
+        local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}`
+        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >&2
+        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >> "${out_opts_file}"
 
-            # Generate info about fifos
-            show_pipeline_fifos_def_opts >> "${out_fifos_file}"
-        fi
+        # Generate info about fifos
+        show_pipeline_fifos_def_opts >> "${out_fifos_file}"
     done < "${procspec_file}"
 
     echo "" >&2
@@ -449,9 +451,7 @@ handle_conda_requirements()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -480,9 +480,7 @@ define_dont_execute_processes()
 
     # Read information about the processes to be executed
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             local should_execute_funcname=`get_should_execute_funcname ${processname}`
@@ -510,9 +508,7 @@ define_forced_exec_processes()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             local process_forced=`extract_attr_from_process_spec "$process_spec" "force"`
@@ -569,9 +565,7 @@ define_reexec_processes_due_to_code_update()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             local status=`get_process_status "${dirname}" ${processname}`
@@ -804,9 +798,7 @@ prepare_files_and_dirs_for_processes()
 
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -876,9 +868,7 @@ launch_processes()
 
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -946,9 +936,7 @@ execute_pipeline_processes_debug()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        local process_spec_comment=`pipeline_process_spec_is_comment "$process_spec"`
-        local process_spec_ok=`pipeline_process_spec_is_ok "$process_spec"`
-        if [ ${process_spec_comment} = "no" -a ${process_spec_ok} = "yes" ]; then
+        if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -983,30 +971,29 @@ create_basic_dirs || exit 1
 
 load_module || exit
 
-original_ppl_file_pref="${outd}/${PPEXEC_ORIGINAL_PPL_PREF}"
-original_procspec_file="${original_ppl_file_pref}.${PROCSPEC_FEXT}"
-gen_procspec_file > "${original_procspec_file}" || exit 1
-
-check_procspec_file "${original_ppl_file_pref}" || exit 1
-
-ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
-reordered_procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
-reorder_procspec_file "${original_ppl_file_pref}" > "${reordered_procspec_file}" || exit 1
-
-processdeps_file="${outd}"/.processdeps.txt
-gen_processdeps "${ppl_file_pref}" > "${processdeps_file}" || exit 1
+initial_procspec_file="${outd}/${PPEXEC_INITIAL_PROCSPEC_BASENAME}"
+gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
 
 configure_scheduler || exit 1
 
 if [ ${showopts_given} -eq 1 ]; then
-    show_pipeline_opts "${reordered_procspec_file}" || exit 1
+    show_pipeline_opts "${initial_procspec_file}" || exit 1
 else
     pipeline_opts_file="${ppl_file_pref}.${PPLOPTS_FEXT}"
     pipeline_fifos_file="${ppl_file_pref}.${FIFOS_FEXT}"
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" "${reordered_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
+        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
     else
-        check_pipeline_opts "${command_line}" "${reordered_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
+        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
+
+        ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
+        procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
+        gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1
+
+        check_pipeline "${ppl_file_pref}" || exit 1
+
+        processdeps_file="${outd}"/.processdeps.txt
+        gen_processdeps "${ppl_file_pref}" > "${processdeps_file}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
@@ -1014,15 +1001,15 @@ else
         create_mod_shared_dirs || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
-            handle_conda_requirements "${reordered_procspec_file}" || exit 1
+            handle_conda_requirements "${procspec_file}" || exit 1
         fi
 
-        define_dont_execute_processes "${command_line}" "${reordered_procspec_file}" || exit 1
+        define_dont_execute_processes "${command_line}" "${procspec_file}" || exit 1
 
-        define_forced_exec_processes "${reordered_procspec_file}" || exit 1
+        define_forced_exec_processes "${procspec_file}" || exit 1
 
         if [ ${reexec_outdated_processes_given} -eq 1 ]; then
-            define_reexec_processes_due_to_code_update "${outd}" "${reordered_procspec_file}" || exit 1
+            define_reexec_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
         fi
 
         define_reexec_processes_due_to_deps "${processdeps_file}" || exit 1
@@ -1032,13 +1019,13 @@ else
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            execute_pipeline_processes_debug "${command_line}" "${outd}" "${reordered_procspec_file}" || exit 1
+            execute_pipeline_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
         else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
-                builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${reordered_procspec_file}" || exit 1
+                builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
             else
-                execute_pipeline_processes "${command_line}" "${outd}" "${reordered_procspec_file}" || exit 1
+                execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
             fi
         fi
     fi
