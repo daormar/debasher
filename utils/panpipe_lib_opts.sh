@@ -881,3 +881,11 @@ show_opt_list_for_processes()
         echo "${process} -> ${PROCESS_OPT_LIST[${process}]}"
     done
 }
+
+########
+show_out_values_for_processes()
+{
+    for outval in "${!PROCESS_OUT_VALUES[@]}"; do
+        echo "${outval} -> ${PROCESS_OUT_VALUES[${outval}]}"
+    done
+}
