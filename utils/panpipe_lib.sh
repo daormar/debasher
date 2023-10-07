@@ -127,7 +127,7 @@ PPLOPTS_FEXT="opts"
 FIFOS_FEXT="fifos"
 
 # FILE NAMES
-PPEXEC_ORIGINAL_PPL_PREF=".original_pipeline"
+PPEXEC_INITIAL_PROCSPEC_BASENAME=".original_pipeline.${PROCSPEC_FEXT}"
 PPEXEC_PPL_PREF="pipeline"
 PPL_COMMAND_LINE_BASENAME="command_line.sh"
 
