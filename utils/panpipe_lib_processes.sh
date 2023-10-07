@@ -237,16 +237,71 @@ process_is_defined()
 ########
 define_opts_for_process()
 {
+    clear_def_opts_vars()
+    {
+        clear_curr_opt_list_array
+        clear_pipeline_shdirs_def_opts_array
+        clear_pipeline_fifos_def_opts_array
+    }
+
+    store_opt_list_in_assoc_array()
+    {
+        local processname=$1
+        local array_length=${#CURRENT_PROCESS_OPT_LIST[@]}
+        PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_KEY_SEP}${ASSOC_ARRAY_KEY_LEN}"]=${array_length}
+        for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
+            PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}"]=${CURRENT_PROCESS_OPT_LIST[task_idx]}
+        done
+    }
+
+    get_output_params_info()
+    {
+        local processname=$1
+        for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
+            deserialize_args ${CURRENT_PROCESS_OPT_LIST[task_idx]}
+            local i=0
+            while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
+                # Check if option was found
+                if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
+                    local opt="${DESERIALIZED_ARGS[$i]}"
+                    i=$((i+1))
+                    # Obtain value if it exists
+                    local value=""
+                    # Check if next token is an option
+                    if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
+                        if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
+                            :
+                        else
+                            value="${DESERIALIZED_ARGS[$i]}"
+                            if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
+                                PROCESS_OUT_VALUES["$value"]="${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}" >&2
+                            fi
+                            i=$((i+1))
+                        fi
+                    fi
+                else
+                    echo "Warning: unexpected value (${DESERIALIZED_ARGS[$i]}), skipping..." >&2
+                    i=$((i+1))
+                fi
+            done
+        done
+    }
+
     local cmdline=$1
     local process_spec=$2
     local processname=`extract_processname_from_process_spec "${process_spec}"`
     local process_outdir=`get_process_outdir "${processname}"`
 
-    clear_opt_list_array
-    clear_pipeline_shdirs_def_opts_array
-    clear_pipeline_fifos_def_opts_array
+    # Clear variables
+    clear_def_opts_vars
+
+    # Obtain define_opts function name and call it
     local define_opts_funcname=`get_define_opts_funcname ${processname}`
     ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
+
+    # Update variables storing option information
+    store_opt_list_in_assoc_array "${processname}"
+    get_output_params_info "${processname}"
 }
 
 ########
