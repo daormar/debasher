@@ -168,6 +168,9 @@ declare -A PROCESS_OPT_LIST
 # Declare associative array used to save output values for all processes
 declare -A PROCESS_OUT_VALUES
 
+# Declare associative array used to store process dependencies
+declare -A PROCESS_DEPENDENCIES
+
 # Declare variable to store name of output directory
 declare PIPELINE_OUTDIR
 
