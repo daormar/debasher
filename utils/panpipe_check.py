@@ -91,16 +91,21 @@ def print_help():
 
 ##################################################
 def process_pars(flags,values):
+    # Extract information
     procspec_file = get_procspec_fname(values["prefix"])
     entries_lineno, process_entries = extract_process_entries(procspec_file)
     multiattempt_processes = extract_processes_with_multiattempt(process_entries)
-    deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno,process_entries)
+    deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno, process_entries)
+
+    # Show checking results
     if(not deps_syntax_ok):
        print("Process dependencies are not syntactically correct", file=sys.stderr)
        return 1
     if(not snames_valid(processdeps_map)):
        print("Process names are not valid", file=sys.stderr)
        return 1
+
+    # Check process dependencies
     ordered_process_entries = []
     if(processdeps_correct(entries_lineno, process_entries, multiattempt_processes, processdeps_map, ordered_process_entries)):
         print("Process specification is correct", file=sys.stderr)
