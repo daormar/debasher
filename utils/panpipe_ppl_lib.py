@@ -189,26 +189,26 @@ def str_contains_commas(str):
 def extract_processes_with_multiattempt(process_entries):
     multiattempt_processes=set()
     for i in range(len(process_entries)):
-        sname=extract_process_name(process_entries[i])
+        prname=extract_process_name(process_entries[i])
         time_value=extract_time_value(process_entries[i])
         mem_value=extract_mem_value(process_entries[i])
         if(str_contains_commas(time_value) or str_contains_commas(mem_value)):
-            multiattempt_processes.add(sname)
+            multiattempt_processes.add(prname)
     return multiattempt_processes
 
 ##################################################
 def extract_processdeps_info(entries_lineno,process_entries):
-    processdeps_map={}
-    processdeps_sep={}
-    deps_syntax_ok=True
+    processdeps_map = {}
+    processdeps_sep = {}
+    deps_syntax_ok = True
     for i in range(len(process_entries)):
-        fields=process_entries[i].split()
-        sname=extract_process_name(process_entries[i])
-        dep_syntax_ok,separator,deps=extract_process_deps(entries_lineno[i], process_entries[i])
+        fields = process_entries[i].split()
+        prname = extract_process_name(process_entries[i])
+        dep_syntax_ok, separator, deps = extract_process_deps(entries_lineno[i], process_entries[i])
         if(not dep_syntax_ok):
             deps_syntax_ok=False
-        processdeps_sep[sname]=separator
-        processdeps_map[sname]=deps
+        processdeps_sep[prname] = separator
+        processdeps_map[prname] = deps
     return deps_syntax_ok, processdeps_sep, processdeps_map
 
 ##################################################
@@ -216,12 +216,12 @@ def processnames_duplicated(entries_lineno, process_entries):
     processnames=set()
     lineno=1
     for i in range(len(process_entries)):
-        sname=extract_process_name(process_entries[i])
-        if sname in processnames:
-            print("Error: process", sname, "in line", entries_lineno[i], "is duplicated", file=sys.stderr)
+        prname=extract_process_name(process_entries[i])
+        if prname in processnames:
+            print("Error: process", prname, "in line", entries_lineno[i], "is duplicated", file=sys.stderr)
             return True
         else:
-            processnames.add(sname)
+            processnames.add(prname)
         lineno=lineno+1
     return False
 
@@ -244,13 +244,13 @@ def depnames_correct(processdeps_map):
     return True
 
 ##################################################
-def processname_can_be_added(sname, processed_processes, processdeps_map):
+def processname_can_be_added(prname, processed_processes, processdeps_map):
     # Check if process name has already been added
-    if sname in processed_processes:
+    if prname in processed_processes:
         return False
 
     # Check if all dependencies for process name were processed
-    for elem in processdeps_map[sname]:
+    for elem in processdeps_map[prname]:
         if(elem.processname not in processed_processes):
             return False
 
@@ -264,9 +264,9 @@ def order_process_entries(process_entries, processdeps_map, ordered_process_entr
         prev_proc_processes_len=len(processed_processes)
         # Explore list of process entries
         for entry in process_entries:
-            sname=extract_process_name(entry)
-            if(processname_can_be_added(sname, processed_processes, processdeps_map)):
-                processed_processes.add(sname)
+            prname=extract_process_name(entry)
+            if(processname_can_be_added(prname, processed_processes, processdeps_map)):
+                processed_processes.add(prname)
                 ordered_process_entries.append(entry)
         # Check if no processes were added
         if(prev_proc_processes_len==len(processed_processes)):
@@ -278,13 +278,13 @@ def order_process_entries(process_entries, processdeps_map, ordered_process_entr
 ##################################################
 def after_dep_has_multatt_process(entries_lineno, multiattempt_processes, processdeps_map):
     found=False
-    for sname in processdeps_map:
-        deplist=processdeps_map[sname]
+    for prname in processdeps_map:
+        deplist=processdeps_map[prname]
         i=0
         while i<len(deplist) and not found:
             if(deplist[i].deptype=="after" and deplist[i].processname in multiattempt_processes):
                 found=True
-                print("Error:", sname, "process has an 'after' dependency with a multiple-attempt process (", deplist[i].processname,")", file=sys.stderr)
+                print("Error:", prname, "process has an 'after' dependency with a multiple-attempt process (", deplist[i].processname,")", file=sys.stderr)
             else:
                 i=i+1
     if(found):
@@ -351,40 +351,40 @@ def print_graph(ordered_process_entries, processdeps_sep, processdeps_map):
     print("}")
 
 ##################################################
-def extract_all_deps_for_process(sname, processdeps_map, result):
-    if sname in processdeps_map:
-        for processdep in processdeps_map[sname]:
+def extract_all_deps_for_process(prname, processdeps_map, result):
+    if prname in processdeps_map:
+        for processdep in processdeps_map[prname]:
             result.add(processdep.processname)
-            extract_all_deps_for_process(processdep.processname, processdeps_map,result)
+            extract_all_deps_for_process(processdep.processname, processdeps_map, result)
 
 ##################################################
-def print_deps(ordered_process_entries,processdeps_map):
+def print_deps(ordered_process_entries, processdeps_map):
     for entry in ordered_process_entries:
         # Extract dependencies for process
-        sname=extract_process_name(entry)
+        prname=extract_process_name(entry)
         processdeps=set()
-        extract_all_deps_for_process(sname, processdeps_map, processdeps)
+        extract_all_deps_for_process(prname, processdeps_map, processdeps)
 
         # Print dependencies for process
-        depstr=""
+        depstr = ""
         for dep in processdeps:
             if(depstr==""):
-                depstr=dep
+                depstr = dep
             else:
-                depstr=depstr+" "+dep
-        print(sname,":",depstr)
+                depstr = depstr+" "+dep
+        print(prname, ":", depstr)
 
 ##################################################
-def sname_valid(sname):
-    for c in sname:
+def prname_valid(prname):
+    for c in prname:
         if not(c.isalpha() or c.isdigit() or c=="_"):
             return 0
     return 1
 
 ##################################################
-def snames_valid(processdeps_map):
-    for sname in processdeps_map:
-        if(not sname_valid(sname)):
-            print("Error: process name", sname, "contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
+def prnames_valid(processdeps_map):
+    for prname in processdeps_map:
+        if(not prname_valid(prname)):
+            print("Error: process name", prname, "contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
             return 0
     return 1
