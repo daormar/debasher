@@ -101,7 +101,7 @@ def process_pars(flags,values):
     if(not deps_syntax_ok):
        print("Process dependencies are not syntactically correct", file=sys.stderr)
        return 1
-    if(not snames_valid(processdeps_map)):
+    if(not prnames_valid(processdeps_map)):
        print("Process names are not valid", file=sys.stderr)
        return 1
 
