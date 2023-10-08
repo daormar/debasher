@@ -221,6 +221,22 @@ process_is_defined()
 }
 
 ########
+get_numtasks_for_process()
+{
+    local processname=$1
+
+    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_KEY_SEP}${ASSOC_ARRAY_KEY_LEN}]}"
+}
+
+########
+get_optlist_for_process_and_task()
+{
+    local processname=$1
+    local task_idx=$2
+    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}]}"
+}
+
+########
 define_opts_for_process()
 {
     clear_def_opts_vars()
@@ -467,10 +483,107 @@ get_end_idx_in_range()
 }
 
 ########
-get_procdeps_for_process()
+get_procdeps_for_process_cached()
 {
-    # TO-BE-DONE
-    echo "${PROCESSDEPS_SPEC}=${NONE_PROCESSDEP_TYPE}"
+    get_procdeps_for_process()
+    {
+        get_procdeps_for_process_task()
+        {
+            # Initialize variables
+            local processname=$1
+            local task_idx=$2
+            declare -A depdict
+            local processdeps=""
+
+            # Iterate over task options
+            local optlist=`get_optlist_for_process_and_task "${processname}" "${task_idx}"`
+            deserialize_args "${optlist}"
+            for i in "${!DESERIALIZED_ARGS[@]}"; do
+                # Check if a value represents an absolute path
+                local value="${DESERIALIZED_ARGS[i]}"
+                if is_absolute_path "${value}"; then
+                    j=$((i-1))
+                    if [ $j -ge 0 ]; then
+                        opt="${DESERIALIZED_ARGS[j]}"
+                        # Check if the option associated to the value is
+                        # not an output option
+                        if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
+                            if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
+                                local proc_plus_idx=${PROCESS_OUT_VALUES[${value}]}
+                                local proc="${proc_plus_idx%%${ASSOC_ARRAY_KEY_SEP}*}"
+                                local idx="${proc_plus_idx#*${ASSOC_ARRAY_KEY_SEP}}"
+                                local procdep="${AFTEROK_PROCESSDEP_TYPE}:${proc}"
+                                depdict["${procdep}"]=1
+                            fi
+                        fi
+                    fi
+                fi
+            done
+
+            # Instantiate processdeps variable
+            local dep
+            for dep in "${!depdict[@]}"; do
+                if [ -z "$processdeps" ]; then
+                    processdeps="${dep}"
+                else
+                    processdeps="${processdeps}${PROCESSDEPS_SEP_COMMA}${dep}"
+                fi
+            done
+            # Return dependencies
+            echo "${processdeps}"
+        }
+
+        get_procdeps_for_task_array()
+        {
+            # TBD
+            local processname=$1
+            local num_tasks=$2
+            declare -A depdict
+            local processdeps=""
+            # Return dependencies
+            echo "${processdeps}"
+        }
+
+        local processname=$1
+        # Determine whether the process has multiple tasks
+        num_tasks=`get_numtasks_for_process "${processname}"`
+        if [ "${num_tasks}" -eq 1 ]; then
+            # The process has only one task
+            get_procdeps_for_process_task "${processname}" 0
+        else
+            # The process is an array of tasks
+            get_procdeps_for_task_array "${processname}" "${num_tasks}"
+        fi
+    }
+
+    local process_spec=$1
+
+    # Extract process information
+    local processname=`extract_processname_from_process_spec "$process_spec"`
+
+    # Check if process dependencies were already obtained
+    if [[ -v PROCESS_DEPENDENCIES["$processname"] ]]; then
+        echo "${PROCESS_DEPENDENCIES[$processname]}"
+    else
+        # Extract dependencies from process specification if given
+        local deps=`extract_processdeps_from_process_spec "${process_spec}"`
+        if [ "${deps}" = "${ATTR_NOT_FOUND}" ]; then
+            # No dependencies are provided in specification
+            local deps=`get_procdeps_for_process "$processname"`
+            if [ -z "${deps}" ]; then
+                deps="${NONE_PROCESSDEP_TYPE}"
+            fi
+            # Add prefix to result
+            deps="${PROCESSDEPS_SPEC}=${deps}"
+            # Cache dependencies
+            PROCESS_DEPENDENCIES[$processname]=${deps}
+            echo "$deps"
+        else
+            # Cache dependencies
+            PROCESS_DEPENDENCIES[$processname]=${deps}
+            echo "$deps"
+        fi
+    fi
 }
 
 ########
