@@ -20,16 +20,17 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 
 # import modules
 import io, sys, getopt, operator
+from panpipe_ppl_lib import *
 
 ##################################################
 def take_pars():
     flags={}
     values={}
     flags["r_given"]=False
-    flags["d_given"]=False
+    flags["p_given"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"r:d:",["reexec-procs=","depfile="])
+        opts, args = getopt.getopt(sys.argv[1:],"r:p:",["reexec-procs=","prefix="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -41,9 +42,9 @@ def take_pars():
             if opt in ("-r", "--reexec-procs"):
                 values["rexec_procs"] = arg
                 flags["r_given"]=True
-            elif opt in ("-d", "--depfile"):
-                values["depfile"] = arg
-                flags["d_given"] = True
+            elif opt in ("-p", "--prefix"):
+                values["prefix"] = arg
+                flags["p_given"] = True
     return (flags,values)
 
 ##################################################
@@ -52,16 +53,16 @@ def check_pars(flags, values):
         print("Error! -r parameter not given", file=sys.stderr)
         sys.exit(2)
 
-    if(flags["d_given"]==False):
-        print("Error! -d parameter not given", file=sys.stderr)
+    if(flags["p_given"]==False):
+        print("Error! -p parameter not given", file=sys.stderr)
         sys.exit(2)
 
 ##################################################
 def print_help():
-    print("pp_get_reexec_procs_due_to_deps -r <string> -d <string>", file=sys.stderr)
+    print("pp_get_reexec_procs_due_to_deps -r <string> -p <string>", file=sys.stderr)
     print("", file=sys.stderr)
     print("-r <string>                     String with processes to be reexecuted", file=sys.stderr)
-    print("-d <string>                     File with dependency information", file=sys.stderr)
+    print("-p <string>                     Prefix of pipeline files", file=sys.stderr)
 
 ##################################################
 def process_r_opt(rexec_processes_str):
@@ -73,18 +74,18 @@ def process_r_opt(rexec_processes_str):
     return result
 
 ##################################################
-def load_dep_info(depfile):
+def get_dep_info(process_entries, processdeps_map):
     dep_info = {}
-    file = open(depfile, 'r')
-    # read file entry by entry
-    for entry in file:
-        fields=entry.split()
-        processname = fields[0]
+    for entry in process_entries:
+        # Extract dependencies for process
+        prname = extract_process_name(entry)
+        processdeps = set()
+        extract_all_deps_for_process(prname, processdeps_map, processdeps)
+        # Add dependencies to dictionary
         deplist = []
-        for i in range(2, len(fields)):
-            deplist.append(fields[i])
-        dep_info[processname] = deplist
-
+        for process in processdeps:
+            deplist.append(process)
+        dep_info[prname] = deplist
     return dep_info
 
 ##################################################
@@ -124,12 +125,21 @@ def print_processes(reexec_processes):
 
 ##################################################
 def process_pars(flags,values):
+    # Read processes to be reexecuted
     initial_reexec_processes = process_r_opt(values["rexec_procs"])
 
-    dep_info = load_dep_info(values["depfile"])
+    # Load process specification entries
+    procspec_file = get_procspec_fname(values["prefix"])
+    entries_lineno, process_entries = extract_process_entries(procspec_file)
+    deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno, process_entries)
 
+    # Get dependency information
+    dep_info = get_dep_info(process_entries, processdeps_map)
+
+    # Get reexecuted processes
     reexec_processes_due_to_deps = get_reexec_processes_due_to_deps(initial_reexec_processes, dep_info)
 
+    # Print processes to be reexecuted due to dependencies
     print_processes(reexec_processes_due_to_deps)
 
 ##################################################
