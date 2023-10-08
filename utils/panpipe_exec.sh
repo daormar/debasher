@@ -979,6 +979,7 @@ configure_scheduler || exit 1
 if [ ${showopts_given} -eq 1 ]; then
     show_pipeline_opts "${initial_procspec_file}" || exit 1
 else
+    ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
     pipeline_opts_file="${ppl_file_pref}.${PPLOPTS_FEXT}"
     pipeline_fifos_file="${ppl_file_pref}.${FIFOS_FEXT}"
     if [ ${checkopts_given} -eq 1 ]; then
@@ -986,7 +987,6 @@ else
     else
         check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
 
-        ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
         procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
         gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1
 
