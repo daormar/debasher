@@ -287,18 +287,6 @@ gen_final_procspec_file()
 }
 
 ########
-gen_processdeps()
-{
-    local prefix_of_ppl_files=$1
-
-    echo "# Generating process dependencies information..." >&2
-
-    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -d || return 1
-
-    echo "" >&2
-}
-
-########
 configure_scheduler()
 {
     echo "# Configuring scheduler..." >&2
@@ -597,12 +585,12 @@ define_reexec_processes_due_to_deps()
 {
     echo "# Defining processes to be reexecuted due to dependencies (if any)..." >&2
 
-    local processdeps_file=$1
+    local ppl_file_pref=$1
 
     # Obtain list of processes to be reexecuted due to dependencies
     local reexec_processes_string=`get_reexec_processes_as_string`
     local reexec_processes_file="${outd}/${REEXEC_PROCESSES_LIST_FNAME}"
-    "${panpipe_libexecdir}"/pp_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -d "${processdeps_file}" > "${reexec_processes_file}" || return 1
+    "${panpipe_libexecdir}"/pp_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -p "${ppl_file_pref}" > "${reexec_processes_file}" || return 1
 
     # Read information about the processes to be re-executed due to
     # dependencies
@@ -992,9 +980,6 @@ else
 
         check_pipeline "${ppl_file_pref}" || exit 1
 
-        processdeps_file="${outd}"/.processdeps.txt
-        gen_processdeps "${ppl_file_pref}" > "${processdeps_file}" || exit 1
-
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
@@ -1012,7 +997,7 @@ else
             define_reexec_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
         fi
 
-        define_reexec_processes_due_to_deps "${processdeps_file}" || exit 1
+        define_reexec_processes_due_to_deps "${ppl_file_pref}" || exit 1
 
         print_reexec_processes || exit 1
 
