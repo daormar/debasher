@@ -276,7 +276,7 @@ gen_final_procspec_file()
         local processname=`extract_processname_from_process_spec "$process_spec"`
 
         # Obtain process dependencies
-        procdeps=`get_procdeps_for_process ${processname}`
+        procdeps=`get_procdeps_for_process_cached "${process_spec}"`
 
         # Print process specification plus process dependencies
         echo "${process_spec}" "${procdeps}"
