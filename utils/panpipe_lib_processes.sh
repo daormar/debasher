@@ -491,7 +491,8 @@ get_procdeps_for_process_cached()
         {
             # Initialize variables
             local processname=$1
-            local task_idx=$2
+            local num_tasks=$2
+            local task_idx=$3
             declare -A depdict
             local processdeps=""
 
@@ -509,11 +510,32 @@ get_procdeps_for_process_cached()
                         # not an output option
                         if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
                             if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
+                                # The value is generated as output by another process
                                 local proc_plus_idx=${PROCESS_OUT_VALUES[${value}]}
                                 local proc="${proc_plus_idx%%${ASSOC_ARRAY_KEY_SEP}*}"
                                 local idx="${proc_plus_idx#*${ASSOC_ARRAY_KEY_SEP}}"
-                                local procdep="${AFTEROK_PROCESSDEP_TYPE}:${proc}"
-                                depdict["${procdep}"]=1
+                                local deptype
+                                if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                                    deptype=${AFTERCORR_PROCESSDEP_TYPE}
+                                else
+                                    deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                fi
+                                depdict["${proc}"]=${deptype}
+                            else
+                                fifoname=`get_fifoname_from_absname "${value}"`
+                                if [[ -v PIPELINE_FIFOS[${fifoname}] ]]; then
+                                    # The value is a FIFO
+                                    local proc_plus_idx="${PIPELINE_FIFOS[${fifoname}]}"
+                                    local processowner="${proc_plus_idx%%${ASSOC_ARRAY_KEY_SEP}*}"
+                                    local idx="${proc_plus_idx#*${ASSOC_ARRAY_KEY_SEP}}"
+                                    if [ "${processowner}" != "${processname}" ]; then
+                                        # The current process is not the owner of the FIFO
+                                        local deptype="${FIFOS_DEPTYPES[$fifoname]}"
+                                        if [ "${deptype}" != "${NONE_PROCESSDEP_TYPE}" ]; then
+                                            depdict["${processowner}"]=${deptype}
+                                        fi
+                                    fi
+                                fi
                             fi
                         fi
                     fi
@@ -521,10 +543,11 @@ get_procdeps_for_process_cached()
             done
 
             # Instantiate processdeps variable
-            local dep
-            for dep in "${!depdict[@]}"; do
+            local proc
+            for proc in "${!depdict[@]}"; do
+                local dep="${depdict[$proc]}:${proc}"
                 if [ -z "$processdeps" ]; then
-                    processdeps="${dep}"
+                    processdeps=${dep}
                 else
                     processdeps="${processdeps}${PROCESSDEPS_SEP_COMMA}${dep}"
                 fi
@@ -549,7 +572,7 @@ get_procdeps_for_process_cached()
         num_tasks=`get_numtasks_for_process "${processname}"`
         if [ "${num_tasks}" -eq 1 ]; then
             # The process has only one task
-            get_procdeps_for_process_task "${processname}" 0
+            get_procdeps_for_process_task "${processname}" "${num_tasks}" 0
         else
             # The process is an array of tasks
             get_procdeps_for_task_array "${processname}" "${num_tasks}"
@@ -628,7 +651,7 @@ get_adaptive_processname()
     local processname=$1
 
     # Get caller process name
-    local caller_processname=`$(get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}")`
+    local caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
 
     # Get suffix of caller process name
     local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
