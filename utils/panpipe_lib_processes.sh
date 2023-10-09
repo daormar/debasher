@@ -483,6 +483,27 @@ get_end_idx_in_range()
 }
 
 ########
+get_highest_priority_deptype()
+{
+    local deptype_a=$1
+    local deptype_b=$2
+
+    if [ -z "${deptype_a}" ]; then
+        deptype_a=${NONE_PROCESSDEP_TYPE}
+    fi
+
+    if [ -z "${deptype_b}" ]; then
+        deptype_b=${NONE_PROCESSDEP_TYPE}
+    fi
+
+    if [ "${PROCESSDEP_PRIORITY[$deptype_a]}" -gt "${PROCESSDEP_PRIORITY[$deptype_b]}" ]; then
+        echo "${deptype_a}"
+    else
+        echo "${deptype_b}"
+    fi
+}
+
+########
 get_procdeps_for_process_cached()
 {
     get_procdeps_for_process()
@@ -494,7 +515,6 @@ get_procdeps_for_process_cached()
             local num_tasks=$2
             local task_idx=$3
             declare -A depdict
-            local processdeps=""
 
             # Iterate over task options
             local optlist=`get_optlist_for_process_and_task "${processname}" "${task_idx}"`
@@ -520,7 +540,8 @@ get_procdeps_for_process_cached()
                                 else
                                     deptype=${AFTEROK_PROCESSDEP_TYPE}
                                 fi
-                                depdict["${proc}"]=${deptype}
+                                local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
+                                depdict["${proc}"]=${highest_pri_deptype}
                             else
                                 fifoname=`get_fifoname_from_absname "${value}"`
                                 if [[ -v PIPELINE_FIFOS[${fifoname}] ]]; then
@@ -532,7 +553,8 @@ get_procdeps_for_process_cached()
                                         # The current process is not the owner of the FIFO
                                         local deptype="${FIFOS_DEPTYPES[$fifoname]}"
                                         if [ "${deptype}" != "${NONE_PROCESSDEP_TYPE}" ]; then
-                                            depdict["${processowner}"]=${deptype}
+                                            local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}"`
+                                            depdict["${processowner}"]=${highest_pri_deptype}
                                         fi
                                     fi
                                 fi
@@ -543,6 +565,7 @@ get_procdeps_for_process_cached()
             done
 
             # Instantiate processdeps variable
+            local processdeps=""
             local proc
             for proc in "${!depdict[@]}"; do
                 local dep="${depdict[$proc]}:${proc}"
@@ -552,17 +575,49 @@ get_procdeps_for_process_cached()
                     processdeps="${processdeps}${PROCESSDEPS_SEP_COMMA}${dep}"
                 fi
             done
+
             # Return dependencies
             echo "${processdeps}"
         }
 
         get_procdeps_for_task_array()
         {
-            # TBD
+            # Initialize variables
             local processname=$1
             local num_tasks=$2
             declare -A depdict
+
+            # Iterate over tasks indices
+            for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
+                # Obtain dependencies for task
+                local prdeps_idx=`get_procdeps_for_process_task "${processname}" "${num_tasks}" "${task_idx}"`
+
+                # Iterate over dependencies
+                if [ -n "${prdeps_idx}" ]; then
+                    while IFS=${PROCESSDEPS_SEP_COMMA} read -r processdep; do
+                        # Extract dependency information
+                        local deptype="${processdep%%:*}"
+                        local proc="${processdep#*:}"
+
+                        # Update associative array of dependencies
+                        local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
+                        depdict["${proc}"]=${highest_pri_deptype}
+                    done <<< "${prdeps_idx}"
+                fi
+            done
+
+            # Instantiate processdeps variable
             local processdeps=""
+            local proc
+            for proc in "${!depdict[@]}"; do
+                local dep="${depdict[$proc]}:${proc}"
+                if [ -z "$processdeps" ]; then
+                    processdeps=${dep}
+                else
+                    processdeps="${processdeps}${PROCESSDEPS_SEP_COMMA}${dep}"
+                fi
+            done
+
             # Return dependencies
             echo "${processdeps}"
         }
@@ -652,7 +707,6 @@ get_adaptive_processname()
 
     # Get caller process name
     local caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
-
     # Get suffix of caller process name
     local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
 
