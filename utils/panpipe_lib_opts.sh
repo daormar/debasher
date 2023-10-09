@@ -847,6 +847,14 @@ get_absolute_fifoname()
 }
 
 ########
+get_fifoname_from_absname()
+{
+    local absname=$1
+
+    ${BASENAME} "${absname}"
+}
+
+########
 get_absolute_condadir()
 {
     echo "${PIPELINE_OUTDIR}/.conda"
