@@ -488,12 +488,16 @@ define_fifo()
     # Get process name
     local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
 
+    # Get task index
+    task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
+
     # Store name of FIFO in associative arrays
-    PIPELINE_FIFOS[${fifoname}]=${processname}
-    PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}
+    PIPELINE_FIFOS[${fifoname}]=${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}
+    PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}
 
     # Store FIFO dependency type
-    if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" -o "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ]; then
+    if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" ] || [ "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" ] \
+           || [ "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ] || [ "${dependency}" = "${AFTERCORR_PROCESSDEP_TYPE}" ]; then
         FIFOS_DEPTYPES[${fifoname}]=${dependency}
     else
         errmsg "Error: dependency type for FIFO not valid (${dependency})"
