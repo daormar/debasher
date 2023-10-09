@@ -495,8 +495,15 @@ get_processname_from_caller()
 get_suffix_from_processname()
 {
     local processname=$1
-    suffix="${processname##*${PROCESSNAME_SUFFIX_SEP}}"
-    echo "${suffix}"
+
+    # Check if processname incorporates a suffix
+    if [[ "$processname" == *"${PROCESSNAME_SUFFIX_SEP}"* ]]; then
+        suffix="${processname##*${PROCESSNAME_SUFFIX_SEP}}"
+        echo "${suffix}"
+    else
+        # The processname variable does not contain any suffix
+        echo ""
+    fi
 }
 
 ########
