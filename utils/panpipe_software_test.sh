@@ -361,7 +361,7 @@ process_f_conda_envs()
 ########
 process_g_document()
 {
-    process_description "Executes an array of 4 tasks. Each task takes an input file and prints its content to standard output."
+    process_description "Executes an array of 4 tasks. Each task takes an input file and prints its content to an output file."
 }
 
 ########
@@ -388,6 +388,7 @@ process_g_define_opts()
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
         define_opt "-infile" "${proc_c_outdir}/${id}" specific_optlist || return 1
+        define_opt "-outdir" "${process_outdir}" specific_optlist || return 1
         save_opt_list specific_optlist
     done
 }
@@ -398,9 +399,13 @@ process_g()
     # Initialize variables
     local id=$(read_opt_value_from_line "$*" "-id")
     local infile=$(read_opt_value_from_line "$*" "-infile")
+    local outd=$(read_opt_value_from_line "$*" "-outdir")
 
-    # Print content of infile
-    cat "${infile}"
+    # Copy content of infile to auxiliary file
+    cat "${infile}" > "${outd}"/${id}_aux
+
+    # Copy content of infile to final file
+    cat "${outd}"/${id}_aux > "${outd}"/${id}
 }
 
 ########
