@@ -106,13 +106,13 @@ def get_new_reexec_processes(reexec_processes, curr_reexec_processes, dep_info):
 
 ##################################################
 def get_reexec_processes_due_to_deps(initial_reexec_processes,dep_info):
-    curr_reexec_processes=initial_reexec_processes
+    curr_reexec_processes = initial_reexec_processes
     reexec_processes = initial_reexec_processes
     end = False
     while not end:
         curr_reexec_processes = get_new_reexec_processes(reexec_processes, curr_reexec_processes, dep_info)
         if (len(curr_reexec_processes) == 0):
-            end=True
+            end = True
         else:
             reexec_processes = reexec_processes.union(curr_reexec_processes)
 
