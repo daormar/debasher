@@ -148,7 +148,7 @@ process_b()
 ########
 process_c_document()
 {
-    process_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
+    process_description "Executes an array of 4 tasks. Each task creates a file containing the task index."
 }
 
 ########
@@ -176,6 +176,7 @@ process_c_define_opts()
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
+        define_opt "-outfile" "${process_outdir}/${id}" specific_optlist || return 1
         save_opt_list specific_optlist
     done
 }
@@ -186,15 +187,13 @@ process_c()
     # Initialize variables
     local sleep_time=$(read_opt_value_from_line "$*" "-c")
     local id=$(read_opt_value_from_line "$*" "-id")
-
-    # create auxiliary file
-    touch "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
+    local outfile=$(read_opt_value_from_line "$*" "-outfile")
 
     # sleep some time
     sleep ${sleep_time}
 
     # create file
-    touch "${PANPIPE_PROCESS_OUTDIR}"/$id
+    echo $id > "${outfile}"
 }
 
 ########
@@ -244,7 +243,7 @@ process_d_define_opts()
     local optlist=""
 
     # Define FIFO
-    define_fifo "process_d_fifo"
+    define_fifo "process_d_fifo" "after"
 
     # Get absolute name of FIFO
     local abs_fifoname=$(get_absolute_fifoname "process_d_fifo")
@@ -309,9 +308,6 @@ process_e()
 
     # Read strings from FIFO
     cat < "${fifo}"
-
-    # sleep some time
-    sleep 10
 }
 
 ########
@@ -365,7 +361,7 @@ process_f_conda_envs()
 ########
 process_g_document()
 {
-    process_description "Executes an array of 4 tasks. Each task creates an empty file named with the task index."
+    process_description "Executes an array of 4 tasks. Each task takes an input file and prints its content to standard output."
 }
 
 ########
@@ -384,10 +380,14 @@ process_g_define_opts()
     local process_outdir=$4
     local optlist=""
 
+    # Obtain output directory for process_c
+    local proc_c_outdir=`get_process_outdir_adaptive "process_c"`
+
     # Save option list so as to execute process four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
+        define_opt "-infile" "${proc_c_outdir}/${id}" specific_optlist || return 1
         save_opt_list specific_optlist
     done
 }
@@ -397,15 +397,10 @@ process_g()
 {
     # Initialize variables
     local id=$(read_opt_value_from_line "$*" "-id")
+    local infile=$(read_opt_value_from_line "$*" "-infile")
 
-    # create auxiliary file
-    touch "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
-
-    # sleep some time
-    sleep 10
-
-    # create file
-    touch "${PANPIPE_PROCESS_OUTDIR}"/$id
+    # Print content of infile
+    cat "${infile}"
 }
 
 ########
