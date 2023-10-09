@@ -513,7 +513,11 @@ get_processname_given_suffix()
     local processname=$1
     local suffix=$2
 
-    echo "${processname}${PROCESSNAME_SUFFIX_SEP}${suffix}"
+    if [ -z "${suffix}" ]; then
+        echo "${processname}"
+    else
+        echo "${processname}${PROCESSNAME_SUFFIX_SEP}${suffix}"
+    fi
 }
 
 ########
