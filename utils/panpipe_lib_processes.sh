@@ -409,7 +409,7 @@ get_deptype_part_in_dep()
 {
     local dep=$1
     local str_array
-    IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${PROCESS_PLUS_DEPTYPE_SEP}"
+    IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${dep}"
 
     echo ${str_array[0]}
 }
@@ -422,7 +422,7 @@ get_processname_part_in_dep()
         echo ${dep}
     else
         local str_array
-        IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${PROCESS_PLUS_DEPTYPE_SEP}"
+        IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${dep}"
         echo ${str_array[1]}
     fi
 }
