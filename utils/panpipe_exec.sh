@@ -705,7 +705,7 @@ print_command_line()
 get_processdeps_from_detailed_spec()
 {
     local processdeps_spec=$1
-    local sdeps=""
+    local pdeps=""
 
     # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
     local separator=`get_processdeps_separator ${processdeps_spec}`
@@ -721,15 +721,15 @@ get_processdeps_from_detailed_spec()
         local processname=`get_processname_part_in_dep ${dep_spec}`
         # Check if there is an id for the process
         if [ ! -z "${PIPE_EXEC_PROCESS_IDS[${processname}]}" ]; then
-            if [ -z "${sdeps}" ]; then
-                sdeps=${mapped_deptype}":"${PIPE_EXEC_PROCESS_IDS[${processname}]}
+            if [ -z "${pdeps}" ]; then
+                pdeps=${mapped_deptype}${PROCESS_PLUS_DEPTYPE_SEP}${PIPE_EXEC_PROCESS_IDS[${processname}]}
             else
-                sdeps=${sdeps}"${separator}"${mapped_deptype}":"${PIPE_EXEC_PROCESS_IDS[${processname}]}
+                pdeps=${pdeps}"${separator}"${mapped_deptype}${PROCESS_PLUS_DEPTYPE_SEP}${PIPE_EXEC_PROCESS_IDS[${processname}]}
             fi
         fi
     done
 
-    echo ${sdeps}
+    echo ${pdeps}
 }
 
 ########
@@ -738,7 +738,7 @@ get_processdeps()
     local process_id_list=$1
     local processdeps_spec=$2
     case ${processdeps_spec} in
-            "afterok:all") apply_deptype_to_processids "${process_id_list}" afterok
+            "${AFTEROK_PROCESSDEP_TYPE}${PROCESS_PLUS_DEPTYPE_SEP}all") apply_deptype_to_processids "${process_id_list}" ${AFTEROK_PROCESSDEP_TYPE}
                     ;;
             "none") echo ""
                     ;;
