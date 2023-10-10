@@ -183,7 +183,7 @@ apply_suffix_to_processdeps()
             local modified_dep="${deptype}"
         else
             local processname_with_suff=`get_processname_given_suffix "${processname}" "${suffix}"`
-            local modified_dep="${deptype}:${processname_with_suff}"
+            local modified_dep="${deptype}${PROCESS_PLUS_DEPTYPE_SEP}${processname_with_suff}"
         fi
         # Add modified dependency to result
         if [ -z "${result}" ]; then
