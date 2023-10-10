@@ -130,7 +130,7 @@ create_slurm_script()
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
     # Write environment variables
-    set | exclude_readonly_vars | exclude_other_vars >> "${fname}" || return 1
+    set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
 
     # Print header
     print_script_header_slurm_sched "${fname}" "${dirname}" ${processname} ${num_scripts} >> "${fname}" || return 1
