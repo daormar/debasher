@@ -738,7 +738,7 @@ get_processdeps()
     local process_id_list=$1
     local processdeps_spec=$2
     case ${processdeps_spec} in
-            "${AFTEROK_PROCESSDEP_TYPE}${PROCESS_PLUS_DEPTYPE_SEP}all") apply_deptype_to_processids "${process_id_list}" ${AFTEROK_PROCESSDEP_TYPE}
+            "${AFTEROK_PROCESSDEP_TYPE}${PROCESS_PLUS_DEPTYPE_SEP}all") apply_deptype_to_processids "${process_id_list}" "${AFTEROK_PROCESSDEP_TYPE}"
                     ;;
             "none") echo ""
                     ;;
