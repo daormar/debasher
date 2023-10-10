@@ -166,6 +166,7 @@ exclude_other_vars()
 {
     "$AWK" -F "=" 'BEGIN{
                          othervars["MEMOIZED_OPTS"]=1
+                         othervars["PROCESS_OUT_VALUES"]=1
                         }
                         {
                          if(!($1 in othervars)) printf"%s\n",$0
