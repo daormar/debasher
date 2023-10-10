@@ -707,6 +707,7 @@ get_adaptive_processname()
 
     # Get caller process name
     local caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+
     # Get suffix of caller process name
     local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
 
