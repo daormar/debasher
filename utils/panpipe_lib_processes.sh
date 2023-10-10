@@ -373,8 +373,7 @@ get_outd_for_dep()
         local outd="${PIPELINE_OUTDIR}"
 
         # Get processname
-        local processname_part=`echo ${dep} | "$AWK" -F ":" '{print $2}'`
-
+        local processname_part="${dep#*${PROCESS_PLUS_DEPTYPE_SEP}}"
         get_process_outdir_given_dirname "${outd}" ${processname_part}
     fi
 }
@@ -409,9 +408,8 @@ get_task_array_size_for_process()
 get_deptype_part_in_dep()
 {
     local dep=$1
-    local sep=":"
     local str_array
-    IFS="$sep" read -r -a str_array <<< "${dep}"
+    IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${PROCESS_PLUS_DEPTYPE_SEP}"
 
     echo ${str_array[0]}
 }
@@ -423,21 +421,10 @@ get_processname_part_in_dep()
     if [ ${dep} = "${NONE_PROCESSDEP_TYPE}" ]; then
         echo ${dep}
     else
-        local sep=":"
         local str_array
-        IFS="$sep" read -r -a str_array <<< "${dep}"
+        IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${PROCESS_PLUS_DEPTYPE_SEP}"
         echo ${str_array[1]}
     fi
-}
-
-########
-get_id_part_in_dep()
-{
-    local dep=$1
-    local sep=":"
-    local str_array
-    IFS="$sep" read -r -a str_array <<< "${dep}"
-    echo ${str_array[1]}
 }
 
 ########
@@ -568,7 +555,7 @@ get_procdeps_for_process_cached()
             local processdeps=""
             local proc
             for proc in "${!depdict[@]}"; do
-                local dep="${depdict[$proc]}:${proc}"
+                local dep="${depdict[$proc]}${PROCESS_PLUS_DEPTYPE_SEP}${proc}"
                 if [ -z "$processdeps" ]; then
                     processdeps=${dep}
                 else
@@ -596,8 +583,8 @@ get_procdeps_for_process_cached()
                 if [ -n "${prdeps_idx}" ]; then
                     while IFS=${PROCESSDEPS_SEP_COMMA} read -r processdep; do
                         # Extract dependency information
-                        local deptype="${processdep%%:*}"
-                        local proc="${processdep#*:}"
+                        local deptype="${processdep%%${PROCESS_PLUS_DEPTYPE_SEP}*}"
+                        local proc="${processdep#*${PROCESS_PLUS_DEPTYPE_SEP}}"
 
                         # Update associative array of dependencies
                         local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
@@ -610,7 +597,7 @@ get_procdeps_for_process_cached()
             local processdeps=""
             local proc
             for proc in "${!depdict[@]}"; do
-                local dep="${depdict[$proc]}:${proc}"
+                local dep="${depdict[$proc]}${PROCESS_PLUS_DEPTYPE_SEP}${proc}"
                 if [ -z "$processdeps" ]; then
                     processdeps=${dep}
                 else
