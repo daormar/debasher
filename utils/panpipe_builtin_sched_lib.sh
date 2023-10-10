@@ -931,8 +931,6 @@ builtin_sched_print_script_header()
     echo "PANPIPE_SCRIPT_FILENAME=\"${fname}\""
     echo "PANPIPE_DIR_NAME=\"${dirname}\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
-    local outd=`get_process_outdir_given_dirname "${dirname}" "${processname}"`
-    echo "PANPIPE_PROCESS_OUTDIR=\"$(esc_dq "${outd}")\""
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
     echo "builtin_sched_print_pid_to_file"
 }
