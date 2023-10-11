@@ -144,7 +144,7 @@ get_task_template_log_filename_slurm()
 }
 
 ########
-get_name_of_process_function_reset()
+get_reset_funcname()
 {
     local processname=$1
 
@@ -152,7 +152,7 @@ get_name_of_process_function_reset()
 }
 
 ########
-get_name_of_process_function()
+get_exec_funcname()
 {
     local processname=$1
 
@@ -160,7 +160,7 @@ get_name_of_process_function()
 }
 
 ########
-get_name_of_process_function_post()
+get_post_funcname()
 {
     local processname=$1
 
@@ -168,7 +168,7 @@ get_name_of_process_function_post()
 }
 
 ########
-get_name_of_process_function_outdir()
+get_outdir_funcname()
 {
     local processname=$1
 
@@ -666,7 +666,7 @@ get_process_outdir_given_dirname()
     local processname=$2
 
     # Get name of process function to set output directory
-    process_function_outdir=`get_name_of_process_function_outdir ${processname}`
+    process_function_outdir=`get_outdir_funcname ${processname}`
 
     if [ "${process_function_outdir}" = "${FUNCT_NOT_FOUND}" ]; then
         get_default_process_outdir_given_dirname "$dirname" "$processname"

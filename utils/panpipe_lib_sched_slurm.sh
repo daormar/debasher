@@ -116,9 +116,9 @@ create_slurm_script()
     local dirname=$1
     local processname=$2
     local fname=`get_script_filename "${dirname}" ${processname}`
-    local reset_funct=`get_name_of_process_function_reset ${processname}`
-    local funct=`get_name_of_process_function ${processname}`
-    local post_funct=`get_name_of_process_function_post ${processname}`
+    local reset_funct=`get_reset_funcname ${processname}`
+    local funct=`get_exec_funcname ${processname}`
+    local post_funct=`get_post_funcname ${processname}`
     local opts_array_name=$3[@]
     local opts_array=("${!opts_array_name}")
     local num_scripts=${#opts_array[@]}
