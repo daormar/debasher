@@ -297,6 +297,9 @@ define_opts_for_process()
     # Clear variables
     clear_def_opts_vars
 
+    # Copy processname_def_opts function if necessary
+    copy_process_defopts_func "${processname}"
+
     # Obtain define_opts function name and call it
     local define_opts_funcname=`get_define_opts_funcname ${processname}`
     ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
@@ -740,14 +743,14 @@ copy_process_func()
 {
     local methodname=$1
     local processname=$2
-    local suffix=$3
+    local processname_wo_suffix=`remove_suffix_from_processname "${processname}"`
+    local suffix=`get_suffix_from_processname "${processname}"`
 
     if [ -n "${suffix}" ]; then
-        local processname_with_suff=`get_processname_given_suffix "${processname}" "${suffix}"`
-        local process_function_wo_suffix=`get_process_funcname "${processname}" "${methodname}"`
-        local process_function_with_suffix=`get_process_funcname "${processname_with_suff}" "${methodname}"`
-        if func_exists "${process_function_wo_suffix}" && ! func_exists "${process_function_with_suffix}"; then
-            copy_func "${process_function_wo_suffix}" "${process_function_with_suffix}"
+        local process_function_wo_suffix=`get_process_funcname "${processname_wo_suffix}" "${methodname}"`
+        local process_function=`get_process_funcname "${processname}" "${methodname}"`
+        if func_exists "${process_function_wo_suffix}" && ! func_exists "${process_function}"; then
+            copy_func "${process_function_wo_suffix}" "${process_function}"
         fi
     fi
 }
@@ -756,9 +759,8 @@ copy_process_func()
 copy_process_defopts_func()
 {
     local processname=$1
-    local suffix=$2
 
-    copy_process_func "${PROCESS_METHOD_NAME_DEFINE_OPTS}" "${processname}" "${suffix}"
+    copy_process_func "${PROCESS_METHOD_NAME_DEFINE_OPTS}" "${processname}"
 }
 
 ########

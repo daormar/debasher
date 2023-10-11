@@ -233,23 +233,6 @@ apply_suffix_to_pipeline_entry()
 }
 
 ########
-exec_additional_actions_for_ppl_entry()
-{
-    local ppl_entry=$1
-    local suffix=$2
-
-    # Read the string into an array using the IFS
-    local elements
-    IFS=" " read -ra elements <<< "$ppl_entry"
-
-    # Get process name from entry
-    local processname="${elements[0]}"
-
-    # Copy processname_def_opts function if necessary
-    copy_process_defopts_func "${processname}" "${suffix}"
-}
-
-########
 add_panpipe_pipeline()
 {
     # Initialize variables
@@ -270,7 +253,6 @@ add_panpipe_pipeline()
     # Process resulting pipeline entries
     while read ppl_entry; do
         apply_suffix_to_pipeline_entry "${ppl_entry}" "${suffix}" || return 1
-        exec_additional_actions_for_ppl_entry "${ppl_entry}" "${suffix}" || return 1
     done < "${tmpfile}"
 
     # Remove temporary file
