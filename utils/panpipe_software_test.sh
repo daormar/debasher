@@ -176,7 +176,7 @@ process_c_define_opts()
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
-        define_opt "-outfile" "${process_outdir}/${id}" specific_optlist || return 1
+        define_opt "-outf" "${process_outdir}/${id}" specific_optlist || return 1
         save_opt_list specific_optlist
     done
 }
@@ -187,13 +187,13 @@ process_c()
     # Initialize variables
     local sleep_time=$(read_opt_value_from_line "$*" "-c")
     local id=$(read_opt_value_from_line "$*" "-id")
-    local outfile=$(read_opt_value_from_line "$*" "-outfile")
+    local outf=$(read_opt_value_from_line "$*" "-outf")
 
     # sleep some time
     sleep ${sleep_time}
 
     # create file
-    echo $id > "${outfile}"
+    echo $id > "${outf}"
 }
 
 ########
@@ -332,6 +332,9 @@ process_f_define_opts()
     local process_outdir=$4
     local optlist=""
 
+    # Define name of output file
+    define_opt "-outf" "${process_outdir}/python_ver.txt" optlist || return 1
+
     # Save option list
     save_opt_list optlist
 }
@@ -339,11 +342,14 @@ process_f_define_opts()
 ########
 process_f()
 {
+    # Initialize variables
+    local outf=$(read_opt_value_from_line "$*" "-outf")
+
     # Activate conda environment
     conda activate py27 || return 1
 
     # Write python version to file
-    python --version > "${PANPIPE_PROCESS_OUTDIR}"/python_ver.txt 2>&1 || return 1
+    python --version > "${outf}" 2>&1 || return 1
 
     # Deactivate conda environment
     conda deactivate
