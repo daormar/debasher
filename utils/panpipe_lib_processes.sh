@@ -736,6 +736,32 @@ get_process_outdir_given_process_spec()
 }
 
 ########
+copy_process_func()
+{
+    local methodname=$1
+    local processname=$2
+    local suffix=$3
+
+    if [ -n "${suffix}" ]; then
+        local processname_with_suff=`get_processname_given_suffix "${processname}" "${suffix}"`
+        local process_function_wo_suffix=`get_process_funcname "${processname}" "${methodname}"`
+        local process_function_with_suffix=`get_process_funcname "${processname_with_suff}" "${methodname}"`
+        if func_exists "${process_function_wo_suffix}" && ! func_exists "${process_function_with_suffix}"; then
+            copy_func "${process_function_wo_suffix}" "${process_function_with_suffix}"
+        fi
+    fi
+}
+
+########
+copy_process_defopts_func()
+{
+    local processname=$1
+    local suffix=$2
+
+    copy_process_func "${PROCESS_METHOD_NAME_DEFINE_OPTS}" "${processname}" "${suffix}"
+}
+
+########
 create_outdir_for_process()
 {
     local dirname=$1
