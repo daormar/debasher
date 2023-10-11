@@ -203,24 +203,27 @@ apply_suffix_to_pipeline_entry()
     local suffix=$2
 
     # Read the string into an array using the IFS
-    local words
-    IFS=" " read -ra words <<< "$ppl_entry"
+    local elements
+    IFS=" " read -ra elements <<< "$ppl_entry"
 
-    # Initialize a variable to store the concatenated words
+    # Initialize a variable to store the concatenated elements
     local result=""
 
-    # Iterate over the indices of the words array
-    for i in "${!words[@]}"; do
+    # Iterate over the indices of the elements array
+    for i in "${!elements[@]}"; do
+        # The first word is the process name
         if [ "${i}" -eq 0 ]; then
-            local processname_with_suff=`get_processname_given_suffix "${words[$i]}" "${suffix}"`
+            # Add process with suffix to result
+            local processname="${elements[$i]}"
+            local processname_with_suff=`get_processname_given_suffix "${processname}" "${suffix}"`
             result="${processname_with_suff}"
         else
-            if [[ "${words[$i]}" == "${PROCESSDEPS_SPEC}"* ]]; then
-                processdeps=`extract_processdeps_from_process_spec "${words[$i]}"`
+            if [[ "${elements[$i]}" == "${PROCESSDEPS_SPEC}"* ]]; then
+                processdeps=`extract_processdeps_from_process_spec "${elements[$i]}"`
                 processdeps_with_suffix=`apply_suffix_to_processdeps "${processdeps}" "${suffix}"`
                 result="${result} ${PROCESSDEPS_SPEC}=${processdeps_with_suffix}"
             else
-                result="${result} ${words[$i]}"
+                result="${result} ${elements[$i]}"
             fi
         fi
     done
@@ -230,13 +233,20 @@ apply_suffix_to_pipeline_entry()
 }
 
 ########
-apply_sufix_to_pipeline_entries()
+exec_additional_actions_for_ppl_entry()
 {
-    local suffix=$1
+    local ppl_entry=$1
+    local suffix=$2
 
-    while read line; do
-        apply_suffix_to_pipeline_entry "${line}" "${suffix}"
-    done
+    # Read the string into an array using the IFS
+    local elements
+    IFS=" " read -ra elements <<< "$ppl_entry"
+
+    # Get process name from entry
+    local processname="${elements[0]}"
+
+    # Copy processname_def_opts function if necessary
+    copy_process_defopts_func "${processname}" "${suffix}"
 }
 
 ########
@@ -246,9 +256,23 @@ add_panpipe_pipeline()
     local modname=$1
     local suffix=$2
 
+    # Create temporary file
+    local tmpfile=`${MKTEMP}`
+
     # Load module
     load_panpipe_module "${modname}"
 
-    # Execute pipeline function for module
-    exec_pipeline_func_for_module "${modname}" | apply_sufix_to_pipeline_entries "${suffix}" ; pipe_fail || return 1
+    # Execute pipeline function for module and store output entries in a
+    # temporary file (the purpose is to enable function execution
+    # without using any sub-shell)
+    exec_pipeline_func_for_module "${modname}" > "${tmpfile}"
+
+    # Process resulting pipeline entries
+    while read ppl_entry; do
+        apply_suffix_to_pipeline_entry "${ppl_entry}" "${suffix}" || return 1
+        exec_additional_actions_for_ppl_entry "${ppl_entry}" "${suffix}" || return 1
+    done < "${tmpfile}"
+
+    # Remove temporary file
+    rm "${tmpfile}"
 }
