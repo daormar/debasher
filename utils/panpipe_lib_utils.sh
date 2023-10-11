@@ -572,10 +572,19 @@ search_process_mandatory_func()
         echo "${process_function}"
     else
         # Return function name without process suffix
-        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${method_name}"`
-        echo "${process_function}"
+        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
+        process_wo_suffix_function=`get_process_funcname "${processname_wo_suffix}" "${method_name}"`
+        echo "${process_wo_suffix_function}"
     fi
+}
+
+########
+copy_func()
+{
+    local existing_funcname=$1
+    local new_funcname=$2
+
+    eval "`echo "${new_funcname}()"; declare -f ${existing_funcname} | tail -n +2`"
 }
 
 ########
