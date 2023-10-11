@@ -96,7 +96,7 @@ process_a_should_execute()
 ########
 process_b_document()
 {
-    process_description "Writes a given value to the file \`process_b.out\` in data directory."
+    process_description "Writes a given value to a file in data directory."
 }
 
 ########
@@ -124,7 +124,7 @@ process_b_define_opts()
     local abs_shrdir=$(get_absolute_shdirname "data")
 
     # Define name of output file
-    local outf="${abs_shrdir}/process_b.out"
+    local outf="${abs_shrdir}/${process_name}.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
@@ -434,7 +434,7 @@ process_g_post()
 ########
 process_h_document()
 {
-    process_description "Writes a given value to the file \`process_h.out\` in data directory."
+    process_description "Writes a given value to a file in data directory."
 }
 
 ########
@@ -462,7 +462,7 @@ process_h_define_opts()
     local abs_shrdir=$(get_absolute_shdirname "data")
 
     # Define name of output file
-    local outf="${abs_shrdir}/process_h.out"
+    local outf="${abs_shrdir}/${process_name}.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
@@ -505,18 +505,19 @@ process_i_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # -b option
+    # -h option
     define_cmdline_opt "$cmdline" "-h" optlist || return 1
 
     # Get absolute name of shared directory
     local abs_shrdir=$(get_absolute_shdirname "data")
 
     # Get name of file containing the value to be read
-    local valfile="${abs_shrdir}/process_b.out"
+    local process_b=$(get_adaptive_processname "process_b")
+    local valfile="${abs_shrdir}/${process_b}.out"
     define_opt "-valfile" "${valfile}" optlist || return 1
 
     # Define name of output file
-    local outf="${process_outdir}/process_i.out"
+    local outf="${process_outdir}/${process_name}.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
