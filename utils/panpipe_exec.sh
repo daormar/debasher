@@ -248,6 +248,8 @@ gen_initial_procspec_file()
 
     exec_pipeline_func_for_module "${pfile}" || exit 1
 
+    echo "Generation complete" >&2
+
     echo "" >&2
 }
 
@@ -259,6 +261,8 @@ check_pipeline()
     echo "# Checking process specification..." >&2
 
     "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" || return 1
+
+    echo "Checking complete" >&2
 
     echo "" >&2
 }
@@ -282,6 +286,7 @@ gen_final_procspec_file()
         echo "${process_spec}" "${procdeps}"
     done < "${initial_procspec_file}"
 
+    echo "Generation complete" >&2
 
     echo "" >&2
 }
@@ -360,7 +365,7 @@ check_pipeline_opts()
     local out_fifos_file=$4
 
     # Remove output files
-    rm -f "${out_opts_file}" "${out_fifos_file}"
+    rm -f "${out_opts_file}"
 
     # Read information about the processes to be executed
     while read process_spec; do
@@ -377,10 +382,19 @@ check_pipeline_opts()
         local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}`
         echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >&2
         echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >> "${out_opts_file}"
-
-        # Generate info about fifos
-        show_pipeline_fifos_def_opts >> "${out_fifos_file}"
     done < "${procspec_file}"
+
+    # Register fifo users
+    while read process_spec; do
+        # Extract process information
+        local processname=`extract_processname_from_process_spec "$process_spec"`
+
+        # Register fifos
+        register_fifos_used_by_process "${processname}"
+    done < "${procspec_file}"
+
+    # Show info about fifos
+    show_pipeline_fifos > "${out_fifos_file}"
 
     echo "" >&2
 }
@@ -475,6 +489,47 @@ define_dont_execute_processes()
             if [ "${should_execute_funcname}" != ${FUNCT_NOT_FOUND} ]; then
                 if ! ${should_execute_funcname} "${cmdline}" "${process_spec}"; then
                     mark_process_as_dont_execute ${processname} "${EXECFUNCT_DONT_EXEC_REASON}"
+                fi
+            fi
+        fi
+    done < "${procspec_file}"
+
+    echo "Definition complete" >&2
+
+    echo "" >&2
+}
+
+########
+define_reexec_processes_due_to_fifos()
+{
+    echo "# Defining processes to be reexecuted due to usage of fifos (if any)..." >&2
+
+    # Read input parameters
+    local dirname=$1
+    local procspec_file=$2
+
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        if pipeline_process_spec_is_ok "$process_spec"; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            # Get fifo owners for process
+            local fifo_owners=`get_fifo_owners_for_process "${processname}"`
+
+            # Get status for process
+            local status=`get_process_status "${dirname}" "${processname}"`
+
+            # Mark process and fifo owners for reexecution
+            if [ -n "${fifo_owners}" ]; then
+                if [ "${status}" = "${TODO_PROCESS_EXIT_CODE}" ] \
+                       || [ "${status}" = "${UNFINISHED_PROCESS_STATUS}" ] \
+                       || [ "${status}" = "${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ] ; then
+                    mark_process_as_reexec ${processname} ${FIFO_REEXEC_REASON}
+                    while read -r fifo_owner; do
+                        mark_process_as_reexec ${fifo_owner} ${FIFO_REEXEC_REASON}
+                    done <<< "${fifo_owners}"
                 fi
             fi
         fi
@@ -990,6 +1045,8 @@ else
         fi
 
         define_dont_execute_processes "${command_line}" "${procspec_file}" || exit 1
+
+        define_reexec_processes_due_to_fifos "${outd}" "${procspec_file}" || exit 1
 
         define_forced_exec_processes "${procspec_file}" || exit 1
 
