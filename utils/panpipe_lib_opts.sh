@@ -492,8 +492,8 @@ define_fifo()
     task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
 
     # Store name of FIFO in associative arrays
-    PIPELINE_FIFOS[${fifoname}]=${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}
-    PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}
+    PIPELINE_FIFOS[${fifoname}]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+    PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
 
     # Store FIFO dependency type
     if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" ] || [ "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" ] \
@@ -794,7 +794,7 @@ show_pipeline_fifos()
 {
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        echo "${fifoname}" ${PIPELINE_FIFOS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]}
+        echo "${fifoname}" ${PIPELINE_FIFOS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]} ${FIFO_USERS["${fifoname}"]}
     done
 }
 
@@ -803,7 +803,7 @@ show_pipeline_fifos_def_opts()
 {
     local fifoname
     for fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
-        echo "${fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]}
+        echo "${fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]} ${FIFO_USERS["${fifoname}"]}
     done
 }
 
