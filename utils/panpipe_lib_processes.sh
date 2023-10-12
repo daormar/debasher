@@ -404,7 +404,7 @@ get_task_array_size_for_process()
     local process_spec=$2
 
     define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-    echo ${#SCRIPT_OPT_LIST_ARRAY[@]}
+    echo ${#CURRENT_PROCESS_OPT_LIST[@]}
 }
 
 ########
