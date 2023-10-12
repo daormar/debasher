@@ -726,6 +726,36 @@ register_fifos_used_by_process()
 }
 
 ########
+get_fifo_owners_for_process()
+{
+    local processname=$1
+    declare -A owners
+
+    # Iterate over fifo users
+    for fifoname in "${!FIFO_USERS[@]}"; do
+        local user="${FIFO_USERS[${fifoname}]}"
+        local user_proc="${user%%${ASSOC_ARRAY_ELEM_SEP}*}"
+        if [ "${user_proc}" = "${processname}" ]; then
+            local owner="${PIPELINE_FIFOS[${fifoname}]}"
+            local owner_proc="${owner%%${ASSOC_ARRAY_ELEM_SEP}*}"
+            owners["${owner_proc}"]=1
+        fi
+    done
+
+    # Obtain result
+    local result=""
+    for owner in "${!owners[@]}"; do
+        if [ -z "${result}" ]; then
+            result=${owner}
+        else
+            result="${result} ${owner}"
+        fi
+    done
+
+    echo "${result}"
+}
+
+########
 get_default_process_outdir_given_dirname()
 {
     local dirname=$1
