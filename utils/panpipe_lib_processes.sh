@@ -225,7 +225,7 @@ get_numtasks_for_process()
 {
     local processname=$1
 
-    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_KEY_SEP}${ASSOC_ARRAY_KEY_LEN}]}"
+    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN}]}"
 }
 
 ########
@@ -233,7 +233,7 @@ get_optlist_for_process_and_task()
 {
     local processname=$1
     local task_idx=$2
-    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}]}"
+    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}]}"
 }
 
 ########
@@ -250,9 +250,9 @@ define_opts_for_process()
     {
         local processname=$1
         local array_length=${#CURRENT_PROCESS_OPT_LIST[@]}
-        PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_KEY_SEP}${ASSOC_ARRAY_KEY_LEN}"]=${array_length}
+        PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN}"]=${array_length}
         for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-            PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}"]=${CURRENT_PROCESS_OPT_LIST[task_idx]}
+            PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"]=${CURRENT_PROCESS_OPT_LIST[task_idx]}
         done
     }
 
@@ -276,7 +276,7 @@ define_opts_for_process()
                         else
                             value="${DESERIALIZED_ARGS[$i]}"
                             if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
-                                PROCESS_OUT_VALUES["$value"]="${processname}${ASSOC_ARRAY_KEY_SEP}${task_idx}" >&2
+                                PROCESS_OUT_VALUES["$value"]="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}" >&2
                             fi
                             i=$((i+1))
                         fi
@@ -522,8 +522,8 @@ get_procdeps_for_process_cached()
                             if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
                                 # The value is generated as output by another process
                                 local proc_plus_idx=${PROCESS_OUT_VALUES[${value}]}
-                                local proc="${proc_plus_idx%%${ASSOC_ARRAY_KEY_SEP}*}"
-                                local idx="${proc_plus_idx#*${ASSOC_ARRAY_KEY_SEP}}"
+                                local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
+                                local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                 local deptype
                                 if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
                                     deptype=${AFTERCORR_PROCESSDEP_TYPE}
@@ -537,8 +537,8 @@ get_procdeps_for_process_cached()
                                 if [[ -v PIPELINE_FIFOS[${fifoname}] ]]; then
                                     # The value is a FIFO
                                     local proc_plus_idx="${PIPELINE_FIFOS[${fifoname}]}"
-                                    local processowner="${proc_plus_idx%%${ASSOC_ARRAY_KEY_SEP}*}"
-                                    local idx="${proc_plus_idx#*${ASSOC_ARRAY_KEY_SEP}}"
+                                    local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
+                                    local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                     if [ "${processowner}" != "${processname}" ]; then
                                         # The current process is not the owner of the FIFO
                                         local deptype="${FIFOS_DEPTYPES[$fifoname]}"
@@ -614,7 +614,7 @@ get_procdeps_for_process_cached()
 
         local processname=$1
         # Determine whether the process has multiple tasks
-        num_tasks=`get_numtasks_for_process "${processname}"`
+        local num_tasks=`get_numtasks_for_process "${processname}"`
         if [ "${num_tasks}" -eq 1 ]; then
             # The process has only one task
             get_procdeps_for_process_task "${processname}" "${num_tasks}" 0
@@ -651,6 +651,77 @@ get_procdeps_for_process_cached()
             PROCESS_DEPENDENCIES[$processname]=${deps}
             echo "$deps"
         fi
+    fi
+}
+
+########
+register_fifos_used_by_process()
+{
+    register_fifos_used_by_process_task()
+    {
+        # Initialize variables
+        local processname=$1
+        local num_tasks=$2
+        local task_idx=$3
+
+        # Iterate over task options
+        local optlist=`get_optlist_for_process_and_task "${processname}" "${task_idx}"`
+        deserialize_args "${optlist}"
+        for i in "${!DESERIALIZED_ARGS[@]}"; do
+            # Check if a value represents an absolute path
+            local value="${DESERIALIZED_ARGS[i]}"
+            if is_absolute_path "${value}"; then
+                j=$((i-1))
+                if [ $j -ge 0 ]; then
+                    opt="${DESERIALIZED_ARGS[j]}"
+                    # Check if the option associated to the value is
+                    # not an output option
+                    if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
+                        if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
+                            :
+                        else
+                            fifoname=`get_fifoname_from_absname "${value}"`
+                            if [[ -v PIPELINE_FIFOS[${fifoname}] ]]; then
+                                # The value is a FIFO
+                                local proc_plus_idx="${PIPELINE_FIFOS[${fifoname}]}"
+                                local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
+                                local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
+                                if [ "${processowner}" != "${processname}" ]; then
+                                    # The current process is not the owner of the FIFO
+                                    FIFO_USERS[${fifoname}]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+                                fi
+                            fi
+                        fi
+                    fi
+                fi
+            fi
+        done
+    }
+
+    register_fifos_used_by_task_array()
+    {
+        # Initialize variables
+        local processname=$1
+        local num_tasks=$2
+        declare -A depdict
+
+        # Iterate over tasks indices
+        for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
+            # Register fifos for task
+            register_fifos_used_by_process_task "${processname}" "${num_tasks}" "${task_idx}"
+        done
+    }
+
+    local processname=$1
+
+    # Determine whether the process has multiple tasks
+    local num_tasks=`get_numtasks_for_process "${processname}"`
+    if [ "${num_tasks}" -eq 1 ]; then
+        # The process has only one task
+        register_fifos_used_by_process_task "${processname}" "${num_tasks}" 0
+    else
+        # The process is an array of tasks
+        register_fifos_used_by_task_array "${processname}" "${num_tasks}"
     fi
 }
 
