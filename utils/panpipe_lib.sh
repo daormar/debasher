@@ -38,7 +38,7 @@ ATTEMPT_SEP=","
 PROCESS_PLUS_DEPTYPE_SEP=":"
 PROCESSDEPS_SEP_COMMA=","
 PROCESSDEPS_SEP_INTERR="?"
-ASSOC_ARRAY_KEY_SEP="__KEYSEP__"
+ASSOC_ARRAY_ELEM_SEP="__ELEMSEP__"
 ASSOC_ARRAY_KEY_LEN="__LEN__"
 
 # INVALID IDENTIFIERS
@@ -82,6 +82,7 @@ MODULE_METHOD_NAME_PIPELINE="_pipeline"
 EXECFUNCT_DONT_EXEC_REASON="execfunct"
 
 # REEXEC REASONS
+FIFO_REEXEC_REASON="fifo"
 FORCED_REEXEC_REASON="forced"
 OUTDATED_CODE_REEXEC_REASON="outdated_code"
 DEPS_REEXEC_REASON="dependencies"
@@ -198,6 +199,9 @@ declare -A PIPELINE_SHDIRS_DEF_OPTS
 # calling its def_options method)
 declare -A PIPELINE_FIFOS
 declare -A PIPELINE_FIFOS_DEF_OPTS
+
+# Declare associative array to store users of fifos
+declare -A FIFO_USERS
 
 # Declare associative array to store dependency types for fifos
 declare -A FIFOS_DEPTYPES
