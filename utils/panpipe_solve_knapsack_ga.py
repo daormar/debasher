@@ -20,7 +20,7 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 
 # import modules
 import io, sys, getopt, operator
-from knapsack_ga import knapsack_solve
+from panpipe_knapsack_ga import knapsack_solve
 
 ##################################################
 def take_pars():
