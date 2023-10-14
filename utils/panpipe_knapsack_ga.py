@@ -87,8 +87,6 @@ def spawn_individual(start_pop_with_zeroes, num_items):
         return individual
 
 ##################################################
-
-
 def mutate(target):
     """
     Changes a random element of the permutation array from 0 -> 1 or from 1 -> 0.
