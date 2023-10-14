@@ -19,7 +19,8 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 # *- python -*
 
 # import modules
-import random, time
+import random
+import time
 
 ##############################################################################
 # 0-1 Knapsack Problem solved using Genetic Algorithms
@@ -29,7 +30,7 @@ import random, time
 ##############################################################################
 
 ##################################################
-def fitness(target,weights,values,capacities):
+def fitness(target, weights, values, capacities):
     """
     fitness(target) will return the fitness value of permutation named "target".
     Higher scores are better and are equal to the total value of items in the permutation.
@@ -42,55 +43,57 @@ def fitness(target,weights,values,capacities):
 
     # Compute total value
     for i in range(len(target)):
-        if (target[i]==1):
-            total_value+=values[i]
+        if (target[i] == 1):
+            total_value += values[i]
 
     # Compute weights
     for i in range(len(weights)):
         for j in range(len(weights[i])):
-            if (target[j]==1):
-                total_weights[i]+=weights[i][j]
+            if (target[j] == 1):
+                total_weights[i] += weights[i][j]
 
     # Verify capacities
-    excess=0
+    excess = 0
     for i in range(len(total_weights)):
         if total_weights[i] > capacities[i]:
             # Capacity exceeded, accumulate excess
-            capacity_exceeded=True
-            excess+=total_weights[i] - capacities[i]
+            capacity_exceeded = True
+            excess += total_weights[i] - capacities[i]
 
     # Return value
-    if excess==0:
+    if excess == 0:
         return total_value
     else:
         return -excess
 
 ##################################################
-def spawn_starting_population(amount,start_pop_with_zeroes,num_items):
-    population=[]
-    for x in range (0,amount):
-        population.append(spawn_individual(start_pop_with_zeroes,num_items))
+def spawn_starting_population(amount, start_pop_with_zeroes, num_items):
+    population = []
+    for x in range(0, amount):
+        population.append(spawn_individual(start_pop_with_zeroes, num_items))
     return population
 
 ##################################################
-def spawn_individual(start_pop_with_zeroes,num_items):
+def spawn_individual(start_pop_with_zeroes, num_items):
     if start_pop_with_zeroes:
-        individual=[]
-        for x in range (0,num_items):
-            individual.append(random.randint(0,0))
+        individual = []
+        for x in range(0, num_items):
+            individual.append(random.randint(0, 0))
         return individual
     else:
-        individual=[]
-        for x in range (0,num_items):
-            individual.append(random.randint(0,1))
+        individual = []
+        for x in range(0, num_items):
+            individual.append(random.randint(0, 1))
         return individual
 
 ##################################################
+
+
 def mutate(target):
     """
     Changes a random element of the permutation array from 0 -> 1 or from 1 -> 0.
     """
-    r = random.randint(0,len(target)-1)
+    r = random.randint(0, len(target)-1)
     if target[r] == 1:
         target[r] = 0
     else:
@@ -122,11 +125,12 @@ def evolve_population(pop):
     # Start breeding
     children = []
     desired_length = len(pop) - len(parents)
-    while len(children) < desired_length :
-        male = pop[random.randint(0,len(parents)-1)]
-        female = pop[random.randint(0,len(parents)-1)]
-        mixpoint=random.randint(0,len(parents))
-        child = male[:mixpoint] + female[mixpoint:] # from start to mixpoint from father, from mixpoint to end from mother
+    while len(children) < desired_length:
+        male = pop[random.randint(0, len(parents)-1)]
+        female = pop[random.randint(0, len(parents)-1)]
+        mixpoint = random.randint(0, len(parents))
+        # from start to mixpoint from father, from mixpoint to end from mother
+        child = male[:mixpoint] + female[mixpoint:]
         if mutation_chance > random.random():
             mutate(child)
         children.append(child)
@@ -138,37 +142,40 @@ def evolve_population(pop):
 
 ##################################################
 def get_packed_items(chrom):
-    packed_items=[]
+    packed_items = []
     for i in range(len(chrom)):
-        if chrom[i]==1:
+        if chrom[i] == 1:
             packed_items.append(i)
     return packed_items
 
 ##################################################
-def knapsack_solve(max_gen,pop_size,start_pop_with_zeroes,weights,values,capacities,time_limit=-1):
+def knapsack_solve(max_gen, pop_size, start_pop_with_zeroes, weights, values, capacities, time_limit=-1):
     # Set random number seed
     random.seed(31415)
 
     # Get start time
-    start=time.time()
+    start = time.time()
 
     # Compute generations
     generation = 1
-    population = spawn_starting_population(pop_size,start_pop_with_zeroes,len(values))
+    population = spawn_starting_population(
+        pop_size, start_pop_with_zeroes, len(values))
     for g in range(max_gen):
-        population = sorted(population, key=lambda x: fitness(x,weights,values,capacities), reverse=True)
+        population = sorted(population, key=lambda x: fitness(
+            x, weights, values, capacities), reverse=True)
         population = evolve_population(population)
         generation += 1
-        curr=time.time()-start
+        curr = time.time()-start
         if time_limit > 0 and curr > time_limit:
             break
 
     # Sort final population
-    population = sorted(population, key=lambda x: fitness(x,weights,values,capacities), reverse=True)
+    population = sorted(population, key=lambda x: fitness(
+        x, weights, values, capacities), reverse=True)
 
     # Obtain solution
-    best_fitted_chrom=population[0]
-    computed_value=fitness(best_fitted_chrom,weights,values,capacities)
-    packed_items=get_packed_items(best_fitted_chrom)
+    best_fitted_chrom = population[0]
+    computed_value = fitness(best_fitted_chrom, weights, values, capacities)
+    packed_items = get_packed_items(best_fitted_chrom)
 
-    return computed_value,packed_items
+    return computed_value, packed_items
