@@ -79,7 +79,7 @@ def print_help():
     print("", file=sys.stderr)
     print("-s <string>    Item weight and value specification", file=sys.stderr)
     print("-c <string>    Comma-separated list of capacities", file=sys.stderr)
-    print("-t <float>     Time limit in seconds (no limit by default)", file=sys.stderr)
+    print("-t <float>     Time limit to produce a solution in seconds (no limit by default)", file=sys.stderr)
 
 ##################################################
 

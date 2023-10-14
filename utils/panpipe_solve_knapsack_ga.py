@@ -85,7 +85,7 @@ def print_help():
     print("-c <string>    Comma-separated list of capacities", file=sys.stderr)
     print("-g <int>       Number of generations (1000 by default)", file=sys.stderr)
     print("-p <int>       Population size (100 by default)", file=sys.stderr)
-    print("-t <float>     Time limit in seconds (no limit by default)", file=sys.stderr)
+    print("-t <float>     Time limit to produce a solution in seconds (no limit by default)", file=sys.stderr)
 
 ##################################################
 def extract_spec_info(specfile):
