@@ -3,11 +3,16 @@
 # import modules
 import io
 import sys
+import re
 
 # Constants
 NONE_PROCESS_DEP = "none"
 PROCSPEC_FEXT = "procspec"
 PPLOPTS_FEXT = "opts"
+PPLOPTS_EXHAUSTIVE_FEXT = "opts_exh"
+ARG_SEP = "<_ARG_SEP_>"
+ASSOC_ARRAY_ELEM_SEP = "__ELEMSEP__"
+ASSOC_ARRAY_KEY_LEN = "__LEN__"
 
 ##################################################
 class DirectedGraph:
@@ -54,6 +59,10 @@ class processdep_data:
 ##################################################
 def get_procspec_fname(prefix):
     return prefix + "." + PROCSPEC_FEXT
+
+##################################################
+def get_pplopts_exh_fname(prefix):
+    return prefix + "." + PPLOPTS_EXHAUSTIVE_FEXT
 
 ##################################################
 def entry_is_comment(entry):
@@ -255,6 +264,36 @@ def processname_can_be_added(prname, processed_processes, processdeps_map):
             return False
 
     return True
+
+##################################################
+def load_pplopt_exh(pplopt_exh_fname):
+    pplopts_exh = {}
+    file = open(pplopt_exh_fname, 'r')
+    # read file entry by entry
+    for entry in file:
+        # Extract entry information
+        words = entry.split()
+        process_info = words[0]
+        process_opts = "".join(words[2:])
+
+        # Extract elements of process info
+        process_info_elems = re.split(re.escape(ASSOC_ARRAY_ELEM_SEP), process_info)
+        if len(process_info_elems) == 2:
+            processname = process_info_elems[0]
+            # Continue processing if the entry is not providing the
+            # number of tasks
+            if process_info_elems[1] != ASSOC_ARRAY_KEY_LEN:
+                task_idx = int(process_info_elems[1])
+                # Make room for options
+                if processname not in pplopts_exh:
+                    pplopts_exh[processname] = []
+                while len(pplopts_exh[processname]) <= task_idx:
+                    pplopts_exh[processname].append([])
+                # Create list from process options
+                opt_list = re.split(re.escape(ARG_SEP), process_opts)
+                pplopts_exh[processname][task_idx] = opt_list
+
+    return pplopts_exh
 
 ##################################################
 def order_process_entries(process_entries, processdeps_map, ordered_process_entries):
