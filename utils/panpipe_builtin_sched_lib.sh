@@ -28,6 +28,10 @@ BUILTIN_SCHED_SLEEP_TIME_SHORT=1
 BUILTIN_SCHED_NPROCESSES_SLEEP_THRESHOLD=10
 BUILTIN_SCHED_KNAPSACK_SPEC_FNAME=.knapsack_spec.txt
 BUILTIN_SCHED_KNAPSACK_SOL_FNAME=.knapsack_sol.txt
+BUILTIN_SCHED_UNLIMITED_CPUS=0
+BUILTIN_SCHED_UNLIMITED_MEM=0
+BUILTIN_SCHED_SOLVE_TIME_LIMIT=1
+BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER=1
 
 # ARRAY TASK STATUSES
 BUILTIN_SCHED_FINISHED_TASK_STATUS="FINISHED"
@@ -506,7 +510,7 @@ builtin_sched_fix_updated_process_status()
 ########
 builtin_sched_get_available_cpus()
 {
-    if [ ${BUILTIN_SCHED_CPUS} -eq 0 ]; then
+    if [ ${BUILTIN_SCHED_CPUS} -eq ${BUILTIN_SCHED_UNLIMITED_CPUS} ]; then
         echo 0
     else
         echo $((BUILTIN_SCHED_CPUS - BUILTIN_SCHED_ALLOC_CPUS))
@@ -516,7 +520,7 @@ builtin_sched_get_available_cpus()
 ########
 builtin_sched_get_available_mem()
 {
-    if [ ${BUILTIN_SCHED_MEM} -eq 0 ]; then
+    if [ ${BUILTIN_SCHED_MEM} -eq ${BUILTIN_SCHED_UNLIMITED_MEM} ]; then
         echo 0
     else
         echo $((BUILTIN_SCHED_MEM - BUILTIN_SCHED_ALLOC_MEM))
@@ -528,7 +532,7 @@ builtin_sched_check_comp_res()
 {
     local processname=$1
 
-    if [ ${BUILTIN_SCHED_CPUS} -gt 0 ]; then
+    if [ ${BUILTIN_SCHED_CPUS} -ne ${BUILTIN_SCHED_UNLIMITED_CPUS} ]; then
         local available_cpus=`builtin_sched_get_available_cpus`
         process_cpus=`builtin_sched_get_process_cpus ${processname}`
         if [ ${process_cpus} -gt ${available_cpus} ]; then
@@ -536,7 +540,7 @@ builtin_sched_check_comp_res()
         fi
     fi
 
-    if [ ${BUILTIN_SCHED_MEM} -gt 0 ]; then
+    if [ ${BUILTIN_SCHED_MEM} -ne ${BUILTIN_SCHED_UNLIMITED_MEM} ]; then
         local available_mem=`builtin_sched_get_available_mem`
         process_mem=`builtin_sched_get_process_mem ${processname}`
         if [ ${process_mem} -gt ${available_mem} ]; then
@@ -725,10 +729,15 @@ builtin_sched_get_knapsack_cpus_for_process()
 {
     local processname=$1
 
-    if [ ${BUILTIN_SCHED_CPUS} -gt 0 ]; then
-        echo ${BUILTIN_SCHED_PROCESS_CPUS[${processname}]}
-    else
+    # Check how many cpus are available
+    if [ ${BUILTIN_SCHED_CPUS} -eq ${BUILTIN_SCHED_UNLIMITED_CPUS} ]; then
+        # If available cpus are unlimited, then the number of required
+        # cpus to executed the process will be zero, resulting in
+        # solutions of the knapsack problem that will not be restricted
+        # by this resource
         echo 0
+    else
+        echo ${BUILTIN_SCHED_PROCESS_CPUS[${processname}]}
     fi
 }
 
@@ -737,10 +746,15 @@ builtin_sched_get_knapsack_mem_for_process()
 {
     local processname=$1
 
-    if [ ${BUILTIN_SCHED_MEM} -gt 0 ]; then
-        echo ${BUILTIN_SCHED_PROCESS_MEM[${processname}]}
-    else
+    # Check how much memory are available
+    if [ ${BUILTIN_SCHED_MEM} -eq ${BUILTIN_SCHED_UNLIMITED_MEM} ]; then
+        # If available memory is unlimited, then the amount of memory
+        # required to execute the process will be zero, resulting in
+        # solutions of the knapsack problem will not be restricted by
+        # this resource
         echo 0
+    else
+        echo ${BUILTIN_SCHED_PROCESS_MEM[${processname}]}
     fi
 }
 
@@ -760,9 +774,8 @@ builtin_sched_get_knapsack_name()
 ########
 builtin_sched_print_knapsack_spec()
 {
-    local processvalue=1
-
-    # Process each executable process
+    # Process each executable process generating its required
+    # information for the knapsack solver
     local processname
     for processname in "${!BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}"; do
         # Obtain array size
@@ -776,11 +789,11 @@ builtin_sched_print_knapsack_spec()
 
         if [ ${array_size} -eq 1 ]; then
             local knapsack_name=`builtin_sched_get_knapsack_name ${processname}`
-            echo "${knapsack_name} ${processvalue} ${cpus} ${mem}"
+            echo "${knapsack_name} ${BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER} ${cpus} ${mem}"
         else
             for id in ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}; do
                 local knapsack_name=`builtin_sched_get_knapsack_name ${processname} ${id}`
-                echo "${knapsack_name} ${processvalue} ${cpus} ${mem}"
+                echo "${knapsack_name} ${BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER} ${cpus} ${mem}"
             done
         fi
     done
@@ -791,8 +804,7 @@ builtin_sched_print_knapsack_sol()
 {
     local available_cpus=`builtin_sched_get_available_cpus`
     local available_mem=`builtin_sched_get_available_mem`
-    local time_limit=1
-    "${panpipe_libexecdir}"/panpipe_solve_knapsack_ga -s "${specfile}" -c ${available_cpus},${available_mem} -t ${time_limit}
+    "${panpipe_libexecdir}"/panpipe_solve_knapsack_ga -s "${specfile}" -c ${available_cpus},${available_mem} -t ${BUILTIN_SCHED_SOLVE_TIME_LIMIT}
 }
 
 ########
