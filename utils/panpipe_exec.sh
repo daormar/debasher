@@ -362,7 +362,8 @@ check_pipeline_opts()
     local cmdline=$1
     local procspec_file=$2
     local out_opts_file=$3
-    local out_fifos_file=$4
+    local out_opts_exh_file=$4
+    local out_fifos_file=$5
 
     # Remove output files
     rm -f "${out_opts_file}"
@@ -384,6 +385,9 @@ check_pipeline_opts()
         echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >> "${out_opts_file}"
     done < "${procspec_file}"
 
+    # Print exhaustive option list
+    show_opt_list_for_processes > "${out_opts_exh_file}"
+
     # Register fifo users
     while read process_spec; do
         # Extract process information
@@ -393,7 +397,7 @@ check_pipeline_opts()
         register_fifos_used_by_process "${processname}"
     done < "${procspec_file}"
 
-    # Show info about fifos
+    # Print info about fifos
     show_pipeline_fifos > "${out_fifos_file}"
 
     echo "" >&2
@@ -1024,11 +1028,12 @@ if [ ${showopts_given} -eq 1 ]; then
 else
     ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
     pipeline_opts_file="${ppl_file_pref}.${PPLOPTS_FEXT}"
+    pipeline_opts_exh_file="${ppl_file_pref}.${PPLOPTS_EXHAUSTIVE_FEXT}"
     pipeline_fifos_file="${ppl_file_pref}.${FIFOS_FEXT}"
     if [ ${checkopts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
+        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
     else
-        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_fifos_file}" || exit 1
+        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
 
         procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
         gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1
