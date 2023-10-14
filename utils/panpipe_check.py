@@ -96,6 +96,8 @@ def process_pars(flags,values):
     entries_lineno, process_entries = extract_process_entries(procspec_file)
     multiattempt_processes = extract_processes_with_multiattempt(process_entries)
     deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno, process_entries)
+    pplopts_exhaustive_file = get_pplopts_exh_fname(values["prefix"])
+    pplopts_exh = load_pplopt_exh(pplopts_exhaustive_file)
 
     # Show checking results
     if(not deps_syntax_ok):
