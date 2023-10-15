@@ -36,10 +36,11 @@ def take_pars():
     flags["r_given"]=False
     flags["g_given"]=False
     flags["d_given"]=False
+    flags["a_given"]=False
     values["verbose"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"p:rgdv",["prefix=","print-reord","print-graph","print-deps","verbose"])
+        opts, args = getopt.getopt(sys.argv[1:],"p:rgdav",["prefix=","print-reord","dep-graph","print-deps","proc-graph", "verbose"])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -53,10 +54,12 @@ def take_pars():
                 flags["p_given"]=True
             elif opt in ("-r", "--print-reord"):
                 flags["r_given"]=True
-            elif opt in ("-g", "--print-graph"):
+            elif opt in ("-g", "--dep-graph"):
                 flags["g_given"]=True
             elif opt in ("-d", "--print-deps"):
                 flags["d_given"]=True
+            elif opt in ("-a", "--proc-graph"):
+                flags["a_given"]=True
             elif opt in ("-v", "--verbose"):
                 flags["verbose"]=True
     return (flags,values)
@@ -79,14 +82,23 @@ def check_pars(flags,values):
         print("Error! -g and -d options cannot be given simultaneously", file=sys.stderr)
         sys.exit(2)
 
+    if(flags["g_given"] and flags["a_given"]):
+        print("Error! -g and -a options cannot be given simultaneously", file=sys.stderr)
+        sys.exit(2)
+
+    if(flags["a_given"] and flags["d_given"]):
+        print("Error! -a and -d options cannot be given simultaneously", file=sys.stderr)
+        sys.exit(2)
+
 ##################################################
 def print_help():
-    print("panpipe_check  -p <string> [-r|-g|-d] [-v]", file=sys.stderr)
+    print("panpipe_check  -p <string> [-r|-g|-d|-a] [-v]", file=sys.stderr)
     print("", file=sys.stderr)
     print("-p <string>    Prefix of pipeline files", file=sys.stderr)
     print("-r             Print reordered process specification", file=sys.stderr)
     print("-g             Print dependency diagram in graphviz format", file=sys.stderr)
     print("-d             Print dependencies for each process", file=sys.stderr)
+    print("-a             Print process diagram", file=sys.stderr)
     print("-v             Verbose mode", file=sys.stderr)
 
 ##################################################
@@ -98,6 +110,9 @@ def process_pars(flags,values):
     deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno, process_entries)
     pplopts_exhaustive_file = get_pplopts_exh_fname(values["prefix"])
     pplopts_exh = load_pplopt_exh(pplopts_exhaustive_file)
+    process_out_values = get_process_out_values(pplopts_exh)
+    fifos_file = get_fifos_fname(values["prefix"])
+    fifo_owners, fifo_users, fifo_deps = load_fifos(fifos_file)
 
     # Show checking results
     if(not deps_syntax_ok):
@@ -114,9 +129,11 @@ def process_pars(flags,values):
         if(flags["r_given"]):
             print_entries(ordered_process_entries)
         elif(flags["g_given"]):
-            print_graph(ordered_process_entries, processdeps_sep,processdeps_map)
+            print_dep_graph(ordered_process_entries, processdeps_sep,processdeps_map)
         elif(flags["d_given"]):
             print_deps(ordered_process_entries, processdeps_map)
+        elif(flags["a_given"]):
+            print_proc_graph(processdeps_sep, processdeps_map, pplopts_exh, process_out_values)
     else:
         print("Process specification is not correct", file=sys.stderr)
         return 1
