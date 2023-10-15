@@ -142,28 +142,6 @@ replace_word_with_blank()
 }
 
 ########
-str_is_option()
-{
-    local str=$1
-    if [ "${str:0:1}" = "-" ] || [ "${str:0:2}" = "--" ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-str_is_output_option()
-{
-    local str=$1
-    if [ "${str:0:4}" = "-out" ] || [ "${str:0:5}" = "--out" ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
 memoize_opts()
 {
     local cmdline=$1

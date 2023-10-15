@@ -426,6 +426,28 @@ str_is_natural_number()
 }
 
 ########
+str_is_option()
+{
+    local str=$1
+    if [ "${str:0:1}" = "-" ] || [ "${str:0:2}" = "--" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+str_is_output_option()
+{
+    local str=$1
+    if [ "${str:0:4}" = "-out" ] || [ "${str:0:5}" = "--out" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 get_num_words_in_string()
 {
     local str=$1
