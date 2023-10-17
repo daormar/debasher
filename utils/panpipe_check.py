@@ -133,7 +133,7 @@ def process_pars(flags,values):
         elif(flags["d_given"]):
             print_deps(ordered_process_entries, processdeps_map)
         elif(flags["a_given"]):
-            print_proc_graph(processdeps_sep, processdeps_map, pplopts_exh, process_out_values)
+            print_proc_graph(pplopts_exh, process_out_values, fifo_owners, fifo_users)
     else:
         print("Process specification is not correct", file=sys.stderr)
         return 1
