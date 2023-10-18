@@ -129,7 +129,7 @@ def process_pars(flags,values):
         if(flags["r_given"]):
             print_entries(ordered_process_entries)
         elif(flags["g_given"]):
-            print_dep_graph(ordered_process_entries, processdeps_sep,processdeps_map)
+            print_dep_graph(ordered_process_entries, processdeps_sep, processdeps_map)
         elif(flags["d_given"]):
             print_deps(ordered_process_entries, processdeps_map)
         elif(flags["a_given"]):
