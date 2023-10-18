@@ -4,15 +4,20 @@
 import io
 import sys
 import re
+import os
 
 # Constants
 NONE_PROCESS_DEP = "none"
 PROCSPEC_FEXT = "procspec"
 PPLOPTS_FEXT = "opts"
 PPLOPTS_EXHAUSTIVE_FEXT = "opts_exh"
+FIFOS_FEXT = "fifos"
 ARG_SEP = "<_ARG_SEP_>"
 ASSOC_ARRAY_ELEM_SEP = "__ELEMSEP__"
 ASSOC_ARRAY_KEY_LEN = "__LEN__"
+PROCESS_TASKIDX_SEP = "__PROCESS_TASKIDX_SEP__"
+OPT_PROCESS_SEP = "__OPT_PROCESS_SEP__"
+OPTPROC_HUB_SUFFIX = "__OPTPROC_HUB_SUFFIX"
 
 ##################################################
 class DirectedGraph:
@@ -63,6 +68,10 @@ def get_procspec_fname(prefix):
 ##################################################
 def get_pplopts_exh_fname(prefix):
     return prefix + "." + PPLOPTS_EXHAUSTIVE_FEXT
+
+##################################################
+def get_fifos_fname(prefix):
+    return prefix + "." + FIFOS_FEXT
 
 ##################################################
 def entry_is_comment(entry):
@@ -266,6 +275,14 @@ def processname_can_be_added(prname, processed_processes, processdeps_map):
     return True
 
 ##################################################
+def get_process_taskidx_elems_ppl_file(process_info):
+    return re.split(re.escape(ASSOC_ARRAY_ELEM_SEP), process_info)
+
+##################################################
+def get_opt_list_ppl_file(process_opts):
+    return re.split(re.escape(ARG_SEP), process_opts)
+
+##################################################
 def load_pplopt_exh(pplopt_exh_fname):
     pplopts_exh = {}
     file = open(pplopt_exh_fname, 'r')
@@ -277,7 +294,7 @@ def load_pplopt_exh(pplopt_exh_fname):
         process_opts = "".join(words[2:])
 
         # Extract elements of process info
-        process_info_elems = re.split(re.escape(ASSOC_ARRAY_ELEM_SEP), process_info)
+        process_info_elems = get_process_taskidx_elems_ppl_file(process_info)
         if len(process_info_elems) == 2:
             processname = process_info_elems[0]
             # Continue processing if the entry is not providing the
@@ -290,10 +307,65 @@ def load_pplopt_exh(pplopt_exh_fname):
                 while len(pplopts_exh[processname]) <= task_idx:
                     pplopts_exh[processname].append([])
                 # Create list from process options
-                opt_list = re.split(re.escape(ARG_SEP), process_opts)
+                opt_list = get_opt_list_ppl_file(process_opts)
                 pplopts_exh[processname][task_idx] = opt_list
 
     return pplopts_exh
+
+##################################################
+def str_is_option(string):
+    if string[0] == "-" or string[0:2] == "--":
+        return True
+    else:
+        return False
+
+##################################################
+def str_is_output_option(string):
+    if string[0:4] == "-out" or string[0:5] == "--out":
+        return True
+    else:
+        return False
+
+##################################################
+def get_process_out_values(pplopts_exh):
+    process_out_values = {}
+    for process, opts_list in pplopts_exh.items():
+        for task_idx in range(len(opts_list)):
+            opts = opts_list[task_idx]
+            i = 0
+            while i < len(opts):
+                if os.path.isabs(opts[i]):
+                    if i > 0 and str_is_output_option(opts[i-1]):
+                        process_out_values[opts[i]] = process, task_idx, opts[i-1]
+                i += 1
+    return process_out_values
+
+##################################################
+def load_fifos(fifos_fname):
+    fifo_owners = {}
+    fifo_users = {}
+    fifo_deps = {}
+
+    file = open(fifos_fname, 'r')
+    # read file entry by entry
+    for entry in file:
+        # Extract entry information
+        words = entry.split()
+        fifoname = words[0]
+        fifo_owner_elems = get_process_taskidx_elems_ppl_file(words[1])
+        fifo_owner = fifo_owner_elems[0]
+        fifo_owner_taskidx = fifo_owner_elems[1]
+        fifodep = words[2]
+        fifo_user_elems = get_process_taskidx_elems_ppl_file(words[3])
+        fifo_user = fifo_user_elems[0]
+        fifo_user_taskidx = fifo_user_elems[1]
+
+        # Populate dictionaries
+        fifo_owners[fifoname] = fifo_owner, fifo_owner_taskidx
+        fifo_users[fifoname] = fifo_user, fifo_user_taskidx
+        fifo_deps[fifoname] = fifodep
+
+    return fifo_owners, fifo_users, fifo_deps
 
 ##################################################
 def order_process_entries(process_entries, processdeps_map, ordered_process_entries):
@@ -367,7 +439,7 @@ def get_graph_linestyle(separator):
         return "solid"
 
 ##################################################
-def print_graph(ordered_process_entries, processdeps_sep, processdeps_map):
+def print_dep_graph(ordered_process_entries, processdeps_sep, processdeps_map):
     # Print header
     print("digraph G {")
     print("overlap=false;")
@@ -427,3 +499,318 @@ def prnames_valid(processdeps_map):
             print("Error: process name", prname, "contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
             return 0
     return 1
+
+##################################################
+def gen_process_graph_repres(pplopts_exh):
+    process_graph_repres = []
+    for process in pplopts_exh:
+        process_graph_repres.append(process)
+    return process_graph_repres
+
+##################################################
+def get_opt_to_processes(pplopts_exh):
+    opt_to_processes = {}
+    for process, opts_list in pplopts_exh.items():
+        for task_idx in range(len(opts_list)):
+            opts = opts_list[task_idx]
+            for i in range(len(opts)):
+                elem = opts[i]
+                if i+1 < len(opts) and not str_is_option(opts[i+1]):
+                    value = opts[i+1]
+                else:
+                    value = None
+                if str_is_option(elem):
+                    if elem in opt_to_processes:
+                        opt_to_processes[elem].append((get_process_taskidx_string(process, task_idx), value))
+                    else:
+                        opt_to_processes[elem] = [(get_process_taskidx_string(process, task_idx), value)]
+    return opt_to_processes
+
+
+##################################################
+def get_opt_graph(opt, process_info):
+    return opt + OPT_PROCESS_SEP + process_info
+
+##################################################
+def gen_opt_graph_elem(opt, suffix, proc_iterable):
+    graph_elem = '{node [label="' + opt + suffix + '"] '
+    for process_info in proc_iterable:
+        opt_graph = get_opt_graph(opt, process_info)
+        graph_elem += '"' + opt_graph + '"; '
+    graph_elem += "}"
+    return graph_elem
+
+##################################################
+def get_process_taskidx_string(processname, task_idx):
+    return processname + PROCESS_TASKIDX_SEP + str(task_idx)
+
+##################################################
+def get_process_taskidx_elems(process_info):
+    return re.split(re.escape(PROCESS_TASKIDX_SEP), process_info)
+
+##################################################
+def gen_optproc_to_arrsize(opt_to_processes):
+    optproc_to_arrsize = {}
+    # Iterate over options
+    for opt in opt_to_processes:
+        # Iterate over option data
+        for opt_data in opt_to_processes[opt]:
+            # Extract data
+            process_info = opt_data[0]
+            process_info_elems = get_process_taskidx_elems(process_info)
+            processname = process_info_elems[0]
+            task_idx = process_info_elems[1]
+
+            # Fill array size information for option and process
+            if (opt, processname) in optproc_to_arrsize:
+                optproc_to_arrsize[(opt, processname)] += 1
+            else:
+                optproc_to_arrsize[(opt, processname)] = 1
+
+    return optproc_to_arrsize
+
+##################################################
+def gen_opt_graph_repres(opt_to_processes, optproc_to_arrsize):
+    opt_repres = []
+    # Iterate over options
+    for opt in opt_to_processes:
+        taskidx_to_processes = {}
+        processes = {}
+
+        # Iterate over processes related to opt
+        for opt_procs in opt_to_processes[opt]:
+            # Extract data
+            process_info = opt_procs[0]
+            process_info_elems = get_process_taskidx_elems(process_info)
+            processname = process_info_elems[0]
+            task_idx = process_info_elems[1]
+
+            # Fill process information organized by task index (only for
+            # task arrays)
+            if optproc_to_arrsize[(opt, processname)] == 1:
+                if processname not in processes:
+                    processes[process_info] = 1
+            else:
+                if task_idx in taskidx_to_processes:
+                    taskidx_to_processes[task_idx].append(process_info)
+                else:
+                    taskidx_to_processes[task_idx] = [process_info]
+
+        # Generate representation
+        if processes:
+            graph_elem = gen_opt_graph_elem(opt, "", processes)
+            opt_repres.append(graph_elem)
+        for task_idx in taskidx_to_processes:
+            graph_elem = gen_opt_graph_elem(opt, str(task_idx), taskidx_to_processes[task_idx])
+            opt_repres.append(graph_elem)
+
+    return opt_repres
+
+##################################################
+def get_opt_hub_graph(optproc):
+    return get_opt_graph(optproc[0], optproc[1]) + OPTPROC_HUB_SUFFIX
+
+##################################################
+def gen_opt_hub_graph_repres(optproc_to_arrsize):
+    opt_hub_graph_repres = []
+    for optproc in optproc_to_arrsize:
+        if optproc_to_arrsize[optproc] > 1:
+            opt_hub_graph = get_opt_hub_graph(optproc)
+            opt_hub_graph_repres.append('"' + opt_hub_graph + '"')
+    return opt_hub_graph_repres
+
+##################################################
+def print_opt_to_proc_args_noarr(fifo_owners, fifo_users, process_info, opt, opt_val):
+    # Initialize variables
+    process_info_elems = get_process_taskidx_elems(process_info)
+    processname = process_info_elems[0]
+    opt_graph = get_opt_graph(opt, process_info)
+
+    # Print arc
+    if str_is_output_option(opt):
+        print(processname, "->", '"'+ opt_graph +'"', ";")
+    elif process_is_fifo_owner(fifo_owners, process_info, opt_val):
+        print(processname, "->", '"'+ opt_graph +'"', "[ dir=none ] ;")
+    elif process_is_fifo_user(fifo_users, process_info, opt_val):
+        print('"'+ opt_graph +'"', "->", processname, "[ dir=none ] ;")
+    else:
+        print('"'+ opt_graph +'"', "->", processname, ";")
+
+##################################################
+def print_opt_to_proc_args_arr(fifo_owners, fifo_users, process_info, opt, opt_val):
+    # Initialize variables
+    process_info_elems = get_process_taskidx_elems(process_info)
+    processname = process_info_elems[0]
+    task_idx = int(process_info_elems[1])
+    opt_graph = get_opt_graph(opt, process_info)
+
+    # Get name of option hub
+    opt_hub = get_opt_hub_graph((opt, processname))
+
+    # Print arc
+    if str_is_output_option(opt):
+        if task_idx == 0:
+            print(processname, "->", '"'+ opt_hub +'"', ";")
+        print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', ";")
+    elif process_is_fifo_owner(fifo_owners, process_info, opt_val):
+        if task_idx == 0:
+            print(processname, "->", '"'+ opt_hub +'"', "[ dir=none ] ;")
+        print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', "[ dir=none ] ;")
+    elif process_is_fifo_user(fifo_users, process_info, opt_val):
+        print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ dir=none ] ;")
+        if task_idx == 0:
+            print('"'+ opt_hub +'"', "->", processname, "[ dir=none ] ;")
+    else:
+        print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', ";")
+        if task_idx == 0:
+            print('"'+ opt_hub +'"', "->", processname, ";")
+
+##################################################
+def print_opt_to_proc_arcs(fifo_owners, fifo_users, optproc_to_arrsize, opt, opt_procs):
+    # Extract process information
+    process_info = opt_procs[0]
+    process_info_elems = get_process_taskidx_elems(process_info)
+    processname = process_info_elems[0]
+    opt_val = opt_procs[1]
+
+    # Print arcs
+    if optproc_to_arrsize[(opt, processname)] == 1:
+        print_opt_to_proc_args_noarr(fifo_owners, fifo_users, process_info, opt, opt_val)
+    else:
+        print_opt_to_proc_args_arr(fifo_owners, fifo_users, process_info, opt, opt_val)
+
+##################################################
+def print_opt_to_opt_outval(process_out_values, process_info, opt, opt_val):
+    # Obtain origin node
+    orig_opt = process_out_values[opt_val][2]
+    orig_procname = process_out_values[opt_val][0]
+    orig_taskidx = process_out_values[opt_val][1]
+    orig_process_info = get_process_taskidx_string(orig_procname, orig_taskidx)
+    orig_opt_graph = get_opt_graph(orig_opt, orig_process_info)
+
+    # Obtain destination node
+    dest_opt_graph = get_opt_graph(opt, process_info)
+
+    # Print arc
+    print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', ";")
+
+##################################################
+def get_fifo_opt(pplopts_exh, process_info, abs_fifoname):
+    # Obtain necessary process information
+    process_info_elems =  get_process_taskidx_elems(process_info)
+    processname = process_info_elems[0]
+    task_idx = int(process_info_elems[1])
+
+    # Get option list
+    opt_list = pplopts_exh[processname][task_idx]
+
+    # Iterate over option list
+    i = 0
+    while i < len(opt_list) and opt_list[i] != abs_fifoname:
+        i += 1
+
+    # Return result
+    if i < len(opt_list) and i > 0:
+        return opt_list[i-1]
+    else:
+        return None
+
+##################################################
+def print_opt_to_opt_fifo(pplopts_exh, fifo_owners, fifo_users, process_info, opt, opt_val):
+    # Obtain origin node
+    base_fname = os.path.basename(opt_val)
+    orig_process_info = get_process_taskidx_string(*fifo_owners[base_fname])
+    orig_opt = get_fifo_opt(pplopts_exh, orig_process_info, opt_val)
+    orig_opt_graph = get_opt_graph(orig_opt, orig_process_info)
+
+    # Obtain destination node
+    dest_process_info = get_process_taskidx_string(*fifo_users[base_fname])
+    dest_opt = get_fifo_opt(pplopts_exh, dest_process_info, opt_val)
+    dest_opt_graph = get_opt_graph(dest_opt, dest_process_info)
+
+    # Print arc
+    print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', "[ dir=none ] ;")
+
+##################################################
+def process_is_fifo_owner(fifo_owners, process_info, abs_fifoname):
+    if not os.path.isabs(abs_fifoname):
+        return False
+    else:
+        base_fname = os.path.basename(abs_fifoname)
+        if base_fname in fifo_owners:
+            if process_info == get_process_taskidx_string(*fifo_owners[base_fname]):
+                return True
+            else:
+                return False
+        else:
+            return False
+
+##################################################
+def process_is_fifo_user(fifo_users, process_info, abs_fifoname):
+    if not os.path.isabs(abs_fifoname):
+        return False
+    else:
+        base_fname = os.path.basename(abs_fifoname)
+        if base_fname in fifo_users:
+            if process_info == get_process_taskidx_string(*fifo_users[base_fname]):
+                return True
+            else:
+                return False
+        else:
+            return False
+
+##################################################
+def print_opt_to_opt_arcs(pplopts_exh, process_out_values, fifo_owners, fifo_users, optproc_to_arrsize, opt, opt_procs):
+    # Extract process information
+    process_info = opt_procs[0]
+
+    # Get option value
+    opt_val = opt_procs[1]
+
+    # Print arcs if required
+    if not str_is_output_option(opt) and os.path.isabs(opt_val):
+        if opt_val in process_out_values:
+            print_opt_to_opt_outval(process_out_values, process_info, opt, opt_val)
+        else:
+            if process_is_fifo_owner(fifo_owners, process_info, opt_val):
+                print_opt_to_opt_fifo(pplopts_exh, fifo_owners, fifo_users, process_info, opt, opt_val)
+
+##################################################
+def print_proc_graph_arcs(pplopts_exh, process_out_values, fifo_owners, fifo_users, opt_to_processes, optproc_to_arrsize):
+    # Iterate over options
+    for opt in opt_to_processes:
+        # Iterate over processes related to opt
+        for opt_procs in opt_to_processes[opt]:
+            print_opt_to_proc_arcs(fifo_owners, fifo_users, optproc_to_arrsize, opt, opt_procs)
+            print_opt_to_opt_arcs(pplopts_exh, process_out_values, fifo_owners, fifo_users, optproc_to_arrsize, opt, opt_procs)
+
+##################################################
+def print_proc_graph(pplopts_exh, process_out_values, fifo_owners, fifo_users):
+    # Print header
+    print("digraph G {")
+    print("overlap=false;")
+
+    print("splines=true;")
+    print("K=1;")
+
+    # Extract information
+    process_graph_repres = gen_process_graph_repres(pplopts_exh)
+    opt_to_processes = get_opt_to_processes(pplopts_exh)
+    optproc_to_arrsize = gen_optproc_to_arrsize(opt_to_processes)
+    opt_repres = gen_opt_graph_repres(opt_to_processes, optproc_to_arrsize)
+    opt_hub_repres = gen_opt_hub_graph_repres(optproc_to_arrsize)
+#    print(process_out_values)
+#    print(opt_to_processes)
+#    print(pplopts_exh)
+#    print(fifo_owners)
+#    print(fifo_users)
+
+    # Set representation for processes and options
+    print("node [shape = box];", "; ".join(process_graph_repres))
+    print("node [shape = ellipse];", "; ".join(opt_repres))
+    print("node [shape = point];", "; ".join(opt_hub_repres))
+
+    # Add process graph arcs
+    print_proc_graph_arcs(pplopts_exh, process_out_values, fifo_owners, fifo_users, opt_to_processes, optproc_to_arrsize)
+
+    print("}")
