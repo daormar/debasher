@@ -799,11 +799,6 @@ def print_proc_graph(pplopts_exh, process_out_values, fifo_owners, fifo_users):
     optproc_to_arrsize = gen_optproc_to_arrsize(opt_to_processes)
     opt_repres = gen_opt_graph_repres(opt_to_processes, optproc_to_arrsize)
     opt_hub_repres = gen_opt_hub_graph_repres(optproc_to_arrsize)
-#    print(process_out_values)
-#    print(opt_to_processes)
-#    print(pplopts_exh)
-#    print(fifo_owners)
-#    print(fifo_users)
 
     # Set representation for processes and options
     print("node [shape = box];", "; ".join(process_graph_repres))
