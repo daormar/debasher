@@ -254,7 +254,7 @@ gen_initial_procspec_file()
 }
 
 ########
-check_pipeline()
+check_procspec()
 {
     local prefix_of_ppl_files=$1
 
@@ -1038,7 +1038,7 @@ else
         procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
         gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1
 
-        check_pipeline "${ppl_file_pref}" || exit 1
+        check_procspec "${ppl_file_pref}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
