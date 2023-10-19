@@ -74,21 +74,6 @@ def process_r_opt(rexec_processes_str):
     return result
 
 ##################################################
-def get_dep_info(process_entries, processdeps_map):
-    dep_info = {}
-    for entry in process_entries:
-        # Extract dependencies for process
-        prname = extract_process_name(entry)
-        processdeps = set()
-        extract_all_deps_for_process(prname, processdeps_map, processdeps)
-        # Add dependencies to dictionary
-        deplist = []
-        for process in processdeps:
-            deplist.append(process)
-        dep_info[prname] = deplist
-    return dep_info
-
-##################################################
 def process_should_reexec(reexec_processes,process_deplist):
     for process in process_deplist:
         if process in reexec_processes:
@@ -129,12 +114,10 @@ def process_pars(flags,values):
     initial_reexec_processes = process_r_opt(values["rexec_procs"])
 
     # Load process specification entries
-    procspec_file = get_procspec_fname(values["prefix"])
-    entries_lineno, process_entries = extract_process_entries(procspec_file)
-    deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno, process_entries)
+    dep_graph = DependencyGraph(values["prefix"])
 
     # Get dependency information
-    dep_info = get_dep_info(process_entries, processdeps_map)
+    dep_info = dep_graph.get_dep_info()
 
     # Get reexecuted processes
     reexec_processes_due_to_deps = get_reexec_processes_due_to_deps(initial_reexec_processes, dep_info)

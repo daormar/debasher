@@ -69,6 +69,20 @@ class DependencyGraph:
         self.multiattempt_processes = self.extract_processes_with_multiattempt(self.process_entries)
         self.deps_syntax_ok, self.processdeps_sep, self.processdeps_map = self.extract_processdeps_info(self.entries_lineno, self.process_entries)
 
+    def get_dep_info(self):
+        dep_info = {}
+        for entry in self.process_entries:
+            # Extract dependencies for process
+            prname = self.extract_process_name(entry)
+            processdeps = set()
+            self.extract_all_deps_for_process(prname, processdeps)
+            # Add dependencies to dictionary
+            deplist = []
+            for process in processdeps:
+                deplist.append(process)
+            dep_info[prname] = deplist
+        return dep_info
+
     def get_procspec_fname(self, prefix):
         return prefix + "." + PROCSPEC_FEXT
 
