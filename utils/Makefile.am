@@ -79,6 +79,7 @@ SUFFIXES= .sh .py .r .R
 	echo "PANDOC=\"$(PANDOC)\"" >> $@
 	echo "PYTHON=\"$(PYTHON)\"" >> $@
 	echo "JAVA=\"$(JAVA)\"" >> $@
+	echo "DOT=\"$(DOT)\"" >> $@
 	echo "DISABLE_SCHEDULERS=\"$(DISABLE_SCHEDULERS)\"" >> $@
 	cat $< >> $@
 	chmod ugo+x $@

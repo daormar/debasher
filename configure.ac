@@ -57,6 +57,7 @@ AC_PATH_PROGS(SCONTROL, scontrol)
 AC_PATH_PROGS(WGET, wget)
 AC_PATH_PROGS(PANDOC, pandoc)
 AC_PATH_PROGS(JAVA, java)
+AC_PATH_PROGS(DOT, dot)
 
 # BASH may already be set in the shell, if the admin then changes the
 # the /bin/sh symlink to a non-bash shell, then the installation will
