@@ -102,38 +102,36 @@ def print_help():
     print("-v             Verbose mode", file=sys.stderr)
 
 ##################################################
+def print_entries(process_entries):
+    for e in process_entries:
+        print(e)
+
+##################################################
 def process_pars(flags,values):
-    # Extract information
-    procspec_file = get_procspec_fname(values["prefix"])
-    entries_lineno, process_entries = extract_process_entries(procspec_file)
-    multiattempt_processes = extract_processes_with_multiattempt(process_entries)
-    deps_syntax_ok, processdeps_sep, processdeps_map = extract_processdeps_info(entries_lineno, process_entries)
-    pplopts_exhaustive_file = get_pplopts_exh_fname(values["prefix"])
-    pplopts_exh = load_pplopt_exh(pplopts_exhaustive_file)
-    process_out_values = get_process_out_values(pplopts_exh)
-    fifos_file = get_fifos_fname(values["prefix"])
-    fifo_owners, fifo_users, fifo_deps = load_fifos(fifos_file)
+    # Create DependencyGraph instance
+    dep_graph = DependencyGraph(values["prefix"])
 
     # Show checking results
-    if(not deps_syntax_ok):
+    if(not dep_graph.syntax_ok()):
        print("Process dependencies are not syntactically correct", file=sys.stderr)
        return 1
-    if(not prnames_valid(processdeps_map)):
+    if(not dep_graph.prnames_valid()):
        print("Process names are not valid", file=sys.stderr)
        return 1
 
     # Check process dependencies
     ordered_process_entries = []
-    if(processdeps_correct(entries_lineno, process_entries, multiattempt_processes, processdeps_map, ordered_process_entries)):
+    if(dep_graph.processdeps_correct(ordered_process_entries)):
         print("Process specification is correct", file=sys.stderr)
         if(flags["r_given"]):
             print_entries(ordered_process_entries)
         elif(flags["g_given"]):
-            print_dep_graph(ordered_process_entries, processdeps_sep, processdeps_map)
+            dep_graph.print()
         elif(flags["d_given"]):
-            print_deps(ordered_process_entries, processdeps_map)
+            dep_graph.print_deps(ordered_process_entries)
         elif(flags["a_given"]):
-            print_proc_graph(pplopts_exh, process_out_values, fifo_owners, fifo_users)
+            proc_graph = ProcessGraph(values["prefix"])
+            proc_graph.print()
     else:
         print("Process specification is not correct", file=sys.stderr)
         return 1
