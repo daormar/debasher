@@ -752,7 +752,7 @@ create_pipeline_shdirs()
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
         local absdir=`get_absolute_shdirname "$dirname"`
         if [ ! -d "${absdir}" ]; then
-           mkdir -p "${absdir}" || exit 1
+           "${MKDIR}" -p "${absdir}" || exit 1
         fi
     done
 }
@@ -765,7 +765,7 @@ create_shdirs_owned_by_process()
     for dirname in "${!PIPELINE_SHDIRS_DEF_OPTS[@]}"; do
         local absdir=`get_absolute_shdirname "$dirname"`
         if [ ! -d "${absdir}" ]; then
-           mkdir -p "${absdir}" || exit 1
+           "${MKDIR}" -p "${absdir}" || exit 1
         fi
     done
 }
@@ -803,7 +803,7 @@ prepare_fifos_owned_by_process()
         local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
         if [ "${proc}" = "${processname}" ]; then
             local dirname=`"${DIRNAME}" "${augm_fifoname}"`
-            mkdir -p "${fifodir}/${dirname}"
+            "${MKDIR}" -p "${fifodir}/${dirname}"
             rm -f "${fifodir}/${augm_fifoname}" || exit 1
             "${MKFIFO}" "${fifodir}/${augm_fifoname}" || exit 1
         fi

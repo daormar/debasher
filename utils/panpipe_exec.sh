@@ -737,21 +737,21 @@ create_basic_dirs()
 {
     echo "# Creating basic directories..." >&2
 
-    mkdir -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
+    "${MKDIR}" -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
     set_panpipe_outdir "${outd}"
 
     local scriptsdir=`get_ppl_scripts_dir`
-    mkdir -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
+    "${MKDIR}" -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
     local graphsdir=`get_ppl_graphs_dir`
-    mkdir -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
+    "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 
     local fifodir=`get_absolute_fifodir`
-    mkdir -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
+    "${MKDIR}" -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
 
     local condadir=`get_absolute_condadir`
     if [ ${conda_support_given} -eq 1 ]; then
-        mkdir -p "${condadir}"
+        "${MKDIR}" -p "${condadir}"
     fi
 
     echo "Creation complete" >&2

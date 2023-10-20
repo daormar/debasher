@@ -874,7 +874,7 @@ create_outdir_for_process()
     if [ -d ${outd} ]; then
         echo "Warning: ${processname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
     else
-        mkdir "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
+        "${MKDIR}" "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
     fi
 }
 
