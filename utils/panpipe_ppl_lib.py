@@ -469,7 +469,7 @@ class ProcessGraph:
         for entry in file:
             # Extract entry information
             words = entry.split()
-            fifoname = words[0]
+            augm_fifoname = words[0]
             fifo_owner_elems = self.get_process_taskidx_elems_ppl_file(words[1])
             fifo_owner = fifo_owner_elems[0]
             fifo_owner_taskidx = fifo_owner_elems[1]
@@ -479,9 +479,9 @@ class ProcessGraph:
             fifo_user_taskidx = fifo_user_elems[1]
 
             # Populate dictionaries
-            fifo_owners[fifoname] = fifo_owner, fifo_owner_taskidx
-            fifo_users[fifoname] = fifo_user, fifo_user_taskidx
-            fifo_deps[fifoname] = fifodep
+            fifo_owners[augm_fifoname] = fifo_owner, fifo_owner_taskidx
+            fifo_users[augm_fifoname] = fifo_user, fifo_user_taskidx
+            fifo_deps[augm_fifoname] = fifodep
 
         return fifo_owners, fifo_users, fifo_deps
 
@@ -695,11 +695,16 @@ class ProcessGraph:
             if task_idx == 0:
                 print('"'+ opt_hub +'"', "->", processname, ";")
 
+    def get_augm_fifoname(self, abs_fifoname):
+        basename = os.path.basename(abs_fifoname)
+        dirname = os.path.dirname(abs_fifoname)
+        return os.path.basename(dirname) + "/" + basename
+
     def process_is_fifo_owner(self, process_info, abs_fifoname):
         if not os.path.isabs(abs_fifoname):
             return False
         else:
-            base_fname = os.path.basename(abs_fifoname)
+            base_fname = self.get_augm_fifoname(abs_fifoname)
             if base_fname in self.fifo_owners:
                 if process_info == self.get_process_taskidx_string(*self.fifo_owners[base_fname]):
                     return True
@@ -712,7 +717,7 @@ class ProcessGraph:
         if not os.path.isabs(abs_fifoname):
             return False
         else:
-            base_fname = os.path.basename(abs_fifoname)
+            base_fname = self.get_augm_fifoname(abs_fifoname)
             if base_fname in self.fifo_users:
                 if process_info == self.get_process_taskidx_string(*self.fifo_users[base_fname]):
                     return True
@@ -738,7 +743,7 @@ class ProcessGraph:
 
     def print_opt_to_opt_fifo(self, process_info, opt, opt_val):
         # Obtain origin node
-        base_fname = os.path.basename(opt_val)
+        base_fname = self.get_augm_fifoname(opt_val)
         orig_process_info = self.get_process_taskidx_string(*self.fifo_owners[base_fname])
         orig_opt = self.get_fifo_opt(orig_process_info, opt_val)
         orig_opt_graph = self.get_opt_graph(orig_opt, orig_process_info)
