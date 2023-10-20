@@ -167,16 +167,14 @@ exclude_other_vars()
     "$AWK" -F "=" 'BEGIN{
                          othervars["MEMOIZED_OPTS"]=1
                          othervars["PROCESS_OUT_VALUES"]=1
+                         othervars["FIFOS_DEPTYPES"]=1
+                         othervars["FIFO_USERS"]=1
+                         othervars["PIPELINE_FIFOS"]=1
+                         othervars["PIPELINE_FIFOS_DEF_OPTS"]=1
                         }
                         {
                          if(!($1 in othervars)) printf"%s\n",$0
                         }'
-}
-
-########
-exclude_bashisms()
-{
-    "$AWK" '{if(index($1,"=(")==0) printf"%s\n",$0}'
 }
 
 ########
