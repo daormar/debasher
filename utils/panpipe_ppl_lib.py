@@ -360,7 +360,7 @@ class DependencyGraph:
         print("K=1;")
 
         # Set representation for processes
-        print("node [shape = ellipse];")
+        print("node [shape = box];")
 
         # Process processes
         for process in self.processdeps_map:
