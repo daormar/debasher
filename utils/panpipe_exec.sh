@@ -271,10 +271,17 @@ check_procspec()
 gen_process_graph()
 {
     local prefix_of_ppl_files=$1
+    local procgraph_file_prefix=$2
 
     echo "# Generating process graph..." >&2
 
-    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -a || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -a > "${procgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
+
+    if [ -z "${DOT}" ]; then
+        echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
+    else
+        "${DOT}" -T pdf "${procgraph_file_prefix}.${GRAPHS_FEXT}" > "${procgraph_file_prefix}.pdf"
+    fi
 
     echo "Generation complete" >&2
 
@@ -736,6 +743,9 @@ create_basic_dirs()
     local scriptsdir=`get_ppl_scripts_dir`
     mkdir -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
+    local graphsdir=`get_ppl_graphs_dir`
+    mkdir -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
+
     local fifodir=`get_absolute_fifodir`
     mkdir -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
 
@@ -1044,7 +1054,8 @@ else
     pipeline_opts_file="${ppl_file_pref}.${PPLOPTS_FEXT}"
     pipeline_opts_exh_file="${ppl_file_pref}.${PPLOPTS_EXHAUSTIVE_FEXT}"
     pipeline_fifos_file="${ppl_file_pref}.${FIFOS_FEXT}"
-    procgraph_file="${ppl_file_pref}.${PROCGRAPH_FEXT}"
+    ppl_graphs_dir=`get_ppl_graphs_dir`
+    procgraph_file_prefix="${ppl_graphs_dir}/process_graph"
 
     if [ ${checkopts_given} -eq 1 ]; then
         check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
@@ -1056,7 +1067,7 @@ else
 
         check_procspec "${ppl_file_pref}" || exit 1
 
-        gen_process_graph "${ppl_file_pref}" > "${procgraph_file}" || exit 1
+        gen_process_graph "${ppl_file_pref}" "${procgraph_file_prefix}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
