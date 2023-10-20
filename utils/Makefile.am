@@ -58,6 +58,7 @@ SUFFIXES= .sh .py .r .R
 	echo "DIFF=\"$(DIFF)\"" >> $@
 	echo "FIND=\"$(FIND)\"" >> $@
 	echo "WC=\"$(WC)\"" >> $@
+	echo "MKDIR=\"$(MKDIR)\"" >> $@
 	echo "MKTEMP=\"$(MKTEMP)\"" >> $@
 	echo "MKFIFO=\"$(MKFIFO)\"" >> $@
 	echo "FLOCK=\"$(FLOCK)\"" >> $@
