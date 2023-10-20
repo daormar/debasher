@@ -243,11 +243,11 @@ process_d_define_opts()
     local optlist=""
 
     # Define FIFO
-    local fifoname="${process_name}_fifo"
+    local fifoname="fifo"
     define_fifo "${fifoname}" "after"
 
     # Get absolute name of FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${fifoname}")
+    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
@@ -293,8 +293,8 @@ process_e_define_opts()
 
     # Get absolute name of FIFO
     local process_d=$(get_adaptive_processname "process_d")
-    local fifoname="${process_d}_fifo"
-    local abs_fifoname=$(get_absolute_fifoname "${fifoname}")
+    local fifoname="fifo"
+    local abs_fifoname=$(get_absolute_fifoname "${process_d}" "${fifoname}")
 
     # Define option for FIFO
     define_opt "-fifo" "${abs_fifoname}" optlist || return 1
