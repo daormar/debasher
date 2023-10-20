@@ -289,6 +289,27 @@ gen_process_graph()
 }
 
 ########
+gen_dependency_graph()
+{
+    local prefix_of_ppl_files=$1
+    local depgraph_file_prefix=$2
+
+    echo "# Generating process graph..." >&2
+
+    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -g > "${depgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
+
+    if [ -z "${DOT}" ]; then
+        echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
+    else
+        "${DOT}" -T pdf "${depgraph_file_prefix}.${GRAPHS_FEXT}" > "${depgraph_file_prefix}.pdf"
+    fi
+
+    echo "Generation complete" >&2
+
+    echo "" >&2
+}
+
+########
 gen_final_procspec_file()
 {
     local initial_procspec_file=$1
@@ -1056,6 +1077,7 @@ else
     pipeline_fifos_file="${ppl_file_pref}.${FIFOS_FEXT}"
     ppl_graphs_dir=`get_ppl_graphs_dir`
     procgraph_file_prefix="${ppl_graphs_dir}/process_graph"
+    depgraph_file_prefix="${ppl_graphs_dir}/dependency_graph"
 
     if [ ${checkopts_given} -eq 1 ]; then
         check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
@@ -1068,6 +1090,8 @@ else
         check_procspec "${ppl_file_pref}" || exit 1
 
         gen_process_graph "${ppl_file_pref}" "${procgraph_file_prefix}" || exit 1
+
+        gen_dependency_graph "${ppl_file_pref}" "${depgraph_file_prefix}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
