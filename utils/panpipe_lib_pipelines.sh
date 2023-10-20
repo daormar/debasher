@@ -146,6 +146,20 @@ get_ppl_scripts_dir()
 }
 
 ########
+get_ppl_graphs_dir_given_basedir()
+{
+    local dirname=$1
+
+    echo "${dirname}/${PANPIPE_GRAPHS_DIRNAME}"
+}
+
+########
+get_ppl_graphs_dir()
+{
+    get_ppl_graphs_dir_given_basedir "${PIPELINE_OUTDIR}"
+}
+
+########
 add_panpipe_process()
 {
     # Initialize variables
