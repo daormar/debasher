@@ -108,13 +108,13 @@ load_panpipe_module()
             :
         else
             # Load file
-            . "${fullmodname}" || return 1
+            . "${fullmodname}" || exit 1
             # Store module name in array
             local i=${#PIPELINE_MODULES[@]}
             PIPELINE_MODULES[${i}]="${fullmodname}"
         fi
     else
         echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
-        return 1
+        exit 1
     fi
 }
