@@ -96,9 +96,9 @@ def print_help():
     print("", file=sys.stderr)
     print("-p <string>    Prefix of pipeline files", file=sys.stderr)
     print("-r             Print reordered process specification", file=sys.stderr)
-    print("-g             Print dependency diagram in graphviz format", file=sys.stderr)
+    print("-g             Print dependency graph in graphviz format", file=sys.stderr)
     print("-d             Print dependencies for each process", file=sys.stderr)
-    print("-a             Print process diagram", file=sys.stderr)
+    print("-a             Print process graph", file=sys.stderr)
     print("-v             Verbose mode", file=sys.stderr)
 
 ##################################################
