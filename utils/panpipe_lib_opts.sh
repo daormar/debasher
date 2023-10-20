@@ -469,14 +469,17 @@ define_fifo()
     # Get task index
     task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
 
+    # Get augmented fifo name
+    local augm_fifoname="${processname}/${fifoname}"
+
     # Store name of FIFO in associative arrays
-    PIPELINE_FIFOS[${fifoname}]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
-    PIPELINE_FIFOS_DEF_OPTS[${fifoname}]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+    PIPELINE_FIFOS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+    PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
 
     # Store FIFO dependency type
     if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" ] || [ "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" ] \
            || [ "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ] || [ "${dependency}" = "${AFTERCORR_PROCESSDEP_TYPE}" ]; then
-        FIFOS_DEPTYPES[${fifoname}]=${dependency}
+        FIFOS_DEPTYPES["${augm_fifoname}"]=${dependency}
     else
         errmsg "Error: dependency type for FIFO not valid (${dependency})"
         return 1
@@ -770,18 +773,18 @@ create_shdirs_owned_by_process()
 ########
 show_pipeline_fifos()
 {
-    local fifoname
-    for fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        echo "${fifoname}" ${PIPELINE_FIFOS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]} ${FIFO_USERS["${fifoname}"]}
+    local augm_fifoname
+    for augm_fifoname in "${!PIPELINE_FIFOS[@]}"; do
+        echo "${augm_fifoname}" ${PIPELINE_FIFOS["${augm_fifoname}"]} ${FIFOS_DEPTYPES["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
     done
 }
 
 ########
 show_pipeline_fifos_def_opts()
 {
-    local fifoname
-    for fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
-        echo "${fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${fifoname}"]} ${FIFOS_DEPTYPES["${fifoname}"]} ${FIFO_USERS["${fifoname}"]}
+    local augm_fifoname
+    for augm_fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
+        echo "${augm_fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]} ${FIFOS_DEPTYPES["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
     done
 }
 
@@ -791,14 +794,18 @@ prepare_fifos_owned_by_process()
     local processname=$1
 
     # Obtain name of directory for FIFOS
-    local fifodir=`get_absolute_fifoname`
+    local fifodir=`get_absolute_fifodir`
 
     # Create FIFOS
-    local fifoname
-    for fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
-        if [ ${PIPELINE_FIFOS_DEF_OPTS["${fifoname}"]} = "${processname}" ]; then
-            rm -f "${fifodir}/${fifoname}" || exit 1
-            $MKFIFO "${fifodir}/${fifoname}" || exit 1
+    local augm_fifoname
+    for augm_fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
+        local proc_plus_idx=${PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]}
+        local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
+        if [ "${proc}" = "${processname}" ]; then
+            local dirname=`"${DIRNAME}" "${augm_fifoname}"`
+            mkdir -p "${fifodir}/${dirname}"
+            rm -f "${fifodir}/${augm_fifoname}" || exit 1
+            "${MKFIFO}" "${fifodir}/${augm_fifoname}" || exit 1
         fi
     done
 }
@@ -821,19 +828,24 @@ get_absolute_fifodir()
 ########
 get_absolute_fifoname()
 {
-    local fifoname=$1
-
+    local owner_process=$1
+    local fifoname=$2
+    local augm_fifoname="${owner_process}/${fifoname}"
     local fifodir=`get_absolute_fifodir`
 
-    echo "${fifodir}/${fifoname}"
+    echo "${fifodir}/${augm_fifoname}"
 }
 
 ########
-get_fifoname_from_absname()
+get_augm_fifoname_from_absname()
 {
     local absname=$1
 
-    ${BASENAME} "${absname}"
+    local fifoname=`${BASENAME} "${absname}"`
+    local dirname=`${DIRNAME} "${absname}"`
+    local owner_process=`${BASENAME} "${dirname}"`
+
+    echo "${owner_process}/${fifoname}"
 }
 
 ########

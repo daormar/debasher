@@ -533,15 +533,15 @@ get_procdeps_for_process_cached()
                                 local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
                                 depdict["${proc}"]=${highest_pri_deptype}
                             else
-                                fifoname=`get_fifoname_from_absname "${value}"`
-                                if [[ -v PIPELINE_FIFOS[${fifoname}] ]]; then
+                                augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
+                                if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
                                     # The value is a FIFO
-                                    local proc_plus_idx="${PIPELINE_FIFOS[${fifoname}]}"
+                                    local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
                                     local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                     if [ "${processowner}" != "${processname}" ]; then
                                         # The current process is not the owner of the FIFO
-                                        local deptype="${FIFOS_DEPTYPES[$fifoname]}"
+                                        local deptype=${FIFOS_DEPTYPES["$augm_fifoname"]}
                                         if [ "${deptype}" != "${NONE_PROCESSDEP_TYPE}" ]; then
                                             local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}"`
                                             depdict["${processowner}"]=${highest_pri_deptype}
@@ -680,15 +680,15 @@ register_fifos_used_by_process()
                         if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
                             :
                         else
-                            fifoname=`get_fifoname_from_absname "${value}"`
-                            if [[ -v PIPELINE_FIFOS[${fifoname}] ]]; then
+                            augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
+                            if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
                                 # The value is a FIFO
-                                local proc_plus_idx="${PIPELINE_FIFOS[${fifoname}]}"
+                                local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
                                 local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                                 local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                 if [ "${processowner}" != "${processname}" ]; then
                                     # The current process is not the owner of the FIFO
-                                    FIFO_USERS[${fifoname}]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+                                    FIFO_USERS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
                                 fi
                             fi
                         fi
@@ -732,11 +732,11 @@ get_fifo_owners_for_process()
     declare -A owners
 
     # Iterate over fifo users
-    for fifoname in "${!FIFO_USERS[@]}"; do
-        local user="${FIFO_USERS[${fifoname}]}"
+    for augm_fifoname in "${!FIFO_USERS[@]}"; do
+        local user=${FIFO_USERS["${augm_fifoname}"]}
         local user_proc="${user%%${ASSOC_ARRAY_ELEM_SEP}*}"
         if [ "${user_proc}" = "${processname}" ]; then
-            local owner="${PIPELINE_FIFOS[${fifoname}]}"
+            local owner=${PIPELINE_FIFOS["${augm_fifoname}"]}
             local owner_proc="${owner%%${ASSOC_ARRAY_ELEM_SEP}*}"
             owners["${owner_proc}"]=1
         fi
