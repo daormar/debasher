@@ -570,7 +570,7 @@ get_process_status()
     local processname=$2
     local script_filename=`get_script_filename "${dirname}" ${processname}`
 
-    # Check if process should not be reexecuted (DONT_EXECUTE status has
+    # Check if process should not be executed (DONT_EXECUTE status has
     # the highest priority)
     if process_should_not_be_exec $processname; then
         echo "${DONT_EXECUTE_PROCESS_STATUS}"
