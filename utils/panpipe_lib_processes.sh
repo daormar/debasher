@@ -670,6 +670,8 @@ get_procdeps_for_process_cached()
             PROCESS_DEPENDENCIES[$processname]=${deps}
             echo "$deps"
         else
+            # Add prefix to result
+            deps="${PROCESSDEPS_SPEC}=${deps}"
             # Cache dependencies
             PROCESS_DEPENDENCIES[$processname]=${deps}
             echo "$deps"
