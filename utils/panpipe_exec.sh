@@ -321,11 +321,22 @@ gen_final_procspec_file()
         # Extract process information
         local processname=`extract_processname_from_process_spec "$process_spec"`
 
-        # Obtain process dependencies
-        procdeps=`get_procdeps_for_process_cached "${process_spec}"`
+        # Extract dependencies from process specification
+        local procdeps=`extract_processdeps_from_process_spec "${process_spec}"`
 
-        # Print process specification plus process dependencies
-        echo "${process_spec}" "${procdeps}"
+        # Check if dependencies were given
+        if [ "${procdeps}" = "${ATTR_NOT_FOUND}" ]; then
+            # Dependencies not given, so they should be obtained
+            procdeps=`get_procdeps_for_process_cached "${process_spec}"`
+
+            # Print process specification plus process dependencies
+            echo "${process_spec}" "${procdeps}"
+        else
+            # Since the dependencies were given, just print process
+            # specification
+            echo "${process_spec}"
+        fi
+
     done < "${initial_procspec_file}"
 
     echo "Generation complete" >&2
