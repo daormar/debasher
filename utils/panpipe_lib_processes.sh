@@ -268,7 +268,7 @@ define_opts_for_process()
     {
         local processname=$1
         for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-            deserialize_args ${CURRENT_PROCESS_OPT_LIST[task_idx]}
+            deserialize_args "${CURRENT_PROCESS_OPT_LIST[task_idx]}"
             local i=0
             while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
                 # Check if option was found
