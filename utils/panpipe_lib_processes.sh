@@ -192,6 +192,14 @@ get_define_opts_funcname()
 }
 
 ########
+get_define_opt_deps_funcname()
+{
+    local processname=$1
+
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPT_DEPS}"
+}
+
+########
 get_should_execute_funcname()
 {
     local processname=$1
@@ -498,6 +506,18 @@ get_procdeps_for_process_cached()
 {
     get_procdeps_for_process()
     {
+        get_deptype_using_func()
+        {
+            local processname=$1
+            local opt=$2
+            local funcname=`get_define_opt_deps_funcname "${processname}"`
+            if [ "${funcname}" = ${FUNCT_NOT_FOUND} ]; then
+                :
+            else
+                "${funcname}" "${opt}"
+            fi
+        }
+
         get_procdeps_for_process_task()
         {
             # Initialize variables
@@ -525,10 +545,13 @@ get_procdeps_for_process_cached()
                                 local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                                 local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                 local deptype
-                                if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
-                                    deptype=${AFTERCORR_PROCESSDEP_TYPE}
-                                else
-                                    deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                deptype=`get_deptype_using_func ${processname} ${opt}`
+                                if [ -z "${deptype}" ]; then
+                                    if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                                        deptype=${AFTERCORR_PROCESSDEP_TYPE}
+                                    else
+                                        deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                    fi
                                 fi
                                 local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
                                 depdict["${proc}"]=${highest_pri_deptype}
