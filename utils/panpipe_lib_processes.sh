@@ -260,7 +260,7 @@ define_opts_for_process()
         local array_length=${#CURRENT_PROCESS_OPT_LIST[@]}
         PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN}"]=${array_length}
         for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-            PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"]=${CURRENT_PROCESS_OPT_LIST[task_idx]}
+            PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"]=${CURRENT_PROCESS_OPT_LIST[$task_idx]}
         done
     }
 
@@ -268,7 +268,7 @@ define_opts_for_process()
     {
         local processname=$1
         for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-            deserialize_args "${CURRENT_PROCESS_OPT_LIST[task_idx]}"
+            deserialize_args "${CURRENT_PROCESS_OPT_LIST[$task_idx]}"
             local i=0
             while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
                 # Check if option was found
