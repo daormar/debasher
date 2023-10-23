@@ -284,7 +284,7 @@ define_opts_for_process()
                         else
                             value="${DESERIALIZED_ARGS[$i]}"
                             if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
-                                PROCESS_OUT_VALUES["$value"]="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}" >&2
+                                PROCESS_OUT_VALUES["$value"]="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"
                             fi
                             i=$((i+1))
                         fi
@@ -646,7 +646,6 @@ get_procdeps_for_process_cached()
             get_procdeps_for_task_array "${processname}" "${num_tasks}"
         fi
     }
-
     local process_spec=$1
 
     # Extract process information
