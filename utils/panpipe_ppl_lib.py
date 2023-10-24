@@ -452,7 +452,10 @@ class ProcessGraph:
                 while i < len(opts):
                     if os.path.isabs(opts[i]):
                         if i > 0 and self.str_is_output_option(opts[i-1]):
-                            process_out_values[opts[i]] = process, task_idx, opts[i-1]
+                            if opts[i] in process_out_values:
+                                process_out_values[opts[i]].append((process, task_idx, opts[i-1]))
+                            else:
+                                process_out_values[opts[i]] = [(process, task_idx, opts[i-1])]
                     i += 1
         return process_out_values
 
@@ -777,15 +780,14 @@ class ProcessGraph:
             return None
 
     def print_opt_to_opt_outval(self, process_info, opt, opt_val):
-        # Obtain origin node
-        orig_opt = self.process_out_values[opt_val][2]
-        orig_procname = self.process_out_values[opt_val][0]
-        orig_taskidx = self.process_out_values[opt_val][1]
-        orig_process_info = self.get_process_taskidx_string(orig_procname, orig_taskidx)
-        orig_opt_graph = self.get_opt_graph(orig_opt, orig_process_info)
+        # Iterate over processes producing opt_val
+        for orig_procname, orig_taskidx, orig_opt in self.process_out_values[opt_val]:
+            # Obtain origin node
+            orig_process_info = self.get_process_taskidx_string(orig_procname, orig_taskidx)
+            orig_opt_graph = self.get_opt_graph(orig_opt, orig_process_info)
 
-        # Obtain destination node
-        dest_opt_graph = self.get_opt_graph(opt, process_info)
+            # Obtain destination node
+            dest_opt_graph = self.get_opt_graph(opt, process_info)
 
-        # Print arc
-        print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', ";")
+            # Print arc
+            print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', ";")
