@@ -284,7 +284,12 @@ define_opts_for_process()
                         else
                             value="${DESERIALIZED_ARGS[$i]}"
                             if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
-                                PROCESS_OUT_VALUES["$value"]="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+                                local process_info="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+                                if [[ -v PROCESS_OUT_VALUES["${value}"] ]]; then
+                                    PROCESS_OUT_VALUES["$value"]=${PROCESS_OUT_VALUES["$value"]}${ASSOC_ARRAY_PROC_SEP}${process_info}
+                                else
+                                    PROCESS_OUT_VALUES["$value"]=${process_info}
+                                fi
                             fi
                             i=$((i+1))
                         fi
@@ -540,21 +545,35 @@ get_procdeps_for_process_cached()
                         # not an output option
                         if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
                             if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
-                                # The value is generated as output by another process
-                                local proc_plus_idx=${PROCESS_OUT_VALUES[${value}]}
-                                local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
-                                local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
-                                local deptype
-                                deptype=`get_deptype_using_func ${processname} ${opt}`
-                                if [ -z "${deptype}" ]; then
-                                    if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
-                                        deptype=${AFTERCORR_PROCESSDEP_TYPE}
-                                    else
-                                        deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                # The value is generated as output by
+                                # another process (or processes)
+                                local processes="${PROCESS_OUT_VALUES[${value}]}"
+                                while [ -n "${processes}" ]; do
+                                    # Extract process information
+                                    local proc_plus_idx="${processes%%${ASSOC_ARRAY_PROC_SEP}*}"
+                                    local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
+                                    local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
+                                    # Determine dependency type
+                                    local deptype
+                                    deptype=`get_deptype_using_func ${processname} ${opt}`
+                                    if [ -z "${deptype}" ]; then
+                                        if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                                            deptype=${AFTERCORR_PROCESSDEP_TYPE}
+                                        else
+                                            deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                        fi
                                     fi
-                                fi
-                                local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
-                                depdict["${proc}"]=${highest_pri_deptype}
+                                    local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
+                                    # Update dependency dictionary
+                                    depdict["${proc}"]=${highest_pri_deptype}
+                                    # Update processes variable
+                                    local processes_aux="${processes#"${proc_plus_idx}${ASSOC_ARRAY_PROC_SEP}"}"
+                                    if [ "${processes}" = "${processes_aux}" ]; then
+                                        processes=""
+                                    else
+                                        processes=${processes_aux}
+                                    fi
+                                done
                             else
                                 augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
                                 if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
