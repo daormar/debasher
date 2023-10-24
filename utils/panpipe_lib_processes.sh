@@ -515,11 +515,12 @@ get_procdeps_for_process_cached()
         {
             local processname=$1
             local opt=$2
+            local producer_process=$3
             local funcname=`get_define_opt_deps_funcname "${processname}"`
             if [ "${funcname}" = ${FUNCT_NOT_FOUND} ]; then
                 :
             else
-                "${funcname}" "${opt}"
+                "${funcname}" "${opt}" "${producer_process}"
             fi
         }
 
@@ -555,7 +556,7 @@ get_procdeps_for_process_cached()
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                     # Determine dependency type
                                     local deptype
-                                    deptype=`get_deptype_using_func ${processname} ${opt}`
+                                    deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
                                     if [ -z "${deptype}" ]; then
                                         if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
                                             deptype=${AFTERCORR_PROCESSDEP_TYPE}
