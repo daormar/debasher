@@ -304,6 +304,23 @@ process_e_define_opts()
 }
 
 ########
+process_e_define_opt_deps()
+{
+    # Initialize variables
+    local opt=$1
+    local producer_process=$2
+
+    case ${opt} in
+        "-fifo")
+            echo "after"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+########
 process_e()
 {
     # Initialize variables
