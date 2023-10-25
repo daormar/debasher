@@ -456,12 +456,6 @@ print_pipeline_opts()
 define_fifo()
 {
     local fifoname=$1
-    local dependency=$2
-
-    # Check if a dependency was given
-    if [ -z "${dependency}" ]; then
-        dependency=${NONE_PROCESSDEP_TYPE}
-    fi
 
     # Get process name
     local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
@@ -475,15 +469,6 @@ define_fifo()
     # Store name of FIFO in associative arrays
     PIPELINE_FIFOS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
     PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
-
-    # Store FIFO dependency type
-    if [ "${dependency}" = "${NONE_PROCESSDEP_TYPE}" ] || [ "${dependency}" = "${AFTER_PROCESSDEP_TYPE}" ] \
-           || [ "${dependency}" = "${AFTEROK_PROCESSDEP_TYPE}" ] || [ "${dependency}" = "${AFTERCORR_PROCESSDEP_TYPE}" ]; then
-        FIFOS_DEPTYPES["${augm_fifoname}"]=${dependency}
-    else
-        errmsg "Error: dependency type for FIFO not valid (${dependency})"
-        return 1
-    fi
 }
 
 ########
@@ -775,7 +760,7 @@ show_pipeline_fifos()
 {
     local augm_fifoname
     for augm_fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        echo "${augm_fifoname}" ${PIPELINE_FIFOS["${augm_fifoname}"]} ${FIFOS_DEPTYPES["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
+        echo "${augm_fifoname}" ${PIPELINE_FIFOS["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
     done
 }
 
@@ -784,7 +769,7 @@ show_pipeline_fifos_def_opts()
 {
     local augm_fifoname
     for augm_fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
-        echo "${augm_fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]} ${FIFOS_DEPTYPES["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
+        echo "${augm_fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
     done
 }
 

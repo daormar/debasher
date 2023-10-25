@@ -208,9 +208,6 @@ declare -A PIPELINE_FIFOS_DEF_OPTS
 # Declare associative array to store users of fifos
 declare -A FIFO_USERS
 
-# Declare associative array to store dependency types for fifos
-declare -A FIFOS_DEPTYPES
-
 # Declare general scheduler-related variables
 declare PANPIPE_SCHEDULER
 declare -A PANPIPE_REEXEC_PROCESSES

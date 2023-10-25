@@ -555,8 +555,7 @@ get_procdeps_for_process_cached()
                                     local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                     # Determine dependency type
-                                    local deptype
-                                    deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
+                                    local deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
                                     if [ -z "${deptype}" ]; then
                                         if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
                                             deptype=${AFTERCORR_PROCESSDEP_TYPE}
@@ -584,7 +583,11 @@ get_procdeps_for_process_cached()
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                     if [ "${processowner}" != "${processname}" ]; then
                                         # The current process is not the owner of the FIFO
-                                        local deptype=${FIFOS_DEPTYPES["$augm_fifoname"]}
+                                        local deptype=`get_deptype_using_func ${processname} ${opt} ${processowner}`
+                                        if [ -z "${deptype}" ]; then
+                                            deptype="${NONE_PROCESSDEP_TYPE}"
+                                        fi
+#                                        local deptype=${FIFOS_DEPTYPES["$augm_fifoname"]}
                                         if [ "${deptype}" != "${NONE_PROCESSDEP_TYPE}" ]; then
                                             local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}"`
                                             depdict["${processowner}"]=${highest_pri_deptype}
