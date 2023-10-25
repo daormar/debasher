@@ -403,7 +403,7 @@ class ProcessGraph:
         self.pplopts_exh = self.load_pplopt_exh(self.pplopts_exhaustive_file)
         self.process_out_values = self.get_process_out_values(self.pplopts_exh)
         self.fifos_file = self.get_fifos_fname(ppl_files_pref)
-        self.fifo_owners, self.fifo_users, self.fifo_deps = self.load_fifos(self.fifos_file)
+        self.fifo_owners, self.fifo_users = self.load_fifos(self.fifos_file)
 
     def get_pplopts_exh_fname(self, prefix):
         return prefix + "." + PPLOPTS_EXHAUSTIVE_FEXT
@@ -465,7 +465,6 @@ class ProcessGraph:
     def load_fifos(self, fifos_fname):
         fifo_owners = {}
         fifo_users = {}
-        fifo_deps = {}
 
         file = open(fifos_fname, 'r')
         # read file entry by entry
@@ -476,17 +475,15 @@ class ProcessGraph:
             fifo_owner_elems = self.get_process_taskidx_elems_ppl_file(words[1])
             fifo_owner = fifo_owner_elems[0]
             fifo_owner_taskidx = fifo_owner_elems[1]
-            fifodep = words[2]
-            fifo_user_elems = self.get_process_taskidx_elems_ppl_file(words[3])
+            fifo_user_elems = self.get_process_taskidx_elems_ppl_file(words[2])
             fifo_user = fifo_user_elems[0]
             fifo_user_taskidx = fifo_user_elems[1]
 
             # Populate dictionaries
             fifo_owners[augm_fifoname] = fifo_owner, fifo_owner_taskidx
             fifo_users[augm_fifoname] = fifo_user, fifo_user_taskidx
-            fifo_deps[augm_fifoname] = fifodep
 
-        return fifo_owners, fifo_users, fifo_deps
+        return fifo_owners, fifo_users
 
     def print(self):
         # Print header
