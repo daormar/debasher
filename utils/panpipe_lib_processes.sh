@@ -587,7 +587,6 @@ get_procdeps_for_process_cached()
                                         if [ -z "${deptype}" ]; then
                                             deptype="${NONE_PROCESSDEP_TYPE}"
                                         fi
-#                                        local deptype=${FIFOS_DEPTYPES["$augm_fifoname"]}
                                         if [ "${deptype}" != "${NONE_PROCESSDEP_TYPE}" ]; then
                                             local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}"`
                                             depdict["${processowner}"]=${highest_pri_deptype}
