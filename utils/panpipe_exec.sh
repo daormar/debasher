@@ -294,7 +294,7 @@ gen_dependency_graph()
     local prefix_of_ppl_files=$1
     local depgraph_file_prefix=$2
 
-    echo "# Generating process graph..." >&2
+    echo "# Generating dependency graph..." >&2
 
     "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -g > "${depgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
 
