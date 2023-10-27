@@ -477,8 +477,8 @@ define_shared_dir()
     local shared_dir=$1
 
     # Store name of shared directory in associative arrays
-    PIPELINE_SHDIRS[${shared_dir}]=1
-    PIPELINE_SHDIRS_DEF_OPTS[${shared_dir}]=1
+    PIPELINE_SHDIRS["${shared_dir}"]=1
+    PIPELINE_SHDIRS_DEF_OPTS["${shared_dir}"]=1
 }
 
 ########
