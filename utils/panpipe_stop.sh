@@ -29,7 +29,7 @@ print_desc()
 ########
 usage()
 {
-    echo "pipe_stop                -d <string> [-s <string>]"
+    echo "panpipe_stop              -d <string> [-s <string>]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for pipeline processes"
