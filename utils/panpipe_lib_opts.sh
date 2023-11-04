@@ -856,7 +856,10 @@ clear_opt_list_assoc_array()
 ########
 save_opt_list()
 {
-    # Set option list for current process
+    # Set option list for current process. The option list is an array
+    # with a different set of options for each process task. If the
+    # process is not an array, then the option list will be composed of
+    # one element
     local optlist_varname=$1
     CURRENT_PROCESS_OPT_LIST+=("${!optlist_varname}")
 }
