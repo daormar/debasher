@@ -554,18 +554,20 @@ get_procdeps_for_process_cached()
                                     local proc_plus_idx="${processes%%${ASSOC_ARRAY_PROC_SEP}*}"
                                     local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
-                                    # Determine dependency type
-                                    local deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
-                                    if [ -z "${deptype}" ]; then
-                                        if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
-                                            deptype=${AFTERCORR_PROCESSDEP_TYPE}
-                                        else
-                                            deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                    if [ "${processname}" != "${proc}" ]; then
+                                        # Determine dependency type
+                                        local deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
+                                        if [ -z "${deptype}" ]; then
+                                            if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                                                deptype=${AFTERCORR_PROCESSDEP_TYPE}
+                                            else
+                                                deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                            fi
                                         fi
+                                        local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
+                                        # Update dependency dictionary
+                                        depdict["${proc}"]=${highest_pri_deptype}
                                     fi
-                                    local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
-                                    # Update dependency dictionary
-                                    depdict["${proc}"]=${highest_pri_deptype}
                                     # Update processes variable
                                     local processes_aux="${processes#"${proc_plus_idx}${ASSOC_ARRAY_PROC_SEP}"}"
                                     if [ "${processes}" = "${processes_aux}" ]; then
