@@ -327,7 +327,7 @@ class DependencyGraph:
                     ordered_process_entries.append(entry)
             # Check if no processes were added
             if(prev_proc_processes_len==len(processed_processes)):
-                print("Error: the analysis file contains at least one cycle", file=sys.stderr)
+                print("Error: the process dependencies contain at least one cycle", file=sys.stderr)
                 return ordered_process_entries
 
         return ordered_process_entries
