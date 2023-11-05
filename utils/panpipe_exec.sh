@@ -1016,11 +1016,6 @@ debug_process()
     ## Obtain process status
     local status=`get_process_status "${dirname}" ${processname}`
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
-
-    ## Obtain process options
-    local define_opts_funcname=`get_define_opts_funcname ${processname}`
-    local process_outdir=`get_process_outdir_given_dirname "${dirname}" "${process_name}"`
-    ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
 }
 
 ########
