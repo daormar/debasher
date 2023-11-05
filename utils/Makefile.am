@@ -52,6 +52,7 @@ SUFFIXES= .sh .py .r .R
 	echo "DIRNAME=\"$(DIRNAME)\"" >> $@
 	echo "REALPATH=\"$(REALPATH)\"" >> $@
 	echo "SPLIT=\"$(SPLIT)\"" >> $@
+	echo "CAT=\"$(CAT)\"" >> $@
 	echo "CUT=\"$(CUT)\"" >> $@
 	echo "HEAD=\"$(HEAD)\"" >> $@
 	echo "TAIL=\"$(TAIL)\"" >> $@
