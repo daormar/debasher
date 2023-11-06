@@ -268,7 +268,7 @@ builtin_sched_get_array_task_status()
             echo ${BUILTIN_SCHED_FINISHED_TASK_STATUS}
         else
             # Task is not finished
-            local id=`cat "${array_taskid_file}"`
+            local id=`"${CAT}" "${array_taskid_file}"`
             if id_exists $id; then
                 echo ${BUILTIN_SCHED_INPROGRESS_TASK_STATUS}
             else

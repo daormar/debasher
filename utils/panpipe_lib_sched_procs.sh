@@ -48,7 +48,7 @@ get_array_taskid()
 
     file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
     if [ -f "${file}" ]; then
-        cat "$file"
+        "${CAT}" "$file"
     else
         echo ${INVALID_ARRAY_TID}
     fi
@@ -226,7 +226,7 @@ read_process_id_info_from_file()
     # Return id for process
     local filename=`get_processid_filename "${dirname}" ${processname}`
     if [ -f "$filename" ]; then
-        cat "$filename"
+        "${CAT}" "$filename"
     else
         echo ${INVALID_SID}
     fi
@@ -242,7 +242,7 @@ read_ids_from_files()
     # Return id for process
     local filename=`get_processid_filename "${dirname}" ${processname}`
     if [ -f "$filename" ]; then
-        ids=`cat "$filename"`
+        ids=`"${CAT}" "$filename"`
     fi
 
     # Get scripts dir
@@ -252,7 +252,7 @@ read_ids_from_files()
     local id
     for taskid_file in "${scriptsdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
-            id=`cat "${taskid_file}"`
+            id=`"${CAT}" "${taskid_file}"`
             if [ -z "${ids}" ]; then
                 ids=$id
             else
@@ -423,7 +423,7 @@ get_launched_array_task_ids()
     # Return ids for array tasks if any
     for taskid_file in "${scriptsdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
-            cat "${taskid_file}"
+            "${CAT}" "${taskid_file}"
         fi
     done
 

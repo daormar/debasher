@@ -181,7 +181,7 @@ get_dflt_nodes_opt()
 ########
 get_ppl_opts_str()
 {
-    cat "${ppl_opts}"
+    "${CAT}" "${ppl_opts}"
 }
 
 ########
