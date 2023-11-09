@@ -1,4 +1,4 @@
-#                                               -*- Autoconf -*-
+¡#                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.71])
@@ -133,7 +133,7 @@ if test "${QSUB_WORKS}" = "yes"; then
  else
   QSTAT_J_OPT="-j"
   echo "yes"
- fi 
+ fi
 else
  QSTAT_J_OPT=""
 fi
@@ -149,7 +149,7 @@ if test "$GAWK" = no; then
    ## NAWK
    AC_PATH_PROG(NAWK, nawk, no)
    if test "$NAWK" = no; then
-        
+
         ## MAWK
 	AC_PATH_PROG(MAWK, mawk, no)
         if test "$MAWK" = no; then
@@ -176,9 +176,9 @@ AC_MSG_CHECKING(whether awk supports delete array )
 USE_FAST_DELETE="no"
 echo "" | $AWK '{ a[[1]]=1; delete a; if (a[[1]]!=0) exit (1) }' && USE_FAST_DELETE="yes"
 if test ${USE_FAST_DELETE} = "yes"; then
-   AC_MSG_RESULT(yes)   
+   AC_MSG_RESULT(yes)
 else
-   AC_MSG_RESULT(no) 
+   AC_MSG_RESULT(no)
 fi
 
 AC_SUBST(USE_FAST_DELETE)
@@ -194,7 +194,7 @@ if test $? -eq 0; then
 else
    sortpars=""
    echo "no"
-fi 
+fi
 AC_SUBST(sortpars)
 
 echo -n "checking whether sort accepts -T <dir>... "
@@ -205,7 +205,7 @@ if test $? -eq 0; then
 else
    sortT="no"
    echo "no"
-fi 
+fi
 AC_SUBST(sortT)
 
 echo -n "checking whether sort accepts -m... "
@@ -216,7 +216,7 @@ if test $? -eq 0; then
 else
    sortm="no"
    echo "no"
-fi 
+fi
 AC_SUBST(sortm)
 
 
@@ -231,7 +231,7 @@ CXXFLAGS="${CXXFLAGS_AUX}"
 # Checks for basic flags
 AC_LANG(C++)
 for f in -Wno-deprecated
-do                        
+do
     AC_MSG_CHECKING(whether ${CXX} supports ${f})
     saved_cxxflags="${CXXFLAGS}"
     CXXFLAGS="${CXXFLAGS} ${f}"
@@ -255,8 +255,8 @@ AC_DEFINE(DEBUG,,[Define if the debugging mode is enabled])
 
 # Checks for flags
 AC_LANG(C)
-for f in -g -Wall  
-do                        
+for f in -g -Wall
+do
     AC_MSG_CHECKING(whether ${CC} supports ${f})
     saved_cflags="${CFLAGS}"
     CFLAGS="${CFLAGS} ${f}"
@@ -268,7 +268,7 @@ done
 
 AC_LANG(C++)
 for f in -g -Wall
-do                        
+do
     AC_MSG_CHECKING(whether ${CXX} supports ${f})
     saved_cxxflags="${CXXFLAGS}"
     CXXFLAGS="${CXXFLAGS} ${f}"
@@ -284,8 +284,8 @@ AC_MSG_RESULT(no)
 
 # Checks for flags
 AC_LANG(C)
-for f in -Wall -O2 
-do                        
+for f in -Wall -O2
+do
     AC_MSG_CHECKING(whether ${CC} supports ${f})
     saved_cflags="${CFLAGS}"
     CFLAGS="${CFLAGS} ${f}"
@@ -297,7 +297,7 @@ done
 
 AC_LANG(C++)
 for f in -Wall -O2
-do                        
+do
     AC_MSG_CHECKING(whether ${CXX} supports ${f})
     saved_cxxflags="${CXXFLAGS}"
     CXXFLAGS="${CXXFLAGS} ${f}"
@@ -332,7 +332,7 @@ fi
 
 AC_LANG(C)
 for f in ${flags}
-do                        
+do
     AC_MSG_CHECKING(whether ${CC} supports ${f})
     saved_cflags="${CFLAGS}"
     CFLAGS="${CFLAGS} ${f}"
@@ -344,7 +344,7 @@ done
 
 AC_LANG(C++)
 for f in ${flags}
-do                        
+do
     AC_MSG_CHECKING(whether ${CXX} supports ${f})
     saved_cxxflags="${CXXFLAGS}"
     CXXFLAGS="${CXXFLAGS} ${f}"
