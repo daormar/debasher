@@ -558,9 +558,9 @@ process_i()
     echo "$value" > "${outf}"
 }
 
-######################################
-# PIPELINE IMPLEMENTED BY THE MODULE #
-######################################
+##################################
+# PIPELINE DEFINED BY THE MODULE #
+##################################
 
 ########
 panpipe_software_test_pipeline()
