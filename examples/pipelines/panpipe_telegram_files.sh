@@ -126,7 +126,7 @@ recomposer_define_opts()
     local inf="${abs_shrdir}/words.txt"
     define_opt "-inf" "${inf}" optlist || return 1
 
-    # Define name of input file
+    # Define name of output file
     local outf="${process_outdir}/output.txt"
     define_opt "-outf" "${outf}" optlist || return 1
 
@@ -165,7 +165,7 @@ recompose()
 recomposer()
 {
     # Initialize variables
-    local outd=`read_opt_value_from_line "$*" "-outdir"`
+    local outf=`read_opt_value_from_line "$*" "-outf"`
     local char_lim=`read_opt_value_from_line "$*" "-c"`
     local inf=`read_opt_value_from_line "$*" "-inf"`
 
