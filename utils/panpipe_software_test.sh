@@ -244,7 +244,7 @@ process_d_define_opts()
 
     # Define FIFO
     local fifoname="fifo"
-    define_fifo "${fifoname}" "after"
+    define_fifo "${fifoname}"
 
     # Get absolute name of FIFO
     local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
