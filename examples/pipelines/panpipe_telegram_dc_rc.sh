@@ -160,7 +160,7 @@ recompose()
 recomposer()
 {
     # Initialize variables
-    local outf=`read_opt_value_from_line "$*" "-outdir"`
+    local outf=`read_opt_value_from_line "$*" "-outf"`
     local char_lim=`read_opt_value_from_line "$*" "-c"`
     local dcfifo=`read_opt_value_from_line "$*" "-dcfifo"`
 

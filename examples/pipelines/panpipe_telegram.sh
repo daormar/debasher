@@ -271,7 +271,7 @@ wseq_define_opts()
 wseq()
 {
     # Initialize variables
-    local outf=`read_opt_value_from_line "$*" "-outdir"`
+    local outf=`read_opt_value_from_line "$*" "-outf"`
     local rcfifo=`read_opt_value_from_line "$*" "-rcfifo"`
 
     # Write string to FIFO
