@@ -82,8 +82,8 @@ decomposer_define_opts()
 decomposer()
 {
     # Initialize variables
-    local file=`read_opt_value_from_line "$*" "-f"`
-    local outf=`read_opt_value_from_line "$*" "-outf"`
+    local file=$(read_opt_value_from_func_args "-f" $@)
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
 
     # Write string to FIFO
     "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
@@ -162,9 +162,9 @@ recompose()
 recomposer()
 {
     # Initialize variables
-    local outf=`read_opt_value_from_line "$*" "-outf"`
-    local char_lim=`read_opt_value_from_line "$*" "-c"`
-    local inf=`read_opt_value_from_line "$*" "-inf"`
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
+    local char_lim=$(read_opt_value_from_func_args "-c" $@)
+    local inf=$(read_opt_value_from_func_args "-inf" $@)
 
     # Write string to FIFO
     "${CAT}" "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
@@ -215,9 +215,9 @@ telegram_define_opts()
 telegram()
 {
     # Initialize variables
-    local outd=`read_opt_value_from_line "$*" "-out-processdir"`
-    local file=`read_opt_value_from_line "$*" "-f"`
-    local char_lim=`read_opt_value_from_line "$*" "-c"`
+    local outd=$(read_opt_value_from_func_args "-out-processdir" $@)
+    local file=$(read_opt_value_from_func_args "-f" $@)
+    local char_lim=$(read_opt_value_from_func_args "-c" $@)
 
     # Execute decomposer
     dyn_launch decomposer -f "${file}" -outf "${outd}"/words.txt || return 1
