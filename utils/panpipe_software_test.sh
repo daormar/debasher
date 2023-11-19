@@ -197,7 +197,7 @@ process_c()
 }
 
 ########
-process_c_reset_outdir()
+process_c_reset_outfiles()
 {
     # Initialize variables
     local outf=$(read_opt_value_from_line "$*" "-outf")

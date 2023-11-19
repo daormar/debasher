@@ -973,9 +973,9 @@ builtin_sched_execute_funct_plus_postfunct()
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ ${num_scripts} -eq 1 ]; then
-            default_reset_outdir_for_process "${dirname}" ${processname}
+            default_reset_outfiles_for_process "${dirname}" ${processname}
         else
-            default_reset_outdir_for_process_array "${dirname}" ${processname} ${taskidx}
+            default_reset_outfiles_for_process_array "${dirname}" ${processname} ${taskidx}
         fi
     else
         ${reset_funct} "${process_opts}"

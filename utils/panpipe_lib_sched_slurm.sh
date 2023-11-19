@@ -72,9 +72,9 @@ print_script_body_slurm_sched()
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ ${num_scripts} -eq 1 ]; then
-            echo "default_reset_outdir_for_process \"$(esc_dq "${dirname}")\" ${processname}"
+            echo "default_reset_outfiles_for_process \"$(esc_dq "${dirname}")\" ${processname}"
         else
-            echo "default_reset_outdir_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
+            echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
         fi
     else
         echo "${reset_funct} \"$(esc_dq "${process_opts}")\""

@@ -148,7 +148,7 @@ get_reset_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_RESET_OUTDIR}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_RESET_OUTFILES}"
 }
 
 ########
@@ -927,7 +927,7 @@ create_outdir_for_process()
 }
 
 ########
-default_reset_outdir_for_process()
+default_reset_outfiles_for_process()
 {
     local dirname=$1
     local processname=$2
@@ -940,7 +940,7 @@ default_reset_outdir_for_process()
 }
 
 ########
-default_reset_outdir_for_process_array()
+default_reset_outfiles_for_process_array()
 {
     :
 }
