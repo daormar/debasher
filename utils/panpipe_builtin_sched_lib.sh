@@ -970,6 +970,11 @@ builtin_sched_execute_funct_plus_postfunct()
 
     display_begin_process_message
 
+    # Convert serialized process options to array (result is placed into
+    # the DESERIALIZED_ARGS variable)
+    # TO-BE-DONE
+    deserialize_args "${process_opts}"
+
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ ${num_scripts} -eq 1 ]; then
@@ -978,11 +983,11 @@ builtin_sched_execute_funct_plus_postfunct()
             default_reset_outfiles_for_process_array "${dirname}" ${processname} ${taskidx}
         fi
     else
-        ${reset_funct} "${process_opts}"
+        ${reset_funct} ${DESERIALIZED_ARGS[@]}
     fi
 
     # Execute process function
-    $funct "${process_opts}"
+    $funct ${DESERIALIZED_ARGS[@]}
     local funct_exit_code=$?
     if [ ${funct_exit_code} -ne 0 ]; then
         echo "Error: execution of ${funct} failed with exit code ${funct_exit_code}" >&2
@@ -992,7 +997,7 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Execute process post-function
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        ${post_funct} "${process_opts}" || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
+        ${post_funct} ${DESERIALIZED_ARGS[@]} || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
     fi
 
     # Treat errors
