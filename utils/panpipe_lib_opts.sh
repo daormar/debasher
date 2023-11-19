@@ -239,6 +239,47 @@ check_opt_given_memoiz()
 }
 
 ########
+read_opt_value_from_func_args()
+{
+    local opt=$1
+
+    # Process function arguments
+    shift
+    local i=1
+    while [ $i -le $# ]; do
+        # Check if option was found
+        if [ "${!i}" = "${opt}" ]; then
+            i=$((i+1))
+            # Obtain value if it exists
+            local value=""
+            # Check if next token is an option
+            if [ $i -le $# ]; then
+                if [ "${!i:0:1}" = "-" ] || [ "${!i:0:2}" = "--" ]; then
+                    :
+                else
+                    value="${!i}"
+                    i=$((i+1))
+                fi
+            fi
+
+            # Show value if it exists and return
+            if [ -z "${value}" ]; then
+                echo ${VOID_VALUE}
+                return 1
+            else
+                echo "${value}"
+                return 0
+            fi
+        fi
+        i=$((i+1))
+    done
+
+    # Option not given
+    echo ${OPT_NOT_FOUND}
+    return 1
+}
+
+########
 read_opt_value_from_line()
 {
     local cmdline=$1
