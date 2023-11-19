@@ -197,27 +197,13 @@ process_c()
 }
 
 ########
-process_c_post()
-{
-    logmsg "Cleaning directory..."
-
-    # Initialize variables
-    local id=$(read_opt_value_from_line "$*" "-id")
-
-    # Remove auxiliary file
-    rm "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
-
-    logmsg "Cleaning finished"
-}
-
-########
 process_c_reset_outdir()
 {
     # Initialize variables
-    local id=$(read_opt_value_from_line "$*" "-id")
+    local outf=$(read_opt_value_from_line "$*" "-outf")
 
     # create auxiliary file
-    rm -f "${PANPIPE_PROCESS_OUTDIR}"/${id}*
+    rm "${outf}"
 }
 
 ########
@@ -441,9 +427,11 @@ process_g_post()
 
     # Initialize variables
     local id=$(read_opt_value_from_line "$*" "-id")
+    local outd=$(read_opt_value_from_line "$*" "-outdir")
 
     # Remove auxiliary file
-    rm "${PANPIPE_PROCESS_OUTDIR}"/${id}_aux
+    rm "${outd}"/${id}_aux
+    rm "${outd}"/${id}
 
     logmsg "Cleaning finished"
 }
