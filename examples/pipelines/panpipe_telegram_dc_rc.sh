@@ -83,7 +83,7 @@ decomposer()
     local file=`read_opt_value_from_line "$*" "-f"`
 
     # Write string to FIFO
-    cat "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
+    "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
 }
 
 ########
@@ -165,7 +165,7 @@ recomposer()
     local dcfifo=`read_opt_value_from_line "$*" "-dcfifo"`
 
     # Write string to FIFO
-    cat "${dcfifo}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
+    "${CAT}" "${dcfifo}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
 }
 
 ######################################

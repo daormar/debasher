@@ -85,11 +85,8 @@ decomposer()
     local file=`read_opt_value_from_line "$*" "-f"`
     local outf=`read_opt_value_from_line "$*" "-outf"`
 
-    # Get data directory
-    local abs_datadir=`get_absolute_shdirname "data"`
-
     # Write string to FIFO
-    cat "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
+    "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
 }
 
 ########
@@ -170,7 +167,7 @@ recomposer()
     local inf=`read_opt_value_from_line "$*" "-inf"`
 
     # Write string to FIFO
-    cat "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
+    "${CAT}" "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
 }
 
 ######################################

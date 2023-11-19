@@ -83,7 +83,7 @@ rseq()
     local file=`read_opt_value_from_line "$*" "-f"`
 
     # Write string to FIFO
-    cat "${file}" > "${rseqfifo}" || return 1
+    "${CAT}" "${file}" > "${rseqfifo}" || return 1
 }
 
 ########
@@ -138,7 +138,7 @@ decomposer()
     local dcfifo=`read_opt_value_from_line "$*" "-dcfifo"`
 
     # Write string to FIFO
-    cat "${rseqfifo}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
+    "${CAT}" "${rseqfifo}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
 }
 
 ########
@@ -226,7 +226,7 @@ recomposer()
     local rcfifo=`read_opt_value_from_line "$*" "-rcfifo"`
 
     # Write string to FIFO
-    cat "${dcfifo}" | recompose "${char_lim}" > "${rcfifo}" ; pipe_fail || return 1
+    "${CAT}" "${dcfifo}" | recompose "${char_lim}" > "${rcfifo}" ; pipe_fail || return 1
 }
 
 ########
@@ -275,7 +275,7 @@ wseq()
     local rcfifo=`read_opt_value_from_line "$*" "-rcfifo"`
 
     # Write string to FIFO
-    cat "${rcfifo}" > "${outf}" || return 1
+    "${CAT}" "${rcfifo}" > "${outf}" || return 1
 }
 
 ######################################
