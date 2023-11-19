@@ -331,11 +331,7 @@ dyn_launch()
 {
     local process_name=$1
 
-    # Serialize process arguments
+    # Execute process
     shift
-    local sargs
-    sargs=`serialize_args "$@"` || return 1
-
-    # Launch process
-    "${process_name}" "${sargs}" || return 1
+    "${process_name}" $@ || return 1
 }
