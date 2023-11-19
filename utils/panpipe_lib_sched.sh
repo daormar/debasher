@@ -325,3 +325,17 @@ map_deptype_if_necessary()
             ;;
     esac
 }
+
+########
+dyn_launch()
+{
+    local process_name=$1
+
+    # Serialize process arguments
+    shift
+    local sargs
+    sargs=`serialize_args "$@"` || return 1
+
+    # Launch process
+    "${process_name}" "${sargs}" || return 1
+}
