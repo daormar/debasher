@@ -948,3 +948,13 @@ get_elapsed_time_for_process_slurm()
         echo ${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
     fi
 }
+
+########
+dyn_launch_slurm()
+{
+    local process_name=$1
+
+    # Execute process
+    shift
+    "${process_name}" $@ || return 1
+}

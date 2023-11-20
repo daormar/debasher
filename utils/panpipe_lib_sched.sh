@@ -329,9 +329,19 @@ map_deptype_if_necessary()
 ########
 dyn_launch()
 {
-    local process_name=$1
-
-    # Execute process
-    shift
-    "${process_name}" $@ || return 1
+    local sched=`determine_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER})
+            dyn_launch_slurm $@
+            ;;
+        ${BUILTIN_SCHEDULER})
+            dyn_launch_builtin $@
+            ;;
+        *)
+            local process_name=$1
+            # Execute process
+            shift
+            "${process_name}" $@ || return 1
+            ;;
+    esac
 }

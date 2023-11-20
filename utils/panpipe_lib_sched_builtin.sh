@@ -124,3 +124,13 @@ get_elapsed_time_for_process_builtin()
         echo ${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
     fi
 }
+
+########
+dyn_launch_builtin()
+{
+    local process_name=$1
+
+    # Execute process
+    shift
+    "${process_name}" $@ || return 1
+}
