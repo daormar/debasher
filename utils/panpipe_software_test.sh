@@ -69,7 +69,7 @@ process_a_define_opts()
 process_a()
 {
     # Initialize variables
-    local sleep_time=$(read_opt_value_from_line "$*" "-a")
+    local sleep_time=$(read_opt_value_from_func_args "-a" $@)
 
     # sleep some time
     sleep ${sleep_time}
@@ -83,7 +83,7 @@ process_a_should_execute()
     local process_spec=$2
 
     # Read sleep time
-    local sleep_time=$(read_opt_value_from_line "${cmdline}" "-a")
+    local sleep_time=$(read_opt_value_from_line "${cmdline}" "-a" $@)
 
     # Do not execute if sleep time is above 10 seconds
     if [ "${sleep_time}" -gt 10 ]; then
@@ -135,8 +135,8 @@ process_b_define_opts()
 process_b()
 {
     # Initialize variables
-    local value=$(read_opt_value_from_line "$*" "-b")
-    local outf=$(read_opt_value_from_line "$*" "-outf")
+    local value=$(read_opt_value_from_func_args "-b" $@)
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
 
     # sleep some time
     sleep 10
@@ -185,9 +185,9 @@ process_c_define_opts()
 process_c()
 {
     # Initialize variables
-    local sleep_time=$(read_opt_value_from_line "$*" "-c")
-    local id=$(read_opt_value_from_line "$*" "-id")
-    local outf=$(read_opt_value_from_line "$*" "-outf")
+    local sleep_time=$(read_opt_value_from_func_args "-c" $@)
+    local id=$(read_opt_value_from_func_args "-id" $@)
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
 
     # sleep some time
     sleep ${sleep_time}
@@ -200,7 +200,7 @@ process_c()
 process_c_reset_outfiles()
 {
     # Initialize variables
-    local outf=$(read_opt_value_from_line "$*" "-outf")
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
 
     # create auxiliary file
     rm "${outf}"
@@ -246,7 +246,7 @@ process_d_define_opts()
 process_d()
 {
     # Initialize variables
-    local fifo=$(read_opt_value_from_line "$*" "-fifo")
+    local fifo=$(read_opt_value_from_func_args "-fifo" $@)
 
     # Write string to FIFO
     echo "Hello World" > "${fifo}"
@@ -310,7 +310,7 @@ process_e_define_opt_deps()
 process_e()
 {
     # Initialize variables
-    local fifo=$(read_opt_value_from_line "$*" "-fifo")
+    local fifo=$(read_opt_value_from_func_args "-fifo" $@)
 
     # Read strings from FIFO
     cat < "${fifo}"
@@ -349,7 +349,7 @@ process_f_define_opts()
 process_f()
 {
     # Initialize variables
-    local outf=$(read_opt_value_from_line "$*" "-outf")
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
 
     # Activate conda environment
     conda activate py27 || return 1
@@ -409,9 +409,9 @@ process_g_define_opts()
 process_g()
 {
     # Initialize variables
-    local id=$(read_opt_value_from_line "$*" "-id")
-    local infile=$(read_opt_value_from_line "$*" "-infile")
-    local outd=$(read_opt_value_from_line "$*" "-outdir")
+    local id=$(read_opt_value_from_func_args "-id" $@)
+    local infile=$(read_opt_value_from_func_args "-infile" $@)
+    local outd=$(read_opt_value_from_func_args "-outdir" $@)
 
     # Copy content of infile to auxiliary file
     cat "${infile}" > "${outd}"/${id}_aux
@@ -426,8 +426,8 @@ process_g_post()
     logmsg "Cleaning directory..."
 
     # Initialize variables
-    local id=$(read_opt_value_from_line "$*" "-id")
-    local outd=$(read_opt_value_from_line "$*" "-outdir")
+    local id=$(read_opt_value_from_func_args "-id" $@)
+    local outd=$(read_opt_value_from_func_args "-outdir" $@)
 
     # Remove auxiliary file
     rm "${outd}"/${id}_aux
@@ -478,8 +478,8 @@ process_h_define_opts()
 process_h()
 {
     # Initialize variables
-    local value=$(read_opt_value_from_line "$*" "-h")
-    local outf=$(read_opt_value_from_line "$*" "-outf")
+    local value=$(read_opt_value_from_func_args "-h" $@)
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
 
     # sleep some time
     sleep 10
@@ -533,8 +533,8 @@ process_i_define_opts()
 process_i()
 {
     # Initialize variables
-    local valfile=$(read_opt_value_from_line "$*" "-valfile")
-    local outf=$(read_opt_value_from_line "$*" "-outf")
+    local valfile=$(read_opt_value_from_func_args "-valfile" $@)
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
 
     # Read value from file
     value=$(cat "${valfile}")

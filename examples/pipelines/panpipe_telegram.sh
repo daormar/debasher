@@ -79,8 +79,8 @@ rseq_define_opts()
 rseq()
 {
     # Initialize variables
-    local rseqfifo=`read_opt_value_from_line "$*" "-rseqfifo"`
-    local file=`read_opt_value_from_line "$*" "-f"`
+    local rseqfifo=$(read_opt_value_from_func_args "-rseqfifo" $@)
+    local file=$(read_opt_value_from_func_args "-f" $@)
 
     # Write string to FIFO
     "${CAT}" "${file}" > "${rseqfifo}" || return 1
@@ -134,8 +134,8 @@ decomposer_define_opts()
 decomposer()
 {
     # Initialize variables
-    local rseqfifo=`read_opt_value_from_line "$*" "-rseqfifo"`
-    local dcfifo=`read_opt_value_from_line "$*" "-dcfifo"`
+    local rseqfifo=$(read_opt_value_from_func_args "-rseqfifo" $@)
+    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" $@)
 
     # Write string to FIFO
     "${CAT}" "${rseqfifo}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
@@ -221,9 +221,9 @@ recompose()
 recomposer()
 {
     # Initialize variables
-    local char_lim=`read_opt_value_from_line "$*" "-c"`
-    local dcfifo=`read_opt_value_from_line "$*" "-dcfifo"`
-    local rcfifo=`read_opt_value_from_line "$*" "-rcfifo"`
+    local char_lim=$(read_opt_value_from_func_args "-c" $@)
+    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" $@)
+    local rcfifo=$(read_opt_value_from_func_args "-rcfifo" $@)
 
     # Write string to FIFO
     "${CAT}" "${dcfifo}" | recompose "${char_lim}" > "${rcfifo}" ; pipe_fail || return 1
@@ -271,8 +271,8 @@ wseq_define_opts()
 wseq()
 {
     # Initialize variables
-    local outf=`read_opt_value_from_line "$*" "-outf"`
-    local rcfifo=`read_opt_value_from_line "$*" "-rcfifo"`
+    local outf=$(read_opt_value_from_func_args "-outf" $@)
+    local rcfifo=$(read_opt_value_from_func_args "-rcfifo" $@)
 
     # Write string to FIFO
     "${CAT}" "${rcfifo}" > "${outf}" || return 1
