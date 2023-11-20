@@ -214,7 +214,7 @@ telegram()
     local char_lim=$(read_opt_value_from_func_args "-c" $@)
 
     # Execute decomposer
-    dyn_launch decomposer -f "${file}" -outf "${outd}"/words.txt || return 1
+    seq_execute decomposer -f "${file}" -outf "${outd}"/words.txt || return 1
 
     # Obtain number of lines of decomposer output
     nlines=$("${WC}" -l "${outd}"/words.txt | "${AWK}" '{print $1}')
@@ -224,7 +224,7 @@ telegram()
         echo -n "${outd}"/output.txt || return 1
     else
         # Execute recomposer
-        dyn_launch recomposer -c "${char_lim}" -inf "${outd}"/words.txt -outf "${outd}"/output.txt || return 1
+        seq_execute recomposer -c "${char_lim}" -inf "${outd}"/words.txt -outf "${outd}"/output.txt || return 1
     fi
 }
 
