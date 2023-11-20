@@ -952,9 +952,37 @@ get_elapsed_time_for_process_slurm()
 ########
 dyn_launch_slurm()
 {
-    local process_name=$1
+    create_dyn_launch_script()
+    {
+        local process_to_launch=$1
+        # Obtain file name
+        local fname
+        fname=`"${MKTEMP}"` || return 1
 
-    # Execute process
+        # Write bash shebang
+        local BASH_SHEBANG=`init_bash_shebang_var`
+        echo "${BASH_SHEBANG}" > "${fname}" || return 1
+
+        # Write environment variables
+        set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
+
+        # Add call to process function
+        echo "${process_to_launch} \$@" >> "${fname}" || return 1
+
+        # Give execution permission
+        chmod u+x "${fname}" || return 1
+
+        # Return file name
+        echo "${fname}"
+    }
+
+    local process_to_launch=$1
+
+    # Create script
+    local script_name
+    script_name=`create_dyn_launch_script "${process_to_launch}"` || return 1
+
+    # Launch script
     shift
-    "${process_name}" $@ || return 1
+    "${SRUN}" "${script_name}" $@ || return 1
 }
