@@ -338,10 +338,10 @@ dyn_launch()
             dyn_launch_builtin $@
             ;;
         *)
-            local process_name=$1
+            local process_to_launch=$1
             # Execute process
             shift
-            "${process_name}" $@ || return 1
+            "${process_to_launch}" $@ || return 1
             ;;
     esac
 }
