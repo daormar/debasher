@@ -25,7 +25,7 @@
 #################
 
 ########
-panpipe_telegram_files_dyn_shared_dirs()
+panpipe_telegram_files_seqmode_shared_dirs()
 {
     define_shared_dir "data"
 }
@@ -233,7 +233,7 @@ telegram()
 ######################################
 
 ########
-panpipe_telegram_files_dyn_pipeline()
+panpipe_telegram_files_seqmode_pipeline()
 {
     add_panpipe_process "telegram"  "cpus=1 mem=32 time=00:05:00"
 }
