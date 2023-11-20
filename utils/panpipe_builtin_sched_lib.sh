@@ -972,7 +972,6 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Convert serialized process options to array (result is placed into
     # the DESERIALIZED_ARGS variable)
-    # TO-BE-DONE
     deserialize_args "${process_opts}"
 
     # Reset output directory
