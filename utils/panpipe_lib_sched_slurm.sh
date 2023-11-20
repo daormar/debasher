@@ -65,7 +65,7 @@ print_script_body_slurm_sched()
     local process_opts=$8
 
     # Deserialize process options
-    echo 'deserialize_args "${process_opts}"'
+    echo "deserialize_args \"$(esc_dq "${process_opts}")\""
 
     # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
