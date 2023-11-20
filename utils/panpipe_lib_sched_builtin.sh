@@ -126,7 +126,7 @@ get_elapsed_time_for_process_builtin()
 }
 
 ########
-dyn_launch_builtin()
+seq_execute_builtin()
 {
     local process_to_launch=$1
 

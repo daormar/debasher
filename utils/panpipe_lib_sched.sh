@@ -327,15 +327,15 @@ map_deptype_if_necessary()
 }
 
 ########
-dyn_launch()
+seq_execute()
 {
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            dyn_launch_slurm $@
+            seq_execute_slurm $@
             ;;
         ${BUILTIN_SCHEDULER})
-            dyn_launch_builtin $@
+            seq_execute_builtin $@
             ;;
         *)
             local process_to_launch=$1

@@ -950,9 +950,9 @@ get_elapsed_time_for_process_slurm()
 }
 
 ########
-dyn_launch_slurm()
+seq_execute_slurm()
 {
-    create_dyn_launch_script()
+    create_seq_execute_script()
     {
         local process_to_launch=$1
         # Obtain file name
@@ -980,7 +980,7 @@ dyn_launch_slurm()
 
     # Create script
     local script_name
-    script_name=`create_dyn_launch_script "${process_to_launch}"` || return 1
+    script_name=`create_seq_execute_script "${process_to_launch}"` || return 1
 
     # Launch script
     shift
