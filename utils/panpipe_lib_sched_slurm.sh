@@ -64,6 +64,9 @@ print_script_body_slurm_sched()
     local post_funct=$7
     local process_opts=$8
 
+    # Deserialize process options
+    echo 'deserialize_args "${process_opts}"'
+
     # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
         echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskidx ]; then"
@@ -77,17 +80,17 @@ print_script_body_slurm_sched()
             echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
         fi
     else
-        echo "${reset_funct} \"$(esc_dq "${process_opts}")\""
+        echo "${reset_funct} \${DESERIALIZED_ARGS[@]}"
     fi
 
     # Write function to be executed
-    echo "${funct} \"$(esc_dq "${process_opts}")\""
+    echo "${funct} \${DESERIALIZED_ARGS[@]}"
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
 
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} \"$(esc_dq "${process_opts}")\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
+        echo "${post_funct} \${DESERIALIZED_ARGS[@]} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
     # Return if function to execute failed
@@ -95,7 +98,7 @@ print_script_body_slurm_sched()
 
     # Signal process completion
     local sign_process_completion_cmd=`get_signal_process_completion_cmd ${dirname} ${processname} ${num_scripts}`
-    echo "srun ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
+    echo "${SRUN} ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 
     # Close if statement
     if [ ${num_scripts} -gt 1 ]; then
