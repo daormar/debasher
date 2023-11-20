@@ -25,7 +25,7 @@
 #################
 
 ########
-telegram_dc_rc_shared_dirs()
+panpipe_telegram_dc_rc_shared_dirs()
 {
     :
 }

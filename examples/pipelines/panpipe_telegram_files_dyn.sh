@@ -25,15 +25,9 @@
 #################
 
 ########
-telegram_files_shared_dirs()
+panpipe_telegram_files_dyn_shared_dirs()
 {
     define_shared_dir "data"
-}
-
-########
-telegram_files_fifos()
-{
-    :
 }
 
 ###################################
