@@ -955,9 +955,7 @@ seq_execute_slurm()
     create_seq_execute_script()
     {
         local process_to_launch=$1
-        # Obtain file name
-        local fname
-        fname=`"${MKTEMP}"` || return 1
+        local fname=$2
 
         # Write bash shebang
         local BASH_SHEBANG=`init_bash_shebang_var`
@@ -971,18 +969,25 @@ seq_execute_slurm()
 
         # Give execution permission
         chmod u+x "${fname}" || return 1
-
-        # Return file name
-        echo "${fname}"
     }
 
     local process_to_launch=$1
 
-    # Create script
+    # Obtain template for tmp file
+    local tmpfile_templ
+    tmpfile_templ="${FUNCNAME[0]}_${process_to_launch}.XXXXXX"
+
+    # Obtain file name
     local script_name
-    script_name=`create_seq_execute_script "${process_to_launch}"` || return 1
+    script_name=`"${MKTEMP}" -t "${tmpfile_templ}"` || return 1
+
+    # Create script
+    create_seq_execute_script "${process_to_launch}" "${script_name}" || return 1
 
     # Launch script
     shift
     "${SRUN}" "${script_name}" $@ || return 1
+
+    # Clean temporary files on exit
+    rm "${script_name}"
 }
