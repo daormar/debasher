@@ -233,7 +233,7 @@ telegram()
 ######################################
 
 ########
-panpipe_telegram_files_seqmode_pipeline()
+panpipe_telegram_files_imperative_pipeline()
 {
     add_panpipe_process "telegram"  "cpus=1 mem=32 time=00:05:00"
 }
