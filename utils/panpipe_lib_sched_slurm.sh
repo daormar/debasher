@@ -80,17 +80,17 @@ print_script_body_slurm_sched()
             echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
         fi
     else
-        echo "${reset_funct} \${DESERIALIZED_ARGS[@]}"
+        echo "${reset_funct} \"\${DESERIALIZED_ARGS[@]}\""
     fi
 
     # Write function to be executed
-    echo "${funct} \${DESERIALIZED_ARGS[@]}"
+    echo "${funct} \"\${DESERIALIZED_ARGS[@]}\""
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
 
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} \${DESERIALIZED_ARGS[@]} || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
+        echo "${post_funct} \"\${DESERIALIZED_ARGS[@]}\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
     # Return if function to execute failed
@@ -965,7 +965,7 @@ seq_execute_slurm()
         set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
 
         # Add call to process function
-        echo "${process_to_launch} \$@" >> "${fname}" || return 1
+        echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1
 
         # Give execution permission
         chmod u+x "${fname}" || return 1
@@ -986,7 +986,7 @@ seq_execute_slurm()
 
     # Launch script
     shift
-    "${SRUN}" "${script_name}" $@ || return 1
+    "${SRUN}" "${script_name}" "$@" || return 1
 
     # Clean temporary files on exit
     rm "${script_name}"

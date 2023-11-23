@@ -132,5 +132,5 @@ seq_execute_builtin()
 
     # Execute process
     shift
-    "${process_to_launch}" $@ || return 1
+    "${process_to_launch}" "$@" || return 1
 }

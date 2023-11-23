@@ -332,16 +332,16 @@ seq_execute()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            seq_execute_slurm $@
+            seq_execute_slurm "$@"
             ;;
         ${BUILTIN_SCHEDULER})
-            seq_execute_builtin $@
+            seq_execute_builtin "$@"
             ;;
         *)
             local process_to_launch=$1
             # Execute process
             shift
-            "${process_to_launch}" $@ || return 1
+            "${process_to_launch}" "$@" || return 1
             ;;
     esac
 }
