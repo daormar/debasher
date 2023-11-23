@@ -79,8 +79,8 @@ decomposer_define_opts()
 decomposer()
 {
     # Initialize variables
-    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" $@)
-    local file=$(read_opt_value_from_func_args "-f" $@)
+    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" "$@")
+    local file=$(read_opt_value_from_func_args "-f" "$@")
 
     # Write string to FIFO
     "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
@@ -160,9 +160,9 @@ recompose()
 recomposer()
 {
     # Initialize variables
-    local outf=$(read_opt_value_from_func_args "-outf" $@)
-    local char_lim=$(read_opt_value_from_func_args "-c" $@)
-    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" $@)
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+    local char_lim=$(read_opt_value_from_func_args "-c" "$@")
+    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" "$@")
 
     # Write string to FIFO
     "${CAT}" "${dcfifo}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
