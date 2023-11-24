@@ -111,8 +111,18 @@ load_panpipe_module()
         if module_is_loaded "${fullmodname}"; then
             :
         else
+            # Obtain directory for module
+            local dirname=`"${DIRNAME}" "${fullmodname}"`
+
+            # Change to module dir
+            pushd "${dirname}" > /dev/null
+
             # Load file
             . "${fullmodname}" || exit 1
+
+            # Restore previous dir
+            popd > /dev/null
+
             # Store module name in array
             local i=${#PIPELINE_MODULES[@]}
             PIPELINE_MODULES[${i}]="${fullmodname}"
