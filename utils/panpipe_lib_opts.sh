@@ -294,51 +294,6 @@ read_opt_value_from_line()
 }
 
 ########
-read_opt_value_from_line_aux()
-{
-    local cmdline=$1
-    local opt=$2
-
-    # Convert string to array (result is placed into the
-    # DESERIALIZED_ARGS variable)
-    deserialize_args "${cmdline}"
-
-    # Scan DESERIALIZED_ARGS
-    local i=0
-    while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
-        # Check if option was found
-        if [ "${DESERIALIZED_ARGS[$i]}" = "${opt}" ]; then
-            i=$((i+1))
-            # Obtain value if it exists
-            local value=""
-            # Check if next token is an option
-            if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
-                if [ "${DESERIALIZED_ARGS[$i]:0:1}" = "-" ] || [ "${DESERIALIZED_ARGS[$i]:0:2}" = "--" ]; then
-                    :
-                else
-                    value="${DESERIALIZED_ARGS[$i]}"
-                    i=$((i+1))
-                fi
-            fi
-
-            # Show value if it exists and return
-            if [ -z "${value}" ]; then
-                echo ${VOID_VALUE}
-                return 1
-            else
-                echo "${value}"
-                return 0
-            fi
-        fi
-        i=$((i+1))
-    done
-
-    # Option not given
-    echo ${OPT_NOT_FOUND}
-    return 1
-}
-
-########
 read_memoized_opt_value()
 {
     local opt=$1
