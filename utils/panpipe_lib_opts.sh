@@ -289,6 +289,20 @@ read_opt_value_from_line()
     # DESERIALIZED_ARGS variable)
     deserialize_args "${cmdline}"
 
+    # Get opt value
+    read_opt_value_from_func_args "${opt}" "${DESERIALIZED_ARGS[@]}"
+}
+
+########
+read_opt_value_from_line_aux()
+{
+    local cmdline=$1
+    local opt=$2
+
+    # Convert string to array (result is placed into the
+    # DESERIALIZED_ARGS variable)
+    deserialize_args "${cmdline}"
+
     # Scan DESERIALIZED_ARGS
     local i=0
     while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
