@@ -16,6 +16,9 @@
 
 # *- bash -*
 
+# Module imports
+load_panpipe_module "panpipe_telegram"
+
 #############
 # CONSTANTS #
 #############
@@ -30,23 +33,9 @@ panpipe_telegram_jobsteps_shared_dirs()
     define_shared_dir "data"
 }
 
-###################################
-# PIPELINE SOFTWARE TESTING STEPS #
-###################################
-
-########
-decomposer_document()
-{
-    step_description "Telegram Problem Decomposer module."
-}
-
-########
-decomposer_explain_cmdline_opts()
-{
-    # -f option
-    local description="File to be processed"
-    explain_cmdline_req_opt "-f" "<string>" "$description"
-}
+######################
+# PIPELINE PROCESSES #
+######################
 
 ########
 decomposer_define_opts()
@@ -70,31 +59,6 @@ decomposer_define_opts()
 
     # Save option list
     save_opt_list optlist
-}
-
-########
-decomposer()
-{
-    # Initialize variables
-    local file=$(read_opt_value_from_func_args "-f" "$@")
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-    # Write string to FIFO
-    "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
-}
-
-########
-recomposer_document()
-{
-    step_description "Telegram Problem Recomposer module."
-}
-
-########
-recomposer_explain_cmdline_opts()
-{
-    # -c option
-    local description="Line length in characters"
-    explain_cmdline_req_opt "-c" "<int>" "$description"
 }
 
 ########
@@ -123,45 +87,6 @@ recomposer_define_opts()
 
     # Save option list
     save_opt_list optlist
-}
-
-########
-recompose()
-{
-    local char_lim=$1
-
-    "${AWK}" -v maxlen="${char_lim}" 'BEGIN{len=0}
-             {
-              for(i=1; i<=NF; ++i)
-              {
-               if(len + length($i) <= maxlen)
-               {
-                 printf"%s", $i
-                 len=len+length($i)
-                 if(len+1 <= maxlen)
-                  printf" "
-               }
-               else
-               {
-                 printf"\n%s",$i
-                 len=length($i)
-                 if(len+1 <= maxlen)
-                  printf" "
-               }
-              }
-             }'
-}
-
-########
-recomposer()
-{
-    # Initialize variables
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
-    local char_lim=$(read_opt_value_from_func_args "-c" "$@")
-    local inf=$(read_opt_value_from_func_args "-inf" "$@")
-
-    # Write string to FIFO
-    "${CAT}" "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
 }
 
 ######################################
