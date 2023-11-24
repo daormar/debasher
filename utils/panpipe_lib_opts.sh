@@ -24,19 +24,29 @@ serialize_args()
 }
 
 ########
-deserialize_args()
+deserialize_args_given_sep()
 {
     local serial_args=$1
+    local sep=$2
+
     if [ -z "${serial_args}" ]; then
         unset DESERIALIZED_ARGS
         declare -ga DESERIALIZED_ARGS
     else
         local new_sep=$'\n'
-        local preproc_sargs="${serial_args//${ARG_SEP}/$new_sep}"
+        local preproc_sargs="${serial_args//${sep}/$new_sep}"
         unset DESERIALIZED_ARGS
         declare -ga DESERIALIZED_ARGS
         while IFS=${new_sep} read -r; do DESERIALIZED_ARGS+=( "${REPLY}" ); done <<< "${preproc_sargs}"
     fi
+}
+
+########
+deserialize_args()
+{
+    local serial_args=$1
+
+    deserialize_args_given_sep "${serial_args}" "${ARG_SEP}"
 }
 
 ########
