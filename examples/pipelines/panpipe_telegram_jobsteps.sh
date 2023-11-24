@@ -25,7 +25,7 @@
 #################
 
 ########
-panpipe_telegram_files_shared_dirs()
+panpipe_telegram_jobsteps_shared_dirs()
 {
     define_shared_dir "data"
 }
@@ -169,7 +169,7 @@ recomposer()
 ######################################
 
 ########
-panpipe_telegram_files_pipeline()
+panpipe_telegram_jobsteps_pipeline()
 {
     add_panpipe_process "decomposer"  "cpus=1 mem=32 time=00:05:00"
     add_panpipe_process "recomposer"  "cpus=1 mem=32 time=00:05:00"
