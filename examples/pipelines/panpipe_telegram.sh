@@ -25,7 +25,7 @@
 #################
 
 ########
-panpipe_telegram_dc_rc_shared_dirs()
+panpipe_telegram_shared_dirs()
 {
     :
 }
@@ -66,7 +66,7 @@ decomposer_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for decomposer FIFO
-    define_opt "-dcfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-outf" "${abs_fifoname}" optlist || return 1
 
     # -f option
     define_cmdline_opt "$cmdline" "-f" optlist || return 1
@@ -79,11 +79,11 @@ decomposer_define_opts()
 decomposer()
 {
     # Initialize variables
-    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
+    "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
 }
 
 ########
@@ -123,7 +123,7 @@ recomposer_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${decomposer}" "${fifoname}")
 
     # Define option for decomposer FIFO
-    define_opt "-dcfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-inf" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -162,10 +162,10 @@ recomposer()
     # Initialize variables
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
     local char_lim=$(read_opt_value_from_func_args "-c" "$@")
-    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" "$@")
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${dcfifo}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
+    "${CAT}" "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
 }
 
 ######################################
@@ -173,7 +173,7 @@ recomposer()
 ######################################
 
 ########
-panpipe_telegram_dc_rc_pipeline()
+panpipe_telegram_pipeline()
 {
     add_panpipe_process "decomposer" "cpus=1 mem=32 time=00:05:00"
     add_panpipe_process "recomposer" "cpus=1 mem=32 time=00:05:00"
