@@ -39,9 +39,13 @@ search_mod_in_dirs()
 {
     local module=$1
 
-    # Search module in directories listed in PANPIPE_MOD_DIR
-    local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_MOD_DIR}`
+    # Obtain module directories separated with blanks
+    local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "${PANPIPE_MOD_DIR_SEP}" ${PANPIPE_MOD_DIR}`
+
+    # Add current directory
     PANPIPE_MOD_DIR_BLANKS=". "${PANPIPE_MOD_DIR_BLANKS}
+
+    # Search module in directories listed in PANPIPE_MOD_DIR
     local dir
     local fullmodname
     for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
