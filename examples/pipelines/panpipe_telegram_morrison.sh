@@ -30,9 +30,9 @@ panpipe_telegram_morrison_shared_dirs()
     :
 }
 
-###################################
-# PIPELINE SOFTWARE TESTING STEPS #
-###################################
+######################
+# PIPELINE PROCESSES #
+######################
 
 ########
 rseq_document()
