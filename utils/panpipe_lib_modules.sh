@@ -39,16 +39,16 @@ search_mod_in_dirs()
 {
     local module=$1
 
-    # Obtain module directories separated with blanks
-    local PANPIPE_MOD_DIR_BLANKS=`replace_str_elem_sep_with_blank "${PANPIPE_MOD_DIR_SEP}" ${PANPIPE_MOD_DIR}`
+    # Obtain array with directories
+    deserialize_args_given_sep "${PANPIPE_MOD_DIR}" "${PANPIPE_MOD_DIR_SEP}"
 
     # Add current directory
-    PANPIPE_MOD_DIR_BLANKS=". "${PANPIPE_MOD_DIR_BLANKS}
+    DESERIALIZED_ARGS+=( "." )
 
     # Search module in directories listed in PANPIPE_MOD_DIR
     local dir
     local fullmodname
-    for dir in ${PANPIPE_MOD_DIR_BLANKS}; do
+    for dir in "${DESERIALIZED_ARGS[@]}"; do
         for fname in "${dir}/${module}" "${dir}/${module}.sh"; do
             if [ -f "${fname}" ]; then
                 fullmodname="${fname}"
