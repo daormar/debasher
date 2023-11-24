@@ -25,7 +25,7 @@
 #################
 
 ########
-panpipe_telegram_shared_dirs()
+panpipe_telegram_morrison_shared_dirs()
 {
     :
 }
@@ -66,7 +66,7 @@ rseq_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for rseq FIFO
-    define_opt "-rseqfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-outf" "${abs_fifoname}" optlist || return 1
 
     # -f option
     define_cmdline_opt "$cmdline" "-f" optlist || return 1
@@ -79,11 +79,11 @@ rseq_define_opts()
 rseq()
 {
     # Initialize variables
-    local rseqfifo=$(read_opt_value_from_func_args "-rseqfifo" "$@")
+    local rseqfifo=$(read_opt_value_from_func_args "-outf" "$@")
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${file}" > "${rseqfifo}" || return 1
+    "${CAT}" "${file}" > "${outf}" || return 1
 }
 
 ########
@@ -114,7 +114,7 @@ decomposer_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${rseq}" "${fifoname}")
 
     # Define option for rseq FIFO
-    define_opt "-rseqfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-inf" "${abs_fifoname}" optlist || return 1
 
     # Define FIFO
     fifoname="dc_fifo"
@@ -124,7 +124,7 @@ decomposer_define_opts()
     abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for decomposer FIFO
-    define_opt "-dcfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-outf" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -134,11 +134,11 @@ decomposer_define_opts()
 decomposer()
 {
     # Initialize variables
-    local rseqfifo=$(read_opt_value_from_func_args "-rseqfifo" "$@")
-    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" "$@")
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${rseqfifo}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${dcfifo}" ; pipe_fail || return 1
+    "${CAT}" "${inf}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
 }
 
 ########
@@ -174,7 +174,7 @@ recomposer_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${decomposer}" "${fifoname}")
 
     # Define option for decomposer FIFO
-    define_opt "-dcfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-inf" "${abs_fifoname}" optlist || return 1
 
     # Define FIFO
     fifoname="rc_fifo"
@@ -184,7 +184,7 @@ recomposer_define_opts()
     abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for decomposer FIFO
-    define_opt "-rcfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-outf" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -222,11 +222,11 @@ recomposer()
 {
     # Initialize variables
     local char_lim=$(read_opt_value_from_func_args "-c" "$@")
-    local dcfifo=$(read_opt_value_from_func_args "-dcfifo" "$@")
-    local rcfifo=$(read_opt_value_from_func_args "-rcfifo" "$@")
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${dcfifo}" | recompose "${char_lim}" > "${rcfifo}" ; pipe_fail || return 1
+    "${CAT}" "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
 }
 
 ########
@@ -261,7 +261,7 @@ wseq_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${recomposer}" "${fifoname}")
 
     # Define option for decomposer FIFO
-    define_opt "-rcfifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-inf" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -272,10 +272,10 @@ wseq()
 {
     # Initialize variables
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
-    local rcfifo=$(read_opt_value_from_func_args "-rcfifo" "$@")
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${rcfifo}" > "${outf}" || return 1
+    "${CAT}" "${inf}" > "${outf}" || return 1
 }
 
 ######################################
@@ -283,7 +283,7 @@ wseq()
 ######################################
 
 ########
-panpipe_telegram_pipeline()
+panpipe_telegram_morrison_pipeline()
 {
     add_panpipe_process "rseq"        "cpus=1 mem=32 time=00:05:00"
     add_panpipe_process "decomposer"  "cpus=1 mem=32 time=00:05:00"
