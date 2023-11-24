@@ -1,6 +1,6 @@
 bin_SCRIPTS= panpipe_lib panpipe_exec panpipe_exec_batch panpipe_stop	\
 panpipe_status panpipe_stats panpipe_process_debug panpipe_doc_mod	\
-panpipe_proc_dataset panpipe_software_test panpipe_reformat_status
+panpipe_proc_dataset panpipe_reformat_status
 
 libexec_SCRIPTS= panpipe_builtin_sched_lib panpipe_lib_utils		\
 panpipe_lib_sched panpipe_lib_sched_slurm panpipe_lib_sched_builtin	\
@@ -20,7 +20,7 @@ panpipe_lib_pipelines.sh panpipe_lib_modules.sh panpipe_lib_opts.sh	\
 panpipe_lib_conda.sh panpipe_builtin_sched_lib.sh panpipe_exec.sh	\
 panpipe_exec_batch.sh panpipe_check.py panpipe_stop.sh			\
 panpipe_status.sh panpipe_stats.sh panpipe_process_debug.sh		\
-panpipe_doc_mod.sh panpipe_proc_dataset.sh panpipe_software_test.sh	\
+panpipe_doc_mod.sh panpipe_proc_dataset.sh				\
 pp_get_reexec_procs_due_to_deps.py panpipe_reformat_status.py		\
 panpipe_solve_knapsack_bb.py panpipe_solve_knapsack_ga.py		\
 panpipe_knapsack_ga.py
