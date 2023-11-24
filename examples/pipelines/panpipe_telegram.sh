@@ -30,9 +30,9 @@ panpipe_telegram_shared_dirs()
     :
 }
 
-###################################
-# PIPELINE SOFTWARE TESTING STEPS #
-###################################
+######################
+# PIPELINE PROCESSES #
+######################
 
 ########
 decomposer_document()
