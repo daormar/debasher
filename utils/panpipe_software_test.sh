@@ -236,7 +236,7 @@ process_d_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for FIFO
-    define_opt "-fifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-outf" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -246,10 +246,10 @@ process_d_define_opts()
 process_d()
 {
     # Initialize variables
-    local fifo=$(read_opt_value_from_func_args "-fifo" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Write string to FIFO
-    echo "Hello World" > "${fifo}"
+    echo "Hello World" > "${outf}"
 
     # sleep some time
     sleep 10
@@ -283,7 +283,7 @@ process_e_define_opts()
     local abs_fifoname=$(get_absolute_fifoname "${process_d}" "${fifoname}")
 
     # Define option for FIFO
-    define_opt "-fifo" "${abs_fifoname}" optlist || return 1
+    define_opt "-inf" "${abs_fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -297,7 +297,7 @@ process_e_define_opt_deps()
     local producer_process=$2
 
     case ${opt} in
-        "-fifo")
+        "-inf")
             echo "after"
             ;;
         *)
@@ -310,10 +310,10 @@ process_e_define_opt_deps()
 process_e()
 {
     # Initialize variables
-    local fifo=$(read_opt_value_from_func_args "-fifo" "$@")
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
     # Read strings from FIFO
-    cat < "${fifo}"
+    cat < "${inf}"
 }
 
 ########
