@@ -659,11 +659,12 @@ class ProcessGraph:
 
         # Print arc
         if self.str_is_output_option(opt):
-            print(processname, "->", '"'+ opt_graph +'"', ";")
-        elif self.process_is_fifo_owner(process_info, opt_val):
-            print(processname, "->", '"'+ opt_graph +'"', "[ dir=none ] ;")
+            if self.process_is_fifo_owner(process_info, opt_val):
+                print(processname, "->", '"'+ opt_graph +'"', "[ style=dashed ] ;")
+            else:
+                print(processname, "->", '"'+ opt_graph +'"', ";")
         elif self.process_is_fifo_user(process_info, opt_val):
-            print('"'+ opt_graph +'"', "->", processname, "[ dir=none ] ;")
+            print('"'+ opt_graph +'"', "->", processname, "[ style=dashed ] ;")
         else:
             print('"'+ opt_graph +'"', "->", processname, ";")
 
@@ -679,17 +680,18 @@ class ProcessGraph:
 
         # Print arc
         if self.str_is_output_option(opt):
-            if task_idx == 0:
-                print(processname, "->", '"'+ opt_hub +'"', ";")
-            print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', ";")
-        elif self.process_is_fifo_owner(process_info, opt_val):
-            if task_idx == 0:
-                print(processname, "->", '"'+ opt_hub +'"', "[ dir=none ] ;")
-            print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', "[ dir=none ] ;")
+            if self.process_is_fifo_owner(process_info, opt_val):
+                if task_idx == 0:
+                    print(processname, "->", '"'+ opt_hub +'"', "[ style=dashed ] ;")
+                print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', "[ style=dashed ] ;")
+            else:
+                if task_idx == 0:
+                    print(processname, "->", '"'+ opt_hub +'"', ";")
+                print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', ";")
         elif self.process_is_fifo_user(process_info, opt_val):
-            print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ dir=none ] ;")
+            print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ style=dashed ] ;")
             if task_idx == 0:
-                print('"'+ opt_hub +'"', "->", processname, "[ dir=none ] ;")
+                print('"'+ opt_hub +'"', "->", processname, "[ style=dashed ] ;")
         else:
             print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', ";")
             if task_idx == 0:
@@ -736,10 +738,10 @@ class ProcessGraph:
         # Print arcs if required
         if not self.str_is_output_option(opt) and os.path.isabs(opt_val):
             if opt_val in self.process_out_values:
-                self.print_opt_to_opt_outval(process_info, opt, opt_val)
-            else:
-                if self.process_is_fifo_owner(process_info, opt_val):
+                if self.process_is_fifo_user(process_info, opt_val):
                     self.print_opt_to_opt_fifo(process_info, opt, opt_val)
+                else:
+                    self.print_opt_to_opt_file(process_info, opt, opt_val)
 
     def print_opt_to_opt_fifo(self, process_info, opt, opt_val):
         # Obtain origin node
@@ -754,7 +756,7 @@ class ProcessGraph:
         dest_opt_graph = self.get_opt_graph(dest_opt, dest_process_info)
 
         # Print arc
-        print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', "[ dir=none ] ;")
+        print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', "[ style=dashed ] ;")
 
     def get_fifo_opt(self, process_info, abs_fifoname):
         # Obtain necessary process information
@@ -776,7 +778,7 @@ class ProcessGraph:
         else:
             return None
 
-    def print_opt_to_opt_outval(self, process_info, opt, opt_val):
+    def print_opt_to_opt_file(self, process_info, opt, opt_val):
         # Iterate over processes producing opt_val
         for orig_procname, orig_taskidx, orig_opt in self.process_out_values[opt_val]:
             # Obtain origin node
