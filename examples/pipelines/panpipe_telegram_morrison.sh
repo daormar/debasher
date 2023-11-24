@@ -79,7 +79,7 @@ rseq_define_opts()
 rseq()
 {
     # Initialize variables
-    local rseqfifo=$(read_opt_value_from_func_args "-outf" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
     # Write string to FIFO
