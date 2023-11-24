@@ -535,11 +535,12 @@ get_procdeps_for_process_cached()
             # Iterate over task options
             local optlist=`get_optlist_for_process_and_task "${processname}" "${task_idx}"`
             deserialize_args "${optlist}"
+            local i
             for i in "${!DESERIALIZED_ARGS[@]}"; do
                 # Check if a value represents an absolute path
                 local value="${DESERIALIZED_ARGS[i]}"
                 if is_absolute_path "${value}"; then
-                    j=$((i-1))
+                    local j=$((i-1))
                     if [ $j -ge 0 ]; then
                         opt="${DESERIALIZED_ARGS[j]}"
                         # Check if the option associated to the value is
@@ -548,38 +549,11 @@ get_procdeps_for_process_cached()
                             if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
                                 # The value is generated as output by
                                 # another process (or processes)
-                                local processes="${PROCESS_OUT_VALUES[${value}]}"
-                                while [ -n "${processes}" ]; do
-                                    # Extract process information
-                                    local proc_plus_idx="${processes%%${ASSOC_ARRAY_PROC_SEP}*}"
-                                    local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
-                                    local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
-                                    if [ "${processname}" != "${proc}" ]; then
-                                        # Determine dependency type
-                                        local deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
-                                        if [ -z "${deptype}" ]; then
-                                            if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
-                                                deptype=${AFTERCORR_PROCESSDEP_TYPE}
-                                            else
-                                                deptype=${AFTEROK_PROCESSDEP_TYPE}
-                                            fi
-                                        fi
-                                        local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
-                                        # Update dependency dictionary
-                                        depdict["${proc}"]=${highest_pri_deptype}
-                                    fi
-                                    # Update processes variable
-                                    local processes_aux="${processes#"${proc_plus_idx}${ASSOC_ARRAY_PROC_SEP}"}"
-                                    if [ "${processes}" = "${processes_aux}" ]; then
-                                        processes=""
-                                    else
-                                        processes=${processes_aux}
-                                    fi
-                                done
-                            else
-                                augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
+
+                                # Check if the value represents a FIFO
+                                local augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
                                 if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
-                                    # The value is a FIFO
+                                    # The value represents a FIFO
                                     local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
                                     local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
@@ -594,6 +568,36 @@ get_procdeps_for_process_cached()
                                             depdict["${processowner}"]=${highest_pri_deptype}
                                         fi
                                     fi
+                                else
+                                    # The value represents a file
+                                    local processes="${PROCESS_OUT_VALUES[${value}]}"
+                                    while [ -n "${processes}" ]; do
+                                        # Extract process information
+                                        local proc_plus_idx="${processes%%${ASSOC_ARRAY_PROC_SEP}*}"
+                                        local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
+                                        local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
+                                        if [ "${processname}" != "${proc}" ]; then
+                                            # Determine dependency type
+                                            local deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
+                                            if [ -z "${deptype}" ]; then
+                                                if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                                                    deptype=${AFTERCORR_PROCESSDEP_TYPE}
+                                                else
+                                                    deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                                fi
+                                            fi
+                                            local highest_pri_deptype=`get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
+                                            # Update dependency dictionary
+                                            depdict["${proc}"]=${highest_pri_deptype}
+                                        fi
+                                        # Update processes variable
+                                        local processes_aux="${processes#"${proc_plus_idx}${ASSOC_ARRAY_PROC_SEP}"}"
+                                        if [ "${processes}" = "${processes_aux}" ]; then
+                                            processes=""
+                                        else
+                                            processes=${processes_aux}
+                                        fi
+                                    done
                                 fi
                             fi
                         fi
@@ -725,19 +729,15 @@ register_fifos_used_by_process()
                     # Check if the option associated to the value is
                     # not an output option
                     if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
-                        if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
-                            :
-                        else
-                            augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
-                            if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
-                                # The value is a FIFO
-                                local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
-                                local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
-                                local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
-                                if [ "${processowner}" != "${processname}" ]; then
-                                    # The current process is not the owner of the FIFO
-                                    FIFO_USERS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
-                                fi
+                        augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
+                        if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
+                            # The value is a FIFO
+                            local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
+                            local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
+                            local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
+                            if [ "${processowner}" != "${processname}" ]; then
+                                # The current process is not the owner of the FIFO
+                                FIFO_USERS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
                             fi
                         fi
                     fi
