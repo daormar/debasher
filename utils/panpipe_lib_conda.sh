@@ -8,7 +8,16 @@ define_conda_env()
     local env_name=$1
     local yml_file=$2
 
-    echo "${env_name} ${yml_file}"
+    if ! conda_env_exists "${env_name}"; then
+        local condadir=`get_absolute_condadir`
+
+        # Obtain absolute yml file name
+        local abs_yml_fname=`get_abs_yml_fname "${yml_file}"`
+
+        echo "Creating conda environment ${env_name} from file ${abs_yml_fname}..." >&2
+        conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
+        echo "Package successfully installed"
+    fi
 }
 
 ########
@@ -54,11 +63,13 @@ get_abs_yml_fname()
 {
     local yml_fname=$1
 
+    # Obtain array with directories
+    deserialize_args_given_sep "${PANPIPE_YML_DIR}" "${PANPIPE_YML_DIR_SEP}"
+
     # Search module in directories listed in PANPIPE_YML_DIR
-    local PANPIPE_YML_DIR_BLANKS=`replace_str_elem_sep_with_blank "," ${PANPIPE_YML_DIR}`
     local dir
     local abs_yml_fname
-    for dir in ${PANPIPE_YML_DIR_BLANKS}; do
+    for dir in "${DESERIALIZED_ARGS[@]}"; do
         if [ -f "${dir}/${yml_fname}" ]; then
             abs_yml_fname="${dir}/${yml_fname}"
             break

@@ -457,49 +457,6 @@ check_pipeline_opts()
 }
 
 ########
-handle_conda_req_entry()
-{
-    local env_name=$1
-    local yml_fname=$2
-
-    # Check if environment already exists
-    if conda_env_exists "${env_name}"; then
-        :
-    else
-        local condadir=`get_absolute_condadir`
-
-        # Obtain absolute yml file name
-        local abs_yml_fname=`get_abs_yml_fname "${yml_fname}"`
-
-        echo "Creating conda environment "${env_name}" from file ${abs_yml_fname}..." >&2
-        conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
-        echo "Package successfully installed"
-    fi
-}
-
-########
-handle_conda_requirements_for_process()
-{
-    processname=$1
-    process_conda_envs=$2
-
-    # Read information about conda environments
-    while read conda_env_entry; do
-        # Convert string to array
-        local array
-        IFS=' ' read -r -a array <<< $conda_env_entry
-        local arraylen=${#array[@]}
-        if [ ${arraylen} -ge 2 ]; then
-            local env_name=${array[0]}
-            local yml_fname=${array[1]}
-            handle_conda_req_entry "${env_name}" "${yml_fname}" || return 1
-        else
-            echo "Error: invalid conda entry for process ${processname}; Entry: ${process_conda_envs}" >&2
-        fi
-    done < <(echo "${process_conda_envs}")
-}
-
-########
 handle_conda_requirements()
 {
     echo "# Handling conda requirements (if any)..." >&2
@@ -517,8 +474,8 @@ handle_conda_requirements()
             # Process conda envs information
             local conda_envs_funcname=`get_conda_envs_funcname ${processname}`
             if func_exists ${conda_envs_funcname}; then
-                process_conda_envs=`${conda_envs_funcname}` || exit 1
-                handle_conda_requirements_for_process "${processname}" "${process_conda_envs}" || return 1
+                echo "Handling conda requirements for process ${processname}..." >&2
+                ${conda_envs_funcname} || exit 1
             fi
         fi
     done < "${procspec_file}"
