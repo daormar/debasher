@@ -529,9 +529,9 @@ handle_conda_requirements()
 }
 
 ########
-define_dont_execute_processes()
+define_skip_processes()
 {
-    echo "# Defining processes that should not be executed (if any)..." >&2
+    echo "# Defining processes that should be skipped (if any)..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -542,10 +542,10 @@ define_dont_execute_processes()
         if pipeline_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
-            local should_execute_funcname=`get_should_execute_funcname ${processname}`
-            if [ "${should_execute_funcname}" != ${FUNCT_NOT_FOUND} ]; then
-                if ! ${should_execute_funcname} "${cmdline}" "${process_spec}"; then
-                    mark_process_as_dont_execute ${processname} "${EXECFUNCT_DONT_EXEC_REASON}"
+            local skip_funcname=`get_skip_funcname ${processname}`
+            if [ "${skip_funcname}" != ${FUNCT_NOT_FOUND} ]; then
+                if "${skip_funcname}" "${cmdline}" "${process_spec}"; then
+                    mark_process_as_skip "${processname}" "${EXECFUNCT_SKIP_REASON}"
                 fi
             fi
         fi
@@ -926,7 +926,7 @@ launch_process()
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     ## Decide whether the process should be executed
-    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" -a "${status}" != "${DONT_EXECUTE_PROCESS_STATUS}" ]; then
+    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" -a "${status}" != "${SKIP_PROCESS_STATUS}" ]; then
         # Create script
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
         local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
@@ -1108,7 +1108,7 @@ else
             handle_conda_requirements "${procspec_file}" || exit 1
         fi
 
-        define_dont_execute_processes "${command_line}" "${procspec_file}" || exit 1
+        define_skip_processes "${command_line}" "${procspec_file}" || exit 1
 
         define_reexec_processes_due_to_fifos "${outd}" "${procspec_file}" || exit 1
 

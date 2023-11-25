@@ -200,11 +200,11 @@ get_define_opt_deps_funcname()
 }
 
 ########
-get_should_execute_funcname()
+get_skip_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_SHOULD_EXECUTE}"
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_SKIP}"
 }
 
 ########

@@ -675,7 +675,7 @@ builtin_sched_process_executable_non_array_process()
     if [ ${status} != ${INPROGRESS_PROCESS_STATUS} -a \
          ${status} != ${FINISHED_PROCESS_STATUS} -a \
          ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a \
-         ${status} != ${DONT_EXECUTE_PROCESS_STATUS} ]; then
+         ${status} != ${SKIP_PROCESS_STATUS} ]; then
         if builtin_sched_process_can_be_executed ${processname}; then
             BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${BUILTIN_SCHED_NO_ARRAY_TASK}
         fi
@@ -690,7 +690,7 @@ builtin_sched_process_executable_array_process()
 
     if [ ${status} != ${FINISHED_PROCESS_STATUS} -a \
          ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a \
-         ${status} != ${DONT_EXECUTE_PROCESS_STATUS} ]; then
+         ${status} != ${SKIP_PROCESS_STATUS} ]; then
         if builtin_sched_process_can_be_executed ${processname}; then
             max_task_num=`builtin_sched_get_max_num_tasks ${processname}`
             if [ ${max_task_num} -gt 0 ]; then

@@ -76,7 +76,7 @@ process_a()
 }
 
 ########
-process_a_should_execute()
+process_a_skip()
 {
     # Initialize variables
     local cmdline=$1
@@ -85,11 +85,11 @@ process_a_should_execute()
     # Read sleep time
     local sleep_time=$(read_opt_value_from_line "${cmdline}" "-a" "$@")
 
-    # Do not execute if sleep time is above 10 seconds
+    # Skip if sleep time is above 10 seconds
     if [ "${sleep_time}" -gt 10 ]; then
-        return 1
-    else
         return 0
+    else
+        return 1
     fi
 }
 
