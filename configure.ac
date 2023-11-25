@@ -83,6 +83,13 @@ else
   fi
 fi
 
+# Check that docker is available
+unset DOCKER
+AC_PATH_PROGS(DOCKER, docker, "no")
+if test x$DOCKER = "xno"; then
+    AC_MSG_WARN([docker is required])
+fi
+
 # Check that dot (from graphviz) is available
 unset DOT
 AC_PATH_PROGS(DOT, dot, "no")
