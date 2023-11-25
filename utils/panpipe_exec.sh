@@ -531,7 +531,7 @@ handle_conda_requirements()
 ########
 define_dont_execute_processes()
 {
-    echo "# Define processes that should not be executed (if any)..." >&2
+    echo "# Defining processes that should not be executed (if any)..." >&2
 
     # Read input parameters
     local cmdline=$1
