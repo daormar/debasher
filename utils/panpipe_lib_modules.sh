@@ -62,7 +62,7 @@ search_mod_in_dirs()
         fullmodname="${panpipe_bindir}/${module}"
     fi
 
-    echo $fullmodname
+    echo "$fullmodname"
 }
 
 ########
