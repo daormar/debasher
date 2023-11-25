@@ -216,6 +216,14 @@ get_conda_envs_funcname()
 }
 
 ########
+get_docker_imgs_funcname()
+{
+    local processname=$1
+
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCKER_IMGS}"
+}
+
+########
 process_is_defined()
 {
     local processname=$1

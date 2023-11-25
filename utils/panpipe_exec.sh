@@ -529,6 +529,35 @@ handle_conda_requirements()
 }
 
 ########
+handle_docker_requirements()
+{
+    echo "# Handling docker requirements (if any)..." >&2
+
+    # Read input parameters
+    local procspec_file=$1
+
+    # Read information about the processes to be executed
+    local process_spec
+    while read process_spec; do
+        if pipeline_process_spec_is_ok "$process_spec"; then
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            # Process conda envs information
+            local docker_imgs_funcname=`get_docker_imgs_funcname ${processname}`
+            if func_exists ${docker_imgs_funcname}; then
+                echo "Handling docker requirements for process ${processname}..." >&2
+                ${docker_imgs_funcname} || exit 1
+            fi
+        fi
+    done < "${procspec_file}"
+
+    echo "Handling complete" >&2
+
+    echo "" >&2
+}
+
+########
 define_skip_processes()
 {
     echo "# Defining processes that should be skipped (if any)..." >&2
@@ -1107,6 +1136,8 @@ else
         if [ ${conda_support_given} -eq 1 ]; then
             handle_conda_requirements "${procspec_file}" || exit 1
         fi
+
+        handle_docker_requirements "${procspec_file}" || exit 1
 
         define_skip_processes "${command_line}" "${procspec_file}" || exit 1
 

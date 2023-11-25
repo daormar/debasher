@@ -78,6 +78,7 @@ PROCESS_METHOD_NAME_DEFINE_OPTS="${PROCESS_METHOD_SEP}define_opts"
 PROCESS_METHOD_NAME_DEFINE_OPT_DEPS="${PROCESS_METHOD_SEP}define_opt_deps"
 PROCESS_METHOD_NAME_SKIP="${PROCESS_METHOD_SEP}skip"
 PROCESS_METHOD_NAME_CONDA_ENVS="${PROCESS_METHOD_SEP}conda_envs"
+PROCESS_METHOD_NAME_DOCKER_IMGS="${PROCESS_METHOD_SEP}docker_imgs"
 
 # MODULE METHOD NAMES
 MODULE_METHOD_NAME_SHRDIRS="${MODULE_METHOD_SEP}shared_dirs"
@@ -234,3 +235,4 @@ declare -A EXIT_CODE
 . "${panpipe_libexecdir}"/panpipe_lib_opts
 . "${panpipe_libexecdir}"/panpipe_lib_sched
 . "${panpipe_libexecdir}"/panpipe_lib_conda
+. "${panpipe_libexecdir}"/panpipe_lib_docker
