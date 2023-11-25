@@ -53,7 +53,7 @@ usage()
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--reexec-outdated-procs] [--conda-support]"
-    echo "                          [--showopts|--checkopts|--debug]"
+    echo "                          [--docker-support] [--showopts|--checkopts|--debug]"
     echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with pipeline processes to be performed (see manual"
@@ -71,6 +71,7 @@ usage()
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--reexec-outdated-procs   Reexecute those processes with outdated code"
     echo "--conda-support           Enable conda support"
+    echo "--docker-support          Enable docker support"
     echo "--showopts                Show pipeline options"
     echo "--checkopts               Check pipeline options"
     echo "--debug                   Do everything except launching pipeline processes"
@@ -91,6 +92,7 @@ read_pars()
     dflt_throttle_given=0
     reexec_outdated_processes_given=0
     conda_support_given=0
+    docker_support_given=0
     showopts_given=0
     checkopts_given=0
     debug=0
@@ -162,6 +164,11 @@ read_pars()
             "--conda-support")
                   if [ $# -ne 0 ]; then
                       conda_support_given=1
+                  fi
+                  ;;
+            "--docker-support")
+                  if [ $# -ne 0 ]; then
+                      docker_support_given=1
                   fi
                   ;;
             "--showopts") showopts_given=1
@@ -1094,7 +1101,9 @@ else
             handle_conda_requirements "${procspec_file}" || exit 1
         fi
 
-        handle_docker_requirements "${procspec_file}" || exit 1
+        if [ ${docker_support_given} -eq 1 ]; then
+            handle_docker_requirements "${procspec_file}" || exit 1
+        fi
 
         define_skip_processes "${command_line}" "${procspec_file}" || exit 1
 
