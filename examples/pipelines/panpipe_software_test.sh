@@ -546,6 +546,45 @@ process_i()
     echo "$value" > "${outf}"
 }
 
+########
+process_j_explain_cmdline_opts()
+{
+    :
+}
+
+########
+process_j_define_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local optlist=""
+
+    # Define name of output file
+    define_opt "-outf" "${process_outdir}/hello_world.txt" optlist || return 1
+
+    # Save option list
+    save_opt_list optlist
+}
+
+########
+process_j()
+{
+    # Initialize variables
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+
+    # Write python version to file
+    "${DOCKER}" run hello-world > "${outf}" 2>&1 || return 1
+}
+
+########
+process_j_docker_imgs()
+{
+    pull_docker_img "library/hello-world"
+}
+
 ##################################
 # PIPELINE DEFINED BY THE MODULE #
 ##################################
@@ -562,4 +601,5 @@ panpipe_software_test_pipeline()
     add_panpipe_process "process_g" "cpus=1 mem=32 time=00:01:00 throttle=4"
     add_panpipe_process "process_h" "cpus=1 mem=32 time=00:01:00"
     add_panpipe_process "process_i" "cpus=1 mem=32 time=00:01:00"
+    add_panpipe_process "process_j" "cpus=1 mem=32 time=00:01:00"
 }
