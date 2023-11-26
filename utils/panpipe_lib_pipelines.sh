@@ -256,9 +256,6 @@ add_panpipe_pipeline()
     # Create temporary file
     local tmpfile=`${MKTEMP}`
 
-    # Load module
-    load_panpipe_module "${modname}"
-
     # Execute pipeline function for module and store output entries in a
     # temporary file (the purpose is to enable function execution
     # without using any sub-shell)
