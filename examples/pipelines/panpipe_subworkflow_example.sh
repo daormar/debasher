@@ -17,7 +17,8 @@
 # *- bash -*
 
 # Module imports
-#
+load_panpipe_module "panpipe_software_test"
+
 
 ########
 panpipe_subworkflow_example_pipeline()
