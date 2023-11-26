@@ -509,7 +509,7 @@ define_cmdline_opt()
     local varname=$3
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
+    read_opt_value_from_line_memoiz "$cmdline" "$opt" || { errmsg "$opt option not found" ; return 1; }
     local value="${_OPT_VALUE_}"
 
     # Add option
@@ -524,10 +524,10 @@ define_cmdline_opt_wo_value()
     local varname=$3
 
     # Get value for option
-    check_opt_given "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
+    check_opt_given "$cmdline" "$opt" || { errmsg "$opt option not found" ; return 1; }
 
     # Add option
-    define_opt_wo_value $opt $varname
+    define_opt_wo_value "$opt" "$varname"
 }
 
 ########
@@ -539,7 +539,7 @@ define_cmdline_nonmandatory_opt()
     local varname=$4
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" $opt
+    read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value="${_OPT_VALUE_}"
 
     if [ "$value" = ${OPT_NOT_FOUND} ]; then
@@ -547,7 +547,7 @@ define_cmdline_nonmandatory_opt()
     fi
 
     # Add option
-    define_opt $opt "$value" $varname
+    define_opt "$opt" "$value" "$varname"
 }
 
 ########
@@ -558,12 +558,12 @@ define_cmdline_opt_if_given()
     local varname=$3
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" $opt
+    read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value=${_OPT_VALUE_}
 
     if [ "$value" != ${OPT_NOT_FOUND} ]; then
         # Add option
-        define_opt $opt "$value" $varname
+        define_opt "$opt" "$value" "$varname"
     fi
 }
 
@@ -587,7 +587,7 @@ define_cmdline_infile_opt()
     fi
 
     # Add option
-    define_opt $opt "$value" $varname
+    define_opt "$opt" "$value" "$varname"
 }
 
 ########
@@ -599,7 +599,7 @@ define_cmdline_infile_nonmand_opt()
     local varname=$4
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" $opt
+    read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value="${_OPT_VALUE_}"
 
     if [ "$value" = ${OPT_NOT_FOUND} ]; then
@@ -640,6 +640,37 @@ define_opt()
         local val="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
         IFS= read -r "$var" <<<"$val" || { errmsg "define_opt: execution error" ; return 1; }
     fi
+}
+
+########
+get_value_descriptor_name()
+{
+    local process_name=$1
+    local opt=$2
+
+    # Obtain output directory for process
+    local process_outdir=$(get_process_outdir "${process_name}")
+
+    # Obtain value descriptor name
+    local val_desc="${process_outdir}/${VALUE_DESCRIPTOR_NAME_PREFIX}${opt}"
+
+    echo "${val_desc}"
+}
+
+########
+define_value_desc_opt()
+{
+    local opt=$1
+    local varname=$2
+
+    # Obtain caller process name
+    local caller_proc_name=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+
+    # Get name of value descriptor
+    local val_desc=$(get_value_descriptor_name "${caller_proc_name}" "${opt}")
+
+    # Define option
+    define_opt "${opt}" "${val_desc}" "${varname}"
 }
 
 ########
@@ -898,4 +929,21 @@ show_out_values_for_processes()
     for outval in "${!PROCESS_OUT_VALUES[@]}"; do
         echo "${outval} -> ${PROCESS_OUT_VALUES[${outval}]}"
     done
+}
+
+########
+write_value_to_desc()
+{
+    local value=$1
+    local value_descriptor=$2
+
+    echo "${value}" > "${value_descriptor}"
+}
+
+########
+read_value_from_desc()
+{
+    local value_descriptor=$1
+
+    cat "${value_descriptor}"
 }
