@@ -16,7 +16,7 @@
 
 # *- bash -*
 
-# Module imports
+# Load modules
 load_panpipe_module "panpipe_telegram_jobsteps"
 
 #############
