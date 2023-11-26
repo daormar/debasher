@@ -96,15 +96,19 @@ process_a_skip()
 ########
 process_b_document()
 {
-    process_description "Writes a given value to a file in data directory."
+    process_description "Takes two numbers and produce their sum as output."
 }
 
 ########
 process_b_explain_cmdline_opts()
 {
-    # -b option
-    local description="Value to write to file in data directory"
-    explain_cmdline_req_opt "-b" "<int>" "$description"
+    # -num-a option
+    local description="First number to be summed"
+    explain_cmdline_req_opt "-num-a" "<int>" "$description"
+
+    # -num-b option
+    local description="Second number to be summed"
+    explain_cmdline_req_opt "-num-b" "<int>" "$description"
 }
 
 ########
@@ -117,15 +121,14 @@ process_b_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # -b option
-    define_cmdline_opt "$cmdline" "-b" optlist || return 1
+    # -num-a option
+    define_cmdline_opt "$cmdline" "-num-a" optlist || return 1
 
-    # Get absolute name of shared directory
-    local abs_shrdir=$(get_absolute_shdirname "data")
+    # -num-b option
+    define_cmdline_opt "$cmdline" "-num-b" optlist || return 1
 
-    # Define name of output file
-    local outf="${abs_shrdir}/${process_name}.out"
-    define_opt "-outf" "${outf}" optlist || return 1
+    # Define value descriptor option
+    define_value_desc_opt "-outv" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -135,14 +138,15 @@ process_b_define_opts()
 process_b()
 {
     # Initialize variables
-    local value=$(read_opt_value_from_func_args "-b" "$@")
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+    local num_a=$(read_opt_value_from_func_args "-num-a" "$@")
+    local num_b=$(read_opt_value_from_func_args "-num-b" "$@")
+    local outv=$(read_opt_value_from_func_args "-outv" "$@")
 
-    # sleep some time
-    sleep 10
+    # Calculate the sum
+    local sum=$((num_a + num_b))
 
-    # Write value to file
-    echo "$value" > "${outf}"
+    # Write value to descriptor
+    write_value_to_desc "${sum}" "${outv}"
 }
 
 ########
@@ -250,9 +254,6 @@ process_d()
 
     # Write string to FIFO
     echo "Hello World" > "${outf}"
-
-    # sleep some time
-    sleep 10
 }
 
 ########
@@ -359,9 +360,6 @@ process_f()
 
     # Deactivate conda environment
     conda deactivate
-
-    # sleep some time
-    sleep 10
 }
 
 ########
@@ -431,7 +429,6 @@ process_g_post()
 
     # Remove auxiliary file
     rm "${outd}"/${id}_aux
-    rm "${outd}"/${id}
 
     logmsg "Cleaning finished"
 }
@@ -460,13 +457,13 @@ process_h_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # -b option
+    # -h option
     define_cmdline_opt "$cmdline" "-h" optlist || return 1
 
     # Get absolute name of shared directory
     local abs_shrdir=$(get_absolute_shdirname "data")
 
-    # Define name of output file
+    # Define output file option
     local outf="${abs_shrdir}/${process_name}.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
@@ -481,9 +478,6 @@ process_h()
     local value=$(read_opt_value_from_func_args "-h" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # sleep some time
-    sleep 10
-
     # Write value to file
     echo "$value" > "${outf}"
 }
@@ -491,7 +485,7 @@ process_h()
 ########
 process_i_document()
 {
-    process_description "Get a value written by another process, increases it in one unit and writes it in own directory."
+    process_description "Get a value produced by another process, increases it in one unit and writes it in own directory."
 }
 
 ########
@@ -513,15 +507,13 @@ process_i_define_opts()
     # -h option
     define_cmdline_opt "$cmdline" "-h" optlist || return 1
 
-    # Get absolute name of shared directory
-    local abs_shrdir=$(get_absolute_shdirname "data")
-
-    # Get name of file containing the value to be read
+    # Define value descriptor option related to output value of
+    # process_b
     local process_b=$(get_adaptive_processname "process_b")
-    local valfile="${abs_shrdir}/${process_b}.out"
-    define_opt "-valfile" "${valfile}" optlist || return 1
+    local val_desc=$(get_value_descriptor_name "${process_b}" "-outv")
+    define_opt "-val-desc" "${val_desc}" optlist || return 1
 
-    # Define name of output file
+    # Define output file option
     local outf="${process_outdir}/${process_name}.out"
     define_opt "-outf" "${outf}" optlist || return 1
 
@@ -533,11 +525,11 @@ process_i_define_opts()
 process_i()
 {
     # Initialize variables
-    local valfile=$(read_opt_value_from_func_args "-valfile" "$@")
+    local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Read value from file
-    value=$(cat "${valfile}")
+    # Read value from descriptor
+    value=$(read_value_from_desc "${val_desc}")
 
     # Increment value by 1
     ((value++))
