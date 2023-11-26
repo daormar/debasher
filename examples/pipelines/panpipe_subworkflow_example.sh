@@ -17,10 +17,12 @@
 # *- bash -*
 
 # Load modules
-load_panpipe_module "panpipe_software_test"
+load_panpipe_module "panpipe_array_example"
+load_panpipe_module "panpipe_fifo_example"
 
 ########
 panpipe_subworkflow_example_pipeline()
 {
-    add_panpipe_pipeline "panpipe_software_test" "test"
+    add_panpipe_pipeline "panpipe_array_example" "test"
+    add_panpipe_pipeline "panpipe_fifo_example" "test"
 }

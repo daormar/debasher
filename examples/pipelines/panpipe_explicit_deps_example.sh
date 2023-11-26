@@ -16,19 +16,12 @@
 
 # *- bash -*
 
-# Module imports
-load_panpipe_module "panpipe_software_test"
+# Load modules
+load_panpipe_module "panpipe_value_pass"
 
 ########
 panpipe_explicit_deps_example_pipeline()
 {
-    add_panpipe_process "process_a" "cpus=1 mem=32 time=00:01:00,00:02:00,00:03:00" "processdeps=none"
-    add_panpipe_process "process_b" "cpus=1 mem=32 time=00:01:00" "processdeps=none"
-    add_panpipe_process "process_c" "cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2" "processdeps=none"
-    add_panpipe_process "process_d" "cpus=1 mem=32 time=00:01:00" "processdeps=none"
-    add_panpipe_process "process_e" "cpus=1 mem=32 time=00:01:00" "processdeps=after:process_d"
-    add_panpipe_process "process_f" "cpus=1 mem=32 time=00:01:00" "processdeps=none"
-    add_panpipe_process "process_g" "cpus=1 mem=32 time=00:01:00 throttle=4" "processdeps=aftercorr:process_c"
-    add_panpipe_process "process_h" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:process_a?afterok:process_f"
-    add_panpipe_process "process_i" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:process_b"
+    add_panpipe_process "value_writer" "cpus=1 mem=32 time=00:01:00"
+    add_panpipe_process "value_reader" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:value_writer"
 }
