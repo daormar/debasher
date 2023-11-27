@@ -24,12 +24,6 @@
 # CFG FUNCTIONS #
 #################
 
-########
-panpipe_software_test_shared_dirs()
-{
-    define_shared_dir "data"
-}
-
 #######################################
 # PIPELINE SOFTWARE TESTING PROCESSES #
 #######################################
