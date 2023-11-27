@@ -18,7 +18,7 @@ slurm_supports_aftercorr_deptype()
     local slurm_ver=`get_slurm_version`
     local slurm_ver_num=`version_to_number ${slurm_ver}`
     local slurm_ver_aftercorr_num=`version_to_number ${FIRST_SLURM_VERSION_WITH_AFTERCORR}`
-    if [ ${slurm_ver_num} -ge ${slurm_ver_aftercorr_num} ]; then
+    if [ "${slurm_ver_num}" -ge "${slurm_ver_aftercorr_num}" ]; then
         return 0
     else
         return 1
@@ -44,7 +44,6 @@ print_script_header_slurm_sched()
     local processname=$3
     local num_scripts=$4
 
-    echo "display_begin_process_message"
     echo "PANPIPE_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
     echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
@@ -59,13 +58,21 @@ print_script_body_slurm_sched()
     local dirname=$2
     local processname=$3
     local taskidx=$4
-    local reset_funct=$5
-    local funct=$6
-    local post_funct=$7
-    local process_opts=$8
+    local skip_funct=$5
+    local reset_funct=$6
+    local funct=$7
+    local post_funct=$8
+    local process_opts=$9
 
     # Deserialize process options
     echo "deserialize_args \"$(esc_dq "${process_opts}")\""
+
+    # Write skip function if it was provided
+    if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
+        echo "${skip_funct} \"\${DESERIALIZED_ARGS[@]}\" || { echo \"Warning: execution of \${processname} will be skipped since the process skip function has finished with exit code \$?\" >&2; exit 1; }"
+    fi
+
+    echo "display_begin_process_message"
 
     # Write treatment for task idx
     if [ ${num_scripts} -gt 1 ]; then
@@ -101,7 +108,7 @@ print_script_body_slurm_sched()
     echo "${SRUN} ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 
     # Close if statement
-    if [ ${num_scripts} -gt 1 ]; then
+    if [ "${num_scripts}" -gt 1 ]; then
         echo "fi"
     fi
 }
@@ -119,6 +126,7 @@ create_slurm_script()
     local dirname=$1
     local processname=$2
     local fname=`get_script_filename "${dirname}" ${processname}`
+    local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
@@ -134,14 +142,14 @@ create_slurm_script()
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
 
     # Print header
-    print_script_header_slurm_sched "${fname}" "${dirname}" ${processname} ${num_scripts} >> "${fname}" || return 1
+    print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${num_scripts}" >> "${fname}" || return 1
 
     # Iterate over options array
     local lineno=1
     local process_opts
     for process_opts in "${opts_array[@]}"; do
 
-        print_script_body_slurm_sched ${num_scripts} "${dirname}" ${processname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${process_opts}" >> "${fname}" || return 1
+        print_script_body_slurm_sched "${num_scripts}" "${dirname}" "${processname}" "${lineno}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${process_opts}" >> "${fname}" || return 1
 
         lineno=$((lineno + 1))
 

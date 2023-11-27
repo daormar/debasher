@@ -674,8 +674,7 @@ builtin_sched_process_executable_non_array_process()
 
     if [ ${status} != ${INPROGRESS_PROCESS_STATUS} -a \
          ${status} != ${FINISHED_PROCESS_STATUS} -a \
-         ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a \
-         ${status} != ${SKIP_PROCESS_STATUS} ]; then
+         ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
         if builtin_sched_process_can_be_executed ${processname}; then
             BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${BUILTIN_SCHED_NO_ARRAY_TASK}
         fi
@@ -689,8 +688,7 @@ builtin_sched_process_executable_array_process()
     local status=$2
 
     if [ ${status} != ${FINISHED_PROCESS_STATUS} -a \
-         ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a \
-         ${status} != ${SKIP_PROCESS_STATUS} ]; then
+         ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
         if builtin_sched_process_can_be_executed ${processname}; then
             max_task_num=`builtin_sched_get_max_num_tasks ${processname}`
             if [ ${max_task_num} -gt 0 ]; then
@@ -963,16 +961,22 @@ builtin_sched_execute_funct_plus_postfunct()
     local dirname=$2
     local processname=$3
     local taskidx=$4
-    local reset_funct=$5
-    local funct=$6
-    local post_funct=$7
-    local process_opts=$8
-
-    display_begin_process_message
+    local skip_funct=$5
+    local reset_funct=$6
+    local funct=$7
+    local post_funct=$8
+    local process_opts=$9
 
     # Convert serialized process options to array (result is placed into
     # the DESERIALIZED_ARGS variable)
     deserialize_args "${process_opts}"
+
+    # Execute process skip function if it was provided
+    if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
+        ${skip_funct} "${DESERIALIZED_ARGS[@]}" || { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
+    fi
+
+    display_begin_process_message
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
@@ -1005,7 +1009,7 @@ builtin_sched_execute_funct_plus_postfunct()
     fi
 
     # Signal process completion
-    signal_process_completion "${dirname}" ${processname} ${taskidx} ${num_scripts} || return 1
+    signal_process_completion "${dirname}" "${processname}" "${taskidx}" "${num_scripts}" || return 1
 
     display_end_process_message
 }
@@ -1018,10 +1022,11 @@ builtin_sched_print_script_body()
     local dirname=$2
     local processname=$3
     local taskidx=$4
-    local reset_funct=$5
-    local funct=$6
-    local post_funct=$7
-    local process_opts=$8
+    local skip_funct=$5
+    local reset_funct=$6
+    local funct=$7
+    local post_funct=$8
+    local process_opts=$9
 
     # Write treatment for task id
     if [ ${num_scripts} -gt 1 ]; then
@@ -1032,10 +1037,10 @@ builtin_sched_print_script_body()
     # Write function to be executed
     if [ ${num_scripts} -gt 1 ]; then
         local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${processname} ${taskidx}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${skip_funct} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
     else
         local builtin_log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${skip_funct} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 
     # Close if statement
@@ -1057,6 +1062,7 @@ builtin_sched_create_script()
     local dirname=$1
     local processname=$2
     local fname=`get_script_filename "${dirname}" ${processname}`
+    local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
@@ -1072,14 +1078,14 @@ builtin_sched_create_script()
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
 
     # Print header
-    builtin_sched_print_script_header "${fname}" "${dirname}" ${processname} ${num_scripts} >> "${fname}" || return 1
+    builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${num_scripts}" >> "${fname}" || return 1
 
     # Iterate over options array
     local lineno=1
     local process_opts
     for process_opts in "${opts_array[@]}"; do
 
-        builtin_sched_print_script_body ${num_scripts} "${dirname}" ${processname} ${lineno} ${reset_funct} ${funct} ${post_funct} "${process_opts}" >> "${fname}" || return 1
+        builtin_sched_print_script_body "${num_scripts}" "${dirname}" "${processname}" "${lineno}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${process_opts}" >> "${fname}" || return 1
 
         lineno=$((lineno + 1))
 
