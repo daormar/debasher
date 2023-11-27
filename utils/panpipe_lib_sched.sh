@@ -95,7 +95,7 @@ create_script()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script "${dirname}" $processname ${opts_array_name}
+            create_slurm_script "${dirname}" "$processname" "${opts_array_name}"
             ;;
     esac
 }
@@ -205,7 +205,7 @@ launch()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch "${dirname}" ${processname} ${array_size} "${task_array_list}" "${process_spec}" "${processdeps}" ${outvar} || return 1
+            slurm_launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "${outvar}" || return 1
             ;;
     esac
 }
@@ -224,10 +224,10 @@ create_script_and_launch()
     local id=$8
 
     # Create script for process
-    create_script "${dirname}" ${processname} ${opts_array_name} || return 1
+    create_script "${dirname}" "${processname}" "${opts_array_name}" || return 1
 
     # Launch process
-    launch "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${processdeps} ${id} || return 1
+    launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "${id}" || return 1
 }
 
 ########
@@ -241,10 +241,10 @@ get_primary_id()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            get_primary_id_slurm ${launch_id_info}
+            get_primary_id_slurm "${launch_id_info}"
             ;;
         ${BUILTIN_SCHEDULER})
-            echo ${launch_id_info}
+            echo "${launch_id_info}"
             ;;
     esac
 }
@@ -260,10 +260,10 @@ get_global_id()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            get_global_id_slurm ${launch_id_info}
+            get_global_id_slurm "${launch_id_info}"
             ;;
         ${BUILTIN_SCHEDULER})
-            echo ${launch_id_info}
+            echo "${launch_id_info}"
             ;;
     esac
 }
@@ -273,7 +273,7 @@ pid_exists()
 {
     local pid=$1
 
-    kill -0 $pid  > /dev/null 2>&1 || return 1
+    kill -0 "$pid"  > /dev/null 2>&1 || return 1
 
     return 0
 }
@@ -283,7 +283,7 @@ stop_pid()
 {
     local pid=$1
 
-    kill -9 $pid  > /dev/null 2>&1 || return 1
+    kill -9 "$pid"  > /dev/null 2>&1 || return 1
 
     return 0
 }
@@ -298,14 +298,14 @@ id_exists()
     local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
-            slurm_jid_exists $id
+            slurm_jid_exists "$id"
             exit_code=$?
-            return ${exit_code}
+            return "${exit_code}"
             ;;
         ${BUILTIN_SCHEDULER})
-            pid_exists $id
+            pid_exists "$id"
             exit_code=$?
-            return ${exit_code}
+            return "${exit_code}"
         ;;
     esac
 }
@@ -318,10 +318,10 @@ map_deptype_if_necessary()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            map_deptype_if_necessary_slurm ${deptype}
+            map_deptype_if_necessary_slurm "${deptype}"
             ;;
         *)
-            echo ${deptype}
+            echo "${deptype}"
             ;;
     esac
 }

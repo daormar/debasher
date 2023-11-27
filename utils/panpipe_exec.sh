@@ -360,7 +360,7 @@ configure_scheduler()
 
     if [ ${sched_given} -eq 1 ]; then
         echo "## Setting scheduler type from value of \"--sched\" option..." >&2
-        set_panpipe_scheduler ${sched_opt} || return 1
+        set_panpipe_scheduler "${sched_opt}" || return 1
         echo "scheduler: ${sched_opt}" >&2
         echo "" >&2
     else
@@ -371,20 +371,20 @@ configure_scheduler()
         # set_panpipe_scheduler function
         echo "## Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
         local sched=`determine_scheduler`
-        set_panpipe_scheduler ${sched} || return 1
+        set_panpipe_scheduler "${sched}" || return 1
         echo "scheduler: ${sched}" >&2
         echo "" >&2
     fi
 
     if [ ${dflt_nodes_given} -eq 1 ]; then
         echo "## Setting default nodes for pipeline execution... (${dflt_nodes})" >&2
-        set_panpipe_default_nodes ${dflt_nodes} || return 1
+        set_panpipe_default_nodes "${dflt_nodes}" || return 1
         echo "" >&2
     fi
 
     if [ ${dflt_throttle_given} -eq 1 ]; then
         echo "## Setting default job array task throttle... (${dflt_throttle})" >&2
-        set_panpipe_default_array_task_throttle ${dflt_throttle} || return 1
+        set_panpipe_default_array_task_throttle "${dflt_throttle}" || return 1
         echo "" >&2
     fi
 }
@@ -405,7 +405,7 @@ show_pipeline_opts()
         local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
         DIFFERENTIAL_CMDLINE_OPT_STR=""
         ${explain_cmdline_opts_funcname} || exit 1
-        update_opt_to_process_map ${processname} "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+        update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
     done < "${procspec_file}"
 
     # Print options
@@ -510,9 +510,9 @@ handle_docker_requirements()
 
             # Process conda envs information
             local docker_imgs_funcname=`get_docker_imgs_funcname ${processname}`
-            if func_exists ${docker_imgs_funcname}; then
+            if func_exists "${docker_imgs_funcname}"; then
                 echo "Handling docker requirements for process ${processname}..." >&2
-                ${docker_imgs_funcname} || exit 1
+                "${docker_imgs_funcname}" || exit 1
             fi
         fi
     done < "${procspec_file}"
@@ -577,9 +577,9 @@ define_reexec_processes_due_to_fifos()
                 if [ "${status}" = "${TODO_PROCESS_EXIT_CODE}" ] \
                        || [ "${status}" = "${UNFINISHED_PROCESS_STATUS}" ] \
                        || [ "${status}" = "${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ] ; then
-                    mark_process_as_reexec ${processname} ${FIFO_REEXEC_REASON}
+                    mark_process_as_reexec "${processname}" "${FIFO_REEXEC_REASON}"
                     while read -r fifo_owner; do
-                        mark_process_as_reexec ${fifo_owner} ${FIFO_REEXEC_REASON}
+                        mark_process_as_reexec "${fifo_owner}" "${FIFO_REEXEC_REASON}"
                     done <<< "${fifo_owners}"
                 fi
             fi
@@ -629,7 +629,7 @@ check_script_is_older_than_modules()
         local mod
         for mod in "${!PIPELINE_MODULES[@]}"; do
             fullmod="${PIPELINE_MODULES[$mod]}"
-            if [ "${script_filename}" -ot ${fullmod} ]; then
+            if [ "${script_filename}" -ot "${fullmod}" ]; then
                 script_older=1
                 echo "Warning: ${script_filename} is older than module ${fullmod}" >&2
             fi
@@ -669,7 +669,7 @@ define_reexec_processes_due_to_code_update()
             if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
                 if check_script_is_older_than_modules "${script_filename}"; then
                     echo "Warning: last execution of process ${processname} used outdated modules">&2
-                    mark_process_as_reexec $processname ${OUTDATED_CODE_REEXEC_REASON}
+                    mark_process_as_reexec "$processname" "${OUTDATED_CODE_REEXEC_REASON}"
                 fi
             fi
 
@@ -703,7 +703,7 @@ define_reexec_processes_due_to_deps()
     local processname
     while read processname; do
         if [ "${processname}" != "" ]; then
-            mark_process_as_reexec $processname ${DEPS_REEXEC_REASON}
+            mark_process_as_reexec "$processname" "${DEPS_REEXEC_REASON}"
         fi
     done < "${reexec_processes_file}"
 
@@ -878,11 +878,11 @@ prepare_files_and_dirs_for_process()
 
         # Prepare files and directories for process
         create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
-        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
-        clean_process_log_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
-        clean_process_id_files "${dirname}" ${processname} ${array_size} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
-        create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
-        prepare_fifos_owned_by_process ${processname}
+        update_process_completion_signal "${dirname}" "${processname}" "${status}" || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
+        clean_process_log_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning log files for process" >&2 ; return 1; }
+        clean_process_id_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning id files for process" >&2 ; return 1; }
+        create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
+        prepare_fifos_owned_by_process "${processname}"
     fi
 }
 
@@ -899,7 +899,7 @@ prepare_files_and_dirs_for_processes()
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            prepare_files_and_dirs_for_process "${dirname}" ${processname} "${process_spec}"
+            prepare_files_and_dirs_for_process "${dirname}" "${processname}" "${process_spec}"
         fi
     done < "${procspec_file}"
 }
@@ -928,13 +928,13 @@ launch_process()
         create_script "${dirname}" ${processname} "process_opts_array"
 
         # Archive script
-        archive_script "${dirname}" ${processname}
+        archive_script "${dirname}" "${processname}"
 
         # Launch process
         local task_array_list=`get_task_array_list "${dirname}" ${processname} ${array_size}`
         local processdeps_spec=`extract_processdeps_from_process_spec "$process_spec"`
         local processdeps=`get_processdeps "${process_id_list}" ${processdeps_spec}`
-        launch "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
+        launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
         local primary_id=`get_primary_id ${launch_outvar}`
@@ -942,7 +942,7 @@ launch_process()
         process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
 
         # Write id to file
-        write_process_id_info_to_file "${dirname}" ${processname} ${launch_outvar}
+        write_process_id_info_to_file "${dirname}" "${processname}" "${launch_outvar}"
     else
         # If process is in progress, its id should be retrieved so as to
         # correctly express dependencies
@@ -969,7 +969,7 @@ launch_processes()
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            launch_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
+            launch_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
         fi
     done < "${procspec_file}"
 }
@@ -1032,7 +1032,7 @@ execute_pipeline_processes_debug()
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            debug_process "${cmdline}" "${dirname}" ${processname} "${process_spec}" || return 1
+            debug_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
         fi
     done < "${procspec_file}"
 
