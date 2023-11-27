@@ -83,7 +83,7 @@ decomposer()
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
+    "${AWK}" '{for(i=1;i<=NF;++i) print $i}' "${file}" > "${outf}" ; pipe_fail || return 1
 }
 
 ########
