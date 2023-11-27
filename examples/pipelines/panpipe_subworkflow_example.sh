@@ -20,6 +20,24 @@
 load_panpipe_module "panpipe_array_example"
 load_panpipe_module "panpipe_fifo_example"
 
+#############
+# CONSTANTS #
+#############
+
+#################
+# CFG FUNCTIONS #
+#################
+
+########
+panpipe_subworkflow_example_shared_dirs()
+{
+    :
+}
+
+######################
+# PIPELINE PROCESSES #
+######################
+
 ########
 panpipe_subworkflow_example_pipeline()
 {

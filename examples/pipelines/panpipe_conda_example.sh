@@ -24,6 +24,12 @@
 # CFG FUNCTIONS #
 #################
 
+########
+panpipe_conda_example_shared_dirs()
+{
+    :
+}
+
 #######################################
 # PIPELINE SOFTWARE TESTING PROCESSES #
 #######################################

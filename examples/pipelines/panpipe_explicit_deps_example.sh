@@ -19,6 +19,24 @@
 # Load modules
 load_panpipe_module "panpipe_value_pass"
 
+#############
+# CONSTANTS #
+#############
+
+#################
+# CFG FUNCTIONS #
+#################
+
+########
+panpipe_explicit_deps_example_shared_dirs()
+{
+    :
+}
+
+######################
+# PIPELINE PROCESSES #
+######################
+
 ########
 panpipe_explicit_deps_example_pipeline()
 {

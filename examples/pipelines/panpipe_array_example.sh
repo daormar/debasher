@@ -24,6 +24,12 @@
 # CFG FUNCTIONS #
 #################
 
+########
+panpipe_array_example_shared_dirs()
+{
+    :
+}
+
 #######################################
 # PIPELINE SOFTWARE TESTING PROCESSES #
 #######################################

@@ -24,6 +24,12 @@
 # CFG FUNCTIONS #
 #################
 
+########
+panpipe_simple_process_shared_dirs()
+{
+    :
+}
+
 #######################################
 # PIPELINE SOFTWARE TESTING PROCESSES #
 #######################################
