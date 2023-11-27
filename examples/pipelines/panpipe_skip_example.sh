@@ -151,10 +151,10 @@ value_reader_skip()
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Read value from descriptor
-    value=$(read_value_from_desc "${val_desc}")
+    local value=$(read_value_from_desc "${val_desc}")
 
     # Skip if read value is odd
-    if ((number % 2 == 0)); then
+    if ((value % 2 == 0)); then
         return 1
     else
         return 0
