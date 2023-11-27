@@ -973,7 +973,7 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Execute process skip function if it was provided
     if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        ${skip_funct} "${DESERIALIZED_ARGS[@]}" || { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
+        ${skip_funct} "${DESERIALIZED_ARGS[@]}" && { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
     fi
 
     display_begin_process_message
