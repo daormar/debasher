@@ -91,7 +91,7 @@ value_writer()
 }
 
 ########
-process_c_document()
+value_reader_document()
 {
     process_description "Executes an array of 4 tasks. Each task creates a file containing the task index."
 }
