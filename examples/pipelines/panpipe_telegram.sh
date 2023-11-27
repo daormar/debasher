@@ -133,6 +133,7 @@ recomposer_define_opts()
 recompose()
 {
     local char_lim=$1
+    local file=$2
 
     "${AWK}" -v maxlen="${char_lim}" 'BEGIN{len=0}
              {
@@ -153,7 +154,7 @@ recompose()
                   printf" "
                }
               }
-             }'
+             }' "${file}"
 }
 
 ########
@@ -165,7 +166,7 @@ recomposer()
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
+    recompose "${char_lim}" "${inf}" > "${outf}" ; pipe_fail || return 1
 }
 
 ######################################
