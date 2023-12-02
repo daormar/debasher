@@ -1355,9 +1355,9 @@ builtin_sched_sleep()
     local num_processes=${#BUILTIN_SCHED_PROCESSNAME_TO_IDX[@]}
 
     if [ ${num_processes} -le ${BUILTIN_SCHED_NPROCESSES_SLEEP_THRESHOLD} ]; then
-        sleep ${BUILTIN_SCHED_SLEEP_TIME_SHORT}
+        "${SLEEP}" ${BUILTIN_SCHED_SLEEP_TIME_SHORT}
     else
-        sleep ${BUILTIN_SCHED_SLEEP_TIME_LONG}
+        "${SLEEP}" ${BUILTIN_SCHED_SLEEP_TIME_LONG}
     fi
 }
 

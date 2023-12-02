@@ -429,7 +429,7 @@ wait_simul_exec_reduction()
 
         # Sleep if not end
         if [ ${end} -eq 0 ]; then
-            sleep ${SLEEP_TIME}
+            "${SLEEP}" "${SLEEP_TIME}"
         fi
 
     done
