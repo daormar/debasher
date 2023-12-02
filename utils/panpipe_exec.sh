@@ -948,9 +948,9 @@ launch_processes()
 }
 
 ########
-execute_pipeline_processes()
+launch_pipeline_processes()
 {
-    echo "# Executing pipeline processes..." >&2
+    echo "# Launching pipeline processes..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -1029,9 +1029,9 @@ debug_process()
 }
 
 ########
-execute_pipeline_processes_debug()
+launch_pipeline_processes_debug()
 {
-    echo "# Executing pipeline processes... (debug mode)" >&2
+    echo "# Launching pipeline processes... (debug mode)" >&2
 
     # Read input parameters
     local cmdline=$1
@@ -1137,13 +1137,13 @@ else
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            execute_pipeline_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
+            launch_pipeline_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
         else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
                 builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
             else
-                execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                launch_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 wait_for_pipeline_processes "${outd}" "${procspec_file}" || exit 1
             fi
         fi
