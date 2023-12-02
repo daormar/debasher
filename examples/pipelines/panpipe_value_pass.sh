@@ -99,7 +99,7 @@ value_reader_document()
 ########
 value_reader_document()
 {
-    process_description "Get a value produced by another process, increases it in one unit and writes it in own directory."
+    process_description "Gets a value produced by another process, increases it in one unit and writes it in own directory."
 }
 
 ########
