@@ -28,6 +28,7 @@
 LOCKFD=99
 MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
 REEXEC_PROCESSES_LIST_FNAME=".reexec_processes_due_to_deps.txt"
+WAIT_FOR_PROCESSES_SLEEP_TIME=10
 
 ####################
 # GLOBAL VARIABLES #
@@ -836,12 +837,12 @@ prepare_files_and_dirs_for_process()
     local processname=$2
     local process_spec=$3
 
-    ## Obtain process status
+    # Obtain process status
     local status=`get_process_status ${dirname} ${processname}`
 
-    ## Decide whether the process should be executed (NOTE: for a
-    ## process that should not be executed, files and directories are
-    ## still prepared)
+    # Decide whether the process should be executed (NOTE: for a
+    # process that should not be executed, files and directories are
+    # still prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
@@ -887,11 +888,11 @@ launch_process()
 
     # Execute process
 
-    ## Obtain process status
+    # Obtain process status
     local status=`get_process_status ${dirname} ${processname}`
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
-    ## Decide whether the process should be executed
+    # Decide whether the process should be executed
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
@@ -969,6 +970,49 @@ execute_pipeline_processes()
 }
 
 ########
+there_are_in_progress_processes()
+{
+    # Read input parameters
+    local dirname=$1
+    local procspec_file=$2
+
+    local process_spec
+    while read process_spec; do
+        if pipeline_process_spec_is_ok "$process_spec"; then
+            # Extract process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            # Obtain process status
+            local status=`get_process_status ${dirname} ${processname}`
+
+            if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
+                return 0
+            fi
+        fi
+    done < "${procspec_file}"
+
+    return 1
+}
+
+########
+wait_for_pipeline_processes()
+{
+    echo "# Waiting for pipeline processes to finish..." >&2
+
+    # Read input parameters
+    local dirname=$1
+    local procspec_file=$2
+
+    while there_are_in_progress_processes "${dirname}" "${procspec_file}"; do
+        "${SLEEP}" "${WAIT_FOR_PROCESSES_SLEEP_TIME}"
+    done
+
+    echo "Waiting complete" >&2
+
+    echo "" >&2
+}
+
+########
 debug_process()
 {
     # Initialize variables
@@ -979,7 +1023,7 @@ debug_process()
 
     # Debug process
 
-    ## Obtain process status
+    # Obtain process status
     local status=`get_process_status "${dirname}" ${processname}`
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 }
@@ -1100,6 +1144,7 @@ else
                 builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
             else
                 execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                wait_for_pipeline_processes "${outd}" "${procspec_file}" || exit 1
             fi
         fi
     fi
