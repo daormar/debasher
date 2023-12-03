@@ -109,7 +109,7 @@ archive_script()
 
     # Archive script with date info
     local curr_date=`date '+%Y_%m_%d'`
-    cp "${script_filename}" "${script_filename}.${curr_date}"
+    "${CP}" "${script_filename}" "${script_filename}.${curr_date}"
 }
 
 ########
