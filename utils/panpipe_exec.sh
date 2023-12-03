@@ -28,7 +28,8 @@
 LOCKFD=99
 MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
 REEXEC_PROCESSES_LIST_FNAME=".reexec_processes_due_to_deps.txt"
-WAIT_FOR_PROCESSES_SLEEP_TIME=10
+WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT=5
+WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 
 ####################
 # GLOBAL VARIABLES #
@@ -1003,8 +1004,15 @@ wait_for_pipeline_processes()
     local dirname=$1
     local procspec_file=$2
 
+    # Obtain number of processes
+    local num_procs=$("${WC}" -l "${procspec_file}" | "${AWK}" '{print $1}')
+
     while there_are_in_progress_processes "${dirname}" "${procspec_file}"; do
-        "${SLEEP}" "${WAIT_FOR_PROCESSES_SLEEP_TIME}"
+        if [ "${num_procs}" -le 10 ]; then
+            "${SLEEP}" "${WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT}"
+        else
+            "${SLEEP}" "${WAIT_FOR_PROCESSES_SLEEP_TIME_LONG}"
+        fi
     done
 
     echo "Waiting complete" >&2
