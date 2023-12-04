@@ -55,12 +55,13 @@ usage()
     echo "panpipe_exec              --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
-    echo "                          [--reexec-outdated-procs] [--conda-support]"
-    echo "                          [--docker-support] [--showopts|--checkopts|--debug]"
+    echo "                          [--reexec-outdated-procs]"
+    echo "                          [--conda-support] [--docker-support]"
+    echo "                          [--show-pipe-opts|--checkopts|--debug]"
     echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
-    echo "--pfile <string>          File with pipeline processes to be performed (see manual"
-    echo "                          for additional information)"
+    echo "--pfile <string>          File with pipeline processes to be performed (see"
+    echo "                          manual for additional information)"
     echo "--outdir <string>         Output directory"
     echo "--sched <string>          Scheduler used to execute the pipeline (if not given,"
     echo "                          it is determined using information gathered during"
@@ -75,8 +76,8 @@ usage()
     echo "--reexec-outdated-procs   Reexecute those processes with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--docker-support          Enable docker support"
-    echo "--showopts                Show pipeline options"
-    echo "--checkopts               Check pipeline options"
+    echo "--show-pipe-opts          Show pipeline options"
+    echo "--check-proc-opts         Check process options"
     echo "--debug                   Do everything except launching pipeline processes"
     echo "--builtinsched-debug      Show debug information for built-in scheduler"
     echo "--version                 Display version information and exit"
@@ -96,8 +97,8 @@ read_pars()
     reexec_outdated_processes_given=0
     conda_support_given=0
     docker_support_given=0
-    showopts_given=0
-    checkopts_given=0
+    show_pipe_opts_given=0
+    check_proc_opts_given=0
     debug=0
     builtinsched_debug=0
     while [ $# -ne 0 ]; do
@@ -174,9 +175,9 @@ read_pars()
                       docker_support_given=1
                   fi
                   ;;
-            "--showopts") showopts_given=1
+            "--show-pipe-opts") show_pipe_opts_given=1
                           ;;
-            "--checkopts") checkopts_given=1
+            "--check-proc-opts") check_proc_opts_given=1
                            ;;
             "--debug") debug=1
                        ;;
@@ -209,18 +210,18 @@ check_pars()
         fi
     fi
 
-    if [ ${showopts_given} -eq 1 -a ${checkopts_given} -eq 1 ]; then
-        echo "Error! --showopts and --checkopts options cannot be given simultaneously"
+    if [ ${show_pipe_opts_given} -eq 1 -a ${check_proc_opts_given} -eq 1 ]; then
+        echo "Error! --show-pipe-opts and --check-proc-opts options cannot be given simultaneously"
         exit 1
     fi
 
-    if [ ${showopts_given} -eq 1 -a ${debug} -eq 1 ]; then
-        echo "Error! --showopts and --debug options cannot be given simultaneously"
+    if [ ${show_pipe_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
+        echo "Error! --show-pipe-opts and --debug options cannot be given simultaneously"
         exit 1
     fi
 
-    if [ ${checkopts_given} -eq 1 -a ${debug} -eq 1 ]; then
-        echo "Error! --checkopts and --debug options cannot be given simultaneously"
+    if [ ${check_proc_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
+        echo "Error! --check-proc-opts and --debug options cannot be given simultaneously"
         exit 1
     fi
 }
@@ -1092,7 +1093,7 @@ gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
 
 configure_scheduler || exit 1
 
-if [ ${showopts_given} -eq 1 ]; then
+if [ ${show_pipe_opts_given} -eq 1 ]; then
     show_pipeline_opts "${initial_procspec_file}" || exit 1
 else
     ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
@@ -1103,7 +1104,7 @@ else
     procgraph_file_prefix="${ppl_graphs_dir}/process_graph"
     depgraph_file_prefix="${ppl_graphs_dir}/dependency_graph"
 
-    if [ ${checkopts_given} -eq 1 ]; then
+    if [ ${check_proc_opts_given} -eq 1 ]; then
         check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
     else
         check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
