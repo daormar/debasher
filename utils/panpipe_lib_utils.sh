@@ -445,6 +445,23 @@ str_is_output_option()
 }
 
 ########
+str_is_val_descriptor()
+{
+    local str=$1
+
+    if is_absolute_path "${str}"; then
+        local basename=`"${BASENAME}" "${str}"`
+        if [[ "${basename}" == "${VALUE_DESCRIPTOR_NAME_PREFIX}"* ]]; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
+}
+
+########
 get_num_words_in_string()
 {
     local str=$1
