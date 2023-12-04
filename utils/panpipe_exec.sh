@@ -57,7 +57,7 @@ usage()
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--reexec-outdated-procs]"
     echo "                          [--conda-support] [--docker-support]"
-    echo "                          [--show-pipe-opts|--checkopts|--debug]"
+    echo "                          [--show-pipe-opts|--check-proc-opts|--debug]"
     echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with pipeline processes to be performed (see"
@@ -418,9 +418,9 @@ show_pipeline_opts()
 }
 
 ########
-check_pipeline_opts()
+check_process_opts()
 {
-    echo "# Checking pipeline options..." >&2
+    echo "# Checking process options..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -1105,9 +1105,9 @@ else
     depgraph_file_prefix="${ppl_graphs_dir}/dependency_graph"
 
     if [ ${check_proc_opts_given} -eq 1 ]; then
-        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
     else
-        check_pipeline_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
 
         procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
         gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1
