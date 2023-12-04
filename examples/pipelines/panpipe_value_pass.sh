@@ -122,7 +122,7 @@ value_reader_define_opts()
     # value_writer
     local value_writer=$(get_adaptive_processname "value_writer")
     local val_desc=$(get_value_descriptor_name "${value_writer}" "-outv")
-    define_opt "-val-desc" "${val_desc}" optlist || return 1
+    define_opt "-value" "${val_desc}" optlist || return 1
 
     # Define output file option
     local outf="${process_outdir}/${process_name}.out"
@@ -136,11 +136,8 @@ value_reader_define_opts()
 value_reader()
 {
     # Initialize variables
-    local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
+    local value=$(read_opt_value_from_func_args "-value" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-    # Read value from descriptor
-    value=$(read_value_from_desc "${val_desc}")
 
     # Increment value by 1
     ((value++))
