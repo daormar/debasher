@@ -57,7 +57,7 @@ usage()
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--reexec-outdated-procs]"
     echo "                          [--conda-support] [--docker-support]"
-    echo "                          [--show-pipe-opts|--check-proc-opts|--debug]"
+    echo "                          [--show-cmdline-opts|--check-proc-opts|--debug]"
     echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with pipeline processes to be performed (see"
@@ -76,7 +76,7 @@ usage()
     echo "--reexec-outdated-procs   Reexecute those processes with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--docker-support          Enable docker support"
-    echo "--show-pipe-opts          Show pipeline options"
+    echo "--show-cmdline-opts       Show command line options for the pipeline"
     echo "--check-proc-opts         Check process options"
     echo "--debug                   Do everything except launching pipeline processes"
     echo "--builtinsched-debug      Show debug information for built-in scheduler"
@@ -97,7 +97,7 @@ read_pars()
     reexec_outdated_processes_given=0
     conda_support_given=0
     docker_support_given=0
-    show_pipe_opts_given=0
+    show_cmdline_opts_given=0
     check_proc_opts_given=0
     debug=0
     builtinsched_debug=0
@@ -175,7 +175,7 @@ read_pars()
                       docker_support_given=1
                   fi
                   ;;
-            "--show-pipe-opts") show_pipe_opts_given=1
+            "--show-cmdline-opts") show_cmdline_opts_given=1
                           ;;
             "--check-proc-opts") check_proc_opts_given=1
                            ;;
@@ -210,13 +210,13 @@ check_pars()
         fi
     fi
 
-    if [ ${show_pipe_opts_given} -eq 1 -a ${check_proc_opts_given} -eq 1 ]; then
-        echo "Error! --show-pipe-opts and --check-proc-opts options cannot be given simultaneously"
+    if [ ${show_cmdline_opts_given} -eq 1 -a ${check_proc_opts_given} -eq 1 ]; then
+        echo "Error! --show-cmdline-opts and --check-proc-opts options cannot be given simultaneously"
         exit 1
     fi
 
-    if [ ${show_pipe_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
-        echo "Error! --show-pipe-opts and --debug options cannot be given simultaneously"
+    if [ ${show_cmdline_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
+        echo "Error! --show-cmdline-opts and --debug options cannot be given simultaneously"
         exit 1
     fi
 
@@ -393,9 +393,9 @@ configure_scheduler()
 }
 
 ########
-show_pipeline_opts()
+show_cmdline_opts()
 {
-    echo "# Pipeline options..." >&2
+    echo "# Command line options for the pipeline..." >&2
 
     # Read input parameters
     local procspec_file=$1
@@ -1093,8 +1093,8 @@ gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
 
 configure_scheduler || exit 1
 
-if [ ${show_pipe_opts_given} -eq 1 ]; then
-    show_pipeline_opts "${initial_procspec_file}" || exit 1
+if [ ${show_cmdline_opts_given} -eq 1 ]; then
+    show_cmdline_opts "${initial_procspec_file}" || exit 1
 else
     ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
     pipeline_opts_file="${ppl_file_pref}.${PPLOPTS_FEXT}"
