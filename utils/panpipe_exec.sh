@@ -436,10 +436,10 @@ check_process_opts()
     while read process_spec; do
         # Extract process information
         local processname=`extract_processname_from_process_spec "$process_spec"`
-        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
+        define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
         local process_opts_array=()
         for process_opts in "${CURRENT_PROCESS_OPT_LIST[@]}"; do
-            # Obtain human-readable representation of script options
+            # Obtain human-readable representation of process options
             hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
             process_opts_array+=("${hr_process_opts}")
         done
@@ -847,7 +847,7 @@ prepare_files_and_dirs_for_process()
     # still prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
-        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
+        define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
         local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
         local array_size=${#process_opts_array[@]}
 
@@ -897,7 +897,7 @@ launch_process()
     # Decide whether the process should be executed
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
-        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
+        define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
         local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
         local array_size=${#process_opts_array[@]}
         create_script "${dirname}" ${processname} "process_opts_array"
