@@ -249,7 +249,7 @@ check_opt_given_memoiz()
 }
 
 ########
-read_opt_value_from_func_args()
+get_opt_value_from_func_args()
 {
     local opt=$1
 
@@ -274,7 +274,7 @@ read_opt_value_from_func_args()
 
             # Show value if it exists and return
             if [ -z "${value}" ]; then
-                echo ${VOID_VALUE}
+                echo "${VOID_VALUE}"
                 return 1
             else
                 echo "${value}"
@@ -285,8 +285,25 @@ read_opt_value_from_func_args()
     done
 
     # Option not given
-    echo ${OPT_NOT_FOUND}
+    echo "${OPT_NOT_FOUND}"
     return 1
+}
+
+########
+read_opt_value_from_func_args()
+{
+    local opt=$1
+
+    # Get value for option
+    local value=`get_opt_value_from_func_args "$@"`
+
+    # If the value is a descriptor and opt is not an output option, then
+    # we should read the descriptor
+    if str_is_val_descriptor "${value}" && ! str_is_output_option "${opt}"; then
+        read_value_from_desc "${value}" || return 1
+    else
+        echo "${value}"
+    fi
 }
 
 ########
@@ -300,7 +317,7 @@ read_opt_value_from_line()
     deserialize_args "${cmdline}"
 
     # Get opt value
-    read_opt_value_from_func_args "${opt}" "${DESERIALIZED_ARGS[@]}"
+    get_opt_value_from_func_args "${opt}" "${DESERIALIZED_ARGS[@]}"
 }
 
 ########
