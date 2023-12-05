@@ -545,7 +545,7 @@ get_process_status()
     local script_filename=`get_script_filename "${dirname}" ${processname}`
 
     # Check if process should be reexecuted (REEXEC status has the
-    # second highest priority level)
+    # highest priority level)
     if process_should_be_reexec $processname; then
         echo "${REEXEC_PROCESS_STATUS}"
         return ${REEXEC_PROCESS_EXIT_CODE}
