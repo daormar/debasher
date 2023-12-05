@@ -265,20 +265,6 @@ read_ids_from_files()
 }
 
 ########
-mark_process_as_skip()
-{
-    local processname=$1
-    local reason=$2
-
-    if [ "${PANPIPE_SKIP_PROCESSES[${processname}]}" = "" ]; then
-        PANPIPE_SKIP_PROCESSES[${processname}]=${reason}
-    else
-        local curr_val=PANPIPE_SKIP_PROCESSES[${processname}]
-        PANPIPE_SKIP_PROCESSES[${processname}]="${curr_val},${reason}"
-    fi
-}
-
-########
 mark_process_as_reexec()
 {
     local processname=$1
@@ -320,18 +306,6 @@ process_should_be_reexec()
         else
             return 1
         fi
-    fi
-}
-
-########
-process_should_be_skipped()
-{
-    local processname=$1
-
-    if [ "${PANPIPE_SKIP_PROCESSES[${processname}]}" = "" ]; then
-        return 1
-    else
-        return 0
     fi
 }
 
@@ -569,13 +543,6 @@ get_process_status()
     local dirname=$1
     local processname=$2
     local script_filename=`get_script_filename "${dirname}" ${processname}`
-
-    # Check if process should not be executed (SKIP status has
-    # the highest priority)
-    if process_should_be_skipped $processname; then
-        echo "${SKIP_PROCESS_STATUS}"
-        return ${SKIP_PROCESS_EXIT_CODE}
-    fi
 
     # Check if process should be reexecuted (REEXEC status has the
     # second highest priority level)
