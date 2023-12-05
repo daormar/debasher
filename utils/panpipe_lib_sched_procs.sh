@@ -370,14 +370,14 @@ process_is_in_progress()
 {
     local dirname=$1
     local processname=$2
-    local ids=`read_ids_from_files "$dirname" $processname`
+    local ids=`read_ids_from_files "$dirname" "$processname"`
 
     # Iterate over ids
     for id in ${ids}; do
         # Get global id (when executing multiple attempts, multiple ids
         # will be associated to a given process)
-        local global_id=`get_global_id ${id}`
-        if id_exists ${global_id}; then
+        local global_id=`get_global_id "${id}"`
+        if id_exists "${global_id}"; then
             return 0
         fi
     done
