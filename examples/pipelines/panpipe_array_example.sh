@@ -112,13 +112,13 @@ array_reader_define_opts()
     local optlist=""
 
     # Obtain output directory for array_writer
-    local array_reader_outdir=`get_process_outdir_adaptive "array_writer"`
+    local array_writer_outdir=`get_process_outdir_adaptive "array_writer"`
 
     # Save option list so as to execute process four times
     for id in 1 2 3 4; do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
-        define_opt "-infile" "${array_reader_outdir}/${id}" specific_optlist || return 1
+        define_opt "-infile" "${array_writer_outdir}/${id}" specific_optlist || return 1
         define_opt "-outdir" "${process_outdir}" specific_optlist || return 1
         save_opt_list specific_optlist
     done
