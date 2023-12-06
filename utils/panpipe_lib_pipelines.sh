@@ -269,3 +269,19 @@ add_panpipe_pipeline()
     # Remove temporary file
     rm "${tmpfile}"
 }
+
+########
+pipeline_uses_fifos()
+{
+    if [ "${#PIPELINE_FIFOS[@]}" -eq 0 ]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+########
+get_number_of_pipeline_fifos()
+{
+    echo "${#PIPELINE_FIFOS[@]}"
+}
