@@ -100,5 +100,5 @@ host1_reset_outfiles()
 ########
 panpipe_host_process_pipeline()
 {
-    add_panpipe_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=16"
+    add_panpipe_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=64"
 }

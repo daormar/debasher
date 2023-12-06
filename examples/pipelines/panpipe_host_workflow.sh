@@ -144,6 +144,6 @@ host2()
 ########
 panpipe_host_workflow_pipeline()
 {
-    add_panpipe_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=16"
-    add_panpipe_process "host2" "cpus=1 mem=32 time=00:10:00 throttle=16"
+    add_panpipe_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=64"
+    add_panpipe_process "host2" "cpus=1 mem=32 time=00:10:00 throttle=64"
 }
