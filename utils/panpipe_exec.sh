@@ -56,7 +56,7 @@ usage()
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--reexec-outdated-procs]"
-    echo "                          [--conda-support] [--docker-support]"
+    echo "                          [--conda-support] [--docker-support] [--gen-proc-graph]"
     echo "                          [--show-cmdline-opts|--check-proc-opts|--debug]"
     echo "                          [--builtinsched-debug] [--version] [--help]"
     echo ""
@@ -76,6 +76,7 @@ usage()
     echo "--reexec-outdated-procs   Reexecute those processes with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--docker-support          Enable docker support"
+    echo "--gen-proc-graph          Generate process graph"
     echo "--show-cmdline-opts       Show command line options for the pipeline"
     echo "--check-proc-opts         Check process options"
     echo "--debug                   Do everything except launching pipeline processes"
@@ -97,6 +98,7 @@ read_pars()
     reexec_outdated_processes_given=0
     conda_support_given=0
     docker_support_given=0
+    gen_proc_graph_given=0
     show_cmdline_opts_given=0
     check_proc_opts_given=0
     debug=0
@@ -173,6 +175,11 @@ read_pars()
             "--docker-support")
                   if [ $# -ne 0 ]; then
                       docker_support_given=1
+                  fi
+                  ;;
+            "--gen-proc-graph")
+                  if [ $# -ne 0 ]; then
+                      gen_proc_graph_given=1
                   fi
                   ;;
             "--show-cmdline-opts") show_cmdline_opts_given=1
@@ -1114,7 +1121,9 @@ else
 
         check_procspec "${ppl_file_pref}" || exit 1
 
-        gen_process_graph "${ppl_file_pref}" "${procgraph_file_prefix}" || exit 1
+        if [ "${gen_proc_graph_given}" -eq 1 ]; then
+            gen_process_graph "${ppl_file_pref}" "${procgraph_file_prefix}" || exit 1
+        fi
 
         gen_dependency_graph "${ppl_file_pref}" "${depgraph_file_prefix}" || exit 1
 
