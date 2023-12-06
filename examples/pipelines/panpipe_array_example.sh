@@ -91,8 +91,10 @@ array_writer_reset_outfiles()
     # Initialize variables
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Remove auxiliary file
-    rm "${outf}"
+    # Remove output file
+    if [ -f "${outf}" ]; then
+        rm "${outf}"
+    fi
 }
 
 ########
