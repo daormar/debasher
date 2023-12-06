@@ -78,10 +78,10 @@ array_writer()
     local id=$(read_opt_value_from_func_args "-id" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # sleep some time
+    # Sleep some time
     sleep ${sleep_time}
 
-    # create file
+    # Create file
     echo $id > "${outf}"
 }
 
@@ -91,7 +91,7 @@ array_writer_reset_outfiles()
     # Initialize variables
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # create auxiliary file
+    # Remove auxiliary file
     rm "${outf}"
 }
 
