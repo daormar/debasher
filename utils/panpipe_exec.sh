@@ -445,15 +445,22 @@ check_process_opts()
         local processname=`extract_processname_from_process_spec "$process_spec"`
         define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
         local process_opts_array=()
+        local ellipsis=""
         for process_opts in "${CURRENT_PROCESS_OPT_LIST[@]}"; do
             # Obtain human-readable representation of process options
             hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
             process_opts_array+=("${hr_process_opts}")
+
+            # Exit loop if maximum number of options is exceeded
+            if [ "${#process_opts_array[@]}" -ge "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" ]; then
+                local ellipsis="..."
+                break
+            fi
         done
         # Generate info about options
-        local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}" ${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}`
-        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >&2
-        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts}" >> "${out_opts_file}"
+        local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}"`
+        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
+        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >> "${out_opts_file}"
     done < "${procspec_file}"
 
     # Print exhaustive option list
