@@ -5,6 +5,7 @@ panpipe_array_example.sh panpipe_skip_example.sh		\
 panpipe_conda_example.sh panpipe_docker_example.sh		\
 panpipe_subworkflow_example.sh panpipe_explicit_deps_example.sh	\
 panpipe_telegram_morrison.sh panpipe_telegram.sh		\
-panpipe_telegram_jobsteps.sh panpipe_telegram_imperative.sh
+panpipe_telegram_jobsteps.sh panpipe_telegram_imperative.sh	\
+panpipe_host_process.sh panpipe_host_workflow.sh
 
 EXTRA_DIST= $(pplfiles_DATA)
