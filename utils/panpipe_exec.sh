@@ -844,9 +844,10 @@ get_processdeps()
 prepare_files_and_dirs_for_process()
 {
     # Read input parameters
-    local dirname=$1
-    local processname=$2
-    local process_spec=$3
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local process_spec=$4
 
     # Obtain process status
     local status=`get_process_status ${dirname} ${processname}`
@@ -855,10 +856,12 @@ prepare_files_and_dirs_for_process()
     # process that should not be executed, files and directories are
     # still prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
-        # Initialize array_size variable and populate array of shared directories
+        # Obtain information about files and directories for processes
+        # by calling define_opts_for_process
         define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
-        local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
-        local array_size=${#process_opts_array[@]}
+
+        # Obtain array size
+        local array_size=`get_numtasks_for_process "${processname}"`
 
         # Prepare files and directories for process
         create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
@@ -873,9 +876,12 @@ prepare_files_and_dirs_for_process()
 ########
 prepare_files_and_dirs_for_processes()
 {
+    echo "# Preparing files and directories for processes..." >&2
+
     # Read input parameters
-    local dirname=$1
-    local procspec_file=$2
+    local cmdline=$1
+    local dirname=$2
+    local procspec_file=$3
 
     local process_spec
     while read process_spec; do
@@ -883,9 +889,11 @@ prepare_files_and_dirs_for_processes()
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            prepare_files_and_dirs_for_process "${dirname}" "${processname}" "${process_spec}"
+            prepare_files_and_dirs_for_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}"
         fi
     done < "${procspec_file}"
+
+    echo "" >&2
 }
 
 ########
@@ -968,11 +976,9 @@ launch_pipeline_processes()
     local dirname=$2
     local procspec_file=$3
 
-    # Prepare files and directories for processes
-    prepare_files_and_dirs_for_processes "${dirname}" "${procspec_file}"
-
-    # process_id_list will store the process ids of the pipeline processes
-    local process_id_list=""
+    # process_id_list will store the process ids of the pipeline
+    # processes (it should be defined as a global variable)
+    process_id_list=""
 
     # Launch processes
     launch_processes "${cmdline}" "${dirname}" "${procspec_file}"
@@ -1056,8 +1062,9 @@ launch_pipeline_processes_debug()
     local dirname=$2
     local procspec_file=$3
 
-    # process_id_list will store the process ids of the pipeline processes
-    local process_id_list=""
+    # process_id_list will store the process ids of the pipeline
+    # processes (it should be defined as a global variable)
+    process_id_list=""
 
     # Read information about the processes to be executed
     local process_spec
@@ -1163,6 +1170,7 @@ else
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
                 builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
             else
+                prepare_files_and_dirs_for_processes "${command_line}" "${outd}" "${procspec_file}"
                 launch_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 wait_for_pipeline_processes "${outd}" "${procspec_file}" || exit 1
             fi
