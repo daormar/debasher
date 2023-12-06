@@ -120,7 +120,6 @@ host2_define_opts()
     # Save option list so as to execute process n times
     for id in $("${SEQ}" "${n_opt}"); do
         local specific_optlist=${optlist}
-        define_opt "-id" $id specific_optlist || return 1
         define_opt "-infile" "${host1_outdir}/${id}" specific_optlist || return 1
         save_opt_list specific_optlist
     done
@@ -130,7 +129,6 @@ host2_define_opts()
 host2()
 {
     # Initialize variables
-    local id=$(read_opt_value_from_func_args "-id" "$@")
     local infile=$(read_opt_value_from_func_args "-infile" "$@")
 
     # create file
