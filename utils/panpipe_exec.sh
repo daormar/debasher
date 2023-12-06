@@ -460,13 +460,15 @@ check_process_opts()
     show_opt_list_for_processes > "${out_opts_exh_file}"
 
     # Register fifo users
-    while read process_spec; do
-        # Extract process information
-        local processname=`extract_processname_from_process_spec "$process_spec"`
+    if pipeline_uses_fifos; then
+        while read process_spec; do
+            # Extract process information
+            local processname=`extract_processname_from_process_spec "$process_spec"`
 
-        # Register fifos
-        register_fifos_used_by_process "${processname}"
-    done < "${procspec_file}"
+            # Register fifos
+            register_fifos_used_by_process "${processname}"
+        done < "${procspec_file}"
+    fi
 
     # Print info about fifos
     show_pipeline_fifos > "${out_fifos_file}"
