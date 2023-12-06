@@ -64,6 +64,11 @@ print_script_body_slurm_sched()
     local post_funct=$8
     local process_opts=$9
 
+    # Write treatment for task idx
+    if [ ${num_scripts} -gt 1 ]; then
+        echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskidx ]; then"
+    fi
+
     # Deserialize process options
     echo "deserialize_args \"$(esc_dq "${process_opts}")\""
 
@@ -73,11 +78,6 @@ print_script_body_slurm_sched()
     fi
 
     echo "display_begin_process_message"
-
-    # Write treatment for task idx
-    if [ ${num_scripts} -gt 1 ]; then
-        echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskidx ]; then"
-    fi
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
@@ -107,6 +107,8 @@ print_script_body_slurm_sched()
     local sign_process_completion_cmd=`get_signal_process_completion_cmd ${dirname} ${processname} ${num_scripts}`
     echo "${SRUN} ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 
+    echo "display_end_process_message"
+
     # Close if statement
     if [ "${num_scripts}" -gt 1 ]; then
         echo "fi"
@@ -116,7 +118,7 @@ print_script_body_slurm_sched()
 ########
 print_script_foot_slurm_sched()
 {
-    echo "display_end_process_message"
+    :
 }
 
 ########
