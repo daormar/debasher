@@ -170,6 +170,7 @@ exclude_other_vars()
                          othervars["FIFO_USERS"]=1
                          othervars["PIPELINE_FIFOS"]=1
                          othervars["PIPELINE_FIFOS_DEF_OPTS"]=1
+                         othervars["PROCESS_OPT_LIST"]=1 # This variable is not necessary and may become huge when working with arrays
                         }
                         {
                          if(!($1 in othervars)) printf"%s\n",$0
