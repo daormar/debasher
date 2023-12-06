@@ -77,7 +77,7 @@ host1()
     local id=$(read_opt_value_from_func_args "-id" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # create file
+    # Create file
     hostname > "${outf}"
 }
 
@@ -87,8 +87,10 @@ host1_reset_outfiles()
     # Initialize variables
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    #  auxiliary file
-    rm "${outf}"
+    # Remove output file
+    if [ -f "${outf}" ]; then
+        rm "${outf}"
+    fi
 }
 
 ########
