@@ -64,6 +64,7 @@ SUFFIXES= .sh .py .r .R
 	echo "TEE=\"$(TEE)\"" >> $@
 	echo "GZIP=\"$(GZIP)\"" >> $@
 	echo "SLEEP=\"$(SLEEP)\"" >> $@
+	echo "SEQ=\"$(SEQ)\"" >> $@
 	echo "DOCKER=\"$(DOCKER)\"" >> $@
 	echo "QSUB=\"$(QSUB)\"" >> $@
 	echo "QSUB_WORKS=\"$(QSUB_WORKS)\"" >> $@
