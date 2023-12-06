@@ -54,23 +54,21 @@ print_script_header_slurm_sched()
 print_script_body_slurm_sched()
 {
     # Initialize variables
-    local num_scripts=$1
-    local dirname=$2
-    local processname=$3
-    local taskidx=$4
-    local skip_funct=$5
-    local reset_funct=$6
-    local funct=$7
-    local post_funct=$8
-    local process_opts=$9
-
-    # Write treatment for task idx
-    if [ ${num_scripts} -gt 1 ]; then
-        echo "if [ \${SLURM_ARRAY_TASK_ID} -eq $taskidx ]; then"
-    fi
+    local dirname=$1
+    local processname=$2
+    local skip_funct=$3
+    local reset_funct=$4
+    local funct=$5
+    local post_funct=$6
+    local opt_array_name=$7
+    local opt_array_size=$8
 
     # Deserialize process options
-    echo "deserialize_args \"$(esc_dq "${process_opts}")\""
+    if [ "${opt_array_size}" -gt 1 ]; then
+        echo "deserialize_args \"\${${opt_array_name}[SLURM_ARRAY_TASK_ID-1]}\""
+    else
+        echo "deserialize_args \"\${${opt_array_name}[0]}\""
+    fi
 
     # Write skip function if it was provided
     if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
@@ -81,7 +79,7 @@ print_script_body_slurm_sched()
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
-        if [ ${num_scripts} -eq 1 ]; then
+        if [ ${opt_array_size} -eq 1 ]; then
             echo "default_reset_outfiles_for_process \"$(esc_dq "${dirname}")\" ${processname}"
         else
             echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
@@ -104,21 +102,14 @@ print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
-    local sign_process_completion_cmd=`get_signal_process_completion_cmd ${dirname} ${processname} ${num_scripts}`
+    local sign_process_completion_cmd=`get_signal_process_completion_cmd ${dirname} ${processname} ${opt_array_size}`
     echo "${SRUN} ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
-
-    echo "display_end_process_message"
-
-    # Close if statement
-    if [ "${num_scripts}" -gt 1 ]; then
-        echo "fi"
-    fi
 }
 
 ########
 print_script_foot_slurm_sched()
 {
-    :
+    echo "display_end_process_message"
 }
 
 ########
@@ -132,9 +123,8 @@ create_slurm_script()
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
-    local opts_array_name=$3[@]
-    local opts_array=("${!opts_array_name}")
-    local num_scripts=${#opts_array[@]}
+    local opt_array_name=$3
+    local opt_array_size=$4
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -144,18 +134,10 @@ create_slurm_script()
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
 
     # Print header
-    print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${num_scripts}" >> "${fname}" || return 1
+    print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
-    # Iterate over options array
-    local lineno=1
-    local process_opts
-    for process_opts in "${opts_array[@]}"; do
-
-        print_script_body_slurm_sched "${num_scripts}" "${dirname}" "${processname}" "${lineno}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${process_opts}" >> "${fname}" || return 1
-
-        lineno=$((lineno + 1))
-
-    done
+    # Print body
+    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_name}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print foot
     print_script_foot_slurm_sched >> "${fname}" || return 1

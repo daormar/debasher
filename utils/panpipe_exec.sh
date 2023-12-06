@@ -903,11 +903,11 @@ launch_process()
 
     # Decide whether the process should be executed
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
-        # Create script
+        # Create script (after calling define_opts_for_process, options
+        # get stored in CURRENT_PROCESS_OPT_LIST array)
         define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
-        local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
-        local array_size=${#process_opts_array[@]}
-        create_script "${dirname}" ${processname} "process_opts_array"
+        local array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
+        create_script "${dirname}" "${processname}" "CURRENT_PROCESS_OPT_LIST" "${array_size}"
 
         # Archive script
         archive_script "${dirname}" "${processname}"
