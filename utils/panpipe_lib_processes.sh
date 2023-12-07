@@ -374,6 +374,18 @@ find_dependency_for_process()
 }
 
 ########
+create_scripts_dir_for_process()
+{
+    local dirname=$1
+    local processname=$2
+
+    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    if [ ! -d "${scriptsdir}" ]; then
+        "${MKDIR}" -p "${scriptsdir}" || return 1
+    fi
+}
+
+########
 get_ppl_scripts_dir_for_process()
 {
     local dirname=$1
@@ -382,7 +394,7 @@ get_ppl_scripts_dir_for_process()
     # Get base scripts dir
     scriptsdir=`get_ppl_scripts_dir_given_basedir "${dirname}"`
 
-    echo "${scriptsdir}"
+    echo "${scriptsdir}/${processname}"
 }
 
 ########
