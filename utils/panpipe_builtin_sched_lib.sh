@@ -1324,7 +1324,8 @@ builtin_sched_prepare_files_and_dirs_for_process()
         local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
         local array_size=${#process_opts_array[@]}
 
-        # Prepare files for process
+        # Prepare files and directories for process
+        create_scripts_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating scripts directory for process" >&2 ; return 1; }
         create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
         builtin_sched_clean_process_log_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
