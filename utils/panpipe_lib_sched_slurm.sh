@@ -2,6 +2,12 @@
 # SCHEDULER FUNCTIONS RELATED TO SLURM #
 ########################################
 
+#############
+# CONSTANTS #
+#############
+
+SLURM_SCRIPT_INPUT_FILE_SUFFIX=".opts"
+
 ########
 get_slurm_version()
 {
@@ -48,6 +54,7 @@ print_script_header_slurm_sched()
     echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
+    echo "source ${fname}${SLURM_SCRIPT_INPUT_FILE_SUFFIX} || return 1"
 }
 
 ########
@@ -132,6 +139,9 @@ create_slurm_script()
 
     # Write environment variables
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
+
+    # Write options array to file
+    declare -p "${opt_array_name}" > "${fname}${SLURM_SCRIPT_INPUT_FILE_SUFFIX}" || return 1
 
     # Print header
     print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
