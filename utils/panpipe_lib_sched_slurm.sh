@@ -105,7 +105,7 @@ print_script_body_slurm_sched()
         echo "${post_funct} \"\${DESERIALIZED_ARGS[@]}\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
-    # Return if function to execute failed
+    # Return if function to be executed failed
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
