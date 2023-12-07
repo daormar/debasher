@@ -859,6 +859,8 @@ prepare_files_and_dirs_for_process()
     local processname=$3
     local process_spec=$4
 
+    echo "Preparing files and directories for process ${processname}" >&2
+
     # Obtain process status
     local status=`get_process_status ${dirname} ${processname}`
 
@@ -902,6 +904,8 @@ prepare_files_and_dirs_for_processes()
             prepare_files_and_dirs_for_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}"
         fi
     done < "${procspec_file}"
+
+    echo "Preparation complete" >&2
 
     echo "" >&2
 }
