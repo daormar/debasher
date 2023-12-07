@@ -142,7 +142,7 @@ get_task_array_list()
 
     if [ -f "${finished_filename}" ]; then
         # Some jobs were completed, return list containing pending ones
-        get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}
+        get_list_of_pending_tasks_in_array "${dirname}" "${processname}" "${array_size}"
     else
         # No jobs were completed, return list containing all of them
         echo "1-${array_size}"
@@ -176,7 +176,7 @@ clean_process_log_files()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            clean_process_log_files_slurm "$dirname" $processname $array_size
+            clean_process_log_files_slurm "$dirname" "$processname" "$array_size"
             ;;
     esac
 }
@@ -494,7 +494,7 @@ process_is_unfinished_but_runnable()
             return 1
             ;;
         ${BUILTIN_SCHEDULER})
-            process_is_unfinished_but_runnable_builtin_sched "${dirname}" ${processname}
+            process_is_unfinished_but_runnable_builtin_sched "${dirname}" "${processname}"
             exit_code=$?
             return ${exit_code}
         ;;
@@ -514,7 +514,7 @@ get_elapsed_time_from_logfile()
         local finish_date_secs=`date -d "${start_date}" +%s`
         echo $(( start_date_secs - finish_date_secs ))
     else
-        echo ${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
+        echo "${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"
     fi
 }
 
@@ -529,10 +529,10 @@ get_elapsed_time_for_process()
     local log_filename
     case $sched in
         ${SLURM_SCHEDULER})
-            get_elapsed_time_for_process_slurm "${dirname}" ${processname}
+            get_elapsed_time_for_process_slurm "${dirname}" "${processname}"
             ;;
         ${BUILTIN_SCHEDULER})
-            get_elapsed_time_for_process_builtin "${dirname}" ${processname}
+            get_elapsed_time_for_process_builtin "${dirname}" "${processname}"
             ;;
     esac
 }
@@ -546,23 +546,23 @@ get_process_status()
 
     # Check if process should be reexecuted (REEXEC status has the
     # highest priority level)
-    if process_should_be_reexec $processname; then
+    if process_should_be_reexec "$processname"; then
         echo "${REEXEC_PROCESS_STATUS}"
         return ${REEXEC_PROCESS_EXIT_CODE}
     fi
 
     # Check that script file for process was created
     if [ -f "${script_filename}" ]; then
-        if process_is_in_progress "$dirname" $processname; then
+        if process_is_in_progress "$dirname" "$processname"; then
             echo "${INPROGRESS_PROCESS_STATUS}"
             return ${INPROGRESS_PROCESS_EXIT_CODE}
         fi
 
-        if process_is_finished "$dirname" $processname; then
+        if process_is_finished "$dirname" "$processname"; then
             echo "${FINISHED_PROCESS_STATUS}"
             return ${FINISHED_PROCESS_EXIT_CODE}
         else
-            if process_is_unfinished_but_runnable "$dirname" $processname; then
+            if process_is_unfinished_but_runnable "$dirname" "$processname"; then
                 echo "${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}"
                 return ${UNFINISHED_BUT_RUNNABLE_PROCESS_EXIT_CODE}
             fi
