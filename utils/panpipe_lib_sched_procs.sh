@@ -29,12 +29,9 @@ get_processid_filename()
 ########
 get_array_taskid_filename()
 {
-    local dirname=$1
+    local scriptsdir=$1
     local processname=$2
     local idx=$3
-
-    # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}_${idx}.${ARRAY_TASKID_FEXT}"
 }
@@ -45,6 +42,9 @@ get_array_taskid()
     local dirname=$1
     local processname=$2
     local idx=$3
+
+    # Get scripts dir
+    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
 
     file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
     if [ -f "${file}" ]; then
@@ -198,9 +198,12 @@ clean_process_id_files()
         local pending_tasks=`get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
+            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
             for idx in ${pending_tasks_blanks}; do
-                local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
-                rm -f "${array_taskid_file}"
+                local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
+                if [ -f "${array_taskid_file}" ]; then
+                    rm "${array_taskid_file}"
+                fi
             done
         fi
     fi

@@ -817,12 +817,9 @@ get_process_log_signcomp_filename_slurm()
 ########
 get_task_log_filename_slurm()
 {
-    local dirname=$1
+    local scriptsdir=$1
     local processname=$2
     local taskidx=$3
-
-    # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
 }
@@ -834,8 +831,11 @@ get_task_last_attempt_logf_slurm()
     local processname=$2
     local taskidx=$3
 
+    # Get scripts dir
+    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+
     # Obtain number of log files
-    local logfname=`get_task_log_filename_slurm "$dirname" $processname $taskidx`
+    local logfname=`get_task_log_filename_slurm "$scriptsdir" "$processname" "$taskidx"`
     local numlogf=0
     for f in "${logfname}*"; do
         numlogf=$((numlogf + 1))
@@ -872,9 +872,12 @@ clean_process_log_files_slurm()
         local pending_tasks=`get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
+            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
             for idx in ${pending_tasks_blanks}; do
-                local slurm_task_log_filename=`get_task_log_filename_slurm "${dirname}" ${processname} ${idx}`
-                rm -f "${slurm_task_log_filename}*"
+                local slurm_task_log_filename=`get_task_log_filename_slurm "${scriptsdir}" "${processname}" "${idx}"`
+                if [ -f "${slurm_task_log_filename}" ]; then
+                    rm "${slurm_task_log_filename}"
+                fi
             done
         fi
     fi
