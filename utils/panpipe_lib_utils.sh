@@ -170,6 +170,7 @@ exclude_other_vars()
                          othervars["FIFO_USERS"]=1
                          othervars["PIPELINE_FIFOS"]=1
                          othervars["PIPELINE_FIFOS_DEF_OPTS"]=1
+                         othervars["CURRENT_PROCESS_OPT_LIST"]=1 # This variable may become huge when working with arrays and is loaded from a separate file
                          othervars["PROCESS_OPT_LIST"]=1 # This variable is not necessary and may become huge when working with arrays
                         }
                         {
