@@ -634,3 +634,24 @@ get_module_funcname()
     local mod_function="${modname}${method_name}"
     echo ${mod_function}
 }
+
+########
+print_array_elems()
+{
+    local arr_name=$1
+    local arr_size=$2
+
+    for ((i=0; i<$array_size; i++)); do
+        local element="${arr_name}[$i]"
+        echo "${!element}"
+    done
+}
+
+########
+get_nth_file_line()
+{
+    local filename=$1
+    local n=$2
+
+    "${HEAD}" -n $n "${filename}" | "${TAIL}" -n 1
+}
