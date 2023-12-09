@@ -1238,51 +1238,59 @@ builtin_sched_exec_processes()
 }
 
 ########
-builtin_sched_clean_process_log_files()
+builtin_sched_clean_process_files()
 {
-    local dirname=$1
-    local processname=$2
-    local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
+    clean_process_id_files_non_array()
+    {
+        local dirname=$1
+        local processname=$2
 
-    # Remove log files depending on array size
-    if [ ${array_size} -eq 1 ]; then
+        local processid_file=`get_processid_filename "${dirname}" ${processname}`
+        rm -f "${processid_file}"
+    }
+
+    clean_process_id_files_array()
+    {
+        local scriptsdir=$1
+        local processname=$2
+        local idx=$3
+
+        local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
+        if [ -f "${array_taskid_file}" ]; then
+            rm "${array_taskid_file}"
+        fi
+    }
+
+    clean_process_log_files_non_array()
+    {
+        local dirname=$1
+        local processname=$2
+
         local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
         local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
         rm -f "${builtin_log_filename}"
-    else
-        # If array size is greater than 1, remove only those log files
-        # related to unfinished array tasks
-        local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${processname}`
-        if [ "${pending_tasks}" != "" ]; then
-            # Store string of pending tasks into an array
-            local pending_tasks_array
-            IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
+    }
 
-            # Iterate over pending tasks
-            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
-            local idx
-            for idx in "${pending_tasks_array[@]}"; do
-                local builtin_task_log_filename=`get_task_log_filename_builtin "${scriptsdir}" ${processname} ${idx}`
-                if [ -f "${builtin_task_log_filename}" ]; then
-                    rm "${builtin_task_log_filename}"
-                fi
-            done
+    clean_process_log_files_array()
+    {
+        local scriptsdir=$1
+        local processname=$2
+        local idx=$3
+
+        local builtin_task_log_filename=`get_task_log_filename_builtin "${scriptsdir}" ${processname} ${idx}`
+        if [ -f "${builtin_task_log_filename}" ]; then
+            rm "${builtin_task_log_filename}"
         fi
-    fi
-}
+    }
 
-########
-builtin_sched_clean_process_id_files()
-{
     local dirname=$1
     local processname=$2
-    local script_filename=`get_script_filename "${dirname}" ${processname}`
     local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        local processid_file=`get_processid_filename "${dirname}" ${processname}`
-        rm -f "${processid_file}"
+        clean_process_id_files_non_array "${dirname}" "${processname}"
+        clean_process_log_files_non_array "${dirname}" "${processname}"
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
@@ -1296,10 +1304,8 @@ builtin_sched_clean_process_id_files()
             local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
             local idx
             for idx in "${pending_tasks_array[@]}"; do
-                local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
-                if [ -f "${array_taskid_file}" ]; then
-                    rm "${array_taskid_file}"
-                fi
+                clean_process_id_files_array "${scriptsdir}" "${processname}" "${idx}"
+                clean_process_log_files_array "${scriptsdir}" "${processname}" "${idx}"
             done
         fi
     fi
@@ -1324,8 +1330,7 @@ builtin_sched_prepare_files_and_dirs_for_process()
         create_scripts_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating scripts directory for process" >&2 ; return 1; }
         create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
-        builtin_sched_clean_process_log_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
-        builtin_sched_clean_process_id_files "${dirname}" ${processname} || { echo "Error when cleaning id files for process" >&2 ; return 1; }
+        builtin_sched_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         prepare_fifos_owned_by_process ${processname}
 
         # Create output directory
