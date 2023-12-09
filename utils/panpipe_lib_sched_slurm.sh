@@ -48,12 +48,12 @@ print_script_header_slurm_sched()
     local fname=$1
     local dirname=$2
     local processname=$3
-    local num_scripts=$4
+    local num_tasks=$4
 
     echo "PANPIPE_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
     echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
-    echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
+    echo "PANPIPE_NUM_TASKS=${num_tasks}"
 }
 
 ########
@@ -66,9 +66,8 @@ print_script_body_slurm_sched()
     local reset_funct=$4
     local funct=$5
     local post_funct=$6
-    local opt_array_name=$7
-    local opt_array_size=$8
-    local opts_fname=$9
+    local opt_array_size=$7
+    local opts_fname=$8
 
     # Retrieve and deserialize process options
     if [ "${opt_array_size}" -gt 1 ]; then
@@ -88,7 +87,7 @@ print_script_body_slurm_sched()
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
-        if [ ${opt_array_size} -eq 1 ]; then
+        if [ "${opt_array_size}" -eq 1 ]; then
             echo "default_reset_outfiles_for_process \"$(esc_dq "${dirname}")\" ${processname}"
         else
             echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
@@ -111,7 +110,7 @@ print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
-    local sign_process_completion_cmd=`get_signal_process_completion_cmd ${dirname} ${processname} ${opt_array_size}`
+    local sign_process_completion_cmd=`get_signal_process_completion_cmd "${dirname}" "${processname}" "${opt_array_size}"`
     echo "${SRUN} ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 }
 
@@ -150,7 +149,7 @@ create_slurm_script()
     print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
-    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_name}" "${opt_array_size}" "${opts_fname}" >> "${fname}" || return 1
+    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" "${opts_fname}" >> "${fname}" || return 1
 
     # Print foot
     print_script_foot_slurm_sched >> "${fname}" || return 1
@@ -864,13 +863,34 @@ get_task_last_attempt_logf_slurm()
 }
 
 ########
-clean_process_log_files_slurm()
+clean_process_files_slurm()
 {
-    local dirname=$1
-    local processname=$2
-    local array_size=$3
-    # Remove log files depending on array size
-    if [ ${array_size} -eq 1 ]; then
+    clean_process_id_files_non_array()
+    {
+        local dirname=$1
+        local processname=$2
+
+        local processid_file=`get_processid_filename "${dirname}" ${processname}`
+        rm -f "${processid_file}"
+    }
+
+    clean_process_id_files_array()
+    {
+        local scriptsdir=$1
+        local processname=$2
+        local idx=$3
+
+        local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
+        if [ -f "${array_taskid_file}" ]; then
+            rm "${array_taskid_file}"
+        fi
+    }
+
+    clean_process_log_files_non_array()
+    {
+        local dirname=$1
+        local processname=$2
+
         local slurm_log_filename=`get_process_log_filename_slurm "${dirname}" ${processname}`
         rm -f "${slurm_log_filename}*"
         local slurm_log_preverif=`get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
@@ -879,18 +899,42 @@ clean_process_log_files_slurm()
         rm -f "${slurm_log_verif}"
         local slurm_log_signcomp=`get_process_log_signcomp_filename_slurm "${dirname}" ${processname}`
         rm -f "${slurm_log_signcomp}"
+    }
+
+    clean_process_log_files_array()
+    {
+        local scriptsdir=$1
+        local processname=$2
+        local idx=$3
+
+        local slurm_task_log_filename=`get_task_log_filename_slurm "${scriptsdir}" "${processname}" "${idx}"`
+        if [ -f "${slurm_task_log_filename}" ]; then
+            rm "${slurm_task_log_filename}"
+        fi
+    }
+
+    local dirname=$1
+    local processname=$2
+    local array_size=$3
+    # Remove log files depending on array size
+    if [ ${array_size} -eq 1 ]; then
+        clean_process_id_files_non_array "${dirname}" "${processname}"
+        clean_process_log_files_non_array "${dirname}" "${processname}"
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
         local pending_tasks=`get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
-            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
+            # Store string of pending tasks into an array
+            local pending_tasks_array
+            IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
+
+            # Iterate over pending tasks
             local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
-            for idx in ${pending_tasks_blanks}; do
-                local slurm_task_log_filename=`get_task_log_filename_slurm "${scriptsdir}" "${processname}" "${idx}"`
-                if [ -f "${slurm_task_log_filename}" ]; then
-                    rm "${slurm_task_log_filename}"
-                fi
+            local idx
+            for idx in "${pending_tasks_array[@]}"; do
+                clean_process_id_files_array "${scriptsdir}" "${processname}" "${idx}"
+                clean_process_log_files_array "${scriptsdir}" "${processname}" "${idx}"
             done
         fi
     fi

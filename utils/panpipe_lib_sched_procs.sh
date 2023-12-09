@@ -167,7 +167,7 @@ update_process_completion_signal()
 }
 
 ########
-clean_process_log_files()
+clean_process_files()
 {
     local dirname=$1
     local processname=$2
@@ -176,37 +176,9 @@ clean_process_log_files()
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            clean_process_log_files_slurm "$dirname" "$processname" "$array_size"
+            clean_process_files_slurm "$dirname" "$processname" "$array_size"
             ;;
     esac
-}
-
-########
-clean_process_id_files()
-{
-    local dirname=$1
-    local processname=$2
-    local array_size=$3
-
-    # Remove log files depending on array size
-    if [ ${array_size} -eq 1 ]; then
-        local processid_file=`get_processid_filename "${dirname}" ${processname}`
-        rm -f "${processid_file}"
-    else
-        # If array size is greater than 1, remove only those log files
-        # related to unfinished array tasks
-        local pending_tasks=`get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
-        if [ "${pending_tasks}" != "" ]; then
-            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
-            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
-            for idx in ${pending_tasks_blanks}; do
-                local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
-                if [ -f "${array_taskid_file}" ]; then
-                    rm "${array_taskid_file}"
-                fi
-            done
-        fi
-    fi
 }
 
 ########
