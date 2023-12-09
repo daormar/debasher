@@ -25,7 +25,7 @@
 #################
 
 ########
-panpipe_array_example_shared_dirs()
+panpipe_host_process_shared_dirs()
 {
     :
 }
@@ -75,20 +75,11 @@ host1()
     # Initialize variables
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
+    # Show host name
+    hostname
+
     # Create file
-    hostname > "${outf}"
-}
-
-########
-host1_reset_outfiles()
-{
-    # Initialize variables
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-    # Remove output file
-    if [ -f "${outf}" ]; then
-        rm "${outf}"
-    fi
+    echo -n "" > "${outf}"
 }
 
 ##################################

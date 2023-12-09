@@ -25,7 +25,7 @@
 #################
 
 ########
-panpipe_array_example_shared_dirs()
+panpipe_host_workflow_shared_dirs()
 {
     :
 }
@@ -77,20 +77,11 @@ host1()
     local id=$(read_opt_value_from_func_args "-id" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
+    # Show host name
+    hostname
+
     # Create file
-    hostname > "${outf}"
-}
-
-########
-host1_reset_outfiles()
-{
-    # Initialize variables
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-    # Remove output file
-    if [ -f "${outf}" ]; then
-        rm "${outf}"
-    fi
+    echo -n "" > "${outf}"
 }
 
 ########
@@ -131,7 +122,7 @@ host2()
     # Initialize variables
     local infile=$(read_opt_value_from_func_args "-infile" "$@")
 
-    # create file
+    # Show host name
     hostname
 }
 
