@@ -935,23 +935,22 @@ launch_process()
 
     # Decide whether the process should be executed
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
-        # Create script (after calling define_opts_for_process, options
-        # get stored in CURRENT_PROCESS_OPT_LIST array)
-        define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
-        local array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
-        create_script "${dirname}" "${processname}" "CURRENT_PROCESS_OPT_LIST" "${array_size}"
+        # Create script
+        local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
+        local opt_array_size=`get_numtasks_for_process "${processname}"`
+        create_script "${dirname}" "${processname}" "${opts_fname}" "${opt_array_size}"
 
         # Archive script
         archive_script "${dirname}" "${processname}"
 
         # Launch process
-        local task_array_list=`get_task_array_list "${dirname}" ${processname} ${array_size}`
-        local processdeps_spec=`extract_processdeps_from_process_spec "$process_spec"`
-        local processdeps=`get_processdeps "${process_id_list}" ${processdeps_spec}`
-        launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
+        local task_array_list=`get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
+        local processdeps_spec=`extract_processdeps_from_process_spec "${process_spec}"`
+        local processdeps=`get_processdeps "${process_id_list}" "${processdeps_spec}"`
+        launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
-        local primary_id=`get_primary_id ${launch_outvar}`
+        local primary_id=`get_primary_id "${launch_outvar}"`
         PIPE_EXEC_PROCESS_IDS[${processname}]=${primary_id}
         process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
 
@@ -961,9 +960,9 @@ launch_process()
         # If process is in progress, its id should be retrieved so as to
         # correctly express dependencies
         if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
-            local sid_info=`read_process_id_info_from_file "${dirname}" ${processname}` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
-            local global_id=`get_global_id ${sid_info}`
-            PIPE_EXEC_PROCESS_IDS[${processname}]=${global_id}
+            local sid_info=`read_process_id_info_from_file "${dirname}" "${processname}"` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
+            local global_id=`get_global_id "${sid_info}"`
+            PIPE_EXEC_PROCESS_IDS["${processname}"]=${global_id}
             process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
         fi
     fi

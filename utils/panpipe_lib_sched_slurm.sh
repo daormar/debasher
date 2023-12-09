@@ -125,9 +125,8 @@ create_slurm_script()
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
-    local opt_array_name=$3
+    local opts_fname=$3
     local opt_array_size=$4
-    local opts_fname="${fname}.${SCHED_SCRIPT_INPUT_FEXT}"
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -135,9 +134,6 @@ create_slurm_script()
 
     # Write environment variables
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
-
-    # Write option array to file (line by line)
-    print_array_elems "${opt_array_name}" "${opt_array_size}" > "${opts_fname}"
 
     # Print header
     print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1

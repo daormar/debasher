@@ -1050,9 +1050,8 @@ builtin_sched_create_script()
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
-    local opt_array_name=$3
+    local opts_fname=$3
     local opt_array_size=$4
-    local opts_fname="${fname}.${SCHED_SCRIPT_INPUT_FEXT}"
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -1060,9 +1059,6 @@ builtin_sched_create_script()
 
     # Write environment variables
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
-
-    # Write option array to file (line by line)
-    print_array_elems "${opt_array_name}" "${opt_array_size}" > "${opts_fname}"
 
     # Print header
     builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
@@ -1152,10 +1148,10 @@ builtin_sched_execute_process()
     echo "PROCESS: ${processname} (TASKIDX: ${taskidx}) ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Create script
-    define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-    local array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
+    local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
+    local opt_array_size=`get_numtasks_for_process "${processname}"`
     if [ "${launched_tasks}" = "" ]; then
-        builtin_sched_create_script "${dirname}" "${processname}" "CURRENT_PROCESS_OPT_LIST" "${array_size}"
+        builtin_sched_create_script "${dirname}" "${processname}" "${opts_fname}" "${opt_array_size}"
     fi
 
     # Archive script

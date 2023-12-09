@@ -90,13 +90,13 @@ create_script()
     # Init variables
     local dirname=$1
     local processname=$2
-    local opt_array_name=$3
+    local opts_fname=$3
     local opt_array_size=$4
 
     local sched=`determine_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script "${dirname}" "$processname" "${opt_array_name}" "${opt_array_size}"
+            create_slurm_script "${dirname}" "$processname" "${opts_fname}" "${opt_array_size}"
             ;;
     esac
 }
