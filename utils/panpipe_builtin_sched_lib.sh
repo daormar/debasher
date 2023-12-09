@@ -1052,7 +1052,7 @@ builtin_sched_create_script()
     local post_funct=`get_post_funcname ${processname}`
     local opt_array_name=$3
     local opt_array_size=$4
-    local opts_fname=${fname}${SLURM_SCRIPT_INPUT_FILE_SUFFIX}
+    local opts_fname="${fname}.${SCHED_SCRIPT_INPUT_FEXT}"
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
