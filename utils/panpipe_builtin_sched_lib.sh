@@ -145,6 +145,7 @@ builtin_sched_init_process_info()
             if [ $array_size -gt 1 ]; then
                 full_throttle_cpus=$((cpus * sched_throttle))
             fi
+
             # Check full_throttle_cpus value
             builtin_sched_cpus_within_limit ${full_throttle_cpus} || { echo "Error: number of cpus for process $processname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
@@ -936,40 +937,34 @@ builtin_sched_print_script_header()
     local fname=$1
     local dirname=$2
     local processname=$3
-    local num_scripts=$4
+    local num_tasks=$4
 
     echo "PANPIPE_SCRIPT_FILENAME=\"${fname}\""
     echo "PANPIPE_DIR_NAME=\"${dirname}\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
-    echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
+    echo "PANPIPE_NUM_TASKS=${num_tasks}"
     echo "builtin_sched_print_pid_to_file"
-}
-
-########
-builtin_sched_get_task_array_task_varname()
-{
-    local arrayname=$1
-    local taskidx=$2
-
-    echo "BUILTIN_SCHED_TASK_ARRAY_${arrayname}_${taskidx}"
 }
 
 ########
 builtin_sched_execute_funct_plus_postfunct()
 {
-    local num_scripts=$1
-    local dirname=$2
-    local processname=$3
-    local taskidx=$4
-    local skip_funct=$5
-    local reset_funct=$6
-    local funct=$7
-    local post_funct=$8
-    local process_opts=$9
+    local dirname=$1
+    local processname=$2
+    local skip_funct=$3
+    local reset_funct=$4
+    local funct=$5
+    local post_funct=$6
+    local opt_array_size=$7
+    local opts_fname=$8
+    local taskidx=$9
+
+    # Get serialized arguments
+    local sargs=`get_nth_file_line "${opts_fname}" "${taskidx}"`
 
     # Convert serialized process options to array (result is placed into
     # the DESERIALIZED_ARGS variable)
-    deserialize_args "${process_opts}"
+    deserialize_args "${sargs}"
 
     # Execute process skip function if it was provided
     if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
@@ -980,10 +975,10 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
-        if [ ${num_scripts} -eq 1 ]; then
-            default_reset_outfiles_for_process "${dirname}" ${processname}
+        if [ "${opt_array_size}" -eq 1 ]; then
+            default_reset_outfiles_for_process "${dirname}" "${processname}"
         else
-            default_reset_outfiles_for_process_array "${dirname}" ${processname} ${taskidx}
+            default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${taskidx}"
         fi
     else
         ${reset_funct} "${DESERIALIZED_ARGS[@]}"
@@ -1009,7 +1004,7 @@ builtin_sched_execute_funct_plus_postfunct()
     fi
 
     # Signal process completion
-    signal_process_completion "${dirname}" "${processname}" "${taskidx}" "${num_scripts}" || return 1
+    signal_process_completion "${dirname}" "${processname}" "${taskidx}" "${opt_array_size}" || return 1
 
     display_end_process_message
 }
@@ -1018,34 +1013,23 @@ builtin_sched_execute_funct_plus_postfunct()
 builtin_sched_print_script_body()
 {
     # Initialize variables
-    local num_scripts=$1
-    local dirname=$2
-    local processname=$3
-    local taskidx=$4
-    local skip_funct=$5
-    local reset_funct=$6
-    local funct=$7
-    local post_funct=$8
-    local process_opts=$9
-
-    # Write treatment for task id
-    if [ ${num_scripts} -gt 1 ]; then
-        local varname=`builtin_sched_get_task_array_task_varname ${processname} ${taskidx}`
-        echo "if [ \"\${${varname}}\" = 1 ]; then"
-    fi
+    local dirname=$1
+    local processname=$2
+    local skip_funct=$3
+    local reset_funct=$4
+    local funct=$5
+    local post_funct=$6
+    local opt_array_size=$7
+    local opts_fname=$8
 
     # Write function to be executed
-    if [ ${num_scripts} -gt 1 ]; then
-        local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${processname} ${taskidx}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${skip_funct} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_task_log_filename}")\" 2>&1"
+    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    if [ "${opt_array_size}" -gt 1 ]; then
+        echo "builtin_task_log_filename=\`get_task_log_filename_builtin \"$(esc_dq "${scriptsdir}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
+        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"$(esc_dq "${opts_fname}")\" \${BUILTIN_ARRAY_TASK_ID} > \${builtin_task_log_filename} 2>&1"
     else
-        local builtin_log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
-        echo "builtin_sched_execute_funct_plus_postfunct ${num_scripts} \"$(esc_dq "${dirname}")\" ${processname} ${taskidx} ${skip_funct} ${reset_funct} ${funct} ${post_funct} \"$(esc_dq "${process_opts}")\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
-    fi
-
-    # Close if statement
-    if [ ${num_scripts} -gt 1 ]; then
-        echo "fi"
+        local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
+        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"$(esc_dq "${opts_fname}")\" \${BUILTIN_ARRAY_TASK_ID} > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 }
 
@@ -1066,9 +1050,9 @@ builtin_sched_create_script()
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
-    local opts_array_name=$3[@]
-    local opts_array=("${!opts_array_name}")
-    local num_scripts=${#opts_array[@]}
+    local opt_array_name=$3
+    local opt_array_size=$4
+    local opts_fname=${fname}${SLURM_SCRIPT_INPUT_FILE_SUFFIX}
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -1077,19 +1061,14 @@ builtin_sched_create_script()
     # Write environment variables
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
 
+    # Write option array to file (line by line)
+    print_array_elems "${opt_array_name}" "${opt_array_size}" > "${opts_fname}"
+
     # Print header
-    builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${num_scripts}" >> "${fname}" || return 1
+    builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
-    # Iterate over options array
-    local lineno=1
-    local process_opts
-    for process_opts in "${opts_array[@]}"; do
-
-        builtin_sched_print_script_body "${num_scripts}" "${dirname}" "${processname}" "${lineno}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${process_opts}" >> "${fname}" || return 1
-
-        lineno=$((lineno + 1))
-
-    done
+    # Print body
+    builtin_sched_print_script_body "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" "${opts_fname}" >> "${fname}" || return 1
 
     # Print foot
     builtin_sched_print_script_foot >> "${fname}" || return 1
@@ -1125,9 +1104,10 @@ builtin_sched_launch()
     local file=`get_script_filename "${dirname}" ${processname}`
 
     # Enable execution of specific task id
-    if [ ${taskidx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        local task_varname=`builtin_sched_get_task_array_task_varname ${processname} ${taskidx}`
-        export ${task_varname}=1
+    if [ ${taskidx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
+        export BUILTIN_ARRAY_TASK_ID=1
+    else
+        export BUILTIN_ARRAY_TASK_ID=${taskidx}
     fi
 
     # Set variable indicating name of file storing PID
@@ -1149,7 +1129,7 @@ builtin_sched_launch()
 
     # Unset variables
     if [ ${taskidx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        unset ${task_varname}
+        unset "${task_varname}"
     fi
     unset BUILTIN_SCHED_PID_FILENAME
 }
@@ -1173,20 +1153,19 @@ builtin_sched_execute_process()
 
     # Create script
     define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-    local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
-    local array_size=${#process_opts_array[@]}
+    local array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
     if [ "${launched_tasks}" = "" ]; then
-        builtin_sched_create_script "${dirname}" ${processname} "process_opts_array"
+        builtin_sched_create_script "${dirname}" "${processname}" "CURRENT_PROCESS_OPT_LIST" "${array_size}"
     fi
 
     # Archive script
     if [ "${launched_tasks}" = "" ]; then
-        archive_script "${dirname}" ${processname}
+        archive_script "${dirname}" "${processname}"
     fi
 
     # Launch script
     local task_array_list=${taskidx}
-    builtin_sched_launch "${dirname}" ${processname} "${taskidx}" || { echo "Error while launching process!" >&2 ; return 1; }
+    builtin_sched_launch "${dirname}" "${processname}" "${taskidx}" || { echo "Error while launching process!" >&2 ; return 1; }
 
     # Update register of launched tasks
     if [ "${launched_tasks}" = "" ]; then
@@ -1267,17 +1246,26 @@ builtin_sched_clean_process_log_files()
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        local builtin_log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
+        local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+        local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
         rm -f "${builtin_log_filename}"
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
         local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${processname}`
         if [ "${pending_tasks}" != "" ]; then
-            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
-            for idx in ${pending_tasks_blanks}; do
-                local builtin_task_log_filename=`get_task_log_filename_builtin "${dirname}" ${processname} ${idx}`
-                rm -f "${builtin_task_log_filename}"
+            # Store string of pending tasks into an array
+            local pending_tasks_array
+            IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
+
+            # Iterate over pending tasks
+            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+            local idx
+            for idx in "${pending_tasks_array[@]}"; do
+                local builtin_task_log_filename=`get_task_log_filename_builtin "${scriptsdir}" ${processname} ${idx}`
+                if [ -f "${builtin_task_log_filename}" ]; then
+                    rm "${builtin_task_log_filename}"
+                fi
             done
         fi
     fi
@@ -1300,10 +1288,18 @@ builtin_sched_clean_process_id_files()
         # related to unfinished array tasks
         local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${processname}`
         if [ "${pending_tasks}" != "" ]; then
-            local pending_tasks_blanks=`replace_str_elem_sep_with_blank "," ${pending_tasks}`
-            for idx in ${pending_tasks_blanks}; do
-                local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
-                rm -f "${array_taskid_file}"
+            # Store string of pending tasks into an array
+            local pending_tasks_array
+            IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
+
+            # Iterate over pending tasks
+            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+            local idx
+            for idx in "${pending_tasks_array[@]}"; do
+                local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
+                if [ -f "${array_taskid_file}" ]; then
+                    rm "${array_taskid_file}"
+                fi
             done
         fi
     fi

@@ -5,11 +5,8 @@
 ########
 get_process_log_filename_builtin()
 {
-    local dirname=$1
+    local scriptsdir=$1
     local processname=$2
-
-    # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}.${BUILTIN_SCHED_LOG_FEXT}"
 }
@@ -17,12 +14,9 @@ get_process_log_filename_builtin()
 ########
 get_task_log_filename_builtin()
 {
-    local dirname=$1
+    local scriptsdir=$1
     local processname=$2
     local taskidx=$3
-
-    # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}"
 }
