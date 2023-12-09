@@ -54,7 +54,6 @@ print_script_header_slurm_sched()
     echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
     echo "PANPIPE_NUM_SCRIPTS=${num_scripts}"
-    echo "source ${fname}${SLURM_SCRIPT_INPUT_FILE_SUFFIX} || return 1"
 }
 
 ########
@@ -69,12 +68,15 @@ print_script_body_slurm_sched()
     local post_funct=$6
     local opt_array_name=$7
     local opt_array_size=$8
+    local opts_fname=$9
 
-    # Deserialize process options
+    # Retrieve and deserialize process options
     if [ "${opt_array_size}" -gt 1 ]; then
-        echo "deserialize_args \"\${${opt_array_name}[SLURM_ARRAY_TASK_ID-1]}\""
+        echo "sargs=\`get_nth_file_line \"${opts_fname}\" \${SLURM_ARRAY_TASK_ID}\`"
+        echo "deserialize_args \"\${sargs}\""
     else
-        echo "deserialize_args \"\${${opt_array_name}[0]}\""
+        echo "sargs=`get_nth_file_line \"${opts_fname}\" 1`"
+        echo "deserialize_args \"\${sargs}\""
     fi
 
     # Write skip function if it was provided
@@ -132,6 +134,7 @@ create_slurm_script()
     local post_funct=`get_post_funcname ${processname}`
     local opt_array_name=$3
     local opt_array_size=$4
+    local opts_fname=${fname}${SLURM_SCRIPT_INPUT_FILE_SUFFIX}
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -140,14 +143,14 @@ create_slurm_script()
     # Write environment variables
     set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
 
-    # Write options array to file
-    declare -p "${opt_array_name}" > "${fname}${SLURM_SCRIPT_INPUT_FILE_SUFFIX}" || return 1
+    # Write option array to file (line by line)
+    print_array_elems "${opt_array_name}" "${opt_array_size}" > "${opts_fname}"
 
     # Print header
     print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
-    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_name}" "${opt_array_size}" >> "${fname}" || return 1
+    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_name}" "${opt_array_size}" "${opts_fname}" >> "${fname}" || return 1
 
     # Print foot
     print_script_foot_slurm_sched >> "${fname}" || return 1
