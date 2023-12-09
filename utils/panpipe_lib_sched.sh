@@ -119,9 +119,9 @@ get_scheduler_throttle()
     local process_spec_throttle=$1
 
     if [ "${process_spec_throttle}" = ${ATTR_NOT_FOUND} ]; then
-        echo ${PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE}
+        echo "${PANPIPE_DEFAULT_ARRAY_TASK_THROTTLE}"
     else
-        echo ${process_spec_throttle}
+        echo "${process_spec_throttle}"
     fi
 }
 
