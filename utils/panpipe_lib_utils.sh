@@ -641,7 +641,7 @@ print_array_elems()
     local arr_name=$1
     local arr_size=$2
 
-    for ((i=0; i<$array_size; i++)); do
+    for ((i=0; i<$arr_size; i++)); do
         local element="${arr_name}[$i]"
         echo "${!element}"
     done
