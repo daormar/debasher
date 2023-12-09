@@ -131,3 +131,10 @@ load_panpipe_module()
         exit 1
     fi
 }
+
+get_mod_vars_and_funcs_fname()
+{
+    local dirname=$1
+
+    echo "${dirname}/${MOD_VARS_AND_FUNCS_BASENAME}"
+}

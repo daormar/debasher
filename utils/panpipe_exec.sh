@@ -260,6 +260,15 @@ load_module()
 }
 
 ########
+get_mod_vars_and_funcs()
+{
+    echo "# Getting module variables and functions..." >&2
+
+    local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${outd}"`
+    "${panpipe_libexecdir}"/panpipe_get_vars_and_funcs "${PIPELINE_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_file}".log
+}
+
+########
 gen_initial_procspec_file()
 {
     echo "# Generating initial process specification from $pfile..." >&2
@@ -1123,7 +1132,9 @@ absolutize_file_paths || exit 1
 
 create_basic_dirs || exit 1
 
-load_module || exit
+load_module || exit 1
+
+get_mod_vars_and_funcs || exit 1
 
 initial_procspec_file="${outd}/${PPEXEC_INITIAL_PROCSPEC_BASENAME}"
 gen_initial_procspec_file > "${initial_procspec_file}" || exit 1

@@ -115,6 +115,18 @@ print_script_foot_slurm_sched()
 }
 
 ########
+write_env_vars_and_funcs_slurm()
+{
+    local dirname=$1
+
+    # Write general environment variables and functions
+    write_env_vars_and_funcs "${dirname}"
+
+    # Write slurm environment variables and functions
+    declare -f seq_execute_slurm
+}
+
+########
 create_slurm_script()
 {
     # Init variables
@@ -133,7 +145,7 @@ create_slurm_script()
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
     # Write environment variables
-    set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
+    write_env_vars_and_funcs_slurm "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
 
     # Print header
     print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1

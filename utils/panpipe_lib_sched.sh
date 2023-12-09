@@ -307,6 +307,44 @@ map_deptype_if_necessary()
     esac
 }
 
+
+########
+write_env_vars_and_funcs()
+{
+    write_panpipe_env_vars_and_funcs()
+    {
+        # Write variables
+        declare -p PANPIPE_SCHEDULER
+
+        # Write functions
+        declare -f read_opt_value_from_func_args
+        declare -f get_opt_value_from_func_args
+        declare -f str_is_val_descriptor
+        declare -f str_is_output_option
+        declare -f read_value_from_desc
+        declare -f seq_execute
+        declare -f deserialize_args
+        declare -f display_begin_process_message
+        declare -f display_end_process_message
+    }
+
+    write_mod_env_vars_and_funcs()
+    {
+        local dirname=$1
+
+        local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${dirname}"`
+        "${CAT}" "${vars_and_funcs_fname}"
+    }
+
+    local dirname=$1
+
+    # Write PanPipe-related variables and functions
+    write_panpipe_env_vars_and_funcs
+
+    # Write module-related variables and functions
+    write_mod_env_vars_and_funcs "${dirname}"
+}
+
 ########
 seq_execute()
 {

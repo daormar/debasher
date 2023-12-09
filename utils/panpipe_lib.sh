@@ -145,6 +145,7 @@ SCHED_SCRIPT_INPUT_FEXT="opts"
 PPEXEC_INITIAL_PROCSPEC_BASENAME=".initial_pipeline.${PROCSPEC_FEXT}"
 PPEXEC_PPL_PREF="pipeline"
 PPL_COMMAND_LINE_BASENAME="command_line.sh"
+MOD_VARS_AND_FUNCS_BASENAME=".mod_vars_and_funcs.sh"
 
 # DIR_NAMES
 PANPIPE_SCRIPTS_DIRNAME="__scripts__"
@@ -193,7 +194,7 @@ declare -A PROCESS_DEPENDENCIES
 # Declare variable to store name of output directory
 declare PIPELINE_OUTDIR
 
-# Declare array to store names of loaded modules
+# Declare array to store file names of loaded modules
 declare -a PIPELINE_MODULES
 
 # Declare associative arrays to store name of shared directories (the
