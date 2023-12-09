@@ -111,6 +111,9 @@ load_panpipe_module()
         if module_is_loaded "${fullmodname}"; then
             :
         else
+            # Store module file name in array
+            PIPELINE_MODULES+=("${fullmodname}")
+
             # Obtain directory for module
             local dirname=`"${DIRNAME}" "${fullmodname}"`
 
@@ -122,10 +125,6 @@ load_panpipe_module()
 
             # Restore previous dir
             popd > /dev/null
-
-            # Store module name in array
-            local i=${#PIPELINE_MODULES[@]}
-            PIPELINE_MODULES[${i}]="${fullmodname}"
         fi
     else
         echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2
