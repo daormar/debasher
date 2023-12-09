@@ -1040,6 +1040,25 @@ builtin_sched_print_script_foot()
 }
 
 ########
+write_env_vars_and_funcs_builtin()
+{
+    local dirname=$1
+
+    # Write general environment variables and functions
+    write_env_vars_and_funcs "${dirname}"
+
+    # Write builtin sched environment variables
+    declare -p BUILTIN_SCHED_PID_FILENAME
+    declare -p BUILTIN_SCHED_LOG_FEXT
+
+    # Write builtin sched environment functions
+    declare -f seq_execute_builtin
+    declare -f builtin_sched_print_pid_to_file
+    declare -f get_task_log_filename_builtin
+    declare -f builtin_sched_execute_funct_plus_postfunct
+}
+
+########
 builtin_sched_create_script()
 {
     # Init variables
@@ -1058,7 +1077,7 @@ builtin_sched_create_script()
     echo ${BASH_SHEBANG} > "${fname}" || return 1
 
     # Write environment variables
-    set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
+    write_env_vars_and_funcs_builtin "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
 
     # Print header
     builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
