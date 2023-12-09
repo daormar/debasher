@@ -191,7 +191,7 @@ declare -A PROCESS_DEPENDENCIES
 # Declare variable to store name of output directory
 declare PIPELINE_OUTDIR
 
-# Declare associative array to store names of loaded modules
+# Declare array to store names of loaded modules
 declare -a PIPELINE_MODULES
 
 # Declare associative arrays to store name of shared directories (the
