@@ -212,26 +212,6 @@ launch()
 }
 
 ########
-create_script_and_launch()
-{
-    # Initialize variables
-    local dirname=$1
-    local processname=$2
-    local array_size=$3
-    local task_array_list=$4
-    local process_spec=$5
-    local processdeps=$6
-    local opts_array_name=$7
-    local id=$8
-
-    # Create script for process
-    create_script "${dirname}" "${processname}" "${opts_array_name}" || return 1
-
-    # Launch process
-    launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "${id}" || return 1
-}
-
-########
 get_primary_id()
 {
     # Returns the primary id of a process. The primary id is the
