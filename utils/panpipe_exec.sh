@@ -431,10 +431,11 @@ check_process_opts()
 
     # Read input parameters
     local cmdline=$1
-    local procspec_file=$2
-    local out_opts_file=$3
-    local out_opts_exh_file=$4
-    local out_fifos_file=$5
+    local dirname=$2
+    local procspec_file=$3
+    local out_opts_file=$4
+    local out_opts_exh_file=$5
+    local out_fifos_file=$6
 
     # Remove output files
     rm -f "${out_opts_file}"
@@ -444,6 +445,13 @@ check_process_opts()
         # Define options for process
         local processname=`extract_processname_from_process_spec "$process_spec"`
         define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
+
+        # Obtain size of option array
+        local opt_array_size=`get_numtasks_for_process "${processname}"`
+
+        # Write option array to file (line by line)
+        local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
+        print_array_elems "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" > "${opts_fname}"
 
         # Store process options in an array
         local process_opts_array=()
@@ -455,7 +463,7 @@ check_process_opts()
 
             # Exit loop if maximum number of options is exceeded
             if [ "${#process_opts_array[@]}" -ge "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" ]; then
-                local ellipsis="..."
+                ellipsis="..."
                 break
             fi
         done
@@ -1135,9 +1143,9 @@ else
     depgraph_file_prefix="${ppl_graphs_dir}/dependency_graph"
 
     if [ ${check_proc_opts_given} -eq 1 ]; then
-        check_process_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
     else
-        check_process_opts "${command_line}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
 
         procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
         gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1

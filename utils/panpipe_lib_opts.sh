@@ -978,3 +978,12 @@ read_value_from_desc()
 
     cat "${value_descriptor}"
 }
+
+########
+get_sched_opts_fname_for_process()
+{
+    local dirname=$1
+    local processname=$2
+
+    echo "${dirname}/${SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX}${processname}"
+}
