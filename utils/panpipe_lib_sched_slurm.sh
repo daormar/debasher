@@ -122,7 +122,10 @@ write_env_vars_and_funcs_slurm()
     # Write general environment variables and functions
     write_env_vars_and_funcs "${dirname}"
 
-    # Write slurm environment variables and functions
+    # Write slurm sched environment variables
+    # TBD
+
+    # Write slurm sched environment functions
     declare -f seq_execute_slurm
 }
 
