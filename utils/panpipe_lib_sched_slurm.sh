@@ -134,7 +134,8 @@ write_env_vars_and_funcs_slurm()
     write_env_vars_and_funcs "${dirname}"
 
     # Write slurm sched environment variables
-    # NONE
+    declare -p SLURM_SCHED_LOG_FEXT
+    declare -p SLURM_EXEC_ATTEMPT_FEXT_STRING
 
     # Write slurm sched environment functions
     declare -f seq_execute_slurm
