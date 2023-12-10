@@ -68,7 +68,7 @@ print_script_body_slurm_sched()
         echo "sargs=\`get_nth_file_line \"${opts_fname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
         echo "deserialize_args \"\${sargs}\""
     else
-        echo "sargs=`get_nth_file_line \"${opts_fname}\" 1`"
+        echo "sargs=\"`get_nth_file_line \"${opts_fname}\" 1`"\"
         echo "deserialize_args \"\${sargs}\""
     fi
 
@@ -93,11 +93,11 @@ print_script_body_slurm_sched()
     # Write function to be executed
     echo "${funct} \"\${DESERIALIZED_ARGS[@]}\""
     echo "funct_exit_code=\$?"
-    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of \${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function \${funct} successfully executed\" >&2; fi"
+    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${funct} successfully executed\" >&2; fi"
 
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} \"\${DESERIALIZED_ARGS[@]}\" || { echo \"Error: execution of \${post_funct} failed with exit code \$?\" >&2; exit 1; }"
+        echo "${post_funct} \"\${DESERIALIZED_ARGS[@]}\" || { echo \"Error: execution of ${post_funct} failed with exit code \$?\" >&2; exit 1; }"
     fi
 
     # Return if function to be executed failed
