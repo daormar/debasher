@@ -329,13 +329,13 @@ write_env_vars_and_funcs()
         declare -f is_absolute_path
         declare -f read_value_from_desc
         declare -f get_nth_file_line
-        declare -f seq_execute
         declare -f deserialize_args
         declare -f deserialize_args_given_sep
         declare -f display_begin_process_message
         declare -f display_end_process_message
         declare -f default_reset_outfiles_for_process_array
         declare -f signal_process_completion
+        declare -f seq_execute
     }
 
     write_mod_env_vars_and_funcs()
