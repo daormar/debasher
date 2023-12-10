@@ -51,7 +51,11 @@ search_mod_in_dirs()
     for dir in "${DESERIALIZED_ARGS[@]}"; do
         for fname in "${dir}/${module}" "${dir}/${module}.sh"; do
             if [ -f "${fname}" ]; then
-                fullmodname="${fname}"
+                if is_absolute_path "${fname}"; then
+                    fullmodname="${fname}"
+                else
+                    fullmodname=`get_absolute_path "${fname}"`
+                fi
                 break
             fi
         done
