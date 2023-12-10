@@ -322,10 +322,14 @@ write_env_vars_and_funcs()
         declare -p ARG_SEP
         declare -p OPT_NOT_FOUND
         declare -p FUNCT_NOT_FOUND
+        declare -p BASENAME
+        declare -p DIRNAME
+        declare -p MKTEMP
         declare -p HEAD
         declare -p TAIL
 
         # Write functions
+        declare -f pipe_fail
         declare -f read_opt_value_from_func_args
         declare -f get_opt_value_from_func_args
         declare -f str_is_val_descriptor
@@ -337,7 +341,16 @@ write_env_vars_and_funcs()
         declare -f deserialize_args_given_sep
         declare -f display_begin_process_message
         declare -f display_end_process_message
+        declare -f default_reset_outfiles_for_process
+        declare -f get_process_outdir_given_dirname
+        declare -f get_default_process_outdir_given_dirname
+        declare -f get_outdir_funcname
+        declare -f process_function_outdir
         declare -f default_reset_outfiles_for_process_array
+        declare -f search_process_func
+        declare -f get_process_funcname
+        declare -f remove_suffix_from_processname
+        declare -f func_exists
         declare -f signal_process_completion
         declare -f seq_execute
     }
