@@ -1058,7 +1058,7 @@ write_env_vars_and_funcs_builtin()
     declare -f get_ppl_scripts_dir_for_process
     declare -f get_ppl_scripts_dir_given_basedir
     declare -f seq_execute_builtin
- }
+}
 
 ########
 builtin_sched_create_script()
