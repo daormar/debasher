@@ -47,6 +47,7 @@ PROCESS_METHOD_SEP="_"
 MODULE_METHOD_SEP="_"
 VALUE_DESCRIPTOR_NAME_PREFIX=".__VAL_DESCRIPTOR__"
 SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX=".sched_opts_"
+SHDIR_MODULE_OWNER="__SHDIR_MODULE_OWNER__"
 
 # INVALID IDENTIFIERS
 INVALID_SID="_INVALID_SID_"
@@ -197,17 +198,11 @@ declare PIPELINE_OUTDIR
 # Declare array to store file names of loaded modules
 declare -a PIPELINE_MODULES
 
-# Declare associative arrays to store name of shared directories (the
-# one with the _DEF_OPTS suffix stores the shared directories of a
-# process immediately after calling its def_options method)
+# Declare associative arrays to store name of shared directories
 declare -A PIPELINE_SHDIRS
-declare -A PIPELINE_SHDIRS_DEF_OPTS
 
-# Declare associative arrays to store names of fifos (the one with the
-# _DEF_OPTS suffix stores the fifos of a process immediately after
-# calling its def_options method)
+# Declare associative arrays to store names of fifos
 declare -A PIPELINE_FIFOS
-declare -A PIPELINE_FIFOS_DEF_OPTS
 
 # Declare associative array to store users of fifos
 declare -A FIFO_USERS

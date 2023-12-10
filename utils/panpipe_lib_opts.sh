@@ -505,7 +505,6 @@ define_fifo()
 
     # Store name of FIFO in associative arrays
     PIPELINE_FIFOS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
-    PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
 }
 
 ########
@@ -513,9 +512,14 @@ define_shared_dir()
 {
     local shared_dir=$1
 
-    # Store name of shared directory in associative arrays
-    PIPELINE_SHDIRS["${shared_dir}"]=1
-    PIPELINE_SHDIRS_DEF_OPTS["${shared_dir}"]=1
+    # Check whether the shared directory is being defined by a module or
+    # by a process
+    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    if [ -z "${processname}" ]; then
+        PIPELINE_SHDIRS["${shared_dir}"]=${SHDIR_MODULE_OWNER}
+    else
+        PIPELINE_SHDIRS["${shared_dir}"]=${processname}
+    fi
 }
 
 ########
@@ -812,14 +816,17 @@ register_module_pipeline_shdirs()
 }
 
 ########
-create_pipeline_shdirs()
+create_mod_shdirs()
 {
-    # Create shared directories
+    # Create shared directories for modules
     local dirname
     for dirname in "${!PIPELINE_SHDIRS[@]}"; do
-        local absdir=`get_absolute_shdirname "$dirname"`
-        if [ ! -d "${absdir}" ]; then
-           "${MKDIR}" -p "${absdir}" || exit 1
+        local owner=${PIPELINE_SHDIRS["${dirname}"]}
+        if [ "${owner}" = "${SHDIR_MODULE_OWNER}" ]; then
+            local absdir=`get_absolute_shdirname "$dirname"`
+            if [ ! -d "${absdir}" ]; then
+                "${MKDIR}" -p "${absdir}" || exit 1
+            fi
         fi
     done
 }
@@ -827,12 +834,16 @@ create_pipeline_shdirs()
 ########
 create_shdirs_owned_by_process()
 {
-    # Create shared directories
+    local processname=$1
+    # Create shared directories for process
     local dirname
-    for dirname in "${!PIPELINE_SHDIRS_DEF_OPTS[@]}"; do
-        local absdir=`get_absolute_shdirname "$dirname"`
-        if [ ! -d "${absdir}" ]; then
-           "${MKDIR}" -p "${absdir}" || exit 1
+    for dirname in "${!PIPELINE_SHDIRS[@]}"; do
+        local owner=${PIPELINE_SHDIRS["${dirname}"]}
+        if [ "${processname}" = "${owner}" ]; then
+            local absdir=`get_absolute_shdirname "$dirname"`
+            if [ ! -d "${absdir}" ]; then
+                "${MKDIR}" -p "${absdir}" || exit 1
+            fi
         fi
     done
 }
@@ -847,15 +858,6 @@ show_pipeline_fifos()
 }
 
 ########
-show_pipeline_fifos_def_opts()
-{
-    local augm_fifoname
-    for augm_fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
-        echo "${augm_fifoname}" ${PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
-    done
-}
-
-########
 prepare_fifos_owned_by_process()
 {
     local processname=$1
@@ -865,13 +867,17 @@ prepare_fifos_owned_by_process()
 
     # Create FIFOS
     local augm_fifoname
-    for augm_fifoname in "${!PIPELINE_FIFOS_DEF_OPTS[@]}"; do
-        local proc_plus_idx=${PIPELINE_FIFOS_DEF_OPTS["${augm_fifoname}"]}
+    for augm_fifoname in "${!PIPELINE_FIFOS[@]}"; do
+        local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
         local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
         if [ "${proc}" = "${processname}" ]; then
             local dirname=`"${DIRNAME}" "${augm_fifoname}"`
-            "${MKDIR}" -p "${fifodir}/${dirname}"
-            rm -f "${fifodir}/${augm_fifoname}" || exit 1
+            if [ ! -d "${fifodir}/${dirname}" ]; then
+                "${MKDIR}" -p "${fifodir}/${dirname}"
+            fi
+            if [ -p "${fifodir}/${augm_fifoname}" ]; then
+                rm -f "${fifodir}/${augm_fifoname}" || exit 1
+            fi
             "${MKFIFO}" "${fifodir}/${augm_fifoname}" || exit 1
         fi
     done

@@ -169,7 +169,6 @@ exclude_other_vars()
                          othervars["PROCESS_OUT_VALUES"]=1
                          othervars["FIFO_USERS"]=1
                          othervars["PIPELINE_FIFOS"]=1
-                         othervars["PIPELINE_FIFOS_DEF_OPTS"]=1
                          othervars["CURRENT_PROCESS_OPT_LIST"]=1 # This variable may become huge when working with arrays and is loaded from a separate file
                          othervars["PROCESS_OPT_LIST"]=1 # This variable is not necessary and may become huge when working with arrays
                         }
@@ -498,20 +497,6 @@ get_first_n_fields_of_str()
 get_panpipe_exec_path()
 {
     echo "${panpipe_bindir}/panpipe_exec"
-}
-
-########
-clear_pipeline_shdirs_def_opts_array()
-{
-    unset PIPELINE_SHDIRS_DEF_OPTS
-    declare -gA PIPELINE_SHDIRS_DEF_OPTS
-}
-
-########
-clear_pipeline_fifos_def_opts_array()
-{
-    unset PIPELINE_FIFOS_DEF_OPTS
-    declare -gA PIPELINE_FIFOS_DEF_OPTS
 }
 
 ########

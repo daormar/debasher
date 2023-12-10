@@ -805,7 +805,7 @@ create_mod_shared_dirs()
     # IMPORTANT NOTE: the following functions can only be executed after
     # loading pipeline modules
     register_module_pipeline_shdirs
-    create_pipeline_shdirs
+    create_mod_shdirs
 
     show_pipeline_shdirs >&2
 
@@ -885,10 +885,6 @@ prepare_files_and_dirs_for_process()
     # process that should not be executed, files and directories are
     # still prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
-        # Obtain information about files and directories for processes
-        # by calling define_opts_for_process
-        define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
-
         # Obtain array size
         local array_size=`get_numtasks_for_process "${processname}"`
 

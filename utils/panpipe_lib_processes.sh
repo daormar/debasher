@@ -258,8 +258,6 @@ define_opts_for_process()
     clear_def_opts_vars()
     {
         clear_curr_opt_list_array
-        clear_pipeline_shdirs_def_opts_array
-        clear_pipeline_fifos_def_opts_array
     }
 
     store_opt_list_in_assoc_array()
