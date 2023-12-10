@@ -79,11 +79,7 @@ simple_process()
 simple_process_skip()
 {
     # Initialize variables
-    local cmdline=$1
-    local process_spec=$2
-
-    # Read sleep time
-    local sleep_time=$(read_opt_value_from_line "${cmdline}" "-a" "$@")
+    local sleep_time=$(read_opt_value_from_func_args "-a" "$@")
 
     # Skip if sleep time is above 10 seconds
     if [ "${sleep_time}" -gt 10 ]; then
