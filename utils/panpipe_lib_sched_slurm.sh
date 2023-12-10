@@ -136,6 +136,7 @@ write_env_vars_and_funcs_slurm()
     # Write slurm sched environment variables
     declare -p SLURM_SCHED_LOG_FEXT
     declare -p SLURM_EXEC_ATTEMPT_FEXT_STRING
+    declare -p SRUN
 
     # Write slurm sched environment functions
     declare -f seq_execute_slurm
