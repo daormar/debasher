@@ -104,6 +104,11 @@ print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
+    # NOTE: signal process completion is executed with the srun command
+    # to avoid those situations in which a job is cancelled for some
+    # reason (e.g. exceeding memory limit) but before stopping it is
+    # still able to signal completion. A job that has been cancelled
+    # cannot execute anything with srun, avoiding the problem
     local sign_process_completion_cmd=`get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}"`
     echo "${SRUN} ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 }
