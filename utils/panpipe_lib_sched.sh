@@ -317,6 +317,7 @@ write_env_vars_and_funcs()
         declare -p PANPIPE_SCHEDULER
         declare -p PANPIPE_SCRIPTS_DIRNAME
         declare -p PROCESS_METHOD_NAME_OUTDIR
+        declare -p VALUE_DESCRIPTOR_NAME_PREFIX
         declare -p FINISHED_PROCESS_FEXT
         declare -p PROCESSID_FEXT
         declare -p ARRAY_TASKID_FEXT
@@ -334,6 +335,8 @@ write_env_vars_and_funcs()
         declare -f read_opt_value_from_func_args
         declare -f get_opt_value_from_func_args
         declare -f str_is_val_descriptor
+        declare -f write_value_to_desc
+        declare -f read_value_from_desc
         declare -f str_is_output_option
         declare -f is_absolute_path
         declare -f read_value_from_desc
