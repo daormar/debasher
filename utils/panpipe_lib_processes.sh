@@ -843,7 +843,7 @@ get_process_outdir_given_dirname()
     if [ "${process_function_outdir}" = "${FUNCT_NOT_FOUND}" ]; then
         get_default_process_outdir_given_dirname "$dirname" "$processname"
     else
-        outdir_basename=`process_function_outdir`
+        local outdir_basename=${process_function_outdir}
         echo "${dirname}/${outdir_basename}"
     fi
 }
@@ -937,7 +937,7 @@ create_outdir_for_process()
 {
     local dirname=$1
     local processname=$2
-    local outd=`get_process_outdir_given_dirname "${dirname}" ${processname}`
+    local outd=`get_process_outdir_given_dirname "${dirname}" "${processname}"`
 
     if [ -d ${outd} ]; then
         echo "Warning: ${processname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
@@ -951,7 +951,7 @@ default_reset_outfiles_for_process()
 {
     local dirname=$1
     local processname=$2
-    local outd=`get_process_outdir_given_dirname "${dirname}" ${processname}`
+    local outd=`get_process_outdir_given_dirname "${dirname}" "${processname}"`
 
     if [ -d "${outd}" ]; then
         echo "* Resetting output directory for process...">&2
