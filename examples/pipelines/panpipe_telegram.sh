@@ -83,7 +83,7 @@ decomposer()
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
     # Write string to FIFO
-    "${AWK}" '{for(i=1;i<=NF;++i) print $i}' "${file}" > "${outf}" ; pipe_fail || return 1
+    awk '{for(i=1;i<=NF;++i) print $i}' "${file}" > "${outf}" ; pipe_fail || return 1
 }
 
 ########
@@ -135,7 +135,7 @@ recompose()
     local char_lim=$1
     local file=$2
 
-    "${AWK}" -v maxlen="${char_lim}" 'BEGIN{len=0}
+    awk -v maxlen="${char_lim}" 'BEGIN{len=0}
              {
               for(i=1; i<=NF; ++i)
               {
