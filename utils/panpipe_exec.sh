@@ -265,7 +265,7 @@ get_mod_vars_and_funcs()
     echo "# Getting module variables and functions..." >&2
 
     local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${outd}"`
-    "${panpipe_libexecdir}"/panpipe_get_vars_and_funcs "${PIPELINE_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_file}".log
+    "${panpipe_libexecdir}"/panpipe_get_vars_and_funcs "${PIPELINE_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
 }
 
 ########
