@@ -308,7 +308,8 @@ get_signal_process_completion_cmd()
     # Initialize variables
     local dirname=$1
     local processname=$2
-    local total=$3
+    local taskidx_varname=$3
+    local total=$4
 
     # Signal completion
     # NOTE: A file lock is not necessary for the following operation
@@ -318,7 +319,7 @@ get_signal_process_completion_cmd()
     if [ ${total} -eq 1 ]; then
         echo "echo \"Finished task idx: 1 ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
     else
-        echo "echo \"Finished task idx: \${SLURM_ARRAY_TASK_ID} ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
+        echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
     fi
 }
 
