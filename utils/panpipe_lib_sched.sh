@@ -316,6 +316,7 @@ write_env_vars_and_funcs()
         # Write variables
         declare -p PANPIPE_SCHEDULER
         declare -p PANPIPE_SCRIPTS_DIRNAME
+        declare -p PROCESS_METHOD_NAME_OUTDIR
         declare -p FINISHED_PROCESS_FEXT
         declare -p PROCESSID_FEXT
         declare -p ARRAY_TASKID_FEXT
