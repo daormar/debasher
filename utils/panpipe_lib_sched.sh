@@ -316,7 +316,10 @@ write_env_vars_and_funcs()
         # Write variables
         declare -p PANPIPE_SCHEDULER
         declare -p ARG_SEP
+        declare -p OPT_NOT_FOUND
         declare -p FUNCT_NOT_FOUND
+        declare -p HEAD
+        declare -p TAIL
 
         # Write functions
         declare -f read_opt_value_from_func_args
