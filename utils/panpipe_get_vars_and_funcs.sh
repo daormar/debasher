@@ -16,6 +16,12 @@
 
 # *- bash -*
 
+load_panpipe_module()
+{
+    # NOTE: this function is intentionally defined void
+    :
+}
+
 if [ "$#" -eq 0 ]; then
     echo "Usage: panpipe_get_vars_and_funcs <file1> <file2> ... <filen>"
     exit 1
