@@ -248,7 +248,7 @@ get_slurm_time_opt()
     if [ "${time}" = ${ATTR_NOT_FOUND} ]; then
         echo ""
     else
-        echo "--time ${time}"
+        echo "--time=${time}"
     fi
 }
 
