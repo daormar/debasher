@@ -1056,6 +1056,9 @@ write_env_vars_and_funcs_builtin()
     declare -f builtin_sched_print_pid_to_file
     declare -f get_task_log_filename_builtin
     declare -f builtin_sched_execute_funct_plus_postfunct
+    declare -f get_process_finished_filename
+    declare -f get_ppl_scripts_dir_for_process
+    declare -f get_ppl_scripts_dir_given_basedir
 }
 
 ########
