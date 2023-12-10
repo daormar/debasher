@@ -1026,10 +1026,10 @@ builtin_sched_print_script_body()
     local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
     if [ "${opt_array_size}" -gt 1 ]; then
         echo "builtin_task_log_filename=\`get_task_log_filename_builtin \"$(esc_dq "${scriptsdir}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
-        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"$(esc_dq "${opts_fname}")\" \${BUILTIN_ARRAY_TASK_ID} > \${builtin_task_log_filename} 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"$(esc_dq "${opts_fname}")\" \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
     else
         local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
-        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"$(esc_dq "${opts_fname}")\" \${BUILTIN_ARRAY_TASK_ID} > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"$(esc_dq "${opts_fname}")\" \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 }
 
@@ -1048,7 +1048,6 @@ write_env_vars_and_funcs_builtin()
     write_env_vars_and_funcs "${dirname}"
 
     # Write builtin sched environment variables
-    declare -p BUILTIN_SCHED_PID_FILENAME
     declare -p BUILTIN_SCHED_LOG_FEXT
 
     # Write builtin sched environment functions
