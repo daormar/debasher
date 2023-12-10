@@ -83,7 +83,7 @@ decomposer()
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${file}" | "${AWK}" '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
+    cat "${file}" | awk '{for(i=1;i<=NF;++i) print $i}' > "${outf}" ; pipe_fail || return 1
 }
 
 ########
@@ -134,7 +134,7 @@ recompose()
 {
     local char_lim=$1
 
-    "${AWK}" -v maxlen="${char_lim}" 'BEGIN{len=0}
+    awk -v maxlen="${char_lim}" 'BEGIN{len=0}
              {
               for(i=1; i<=NF; ++i)
               {
@@ -165,7 +165,7 @@ recomposer()
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
+    cat "${inf}" | recompose "${char_lim}" > "${outf}" ; pipe_fail || return 1
 }
 
 ######################################

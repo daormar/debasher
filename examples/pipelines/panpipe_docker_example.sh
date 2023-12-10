@@ -64,7 +64,7 @@ docker_example()
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Write python version to file
-    "${DOCKER}" run hello-world > "${outf}" 2>&1 || return 1
+    docker run hello-world > "${outf}" 2>&1 || return 1
 }
 
 ########

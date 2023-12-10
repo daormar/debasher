@@ -62,7 +62,7 @@ host1_define_opts()
     local n_opt=$(get_cmdline_opt "$cmdline" "-n")
 
     # Save option list so as to execute process n times
-    for id in $("${SEQ}" "${n_opt}"); do
+    for id in $(seq "${n_opt}"); do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
         save_opt_list specific_optlist
@@ -101,7 +101,7 @@ host2_define_opts()
     local n_opt=$(get_cmdline_opt "$cmdline" "-n")
 
     # Save option list so as to execute process n times
-    for id in $("${SEQ}" "${n_opt}"); do
+    for id in $(seq "${n_opt}"); do
         local specific_optlist=${optlist}
         define_opt "-id" $id specific_optlist || return 1
         save_opt_list specific_optlist

@@ -90,7 +90,7 @@ telegram()
     seq_execute decomposer -f "${file}" -outf "${outd}"/words.txt || return 1
 
     # Obtain number of lines of decomposer output
-    nlines=$("${WC}" -l "${outd}"/words.txt | "${AWK}" '{print $1}')
+    nlines=$(wc -l "${outd}"/words.txt | awk '{print $1}')
 
     if [ "${nlines}" -eq 0 ]; then
         echo "Warning: Decomposer's output is empty" >&2
