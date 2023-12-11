@@ -315,6 +315,10 @@ write_env_vars_and_funcs()
     {
         # Write variables
         declare -p PANPIPE_SCHEDULER
+        declare -p DISABLE_SCHEDULERS
+        declare -p BUILTIN_SCHEDULER
+        declare -p SLURM_SCHEDULER
+        declare -p SBATCH
         declare -p PANPIPE_SCRIPTS_DIRNAME
         declare -p PROCESS_METHOD_NAME_OUTDIR
         declare -p VALUE_DESCRIPTOR_NAME_PREFIX
@@ -324,11 +328,13 @@ write_env_vars_and_funcs()
         declare -p ARG_SEP
         declare -p OPT_NOT_FOUND
         declare -p FUNCT_NOT_FOUND
+        declare -p BASH
         declare -p BASENAME
         declare -p DIRNAME
         declare -p MKTEMP
         declare -p HEAD
         declare -p TAIL
+        declare -p AWK
 
         # Write functions
         declare -f pipe_fail
@@ -356,6 +362,10 @@ write_env_vars_and_funcs()
         declare -f remove_suffix_from_processname
         declare -f func_exists
         declare -f signal_process_completion
+        declare -f determine_scheduler
+        declare -f init_bash_shebang_var
+        declare -f exclude_readonly_vars
+        declare -f exclude_other_vars
         declare -f seq_execute
     }
 
