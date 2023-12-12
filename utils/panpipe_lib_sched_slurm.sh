@@ -2,6 +2,13 @@
 # SCHEDULER FUNCTIONS RELATED TO SLURM #
 ########################################
 
+#############
+# CONSTANTS #
+#############
+
+# PROCESS METHOD NAMES
+PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER="${PROCESS_METHOD_SEP}slurm_sigterm_handler"
+
 ########
 get_slurm_version()
 {
@@ -39,11 +46,33 @@ init_slurm_scheduler()
 ########
 print_script_header_slurm_sched()
 {
+    get_sigterm_handler_funcname()
+    {
+        local processname=$1
+
+        echo "${processname}${PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER}"
+    }
+
+    write_sigterm_handler()
+    {
+        local funcname=$1
+        echo "${funcname} ()"
+        echo "{"
+        echo " echo \"SIGTERM received: process execution will be aborted\""
+        echo " exit 1"
+        echo "}"
+    }
+
     local fname=$1
     local dirname=$2
     local processname=$3
     local num_tasks=$4
 
+    local sigterm_handler_funcname=`get_sigterm_handler_funcname "${processname}"`
+    if ! func_exists "${sigterm_handler_funcname}"; then
+        write_sigterm_handler "${sigterm_handler_funcname}"
+    fi
+    echo "trap '${sigterm_handler_funcname}' SIGTERM"
     echo "PANPIPE_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
     echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
     echo "PANPIPE_PROCESS_NAME=${processname}"
@@ -104,19 +133,8 @@ print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
-
-    # NOTE: signal process completion is executed with the srun command
-    # to avoid those situations in which a job is cancelled for some
-    # reason (e.g. exceeding memory limit) but before stopping it is
-    # still able to signal completion. A job that has been cancelled
-    # cannot execute anything with srun, avoiding the undesired
-    # completion signal. The consequence of a job that has signaled
-    # completion but has failed according SLURM is that its job
-    # dependencies will not be executed, but at the same time, they will
-    # not be restarted in subsequent pipeline executions due to the fact
-    # that the completion has been signaled
     local sign_process_completion_cmd=`get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}"`
-    echo "${SRUN} ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
+    echo "${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 }
 
 ########
@@ -464,7 +482,7 @@ slurm_launch_attempt()
 
     # Submit job (initially it is put on hold)
     local jid
-    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes -H "${file}")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes --signal=B:SIGTERM@10 -H "${file}")
     local exit_code=$?
 
     # Check for errors
