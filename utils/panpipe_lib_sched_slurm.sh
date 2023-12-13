@@ -157,6 +157,7 @@ write_env_vars_and_funcs_slurm()
     declare -p SRUN
 
     # Write slurm sched environment functions
+    declare -f write_env_vars_and_funcs_slurm
     declare -f seq_execute_slurm
 }
 
@@ -1042,15 +1043,16 @@ seq_execute_slurm()
 {
     create_seq_execute_script()
     {
-        local process_to_launch=$1
-        local fname=$2
+        local dirname=$1
+        local process_to_launch=$2
+        local fname=$3
 
         # Write bash shebang
         local BASH_SHEBANG=`init_bash_shebang_var`
         echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
         # Write environment variables
-        set | exclude_readonly_vars | exclude_other_vars >> "${fname}" ; pipe_fail || return 1
+        write_env_vars_and_funcs_slurm "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
 
         # Add call to process function
         echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1
@@ -1070,7 +1072,7 @@ seq_execute_slurm()
     script_name=`"${MKTEMP}" -t "${tmpfile_templ}"` || return 1
 
     # Create script
-    create_seq_execute_script "${process_to_launch}" "${script_name}" || return 1
+    create_seq_execute_script "${PIPELINE_OUTDIR}" "${process_to_launch}" "${script_name}" || return 1
 
     # Launch script
     shift
