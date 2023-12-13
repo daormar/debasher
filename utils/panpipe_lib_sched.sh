@@ -85,6 +85,12 @@ determine_scheduler()
 }
 
 ########
+get_scheduler()
+{
+    echo ${PANPIPE_SCHEDULER}
+}
+
+########
 create_script()
 {
     # Init variables
@@ -93,7 +99,7 @@ create_script()
     local opts_fname=$3
     local opt_array_size=$4
 
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             create_slurm_script "${dirname}" "$processname" "${opts_fname}" "${opt_array_size}"
@@ -203,7 +209,7 @@ launch()
     local outvar=$7
 
     # Launch process
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
             slurm_launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "${outvar}" || return 1
@@ -219,7 +225,7 @@ get_primary_id()
     # may be necessary to complete process execution)
     local launch_id_info=$1
 
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             get_primary_id_slurm "${launch_id_info}"
@@ -238,7 +244,7 @@ get_global_id()
     # the others jobs/processes are completed
     local launch_id_info=$1
 
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             get_global_id_slurm "${launch_id_info}"
@@ -275,7 +281,7 @@ id_exists()
     local id=$1
 
     # Check id depending on the scheduler
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
@@ -296,7 +302,7 @@ map_deptype_if_necessary()
 {
     local deptype=$1
 
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             map_deptype_if_necessary_slurm "${deptype}"
@@ -316,9 +322,6 @@ write_env_vars_and_funcs()
         # Write variables
         declare -p PANPIPE_SCHEDULER
         declare -p DISABLE_SCHEDULERS
-        declare -p BUILTIN_SCHEDULER
-        declare -p SLURM_SCHEDULER
-        declare -p SBATCH
         declare -p PANPIPE_SCRIPTS_DIRNAME
         declare -p PROCESS_METHOD_NAME_OUTDIR
         declare -p VALUE_DESCRIPTOR_NAME_PREFIX
@@ -328,13 +331,11 @@ write_env_vars_and_funcs()
         declare -p ARG_SEP
         declare -p OPT_NOT_FOUND
         declare -p FUNCT_NOT_FOUND
-        declare -p BASH
         declare -p BASENAME
         declare -p DIRNAME
         declare -p MKTEMP
         declare -p HEAD
         declare -p TAIL
-        declare -p AWK
 
         # Write functions
         declare -f pipe_fail
@@ -362,8 +363,7 @@ write_env_vars_and_funcs()
         declare -f remove_suffix_from_processname
         declare -f func_exists
         declare -f signal_process_completion
-        declare -f determine_scheduler
-        declare -f init_bash_shebang_var
+        declare -f get_scheduler
         declare -f exclude_readonly_vars
         declare -f exclude_other_vars
         declare -f seq_execute
@@ -389,7 +389,7 @@ write_env_vars_and_funcs()
 ########
 seq_execute()
 {
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             seq_execute_slurm "$@"

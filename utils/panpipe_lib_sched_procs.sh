@@ -173,7 +173,7 @@ clean_process_files()
     local processname=$2
     local array_size=$3
 
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             clean_process_files_slurm "$dirname" "$processname" "$array_size"
@@ -330,7 +330,7 @@ stop_process()
     local ids_info=$1
 
     # Launch process
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
             slurm_stop_process ${ids_info} || return 1
@@ -460,7 +460,7 @@ process_is_unfinished_but_runnable()
     local processname=$2
 
     # Check status depending on the scheduler
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
@@ -501,7 +501,7 @@ get_elapsed_time_for_process()
     local processname=$2
 
     # Get name of log file
-    local sched=`determine_scheduler`
+    local sched=`get_scheduler`
     local log_filename
     case $sched in
         ${SLURM_SCHEDULER})
