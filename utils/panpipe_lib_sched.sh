@@ -355,6 +355,7 @@ write_env_vars_and_funcs()
         declare -f is_absolute_path
         declare -f read_value_from_desc
         declare -f get_nth_file_line
+        declare -f get_file_opts_for_process_and_task
         declare -f deserialize_args
         declare -f deserialize_args_given_sep
         declare -f display_begin_process_message
