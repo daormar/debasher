@@ -902,8 +902,8 @@ prepare_files_and_dirs_for_process()
         else
             clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
-        update_process_completion_signal "${dirname}" "${processname}" "${status}" || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
         prepare_fifos_owned_by_process "${processname}"
+        update_process_completion_signal "${dirname}" "${processname}" "${status}" || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
     fi
 }
 

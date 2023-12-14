@@ -1350,8 +1350,8 @@ builtin_sched_prepare_files_and_dirs_for_process()
         else
             builtin_sched_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         fi
-        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
         prepare_fifos_owned_by_process ${processname}
+        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
 
         # Create output directory
         create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
