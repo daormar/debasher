@@ -117,8 +117,8 @@ get_list_of_pending_tasks_in_array()
 
     # Create string enumerating pending tasks
     local pending_tasks=""
-    local idx=1
-    while [ $idx -le ${array_size} ]; do
+    local idx=0
+    while [ $idx -lt ${array_size} ]; do
         if [ -z "${completed_tasks[${idx}]}" ]; then
             if [ -z "${pending_tasks}" ]; then
                 pending_tasks=${idx}
@@ -145,7 +145,8 @@ get_task_array_list()
         get_list_of_pending_tasks_in_array "${dirname}" "${processname}" "${array_size}"
     else
         # No jobs were completed, return list containing all of them
-        echo "1-${array_size}"
+        local last_task_idx=$((array_size - 1))
+        echo "0-${last_task_idx}"
     fi
 }
 
@@ -317,7 +318,7 @@ get_signal_process_completion_cmd()
     # 512 bytes, source:
     # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
     if [ ${total} -eq 1 ]; then
-        echo "echo \"Finished task idx: 1 ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
+        echo "echo \"Finished task idx: 0 ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
     else
         echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
     fi
