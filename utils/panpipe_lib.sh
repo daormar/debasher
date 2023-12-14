@@ -183,8 +183,9 @@ declare LAST_PROC_LINE_MEMOPTS=""
 # needed to support multiple process executions)
 declare -a CURRENT_PROCESS_OPT_LIST
 
-# Declare associative array used to save option lists for all processes
-declare -A PROCESS_OPT_LIST
+# Declare associative array used to save lengths of option lists for all
+# processes
+declare -A PROCESS_OPT_LIST_LENS
 
 # Declare associative array used to save output values for all processes
 declare -A PROCESS_OUT_VALUES
