@@ -58,7 +58,7 @@ usage()
     echo "                          [--reexec-outdated-procs]"
     echo "                          [--conda-support] [--docker-support] [--gen-proc-graph]"
     echo "                          [--show-cmdline-opts|--check-proc-opts|--debug]"
-    echo "                          [--builtinsched-debug] [--version] [--help]"
+    echo "                          [--wait] [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with pipeline processes to be performed (see"
     echo "                          manual for additional information)"
