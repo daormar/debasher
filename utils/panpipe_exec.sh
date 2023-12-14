@@ -454,6 +454,7 @@ check_process_opts()
 
     # Remove output files
     rm -f "${out_opts_file}"
+    rm -f "${out_opts_exh_file}"
 
     # Read information about the processes to be executed
     while read process_spec; do
@@ -462,11 +463,15 @@ check_process_opts()
         define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
 
         # Obtain size of option array
-        local opt_array_size=`get_numtasks_for_process "${processname}"`
+        local opt_array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
+        PROCESS_OPT_LIST_LENS["${processname}"]=${opt_array_size}
 
         # Write option array to file (line by line)
         local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
         print_array_elems "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" > "${opts_fname}"
+
+        # Print exhaustive option list for process
+        show_curr_opt_list "${processname}" >> "${out_opts_exh_file}"
 
         # Store process options in an array
         local process_opts_array=()
@@ -487,10 +492,11 @@ check_process_opts()
         local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}"`
         echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
         echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >> "${out_opts_file}"
-    done < "${procspec_file}"
 
-    # Print exhaustive option list
-    show_opt_list_for_processes > "${out_opts_exh_file}"
+        # Clear variables
+        clear_def_opts_vars
+
+    done < "${procspec_file}"
 
     # Register fifo users
     if pipeline_uses_fifos; then
