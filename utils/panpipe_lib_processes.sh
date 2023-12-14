@@ -241,15 +241,27 @@ get_numtasks_for_process()
 {
     local processname=$1
 
-    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN}]}"
+    echo ${PROCESS_OPT_LIST_LENS["${processname}"]}
 }
 
 ########
-get_optlist_for_process_and_task()
+get_opts_for_process_and_task()
 {
     local processname=$1
     local task_idx=$2
-    echo "${PROCESS_OPT_LIST[${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}]}"
+
+    local opts_fname=`get_sched_opts_fname_for_process "${PIPELINE_OUTDIR}" "${processname}"`
+    get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
+}
+
+########
+get_file_opts_for_process_and_task()
+{
+    local opts_fname=$1
+    local task_idx=$2
+
+    local line=$((task_idx + 1))
+    get_nth_file_line "${opts_fname}" "${line}"
 }
 
 ########
@@ -260,21 +272,12 @@ define_opts_for_process()
         clear_curr_opt_list_array
     }
 
-    store_opt_list_in_assoc_array()
-    {
-        local processname=$1
-        local array_length=${#CURRENT_PROCESS_OPT_LIST[@]}
-        PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN}"]=${array_length}
-        for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-            PROCESS_OPT_LIST["${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"]=${CURRENT_PROCESS_OPT_LIST[$task_idx]}
-        done
-    }
-
     get_output_params_info()
     {
         local processname=$1
-        for task_idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-            deserialize_args "${CURRENT_PROCESS_OPT_LIST[$task_idx]}"
+        for idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
+            local task_idx=$idx
+            deserialize_args "${CURRENT_PROCESS_OPT_LIST[$idx]}"
             local i=0
             while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
                 # Check if option was found
@@ -324,7 +327,6 @@ define_opts_for_process()
     ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
 
     # Update variables storing option information
-    store_opt_list_in_assoc_array "${processname}"
     get_output_params_info "${processname}"
 }
 
@@ -541,8 +543,8 @@ get_procdeps_for_process_cached()
             declare -A depdict
 
             # Iterate over task options
-            local optlist=`get_optlist_for_process_and_task "${processname}" "${task_idx}"`
-            deserialize_args "${optlist}"
+            local opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+            deserialize_args "${opts}"
             local i
             for i in "${!DESERIALIZED_ARGS[@]}"; do
                 # Check if a value represents an absolute path
@@ -725,8 +727,8 @@ register_fifos_used_by_process()
         local task_idx=$3
 
         # Iterate over task options
-        local optlist=`get_optlist_for_process_and_task "${processname}" "${task_idx}"`
-        deserialize_args "${optlist}"
+        local opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+        deserialize_args "${opts}"
         for i in "${!DESERIALIZED_ARGS[@]}"; do
             # Check if a value represents an absolute path
             local value="${DESERIALIZED_ARGS[i]}"
