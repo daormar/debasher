@@ -935,13 +935,6 @@ clear_curr_opt_list_array()
 }
 
 ########
-clear_opt_list_assoc_array()
-{
-    unset PROCESS_OPT_LIST
-    declare -gA PROCESS_OPT_LIST
-}
-
-########
 save_opt_list()
 {
     # Set option list for current process. The option list is an array
@@ -953,10 +946,18 @@ save_opt_list()
 }
 
 ########
-show_opt_list_for_processes()
+show_curr_opt_list()
 {
-    for process in "${!PROCESS_OPT_LIST[@]}"; do
-        echo "${process} -> ${PROCESS_OPT_LIST[${process}]}"
+    local processname=$1
+
+    # Show array length
+    local array_length=${#CURRENT_PROCESS_OPT_LIST[@]}
+    echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN} -> ${array_length}"
+
+    # Show options
+    for idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
+        task_idx=$idx
+        echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx} -> ${CURRENT_PROCESS_OPT_LIST[$idx]}"
     done
 }
 
