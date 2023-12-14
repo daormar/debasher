@@ -256,16 +256,17 @@ builtin_sched_get_array_task_status()
 {
     local dirname=$1
     local processname=$2
-    local taskidx=$3
+    local task_idx=$3
     local processdirname=`get_process_outdir_given_dirname "${dirname}" ${processname}`
-    local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${taskidx}`
+    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${task_idx}`
 
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
         echo ${BUILTIN_SCHED_TODO_TASK_STATUS}
     else
         # Task was started
-        if array_task_is_finished "${dirname}" ${processname} ${taskidx}; then
+        if array_task_is_finished "${dirname}" ${processname} ${task_idx}; then
             echo ${BUILTIN_SCHED_FINISHED_TASK_STATUS}
         else
             # Task is not finished
@@ -287,13 +288,15 @@ builtin_sched_get_failed_array_task_indices()
     local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
-    for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
+    local task_idx
+    local last_task_idx=$((array_size - 1))
+    for task_idx in `"${SEQ}" 0 ${last_task_idx}`; do
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $task_idx`
         if [ ${task_status} = ${BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
-                result=$taskidx
+                result=$task_idx
             else
-                result="$result $taskidx"
+                result="$result $task_idx"
             fi
         fi
     done
@@ -309,13 +312,15 @@ builtin_sched_get_finished_array_task_indices()
     local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
-    for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
+    local task_idx
+    local last_task_idx=$((array_size - 1))
+    for task_idx in `"${SEQ}" 0 ${last_task_idx}`; do
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $task_idx`
         if [ ${task_status} = ${BUILTIN_SCHED_FINISHED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
-                result=$taskidx
+                result=$task_idx
             else
-                result="$result $taskidx"
+                result="$result $task_idx"
             fi
         fi
     done
@@ -331,13 +336,15 @@ builtin_sched_get_inprogress_array_task_indices()
     local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
-    for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
+    local task_idx
+    local last_task_idx=$((array_size - 1))
+    for task_idx in `"${SEQ}" 0 ${last_task_idx}`; do
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $task_idx`
         if [ ${task_status} = ${INPROGRESS_PROCESS_STATUS} ]; then
             if [ "${result}" = "" ]; then
-                result=$taskidx
+                result=$task_idx
             else
-                result="$result $taskidx"
+                result="$result $task_idx"
             fi
         fi
     done
@@ -353,14 +360,15 @@ builtin_sched_get_todo_array_task_indices()
     local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
-    local taskidx
-    for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
+    local task_idx
+    local last_task_idx=$((array_size - 1))
+    for task_idx in `"${SEQ}" 0 ${last_task_idx}`; do
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $task_idx`
         if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
-                result=$taskidx
+                result=$task_idx
             else
-                result="$result $taskidx"
+                result="$result $task_idx"
             fi
         fi
     done
@@ -376,14 +384,15 @@ builtin_sched_get_pending_array_task_indices()
     local array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
-    local taskidx
-    for taskidx in `seq ${array_size}`; do
-        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $taskidx`
+    local task_idx
+    local last_task_idx=$((array_size - 1))
+    for task_idx in `"${SEQ}" 0 ${last_task_idx}`; do
+        local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $task_idx`
         if [ ${task_status} = ${BUILTIN_SCHED_TODO_TASK_STATUS} -o ${task_status} = ${BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
             if [ "${result}" = "" ]; then
-                result=$taskidx
+                result=$task_idx
             else
-                result="$result $taskidx"
+                result="$result $task_idx"
             fi
         fi
     done
@@ -761,12 +770,12 @@ builtin_sched_get_knapsack_mem_for_process()
 builtin_sched_get_knapsack_name()
 {
     local processname=$1
-    local taskidx=$2
+    local task_idx=$2
 
-    if [ "${taskidx}" = "" ]; then
+    if [ "${task_idx}" = "" ]; then
         echo "${BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]}"
     else
-        echo "${BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]}_${taskidx}"
+        echo "${BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]}_${task_idx}"
     fi
 }
 
@@ -873,7 +882,7 @@ builtin_sched_get_debug_sel_processes_info()
     local knapsack_name
     for knapsack_name in ${BUILTIN_SCHED_SELECTED_PROCESSES}; do
         sname=`builtinsched_extract_process_from_knapsack_name ${knapsack_name}`
-        tidx=`builtinsched_extract_taskidx_from_knapsack_name ${knapsack_name}`
+        tidx=`builtinsched_extract_task_idx_from_knapsack_name ${knapsack_name}`
         sel_processes="${sel_processes} ${knapsack_name} -> ${sname},${tidx};"
     done
     echo $sel_processes
@@ -957,10 +966,10 @@ builtin_sched_execute_funct_plus_postfunct()
     local post_funct=$6
     local opt_array_size=$7
     local opts_fname=$8
-    local taskidx=$9
+    local task_idx=$9
 
     # Get serialized arguments
-    local sargs=`get_nth_file_line "${opts_fname}" "${taskidx}"`
+    local sargs=`get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"`
 
     # Convert serialized process options to array (result is placed into
     # the DESERIALIZED_ARGS variable)
@@ -978,7 +987,7 @@ builtin_sched_execute_funct_plus_postfunct()
         if [ "${opt_array_size}" -eq 1 ]; then
             default_reset_outfiles_for_process "${dirname}" "${processname}"
         else
-            default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${taskidx}"
+            default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
         fi
     else
         ${reset_funct} "${DESERIALIZED_ARGS[@]}"
@@ -1004,7 +1013,7 @@ builtin_sched_execute_funct_plus_postfunct()
     fi
 
     # Signal process completion
-    signal_process_completion "${dirname}" "${processname}" "${taskidx}" "${opt_array_size}" || return 1
+    signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
 
     display_end_process_message
 }
@@ -1117,22 +1126,26 @@ builtin_sched_launch()
     # Initialize variables
     local dirname=$1
     local processname=$2
-    local taskidx=$3
+    local task_idx=$3
     local file=`get_script_filename "${dirname}" ${processname}`
 
     # Enable execution of specific task id
-    if [ ${taskidx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        export BUILTIN_ARRAY_TASK_ID=1
+    if [ ${task_idx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
+        export BUILTIN_ARRAY_TASK_ID=0
     else
-        export BUILTIN_ARRAY_TASK_ID=${taskidx}
+        export BUILTIN_ARRAY_TASK_ID=${task_idx}
     fi
 
     # Set variable indicating name of file storing PID
-    if [ ${taskidx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
+    if [ ${task_idx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
         local pid_file=`get_processid_filename "${dirname}" ${processname}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
-        local pid_file=`get_array_taskid_filename "${dirname}" ${processname} ${taskidx}`
+        # Get scripts dir
+        local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+
+        # Write pid
+        local pid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${task_idx}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
@@ -1145,7 +1158,7 @@ builtin_sched_launch()
     wait_until_file_exists "${pid_file}" ${max_num_iters} || return 1
 
     # Unset variables
-    if [ ${taskidx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
+    if [ ${task_idx} != ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
         unset "${task_varname}"
     fi
     unset BUILTIN_SCHED_PID_FILENAME
@@ -1158,7 +1171,7 @@ builtin_sched_execute_process()
     local cmdline=$1
     local dirname=$2
     local processname=$3
-    local taskidx=$4
+    local task_idx=$4
     local launched_tasks=${BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]}
     local process_spec=${BUILTIN_SCHED_PROCESS_SPEC[${processname}]}
 
@@ -1166,7 +1179,7 @@ builtin_sched_execute_process()
 
     ## Obtain process status
     local status=`get_process_status "${dirname}" ${processname}`
-    echo "PROCESS: ${processname} (TASKIDX: ${taskidx}) ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
+    echo "PROCESS: ${processname} (TASK_IDX: ${task_idx}) ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Create script
     local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
@@ -1181,14 +1194,14 @@ builtin_sched_execute_process()
     fi
 
     # Launch script
-    local task_array_list=${taskidx}
-    builtin_sched_launch "${dirname}" "${processname}" "${taskidx}" || { echo "Error while launching process!" >&2 ; return 1; }
+    local task_array_list=${task_idx}
+    builtin_sched_launch "${dirname}" "${processname}" "${task_idx}" || { echo "Error while launching process!" >&2 ; return 1; }
 
     # Update register of launched tasks
     if [ "${launched_tasks}" = "" ]; then
-        BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]=$taskidx
+        BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]=$task_idx
     else
-        BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]="${BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]} $taskidx"
+        BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]="${BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]} $task_idx"
     fi
 }
 
@@ -1201,7 +1214,7 @@ builtinsched_extract_process_from_knapsack_name()
 }
 
 ########
-builtinsched_extract_taskidx_from_knapsack_name()
+builtinsched_extract_task_idx_from_knapsack_name()
 {
     local knapsack_name=$1
     local tidx=`echo "${knapsack_name}" | "${AWK}" -F "_" '{print $2}'`
@@ -1222,10 +1235,10 @@ builtin_sched_exec_processes_and_update_status()
     for knapsack_name in ${BUILTIN_SCHED_SELECTED_PROCESSES}; do
         # Extract process name and task id
         processname=`builtinsched_extract_process_from_knapsack_name "${knapsack_name}"`
-        taskidx=`builtinsched_extract_taskidx_from_knapsack_name "${knapsack_name}"`
+        task_idx=`builtinsched_extract_task_idx_from_knapsack_name "${knapsack_name}"`
 
         # Execute process
-        builtin_sched_execute_process "${cmdline}" "${dirname}" ${processname} ${taskidx} || return 1
+        builtin_sched_execute_process "${cmdline}" "${dirname}" ${processname} ${task_idx} || return 1
 
         # Update process status
         BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${INPROGRESS_PROCESS_STATUS}
