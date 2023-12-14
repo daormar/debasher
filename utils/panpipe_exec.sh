@@ -80,6 +80,9 @@ usage()
     echo "--show-cmdline-opts       Show command line options for the pipeline"
     echo "--check-proc-opts         Check process options"
     echo "--debug                   Do everything except launching pipeline processes"
+    echo "--wait                    Wait until all processes finish. This option has"
+    echo "                          no effect when using the BUILTIN scheduler since it"
+    echo "                          waits by its own design"
     echo "--builtinsched-debug      Show debug information for built-in scheduler"
     echo "--version                 Display version information and exit"
     echo "--help                    Display this help and exit"
@@ -102,6 +105,7 @@ read_pars()
     show_cmdline_opts_given=0
     check_proc_opts_given=0
     debug=0
+    wait=0
     builtinsched_debug=0
     while [ $# -ne 0 ]; do
         case $1 in
@@ -187,6 +191,8 @@ read_pars()
             "--check-proc-opts") check_proc_opts_given=1
                            ;;
             "--debug") debug=1
+                       ;;
+            "--wait") wait=1
                        ;;
             "--builtinsched-debug") builtinsched_debug=1
                                     ;;
@@ -1200,7 +1206,9 @@ else
             else
                 prepare_files_and_dirs_for_processes "${command_line}" "${outd}" "${procspec_file}"
                 launch_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
-                wait_for_pipeline_processes "${outd}" "${procspec_file}" || exit 1
+                if [ "${wait}" -eq 1 ]; then
+                    wait_for_pipeline_processes "${outd}" "${procspec_file}" || exit 1
+                fi
             fi
         fi
     fi
