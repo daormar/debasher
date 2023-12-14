@@ -1340,8 +1340,7 @@ builtin_sched_prepare_files_and_dirs_for_process()
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Initialize array_size variable and populate array of shared directories
         define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-        local process_opts_array=("${CURRENT_PROCESS_OPT_LIST[@]}")
-        local array_size=${#process_opts_array[@]}
+        local array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
 
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
