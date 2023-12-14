@@ -429,16 +429,6 @@ get_outd_for_dep_given_process_spec()
 }
 
 ########
-get_task_array_size_for_process()
-{
-    local cmdline=$1
-    local process_spec=$2
-
-    define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-    echo ${#CURRENT_PROCESS_OPT_LIST[@]}
-}
-
-########
 get_deptype_part_in_dep()
 {
     local dep=$1
