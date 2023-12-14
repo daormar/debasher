@@ -126,7 +126,7 @@ builtin_sched_init_process_info()
             local processdeps=`extract_processdeps_from_process_spec "$process_spec"`
             local spec_throttle=`extract_attr_from_process_spec "$process_spec" "throttle"`
             local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
-            local array_size=`get_task_array_size_for_process "${cmdline}" "${process_spec}"`
+            local array_size=`get_numtasks_for_process "${processname}"`
 
             # Get cpus info
             local cpus=`extract_cpus_from_process_spec "$process_spec"`
@@ -1338,9 +1338,8 @@ builtin_sched_prepare_files_and_dirs_for_process()
     local process_spec=${BUILTIN_SCHED_PROCESS_SPEC[${processname}]}
 
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
-        # Initialize array_size variable and populate array of shared directories
-        define_opts_for_process "${cmdline}" "${process_spec}" || return 1
-        local array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
+        # Obtain array size
+        local array_size=`get_numtasks_for_process "${processname}"`
 
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
