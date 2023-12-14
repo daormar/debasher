@@ -94,10 +94,10 @@ print_script_body_slurm_sched()
 
     # Retrieve and deserialize process options
     if [ "${opt_array_size}" -gt 1 ]; then
-        echo "sargs=\`get_nth_file_line \"${opts_fname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
+        echo "sargs=\`get_file_opts_for_process_and_task \"${opts_fname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
         echo "deserialize_args \"\${sargs}\""
     else
-        echo "sargs=\`get_nth_file_line \"${opts_fname}\" 1\`"
+        echo "sargs=\`get_file_opts_for_process_and_task \"${opts_fname}\" 0\`"
         echo "deserialize_args \"\${sargs}\""
     fi
 
