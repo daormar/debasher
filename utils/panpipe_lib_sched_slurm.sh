@@ -159,6 +159,7 @@ write_env_vars_and_funcs_slurm()
     # Write slurm sched environment functions
     declare -f write_env_vars_and_funcs_slurm
     declare -f seq_execute_slurm
+    declare -f get_script_log_filenames_slurm
 }
 
 ########
@@ -1039,6 +1040,14 @@ get_elapsed_time_for_process_slurm()
 }
 
 ########
+get_script_log_filenames_slurm()
+{
+    local scripts_dirname=$1
+
+    find "${scripts_dirname}" -name "*.${SLURM_SCHED_LOG_FEXT}" -exec echo {} \;
+}
+
+########
 seq_execute_slurm()
 {
     create_seq_execute_script()
@@ -1081,3 +1090,4 @@ seq_execute_slurm()
     # Clean temporary files on exit
     rm "${script_name}"
 }
+
