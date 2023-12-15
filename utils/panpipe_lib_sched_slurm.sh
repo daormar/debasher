@@ -1090,4 +1090,3 @@ seq_execute_slurm()
     # Clean temporary files on exit
     rm "${script_name}"
 }
-
