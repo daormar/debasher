@@ -270,17 +270,15 @@ get_script_log_filenames()
 {
     local scripts_dirname=`get_ppl_scripts_dir`
 
-    for filename in "${scripts_dirname}/"*.${BUILTIN_SCHED_LOG_FEXT}; do
-        if [ -f "${filename}" ]; then
-            echo "${filename}"
-        fi
-    done
-
-    for filename in "${scripts_dirname}/"*.${SLURM_SCHED_LOG_FEXT}; do
-        if [ -f "${filename}" ]; then
-            echo "${filename}"
-        fi
-    done
+        local sched=`get_scheduler`
+    case $sched in
+        ${SLURM_SCHEDULER})
+            get_script_log_filenames_slurm "${scripts_dirname}"
+            ;;
+        ${BUILTIN_SCHEDULER})
+            get_script_log_filenames_builtin "${scripts_dirname}"
+            ;;
+    esac
 }
 
 ########
@@ -333,7 +331,6 @@ filter_errwarns_in_script_log_files_pref()
     local errpref=$1
     local warnpref=$2
     local format=$3
-    local scripts_dirname=`get_ppl_scripts_dir`
     local i=0
 
     while read filename; do
