@@ -335,6 +335,8 @@ write_env_vars_and_funcs()
         declare -p ARG_SEP
         declare -p OPT_NOT_FOUND
         declare -p FUNCT_NOT_FOUND
+        declare -p PANPIPE_LOG_ERROR_MSG_START
+        declare -p PANPIPE_LOG_WARNING_MSG_START
         declare -p BASH
         declare -p BASENAME
         declare -p DIRNAME
@@ -346,6 +348,10 @@ write_env_vars_and_funcs()
 
         # Write functions
         declare -f pipe_fail
+        declare -f get_process_finished_filename
+        declare -f get_ppl_scripts_dir
+        declare -f get_ppl_scripts_dir_for_process
+        declare -f get_ppl_scripts_dir_given_basedir
         declare -f read_opt_value_from_func_args
         declare -f get_opt_value_from_func_args
         declare -f str_is_val_descriptor
@@ -377,6 +383,12 @@ write_env_vars_and_funcs()
         declare -f write_env_vars_and_funcs
         declare -f get_mod_vars_and_funcs_fname
         declare -f seq_execute
+        declare -f logmsg
+        declare -f get_script_log_filenames
+        declare -f filter_warnings_in_script_log_file
+        declare -f filter_errors_in_script_log_file
+        declare -f create_script_log_file_errwarn_entry
+        declare -f filter_errwarns_in_script_log_files_pref
     }
 
     write_mod_env_vars_and_funcs()
