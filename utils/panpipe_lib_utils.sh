@@ -636,7 +636,7 @@ split_file_in_blocks()
     local outpref=$2
     local num_lines=$3
 
-    "${AWK}" -v lines_per_block=${num_lines} -v outpref="outpref" 'BEGIN{block_count=0}
+    "${AWK}" -v lines_per_block="${num_lines}" -v outpref="${outpref}" 'BEGIN{block_count=0}
              {
               if ((NR-1)  % lines_per_block == 0) {
                output_file = outpref "_" (block_count);
