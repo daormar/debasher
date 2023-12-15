@@ -630,6 +630,23 @@ print_array_elems()
 }
 
 ########
+split_file_in_blocks()
+{
+    local filename=$1
+    local outpref=$2
+    local num_lines=$3
+
+    "${AWK}" -v lines_per_block=${num_lines} -v outpref="outpref" 'BEGIN{block_count=0}
+             {
+              if ((NR-1)  % lines_per_block == 0) {
+               output_file = outpref "_" (block_count);
+               ++block_count
+              }
+              print > output_file;
+             }' "${filename}"
+}
+
+########
 get_nth_file_line()
 {
     local filename=$1
