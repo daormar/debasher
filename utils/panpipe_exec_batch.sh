@@ -456,7 +456,7 @@ move_dir()
         echo "Error: ${destdir} exists" >&2
         return 1
     else
-        mv "${pipeline_outd}" "${outd}" || return 1
+        "${MV}" "${pipeline_outd}" "${outd}" || return 1
     fi
 }
 
