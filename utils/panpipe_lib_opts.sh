@@ -876,7 +876,7 @@ prepare_fifos_owned_by_process()
                 "${MKDIR}" -p "${fifodir}/${dirname}"
             fi
             if [ -p "${fifodir}/${augm_fifoname}" ]; then
-                rm -f "${fifodir}/${augm_fifoname}" || exit 1
+                "${RM}" -f "${fifodir}/${augm_fifoname}" || exit 1
             fi
             "${MKFIFO}" "${fifodir}/${augm_fifoname}" || exit 1
         fi

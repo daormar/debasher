@@ -162,7 +162,7 @@ update_process_completion_signal()
     # specific associative array
     local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
     if [ "${status}" = "${REEXEC_PROCESS_STATUS}" ]; then
-        rm -f "${finished_filename}"
+        "${RM}" -f "${finished_filename}"
         PANPIPE_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]=1
     fi
 }

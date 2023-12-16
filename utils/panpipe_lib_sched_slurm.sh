@@ -909,7 +909,7 @@ clean_process_files_slurm()
         local processname=$2
 
         local processid_file=`get_processid_filename "${dirname}" ${processname}`
-        rm -f "${processid_file}"
+        "${RM}" -f "${processid_file}"
     }
 
     clean_process_id_files_array()
@@ -920,7 +920,7 @@ clean_process_files_slurm()
 
         local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
-            rm "${array_taskid_file}"
+            "${RM}" "${array_taskid_file}"
         fi
     }
 
@@ -930,13 +930,13 @@ clean_process_files_slurm()
         local processname=$2
 
         local slurm_log_filename=`get_process_log_filename_slurm "${dirname}" ${processname}`
-        rm -f "${slurm_log_filename}*"
+        "${RM}" -f "${slurm_log_filename}*"
         local slurm_log_preverif=`get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
-        rm -f "${slurm_log_preverif}"
+        "${RM}" -f "${slurm_log_preverif}"
         local slurm_log_verif=`get_process_log_verif_filename_slurm "${dirname}" ${processname}`
-        rm -f "${slurm_log_verif}"
+        "${RM}" -f "${slurm_log_verif}"
         local slurm_log_signcomp=`get_process_log_signcomp_filename_slurm "${dirname}" ${processname}`
-        rm -f "${slurm_log_signcomp}"
+        "${RM}" -f "${slurm_log_signcomp}"
     }
 
     clean_process_log_files_array()
@@ -947,7 +947,7 @@ clean_process_files_slurm()
 
         local slurm_task_log_filename=`get_task_log_filename_slurm "${scriptsdir}" "${processname}" "${idx}"`
         if [ -f "${slurm_task_log_filename}" ]; then
-            rm "${slurm_task_log_filename}"
+            "${RM}" "${slurm_task_log_filename}"
         fi
     }
 
@@ -1088,5 +1088,5 @@ seq_execute_slurm()
     "${SRUN}" "${script_name}" "$@" || return 1
 
     # Clean temporary files on exit
-    rm "${script_name}"
+    "${RM}" "${script_name}"
 }

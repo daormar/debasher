@@ -267,7 +267,7 @@ add_panpipe_pipeline()
     done < "${tmpfile}"
 
     # Remove temporary file
-    rm "${tmpfile}"
+    "${RM}" "${tmpfile}"
 }
 
 ########

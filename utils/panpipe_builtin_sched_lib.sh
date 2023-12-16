@@ -822,7 +822,7 @@ builtin_sched_solve_knapsack()
 
     # Create file with item and weight specification
     specfile="${dirname}/${BUILTIN_SCHED_KNAPSACK_SPEC_FNAME}"
-    rm -f "${specfile}"
+    "${RM}" -f "${specfile}"
     builtin_sched_print_knapsack_spec > "${specfile}"
 
     # Solve knapsack problem
@@ -1274,7 +1274,7 @@ builtin_sched_clean_process_files()
         local processname=$2
 
         local processid_file=`get_processid_filename "${dirname}" ${processname}`
-        rm -f "${processid_file}"
+        "${RM}" -f "${processid_file}"
     }
 
     clean_process_id_files_array()
@@ -1285,7 +1285,7 @@ builtin_sched_clean_process_files()
 
         local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
-            rm "${array_taskid_file}"
+            "${RM}" "${array_taskid_file}"
         fi
     }
 
@@ -1296,7 +1296,7 @@ builtin_sched_clean_process_files()
 
         local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
         local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
-        rm -f "${builtin_log_filename}"
+        "${RM}" -f "${builtin_log_filename}"
     }
 
     clean_process_log_files_array()
@@ -1307,7 +1307,7 @@ builtin_sched_clean_process_files()
 
         local builtin_task_log_filename=`get_task_log_filename_builtin "${scriptsdir}" ${processname} ${idx}`
         if [ -f "${builtin_task_log_filename}" ]; then
-            rm "${builtin_task_log_filename}"
+            "${RM}" "${builtin_task_log_filename}"
         fi
     }
 

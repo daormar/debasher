@@ -248,7 +248,7 @@ write_opt_array()
     else
         print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
         split_file_in_blocks "${opts_fname}" "${opts_fname}" "${OPT_FILE_LINES_PER_BLOCK}"
-        rm "${opts_fname}"
+        "${RM}" "${opts_fname}"
     fi
 }
 
@@ -970,7 +970,7 @@ default_reset_outfiles_for_process()
 
     if [ -d "${outd}" ]; then
         echo "* Resetting output directory for process...">&2
-        rm -rf "${outd}"/* || { echo "Error! could not clear output directory" >&2; return 1; }
+        "${RM}" -rf "${outd}"/* || { echo "Error! could not clear output directory" >&2; return 1; }
     fi
 }
 

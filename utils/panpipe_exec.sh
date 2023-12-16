@@ -453,8 +453,8 @@ check_process_opts()
     local out_fifos_file=$6
 
     # Remove output files
-    rm -f "${out_opts_file}"
-    rm -f "${out_opts_exh_file}"
+    "${RM}" -f "${out_opts_file}"
+    "${RM}" -f "${out_opts_exh_file}"
 
     # Read information about the processes to be executed
     while read process_spec; do
@@ -759,7 +759,7 @@ release_lock()
 
     # Try to acquire lock and remove associated file (if acquisition was
     # successful)
-    $FLOCK -xn $fd && rm -f "$file" || return 1
+    $FLOCK -xn $fd && "${RM}" -f "$file" || return 1
 }
 
 ########

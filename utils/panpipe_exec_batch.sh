@@ -302,7 +302,7 @@ get_ppl_status()
 
         # Obtain percentage of unfinished processes
         local unfinished_process_perc=`get_unfinished_process_perc "${tmpfile}"`
-        rm "${tmpfile}"
+        "${RM}" "${tmpfile}"
 
         # Evaluate exit code of pipe_status
         case $exit_code in
