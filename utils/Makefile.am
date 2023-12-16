@@ -52,6 +52,7 @@ SUFFIXES= .sh .py .r .R
 	echo "SPLIT=\"$(SPLIT)\"" >> $@
 	echo "CAT=\"$(CAT)\"" >> $@
 	echo "RM=\"$(RM_CMD)\"" >> $@
+	echo "MV=\"$(MV)\"" >> $@
 	echo "CP=\"$(CP)\"" >> $@
 	echo "CUT=\"$(CUT)\"" >> $@
 	echo "HEAD=\"$(HEAD)\"" >> $@
