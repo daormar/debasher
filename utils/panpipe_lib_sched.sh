@@ -324,6 +324,7 @@ write_env_vars_and_funcs()
         declare -p SLURM_SCHEDULER
         declare -p BUILTIN_SCHEDULER
         declare -p DISABLE_SCHEDULERS
+        declare -p OPT_FILE_LINES_PER_BLOCK
         declare -p PANPIPE_SCRIPTS_DIRNAME
         declare -p PIPELINE_OUTDIR
         declare -p MOD_VARS_AND_FUNCS_BASENAME
