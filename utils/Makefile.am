@@ -51,6 +51,7 @@ SUFFIXES= .sh .py .r .R
 	echo "REALPATH=\"$(REALPATH)\"" >> $@
 	echo "SPLIT=\"$(SPLIT)\"" >> $@
 	echo "CAT=\"$(CAT)\"" >> $@
+	echo "RM=\"$(RM)\"" >> $@
 	echo "CP=\"$(CP)\"" >> $@
 	echo "CUT=\"$(CUT)\"" >> $@
 	echo "HEAD=\"$(HEAD)\"" >> $@
