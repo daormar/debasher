@@ -237,6 +237,22 @@ process_is_defined()
 }
 
 ########
+write_opt_array()
+{
+    local varname=$1
+    local opt_array_size=$2
+    local opts_fname=$3
+
+    if [ "${OPT_FILE_LINES_PER_BLOCK}" -le 0 ] || [ "${opt_array_size}" -le "${OPT_FILE_LINES_PER_BLOCK}" ]; then
+        print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
+    else
+        print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
+        split_file_in_blocks "${opts_fname}" "${opts_fname}" "${OPT_FILE_LINES_PER_BLOCK}"
+        rm "${opts_fname}"
+    fi
+}
+
+########
 get_numtasks_for_process()
 {
     local processname=$1
@@ -260,8 +276,17 @@ get_file_opts_for_process_and_task()
     local opts_fname=$1
     local task_idx=$2
 
-    local line=$((task_idx + 1))
-    get_nth_file_line "${opts_fname}" "${line}"
+    if [ -f "${opts_fname}" ]; then
+        local line=$((task_idx + 1))
+        get_nth_file_line "${opts_fname}" "${line}"
+    else
+        local block_number=$((task_idx / OPT_FILE_LINES_PER_BLOCK))
+        local block_idx=$((task_idx % OPT_FILE_LINES_PER_BLOCK))
+        local block_fname="${opts_fname}_${block_number}"
+
+        local line=$((block_idx + 1))
+        get_nth_file_line "${block_fname}" "${line}"
+    fi
 }
 
 ########

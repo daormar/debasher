@@ -468,7 +468,7 @@ check_process_opts()
 
         # Write option array to file (line by line)
         local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
-        print_array_elems "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" > "${opts_fname}"
+        write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
         # Print exhaustive option list for process
         show_curr_opt_list "${processname}" >> "${out_opts_exh_file}"
