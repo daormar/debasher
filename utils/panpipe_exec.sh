@@ -792,6 +792,9 @@ create_basic_dirs()
     local scriptsdir=`get_ppl_scripts_dir`
     "${MKDIR}" -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
+    local sched_opts_dir=`get_sched_opts_dir`
+    "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
+
     local graphsdir=`get_ppl_graphs_dir`
     "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 

@@ -987,10 +987,25 @@ read_value_from_desc()
 }
 
 ########
+get_sched_opts_dir_given_basedir()
+{
+    local dirname=$1
+
+    echo "${dirname}/${SCHED_OPTS_DIRNAME}"
+}
+
+########
+get_sched_opts_dir()
+{
+    get_sched_opts_dir_given_basedir "${PIPELINE_OUTDIR}"
+}
+
+########
 get_sched_opts_fname_for_process()
 {
     local dirname=$1
     local processname=$2
 
-    echo "${dirname}/${SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX}${processname}"
+    local sched_opts_dir=`get_sched_opts_dir_given_basedir "${dirname}"`
+    echo "${sched_opts_dir}/${SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX}${processname}"
 }
