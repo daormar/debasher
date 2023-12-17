@@ -773,12 +773,14 @@ ensure_exclusive_execution()
 }
 
 ########
-create_panpipe_output_dir()
+set_panpipe_output_dir()
 {
-    echo "# Creating PanPipe output directory..." >&2
+    echo "# Setting PanPipe output directory (the directory will be created if necessary)..." >&2
 
     # Create directory
-    "${MKDIR}" -p "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
+    if [ ! -d "${outd}" ]; then
+        "${MKDIR}" -p "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
+    fi
 
     # Get absolute file path (very important so as to ensure correct
     # execution of processes)
@@ -789,9 +791,9 @@ create_panpipe_output_dir()
 }
 
 ########
-create_additional_dirs()
+create_basic_dirs()
 {
-    echo "# Creating additional directories..." >&2
+    echo "# Creating basic directories..." >&2
 
     local scriptsdir=`get_ppl_scripts_dir`
     "${MKDIR}" -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
@@ -1146,9 +1148,9 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-create_panpipe_output_dir || exit 1
+set_panpipe_output_dir || exit 1
 
-create_additional_dirs || exit 1
+create_basic_dirs || exit 1
 
 load_module || exit 1
 
