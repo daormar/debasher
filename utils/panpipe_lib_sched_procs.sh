@@ -521,18 +521,16 @@ get_process_status()
     local processname=$2
     local script_filename=`get_script_filename "${dirname}" ${processname}`
 
-    # Check if process should be reexecuted (REEXEC status has the
-    # highest priority level)
-    if process_should_be_reexec "$processname"; then
-        echo "${REEXEC_PROCESS_STATUS}"
-        return ${REEXEC_PROCESS_EXIT_CODE}
-    fi
-
-    # Check that script file for process was created
     if [ -f "${script_filename}" ]; then
         if process_is_in_progress "$dirname" "$processname"; then
             echo "${INPROGRESS_PROCESS_STATUS}"
             return ${INPROGRESS_PROCESS_EXIT_CODE}
+        fi
+
+        # Check if process should be reexecuted
+        if process_should_be_reexec "$processname"; then
+            echo "${REEXEC_PROCESS_STATUS}"
+            return ${REEXEC_PROCESS_EXIT_CODE}
         fi
 
         if process_is_finished "$dirname" "$processname"; then
