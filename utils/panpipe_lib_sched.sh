@@ -320,6 +320,9 @@ write_env_vars_and_funcs()
     write_panpipe_env_vars_and_funcs()
     {
         # Write variables
+        for conda_var in CONDA_EXE CONDA_PYTHON_EXE _CE_M _CE_CONDA; do
+            declare -p "${conda_var}"
+        done
         declare -p PANPIPE_SCHEDULER
         declare -p SLURM_SCHEDULER
         declare -p BUILTIN_SCHEDULER
@@ -348,6 +351,9 @@ write_env_vars_and_funcs()
         declare -p AWK
 
         # Write functions
+        for conda_func in __conda_activate __conda_exe __conda_hashr __conda_reactivate conda; do
+            declare -f "${conda_func}"
+        done
         declare -f pipe_fail
         declare -f get_process_finished_filename
         declare -f get_ppl_scripts_dir
