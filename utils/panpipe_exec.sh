@@ -786,7 +786,7 @@ create_basic_dirs()
 {
     echo "# Creating basic directories..." >&2
 
-    "${MKDIR}" -p ${outd} || { echo "Error! cannot create output directory" >&2; return 1; }
+    "${MKDIR}" -p "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
     set_panpipe_outdir "${outd}"
 
     local scriptsdir=`get_ppl_scripts_dir`
@@ -1142,9 +1142,9 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-absolutize_file_paths || exit 1
-
 create_basic_dirs || exit 1
+
+absolutize_file_paths || exit 1
 
 load_module || exit 1
 
