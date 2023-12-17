@@ -211,6 +211,9 @@ check_pars()
         if [ ! -f "${pfile}" ]; then
             echo "Error! file ${pfile} does not exist" >&2
             exit 1
+        else
+            # Absolutize file path
+            pfile=`get_absolute_path "${pfile}"`
         fi
     fi
 
@@ -236,18 +239,6 @@ check_pars()
     if [ ${check_proc_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
         echo "Error! --check-proc-opts and --debug options cannot be given simultaneously"
         exit 1
-    fi
-}
-
-########
-absolutize_file_paths()
-{
-    if [ ${pfile_given} -eq 1 ]; then
-        pfile=`get_absolute_path "${pfile}"`
-    fi
-
-    if [ ${outdir_given} -eq 1 ]; then
-        outd=`get_absolute_path "${outd}"`
     fi
 }
 
@@ -782,12 +773,25 @@ ensure_exclusive_execution()
 }
 
 ########
-create_basic_dirs()
+create_panpipe_output_dir()
 {
-    echo "# Creating basic directories..." >&2
+    echo "# Creating PanPipe output directory..." >&2
 
+    # Create directory
     "${MKDIR}" -p "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
+
+    # Get absolute file path (very important so as to ensure correct
+    # execution of processes)
+    outd=`get_absolute_path "${outd}"`
+
+    # Set outd as the output directory of panpipe
     set_panpipe_outdir "${outd}"
+}
+
+########
+create_additional_dirs()
+{
+    echo "# Creating additional directories..." >&2
 
     local scriptsdir=`get_ppl_scripts_dir`
     "${MKDIR}" -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
@@ -1142,9 +1146,9 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-create_basic_dirs || exit 1
+create_panpipe_output_dir || exit 1
 
-absolutize_file_paths || exit 1
+create_additional_dirs || exit 1
 
 load_module || exit 1
 
