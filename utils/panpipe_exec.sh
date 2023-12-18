@@ -263,6 +263,21 @@ get_mod_vars_and_funcs()
 
     local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${outd}"`
     "${panpipe_libexecdir}"/panpipe_get_vars_and_funcs "${PIPELINE_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
+
+    echo "" >&2
+}
+
+########
+ensure_pipeline_not_being_executed()
+{
+    local initial_procspec_file=$1
+
+    if [ -f "${initial_procspec_file}" ]; then
+        if there_are_in_progress_processes "${outd}" "${initial_procspec_file}"; then
+            echo "Error: this pipeline has processes being executed. Please use panpipe_status or panpipe_stop tools to interact with the pipeline. The execution of panpipe_exec will be aborted" >&2
+            exit 1
+        fi
+    fi
 }
 
 ########
@@ -788,6 +803,8 @@ set_panpipe_output_dir()
 
     # Set outd as the output directory of panpipe
     set_panpipe_outdir "${outd}"
+
+    echo "" >&2
 }
 
 ########
@@ -1152,14 +1169,20 @@ set_panpipe_output_dir || exit 1
 
 create_basic_dirs || exit 1
 
+configure_scheduler || exit 1
+
 load_module || exit 1
 
 get_mod_vars_and_funcs || exit 1
 
+# Get name of initial process specification file
 initial_procspec_file="${outd}/${PPEXEC_INITIAL_PROCSPEC_BASENAME}"
-gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
 
-configure_scheduler || exit 1
+# Check if there are running processes and abort execution if true
+ensure_pipeline_not_being_executed "${initial_procspec_file}"
+
+# Write initial process specification file
+gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts "${initial_procspec_file}" || exit 1
