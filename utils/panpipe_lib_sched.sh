@@ -345,6 +345,7 @@ write_env_vars_and_funcs()
         declare -p BASENAME
         declare -p DIRNAME
         declare -p MKTEMP
+        declare -p RM
         declare -p CAT
         declare -p HEAD
         declare -p TAIL
