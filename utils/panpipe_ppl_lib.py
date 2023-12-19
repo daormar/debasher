@@ -18,6 +18,15 @@ ASSOC_ARRAY_KEY_LEN = "__LEN__"
 PROCESS_TASKIDX_SEP = "__PROCESS_TASKIDX_SEP__"
 OPT_PROCESS_SEP = "__OPT_PROCESS_SEP__"
 OPTPROC_HUB_SUFFIX = "__OPTPROC_HUB_SUFFIX"
+CLUSTER_STYLE = "filled"
+CLUSTER_FILL_COLOR = "lightgrey"
+PROCESS_NODE_SHAPE = "box"
+OPTION_NODE_SHAPE = "ellipse"
+OPTION_HUB_SHAPE = "point"
+FIFO_ARC_STYLE = "dashed"
+DEP_GRAPH_LINESTYLE_SEP_INT = "dashed"
+DEP_GRAPH_LINESTYLE_SEP_COMMA = "solid"
+DEP_GRAPH_LINESTYLE_SEP_VOID = "solid"
 
 ##################################################
 class DirectedGraph:
@@ -346,11 +355,11 @@ class DependencyGraph:
 
     def get_graph_linestyle(self, separator):
         if separator=="?":
-            return "dashed"
+            return DEP_GRAPH_LINESTYLE_SEP_INT
         elif separator==",":
-            return "solid"
+            return DEP_GRAPH_LINESTYLE_SEP_COMMA
         elif separator=="":
-            return "solid"
+            return DEP_GRAPH_LINESTYLE_SEP_VOID
 
     def print(self):
         # Print header
@@ -360,7 +369,7 @@ class DependencyGraph:
         print("K=1;")
 
         # Set representation for processes
-        print("node [shape = box];")
+        print("node [shape = " + PROCESS_NODE_SHAPE + "];")
 
         # Process processes
         for process in self.processdeps_map:
@@ -494,16 +503,20 @@ class ProcessGraph:
         print("K=1;")
 
         # Extract information
-        process_graph_repres = self.gen_process_graph_repres()
+        process_graph_repres, process_graph_set = self.gen_process_graph_repres()
         opt_to_processes = self.get_opt_to_processes()
         optproc_to_arrsize = self.gen_optproc_to_arrsize(opt_to_processes)
-        opt_repres = self.gen_opt_graph_repres(opt_to_processes, optproc_to_arrsize)
-        opt_hub_repres = self.gen_opt_hub_graph_repres(optproc_to_arrsize)
+        opt_repres, opt_graph_set = self.gen_opt_graph_repres(opt_to_processes, optproc_to_arrsize)
+        opt_hub_repres, opt_hub_graph_set = self.gen_opt_hub_graph_repres(optproc_to_arrsize)
+        clusters = self.gen_clusters(process_graph_set, opt_graph_set, opt_hub_graph_set)
 
         # Set representation for processes and options
-        print("node [shape = box];", "; ".join(process_graph_repres))
-        print("node [shape = ellipse];", "; ".join(opt_repres))
-        print("node [shape = point];", "; ".join(opt_hub_repres))
+        print("node [shape = " + PROCESS_NODE_SHAPE + "];", "; ".join(process_graph_repres))
+        print("node [shape = " + OPTION_NODE_SHAPE + "];", "; ".join(opt_repres))
+        print("node [shape = " + OPTION_HUB_SHAPE + "];", "; ".join(opt_hub_repres))
+
+        # Add cluster information
+        self.print_clusters(clusters)
 
         # Add process graph arcs
         self.print_proc_graph_arcs(opt_to_processes, optproc_to_arrsize)
@@ -511,10 +524,15 @@ class ProcessGraph:
         print("}")
 
     def gen_process_graph_repres(self):
+        # Generate process graph representation in a list and also a set
+        # with the elements that compose the representation (in current
+        # implementation, the representation and the elements coincide)
         process_graph_repres = []
+        process_graph_set = set()
         for process in self.pplopts_exh:
             process_graph_repres.append(process)
-        return process_graph_repres
+            process_graph_set.add(process)
+        return process_graph_repres, process_graph_set
 
     def get_opt_to_processes(self):
         opt_to_processes = {}
@@ -574,6 +592,8 @@ class ProcessGraph:
 
     def gen_opt_graph_repres(self, opt_to_processes, optproc_to_arrsize):
         opt_repres = []
+        opt_graph_set = set()
+
         # Iterate over options
         for opt in opt_to_processes:
             taskidx_to_processes = {}
@@ -600,18 +620,19 @@ class ProcessGraph:
 
             # Generate representation
             if processes:
-                graph_elem = self.gen_opt_graph_elem(opt, "", processes)
+                graph_elem = self.gen_opt_graph_elem(opt, "", processes, opt_graph_set)
                 opt_repres.append(graph_elem)
             for task_idx in taskidx_to_processes:
-                graph_elem = self.gen_opt_graph_elem(opt, str(task_idx), taskidx_to_processes[task_idx])
+                graph_elem = self.gen_opt_graph_elem(opt, str(task_idx), taskidx_to_processes[task_idx], opt_graph_set)
                 opt_repres.append(graph_elem)
 
-        return opt_repres
+        return opt_repres, opt_graph_set
 
-    def gen_opt_graph_elem(self, opt, suffix, proc_iterable):
+    def gen_opt_graph_elem(self, opt, suffix, proc_iterable, opt_graph_set):
         graph_elem = '{node [label="' + opt + suffix + '"] '
         for process_info in proc_iterable:
             opt_graph = self.get_opt_graph(opt, process_info)
+            opt_graph_set.add(opt_graph)
             graph_elem += '"' + opt_graph + '"; '
         graph_elem += "}"
         return graph_elem
@@ -624,11 +645,52 @@ class ProcessGraph:
 
     def gen_opt_hub_graph_repres(self, optproc_to_arrsize):
         opt_hub_graph_repres = []
+        opt_hub_graph_set = set()
+
         for optproc in optproc_to_arrsize:
             if optproc_to_arrsize[optproc] > 1:
                 opt_hub_graph = self.get_opt_hub_graph(optproc)
                 opt_hub_graph_repres.append('"' + opt_hub_graph + '"')
-        return opt_hub_graph_repres
+                opt_hub_graph_set.add(opt_hub_graph)
+
+        return opt_hub_graph_repres, opt_hub_graph_set
+
+    def get_proc_from_opt_graph(self, opt_graph):
+        return opt_graph.split(OPT_PROCESS_SEP)[1].split(PROCESS_TASKIDX_SEP)[0]
+
+    def get_proc_from_opt_hub_graph(self, opt_hub_graph):
+        return opt_hub_graph.split(OPT_PROCESS_SEP)[1].split(OPTPROC_HUB_SUFFIX)[0]
+
+    def gen_clusters(self, process_graph_set, opt_graph_set, opt_hub_graph_set):
+        # Create dictionary entries for each process
+        clusters = {}
+        for process_graph in process_graph_set:
+            clusters[process_graph] = set()
+
+        # Add option-related nodes to clusters
+        for opt_graph in opt_graph_set:
+            process_graph = self.get_proc_from_opt_graph(opt_graph)
+            if process_graph in clusters:
+                clusters[process_graph].add(opt_graph)
+
+        # Add option hub-related nodes to clusters
+        for opt_hub_graph in opt_hub_graph_set:
+            process_graph = self.get_proc_from_opt_hub_graph(opt_hub_graph)
+            if process_graph in clusters:
+                clusters[process_graph].add(opt_hub_graph)
+
+        # Return result
+        return clusters
+
+    def print_clusters(self, clusters):
+        for proc_graph in clusters:
+            print("subgraph", "cluster_" + proc_graph, "{")
+            print("style=" + CLUSTER_STYLE + ";")
+            print("color=" + CLUSTER_FILL_COLOR + ";")
+            print(proc_graph + ";")
+            for elem in clusters[proc_graph]:
+                print('"' + elem + '"' + ";")
+            print("}")
 
     def print_proc_graph_arcs(self, opt_to_processes, optproc_to_arrsize):
         # Iterate over options
@@ -660,11 +722,11 @@ class ProcessGraph:
         # Print arc
         if self.str_is_output_option(opt):
             if self.process_is_fifo_owner(process_info, opt_val):
-                print(processname, "->", '"'+ opt_graph +'"', "[ style=dashed ] ;")
+                print(processname, "->", '"'+ opt_graph +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             else:
                 print(processname, "->", '"'+ opt_graph +'"', ";")
         elif self.process_is_fifo_user(process_info, opt_val):
-            print('"'+ opt_graph +'"', "->", processname, "[ style=dashed ] ;")
+            print('"'+ opt_graph +'"', "->", processname, "[ style=" + FIFO_ARC_STYLE + " ] ;")
         else:
             print('"'+ opt_graph +'"', "->", processname, ";")
 
@@ -682,16 +744,16 @@ class ProcessGraph:
         if self.str_is_output_option(opt):
             if self.process_is_fifo_owner(process_info, opt_val):
                 if task_idx == 0:
-                    print(processname, "->", '"'+ opt_hub +'"', "[ style=dashed ] ;")
-                print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', "[ style=dashed ] ;")
+                    print(processname, "->", '"'+ opt_hub +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
+                print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             else:
                 if task_idx == 0:
                     print(processname, "->", '"'+ opt_hub +'"', ";")
                 print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', ";")
         elif self.process_is_fifo_user(process_info, opt_val):
-            print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ style=dashed ] ;")
+            print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             if task_idx == 0:
-                print('"'+ opt_hub +'"', "->", processname, "[ style=dashed ] ;")
+                print('"'+ opt_hub +'"', "->", processname, "[ style=" + FIFO_ARC_STYLE + " ] ;")
         else:
             print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', ";")
             if task_idx == 0:
@@ -756,7 +818,7 @@ class ProcessGraph:
         dest_opt_graph = self.get_opt_graph(dest_opt, dest_process_info)
 
         # Print arc
-        print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', "[ style=dashed ] ;")
+        print('"'+ orig_opt_graph +'"', "->", '"' + dest_opt_graph + '"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
 
     def get_fifo_opt(self, process_info, abs_fifoname):
         # Obtain necessary process information
