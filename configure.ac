@@ -24,6 +24,7 @@ dnl AX_PYTHON_MODULE(mwparserfromhell,fatal,python)
 # Checks for programs.
 AC_PATH_PROGS(PYTHON, python)
 AC_PATH_PROGS(RSCRIPT, Rscript)
+AC_PATH_PROGS(ECHO, echo)
 AC_PATH_PROGS(SPLIT, split)
 AC_PATH_PROGS(CAT, cat)
 AC_PATH_PROGS(CP, cp)

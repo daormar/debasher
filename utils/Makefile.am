@@ -38,6 +38,7 @@ SUFFIXES= .sh .py .r .R
 	echo "panpipe_libexecdir=\"$(libexecdir)\"" >> $@
 	echo "panpipe_datadir=\"$(datadir)/$(PACKAGE_NAME)\"" >> $@
 	echo "BASH=\"$(BASH)\"" >> $@
+	echo "ECHO=\"$(ECHO)\"" >> $@
 	echo "AWK=\"$(AWK)\"" >> $@
 	echo "SORT=\"$(SORT)\"" >> $@
 	echo "sortpars=\"$(sortpars)\"" >> $@
