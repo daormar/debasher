@@ -1,1 +1,1 @@
-SUBDIRS= pipelines conda_envs
+SUBDIRS= programs conda_envs
