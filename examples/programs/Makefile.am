@@ -1,4 +1,4 @@
-pplfilesdir = $(datadir)/$(PACKAGE)/pipelines
+pplfilesdir = $(datadir)/$(PACKAGE)/programs
 pplfiles_DATA= panpipe_simple_process.sh panpipe_value_pass.sh	\
 panpipe_fifo_example.sh panpipe_shared_dir_example.sh		\
 panpipe_array_example.sh panpipe_skip_example.sh		\
