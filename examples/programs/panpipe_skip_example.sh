@@ -30,9 +30,9 @@ panpipe_skip_example_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 value_writer_document()
@@ -167,12 +167,12 @@ value_reader_skip()
     fi
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_skip_example_pipeline()
+panpipe_skip_example_program()
 {
     add_panpipe_process "value_writer" "cpus=1 mem=32 time=00:01:00"
     add_panpipe_process "value_reader" "cpus=1 mem=32 time=00:01:00"

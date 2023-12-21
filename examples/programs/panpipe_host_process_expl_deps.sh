@@ -19,12 +19,12 @@
 # Load modules
 load_panpipe_module "panpipe_host_process"
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_host_process_expl_deps_pipeline()
+panpipe_host_process_expl_deps_program()
 {
     add_panpipe_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=64" "processdeps=none"
 }

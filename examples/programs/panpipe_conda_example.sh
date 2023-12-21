@@ -30,9 +30,9 @@ panpipe_conda_example_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 conda_example_document()
@@ -85,12 +85,12 @@ conda_example_conda_envs()
     define_conda_env py27 py27.yml
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_conda_example_pipeline()
+panpipe_conda_example_program()
 {
     add_panpipe_process "conda_example" "cpus=1 mem=32 time=00:01:00"
 }

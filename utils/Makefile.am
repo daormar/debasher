@@ -4,7 +4,7 @@ panpipe_proc_dataset panpipe_reformat_status
 
 libexec_SCRIPTS= panpipe_builtin_sched_lib panpipe_lib_utils		\
 panpipe_lib_sched panpipe_lib_sched_slurm panpipe_lib_sched_builtin	\
-panpipe_lib_sched_procs panpipe_lib_processes panpipe_lib_pipelines	\
+panpipe_lib_sched_procs panpipe_lib_processes panpipe_lib_programs	\
 panpipe_lib_modules panpipe_lib_opts panpipe_lib_conda			\
 panpipe_lib_docker panpipe_get_vars_and_funcs panpipe_check		\
 pp_get_reexec_procs_due_to_deps panpipe_solve_knapsack_bb		\
@@ -12,12 +12,12 @@ panpipe_solve_knapsack_ga
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS)
 
-python_PYTHON= panpipe_ppl_lib.py panpipe_knapsack_ga.py
+python_PYTHON= panpipe_prg_lib.py panpipe_knapsack_ga.py
 
 EXTRA_DIST = panpipe_lib.sh panpipe_lib_utils.sh panpipe_lib_sched.sh	\
 panpipe_lib_sched_procs.sh panpipe_lib_sched_slurm.sh			\
 panpipe_lib_sched_builtin panpipe_lib_processes.sh			\
-panpipe_lib_pipelines.sh panpipe_lib_modules.sh panpipe_lib_opts.sh	\
+panpipe_lib_programs.sh panpipe_lib_modules.sh panpipe_lib_opts.sh	\
 panpipe_lib_conda.sh panpipe_lib_docker.sh panpipe_builtin_sched_lib.sh	\
 panpipe_exec.sh panpipe_exec_batch.sh panpipe_get_vars_and_funcs.sh	\
 panpipe_check.py panpipe_stop.sh panpipe_status.sh panpipe_stats.sh	\

@@ -1,5 +1,5 @@
 ##############################
-# PIPELINE-RELATED FUNCTIONS #
+# PROGRAM-RELATED FUNCTIONS #
 ##############################
 
 ########
@@ -98,41 +98,41 @@ get_abspfile_from_command_line_file()
     # Initialize variables
     local command_line_file=$1
 
-    # Obtain pipeline file and current dir
+    # Obtain program file and current dir
     local cmdline_pfile
     cmdline_pfile=`get_pfile_from_command_line_file "${command_line_file}"` || return 1
     local cmdline_currdir
     cmdline_currdir=`get_currdir_from_command_line_file "${command_line_file}"` || return 1
 
-    # Obtain absolute pipeline file name
+    # Obtain absolute program file name
     local abspfile
     pushd "${cmdline_currdir}" > /dev/null
     abspfile=`get_absolute_path "${cmdline_pfile}"`
     popd > /dev/null
 
-    # Check if resulting pipeline file exists
+    # Check if resulting program file exists
     if [ -f "${abspfile}" ]; then
         echo "${abspfile}"
         return 0
     else
-        echo "Error: unable to find pipeline file (${abspfile})" >&2
+        echo "Error: unable to find program file (${abspfile})" >&2
         return 1
     fi
 }
 
 ########
-exec_pipeline_func_for_module()
+exec_program_func_for_module()
 {
     local pfile=$1
 
-    local pipeline_funcname
-    pipeline_funcname=`get_pipeline_funcname "${pfile}"`
+    local program_funcname
+    program_funcname=`get_program_funcname "${pfile}"`
 
-    ${pipeline_funcname}
+    ${program_funcname}
 }
 
 ########
-get_ppl_scripts_dir_given_basedir()
+get_prg_scripts_dir_given_basedir()
 {
     local dirname=$1
 
@@ -140,13 +140,13 @@ get_ppl_scripts_dir_given_basedir()
 }
 
 ########
-get_ppl_scripts_dir()
+get_prg_scripts_dir()
 {
-    get_ppl_scripts_dir_given_basedir "${PIPELINE_OUTDIR}"
+    get_prg_scripts_dir_given_basedir "${PROGRAM_OUTDIR}"
 }
 
 ########
-get_ppl_graphs_dir_given_basedir()
+get_prg_graphs_dir_given_basedir()
 {
     local dirname=$1
 
@@ -154,9 +154,9 @@ get_ppl_graphs_dir_given_basedir()
 }
 
 ########
-get_ppl_graphs_dir()
+get_prg_graphs_dir()
 {
-    get_ppl_graphs_dir_given_basedir "${PIPELINE_OUTDIR}"
+    get_prg_graphs_dir_given_basedir "${PROGRAM_OUTDIR}"
 }
 
 ########
@@ -167,7 +167,7 @@ add_panpipe_process()
     local process_computational_specs=$2
     local process_additional_specs=$3
 
-    # Print process pipeline line
+    # Print process program line
     echo "${processname}" "${process_computational_specs}" "${process_additional_specs}"
 }
 
@@ -211,14 +211,14 @@ apply_suffix_to_processdeps()
 }
 
 ########
-apply_suffix_to_pipeline_entry()
+apply_suffix_to_program_entry()
 {
-    local ppl_entry=$1
+    local prg_entry=$1
     local suffix=$2
 
     # Read the string into an array using the IFS
     local elements
-    IFS=" " read -ra elements <<< "$ppl_entry"
+    IFS=" " read -ra elements <<< "$prg_entry"
 
     # Initialize a variable to store the concatenated elements
     local result=""
@@ -247,7 +247,7 @@ apply_suffix_to_pipeline_entry()
 }
 
 ########
-add_panpipe_pipeline()
+add_panpipe_program()
 {
     # Initialize variables
     local modname=$1
@@ -256,14 +256,14 @@ add_panpipe_pipeline()
     # Create temporary file
     local tmpfile=`${MKTEMP}`
 
-    # Execute pipeline function for module and store output entries in a
+    # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution
     # without using any sub-shell)
-    exec_pipeline_func_for_module "${modname}" > "${tmpfile}"
+    exec_program_func_for_module "${modname}" > "${tmpfile}"
 
-    # Process resulting pipeline entries
-    while read ppl_entry; do
-        apply_suffix_to_pipeline_entry "${ppl_entry}" "${suffix}" || return 1
+    # Process resulting program entries
+    while read prg_entry; do
+        apply_suffix_to_program_entry "${prg_entry}" "${suffix}" || return 1
     done < "${tmpfile}"
 
     # Remove temporary file
@@ -271,9 +271,9 @@ add_panpipe_pipeline()
 }
 
 ########
-pipeline_uses_fifos()
+program_uses_fifos()
 {
-    if [ "${#PIPELINE_FIFOS[@]}" -eq 0 ]; then
+    if [ "${#PROGRAM_FIFOS[@]}" -eq 0 ]; then
         return 1
     else
         return 0
@@ -281,7 +281,7 @@ pipeline_uses_fifos()
 }
 
 ########
-get_number_of_pipeline_fifos()
+get_number_of_program_fifos()
 {
-    echo "${#PIPELINE_FIFOS[@]}"
+    echo "${#PROGRAM_FIFOS[@]}"
 }

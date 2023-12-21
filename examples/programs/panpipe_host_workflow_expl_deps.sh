@@ -30,9 +30,9 @@ panpipe_host_workflow_expl_deps_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 host1_document()
@@ -118,12 +118,12 @@ host2()
     hostname
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_host_workflow_expl_deps_pipeline()
+panpipe_host_workflow_expl_deps_program()
 {
     add_panpipe_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=64" "processdeps=none"
     add_panpipe_process "host2" "cpus=1 mem=32 time=00:10:00 throttle=64" "processdeps=aftercorr:host1"

@@ -30,9 +30,9 @@ panpipe_telegram_shared_dirs()
     :
 }
 
-######################
-# PIPELINE PROCESSES #
-######################
+#####################
+# PROGRAM PROCESSES #
+#####################
 
 ########
 decomposer_document()
@@ -169,12 +169,12 @@ recomposer()
     recompose "${char_lim}" "${inf}" > "${outf}" ; pipe_fail || return 1
 }
 
-######################################
-# PIPELINE IMPLEMENTED BY THE MODULE #
-######################################
+#####################################
+# PROGRAM IMPLEMENTED BY THE MODULE #
+#####################################
 
 ########
-panpipe_telegram_pipeline()
+panpipe_telegram_program()
 {
     add_panpipe_process "decomposer" "cpus=1 mem=32 time=00:05:00"
     add_panpipe_process "recomposer" "cpus=1 mem=32 time=00:05:00"

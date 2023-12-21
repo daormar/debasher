@@ -30,9 +30,9 @@ panpipe_value_pass_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 value_writer_document()
@@ -146,12 +146,12 @@ value_reader()
     echo "$value" > "${outf}"
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_value_pass_pipeline()
+panpipe_value_pass_program()
 {
     add_panpipe_process "value_writer" "cpus=1 mem=32 time=00:01:00"
     add_panpipe_process "value_reader" "cpus=1 mem=32 time=00:01:00"

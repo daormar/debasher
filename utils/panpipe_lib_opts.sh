@@ -363,10 +363,10 @@ update_opt_to_process_map()
     local opts=$2
 
     for opt in ${opts}; do
-        if [ "${PIPELINE_OPT_PROCESS[${opt}]}" = "" ]; then
-            PIPELINE_OPT_PROCESS[${opt}]=${processname}
+        if [ "${PROGRAM_OPT_PROCESS[${opt}]}" = "" ]; then
+            PROGRAM_OPT_PROCESS[${opt}]=${processname}
         else
-            PIPELINE_OPT_PROCESS[${opt}]="${PIPELINE_OPT_PROCESS[${opt}]} ${processname}"
+            PROGRAM_OPT_PROCESS[${opt}]="${PROGRAM_OPT_PROCESS[${opt}]} ${processname}"
         fi
     done
 }
@@ -385,11 +385,11 @@ explain_cmdline_req_opt()
     fi
 
     # Store option in associative arrays
-    PIPELINE_OPT_TYPE[$opt]=$type
-    PIPELINE_OPT_REQ[$opt]=1
-    PIPELINE_OPT_DESC[$opt]=$desc
-    PIPELINE_OPT_CATEG[$opt]=$categ
-    PIPELINE_CATEG_MAP[$categ]=1
+    PROGRAM_OPT_TYPE[$opt]=$type
+    PROGRAM_OPT_REQ[$opt]=1
+    PROGRAM_OPT_DESC[$opt]=$desc
+    PROGRAM_OPT_CATEG[$opt]=$categ
+    PROGRAM_CATEG_MAP[$categ]=1
 
     # Add option to differential command line option string
     if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
@@ -413,10 +413,10 @@ explain_cmdline_opt()
     fi
 
     # Store option in associative arrays
-    PIPELINE_OPT_TYPE[$opt]=$type
-    PIPELINE_OPT_DESC[$opt]=$desc
-    PIPELINE_OPT_CATEG[$opt]=$categ
-    PIPELINE_CATEG_MAP[$categ]=1
+    PROGRAM_OPT_TYPE[$opt]=$type
+    PROGRAM_OPT_DESC[$opt]=$desc
+    PROGRAM_OPT_CATEG[$opt]=$categ
+    PROGRAM_CATEG_MAP[$categ]=1
 
     # Add option to differential command line option string
     if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
@@ -439,10 +439,10 @@ explain_cmdline_opt_wo_value()
     fi
 
     # Store option in associative arrays
-    PIPELINE_OPT_TYPE[$opt]=""
-    PIPELINE_OPT_DESC[$opt]=$desc
-    PIPELINE_OPT_CATEG[$opt]=$categ
-    PIPELINE_CATEG_MAP[$categ]=1
+    PROGRAM_OPT_TYPE[$opt]=""
+    PROGRAM_OPT_DESC[$opt]=$desc
+    PROGRAM_OPT_CATEG[$opt]=$categ
+    PROGRAM_CATEG_MAP[$categ]=1
 
     # Add option to differential command line option string
     if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
@@ -453,34 +453,34 @@ explain_cmdline_opt_wo_value()
 }
 
 ########
-print_pipeline_opts()
+print_program_opts()
 {
     local lineno=0
 
     # Iterate over option categories
     local categ
-    for categ in ${!PIPELINE_CATEG_MAP[@]}; do
+    for categ in ${!PROGRAM_CATEG_MAP[@]}; do
         if [ ${lineno} -gt 0 ]; then
             echo ""
         fi
         echo "CATEGORY: ${categ}"
         # Iterate over options
         local opt
-        for opt in ${!PIPELINE_OPT_TYPE[@]}; do
+        for opt in ${!PROGRAM_OPT_TYPE[@]}; do
             # Check if option belongs to current category
-            if [ ${PIPELINE_OPT_CATEG[${opt}]} = $categ ]; then
+            if [ ${PROGRAM_OPT_CATEG[${opt}]} = $categ ]; then
                 # Set value of required option flag
-                if [ "${PIPELINE_OPT_REQ[${opt}]}" != "" ]; then
+                if [ "${PROGRAM_OPT_REQ[${opt}]}" != "" ]; then
                     reqflag=" (required) "
                 else
                     reqflag=" "
                 fi
 
                 # Print option
-                if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
-                    echo "${opt} ${PIPELINE_OPT_DESC[$opt]}${reqflag}[${PIPELINE_OPT_PROCESS[$opt]}]"
+                if [ -z ${PROGRAM_OPT_TYPE[$opt]} ]; then
+                    echo "${opt} ${PROGRAM_OPT_DESC[$opt]}${reqflag}[${PROGRAM_OPT_PROCESS[$opt]}]"
                 else
-                    echo "${opt} ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}${reqflag}[${PIPELINE_OPT_PROCESS[$opt]}]"
+                    echo "${opt} ${PROGRAM_OPT_TYPE[$opt]} ${PROGRAM_OPT_DESC[$opt]}${reqflag}[${PROGRAM_OPT_PROCESS[$opt]}]"
                 fi
             fi
         done
@@ -504,7 +504,7 @@ define_fifo()
     local augm_fifoname="${processname}/${fifoname}"
 
     # Store name of FIFO in associative arrays
-    PIPELINE_FIFOS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+    PROGRAM_FIFOS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
 }
 
 ########
@@ -516,9 +516,9 @@ define_shared_dir()
     # by a process
     local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
     if [ -z "${processname}" ]; then
-        PIPELINE_SHDIRS["${shared_dir}"]=${SHDIR_MODULE_OWNER}
+        PROGRAM_SHDIRS["${shared_dir}"]=${SHDIR_MODULE_OWNER}
     else
-        PIPELINE_SHDIRS["${shared_dir}"]=${processname}
+        PROGRAM_SHDIRS["${shared_dir}"]=${processname}
     fi
 }
 
@@ -792,22 +792,22 @@ define_indir_opt()
 }
 
 ########
-show_pipeline_shdirs()
+show_program_shdirs()
 {
     local dirname
-    for dirname in "${!PIPELINE_SHDIRS[@]}"; do
+    for dirname in "${!PROGRAM_SHDIRS[@]}"; do
         local absdir=`get_absolute_shdirname "$dirname"`
         echo "${absdir}"
     done
 }
 
 ########
-register_module_pipeline_shdirs()
+register_module_program_shdirs()
 {
     # Populate associative array of shared directories for the loaded
     # modules
     local absmodname
-    for absmodname in "${PIPELINE_MODULES[@]}"; do
+    for absmodname in "${PROGRAM_MODULES[@]}"; do
         local shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
         if func_exists "${shrdirs_funcname}"; then
             ${shrdirs_funcname} || exit 1
@@ -820,8 +820,8 @@ create_mod_shdirs()
 {
     # Create shared directories for modules
     local dirname
-    for dirname in "${!PIPELINE_SHDIRS[@]}"; do
-        local owner=${PIPELINE_SHDIRS["${dirname}"]}
+    for dirname in "${!PROGRAM_SHDIRS[@]}"; do
+        local owner=${PROGRAM_SHDIRS["${dirname}"]}
         if [ "${owner}" = "${SHDIR_MODULE_OWNER}" ]; then
             local absdir=`get_absolute_shdirname "$dirname"`
             if [ ! -d "${absdir}" ]; then
@@ -837,8 +837,8 @@ create_shdirs_owned_by_process()
     local processname=$1
     # Create shared directories for process
     local dirname
-    for dirname in "${!PIPELINE_SHDIRS[@]}"; do
-        local owner=${PIPELINE_SHDIRS["${dirname}"]}
+    for dirname in "${!PROGRAM_SHDIRS[@]}"; do
+        local owner=${PROGRAM_SHDIRS["${dirname}"]}
         if [ "${processname}" = "${owner}" ]; then
             local absdir=`get_absolute_shdirname "$dirname"`
             if [ ! -d "${absdir}" ]; then
@@ -849,11 +849,11 @@ create_shdirs_owned_by_process()
 }
 
 ########
-show_pipeline_fifos()
+show_program_fifos()
 {
     local augm_fifoname
-    for augm_fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        echo "${augm_fifoname}" ${PIPELINE_FIFOS["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
+    for augm_fifoname in "${!PROGRAM_FIFOS[@]}"; do
+        echo "${augm_fifoname}" ${PROGRAM_FIFOS["${augm_fifoname}"]} ${FIFO_USERS["${augm_fifoname}"]}
     done
 }
 
@@ -867,8 +867,8 @@ prepare_fifos_owned_by_process()
 
     # Create FIFOS
     local augm_fifoname
-    for augm_fifoname in "${!PIPELINE_FIFOS[@]}"; do
-        local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
+    for augm_fifoname in "${!PROGRAM_FIFOS[@]}"; do
+        local proc_plus_idx=${PROGRAM_FIFOS["${augm_fifoname}"]}
         local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
         if [ "${proc}" = "${processname}" ]; then
             local dirname=`"${DIRNAME}" "${augm_fifoname}"`
@@ -889,13 +889,13 @@ get_absolute_shdirname()
     local shdirname=$1
 
     # Output absolute shared directory name
-    echo "${PIPELINE_OUTDIR}/${shdirname}"
+    echo "${PROGRAM_OUTDIR}/${shdirname}"
 }
 
 ########
 get_absolute_fifodir()
 {
-    echo "${PIPELINE_OUTDIR}/.fifos"
+    echo "${PROGRAM_OUTDIR}/.fifos"
 }
 
 ########
@@ -924,7 +924,7 @@ get_augm_fifoname_from_absname()
 ########
 get_absolute_condadir()
 {
-    echo "${PIPELINE_OUTDIR}/.conda"
+    echo "${PROGRAM_OUTDIR}/.conda"
 }
 
 ########
@@ -997,7 +997,7 @@ get_sched_opts_dir_given_basedir()
 ########
 get_sched_opts_dir()
 {
-    get_sched_opts_dir_given_basedir "${PIPELINE_OUTDIR}"
+    get_sched_opts_dir_given_basedir "${PROGRAM_OUTDIR}"
 }
 
 ########

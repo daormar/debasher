@@ -20,7 +20,7 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 
 # import modules
 import io, sys, getopt, operator
-from panpipe_ppl_lib import *
+from panpipe_prg_lib import *
 
 ##################################################
 class processdep_data:
@@ -94,7 +94,7 @@ def check_pars(flags,values):
 def print_help():
     print("panpipe_check  -p <string> [-r|-g|-d|-a] [-v]", file=sys.stderr)
     print("", file=sys.stderr)
-    print("-p <string>    Prefix of pipeline files", file=sys.stderr)
+    print("-p <string>    Prefix of program files", file=sys.stderr)
     print("-r             Print reordered process specification", file=sys.stderr)
     print("-g             Print dependency graph in graphviz format", file=sys.stderr)
     print("-d             Print dependencies for each process", file=sys.stderr)

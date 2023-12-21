@@ -30,9 +30,9 @@ panpipe_fifo_example_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 fifo_writer_document()
@@ -141,12 +141,12 @@ fifo_reader()
     cat < "${inf}"
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_fifo_example_pipeline()
+panpipe_fifo_example_program()
 {
     add_panpipe_process "fifo_writer" "cpus=1 mem=32 time=00:01:00"
     add_panpipe_process "fifo_reader" "cpus=1 mem=32 time=00:01:00"

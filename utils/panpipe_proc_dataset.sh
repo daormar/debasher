@@ -31,15 +31,15 @@ usage()
 {
     echo "panpipe_proc_dataset   --pfile <string>"
     echo "                       --sched <string> [--dflt-nodes <string>]"
-    echo "                       --ppl-sopts <string> [--ppl-opts <string>]"
+    echo "                       --prg-sopts <string> [--prg-opts <string>]"
     echo "                       [--help]"
     echo ""
-    echo "--pfile <string>       File with pipeline processes to be performed"
-    echo "--sched <string>       Scheduler used to execute the pipelines"
-    echo "--dflt-nodes <string>  Default set of nodes used to execute the pipeline"
-    echo "--ppl-sopts <string>   File containing a string with pipeline options per"
+    echo "--pfile <string>       File with program processes to be performed"
+    echo "--sched <string>       Scheduler used to execute the programs"
+    echo "--dflt-nodes <string>  Default set of nodes used to execute the program"
+    echo "--prg-sopts <string>   File containing a string with program options per"
     echo "                       sample"
-    echo "--ppl-opts <string>    File containing a string with pipeline options"
+    echo "--prg-opts <string>    File containing a string with program options"
     echo "--help                 Display this help and exit"
 }
 
@@ -49,8 +49,8 @@ read_pars()
     pfile_given=0
     sched_given=0
     dflt_nodes_given=0
-    ppl_sopts_given=0
-    ppl_opts_given=0
+    prg_sopts_given=0
+    prg_opts_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -74,16 +74,16 @@ read_pars()
                       dflt_nodes_given=1
                   fi
                   ;;
-            "--ppl-sopts") shift
+            "--prg-sopts") shift
                   if [ $# -ne 0 ]; then
-                      ppl_sopts=$1
-                      ppl_sopts_given=1
+                      prg_sopts=$1
+                      prg_sopts_given=1
                   fi
                   ;;
-            "--ppl-opts") shift
+            "--prg-opts") shift
                   if [ $# -ne 0 ]; then
-                      ppl_opts=$1
-                      ppl_opts_given=1
+                      prg_opts=$1
+                      prg_opts_given=1
                   fi
                   ;;
         esac
@@ -108,21 +108,21 @@ check_pars()
         exit 1
     fi
 
-    if [ ${ppl_sopts_given} -eq 0 ]; then
-        echo "Error, --ppl-sopts option should be given" >&2
+    if [ ${prg_sopts_given} -eq 0 ]; then
+        echo "Error, --prg-sopts option should be given" >&2
         exit 1
     fi
 
-    if [ ${ppl_sopts_given} -eq 1 ]; then
-        if [ ! -f "${ppl_sopts}" ]; then
-            echo "Error! file ${ppl_sopts} does not exist" >&2
+    if [ ${prg_sopts_given} -eq 1 ]; then
+        if [ ! -f "${prg_sopts}" ]; then
+            echo "Error! file ${prg_sopts} does not exist" >&2
             exit 1
         fi
     fi
 
-    if [ ${ppl_opts_given} -eq 1 ]; then
-        if [ ! -f "${ppl_opts}" ]; then
-            echo "Error! file ${ppl_opts} does not exist" >&2
+    if [ ${prg_opts_given} -eq 1 ]; then
+        if [ ! -f "${prg_opts}" ]; then
+            echo "Error! file ${prg_opts} does not exist" >&2
             exit 1
         fi
     fi
@@ -135,12 +135,12 @@ absolutize_file_paths()
         pfile=`get_absolute_path "${pfile}"`
     fi
 
-    if [ ${ppl_sopts_given} -eq 1 ]; then
-        ppl_sopts=`get_absolute_path "${ppl_sopts}"`
+    if [ ${prg_sopts_given} -eq 1 ]; then
+        prg_sopts=`get_absolute_path "${prg_sopts}"`
     fi
 
-    if [ ${ppl_opts_given} -eq 1 ]; then
-        ppl_opts=`get_absolute_path "${ppl_opts}"`
+    if [ ${prg_opts_given} -eq 1 ]; then
+        prg_opts=`get_absolute_path "${prg_opts}"`
     fi
 }
 
@@ -155,16 +155,16 @@ print_pars()
         echo "--sched is ${sched}" >&2
     fi
 
-    if [ ${ppl_sopts_given} -eq 1 ]; then
-        echo "--ppl-sopts is ${ppl_sopts}" >&2
+    if [ ${prg_sopts_given} -eq 1 ]; then
+        echo "--prg-sopts is ${prg_sopts}" >&2
     fi
 
     if [ ${dflt_nodes_given} -eq 1 ]; then
         echo "--dflt-nodes is ${dflt_nodes}" >&2
     fi
 
-    if [ ${ppl_opts_given} -eq 1 ]; then
-        echo "--ppl-opts is ${ppl_opts}" >&2
+    if [ ${prg_opts_given} -eq 1 ]; then
+        echo "--prg-opts is ${prg_opts}" >&2
     fi
 }
 
@@ -179,9 +179,9 @@ get_dflt_nodes_opt()
 }
 
 ########
-get_ppl_opts_str()
+get_prg_opts_str()
 {
-    "${CAT}" "${ppl_opts}"
+    "${CAT}" "${prg_opts}"
 }
 
 ########
@@ -194,11 +194,11 @@ esc_dq()
 process_pars()
 {
     # Set options
-    local ppl_opts_str
-    if [ ${ppl_opts_given} -eq 1 ]; then
-        ppl_opts_str=`get_ppl_opts_str`
+    local prg_opts_str
+    if [ ${prg_opts_given} -eq 1 ]; then
+        prg_opts_str=`get_prg_opts_str`
     else
-        ppl_opts_str=""
+        prg_opts_str=""
     fi
 
     # Get pipe_exec path
@@ -208,18 +208,18 @@ process_pars()
     # Read metadata file
     local entry_num=1
     entry_num=1
-    local ppl_sopts_str
-    while read ppl_sopts_str; do
+    local prg_sopts_str
+    while read prg_sopts_str; do
 
         # Obtain --dflt-nodes option
         dflt_nodes_opt=`get_dflt_nodes_opt`
 
-        # Print command to execute pipeline
-        normalize_cmd "\"$(esc_dq "${panpipe_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --sched ${sched} ${dflt_nodes_opt} ${ppl_sopts_str} ${ppl_opts_str}"
+        # Print command to execute program
+        normalize_cmd "\"$(esc_dq "${panpipe_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --sched ${sched} ${dflt_nodes_opt} ${prg_sopts_str} ${prg_opts_str}"
 
         entry_num=$((entry_num + 1))
 
-    done < "${ppl_sopts}"
+    done < "${prg_sopts}"
 }
 
 ########

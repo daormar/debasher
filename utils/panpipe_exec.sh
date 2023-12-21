@@ -45,7 +45,7 @@ declare -A PIPE_EXEC_PROCESS_IDS
 ########
 print_desc()
 {
-    echo "panpipe_exec executes general purpose pipelines"
+    echo "panpipe_exec executes general purpose programs"
     echo "type \"panpipe_exec --help\" to get usage information"
 }
 
@@ -60,10 +60,10 @@ usage()
     echo "                          [--show-cmdline-opts|--check-proc-opts|--debug]"
     echo "                          [--wait] [--builtinsched-debug] [--version] [--help]"
     echo ""
-    echo "--pfile <string>          File with pipeline processes to be performed (see"
+    echo "--pfile <string>          File with program processes to be executed (see"
     echo "                          manual for additional information)"
     echo "--outdir <string>         Output directory"
-    echo "--sched <string>          Scheduler used to execute the pipeline (if not given,"
+    echo "--sched <string>          Scheduler used to execute the program (if not given,"
     echo "                          it is determined using information gathered during"
     echo "                          package configuration)"
     echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${BUILTIN_SCHED_CPUS} by default)."
@@ -71,15 +71,15 @@ usage()
     echo "--builtinsched-mem <int>  Available memory in MB for built-in scheduler"
     echo "                          (${BUILTIN_SCHED_MEM} by default). A value of zero"
     echo "                          means unlimited memory"
-    echo "--dflt-nodes <string>     Default set of nodes used to execute the pipeline"
+    echo "--dflt-nodes <string>     Default set of nodes used to execute the program"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--reexec-outdated-procs   Reexecute those processes with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--docker-support          Enable docker support"
     echo "--gen-proc-graph          Generate process graph"
-    echo "--show-cmdline-opts       Show command line options for the pipeline"
+    echo "--show-cmdline-opts       Show command line options for the program"
     echo "--check-proc-opts         Check process options"
-    echo "--debug                   Do everything except launching pipeline processes"
+    echo "--debug                   Do everything except launching program processes"
     echo "--wait                    Wait until all processes finish. This option has"
     echo "                          no effect when using the BUILTIN scheduler since it"
     echo "                          waits by its own design"
@@ -250,7 +250,7 @@ load_module()
 {
     echo "# Loading module ($pfile)..." >&2
 
-    # Load panpipe module containing the pipeline to be executed
+    # Load panpipe module containing the program to be executed
     load_panpipe_module "${pfile}" || exit 1
 
     echo "" >&2
@@ -262,19 +262,19 @@ get_mod_vars_and_funcs()
     echo "# Getting module variables and functions..." >&2
 
     local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${outd}"`
-    "${panpipe_libexecdir}"/panpipe_get_vars_and_funcs "${PIPELINE_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
+    "${panpipe_libexecdir}"/panpipe_get_vars_and_funcs "${PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
 
     echo "" >&2
 }
 
 ########
-ensure_pipeline_not_being_executed()
+ensure_program_not_being_executed()
 {
     local initial_procspec_file=$1
 
     if [ -f "${initial_procspec_file}" ]; then
         if there_are_in_progress_processes "${outd}" "${initial_procspec_file}"; then
-            echo "Error: this pipeline has processes being executed. Please use panpipe_status or panpipe_stop tools to interact with the pipeline. The execution of panpipe_exec will be aborted" >&2
+            echo "Error: this program has processes being executed. Please use panpipe_status or panpipe_stop tools to interact with the program. The execution of panpipe_exec will be aborted" >&2
             exit 1
         fi
     fi
@@ -285,7 +285,7 @@ gen_initial_procspec_file()
 {
     echo "# Generating initial process specification from $pfile..." >&2
 
-    exec_pipeline_func_for_module "${pfile}" || exit 1
+    exec_program_func_for_module "${pfile}" || exit 1
 
     echo "Generation complete" >&2
 
@@ -295,11 +295,11 @@ gen_initial_procspec_file()
 ########
 check_procspec()
 {
-    local prefix_of_ppl_files=$1
+    local prefix_of_prg_files=$1
 
     echo "# Checking process specification..." >&2
 
-    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_prg_files}" || return 1
 
     echo "Checking complete" >&2
 
@@ -309,12 +309,12 @@ check_procspec()
 ########
 gen_process_graph()
 {
-    local prefix_of_ppl_files=$1
+    local prefix_of_prg_files=$1
     local procgraph_file_prefix=$2
 
     echo "# Generating process graph..." >&2
 
-    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -a > "${procgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_prg_files}" -a > "${procgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
 
     if [ -z "${DOT}" ]; then
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
@@ -330,12 +330,12 @@ gen_process_graph()
 ########
 gen_dependency_graph()
 {
-    local prefix_of_ppl_files=$1
+    local prefix_of_prg_files=$1
     local depgraph_file_prefix=$2
 
     echo "# Generating dependency graph..." >&2
 
-    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_ppl_files}" -g > "${depgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
+    "${panpipe_libexecdir}"/panpipe_check -p "${prefix_of_prg_files}" -g > "${depgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
 
     if [ -z "${DOT}" ]; then
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
@@ -408,7 +408,7 @@ configure_scheduler()
     fi
 
     if [ ${dflt_nodes_given} -eq 1 ]; then
-        echo "## Setting default nodes for pipeline execution... (${dflt_nodes})" >&2
+        echo "## Setting default nodes for program execution... (${dflt_nodes})" >&2
         set_panpipe_default_nodes "${dflt_nodes}" || return 1
         echo "" >&2
     fi
@@ -423,7 +423,7 @@ configure_scheduler()
 ########
 show_cmdline_opts()
 {
-    echo "# Command line options for the pipeline..." >&2
+    echo "# Command line options for the program..." >&2
 
     # Read input parameters
     local procspec_file=$1
@@ -440,7 +440,7 @@ show_cmdline_opts()
     done < "${procspec_file}"
 
     # Print options
-    print_pipeline_opts
+    print_program_opts
 
     echo "" >&2
 }
@@ -505,7 +505,7 @@ check_process_opts()
     done < "${procspec_file}"
 
     # Register fifo users
-    if pipeline_uses_fifos; then
+    if program_uses_fifos; then
         while read process_spec; do
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
@@ -516,7 +516,7 @@ check_process_opts()
     fi
 
     # Print info about fifos
-    show_pipeline_fifos > "${out_fifos_file}"
+    show_program_fifos > "${out_fifos_file}"
 
     echo "" >&2
 }
@@ -532,7 +532,7 @@ handle_conda_requirements()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -561,7 +561,7 @@ handle_docker_requirements()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -591,7 +591,7 @@ define_reexec_processes_due_to_fifos()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -631,7 +631,7 @@ define_forced_exec_processes()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             local process_forced=`extract_attr_from_process_spec "$process_spec" "force"`
@@ -656,8 +656,8 @@ check_script_is_older_than_modules()
         # script exists
         script_older=0
         local mod
-        for mod in "${!PIPELINE_MODULES[@]}"; do
-            fullmod="${PIPELINE_MODULES[$mod]}"
+        for mod in "${!PROGRAM_MODULES[@]}"; do
+            fullmod="${PROGRAM_MODULES[$mod]}"
             if [ "${script_filename}" -ot "${fullmod}" ]; then
                 script_older=1
                 echo "Warning: ${script_filename} is older than module ${fullmod}" >&2
@@ -688,7 +688,7 @@ define_reexec_processes_due_to_code_update()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             local status=`get_process_status "${dirname}" ${processname}`
@@ -720,12 +720,12 @@ define_reexec_processes_due_to_deps()
 {
     echo "# Defining processes to be reexecuted due to dependencies (if any)..." >&2
 
-    local ppl_file_pref=$1
+    local prg_file_pref=$1
 
     # Obtain list of processes to be reexecuted due to dependencies
     local reexec_processes_string=`get_reexec_processes_as_string`
     local reexec_processes_file="${outd}/${REEXEC_PROCESSES_LIST_FNAME}"
-    "${panpipe_libexecdir}"/pp_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -p "${ppl_file_pref}" > "${reexec_processes_file}" || return 1
+    "${panpipe_libexecdir}"/pp_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -p "${prg_file_pref}" > "${reexec_processes_file}" || return 1
 
     # Read information about the processes to be re-executed due to
     # dependencies
@@ -812,13 +812,13 @@ create_basic_dirs()
 {
     echo "# Creating basic directories..." >&2
 
-    local scriptsdir=`get_ppl_scripts_dir`
+    local scriptsdir=`get_prg_scripts_dir`
     "${MKDIR}" -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
 
     local sched_opts_dir=`get_sched_opts_dir`
     "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
 
-    local graphsdir=`get_ppl_graphs_dir`
+    local graphsdir=`get_prg_graphs_dir`
     "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 
     local fifodir=`get_absolute_fifodir`
@@ -839,13 +839,13 @@ create_mod_shared_dirs()
 {
     echo "# Creating shared directories for modules... (if any)" >&2
 
-    # Create shared directories required by the pipeline processes
+    # Create shared directories required by the program processes
     # IMPORTANT NOTE: the following functions can only be executed after
-    # loading pipeline modules
-    register_module_pipeline_shdirs
+    # loading program modules
+    register_module_program_shdirs
     create_mod_shdirs
 
-    show_pipeline_shdirs >&2
+    show_program_shdirs >&2
 
     echo "Creation complete" >&2
 
@@ -855,8 +855,8 @@ create_mod_shared_dirs()
 ########
 print_command_line()
 {
-    echo "cd $PWD" > "${outd}/${PPL_COMMAND_LINE_BASENAME}"
-    sargs_to_sargsquotes "${command_line}" >> "${outd}/${PPL_COMMAND_LINE_BASENAME}"
+    echo "cd $PWD" > "${outd}/${PRG_COMMAND_LINE_BASENAME}"
+    sargs_to_sargsquotes "${command_line}" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
 }
 
 ########
@@ -951,7 +951,7 @@ prepare_files_and_dirs_for_processes()
 
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -1024,7 +1024,7 @@ launch_processes()
 
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -1034,16 +1034,16 @@ launch_processes()
 }
 
 ########
-launch_pipeline_processes()
+launch_program_processes()
 {
-    echo "# Launching pipeline processes..." >&2
+    echo "# Launching program processes..." >&2
 
     # Read input parameters
     local cmdline=$1
     local dirname=$2
     local procspec_file=$3
 
-    # process_id_list will store the process ids of the pipeline
+    # process_id_list will store the process ids of the program
     # processes (it should be defined as a global variable)
     process_id_list=""
 
@@ -1062,7 +1062,7 @@ there_are_in_progress_processes()
 
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -1079,9 +1079,9 @@ there_are_in_progress_processes()
 }
 
 ########
-wait_for_pipeline_processes()
+wait_for_program_processes()
 {
-    echo "# Waiting for pipeline processes to finish..." >&2
+    echo "# Waiting for program processes to finish..." >&2
 
     # Read input parameters
     local dirname=$1
@@ -1120,23 +1120,23 @@ debug_process()
 }
 
 ########
-launch_pipeline_processes_debug()
+launch_program_processes_debug()
 {
-    echo "# Launching pipeline processes... (debug mode)" >&2
+    echo "# Launching program processes... (debug mode)" >&2
 
     # Read input parameters
     local cmdline=$1
     local dirname=$2
     local procspec_file=$3
 
-    # process_id_list will store the process ids of the pipeline
+    # process_id_list will store the process ids of the program
     # processes (it should be defined as a global variable)
     process_id_list=""
 
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
@@ -1179,7 +1179,7 @@ get_mod_vars_and_funcs || exit 1
 initial_procspec_file="${outd}/${PPEXEC_INITIAL_PROCSPEC_BASENAME}"
 
 # Check if there are running processes and abort execution if true
-ensure_pipeline_not_being_executed "${initial_procspec_file}"
+ensure_program_not_being_executed "${initial_procspec_file}"
 
 # Write initial process specification file
 gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
@@ -1187,29 +1187,29 @@ gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts "${initial_procspec_file}" || exit 1
 else
-    ppl_file_pref="${outd}/${PPEXEC_PPL_PREF}"
-    pipeline_opts_file="${ppl_file_pref}.${PPLOPTS_FEXT}"
-    pipeline_opts_exh_file="${ppl_file_pref}.${PPLOPTS_EXHAUSTIVE_FEXT}"
-    pipeline_fifos_file="${ppl_file_pref}.${FIFOS_FEXT}"
-    ppl_graphs_dir=`get_ppl_graphs_dir`
-    procgraph_file_prefix="${ppl_graphs_dir}/process_graph"
-    depgraph_file_prefix="${ppl_graphs_dir}/dependency_graph"
+    prg_file_pref="${outd}/${PPEXEC_PRG_PREF}"
+    program_opts_file="${prg_file_pref}.${PRGOPTS_FEXT}"
+    program_opts_exh_file="${prg_file_pref}.${PRGOPTS_EXHAUSTIVE_FEXT}"
+    program_fifos_file="${prg_file_pref}.${FIFOS_FEXT}"
+    prg_graphs_dir=`get_prg_graphs_dir`
+    procgraph_file_prefix="${prg_graphs_dir}/process_graph"
+    depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
     if [ ${check_proc_opts_given} -eq 1 ]; then
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
     else
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${pipeline_opts_file}" "${pipeline_opts_exh_file}" "${pipeline_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
-        procspec_file="${ppl_file_pref}.${PROCSPEC_FEXT}"
+        procspec_file="${prg_file_pref}.${PROCSPEC_FEXT}"
         gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1
 
-        check_procspec "${ppl_file_pref}" || exit 1
+        check_procspec "${prg_file_pref}" || exit 1
 
         if [ "${gen_proc_graph_given}" -eq 1 ]; then
-            gen_process_graph "${ppl_file_pref}" "${procgraph_file_prefix}" || exit 1
+            gen_process_graph "${prg_file_pref}" "${procgraph_file_prefix}" || exit 1
         fi
 
-        gen_dependency_graph "${ppl_file_pref}" "${depgraph_file_prefix}" || exit 1
+        gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
         ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
@@ -1232,23 +1232,23 @@ else
             define_reexec_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
         fi
 
-        define_reexec_processes_due_to_deps "${ppl_file_pref}" || exit 1
+        define_reexec_processes_due_to_deps "${prg_file_pref}" || exit 1
 
         print_reexec_processes || exit 1
 
         print_command_line || exit 1
 
         if [ ${debug} -eq 1 ]; then
-            launch_pipeline_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
+            launch_program_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
         else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
-                builtin_sched_execute_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                builtin_sched_execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
             else
                 prepare_files_and_dirs_for_processes "${command_line}" "${outd}" "${procspec_file}"
-                launch_pipeline_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                launch_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 if [ "${wait}" -eq 1 ]; then
-                    wait_for_pipeline_processes "${outd}" "${procspec_file}" || exit 1
+                    wait_for_program_processes "${outd}" "${procspec_file}" || exit 1
                 fi
             fi
         fi

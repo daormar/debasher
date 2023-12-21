@@ -30,9 +30,9 @@ panpipe_host_workflow_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 process_a_document()
@@ -165,12 +165,12 @@ process_b()
     done
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_cycle_pipeline()
+panpipe_cycle_program()
 {
     add_panpipe_process "process_a" "cpus=1 mem=32 time=00:10:00"
     add_panpipe_process "process_b" "cpus=1 mem=32 time=00:10:00"

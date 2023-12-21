@@ -85,7 +85,7 @@ PROCESS_METHOD_NAME_DOCKER_IMGS="${PROCESS_METHOD_SEP}docker_imgs"
 
 # MODULE METHOD NAMES
 MODULE_METHOD_NAME_SHRDIRS="${MODULE_METHOD_SEP}shared_dirs"
-MODULE_METHOD_NAME_PIPELINE="${MODULE_METHOD_SEP}pipeline"
+MODULE_METHOD_NAME_PROGRAM="${MODULE_METHOD_SEP}program"
 
 # REEXEC REASONS
 FIFO_REEXEC_REASON="fifo"
@@ -116,13 +116,13 @@ PROCESSDEP_PRIORITY[${AFTERNOTOK_PROCESSDEP_TYPE}]=4
 # PROCESS STATISTICS
 UNKNOWN_ELAPSED_TIME_FOR_PROCESS="UNKNOWN"
 
-# PIPELINE STATUSES
+# PROGRAM STATUSES
 #
 # NOTE: exit code 1 is reserved for general errors when executing
 # pipe_status
-PIPELINE_FINISHED_EXIT_CODE=0
-PIPELINE_IN_PROGRESS_EXIT_CODE=2
-PIPELINE_UNFINISHED_EXIT_CODE=3
+PROGRAM_FINISHED_EXIT_CODE=0
+PROGRAM_IN_PROGRESS_EXIT_CODE=2
+PROGRAM_UNFINISHED_EXIT_CODE=3
 
 # PANPIPE STATUS
 PANPIPE_SCHEDULER=""
@@ -140,16 +140,16 @@ PROCESSID_FEXT="id"
 ARRAY_TASKID_FEXT="id"
 SLURM_EXEC_ATTEMPT_FEXT_STRING="__attempt"
 PROCSPEC_FEXT="procspec"
-PPLOPTS_FEXT="opts"
-PPLOPTS_EXHAUSTIVE_FEXT="opts_exh"
+PRGOPTS_FEXT="opts"
+PRGOPTS_EXHAUSTIVE_FEXT="opts_exh"
 FIFOS_FEXT="fifos"
 GRAPHS_FEXT="dot"
 SCHED_SCRIPT_INPUT_FEXT="opts"
 
 # FILE NAMES
-PPEXEC_INITIAL_PROCSPEC_BASENAME=".initial_pipeline.${PROCSPEC_FEXT}"
-PPEXEC_PPL_PREF="pipeline"
-PPL_COMMAND_LINE_BASENAME="command_line.sh"
+PPEXEC_INITIAL_PROCSPEC_BASENAME=".initial_program.${PROCSPEC_FEXT}"
+PPEXEC_PRG_PREF="program"
+PRG_COMMAND_LINE_BASENAME="command_line.sh"
 MOD_VARS_AND_FUNCS_BASENAME=".mod_vars_and_funcs.sh"
 
 # DIR_NAMES
@@ -165,13 +165,13 @@ PANPIPE_REEXEC_PROCESSES_WARNING="Warning: there are processes to be re-executed
 # GLOBAL VARIABLES #
 ####################
 
-# Declare associative arrays to store help about pipeline options
-declare -A PIPELINE_OPT_DESC
-declare -A PIPELINE_OPT_TYPE
-declare -A PIPELINE_OPT_REQ
-declare -A PIPELINE_OPT_CATEG
-declare -A PIPELINE_CATEG_MAP
-declare -A PIPELINE_OPT_PROCESS
+# Declare associative arrays to store help about program options
+declare -A PROGRAM_OPT_DESC
+declare -A PROGRAM_OPT_TYPE
+declare -A PROGRAM_OPT_REQ
+declare -A PROGRAM_OPT_CATEG
+declare -A PROGRAM_CATEG_MAP
+declare -A PROGRAM_OPT_PROCESS
 
 # Declare array to store deserialized arguments
 declare -a DESERIALIZED_ARGS
@@ -198,16 +198,16 @@ declare -A PROCESS_OUT_VALUES
 declare -A PROCESS_DEPENDENCIES
 
 # Declare variable to store name of output directory
-declare PIPELINE_OUTDIR
+declare PROGRAM_OUTDIR
 
 # Declare array to store file names of loaded modules
-declare -a PIPELINE_MODULES
+declare -a PROGRAM_MODULES
 
 # Declare associative arrays to store name of shared directories
-declare -A PIPELINE_SHDIRS
+declare -A PROGRAM_SHDIRS
 
 # Declare associative arrays to store names of fifos
-declare -A PIPELINE_FIFOS
+declare -A PROGRAM_FIFOS
 
 # Declare associative array to store users of fifos
 declare -A FIFO_USERS
@@ -228,7 +228,7 @@ declare -A EXIT_CODE
 
 # INCLUDE BASH FILES
 . "${panpipe_libexecdir}"/panpipe_lib_utils
-. "${panpipe_libexecdir}"/panpipe_lib_pipelines
+. "${panpipe_libexecdir}"/panpipe_lib_programs
 . "${panpipe_libexecdir}"/panpipe_lib_modules
 . "${panpipe_libexecdir}"/panpipe_lib_processes
 . "${panpipe_libexecdir}"/panpipe_lib_opts

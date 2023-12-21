@@ -33,9 +33,9 @@ panpipe_telegram_jobsteps_shared_dirs()
     define_shared_dir "data"
 }
 
-######################
-# PIPELINE PROCESSES #
-######################
+#####################
+# PROGRAM PROCESSES #
+#####################
 
 ########
 decomposer_define_opts()
@@ -89,12 +89,12 @@ recomposer_define_opts()
     save_opt_list optlist
 }
 
-######################################
-# PIPELINE IMPLEMENTED BY THE MODULE #
-######################################
+#####################################
+# PROGRAM IMPLEMENTED BY THE MODULE #
+#####################################
 
 ########
-panpipe_telegram_jobsteps_pipeline()
+panpipe_telegram_jobsteps_program()
 {
     add_panpipe_process "decomposer"  "cpus=1 mem=32 time=00:05:00"
     add_panpipe_process "recomposer"  "cpus=1 mem=32 time=00:05:00"

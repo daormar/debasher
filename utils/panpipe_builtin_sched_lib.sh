@@ -118,7 +118,7 @@ builtin_sched_init_process_info()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if pipeline_process_spec_is_ok "$process_spec"; then
+        if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
             local script_filename=`get_script_filename "${dirname}" ${processname}`
@@ -258,7 +258,7 @@ builtin_sched_get_array_task_status()
     local processname=$2
     local task_idx=$3
     local processdirname=`get_process_outdir_given_dirname "${dirname}" ${processname}`
-    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
     local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${task_idx}`
 
     if [ ! -f ${array_taskid_file} ]; then
@@ -1032,7 +1032,7 @@ builtin_sched_print_script_body()
     local opts_fname=$8
 
     # Write function to be executed
-    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
     if [ "${opt_array_size}" -gt 1 ]; then
         echo "builtin_task_log_filename=\`get_task_log_filename_builtin \"$(esc_dq "${scriptsdir}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
         echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"$(esc_dq "${opts_fname}")\" \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
@@ -1140,7 +1140,7 @@ builtin_sched_launch()
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
         # Get scripts dir
-        local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+        local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
         # Write pid
         local pid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${task_idx}`
@@ -1294,7 +1294,7 @@ builtin_sched_clean_process_files()
         local dirname=$1
         local processname=$2
 
-        local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+        local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
         local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
         "${RM}" -f "${builtin_log_filename}"
     }
@@ -1329,7 +1329,7 @@ builtin_sched_clean_process_files()
             IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
 
             # Iterate over pending tasks
-            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+            local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
             local idx
             for idx in "${pending_tasks_array[@]}"; do
                 clean_process_id_files_array "${scriptsdir}" "${processname}" "${idx}"
@@ -1382,7 +1382,7 @@ builtin_sched_prepare_files_and_dirs_for_processes()
 builtin_sched_sleep()
 {
     # Sleep a certain number of seconds depending on the number of
-    # pipeline processes
+    # program processes
     local num_processes=${#BUILTIN_SCHED_PROCESSNAME_TO_IDX[@]}
 
     if [ ${num_processes} -le ${BUILTIN_SCHED_NPROCESSES_SLEEP_THRESHOLD} ]; then
@@ -1393,7 +1393,7 @@ builtin_sched_sleep()
 }
 
 ########
-builtin_sched_execute_pipeline_processes()
+builtin_sched_execute_program_processes()
 {
     # Read input parameters
     local cmdline=$1
@@ -1426,7 +1426,7 @@ builtin_sched_execute_pipeline_processes()
 
     echo "" >&2
 
-    echo "* Executing pipeline processes..." >&2
+    echo "* Executing program processes..." >&2
 
     # Execute scheduling loop
     local end=0

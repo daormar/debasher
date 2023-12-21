@@ -30,9 +30,9 @@ panpipe_shared_dir_example_shared_dirs()
     define_shared_dir "data"
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 shared_dir_writer_document()
@@ -83,12 +83,12 @@ shared_dir_writer()
     echo "$value" > "${outf}"
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_shared_dir_example_pipeline()
+panpipe_shared_dir_example_program()
 {
     add_panpipe_process "shared_dir_writer" "cpus=1 mem=32 time=00:01:00"
 }

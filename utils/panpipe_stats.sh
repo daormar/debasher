@@ -22,7 +22,7 @@
 ########
 print_desc()
 {
-    echo "panpipe_stats gets statistics about pipeline processes"
+    echo "panpipe_stats gets statistics about program processes"
     echo "type \"panpipe_stats --help\" to get usage information"
 }
 
@@ -32,7 +32,7 @@ usage()
     echo "panpipe_stats             -d <string> [-s <string>]"
     echo "                          [--help]"
     echo ""
-    echo "-d <string>               Output directory for pipeline processes"
+    echo "-d <string>               Output directory for program processes"
     echo "-s <string>               Process name whose statistics should be obtained"
     echo "--help                    Display this help and exit"
 }
@@ -72,12 +72,12 @@ check_pars()
         exit 1
     else
         if [ ! -d "${pdir}" ]; then
-            echo "Error! pipeline directory does not exist" >&2
+            echo "Error! program directory does not exist" >&2
             exit 1
         fi
 
-        if [ ! -f "${pdir}/${PPL_COMMAND_LINE_BASENAME}" ]; then
-            echo "Error! ${pdir}/${PPL_COMMAND_LINE_BASENAME} file is missing" >&2
+        if [ ! -f "${pdir}/${PRG_COMMAND_LINE_BASENAME}" ]; then
+            echo "Error! ${pdir}/${PRG_COMMAND_LINE_BASENAME} file is missing" >&2
             exit 1
         fi
     fi
@@ -97,9 +97,9 @@ process_status_for_pfile()
 {
     local dirname=$1
     local absdirname=`get_absolute_path "${dirname}"`
-    local command_line_file="${absdirname}/${PPL_COMMAND_LINE_BASENAME}"
+    local command_line_file="${absdirname}/${PRG_COMMAND_LINE_BASENAME}"
 
-    # Extract information from PPL_COMMAND_LINE_BASENAME file
+    # Extract information from PRG_COMMAND_LINE_BASENAME file
     local pfile
     pfile=`get_abspfile_from_command_line_file "${command_line_file}"` || return 1
     local sched
@@ -114,7 +114,7 @@ process_status_for_pfile()
     if dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
         local moved_outdir="no"
     else
-        echo "Warning: pipeline output directory was moved (original directory: ${orig_outdir})" >&2
+        echo "Warning: program output directory was moved (original directory: ${orig_outdir})" >&2
         cmdline=`replace_outdir_in_cmdline "${cmdline}" "${absdirname}"`
         local moved_outdir="yes"
     fi
@@ -148,7 +148,7 @@ process_status_for_pfile()
 
         # Print status
         echo "PROCESS: $processname ; STATUS: $status ; ELAPSED_TIME(s): ${elapsed_time}"
-    done < <(exec_pipeline_func_for_module "${pfile}")
+    done < <(exec_program_func_for_module "${pfile}")
 }
 
 ########

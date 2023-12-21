@@ -30,9 +30,9 @@ panpipe_telegram_morrison_shared_dirs()
     :
 }
 
-######################
-# PIPELINE PROCESSES #
-######################
+#####################
+# PROGRAM PROCESSES #
+#####################
 
 ########
 rseq_document()
@@ -279,12 +279,12 @@ wseq()
     cat "${inf}" > "${outf}" || return 1
 }
 
-######################################
-# PIPELINE IMPLEMENTED BY THE MODULE #
-######################################
+#####################################
+# PROGRAM IMPLEMENTED BY THE MODULE #
+#####################################
 
 ########
-panpipe_telegram_morrison_pipeline()
+panpipe_telegram_morrison_program()
 {
     add_panpipe_process "rseq"        "cpus=1 mem=32 time=00:05:00"
     add_panpipe_process "decomposer"  "cpus=1 mem=32 time=00:05:00"

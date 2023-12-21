@@ -25,13 +25,13 @@ get_shrdirs_funcname()
 }
 
 ########
-get_pipeline_funcname()
+get_program_funcname()
 {
     local absmodname=$1
 
     local modname=`get_modname_from_absmodname "${absmodname}"`
 
-    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_PIPELINE}"
+    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_PROGRAM}"
 }
 
 ########
@@ -89,7 +89,7 @@ module_is_loaded()
 
     # Search module name in the array of loaded modules
     local absmodname
-    for absmodname in "${PIPELINE_MODULES[@]}"; do
+    for absmodname in "${PROGRAM_MODULES[@]}"; do
         if [ "${absmodname}" = "${fullmodname}" ]; then
             return 0
         fi
@@ -128,7 +128,7 @@ load_panpipe_module()
             popd > /dev/null
 
             # Store module file name in array
-            PIPELINE_MODULES+=("${fullmodname}")
+            PROGRAM_MODULES+=("${fullmodname}")
         fi
     else
         echo "File not found (consider setting an appropriate value for PANPIPE_MOD_DIR environment variable)">&2

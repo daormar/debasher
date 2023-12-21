@@ -30,9 +30,9 @@ panpipe_docker_example_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 docker_example_explain_cmdline_opts()
@@ -73,12 +73,12 @@ docker_example_docker_imgs()
     pull_docker_img "library/hello-world"
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_docker_example_pipeline()
+panpipe_docker_example_program()
 {
     add_panpipe_process "docker_example" "cpus=1 mem=32 time=00:01:00"
 }

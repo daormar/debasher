@@ -801,7 +801,7 @@ get_process_log_filename_slurm()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}.${SLURM_SCHED_LOG_FEXT}"
 }
@@ -835,7 +835,7 @@ get_process_log_preverif_filename_slurm()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}.preverif.${SLURM_SCHED_LOG_FEXT}"
 }
@@ -847,7 +847,7 @@ get_process_log_verif_filename_slurm()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}.verif.${SLURM_SCHED_LOG_FEXT}"
 }
@@ -859,7 +859,7 @@ get_process_log_signcomp_filename_slurm()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}.signcomp.${SLURM_SCHED_LOG_FEXT}"
 }
@@ -882,7 +882,7 @@ get_task_last_attempt_logf_slurm()
     local taskidx=$3
 
     # Get scripts dir
-    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     # Obtain number of log files
     local logfname=`get_task_log_filename_slurm "$scriptsdir" "$processname" "$taskidx"`
@@ -968,7 +968,7 @@ clean_process_files_slurm()
             IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
 
             # Iterate over pending tasks
-            local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+            local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
             local idx
             for idx in "${pending_tasks_array[@]}"; do
                 clean_process_id_files_array "${scriptsdir}" "${processname}" "${idx}"
@@ -1081,7 +1081,7 @@ seq_execute_slurm()
     script_name=`"${MKTEMP}" -t "${tmpfile_templ}"` || return 1
 
     # Create script
-    create_seq_execute_script "${PIPELINE_OUTDIR}" "${process_to_launch}" "${script_name}" || return 1
+    create_seq_execute_script "${PROGRAM_OUTDIR}" "${process_to_launch}" "${script_name}" || return 1
 
     # Launch script
     shift

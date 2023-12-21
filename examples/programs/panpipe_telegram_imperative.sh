@@ -33,9 +33,9 @@ panpipe_telegram_imperative_shared_dirs()
     :
 }
 
-######################
-# PIPELINE PROCESSES #
-######################
+#####################
+# PROGRAM PROCESSES #
+#####################
 
 ########
 telegram_document()
@@ -101,12 +101,12 @@ telegram()
     fi
 }
 
-######################################
-# PIPELINE IMPLEMENTED BY THE MODULE #
-######################################
+#####################################
+# PROGRAM IMPLEMENTED BY THE MODULE #
+#####################################
 
 ########
-panpipe_telegram_imperative_pipeline()
+panpipe_telegram_imperative_program()
 {
     add_panpipe_process "telegram"  "cpus=1 mem=32 time=00:05:00"
 }

@@ -9,8 +9,8 @@ import os
 # Constants
 NONE_PROCESS_DEP = "none"
 PROCSPEC_FEXT = "procspec"
-PPLOPTS_FEXT = "opts"
-PPLOPTS_EXHAUSTIVE_FEXT = "opts_exh"
+PRGOPTS_FEXT = "opts"
+PRGOPTS_EXHAUSTIVE_FEXT = "opts_exh"
 FIFOS_FEXT = "fifos"
 ARG_SEP = "<_ARG_SEP_>"
 ASSOC_ARRAY_ELEM_SEP = "__ELEMSEP__"
@@ -72,8 +72,8 @@ class processdep_data:
 
 ##################################################
 class DependencyGraph:
-    def __init__(self, ppl_files_pref):
-        self.procspec_file = self.get_procspec_fname(ppl_files_pref)
+    def __init__(self, prg_files_pref):
+        self.procspec_file = self.get_procspec_fname(prg_files_pref)
         self.entries_lineno, self.process_entries = self.extract_process_entries(self.procspec_file)
         self.multiattempt_processes = self.extract_processes_with_multiattempt(self.process_entries)
         self.deps_syntax_ok, self.processdeps_sep, self.processdeps_map = self.extract_processdeps_info(self.entries_lineno, self.process_entries)
@@ -407,19 +407,19 @@ class DependencyGraph:
 
 ##################################################
 class ProcessGraph:
-    def __init__(self, ppl_files_pref):
-        self.pplopts_exhaustive_file = self.get_pplopts_exh_fname(ppl_files_pref)
-        self.pplopts_exh = self.load_pplopt_exh(self.pplopts_exhaustive_file)
-        self.process_out_values = self.get_process_out_values(self.pplopts_exh)
-        self.fifos_file = self.get_fifos_fname(ppl_files_pref)
+    def __init__(self, prg_files_pref):
+        self.prgopts_exhaustive_file = self.get_prgopts_exh_fname(prg_files_pref)
+        self.prgopts_exh = self.load_prgopt_exh(self.prgopts_exhaustive_file)
+        self.process_out_values = self.get_process_out_values(self.prgopts_exh)
+        self.fifos_file = self.get_fifos_fname(prg_files_pref)
         self.fifo_owners, self.fifo_users = self.load_fifos(self.fifos_file)
 
-    def get_pplopts_exh_fname(self, prefix):
-        return prefix + "." + PPLOPTS_EXHAUSTIVE_FEXT
+    def get_prgopts_exh_fname(self, prefix):
+        return prefix + "." + PRGOPTS_EXHAUSTIVE_FEXT
 
-    def load_pplopt_exh(self, pplopt_exh_fname):
-        pplopts_exh = {}
-        file = open(pplopt_exh_fname, 'r')
+    def load_prgopt_exh(self, prgopt_exh_fname):
+        prgopts_exh = {}
+        file = open(prgopt_exh_fname, 'r')
         # read file entry by entry
         for entry in file:
             # Extract entry information
@@ -428,7 +428,7 @@ class ProcessGraph:
             process_opts = "".join(words[2:])
 
             # Extract elements of process info
-            process_info_elems = self.get_process_taskidx_elems_ppl_file(process_info)
+            process_info_elems = self.get_process_taskidx_elems_prg_file(process_info)
             if len(process_info_elems) == 2:
                 processname = process_info_elems[0]
                 # Continue processing if the entry is not providing the
@@ -436,25 +436,25 @@ class ProcessGraph:
                 if process_info_elems[1] != ASSOC_ARRAY_KEY_LEN:
                     task_idx = int(process_info_elems[1])
                     # Make room for options
-                    if processname not in pplopts_exh:
-                        pplopts_exh[processname] = []
-                    while len(pplopts_exh[processname]) <= task_idx:
-                        pplopts_exh[processname].append([])
+                    if processname not in prgopts_exh:
+                        prgopts_exh[processname] = []
+                    while len(prgopts_exh[processname]) <= task_idx:
+                        prgopts_exh[processname].append([])
                     # Create list from process options
-                    opt_list = self.get_opt_list_ppl_file(process_opts)
-                    pplopts_exh[processname][task_idx] = opt_list
+                    opt_list = self.get_opt_list_prg_file(process_opts)
+                    prgopts_exh[processname][task_idx] = opt_list
 
-        return pplopts_exh
+        return prgopts_exh
 
-    def get_opt_list_ppl_file(self, process_opts):
+    def get_opt_list_prg_file(self, process_opts):
         return re.split(re.escape(ARG_SEP), process_opts)
 
-    def get_process_taskidx_elems_ppl_file(self, process_info):
+    def get_process_taskidx_elems_prg_file(self, process_info):
         return re.split(re.escape(ASSOC_ARRAY_ELEM_SEP), process_info)
 
-    def get_process_out_values(self, pplopts_exh):
+    def get_process_out_values(self, prgopts_exh):
         process_out_values = {}
-        for process, opts_list in pplopts_exh.items():
+        for process, opts_list in prgopts_exh.items():
             for task_idx in range(len(opts_list)):
                 opts = opts_list[task_idx]
                 i = 0
@@ -481,10 +481,10 @@ class ProcessGraph:
             # Extract entry information
             words = entry.split()
             augm_fifoname = words[0]
-            fifo_owner_elems = self.get_process_taskidx_elems_ppl_file(words[1])
+            fifo_owner_elems = self.get_process_taskidx_elems_prg_file(words[1])
             fifo_owner = fifo_owner_elems[0]
             fifo_owner_taskidx = fifo_owner_elems[1]
-            fifo_user_elems = self.get_process_taskidx_elems_ppl_file(words[2])
+            fifo_user_elems = self.get_process_taskidx_elems_prg_file(words[2])
             fifo_user = fifo_user_elems[0]
             fifo_user_taskidx = fifo_user_elems[1]
 
@@ -529,14 +529,14 @@ class ProcessGraph:
         # implementation, the representation and the elements coincide)
         process_graph_repres = []
         process_graph_set = set()
-        for process in self.pplopts_exh:
+        for process in self.prgopts_exh:
             process_graph_repres.append(process)
             process_graph_set.add(process)
         return process_graph_repres, process_graph_set
 
     def get_opt_to_processes(self):
         opt_to_processes = {}
-        for process, opts_list in self.pplopts_exh.items():
+        for process, opts_list in self.prgopts_exh.items():
             for task_idx in range(len(opts_list)):
                 opts = opts_list[task_idx]
                 for i in range(len(opts)):
@@ -827,7 +827,7 @@ class ProcessGraph:
         task_idx = int(process_info_elems[1])
 
         # Get option list
-        opt_list = self.pplopts_exh[processname][task_idx]
+        opt_list = self.prgopts_exh[processname][task_idx]
 
         # Iterate over option list
         i = 0

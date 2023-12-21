@@ -35,12 +35,12 @@ panpipe_subworkflow_example_shared_dirs()
 }
 
 ######################
-# PIPELINE PROCESSES #
+# PROGRAM PROCESSES #
 ######################
 
 ########
-panpipe_subworkflow_example_pipeline()
+panpipe_subworkflow_example_program()
 {
-    add_panpipe_pipeline "panpipe_array_example" "test"
-    add_panpipe_pipeline "panpipe_fifo_example" "test"
+    add_panpipe_program "panpipe_array_example" "test"
+    add_panpipe_program "panpipe_fifo_example" "test"
 }

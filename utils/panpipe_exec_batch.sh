@@ -23,17 +23,17 @@
 # CONSTANTS #
 #############
 
-PPL_IS_COMPLETED=0
-PPL_REQUIRES_POST_FINISH_ACTIONS=1
-PPL_FAILED=2
-PPL_IS_NOT_COMPLETED=3
-PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME=".ppl_post_finish_actions_signal"
+PRG_IS_COMPLETED=0
+PRG_REQUIRES_POST_FINISH_ACTIONS=1
+PRG_FAILED=2
+PRG_IS_NOT_COMPLETED=3
+PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME=".prg_post_finish_actions_signal"
 export RESERVED_HOOK_EXIT_CODE=200
 
 ########
 print_desc()
 {
-    echo "panpipe_exec_batch executes a batch of pipelines"
+    echo "panpipe_exec_batch executes a batch of programs"
     echo "type \"pipe_exec_batch --help\" to get usage information"
 }
 
@@ -45,15 +45,15 @@ usage()
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"
     echo "                          per line)"
-    echo "-m <int>                  Maximum number of pipelines executed simultaneously"
-    echo "-o <string>               Output directory where the pipeline output should be"
+    echo "-m <int>                  Maximum number of programs executed simultaneously"
+    echo "-o <string>               Output directory where the program output should be"
     echo "                          moved (if not given, the output directories are"
     echo "                          provided by the pipe_exec commands)"
     echo "-u <int>                  Maximum percentage of unfinished processes that is"
-    echo "                          allowed when evaluating if pipeline completed"
+    echo "                          allowed when evaluating if program completed"
     echo "                          execution (0 by default)"
     echo "-k <string>               Execute script implementing a software hook after"
-    echo "                          each pipeline reaches finished status"
+    echo "                          each program reaches finished status"
     echo "--help                    Display this help and exit"
 }
 
@@ -173,35 +173,35 @@ exec_hook()
     local outd=$1
 
     # export variables
-    export PIPE_EXEC_BATCH_PPL_OUTD="${outd}"
-    export PIPE_EXEC_BATCH_PPL_CMD=${PIPELINE_COMMANDS["${outd}"]}
+    export PIPE_EXEC_BATCH_PRG_OUTD="${outd}"
+    export PIPE_EXEC_BATCH_PRG_CMD=${PROGRAM_COMMANDS["${outd}"]}
 
     # Execute script
     "${k_val}"
     local exit_code=$?
 
     # unset variables
-    unset PPL_OUTD
-    unset PPL_CMD
+    unset PRG_OUTD
+    unset PRG_CMD
 
     return ${exit_code}
 }
 
 ########
-post_ppl_finish_actions_are_executed()
+post_prg_finish_actions_are_executed()
 {
-    local pipeline_outd=$1
+    local program_outd=$1
     local outd=$2
 
     if [ -z "${outd}" ]; then
-        if [ -f "${pipeline_outd}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}" ]; then
+        if [ -f "${program_outd}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}" ]; then
             return 0
         else
             return 1
         fi
     else
-        destdir=`get_dest_dir_for_ppl "${pipeline_outd}" "${outd}"`
-        if [ -f "${destdir}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}" ]; then
+        destdir=`get_dest_dir_for_prg "${program_outd}" "${outd}"`
+        if [ -f "${destdir}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}" ]; then
             return 0
         else
             return 1
@@ -210,42 +210,42 @@ post_ppl_finish_actions_are_executed()
 }
 
 ########
-signal_execution_of_post_ppl_finish_actions()
+signal_execution_of_post_prg_finish_actions()
 {
-    local pipeline_outd=$1
+    local program_outd=$1
     local outd=$2
 
     if [ -z "${outd}" ]; then
-        touch "${pipeline_outd}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
+        touch "${program_outd}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
     else
-        destdir=`get_dest_dir_for_ppl "${pipeline_outd}" "${outd}"`
-        touch "${destdir}/${PPL_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
+        destdir=`get_dest_dir_for_prg "${program_outd}" "${outd}"`
+        touch "${destdir}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
     fi
 }
 
 ########
-exec_post_ppl_finish_actions()
+exec_post_prg_finish_actions()
 {
-    local pipeline_outd=$1
+    local program_outd=$1
     local outd=$2
 
-    # Check that ${pipeline_outd} directory exists
-    if [ ! -d "${pipeline_outd}" ]; then
-        echo "Error: post pipeline finish actions cannot be executed because ${pipeline_outd} directory no longer exists" >&2
+    # Check that ${program_outd} directory exists
+    if [ ! -d "${program_outd}" ]; then
+        echo "Error: post program finish actions cannot be executed because ${program_outd} directory no longer exists" >&2
         return 1
     fi
 
     # Execute hook if requested
     if [ ${k_given} -eq 1 ]; then
-        echo "- Executing hook implemented in ${k_val} for pipeline stored in ${pipeline_outd}" >&2
-        exec_hook ${pipeline_outd}
+        echo "- Executing hook implemented in ${k_val} for program stored in ${program_outd}" >&2
+        exec_hook ${program_outd}
         local exit_code_hook=$?
         case ${exit_code_hook} in
             0) :
                ;;
             ${RESERVED_HOOK_EXIT_CODE}) return ${RESERVED_HOOK_EXIT_CODE}
                                         ;;
-            *) echo "Error: hook execution failed for pipeline stored in ${pipeline_outd} directory" >&2
+            *) echo "Error: hook execution failed for program stored in ${program_outd} directory" >&2
                return ${exit_code_hook}
                ;;
         esac
@@ -253,12 +253,12 @@ exec_post_ppl_finish_actions()
 
     # Move directory if requested
     if [ ! -z "${outd}" ]; then
-        echo "- Moving ${pipeline_outd} directory to ${outd}" >&2
-        move_dir "${pipeline_outd}" "${outd}" || return 1
+        echo "- Moving ${program_outd} directory to ${outd}" >&2
+        move_dir "${program_outd}" "${outd}" || return 1
     fi
 
-    # Signal execution of post pipeline finish actions
-    signal_execution_of_post_ppl_finish_actions "${pipeline_outd}" "${outd}"
+    # Signal execution of post program finish actions
+    signal_execution_of_post_prg_finish_actions "${program_outd}" "${outd}"
 }
 
 ########
@@ -276,7 +276,7 @@ extract_outd_from_pipe_exec_cmd()
 }
 
 ########
-get_ppl_status()
+get_prg_status()
 {
     local pipe_cmd_outd=$1
     local outd=$2
@@ -284,18 +284,18 @@ get_ppl_status()
     # Check if final output directory was provided and also that this
     # directory is not the same as the original output directory
     if [ "${outd}" != "" ]; then
-        # Get pipeline directory after moving
-        local final_outdir=`get_dest_dir_for_ppl "${pipe_cmd_outd}" "${outd}"`
+        # Get program directory after moving
+        local final_outdir=`get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}"`
         if [ -d "${final_outdir}" ]; then
             # If output directory exists, it is assumed that the
-            # pipeline completed execution
-            return ${PPL_IS_COMPLETED}
+            # program completed execution
+            return ${PRG_IS_COMPLETED}
         fi
     fi
 
-    # If original output directory exists then check pipeline status
+    # If original output directory exists then check program status
     if [ -d "${pipe_cmd_outd}" ]; then
-        # Obtain pipeline status
+        # Obtain program status
         local tmpfile=`"${MKTEMP}"`
         "${panpipe_bindir}"/panpipe_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
@@ -306,32 +306,32 @@ get_ppl_status()
 
         # Evaluate exit code of pipe_status
         case $exit_code in
-            ${PIPELINE_FINISHED_EXIT_CODE}) if post_ppl_finish_actions_are_executed "${pipe_cmd_outd}"; then
-                                                return ${PPL_IS_COMPLETED}
+            ${PROGRAM_FINISHED_EXIT_CODE}) if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
+                                                return ${PRG_IS_COMPLETED}
                                             else
-                                                return ${PPL_REQUIRES_POST_FINISH_ACTIONS}
+                                                return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
                                             fi
                                             ;;
-            ${PIPELINE_UNFINISHED_EXIT_CODE}) if [ ${unfinished_process_perc} -gt ${max_unfinished_process_perc} ]; then
-                                                  return ${PPL_FAILED}
+            ${PROGRAM_UNFINISHED_EXIT_CODE}) if [ ${unfinished_process_perc} -gt ${max_unfinished_process_perc} ]; then
+                                                  return ${PRG_FAILED}
                                               else
-                                                  if post_ppl_finish_actions_are_executed "${pipe_cmd_outd}"; then
-                                                      return ${PPL_IS_COMPLETED}
+                                                  if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
+                                                      return ${PRG_IS_COMPLETED}
                                                   else
-                                                      return ${PPL_REQUIRES_POST_FINISH_ACTIONS}
+                                                      return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
                                                   fi
                                               fi
                                               ;;
-            *) return ${PPL_IS_NOT_COMPLETED}
+            *) return ${PRG_IS_NOT_COMPLETED}
                ;;
         esac
     else
-        return ${PPL_IS_NOT_COMPLETED}
+        return ${PRG_IS_NOT_COMPLETED}
     fi
 }
 
 ########
-ppl_has_processes_to_reexec()
+prg_has_processes_to_reexec()
 {
     local pipe_exec_cmd=$1
     local pipe_cmd_outd=$2
@@ -340,11 +340,11 @@ ppl_has_processes_to_reexec()
     # Check if final output directory was provided and also that this
     # directory is not the same as the original output directory
     if [ "${outd}" != "" ]; then
-        # Get pipeline directory after moving
-        local final_outdir=`get_dest_dir_for_ppl "${pipe_cmd_outd}" "${outd}"`
+        # Get program directory after moving
+        local final_outdir=`get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}"`
         if [ -d "${final_outdir}" ]; then
             # If output directory exists, it is assumed that the
-            # pipeline completed execution
+            # program completed execution
             return 1
         fi
     fi
@@ -359,20 +359,20 @@ ppl_has_processes_to_reexec()
 }
 
 ########
-get_initial_ppl_status()
+get_initial_prg_status()
 {
     local pipe_exec_cmd=$1
     local pipe_cmd_outd=$2
     local outd=$3
 
-    # Check if pipeline has processes to re-execute (this is only necessary
+    # Check if program has processes to re-execute (this is only necessary
     # in the initial status check)
-    if ppl_has_processes_to_reexec "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
-        return ${PPL_IS_NOT_COMPLETED}
+    if prg_has_processes_to_reexec "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
+        return ${PRG_IS_NOT_COMPLETED}
     fi
 
-    # Get pipeline status
-    get_ppl_status "${pipe_cmd_outd}" "${outd}"
+    # Get program status
+    get_prg_status "${pipe_cmd_outd}" "${outd}"
 }
 
 ########
@@ -381,20 +381,20 @@ wait_simul_exec_reduction()
     local maxp=$1
     local SLEEP_TIME=60
     local end=0
-    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
+    local num_active_programs=${#PROGRAM_COMMANDS[@]}
 
     while [ ${end} -eq 0 ] ; do
-        # Iterate over active pipelines
-        local num_completed_pipelines=0
-        local num_failed_pipelines=0
-        for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
-            # Check if pipeline has completed execution
-            get_ppl_status "${pipeline_outd}" "${outd}"
+        # Iterate over active programs
+        local num_completed_programs=0
+        local num_failed_programs=0
+        for program_outd in "${!PROGRAM_COMMANDS[@]}"; do
+            # Check if program has completed execution
+            get_prg_status "${program_outd}" "${outd}"
             local exit_code=$?
             case $exit_code in
-                ${PPL_IS_COMPLETED}) num_completed_pipelines=$((num_completed_pipelines+1))
+                ${PRG_IS_COMPLETED}) num_completed_programs=$((num_completed_programs+1))
                                      ;;
-                ${PPL_REQUIRES_POST_FINISH_ACTIONS}) exec_post_ppl_finish_actions "${pipeline_outd}" "${outd}"
+                ${PRG_REQUIRES_POST_FINISH_ACTIONS}) exec_post_prg_finish_actions "${program_outd}" "${outd}"
                                                      local exit_code_post_comp_actions=$?
                                                      case $exit_code_post_comp_actions in
                                                          0) :
@@ -405,24 +405,24 @@ wait_simul_exec_reduction()
                                                             ;;
                                                      esac
                                                      ;;
-                ${PPL_FAILED}) num_failed_pipelines=$((num_failed_pipelines+1))
+                ${PRG_FAILED}) num_failed_programs=$((num_failed_programs+1))
                                ;;
             esac
         done
 
-        # Obtain number of pending pipelines
-        local num_pending_pipelines=$((num_active_pipelines - num_completed_pipelines))
+        # Obtain number of pending programs
+        local num_pending_programs=$((num_active_programs - num_completed_programs))
 
         # Decide whether to wait or end the loop
-        if [ ${num_pending_pipelines} -eq ${num_failed_pipelines} ]; then
-            if [ ${num_pending_pipelines} -ge ${maxp} ]; then
-                echo "Error: all pending pipelines failed and maximum capacity was reached" >&2
+        if [ ${num_pending_programs} -eq ${num_failed_programs} ]; then
+            if [ ${num_pending_programs} -ge ${maxp} ]; then
+                echo "Error: all pending programs failed and maximum capacity was reached" >&2
                 return 1
             else
                 end=1
             fi
         else
-            if [ ${num_pending_pipelines} -lt ${maxp} ]; then
+            if [ ${num_pending_programs} -lt ${maxp} ]; then
                 end=1
             fi
         fi
@@ -436,64 +436,64 @@ wait_simul_exec_reduction()
 }
 
 ########
-get_dest_dir_for_ppl()
+get_dest_dir_for_prg()
 {
-    local pipeline_outd=$1
+    local program_outd=$1
     local outd=$2
-    basedir=`"$BASENAME" "${pipeline_outd}"`
+    basedir=`"$BASENAME" "${program_outd}"`
     echo "${outd}/${basedir}"
 }
 
 ########
 move_dir()
 {
-    local pipeline_outd=$1
+    local program_outd=$1
     local outd=$2
-    destdir=`get_dest_dir_for_ppl "${pipeline_outd}" "${outd}"`
+    destdir=`get_dest_dir_for_prg "${program_outd}" "${outd}"`
 
     # Move directory
     if [ -d "${destdir}" ]; then
         echo "Error: ${destdir} exists" >&2
         return 1
     else
-        "${MV}" "${pipeline_outd}" "${outd}" || return 1
+        "${MV}" "${program_outd}" "${outd}" || return 1
     fi
 }
 
 ########
-update_active_pipeline()
+update_active_program()
 {
-    local pipeline_outd=$1
+    local program_outd=$1
     local outd=$2
 
-    # Check pipeline status
-    get_ppl_status "${pipeline_outd}" "${outd}"
+    # Check program status
+    get_prg_status "${program_outd}" "${outd}"
     local exit_code=$?
 
     case $exit_code in
-        ${PPL_IS_COMPLETED}) echo "Pipeline stored in ${pipeline_outd} has completed execution" >&2
-                             unset PIPELINE_COMMANDS["${pipeline_outd}"]
+        ${PRG_IS_COMPLETED}) echo "Program stored in ${program_outd} has completed execution" >&2
+                             unset PROGRAM_COMMANDS["${program_outd}"]
                              ;;
-        ${PPL_REQUIRES_POST_FINISH_ACTIONS}) echo "Pipeline stored in ${pipeline_outd} has post-finish actions pending" >&2
+        ${PRG_REQUIRES_POST_FINISH_ACTIONS}) echo "Program stored in ${program_outd} has post-finish actions pending" >&2
                                            ;;
     esac
 }
 
 ########
-update_active_pipelines()
+update_active_programs()
 {
     local outd=$1
 
-    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
-    echo "Previous number of active pipelines: ${num_active_pipelines}" >&2
+    local num_active_programs=${#PROGRAM_COMMANDS[@]}
+    echo "Previous number of active programs: ${num_active_programs}" >&2
 
-    # Iterate over active pipelines
-    for pipeline_outd in "${!PIPELINE_COMMANDS[@]}"; do
-        update_active_pipeline "${pipeline_outd}" "${outd}" || return 1
+    # Iterate over active programs
+    for program_outd in "${!PROGRAM_COMMANDS[@]}"; do
+        update_active_program "${program_outd}" "${outd}" || return 1
     done
 
-    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
-    echo "Updated number of active pipelines: ${num_active_pipelines}" >&2
+    local num_active_programs=${#PROGRAM_COMMANDS[@]}
+    echo "Updated number of active programs: ${num_active_programs}" >&2
 }
 
 ########
@@ -502,11 +502,11 @@ add_cmd_to_assoc_array()
     local cmd=$1
     local dir=$2
 
-    PIPELINE_COMMANDS["${dir}"]="${cmd}"
+    PROGRAM_COMMANDS["${dir}"]="${cmd}"
 }
 
 ########
-wait_until_pending_ppls_complete()
+wait_until_pending_prgs_complete()
 {
     wait_simul_exec_reduction 1 || return 1
 }
@@ -518,9 +518,9 @@ execute_batches()
     lineno=1
 
     # Global variable declaration
-    declare -A PIPELINE_COMMANDS
+    declare -A PROGRAM_COMMANDS
 
-    # Process pipeline execution commands...
+    # Process program execution commands...
     while read pipe_exec_cmd; do
 
         # Execute built-in tilde expansion to avoid problems with "~"
@@ -534,55 +534,55 @@ execute_batches()
         wait_simul_exec_reduction ${maxp} || return 1
         echo "" >&2
 
-        echo "** Update array of active pipelines..." >&2
-        update_active_pipelines "${outd}" || return 1
+        echo "** Update array of active programs..." >&2
+        update_active_programs "${outd}" || return 1
         echo "" >&2
 
-        echo "** Extract output directory for pipeline..." >&2
+        echo "** Extract output directory for program..." >&2
         local pipe_cmd_outd
-        pipe_cmd_outd=`extract_outd_from_pipe_exec_cmd "${pipe_exec_cmd}"` || { echo "Error: pipeline command does not contain --outdir option">&2; return 1; }
+        pipe_cmd_outd=`extract_outd_from_pipe_exec_cmd "${pipe_exec_cmd}"` || { echo "Error: program command does not contain --outdir option">&2; return 1; }
         echo "${pipe_cmd_outd}"
         echo "" >&2
 
         echo "** Check correctness of output directory..." >&2
         local base_pipe_cmd_outd=`"${DIRNAME}" "${pipe_cmd_outd}"`
         if dirnames_are_equal "${outd}" "${base_pipe_cmd_outd}"; then
-            echo "Error: final output directory is equal to the directory containing the output directory for pipeline">&2
+            echo "Error: final output directory is equal to the directory containing the output directory for program">&2
             return 1;
         else
             echo "yes" >&2
         fi
         echo "" >&2
 
-        echo "** Check if pipeline already completed execution..." >&2
-        get_initial_ppl_status "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"
+        echo "** Check if program already completed execution..." >&2
+        get_initial_prg_status "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"
         local exit_code=$?
         case $exit_code in
-            ${PPL_IS_COMPLETED}) echo "yes">&2
+            ${PRG_IS_COMPLETED}) echo "yes">&2
                                  ;;
-            ${PPL_REQUIRES_POST_FINISH_ACTIONS}) echo "no">&2
+            ${PRG_REQUIRES_POST_FINISH_ACTIONS}) echo "no">&2
                                                ;;
-            ${PPL_FAILED}) echo "no">&2
+            ${PRG_FAILED}) echo "no">&2
                            ;;
-            ${PPL_IS_NOT_COMPLETED}) echo "no">&2
+            ${PRG_IS_NOT_COMPLETED}) echo "no">&2
                                      ;;
         esac
         echo "" >&2
 
-        if [ ${exit_code} -eq ${PPL_REQUIRES_POST_FINISH_ACTIONS} ]; then
+        if [ ${exit_code} -eq ${PRG_REQUIRES_POST_FINISH_ACTIONS} ]; then
             add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}"
         fi
 
-        if [ ${exit_code} -eq ${PPL_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PPL_FAILED} ]; then
+        if [ ${exit_code} -eq ${PRG_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PRG_FAILED} ]; then
             echo "**********************" >&2
-            echo "** Execute pipeline..." >&2
+            echo "** Execute program..." >&2
             echo "${pipe_exec_cmd}" >&2
             eval "${pipe_exec_cmd}" || return 1
             echo "**********************" >&2
             echo "" >&2
 
-            echo "** Add pipeline command to associative array..." >&2
-            add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}" || { echo "Error: pipeline command does not contain --outdir option">&2 ; return 1; }
+            echo "** Add program command to associative array..." >&2
+            add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}" || { echo "Error: program command does not contain --outdir option">&2 ; return 1; }
             echo "" >&2
         fi
 
@@ -591,23 +591,23 @@ execute_batches()
 
     done < "${file}"
 
-    # Wait for all pipelines to complete
-    echo "* Waiting for pending pipelines to complete..." >&2
-    wait_until_pending_ppls_complete || return 1
+    # Wait for all programs to complete
+    echo "* Waiting for pending programs to complete..." >&2
+    wait_until_pending_prgs_complete || return 1
     echo "" >&2
 
-    # Final update of active pipelines
-    echo "* Final update of array of active pipelines..." >&2
-    update_active_pipelines "${outd}" || return 1
+    # Final update of active programs
+    echo "* Final update of array of active programs..." >&2
+    update_active_programs "${outd}" || return 1
     echo "" >&2
 
-    # Check if there are active pipelines
-    local num_active_pipelines=${#PIPELINE_COMMANDS[@]}
-    if [ ${num_active_pipelines} -eq 0 ]; then
-        echo "All pipelines successfully completed execution" >&2
+    # Check if there are active programs
+    local num_active_programs=${#PROGRAM_COMMANDS[@]}
+    if [ ${num_active_programs} -eq 0 ]; then
+        echo "All programs successfully completed execution" >&2
         echo "" >&2
     else
-        echo "Warning: ${num_active_pipelines} pipelines did not complete execution" >&2
+        echo "Warning: ${num_active_programs} programs did not complete execution" >&2
         echo "" >&2
     fi
 }

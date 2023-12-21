@@ -9,7 +9,7 @@ get_script_filename()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}"
 }
@@ -21,7 +21,7 @@ get_processid_filename()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/$processname.${PROCESSID_FEXT}"
 }
@@ -44,7 +44,7 @@ get_array_taskid()
     local idx=$3
 
     # Get scripts dir
-    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
     if [ -f "${file}" ]; then
@@ -61,7 +61,7 @@ get_process_finished_filename()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}.${FINISHED_PROCESS_FEXT}"
 }
@@ -222,7 +222,7 @@ read_ids_from_files()
     fi
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_given_basedir "${dirname}"`
+    scriptsdir=`get_prg_scripts_dir_given_basedir "${dirname}"`
 
     # Return ids for array tasks if any
     local id
@@ -369,7 +369,7 @@ get_launched_array_task_ids()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     # Return ids for array tasks if any
     for taskid_file in "${scriptsdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do

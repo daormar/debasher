@@ -33,12 +33,12 @@ panpipe_explicit_deps_example_shared_dirs()
     :
 }
 
-######################
-# PIPELINE PROCESSES #
-######################
+#####################
+# PROGRAM PROCESSES #
+#####################
 
 ########
-panpipe_explicit_deps_example_pipeline()
+panpipe_explicit_deps_example_program()
 {
     add_panpipe_process "value_writer" "cpus=1 mem=32 time=00:01:00"
     add_panpipe_process "value_reader" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:value_writer"

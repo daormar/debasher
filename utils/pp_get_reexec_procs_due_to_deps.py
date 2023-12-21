@@ -20,7 +20,7 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 
 # import modules
 import io, sys, getopt, operator
-from panpipe_ppl_lib import *
+from panpipe_prg_lib import *
 
 ##################################################
 def take_pars():
@@ -62,7 +62,7 @@ def print_help():
     print("pp_get_reexec_procs_due_to_deps -r <string> -p <string>", file=sys.stderr)
     print("", file=sys.stderr)
     print("-r <string>                     String with processes to be reexecuted", file=sys.stderr)
-    print("-p <string>                     Prefix of pipeline files", file=sys.stderr)
+    print("-p <string>                     Prefix of program files", file=sys.stderr)
 
 ##################################################
 def process_r_opt(rexec_processes_str):

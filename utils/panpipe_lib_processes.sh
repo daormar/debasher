@@ -22,17 +22,17 @@ document_process_opts()
 {
     local opts=$1
     for opt in ${opts}; do
-        if [ "${PIPELINE_OPT_REQ[${opt}]}" != "" ]; then
+        if [ "${PROGRAM_OPT_REQ[${opt}]}" != "" ]; then
             reqflag=" (required) "
         else
             reqflag=" "
         fi
 
         # Print option
-        if [ -z ${PIPELINE_OPT_TYPE[$opt]} ]; then
-            echo "\`${opt}\` ${PIPELINE_OPT_DESC[$opt]}${reqflag}"
+        if [ -z ${PROGRAM_OPT_TYPE[$opt]} ]; then
+            echo "\`${opt}\` ${PROGRAM_OPT_DESC[$opt]}${reqflag}"
         else
-            echo "\`${opt}\` ${PIPELINE_OPT_TYPE[$opt]} ${PIPELINE_OPT_DESC[$opt]}${reqflag}"
+            echo "\`${opt}\` ${PROGRAM_OPT_TYPE[$opt]} ${PROGRAM_OPT_DESC[$opt]}${reqflag}"
         fi
         echo ""
     done
@@ -64,7 +64,7 @@ document_process()
 }
 
 ########
-pipeline_process_spec_is_ok()
+program_process_spec_is_ok()
 {
     local process_spec=$1
 
@@ -138,7 +138,7 @@ get_task_template_log_filename_slurm()
     local processname=$2
 
     # Get scripts dir
-    scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}_%a.${SLURM_SCHED_LOG_FEXT}"
 }
@@ -266,7 +266,7 @@ get_opts_for_process_and_task()
     local processname=$1
     local task_idx=$2
 
-    local opts_fname=`get_sched_opts_fname_for_process "${PIPELINE_OUTDIR}" "${processname}"`
+    local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
     get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
 }
 
@@ -404,20 +404,20 @@ create_scripts_dir_for_process()
     local dirname=$1
     local processname=$2
 
-    local scriptsdir=`get_ppl_scripts_dir_for_process "${dirname}" "${processname}"`
+    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
     if [ ! -d "${scriptsdir}" ]; then
         "${MKDIR}" -p "${scriptsdir}" || return 1
     fi
 }
 
 ########
-get_ppl_scripts_dir_for_process()
+get_prg_scripts_dir_for_process()
 {
     local dirname=$1
     local processname=$2
 
     # Get base scripts dir
-    scriptsdir=`get_ppl_scripts_dir_given_basedir "${dirname}"`
+    scriptsdir=`get_prg_scripts_dir_given_basedir "${dirname}"`
 
     echo "${scriptsdir}/${processname}"
 }
@@ -431,7 +431,7 @@ get_outd_for_dep()
         echo ""
     else
         # Get name of output directory
-        local outd="${PIPELINE_OUTDIR}"
+        local outd="${PROGRAM_OUTDIR}"
 
         # Get processname
         local processname_part="${dep#*${PROCESS_PLUS_DEPTYPE_SEP}}"
@@ -587,9 +587,9 @@ get_procdeps_for_process_cached()
 
                                 # Check if the value represents a FIFO
                                 local augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
-                                if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
+                                if [[ -v PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
                                     # The value represents a FIFO
-                                    local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
+                                    local proc_plus_idx=${PROGRAM_FIFOS["${augm_fifoname}"]}
                                     local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                     if [ "${processowner}" != "${processname}" ]; then
@@ -765,9 +765,9 @@ register_fifos_used_by_process()
                     # not an output option
                     if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
                         augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
-                        if [[ -v PIPELINE_FIFOS["${augm_fifoname}"] ]]; then
+                        if [[ -v PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
                             # The value is a FIFO
-                            local proc_plus_idx=${PIPELINE_FIFOS["${augm_fifoname}"]}
+                            local proc_plus_idx=${PROGRAM_FIFOS["${augm_fifoname}"]}
                             local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
                             local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                             if [ "${processowner}" != "${processname}" ]; then
@@ -819,7 +819,7 @@ get_fifo_owners_for_process()
         local user=${FIFO_USERS["${augm_fifoname}"]}
         local user_proc="${user%%${ASSOC_ARRAY_ELEM_SEP}*}"
         if [ "${user_proc}" = "${processname}" ]; then
-            local owner=${PIPELINE_FIFOS["${augm_fifoname}"]}
+            local owner=${PROGRAM_FIFOS["${augm_fifoname}"]}
             local owner_proc="${owner%%${ASSOC_ARRAY_ELEM_SEP}*}"
             owners["${owner_proc}"]=1
         fi
@@ -869,7 +869,7 @@ get_process_outdir()
     local processname=$1
 
     # Get full path of output directory
-    local outd=${PIPELINE_OUTDIR}
+    local outd=${PROGRAM_OUTDIR}
 
     get_process_outdir_given_dirname "${outd}" "${processname}"
 }
@@ -913,7 +913,7 @@ get_process_outdir_given_process_spec()
     local process_spec=$1
 
     # Get full path of output directory
-    local outd=${PIPELINE_OUTDIR}
+    local outd=${PROGRAM_OUTDIR}
 
     # Obtain output directory for process
     local processname=`extract_processname_from_process_spec ${process_spec}`
@@ -955,7 +955,7 @@ create_outdir_for_process()
     local outd=`get_process_outdir_given_dirname "${dirname}" "${processname}"`
 
     if [ -d ${outd} ]; then
-        echo "Warning: ${processname} output directory already exists but pipeline was not finished or will be re-executed, directory content will be removed">&2
+        echo "Warning: ${processname} output directory already exists but program was not finished or will be re-executed, directory content will be removed">&2
     else
         "${MKDIR}" "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
     fi

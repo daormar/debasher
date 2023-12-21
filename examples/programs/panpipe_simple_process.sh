@@ -30,9 +30,9 @@ panpipe_simple_process_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 simple_process_document()
@@ -89,12 +89,12 @@ simple_process_skip()
     fi
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_simple_process_pipeline()
+panpipe_simple_process_program()
 {
     add_panpipe_process "simple_process" "cpus=1 mem=32 time=00:01:00,00:02:00,00:03:00"
 }

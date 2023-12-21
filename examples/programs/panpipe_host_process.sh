@@ -30,9 +30,9 @@ panpipe_host_process_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 host1_document()
@@ -82,12 +82,12 @@ host1()
     echo -n "" > "${outf}"
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_host_process_pipeline()
+panpipe_host_process_program()
 {
     add_panpipe_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=64"
 }

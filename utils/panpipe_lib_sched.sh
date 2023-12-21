@@ -12,13 +12,13 @@ set_panpipe_outdir()
 {
     local abs_outd=$1
 
-    PIPELINE_OUTDIR=${abs_outd}
+    PROGRAM_OUTDIR=${abs_outd}
 }
 
 ########
-get_ppl_outd()
+get_prg_outd()
 {
-    echo "${PIPELINE_OUTDIR}"
+    echo "${PROGRAM_OUTDIR}"
 }
 
 ########
@@ -329,7 +329,7 @@ write_env_vars_and_funcs()
         declare -p DISABLE_SCHEDULERS
         declare -p OPT_FILE_LINES_PER_BLOCK
         declare -p PANPIPE_SCRIPTS_DIRNAME
-        declare -p PIPELINE_OUTDIR
+        declare -p PROGRAM_OUTDIR
         declare -p MOD_VARS_AND_FUNCS_BASENAME
         declare -p PROCESS_METHOD_NAME_OUTDIR
         declare -p VALUE_DESCRIPTOR_NAME_PREFIX
@@ -357,9 +357,9 @@ write_env_vars_and_funcs()
         done
         declare -f pipe_fail
         declare -f get_process_finished_filename
-        declare -f get_ppl_scripts_dir
-        declare -f get_ppl_scripts_dir_for_process
-        declare -f get_ppl_scripts_dir_given_basedir
+        declare -f get_prg_scripts_dir
+        declare -f get_prg_scripts_dir_for_process
+        declare -f get_prg_scripts_dir_given_basedir
         declare -f read_opt_value_from_func_args
         declare -f get_opt_value_from_func_args
         declare -f str_is_val_descriptor

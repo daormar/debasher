@@ -22,8 +22,8 @@
 ########
 print_desc()
 {
-    echo "panpipe_process_debug executes a pipeline process for debugging purposes"
-    echo "Usage: panpipe_process_debug <pplfile> <processname> <options>"
+    echo "panpipe_process_debug executes a program process for debugging purposes"
+    echo "Usage: panpipe_process_debug <prgfile> <processname> <options>"
 }
 
 ########

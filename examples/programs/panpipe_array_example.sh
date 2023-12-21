@@ -30,9 +30,9 @@ panpipe_array_example_shared_dirs()
     :
 }
 
-#######################################
-# PIPELINE SOFTWARE TESTING PROCESSES #
-#######################################
+######################################
+# PROGRAM SOFTWARE TESTING PROCESSES #
+######################################
 
 ########
 array_writer_document()
@@ -156,12 +156,12 @@ array_reader_post()
     logmsg "Cleaning finished"
 }
 
-##################################
-# PIPELINE DEFINED BY THE MODULE #
-##################################
+#################################
+# PROGRAM DEFINED BY THE MODULE #
+#################################
 
 ########
-panpipe_array_example_pipeline()
+panpipe_array_example_program()
 {
     add_panpipe_process "array_writer" "cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2"
     add_panpipe_process "array_reader" "cpus=1 mem=32 time=00:01:00 throttle=4"

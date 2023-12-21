@@ -168,7 +168,7 @@ exclude_other_vars()
                          othervars["MEMOIZED_OPTS"]=1
                          othervars["PROCESS_OUT_VALUES"]=1
                          othervars["FIFO_USERS"]=1
-                         othervars["PIPELINE_FIFOS"]=1
+                         othervars["PROGRAM_FIFOS"]=1
                          othervars["CURRENT_PROCESS_OPT_LIST"]=1 # This variable may become huge when working with arrays and is loaded from a separate file
                          othervars["PROCESS_OPT_LIST"]=1 # This variable is not necessary and may become huge when working with arrays
                         }
@@ -268,7 +268,7 @@ log_warning_msg()
 ########
 get_script_log_filenames()
 {
-    local scripts_dirname=`get_ppl_scripts_dir`
+    local scripts_dirname=`get_prg_scripts_dir`
 
         local sched=`get_scheduler`
     case $sched in
