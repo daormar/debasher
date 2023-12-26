@@ -73,10 +73,10 @@ print_script_header_slurm_sched()
         write_sigterm_handler "${sigterm_handler_funcname}"
     fi
     echo "trap '${sigterm_handler_funcname}' SIGTERM"
-    echo "PANPIPE_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
-    echo "PANPIPE_DIR_NAME=\"$(esc_dq "${dirname}")\""
-    echo "PANPIPE_PROCESS_NAME=${processname}"
-    echo "PANPIPE_NUM_TASKS=${num_tasks}"
+    echo "DEBASHER_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
+    echo "DEBASHER_DIR_NAME=\"$(esc_dq "${dirname}")\""
+    echo "DEBASHER_PROCESS_NAME=${processname}"
+    echo "DEBASHER_NUM_TASKS=${num_tasks}"
 }
 
 ########
@@ -290,8 +290,8 @@ get_slurm_nodes_opt()
     local nodes=$1
 
     if [ "${nodes}" = ${ATTR_NOT_FOUND} ]; then
-        if [ "${PANPIPE_DEFAULT_NODES}" != "" ]; then
-            echo "-w ${PANPIPE_DEFAULT_NODES}"
+        if [ "${DEBASHER_DEFAULT_NODES}" != "" ]; then
+            echo "-w ${DEBASHER_DEFAULT_NODES}"
         else
             echo ""
         fi
@@ -332,7 +332,7 @@ get_slurm_task_array_opt()
     local task_array_list=$2
     local throttle=$3
 
-    if [ ${throttle} -eq ${PANPIPE_ARRAY_TASK_NOTHROTTLE} ]; then
+    if [ ${throttle} -eq ${DEBASHER_ARRAY_TASK_NOTHROTTLE} ]; then
         echo "--array=${task_array_list}"
     else
         echo "--array=${task_array_list}%${throttle}"
@@ -545,7 +545,7 @@ slurm_launch_preverif_job()
     local partition_opt=`get_slurm_partition_opt ${partition}`
     local dependency_opt=`get_slurm_dependency_opt "${attempt_deps}"`
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${PANPIPE_ARRAY_TASK_NOTHROTTLE}`
+        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE}`
     fi
 
     # Submit preliminary verification job (the job will fail if all
@@ -609,7 +609,7 @@ slurm_launch_verif_job()
     local verjob_deps="${AFTERNOTOK_PROCESSDEP_TYPE}:${preverif_jid}"
     local dependency_opt=`get_slurm_dependency_opt "${verjob_deps}"`
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${PANPIPE_ARRAY_TASK_NOTHROTTLE}`
+        local jobarray_opt=`get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE}`
     fi
 
     # Submit verification job (the job will succeed if preliminary

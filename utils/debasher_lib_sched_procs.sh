@@ -163,7 +163,7 @@ update_process_completion_signal()
     local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
     if [ "${status}" = "${REEXEC_PROCESS_STATUS}" ]; then
         "${RM}" -f "${finished_filename}"
-        PANPIPE_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]=1
+        DEBASHER_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]=1
     fi
 }
 
@@ -246,11 +246,11 @@ mark_process_as_reexec()
     local processname=$1
     local reason=$2
 
-    if [ "${PANPIPE_REEXEC_PROCESSES[${processname}]}" = "" ]; then
-        PANPIPE_REEXEC_PROCESSES[${processname}]=${reason}
+    if [ "${DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
+        DEBASHER_REEXEC_PROCESSES[${processname}]=${reason}
     else
-        local curr_val=PANPIPE_REEXEC_PROCESSES[${processname}]
-        PANPIPE_REEXEC_PROCESSES[${processname}]="${curr_val},${reason}"
+        local curr_val=DEBASHER_REEXEC_PROCESSES[${processname}]
+        DEBASHER_REEXEC_PROCESSES[${processname}]="${curr_val},${reason}"
     fi
 }
 
@@ -258,7 +258,7 @@ mark_process_as_reexec()
 get_reexec_processes_as_string()
 {
     local result=""
-    for processname in "${!PANPIPE_REEXEC_PROCESSES[@]}"; do
+    for processname in "${!DEBASHER_REEXEC_PROCESSES[@]}"; do
         if [ "${result}" = "" ]; then
             result=${processname}
         else
@@ -274,10 +274,10 @@ process_should_be_reexec()
 {
     local processname=$1
 
-    if [ "${PANPIPE_REEXEC_PROCESSES[${processname}]}" = "" ]; then
+    if [ "${DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
         return 1
     else
-        if [ "${PANPIPE_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]}" = "" ]; then
+        if [ "${DEBASHER_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]}" = "" ]; then
             return 0
         else
             return 1
