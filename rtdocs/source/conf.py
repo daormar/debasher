@@ -2,7 +2,7 @@
 
 # -- Project information
 
-project = 'PanPipe'
+project = 'DeBasher'
 copyright = '2023, daormar'
 author = 'daormar'
 
