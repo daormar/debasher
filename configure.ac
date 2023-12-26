@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.71])
-AC_INIT([panpipe],[1.0],[daniel.ortiz@ub.edu])
+AC_INIT([debasher],[1.0],[daniel.ortiz@ub.edu])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 dnl AC_CONFIG_HEADERS([config.h])
