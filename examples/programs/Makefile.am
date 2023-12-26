@@ -1,13 +1,13 @@
 pplfilesdir = $(datadir)/$(PACKAGE)/programs
-pplfiles_DATA= panpipe_simple_process.sh panpipe_value_pass.sh	\
-panpipe_fifo_example.sh panpipe_shared_dir_example.sh		\
-panpipe_array_example.sh panpipe_skip_example.sh		\
-panpipe_conda_example.sh panpipe_docker_example.sh		\
-panpipe_subworkflow_example.sh panpipe_explicit_deps_example.sh	\
-panpipe_telegram_morrison.sh panpipe_telegram.sh		\
-panpipe_telegram_jobsteps.sh panpipe_telegram_imperative.sh	\
-panpipe_host_process.sh panpipe_host_process_expl_deps.sh	\
-panpipe_host_workflow.sh panpipe_host_workflow_expl_deps.sh	\
-panpipe_cycle.sh
+pplfiles_DATA= debasher_simple_process.sh debasher_value_pass.sh	\
+debasher_fifo_example.sh debasher_shared_dir_example.sh			\
+debasher_array_example.sh debasher_skip_example.sh			\
+debasher_conda_example.sh debasher_docker_example.sh			\
+debasher_subworkflow_example.sh debasher_explicit_deps_example.sh	\
+debasher_telegram_morrison.sh debasher_telegram.sh			\
+debasher_telegram_jobsteps.sh debasher_telegram_imperative.sh		\
+debasher_host_process.sh debasher_host_process_expl_deps.sh		\
+debasher_host_workflow.sh debasher_host_workflow_expl_deps.sh		\
+debasher_cycle.sh
 
 EXTRA_DIST= $(pplfiles_DATA)
