@@ -1,1 +1,1 @@
-Please refer to [http://daormar.github.io/panpipe/](http://daormar.github.io/panpipe/) to see project information, including installation instructions.
+Please refer to [http://daormar.github.io/debasher/](http://daormar.github.io/debasher/) to see project information, including installation instructions.
