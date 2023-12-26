@@ -1,7 +1,7 @@
-Panpipe Workflow Manager
-========================
+DeBasher
+========
 
-**PanPipe** is a general purpose workflow manager.
+**DeBasher** is a flow-base programming extension for Bash.
 
 Check out the :doc:`intro` section for further information, including an
 :ref:`overview` of the project.
