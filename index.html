@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <title>PanPipe Workflow Manager</title>
+    <title>DeBasher</title>
     <link rel="stylesheet" href="stylesheets/styles.css">
     <link rel="stylesheet" href="stylesheets/pygment_trac.css">
     <!-- begin TOC stuff -->
@@ -24,27 +24,30 @@
   <body>
     <div class="wrapper">
       <header>
-        <p style="text-align:left;">  <IMG SRC="images/my_logo_panpipe.png" Alt="PanPipe Workflow Manager" WIDTH=165> </p>
-        <p> <font size="3">PanPipe Workflow Manager</font></p>
+        <!-- <p style="text-align:left;">  <IMG SRC="images/my_logo_panpipe.png" Alt="DeBasher" WIDTH=165> </p> -->
+        <p> <font size="3">DeBasher</font></p>
         <div id="toc"></div>
-        <p class="view"><a href="https://github.com/daormar/panpipe">View the Project on GitHub <small>daormar/panpipe</small></a></p>
+        <p class="view"><a href="https://github.com/daormar/debasher">View the Project on GitHub <small>daormar/debasher</small></a></p>
 
       </header>
       <section>
-        <p style="font-size:30px; font-weight:bold; color:black">PanPipe Workflow Manager</p>
+        <p style="font-size:30px; font-weight:bold; color:black">DeBasher Workflow Manager</p>
 
 <h2>
 <a id="introduction" class="anchor" href="#introduction" aria-hidden="true"><span class="octicon octicon-link"></span></a>Introduction</h2>
 
-<p>PanPipe is a software package implementing a general workflow
-management system. The execution of workflows, also called pipelines,
-using PanPipe follows the flow-based programming paradigm, where
-networks of black box processes with well defined data exchange
-connections are executed. PanPipe is characterized by a strong
-orientation towards the definition of software components or
-modules.</p>
+<p>DeBasher is a software package implementing a flow-based programming
+extension for Bash. In the flow-based programming paradigm, networks of
+black box processes with well defined data exchange connections are
+executed. DeBasher is characterized by a strong orientation towards the
+definition of software components or modules.</p>
 
-<p>The Panpipe workflow manager was created and is currently maintained
+<p>DeBasher can be used to execute general programs. However, DeBasher
+is particularly appropriate for the execution of workflows, also called
+pipelines. Workflow execution is important in different fields. One
+particular example would be the field of Bioinformatics.</p>
+
+<p>The DeBasher software package was created and is currently maintained
 by <a href="http://daormar.github.io/">Daniel Ortiz-Martínez</a>.
 Daniel is an experienced machine learning researcher and also holds
 an MSc degree in Bioinformatics.</p>
@@ -79,7 +82,7 @@ an MSc degree in Bioinformatics.</p>
 <h2>
 <a id="distribution-details" class="anchor" href="#distribution-details" aria-hidden="true"><span class="octicon octicon-link"></span></a>Distribution Details</h2>
 
-<p>PanPipe has been coded using Bash shell-scripting and Python. PanPipe
+<p>DeBasher has been coded using Bash shell-scripting and Python. DeBasher
 is known to compile on Unix-like and Windows (using Cygwin) systems. See
 the "Documentation and Support" section of these instructions if you
 experience problems during compilation.</p>
@@ -92,15 +95,15 @@ experience problems during compilation.</p>
 <h4>
 <a id="basic-installation-procedure" class="anchor" href="#basic-installation-procedure" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic Installation Procedure</h4>
 
-<p>To install PanPipe, first you need to install the autotools
+<p>To install DeBasher, first you need to install the autotools
 (autoconf, autoconf-archive, automake and libtool packages in
-Ubuntu). PanPipe requires Bash 4.0 or above as well as Python 2.x to
-work. If you are planning to use PanPipe on a Windows platform, you also
+Ubuntu). DeBasher requires Bash 4.0 or above as well as Python 2.x to
+work. If you are planning to use DeBasher on a Windows platform, you also
 need to install the <a href="https://www.cygwin.com/">Cygwin</a>
 environment. Alternatively, the tool can also be installed on Mac OS X
 systems using <a href="https://www.macports.org/">MacPorts</a>.</p>
 
-<p>On the other hand, some of the functionality incorporated by PanPipe
+<p>On the other hand, some of the functionality incorporated by DeBasher
 requires the previous installation of third-party software
 (<a href="#third-party-software">see below</a>).</p>
 
@@ -112,10 +115,10 @@ the tool by following the next sequence of steps:</p>
 <li>
 <p>Obtain the package using git:</p>
 
-<pre><code>$ git clone https://github.com/daormar/panpipe.git
+<pre><code>$ git clone https://github.com/daormar/debasher.git
 </code></pre>
 
-<p>Or <a href="https://github.com/daormar/panpipe/archive/master.zip">download it in a zip file</a></p>
+<p>Or <a href="https://github.com/daormar/debasher/archive/master.zip">download it in a zip file</a></p>
 </li>
 <li><p><code>cd</code> to the directory containing the package's source code and type
 <code>./reconf</code>.</p></li>
@@ -135,18 +138,18 @@ typing:</p>
 <pre><code> $ configure --prefix=&lt;absolute-installation-path&gt;
 </code></pre>
 
-<p>For example, if "user1" wants to install the PanPipe package in
-the directory /home/user1/panpipe, the sequence of commands to
+<p>For example, if "user1" wants to install the DeBasher package in
+the directory /home/user1/debasher, the sequence of commands to
 execute should be the following:</p>
 
 <pre><code> $ ./reconf
- $ configure --prefix=/home/user1/panpipe
+ $ configure --prefix=/home/user1/debasher
  $ make
  $ make install
 </code></pre>
 
 <p>The installation directory can be the same directory where the
-PanPipe package was decompressed.</p>
+DeBasher package was decompressed.</p>
 
 <!-- <h4 id="checking-package-installation">Checking Package Installation</h4> -->
 
@@ -170,22 +173,22 @@ Party Software</h4>
 
 <h5>Slurm</h5>
 
-<p>Panpipe can be configured to
+<p>DeBasher can be configured to
 use <a href="https://slurm.schedmd.com/">Slurm</a> as a workload
 scheduler. Slurm is particularly indicated to execute large pipelines or
 to execute pipelines in high performance computing environments.</p>
 
 <h5>Conda</h5>
 
-<p>Panpipe provides support for automated installation
+<p>DeBasher provides support for automated installation
 of <a href="https://conda.io/">Conda</a> packages. Such packages are
-organized in environments and (optionally) used within PanPipe software
+organized in environments and (optionally) used within DeBasher software
 modules.</p>
 
 <h2>
 <a id="current-status" class="anchor" href="#current-status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Current Status</h2>
 
-<p> The PanPipe package is under development. Basic usage instructions
+<p> The DeBasher package is under development. Basic usage instructions
   are being added. Below there is a list of features that will be
   incorporated in a near future:</p>
 
@@ -195,11 +198,11 @@ modules.</p>
 </ul>
 
 <h2>
-<a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sample Projects Using PanPipe</h2>
+<a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sample Projects Using DeBasher</h2>
 <p></p>
 <ul>
-<li><p><a href="https://daormar.github.io/geno-panpipe/">Geno-PanPipe</a>:
-Geno-PanPipe is a bioinformatics software project implementing PanPipe
+<li><p><a href="https://daormar.github.io/geno-debasher/">Geno-DeBasher</a>:
+Geno-DeBasher is a bioinformatics software project implementing DeBasher
 modules related to genome variant calling.</p></li>
 </ul>
 
@@ -211,15 +214,15 @@ modules related to genome variant calling.</p></li>
 <ul>
 <li>These instructions.</li>
 <li>A set
-of <a href="http://daormar.github.io/panpipe/docsupport/slides.pdf">slides</a>
+of <a href="http://daormar.github.io/debasher/docsupport/slides.pdf">slides</a>
 ("slides.pdf" under the "doc" directory).</li>
-<li><a href="https://panpipe.readthedocs.io/en/latest/">Technical documentation</a>.</li>
+<li><a href="https://debasher.readthedocs.io/en/latest/">Technical documentation</a>.</li>
 </ul>
 
 <p>If you need additional help, you can:</p>
 
 <ul>
-<li>use the <a href="https://github.com/daormar/panpipe/issues">github issue tracker</a>.
+<li>use the <a href="https://github.com/daormar/debasher/issues">github issue tracker</a>.
 </li>
 <li><a href="mailto:daniel.ortiz.phd@gmail.com">send an e-mail to the author</a>.</li>
 </li>
