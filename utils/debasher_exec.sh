@@ -1058,7 +1058,7 @@ there_are_in_progress_processes()
 {
     # Read input parameters
     local dirname=$1
-    local procspec_file=$2
+    local initial_procspec_file=$2
 
     local process_spec
     while read process_spec; do
@@ -1073,7 +1073,7 @@ there_are_in_progress_processes()
                 return 0
             fi
         fi
-    done < "${procspec_file}"
+    done < "${initial_procspec_file}"
 
     return 1
 }
