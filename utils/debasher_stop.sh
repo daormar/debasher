@@ -155,8 +155,12 @@ process_status_for_pfile()
         ids_info=`read_ids_from_files "${absdirname}" ${processname}`
 
         # Print status
-        echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (Stopping...)"
-        stop_process "${ids_info}"
+        if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
+            echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (Stopping...)"
+            stop_process "${ids_info}"
+        else
+            echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (The process is not running)"
+        fi
 
         # Increase lineno
     done < <(exec_program_func_for_module "${pfile}")
