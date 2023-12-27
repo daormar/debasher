@@ -37,8 +37,7 @@ def take_pars():
     values["time"] = -1
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "s:c:t:", [
-                                   "spec=", "capacities=", "time="])
+        opts, args = getopt.getopt(sys.argv[1:], "s:c:t:", ["spec=", "capacities=", "time="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -74,8 +73,7 @@ def check_pars(flags, values):
 
 
 def print_help():
-    print(
-        "solve_knapsack_bb -s <string> -c <string> [-t <float>]", file=sys.stderr)
+    print("debasher_solve_knapsack_bb -s <string> -c <string> [-t <float>]", file=sys.stderr)
     print("", file=sys.stderr)
     print("-s <string>    Item weight and value specification", file=sys.stderr)
     print("-c <string>    Comma-separated list of capacities", file=sys.stderr)

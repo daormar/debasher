@@ -92,7 +92,7 @@ def check_pars(flags,values):
 
 ##################################################
 def print_help():
-    print("debasher_check  -p <string> [-r|-g|-d|-a] [-v]", file=sys.stderr)
+    print("debasher_check -p <string> [-r|-g|-d|-a] [-v]", file=sys.stderr)
     print("", file=sys.stderr)
     print("-p <string>    Prefix of program files", file=sys.stderr)
     print("-r             Print reordered process specification", file=sys.stderr)
