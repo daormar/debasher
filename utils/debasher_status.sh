@@ -29,7 +29,7 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_status            -d <string> [-s <string>] [-i]"
+    echo "debasher_status           -d <string> [-s <string>] [-i]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"

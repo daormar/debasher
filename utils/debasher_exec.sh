@@ -52,7 +52,7 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_exec              --pfile <string> --outdir <string> [--sched <string>]"
+    echo "debasher_exec             --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--reexec-outdated-procs]"

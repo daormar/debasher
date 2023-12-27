@@ -40,7 +40,7 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_exec_batch        -f <string> -m <int> [-o <string>] [-u <int>]"
+    echo "debasher_exec_batch       -f <string> -m <int> [-o <string>] [-u <int>]"
     echo "                          [-k <string>] [--help]"
     echo ""
     echo "-f <string>               File with a set of pipe_exec commands (one"

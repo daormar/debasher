@@ -29,7 +29,7 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_doc_mod           -m <string> [-s <string>]"
+    echo "debasher_doc_mod          -m <string> [-s <string>]"
     echo "                          [--show-cmdline-opts] [--help]"
     echo ""
     echo "-m <string>               Module file name"
