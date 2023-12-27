@@ -69,17 +69,22 @@ program_process_spec_is_ok()
     local process_spec=$1
 
     local fieldno=1
+    local procdeps_correct=1
     local field
     for field in $process_spec; do
         if [[ ${field} = "${PROCESSDEPS_SPEC}="* ]]; then
-            if [ $fieldno -ge 2 ]; then
-                return 0
+            if [ "$fieldno" = 1 ]; then
+                procdeps_correct=0
             fi
         fi
         fieldno=$((fieldno + 1))
     done
 
-    return 1
+    if [ "${fieldno}" -gt 0 ] && [ "${procdeps_correct}" = 1 ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 ########
