@@ -27,20 +27,6 @@ print_desc()
 }
 
 ########
-read_pars()
-{
-    if [ $# -lt 3 ]; then
-        return 1
-    fi
-
-    pfile=$1
-    shift
-    processname=$1
-    shift
-    opts=$*
-}
-
-########
 load_modules()
 {
     echo "* Loading debasher modules..." >&2
@@ -53,26 +39,19 @@ load_modules()
 }
 
 ########
-execute_process()
-{
-    # Initialize variables
-    local processname=$1
-    local opts=$2
 
-    # Execute process
-    echo "Executing: $processname $opts" >&2
-    "${processname}" "${opts}"
-}
-
-########
-
-if [ $# -eq 0 ]; then
+if [ $# -lt 3 ]; then
     print_desc
     exit 1
 fi
 
-read_pars "$*" || { echo "Error: wrong input parameters" >&2 ; exit 1; }
+# Read parameters
+pfile=$1
+shift
+processname=$1
+shift
 
 load_modules "${pfile}" || exit 1
 
-execute_process ${processname} "${opts}" || exit 1
+echo "Executing: $processname $opts" >&2
+"${processname}" "$@" || exit 1
