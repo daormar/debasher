@@ -16,6 +16,15 @@
 
 # *- bash -*
 
+unset_previous_vars_and_funcs()
+{
+    unset -v $(compgen -v) && unset -f $(compgen -A function)
+
+    for conda_func in __conda_activate __conda_exe __conda_hashr __conda_reactivate conda; do
+        unset "${conda_func}"
+    done
+}
+
 load_debasher_module()
 {
     # NOTE: this function is intentionally defined void
@@ -27,8 +36,8 @@ if [ "$#" -eq 0 ]; then
     exit 1
 fi
 
-# Unset previously defined variables
-unset -v $(compgen -v) && unset -f $(compgen -A function)
+# Unset previously defined variables and functions
+unset_previous_vars_and_funcs
 
 # Load all files given
 for arg in "$@"; do
