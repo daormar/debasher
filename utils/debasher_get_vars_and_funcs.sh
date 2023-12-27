@@ -1,5 +1,5 @@
 # DeBasher package
-# Copyright (C) 2021 Daniel Ortiz-Mart\'inez
+# Copyright (C) 2019-2024 Daniel Ortiz-Mart\'inez
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public License
