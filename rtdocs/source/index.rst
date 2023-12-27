@@ -1,7 +1,7 @@
 DeBasher
 ========
 
-**DeBasher** is a flow-base programming extension for Bash.
+**DeBasher** is a flow-based programming extension for Bash.
 
 Check out the :doc:`intro` section for further information, including an
 :ref:`overview` of the project.
