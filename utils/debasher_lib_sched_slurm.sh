@@ -103,7 +103,7 @@ print_script_body_slurm_sched()
 
     # Write skip function if it was provided
     if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        echo "${skip_funct} \"\${DESERIALIZED_ARGS[@]}\" && { echo \"Warning: execution of \${processname} will be skipped since the process skip function has finished with exit code \$?\" >&2; exit 1; }"
+        echo "${skip_funct} \"\${DESERIALIZED_ARGS[@]}\" && { echo \"Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code \$?\" >&2; exit 1; }"
     fi
 
     echo "display_begin_process_message"
