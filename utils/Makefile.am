@@ -1,5 +1,5 @@
 bin_SCRIPTS= debasher_lib debasher_exec debasher_exec_batch		\
-debasher_stop debasher_status debasher_stats debasher_process_debug	\
+debasher_stop debasher_status debasher_stats debasher_debug_process	\
 debasher_doc_mod debasher_proc_dataset debasher_reformat_status
 
 libexec_SCRIPTS= debasher_builtin_sched_lib debasher_lib_utils		\
@@ -22,7 +22,7 @@ debasher_lib_modules.sh debasher_lib_opts.sh debasher_lib_conda.sh	\
 debasher_lib_docker.sh debasher_builtin_sched_lib.sh debasher_exec.sh	\
 debasher_exec_batch.sh debasher_get_vars_and_funcs.sh debasher_check.py	\
 debasher_stop.sh debasher_status.sh debasher_stats.sh			\
-debasher_process_debug.sh debasher_doc_mod.sh debasher_proc_dataset.sh	\
+debasher_debug_process.sh debasher_doc_mod.sh debasher_proc_dataset.sh	\
 db_get_reexec_procs_due_to_deps.py debasher_reformat_status.py		\
 debasher_solve_knapsack_bb.py debasher_solve_knapsack_ga.py		\
 debasher_knapsack_ga.py
