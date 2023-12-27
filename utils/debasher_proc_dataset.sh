@@ -29,12 +29,12 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_proc_dataset   --pfile <string>"
+    echo "debasher_proc_dataset  --pfile <string>"
     echo "                       --sched <string> [--dflt-nodes <string>]"
     echo "                       --prg-sopts <string> [--prg-opts <string>]"
     echo "                       [--help]"
     echo ""
-    echo "--pfile <string>       File with program processes to be performed"
+    echo "--pfile <string>       File with program processes to be executed"
     echo "--sched <string>       Scheduler used to execute the programs"
     echo "--dflt-nodes <string>  Default set of nodes used to execute the program"
     echo "--prg-sopts <string>   File containing a string with program options per"
