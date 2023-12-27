@@ -55,7 +55,7 @@ document_process()
     echo ""
 
     if [ ${doc_options} -eq 1 ]; then
-        echo "## Options"
+        echo "## Command Line Options"
         DIFFERENTIAL_CMDLINE_OPT_STR=""
         local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
         ${explain_cmdline_opts_funcname}
