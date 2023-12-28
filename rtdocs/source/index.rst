@@ -3,8 +3,7 @@ DeBasher
 
 **DeBasher** is a flow-based programming extension for Bash.
 
-Check out the :doc:`intro` section for further information, including an
-:ref:`overview` of the project.
+Check out the table of contents below for further information.
 
 .. note::
 
@@ -14,6 +13,8 @@ Contents
 --------
 
 .. toctree::
+
+   intro
 
    getstart
 
