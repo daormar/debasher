@@ -8,7 +8,7 @@ debasher_lib_sched_procs debasher_lib_processes debasher_lib_programs	\
 debasher_lib_modules debasher_lib_opts debasher_lib_conda		\
 debasher_lib_docker debasher_get_vars_and_funcs debasher_check		\
 db_get_reexec_procs_due_to_deps debasher_solve_knapsack_bb		\
-debasher_solve_knapsack_ga
+debasher_solve_knapsack_ga debasher_gen_telegram_data
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS)
 
@@ -25,7 +25,7 @@ debasher_stop.sh debasher_status.sh debasher_stats.sh			\
 debasher_debug_process.sh debasher_doc_mod.sh debasher_proc_dataset.sh	\
 db_get_reexec_procs_due_to_deps.py debasher_reformat_status.py		\
 debasher_solve_knapsack_bb.py debasher_solve_knapsack_ga.py		\
-debasher_knapsack_ga.py
+debasher_knapsack_ga.py debasher_gen_telegram_data.py
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
