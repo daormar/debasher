@@ -5,10 +5,6 @@ DeBasher
 
 Check out the table of contents below for further information.
 
-.. note::
-
-   This project is under active development.
-
 Contents
 --------
 
