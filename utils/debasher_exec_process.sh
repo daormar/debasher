@@ -22,8 +22,8 @@
 ########
 print_desc()
 {
-    echo "debasher_process_debug executes a program process for debugging purposes"
-    echo "Usage: debasher_process_debug <prgfile> <processname> <options>"
+    echo "debasher_exec_process executes a program process"
+    echo "Usage: debasher_exec_process <prgfile> <processname> <options>"
 }
 
 ########
