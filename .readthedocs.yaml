@@ -13,8 +13,9 @@ build:
     # nodejs: "20"
     # rust: "1.70"
     # golang: "1.20"
-  steps:
-    - command: "sh rtdocs/tomdoc.sh -m -a Public utils/debasher_lib_opts.sh > rtdocs/source/api_opts_doc.md"
+  jobs:
+    pre_build:
+      - sh rtdocs/tomdoc.sh -m -a Public utils/debasher_lib_opts.sh > rtdocs/source/api_opts_doc.md
 
 # Build documentation in the "rtdocs/" directory with Sphinx
 sphinx:
