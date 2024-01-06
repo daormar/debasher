@@ -1,4 +1,6 @@
 DeBasher API
 ============
 
-TBD
+.. toctree::
+
+   api_opts
