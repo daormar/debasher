@@ -6,6 +6,7 @@
 #/     -t, --text               produce plain text (default format)
 #/     -m, --markdown           produce markdown
 #/     -a, --access <level>     filter by access level
+#/     -s, --symbol <name>      filter variable or function
 #/
 #/ Parse TomDoc'd shell scripts and generate pretty documentation from it.
 #
@@ -19,6 +20,7 @@ TOMDOCSH_VERSION="0.1.5-1-g8371"
 
 generate=generate_text
 access=
+symbol=
 
 while test "$#" -ne 0; do
     case "$1" in
@@ -33,6 +35,9 @@ while test "$#" -ne 0; do
     -a|--a|--ac|--acc|--acce|--acces|--access)
         test "$#" -ge 2 || { echo >&2 "error: $1 requires an argument"; exit 1; }
         access="$2"; shift 2 ;;
+    -s|--s|--sy|--sym|--symb|--symbo|--symbol)
+        test "$#" -ge 2 || { echo >&2 "error: $1 requires an argument"; exit 1; }
+        symbol="$2"; shift 2 ;;
     --)
         shift; break ;;
     -|[!-]*)
@@ -204,7 +209,9 @@ parse_tomdoc() {
                 esac
 
                 name="$(echo "$line" | parse_code)"
-                test -n "$name" && "$generate" "$name" "$doc"
+                if [ -z "$symbol" ] || [ "$name" = "$symbol" ]; then
+                    test -n "$name" && "$generate" "$name" "$doc"
+                fi
             }
             doc=
             ;;
