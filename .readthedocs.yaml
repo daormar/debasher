@@ -15,7 +15,7 @@ build:
     # golang: "1.20"
   jobs:
     pre_build:
-      - sh rtdocs/tomdoc.sh -m -a Public utils/debasher_lib_opts.sh > rtdocs/source/api_opts_doc.md
+      - sh rtdocs/generate_api_files.sh
 
 # Build documentation in the "rtdocs/" directory with Sphinx
 sphinx:
