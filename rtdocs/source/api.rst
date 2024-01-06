@@ -3,4 +3,4 @@ DeBasher API
 
 .. toctree::
 
-   api_opts
+   api_proc_opts
