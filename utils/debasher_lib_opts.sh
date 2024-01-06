@@ -681,6 +681,17 @@ define_cmdline_infile_nonmand_opt()
 }
 
 ########
+# Public: Define process option.
+#
+# TO-BE-DONE
+#
+# $1 - Option name
+#
+# Examples
+#
+#   TO-BE-DONE
+#
+# The function does not return any value
 define_opt()
 {
     local opt=$1
