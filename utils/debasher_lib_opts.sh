@@ -416,6 +416,17 @@ explain_cmdline_req_opt()
 }
 
 ########
+# Public: Explain command-line option.
+#
+# TO-BE-DONE
+#
+# $1 - Option name
+#
+# Examples
+#
+#   TO-BE-DONE
+#
+# The function does not return any value
 explain_cmdline_opt()
 {
     local opt=$1
