@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Generate process options API file
 rm -f rtdocs/source/api_proc_opts_doc.md
