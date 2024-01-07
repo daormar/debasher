@@ -306,6 +306,17 @@ get_opt_value_from_func_args()
 }
 
 ########
+# Public: Read option value from function arguments.
+#
+# TO-BE-DONE
+#
+# $1 - Option name
+#
+# Examples
+#
+#   TO-BE-DONE
+#
+# The function prints the value of the option if it was given, or the "OPT_NOT_FOUND" constant otherwise
 read_opt_value_from_func_args()
 {
     local opt=$1
