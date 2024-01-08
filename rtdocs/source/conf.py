@@ -3,8 +3,8 @@
 # -- Project information
 
 project = 'DeBasher'
-copyright = '2023, daormar'
-author = 'daormar'
+copyright = '2024, Daniel Ortiz-Martínez'
+author = 'Daniel Ortiz-Martínez'
 
 release = '0.1'
 version = '0.1.0'
