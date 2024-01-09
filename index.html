@@ -98,10 +98,19 @@ experience problems during compilation.</p>
 <p>To install DeBasher, first you need to install the autotools
 (autoconf, autoconf-archive, automake and libtool packages in
 Ubuntu). DeBasher requires Bash 4.0 or above as well as Python 3.x to
-work. If you are planning to use DeBasher on a Windows platform, you also
-need to install the <a href="https://www.cygwin.com/">Cygwin</a>
+work. If you are planning to use DeBasher on a Windows platform, you
+also need to install the <a href="https://www.cygwin.com/">Cygwin</a>
 environment. Alternatively, the tool can also be installed on Mac OS X
-systems using <a href="https://www.macports.org/">MacPorts</a>.</p>
+systems using <a href="https://www.macports.org/">MacPorts</a>. Finally,
+the Graphviz package is also required so as to generate graphic
+information about programs.
+</p>
+
+<p> Assuming Ubuntu is being used, the required packages can be
+installed as follows:</p>
+
+<pre><code> $ sudo apt install autoconf autoconf-archive automake libtool graphviz
+</code></pre>
 
 <p>On the other hand, some of the functionality incorporated by DeBasher
 requires the previous installation of third-party software
@@ -130,7 +139,7 @@ documentation.</p></li>
 code directory by typing <code>make clean</code>.</p></li>
 </ol>
 
-<p>By default the files are installed under the /usr/local/ directory (or
+<p>By default the files are installed under the <code>/usr/local directory (or
 similar, depending on the OS you use); however, since Step 5 requires
 root privileges, another directory can be specified during Step 3 by
 typing:</p>
@@ -138,9 +147,9 @@ typing:</p>
 <pre><code> $ configure --prefix=&lt;absolute-installation-path&gt;
 </code></pre>
 
-<p>For example, if "user1" wants to install the DeBasher package in
-the directory /home/user1/debasher, the sequence of commands to
-execute should be the following:</p>
+<p>For example, if <code>user1</code> wants to install the DeBasher
+package in the directory <code>/home/user1/debasher</code>, the sequence
+of commands to execute should be the following:</p>
 
 <pre><code> $ ./reconf
  $ configure --prefix=/home/user1/debasher
