@@ -2,7 +2,7 @@ Getting Started
 ===============
 
 Installing DeBasher and use it to implement a simple program is very
-easy as it is show below.
+easy as it is shown below.
 
 .. _installation:
 
@@ -12,14 +12,21 @@ Installation
 Basic Installation Procedure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To install DeBasher, first you need to install the autotools
-(autoconf, autoconf-archive, automake and libtool packages in
-Ubuntu). DeBasher requires Bash 4.0 or above as well as Python 3.x
-to work. If you are planning to use DeBasher on a Windows
-platform, you also need to install the
-`Cygwin <https://www.cygwin.com/>`__ environment. Alternatively,
-the tool can also be installed on Mac OS X systems using
-`MacPorts <https://www.macports.org/>`__.
+To install DeBasher, first you need to install the autotools (autoconf,
+autoconf-archive, automake and libtool packages in Ubuntu). DeBasher
+requires Bash 4.0 or above as well as Python 3.x to work. If you are
+planning to use DeBasher on a Windows platform, you also need to install
+the `Cygwin <https://www.cygwin.com/>`__ environment. Alternatively, the
+tool can also be installed on Mac OS X systems using `MacPorts
+<https://www.macports.org/>`__. Finally, the Graphviz package is also
+required so as to generate graphic information about programs.
+
+Assuming Ubuntu is being used, the required packages can be installed as
+follows:
+
+::
+
+    $ sudo apt install autoconf autoconf-archive automake libtool graphviz
 
 On the other hand, some of the functionality incorporated by
 DeBasher requires the previous installation of third-party
@@ -51,17 +58,17 @@ installation of the tool by following the next sequence of steps:
 #. You can remove the program binaries and object files from the
    source code directory by typing ``make clean``.
 
-By default the files are installed under the /usr/local/ directory
+By default the files are installed under the ``/usr/local`` directory
 (or similar, depending on the OS you use); however, since Step 5
-requires root privileges, another directory can be specified
-during Step 3 by typing:
+requires root privileges, another directory can be specified during Step
+3 by typing:
 
 ::
 
     $ configure --prefix=<absolute-installation-path>
 
-For example, if "user1" wants to install the DeBasher package in
-the directory /home/user1/debasher, the sequence of commands to
+For example, if ``user1`` wants to install the DeBasher package in
+the directory ``/home/user1/debasher``, the sequence of commands to
 execute should be the following:
 
 ::
@@ -73,6 +80,30 @@ execute should be the following:
 
 The installation directory can be the same directory where the
 DeBasher package was decompressed.
+
+Third Party Software
+^^^^^^^^^^^^^^^^^^^^
+
+Slurm
+"""""
+
+DeBasher can be configured to use `Slurm <https://slurm.schedmd.com/>`__
+as a workload scheduler.  Slurm is particularly indicated to execute
+large pipelines or to execute pipelines in high performance computing
+environments.
+
+Conda
+"""""
+
+DeBasher provides support for automated installation of `Conda
+<https://conda.io/>`__ packages. Such packages are organized in
+environments and (optionally) used within DeBasher software modules.
+
+Docker
+""""""
+
+DeBasher also provides support for `Docker <https://www.docker.com/>`__
+containers.
 
 .. _quickstart_example:
 
