@@ -571,12 +571,16 @@ class ProcessGraph:
         return opt_to_processes
 
     def str_is_option(self, string):
+        if not string:
+            return False
         if string[0] == "-" or string[0:2] == "--":
             return True
         else:
             return False
 
     def str_is_output_option(self, string):
+        if not string:
+            return False
         if string[0:4] == "-out" or string[0:5] == "--out":
             return True
         else:
