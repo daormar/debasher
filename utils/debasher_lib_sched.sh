@@ -367,6 +367,7 @@ write_env_vars_and_funcs()
         declare -f get_prg_scripts_dir
         declare -f get_prg_scripts_dir_for_process
         declare -f get_prg_scripts_dir_given_basedir
+        declare -f get_process_stdout_filename
         declare -f read_opt_value_from_func_args
         declare -f get_opt_value_from_func_args
         declare -f str_is_val_descriptor
@@ -387,9 +388,6 @@ write_env_vars_and_funcs()
         declare -f get_outdir_funcname
         declare -f process_function_outdir
         declare -f default_reset_outfiles_for_process_array
-        declare -f get_prg_scripts_dir_given_basedir
-        declare -f get_prg_scripts_dir_for_process
-        declare -f get_process_stdout_filename
         declare -f search_process_func
         declare -f get_process_funcname
         declare -f remove_suffix_from_processname
