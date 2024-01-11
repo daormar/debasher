@@ -78,9 +78,11 @@ process_is_unfinished_but_runnable_builtin_sched()
 
         # Check that not all array tasks were launched
         local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
-        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file "${finished_filename}"`
-        if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
-            return 1
+        if [ -f "${finished_filename}" ] ; then
+            local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file "${finished_filename}"`
+            if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
+                return 1
+            fi
         fi
 
         # Check there are no tasks in progress
