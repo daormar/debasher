@@ -29,11 +29,11 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_stats            -d <string> [-s <string>]"
+    echo "debasher_stats            -d <string> [-p <string>]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
-    echo "-s <string>               Process name whose statistics should be obtained"
+    echo "-p <string>               Process name whose statistics should be obtained"
     echo "--help                    Display this help and exit"
 }
 
@@ -41,7 +41,7 @@ usage()
 read_pars()
 {
     d_given=0
-    s_given=0
+    p_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -53,10 +53,10 @@ read_pars()
                       d_given=1
                   fi
                   ;;
-            "-s") shift
+            "-p") shift
                   if [ $# -ne 0 ]; then
                       given_processname=$1
-                      s_given=1
+                      p_given=1
                   fi
                   ;;
         esac
@@ -136,7 +136,7 @@ process_status_for_pfile()
 
         # If s option was given, continue to next iteration if process
         # name does not match with the given one
-        if [ ${s_given} -eq 1 -a "${given_processname}" != $processname ]; then
+        if [ ${p_given} -eq 1 -a "${given_processname}" != $processname ]; then
             continue
         fi
 

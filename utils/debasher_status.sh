@@ -29,11 +29,11 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_status           -d <string> [-s <string>] [-i]"
+    echo "debasher_status           -d <string> [-p <string>] [-i]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
-    echo "-s <string>               Process name whose status should be determined"
+    echo "-p <string>               Process name whose status should be determined"
     echo "-i                        Show scheduler ids for program processes"
     echo "--help                    Display this help and exit"
 }
@@ -42,7 +42,7 @@ usage()
 read_pars()
 {
     d_given=0
-    s_given=0
+    p_given=0
     i_given=0
     while [ $# -ne 0 ]; do
         case $1 in
@@ -55,10 +55,10 @@ read_pars()
                       d_given=1
                   fi
                   ;;
-            "-s") shift
+            "-p") shift
                   if [ $# -ne 0 ]; then
                       given_processname=$1
-                      s_given=1
+                      p_given=1
                   fi
                   ;;
             "-i") if [ $# -ne 0 ]; then
@@ -147,7 +147,7 @@ process_status_for_pfile()
 
         # If s option was given, continue to next iteration if process
         # name does not match with the given one
-        if [ ${s_given} -eq 1 -a "${given_processname}" != $processname ]; then
+        if [ ${p_given} -eq 1 -a "${given_processname}" != $processname ]; then
             continue
         fi
 
