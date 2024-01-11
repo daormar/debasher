@@ -365,6 +365,7 @@ write_env_vars_and_funcs()
         declare -p CAT
         declare -p HEAD
         declare -p TAIL
+        declare -p TEE
         declare -p AWK
 
         # Write functions
