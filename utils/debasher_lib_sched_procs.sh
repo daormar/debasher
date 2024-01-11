@@ -256,7 +256,7 @@ read_ids_from_files()
     fi
 
     # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_given_basedir "${dirname}"`
+    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     # Return ids for array tasks if any
     local id
