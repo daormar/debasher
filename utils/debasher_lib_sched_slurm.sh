@@ -235,6 +235,18 @@ get_slurm_jobname()
 }
 
 ########
+get_task_template_log_filename_slurm()
+{
+    local dirname=$1
+    local processname=$2
+
+    # Get scripts dir
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+
+    echo "${scriptsdir}/${processname}_%a.${SLURM_SCHED_LOG_FEXT}"
+}
+
+########
 get_slurm_output()
 {
     local dirname=$1
