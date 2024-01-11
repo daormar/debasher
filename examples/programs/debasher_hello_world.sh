@@ -89,5 +89,5 @@ hello_world()
 ########
 debasher_hello_world_program()
 {
-    add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00,00:02:00,00:03:00"
+    add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
 }
