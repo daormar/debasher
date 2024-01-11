@@ -60,8 +60,7 @@ hello_world_define_opts()
 
     # Obtain value of -n option
     local name=`get_cmdline_opt "${cmdline}" "-n"`
-    echo "****** $name"
-    
+
     # -n option
     if [ "${name}" = "${OPT_NOT_FOUND}" ]; then
         define_opt "-n" "World" optlist || return 1
