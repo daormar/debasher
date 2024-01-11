@@ -352,6 +352,7 @@ write_env_vars_and_funcs()
         declare -p FINISHED_PROCESS_FEXT
         declare -p PROCESSID_FEXT
         declare -p ARRAY_TASKID_FEXT
+        declare -p STDOUT_FEXT
         declare -p ARG_SEP
         declare -p OPT_NOT_FOUND
         declare -p FUNCT_NOT_FOUND
@@ -396,6 +397,9 @@ write_env_vars_and_funcs()
         declare -f get_outdir_funcname
         declare -f process_function_outdir
         declare -f default_reset_outfiles_for_process_array
+        declare -f get_prg_scripts_dir_given_basedir
+        declare -f get_prg_scripts_dir_for_process
+        declare -f get_process_stdout_filename
         declare -f search_process_func
         declare -f get_process_funcname
         declare -f remove_suffix_from_processname
