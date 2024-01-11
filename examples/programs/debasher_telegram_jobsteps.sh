@@ -30,7 +30,7 @@ load_debasher_module "debasher_telegram"
 ########
 debasher_telegram_jobsteps_shared_dirs()
 {
-    define_shared_dir "data"
+    :
 }
 
 #####################
@@ -49,6 +49,9 @@ decomposer_define_opts()
 
     # -f option
     define_cmdline_opt "$cmdline" "-f" optlist || return 1
+
+    # Define shared directory
+    define_shared_dir "data"
 
     # Get absolute name of shared directory
     local abs_shrdir=$(get_absolute_shdirname "data")
