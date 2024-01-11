@@ -62,6 +62,9 @@ decomposer_define_opts()
     local fifoname="dc_fifo"
     define_fifo "${fifoname}"
 
+    # Define shared directory
+    define_shared_dir "data"
+
     # Get absolute name of FIFO
     local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
