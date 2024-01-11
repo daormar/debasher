@@ -773,7 +773,7 @@ get_slurm_state_code()
 }
 
 ########
-slurm_jid_exists()
+slurm_id_exists()
 {
     local jid=$1
 

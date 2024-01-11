@@ -19,6 +19,16 @@
 ##########################################
 
 ########
+builtin_sched_id_exists()
+{
+    local pid=$1
+
+    kill -0 "$pid"  > /dev/null 2>&1 || return 1
+
+    return 0
+}
+
+########
 get_process_log_filename_builtin()
 {
     local scriptsdir=$1
@@ -54,7 +64,7 @@ process_is_unfinished_but_runnable_builtin_sched()
 {
     # Processes where the following is true are assigned this status:
     #  - process is an array of tasks
-    #  - there are no tasks in progress
+    #  - there are no tasks in progres (otherwise, it would be an in-progress process)
     #  - at least one task has been launched
     #  - at least one task can start execution
 
@@ -62,15 +72,16 @@ process_is_unfinished_but_runnable_builtin_sched()
     local processname=$2
 
     # Get .id files of finished tasks
-    ids=`get_launched_array_task_ids "$dirname" $processname`
+    local ids=`get_launched_array_task_ids "$dirname" $processname`
     local -A launched_array_tids
+    local id
     for id in ${ids}; do
         launched_array_tids[${id}]=1
     done
 
     # If no launched array tasks were found, process is not array or it is
     # not an unfinished one
-    num_launched_tasks=${#launched_array_tids[@]}
+    local num_launched_tasks=${#launched_array_tids[@]}
     if [ ${num_launched_tasks} -eq 0 ]; then
         return 1
     else

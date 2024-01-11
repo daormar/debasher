@@ -272,16 +272,6 @@ get_global_id()
 }
 
 ########
-pid_exists()
-{
-    local pid=$1
-
-    kill -0 "$pid"  > /dev/null 2>&1 || return 1
-
-    return 0
-}
-
-########
 stop_pid()
 {
     local pid=$1
@@ -301,12 +291,12 @@ id_exists()
     local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
-            slurm_jid_exists "$id"
+            slurm_id_exists "$id"
             exit_code=$?
             return "${exit_code}"
             ;;
         ${BUILTIN_SCHEDULER})
-            pid_exists "$id"
+            builtin_sched_id_exists "$id"
             exit_code=$?
             return "${exit_code}"
         ;;
