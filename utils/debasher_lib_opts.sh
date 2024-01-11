@@ -567,7 +567,7 @@ get_cmdline_opt()
     local opt=$2
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" "$opt" || { errmsg "$opt option not found" ; return 1; }
+    read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value="${_OPT_VALUE_}"
 
     # Add option
