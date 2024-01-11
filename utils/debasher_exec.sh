@@ -929,7 +929,7 @@ prepare_files_and_dirs_for_process()
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
             create_scripts_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating scripts directory for process" >&2 ; return 1; }
-            create_shdirs_owned_by_process || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
+            create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
             create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
         else
             clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
