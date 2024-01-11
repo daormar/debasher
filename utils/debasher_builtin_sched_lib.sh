@@ -996,7 +996,7 @@ builtin_sched_execute_funct_plus_postfunct()
     # Execute process function
     DEBASHER_PROCESS_STDOUT_FILENAME=`get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
     $funct "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
-    local funct_exit_code=$?
+    local funct_exit_code=${PIPESTATUS[0]}
     if [ ${funct_exit_code} -ne 0 ]; then
         echo "Error: execution of ${funct} failed with exit code ${funct_exit_code}" >&2
     else

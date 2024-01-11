@@ -138,7 +138,7 @@ print_script_body_slurm_sched()
     # Write function to be executed
     echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`get_process_stdout_filename \"$(esc_dq "${dirname}")\" "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
     echo "${funct} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
-    echo "funct_exit_code=\$?"
+    echo "funct_exit_code=\${PIPESTATUS[0]}"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${funct} successfully executed\" >&2; fi"
 
     # Write post function if it was provided
