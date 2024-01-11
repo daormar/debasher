@@ -129,14 +129,15 @@ print_script_body_slurm_sched()
         if [ "${opt_array_size}" -eq 1 ]; then
             echo "default_reset_outfiles_for_process \"$(esc_dq "${dirname}")\" ${processname}"
         else
-            echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} ${taskidx}"
+            echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
         fi
     else
         echo "${reset_funct} \"\${DESERIALIZED_ARGS[@]}\""
     fi
 
     # Write function to be executed
-    echo "${funct} \"\${DESERIALIZED_ARGS[@]}\""
+    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`get_process_stdout_filename \"$(esc_dq "${dirname}")\" "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
+    echo "${funct} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
     echo "funct_exit_code=\$?"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${funct} successfully executed\" >&2; fi"
 
