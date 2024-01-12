@@ -713,6 +713,11 @@ define_opt()
     if [ "${opt}" = "" -o "${value}" = "" -o "${varname}" = "" ]; then
         errmsg "define_opt: wrong input parameters"
         return 1
+    else
+        if [[ ! "${opt}" =~ ^(-|--) ]]; then
+            errmsg "define_opt: option name should start with '-' or '--'"
+            return 1
+        fi
     fi
 
     if [ -z "${!varname}" ]; then
