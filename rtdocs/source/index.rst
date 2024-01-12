@@ -20,7 +20,7 @@ Contents
 
    getstart
 
-   run
+   exec
 
    implem
 
