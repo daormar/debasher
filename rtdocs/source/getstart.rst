@@ -103,7 +103,7 @@ Docker
 """"""
 
 DeBasher also provides support for `Docker <https://www.docker.com/>`__
-containers.
+containers, favoring reproducibility of results.
 
 .. _quickstart_example:
 
