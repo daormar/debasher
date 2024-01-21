@@ -85,7 +85,7 @@ decomposer()
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
-    # Write string to FIFO
+    # Decompose input
     awk '{for(i=1;i<=NF;++i) print $i}' "${file}" > "${outf}" || return 1
 }
 
@@ -161,7 +161,7 @@ recomposer()
     local char_lim=$(read_opt_value_from_func_args "-c" "$@")
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
-    # Write string to FIFO
+    # Recompose input
     recompose "${char_lim}" "${inf}" > "${outf}" || return 1
 }
 

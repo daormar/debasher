@@ -82,7 +82,7 @@ rseq()
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
-    # Write string to FIFO
+    # Read sequence
     cat "${file}" > "${outf}" || return 1
 }
 
@@ -137,7 +137,7 @@ decomposer()
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Write string to FIFO
+    # Decompose input
     awk '{for(i=1;i<=NF;++i) print $i}' "${inf}" > "${outf}" ; pipe_fail || return 1
 }
 
@@ -219,7 +219,7 @@ recomposer()
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Write string to FIFO
+    # Recompose input
     recompose "${char_lim}" "${inf}" > "${outf}" ; pipe_fail || return 1
 }
 
@@ -268,7 +268,7 @@ wseq()
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
-    # Write string to FIFO
+    # Write sequence
     cat "${inf}" > "${outf}" || return 1
 }
 
