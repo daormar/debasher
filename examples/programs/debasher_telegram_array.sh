@@ -131,6 +131,5 @@ recomposer_define_opts()
 ########
 debasher_telegram_array_program()
 {
-    add_debasher_process "decomposer"  "cpus=1 mem=32 time=00:05:00"
-    add_debasher_process "recomposer"  "cpus=1 mem=32 time=00:05:00"
+    add_debasher_program "debasher_telegram" ""
 }
