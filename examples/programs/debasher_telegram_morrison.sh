@@ -196,26 +196,19 @@ recompose()
     local char_lim=$1
     local file=$2
 
-    awk -v maxlen="${char_lim}" 'BEGIN{len=0}
-             {
-              for(i=1; i<=NF; ++i)
-              {
-               if(len + length($i) <= maxlen)
-               {
-                 printf"%s", $i
-                 len=len+length($i)
-                 if(len+1 <= maxlen)
-                  printf" "
-               }
-               else
-               {
-                 printf"\n%s",$i
-                 len=length($i)
-                 if(len+1 <= maxlen)
-                  printf" "
-               }
-              }
-             }' "${file}"
+    awk -v maxlen="${char_lim}" '{
+          current_line = current_line $0
+          if (length(current_line) < char_lim)
+           current_line = current_line " "
+          else {
+           print current_line
+           current_line = $0
+          }
+         }
+        END {
+         if (length(current_line) > 0)
+         print current_line
+        }' "${file}"
 }
 
 ########
