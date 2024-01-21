@@ -83,7 +83,7 @@ rseq()
     local file=$(read_opt_value_from_func_args "-f" "$@")
 
     # Write string to FIFO
-    "${CAT}" "${file}" > "${outf}" || return 1
+    cat "${file}" > "${outf}" || return 1
 }
 
 ########
@@ -196,7 +196,7 @@ recompose()
     local char_lim=$1
     local file=$2
 
-    awk -v maxlen="${char_lim}" '{
+    awk -v char_lim="${char_lim}" '{
           current_line = current_line $0
           if (length(current_line) < char_lim)
            current_line = current_line " "
