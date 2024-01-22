@@ -206,8 +206,8 @@ recompose()
           }
          }
         END {
-         if (length(current_line) > 0)
-          print current_line
+          if (length(current_line) > 0)
+           print current_line
         }' "${file}"
 }
 
