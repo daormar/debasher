@@ -202,21 +202,16 @@ recompose()
               {
                 printf"%s", $0
                 len = len + length($0)
-                if(len+1 <= char_lim)
-                {
-                 printf" "
-                 len = len + 1
-                }
               }
               else
               {
                 printf"\n%s",$0
                 len = length($0)
-                if(len+1 <= char_lim)
-                {
-                 printf" "
-                 len = len + 1
-                }
+              }
+              if(len+1 <= char_lim)
+              {
+               printf" "
+               len = len + 1
               }
              }' "${file}"
 }
