@@ -142,6 +142,7 @@ recompose()
              {
               if(len + length($0) <= char_lim)
               {
+                if(len > 0) printf" "
                 printf"%s", $0
                 len = len + length($0)
               }
@@ -151,10 +152,7 @@ recompose()
                 len = length($0)
               }
               if(len+1 <= char_lim)
-              {
-               printf" "
                len = len + 1
-              }
              }' "${file}"
 }
 
