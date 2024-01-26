@@ -192,8 +192,11 @@ declare -a CURRENT_PROCESS_OPT_LIST
 # processes
 declare -A PROCESS_OPT_LIST_LENS
 
-# Declare associative array used to save output values for all processes
+# Declare associative array used to map output values to processes
 declare -A OUT_VALUE_TO_PROCESSES
+
+# Declare associative array used to map a process to output values
+declare -A PROCESS_TO_OUT_VALUE
 
 # Declare associative array used to store process dependencies
 declare -A PROCESS_DEPENDENCIES
