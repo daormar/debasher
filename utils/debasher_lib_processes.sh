@@ -327,12 +327,17 @@ define_opts_for_process()
                         else
                             value="${DESERIALIZED_ARGS[$i]}"
                             if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
+                                # Update out value to processes array
                                 local process_info="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"
                                 if [[ -v OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
                                     OUT_VALUE_TO_PROCESSES["$value"]=${OUT_VALUE_TO_PROCESSES["$value"]}${ASSOC_ARRAY_PROC_SEP}${process_info}
                                 else
                                     OUT_VALUE_TO_PROCESSES["$value"]=${process_info}
                                 fi
+
+                                # Update process to out value array
+                                local process_opt_info="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}${ASSOC_ARRAY_ELEM_SEP}${opt}"
+                                PROCESS_TO_OUT_VALUE["${process_opt_info}"]=${value}
                             fi
                             i=$((i+1))
                         fi
