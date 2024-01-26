@@ -182,7 +182,7 @@ exclude_other_vars()
 {
     "$AWK" -F "=" 'BEGIN{
                          othervars["MEMOIZED_OPTS"]=1
-                         othervars["PROCESS_OUT_VALUES"]=1
+                         othervars["OUT_VALUE_TO_PROCESSES"]=1
                          othervars["FIFO_USERS"]=1
                          othervars["PROGRAM_FIFOS"]=1
                          othervars["CURRENT_PROCESS_OPT_LIST"]=1 # This variable may become huge when working with arrays and is loaded from a separate file

@@ -1018,8 +1018,8 @@ show_curr_opt_list()
 ########
 show_out_values_for_processes()
 {
-    for outval in "${!PROCESS_OUT_VALUES[@]}"; do
-        echo "${outval} -> ${PROCESS_OUT_VALUES[${outval}]}"
+    for outval in "${!OUT_VALUE_TO_PROCESSES[@]}"; do
+        echo "${outval} -> ${OUT_VALUE_TO_PROCESSES[${outval}]}"
     done
 }
 

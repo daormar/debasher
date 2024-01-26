@@ -328,10 +328,10 @@ define_opts_for_process()
                             value="${DESERIALIZED_ARGS[$i]}"
                             if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
                                 local process_info="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"
-                                if [[ -v PROCESS_OUT_VALUES["${value}"] ]]; then
-                                    PROCESS_OUT_VALUES["$value"]=${PROCESS_OUT_VALUES["$value"]}${ASSOC_ARRAY_PROC_SEP}${process_info}
+                                if [[ -v OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
+                                    OUT_VALUE_TO_PROCESSES["$value"]=${OUT_VALUE_TO_PROCESSES["$value"]}${ASSOC_ARRAY_PROC_SEP}${process_info}
                                 else
-                                    PROCESS_OUT_VALUES["$value"]=${process_info}
+                                    OUT_VALUE_TO_PROCESSES["$value"]=${process_info}
                                 fi
                             fi
                             i=$((i+1))
@@ -590,7 +590,7 @@ get_procdeps_for_process_cached()
                         # Check if the option associated to the value is
                         # not an output option
                         if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
-                            if [[ -v PROCESS_OUT_VALUES[${value}] ]]; then
+                            if [[ -v OUT_VALUE_TO_PROCESSES[${value}] ]]; then
                                 # The value is generated as output by
                                 # another process (or processes)
 
@@ -614,7 +614,7 @@ get_procdeps_for_process_cached()
                                     fi
                                 else
                                     # The value represents a file
-                                    local processes="${PROCESS_OUT_VALUES[${value}]}"
+                                    local processes="${OUT_VALUE_TO_PROCESSES[${value}]}"
                                     while [ -n "${processes}" ]; do
                                         # Extract process information
                                         local proc_plus_idx="${processes%%${ASSOC_ARRAY_PROC_SEP}*}"
