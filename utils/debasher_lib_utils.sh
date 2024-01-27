@@ -459,6 +459,18 @@ str_is_output_option()
 }
 
 ########
+str_is_proc_out_opt_descriptor()
+{
+    local str=$1
+
+    if [[ "${str}" == "${PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"* ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 str_is_val_descriptor()
 {
     local str=$1
