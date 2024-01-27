@@ -120,13 +120,8 @@ recomposer_define_opts()
     # -c option
     define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
-    # Get absolute name of FIFO
-    local decomposer=$(get_adaptive_processname "decomposer")
-    local fifoname="dc_fifo"
-    local abs_fifoname=$(get_absolute_fifoname "${decomposer}" "${fifoname}")
-
     # Define option for decomposer FIFO
-    define_opt "-inf" "${abs_fifoname}" optlist || return 1
+    define_opt_from_proc_out "-inf" "decomposer" "-outf" optlist || return 1
 
     # Save option list
     save_opt_list optlist
