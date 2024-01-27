@@ -75,6 +75,19 @@ if test x$BASH = "xno"; then
     AC_MSG_ERROR([bash is required])
 fi
 
+# Extract BASH major and minor versions
+if test -n "$BASH_VERSION"; then
+   AC_MSG_CHECKING(for a bash shell with version >= 4.3)
+   # Extract major and minor version numbers from BASH_VERSION
+   bash_major_version=$(echo "$BASH_VERSION" | cut -d'.' -f1)
+   bash_minor_version=$(echo "$BASH_VERSION" | cut -d'.' -f2)
+   if (( bash_major_version < 4 || (bash_major_version == 4 && bash_minor_version < 3) )); then
+      AC_MSG_ERROR([bash version 4.3 or above is required])
+   else
+      AC_MSG_RESULT(yes)
+   fi
+fi
+
 # Check conda (conda is defined as a function so AC_PATH_PROGS may be
 # inadequate for checking)
 AC_MSG_CHECKING(for conda)
