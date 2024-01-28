@@ -464,7 +464,7 @@ check_process_opts()
 
     # Clear scheduler options directory
     local sched_opts_dir=`get_sched_opts_dir_given_basedir "${dirname}"`
-    "${RM}" "${sched_opts_dir}"/*
+    "${RM}" -f "${sched_opts_dir}"/*
 
     # Read information about the processes to be executed and use it to
     # initialize data structures
