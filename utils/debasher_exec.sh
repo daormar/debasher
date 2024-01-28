@@ -555,8 +555,11 @@ check_process_opts()
     # Generate option array
     generate_option_array "${cmdline}" "${dirname}" "${procspec_file}"
 
-    # Print exhaustive option list for processes
-    print_exh_opt_list_procs "${procspec_file}" > "${out_opts_exh_file}"
+    # Print exhaustive option list for processes (only if process graph
+    # should be generated)
+    if [ "${gen_proc_graph_given}" -eq 1 ]; then
+        print_exh_opt_list_procs "${procspec_file}" > "${out_opts_exh_file}"
+    fi
 
     # Show process options
     show_process_opts "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}"
