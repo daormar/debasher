@@ -106,14 +106,13 @@ print_script_body_slurm_sched()
     local funct=$5
     local post_funct=$6
     local opt_array_size=$7
-    local opts_fname=$8
 
     # Retrieve and deserialize process options
     if [ "${opt_array_size}" -gt 1 ]; then
-        echo "sargs=\`get_file_opts_for_process_and_task \"${opts_fname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
+        echo "sargs=\`get_opts_for_process_and_task \"${processname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
         echo "deserialize_args \"\${sargs}\""
     else
-        echo "sargs=\`get_file_opts_for_process_and_task \"${opts_fname}\" 0\`"
+        echo "sargs=\`get_opts_for_process_and_task \"${processname}\" 0\`"
         echo "deserialize_args \"\${sargs}\""
     fi
 
@@ -190,8 +189,7 @@ create_slurm_script()
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
-    local opts_fname=$3
-    local opt_array_size=$4
+    local opt_array_size=$3
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -204,7 +202,7 @@ create_slurm_script()
     print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
-    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" "${opts_fname}" >> "${fname}" || return 1
+    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print foot
     print_script_foot_slurm_sched >> "${fname}" || return 1

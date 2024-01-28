@@ -1034,9 +1034,8 @@ launch_process()
     # Decide whether the process should be executed
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
-        local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
         local opt_array_size=`get_numtasks_for_process "${processname}"`
-        create_script "${dirname}" "${processname}" "${opts_fname}" "${opt_array_size}"
+        create_script "${dirname}" "${processname}" "${opt_array_size}"
 
         # Archive script
         archive_script "${dirname}" "${processname}"

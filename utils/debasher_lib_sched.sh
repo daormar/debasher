@@ -112,13 +112,12 @@ create_script()
     # Init variables
     local dirname=$1
     local processname=$2
-    local opts_fname=$3
-    local opt_array_size=$4
+    local opt_array_size=$3
 
     local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script "${dirname}" "$processname" "${opts_fname}" "${opt_array_size}"
+            create_slurm_script "${dirname}" "$processname" "${opt_array_size}"
             ;;
     esac
 }
@@ -336,6 +335,8 @@ write_env_vars_and_funcs()
         declare -p OPT_FILE_LINES_PER_BLOCK
         declare -p DEBASHER_SCRIPTS_DIRNAME
         declare -p PROGRAM_OUTDIR
+        declare -p SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX
+        declare -p SCHED_OPTS_DIRNAME
         declare -p MOD_VARS_AND_FUNCS_BASENAME
         declare -p PROCESS_METHOD_NAME_OUTDIR
         declare -p VALUE_DESCRIPTOR_NAME_PREFIX
@@ -377,7 +378,10 @@ write_env_vars_and_funcs()
         declare -f is_absolute_path
         declare -f read_value_from_desc
         declare -f get_nth_file_line
+        declare -f get_sched_opts_dir_given_basedir
+        declare -f get_sched_opts_fname_for_process
         declare -f get_file_opts_for_process_and_task
+        declare -f get_opts_for_process_and_task
         declare -f deserialize_args
         declare -f deserialize_args_given_sep
         declare -f display_begin_process_message
