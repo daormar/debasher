@@ -199,11 +199,11 @@ declare -a CURRENT_PROCESS_OPT_LIST
 # processes
 declare -A PROCESS_OPT_LIST_LEN
 
-# Declare associative array used to map output values to processes
-declare -A OUT_VALUE_TO_PROCESSES
-
 # Declare associative array used to store process specification
 declare -A PROCESS_SPEC
+
+# Declare associative array used to map output values to processes
+declare -A OUT_VALUE_TO_PROCESSES
 
 # Declare associative array used to store process dependencies
 declare -A PROCESS_DEPENDENCIES
