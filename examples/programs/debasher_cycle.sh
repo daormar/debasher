@@ -71,13 +71,8 @@ process_a_define_opts()
     # Define option for output FIFO
     define_opt "-outf" "${abs_fifoname}" optlist || return 1
 
-    # Get absolute name of input FIFO
-    local fifo_proc_b=$(get_adaptive_processname "process_b")
-    local fifoname="proc_b_fifo"
-    local abs_fifoname=$(get_absolute_fifoname "${fifo_proc_b}" "${fifoname}")
-
     # Define option for input FIFO
-    define_opt "-inf" "${abs_fifoname}" optlist || return 1
+    define_opt_from_proc_out "-inf" "process_b" "-outf" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -136,13 +131,8 @@ process_b_define_opts()
     # Define option for output FIFO
     define_opt "-outf" "${abs_fifoname}" optlist || return 1
 
-    # Get absolute name of input FIFO
-    local fifo_proc_a=$(get_adaptive_processname "process_a")
-    local fifoname="proc_a_fifo"
-    local abs_fifoname=$(get_absolute_fifoname "${fifo_proc_a}" "${fifoname}")
-
     # Define option for input FIFO
-    define_opt "-inf" "${abs_fifoname}" optlist || return 1
+    define_opt_from_proc_out "-inf" "process_a" "-outf" optlist || return 1
 
     # Save option list
     save_opt_list optlist
