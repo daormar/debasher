@@ -448,6 +448,89 @@ show_cmdline_opts()
 ########
 check_process_opts()
 {
+    init_option_info()
+    {
+        local cmdline=$1
+        local procspec_file=$2
+
+        while read process_spec; do
+            # Define options for process
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
+
+            # Store process specification
+            PROCESS_SPEC["${processname}"]=${process_spec}
+        done < "${procspec_file}"
+    }
+
+    generate_option_array()
+    {
+        local cmdline=$1
+        local dirname=$2
+        local procspec_file=$3
+
+        while read process_spec; do
+            # Get process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            # Load current option list
+            load_curr_opt_list "${cmdline}" "${process_spec}" "${processname}"
+
+            # Write option array to file (line by line)
+            local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
+            local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
+            write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
+
+            # Clear variables
+            clear_curr_opt_list_array
+        done < "${procspec_file}"
+    }
+
+    print_exh_opt_list_procs()
+    {
+        local procspec_file=$1
+
+        while read process_spec; do
+            # Get process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            show_curr_opt_list "${processname}"
+        done < "${procspec_file}"
+    }
+
+    show_process_opts()
+    {
+        local procspec_file=$1
+        local max_num_proc_opts_to_display=$2
+
+        while read process_spec; do
+            # Get process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            # Store process options in an array for visualization
+            local serial_process_opts=`get_serial_process_opts "${processname}" "${max_num_proc_opts_to_display}"`
+
+            # Print info about options
+            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
+            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >> "${out_opts_file}"
+        done < "${procspec_file}"
+    }
+
+    register_fifo_users()
+    {
+        local procspec_file=$1
+
+        if program_uses_fifos; then
+            while read process_spec; do
+                # Extract process information
+                local processname=`extract_processname_from_process_spec "$process_spec"`
+
+                # Register fifos
+                register_fifos_used_by_process "${processname}"
+            done < "${procspec_file}"
+        fi
+    }
+
     echo "# Checking process options..." >&2
 
     # Read input parameters
@@ -466,70 +549,20 @@ check_process_opts()
     local sched_opts_dir=`get_sched_opts_dir_given_basedir "${dirname}"`
     "${RM}" -f "${sched_opts_dir}"/*
 
-    # Read information about the processes to be executed and use it to
-    # initialize data structures
-    while read process_spec; do
-        # Define options for process
-        local processname=`extract_processname_from_process_spec "$process_spec"`
-        define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
+    # Initialize option information
+    init_option_info "${cmdline}" "${procspec_file}"
 
-        # Store process specification
-        PROCESS_SPEC["${processname}"]=${process_spec}
-    done < "${procspec_file}"
+    # Generate option array
+    generate_option_array "${cmdline}" "${dirname}" "${procspec_file}"
 
-    # Generate option array and exhaustive option list files (they can
-    # only be generated correctly after a first pass through all of the
-    # options)
-    while read process_spec; do
-        # Get process name
-        local processname=`extract_processname_from_process_spec "$process_spec"`
+    # Print exhaustive option list for processes
+    print_exh_opt_list_procs "${procspec_file}" > "${out_opts_exh_file}"
 
-        # Load current option list
-        load_curr_opt_list "${cmdline}" "${process_spec}" "${processname}"
-
-        # Write option array to file (line by line)
-        local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
-        local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
-        write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
-
-        # Print exhaustive option list for process
-        show_curr_opt_list "${processname}" >> "${out_opts_exh_file}"
-
-        # Store process options in an array for visualization
-        local process_opts_array=()
-        local ellipsis=""
-        for process_opts in "${CURRENT_PROCESS_OPT_LIST[@]}"; do
-            # Obtain human-readable representation of process options
-            hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
-            process_opts_array+=("${hr_process_opts}")
-
-            # Exit loop if maximum number of options is exceeded
-            if [ "${#process_opts_array[@]}" -ge "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" ]; then
-                ellipsis="..."
-                break
-            fi
-        done
-
-        # Print info about options
-        local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}"`
-        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
-        echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >> "${out_opts_file}"
-
-        # Clear variables
-        clear_curr_opt_list_array
-
-    done < "${procspec_file}"
+    # Show process options
+    show_process_opts "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}"
 
     # Register fifo users
-    if program_uses_fifos; then
-        while read process_spec; do
-            # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
-
-            # Register fifos
-            register_fifos_used_by_process "${processname}"
-        done < "${procspec_file}"
-    fi
+    register_fifo_users "${procspec_file}"
 
     # Print info about fifos
     show_program_fifos > "${out_fifos_file}"

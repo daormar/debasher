@@ -1322,14 +1322,48 @@ show_curr_opt_list()
     local processname=$1
 
     # Show array length
-    local array_length=${#CURRENT_PROCESS_OPT_LIST[@]}
-    echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN} -> ${array_length}"
+    local num_tasks=`get_numtasks_for_process "${processname}"`
+    echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN} -> ${num_tasks}"
 
     # Show options
-    for idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-        task_idx=$idx
-        echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx} -> ${CURRENT_PROCESS_OPT_LIST[$idx]}"
+    local task_idx
+    for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
+        local opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+        echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx} -> ${opts}"
     done
+}
+
+########
+get_serial_process_opts()
+{
+    local processname=$1
+    local max_num_proc_opts_to_display=$2
+
+    # Store options in array
+    local process_opts_array=()
+    local ellipsis=""
+    local num_tasks=`get_numtasks_for_process "${processname}"`
+    local task_idx
+    for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
+        # Obtain process options
+        local process_opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+
+        # Obtain human-readable representation of process options
+        hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
+        process_opts_array+=("${hr_process_opts}")
+
+        # Exit loop if maximum number of options is exceeded
+        if [ "${#process_opts_array[@]}" -ge "${max_num_proc_opts_to_display}" ]; then
+            ellipsis="..."
+            break
+        fi
+    done
+
+    # Serialize array
+    local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}"`
+
+    # Return result
+    echo "${serial_process_opts}"
 }
 
 ########
