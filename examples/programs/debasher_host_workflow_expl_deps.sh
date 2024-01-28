@@ -49,24 +49,34 @@ host1_explain_cmdline_opts()
 }
 
 ########
-host1_define_opts()
+host1_generate_opts_size()
 {
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
-    local optlist=""
 
     # -n option
     local n_opt=$(get_cmdline_opt "$cmdline" "-n")
 
-    # Save option list so as to execute process n times
-    for id in $(seq "${n_opt}"); do
-        local specific_optlist=${optlist}
-        define_opt "-id" $id specific_optlist || return 1
-        save_opt_list specific_optlist
-    done
+    echo ${n_opt}
+}
+
+########
+host1_generate_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local task_idx=$5
+    local optlist=""
+
+    # Save option list
+    define_opt "-id" ${task_idx} optlist || return 1
+    save_opt_list optlist
 }
 
 ########
@@ -88,24 +98,34 @@ host2_explain_cmdline_opts()
 }
 
 ########
-host2_define_opts()
+host2_generate_opts_size()
 {
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
-    local optlist=""
 
     # -n option
     local n_opt=$(get_cmdline_opt "$cmdline" "-n")
 
-    # Save option list so as to execute process n times
-    for id in $(seq "${n_opt}"); do
-        local specific_optlist=${optlist}
-        define_opt "-id" $id specific_optlist || return 1
-        save_opt_list specific_optlist
-    done
+    echo "${n_opt}"
+}
+
+########
+host2_generate_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local task_idx=$5
+    local optlist=""
+
+    # Save option list
+    define_opt "-id" $task_idx optlist || return 1
+    save_opt_list optlist
 }
 
 ########
