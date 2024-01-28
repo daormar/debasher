@@ -46,6 +46,7 @@ DEBASHER_YML_DIR_SEP=":"
 PROCESS_METHOD_SEP="_"
 MODULE_METHOD_SEP="_"
 VALUE_DESCRIPTOR_NAME_PREFIX=".__VAL_DESCRIPTOR__"
+PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX="__PROC_OUT_OPT_DESCRIPTOR__"
 SCHED_OPTS_DIRNAME=".sched_opts"
 SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX="sched_opts_"
 SHDIR_MODULE_OWNER="__SHDIR_MODULE_OWNER__"
@@ -79,6 +80,8 @@ PROCESS_METHOD_NAME_OUTDIR="${PROCESS_METHOD_SEP}outdir_basename"
 PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS="${PROCESS_METHOD_SEP}explain_cmdline_opts"
 PROCESS_METHOD_NAME_DEFINE_OPTS="${PROCESS_METHOD_SEP}define_opts"
 PROCESS_METHOD_NAME_DEFINE_OPT_DEPS="${PROCESS_METHOD_SEP}define_opt_deps"
+PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE="${PROCESS_METHOD_SEP}generate_opts_size"
+PROCESS_METHOD_NAME_GENERATE_OPTS="${PROCESS_METHOD_SEP}generate_opts"
 PROCESS_METHOD_NAME_SKIP="${PROCESS_METHOD_SEP}skip"
 PROCESS_METHOD_NAME_CONDA_ENVS="${PROCESS_METHOD_SEP}conda_envs"
 PROCESS_METHOD_NAME_DOCKER_IMGS="${PROCESS_METHOD_SEP}docker_imgs"
@@ -184,19 +187,23 @@ declare -A MEMOIZED_OPTS
 # memoizing options
 declare LAST_PROC_LINE_MEMOPTS=""
 
+# Declare string used to indicate current process during option
+# definition
+declare DEFINE_OPTS_CURRENT_PROCESS=""
+
 # Declare array to save option lists for current process (an array is
 # needed to support multiple process executions)
 declare -a CURRENT_PROCESS_OPT_LIST
 
 # Declare associative array used to save lengths of option lists for all
 # processes
-declare -A PROCESS_OPT_LIST_LENS
+declare -A PROCESS_OPT_LIST_LEN
 
 # Declare associative array used to map output values to processes
 declare -A OUT_VALUE_TO_PROCESSES
 
-# Declare associative array used to map a process to output values
-declare -A PROCESS_TO_OUT_VALUE
+# Declare associative array used to store process specification
+declare -A PROCESS_SPEC
 
 # Declare associative array used to store process dependencies
 declare -A PROCESS_DEPENDENCIES

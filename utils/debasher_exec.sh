@@ -462,24 +462,36 @@ check_process_opts()
     "${RM}" -f "${out_opts_file}"
     "${RM}" -f "${out_opts_exh_file}"
 
-    # Read information about the processes to be executed
+    # Read information about the processes to be executed and use it to
+    # initialize data structures
     while read process_spec; do
         # Define options for process
         local processname=`extract_processname_from_process_spec "$process_spec"`
         define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
 
-        # Obtain size of option array
-        local opt_array_size=${#CURRENT_PROCESS_OPT_LIST[@]}
-        PROCESS_OPT_LIST_LENS["${processname}"]=${opt_array_size}
+        # Store process specification
+        PROCESS_SPEC["${processname}"]=${process_spec}
+    done < "${procspec_file}"
+
+    # Generate option array and exhaustive option list files (they can
+    # only be generated correctly after a first pass through all of the
+    # options)
+    while read process_spec; do
+        # Get process name
+        local processname=`extract_processname_from_process_spec "$process_spec"`
+
+        # Load current option list
+        load_curr_opt_list "${cmdline}" "${process_spec}" "${processname}"
 
         # Write option array to file (line by line)
+        local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
         local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
         write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
         # Print exhaustive option list for process
         show_curr_opt_list "${processname}" >> "${out_opts_exh_file}"
 
-        # Store process options in an array
+        # Store process options in an array for visualization
         local process_opts_array=()
         local ellipsis=""
         for process_opts in "${CURRENT_PROCESS_OPT_LIST[@]}"; do
@@ -500,7 +512,7 @@ check_process_opts()
         echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >> "${out_opts_file}"
 
         # Clear variables
-        clear_def_opts_vars
+        clear_curr_opt_list_array
 
     done < "${procspec_file}"
 

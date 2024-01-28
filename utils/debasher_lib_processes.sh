@@ -209,6 +209,22 @@ get_define_opt_deps_funcname()
 }
 
 ########
+get_generate_opts_funcname()
+{
+    local processname=$1
+
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS}"
+}
+
+########
+get_generate_opts_size_funcname()
+{
+    local processname=$1
+
+    search_process_func "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}"
+}
+
+########
 get_skip_funcname()
 {
     local processname=$1
@@ -246,6 +262,19 @@ process_is_defined()
 }
 
 ########
+uses_option_generator()
+{
+    local processname=$1
+    local funcname=${processname}${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}
+
+    if func_exists "${funcname}"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 write_opt_array()
 {
     local varname=$1
@@ -266,7 +295,7 @@ get_numtasks_for_process()
 {
     local processname=$1
 
-    echo ${PROCESS_OPT_LIST_LENS["${processname}"]}
+    echo ${PROCESS_OPT_LIST_LEN["${processname}"]}
 }
 
 ########
@@ -299,74 +328,74 @@ get_file_opts_for_process_and_task()
 }
 
 ########
+# Public: Defines options for process.
+#
+# TO-BE-DONE
+#
+# $1 - Command line
+# $2 - Process specification
+#
+# Examples
+#
+#   define_opts_for_process <cmdline> <process_spec>
+#
+# The function does not return any value
 define_opts_for_process()
 {
-    clear_def_opts_vars()
+    define_opts_loop()
     {
-        clear_curr_opt_list_array
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local processname=`extract_processname_from_process_spec "${process_spec}"`
+        local process_outdir=`get_process_outdir "${processname}"`
+
+        # Copy processname_def_opts function if necessary
+        copy_process_defopts_func "${processname}"
+
+        # Obtain define_opts function name and call it
+        DEFINE_OPTS_CURRENT_PROCESS=${processname}
+        local define_opts_funcname=`get_define_opts_funcname ${processname}`
+        ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
     }
 
-    get_output_params_info()
+    define_opts_generator()
     {
-        local processname=$1
-        for idx in "${!CURRENT_PROCESS_OPT_LIST[@]}"; do
-            local task_idx=$idx
-            deserialize_args "${CURRENT_PROCESS_OPT_LIST[$idx]}"
-            local i=0
-            while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
-                # Check if option was found
-                if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
-                    local opt="${DESERIALIZED_ARGS[$i]}"
-                    i=$((i+1))
-                    # Obtain value if it exists
-                    local value=""
-                    # Check if next token is an option
-                    if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
-                        if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
-                            :
-                        else
-                            value="${DESERIALIZED_ARGS[$i]}"
-                            if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
-                                # Update out value to processes array
-                                local process_info="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"
-                                if [[ -v OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
-                                    OUT_VALUE_TO_PROCESSES["$value"]=${OUT_VALUE_TO_PROCESSES["$value"]}${ASSOC_ARRAY_PROC_SEP}${process_info}
-                                else
-                                    OUT_VALUE_TO_PROCESSES["$value"]=${process_info}
-                                fi
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local processname=`extract_processname_from_process_spec "${process_spec}"`
+        local process_outdir=`get_process_outdir "${processname}"`
 
-                                # Update process to out value array
-                                local process_opt_info="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}${ASSOC_ARRAY_ELEM_SEP}${opt}"
-                                PROCESS_TO_OUT_VALUE["${process_opt_info}"]=${value}
-                            fi
-                            i=$((i+1))
-                        fi
-                    fi
-                else
-                    echo "Warning: unexpected value (${DESERIALIZED_ARGS[$i]}), skipping..." >&2
-                    i=$((i+1))
-                fi
-            done
+        # Obtain define_opts_array function name and call it
+        DEFINE_OPTS_CURRENT_PROCESS=${processname}
+        local generate_opts_size_funcname=`get_generate_opts_size_funcname ${processname}`
+        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+        local array_size=`${generate_opts_size_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
+
+        # Iterate over array tasks
+        local task_idx
+        for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
+            # Call option generator
+            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
+
+            # Update output options information
+            get_output_opts_info "${processname}" "${task_idx}" "${DESERIALIZED_ARGS[@]}"
         done
+
+        # Set option list length
+        PROCESS_OPT_LIST_LEN[$processname]=${array_size}
     }
 
+    # Initialize variables
     local cmdline=$1
     local process_spec=$2
-    local processname=`extract_processname_from_process_spec "${process_spec}"`
-    local process_outdir=`get_process_outdir "${processname}"`
 
-    # Clear variables
-    clear_def_opts_vars
-
-    # Copy processname_def_opts function if necessary
-    copy_process_defopts_func "${processname}"
-
-    # Obtain define_opts function name and call it
-    local define_opts_funcname=`get_define_opts_funcname ${processname}`
-    ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
-
-    # Update variables storing option information
-    get_output_params_info "${processname}"
+    if uses_option_generator "$processname"; then
+        define_opts_generator "${cmdline}" "${process_spec}"
+    else
+        define_opts_loop "${cmdline}" "${process_spec}"
+    fi
 }
 
 ########
