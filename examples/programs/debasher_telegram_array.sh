@@ -108,9 +108,8 @@ recomposer_define_opts()
     for file in "${pref_of_files}"*; do
         local specific_optlist=${optlist}
 
-        # Define name of input file
-        local inf="${abs_shrdir}/words_$i.txt"
-        define_opt "-inf" "${inf}" specific_optlist || return 1
+        # -inf option
+        define_opt_from_proc_task_out "-inf" "decomposer" "$i" "-outf" specific_optlist || return 1
 
         # Define name of output file
         local outf="${process_outdir}/output_$i.txt"

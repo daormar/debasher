@@ -77,12 +77,8 @@ recomposer_define_opts()
     # -c option
     define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
-    # Get absolute name of shared directory
-    local abs_shrdir=$(get_absolute_shdirname "data")
-
-    # Define name of input file
-    local inf="${abs_shrdir}/words.txt"
-    define_opt "-inf" "${inf}" optlist || return 1
+    # -inf option
+    define_opt_from_proc_out "-inf" "decomposer" "-outf" optlist || return 1
 
     # Define name of output file
     local outf="${process_outdir}/output.txt"
