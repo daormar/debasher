@@ -110,14 +110,15 @@ get_scheduler()
 create_script()
 {
     # Init variables
-    local dirname=$1
-    local processname=$2
-    local opt_array_size=$3
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local opt_array_size=$4
 
     local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script "${dirname}" "$processname" "${opt_array_size}"
+            create_slurm_script "${cmdline}" "${dirname}" "$processname" "${opt_array_size}"
             ;;
     esac
 }
@@ -324,91 +325,18 @@ write_env_vars_and_funcs()
 {
     write_debasher_env_vars_and_funcs()
     {
-        # Write variables
-        for conda_var in CONDA_EXE CONDA_PYTHON_EXE _CE_M _CE_CONDA; do
-            declare -p "${conda_var}"
-        done
-        declare -p DEBASHER_SCHEDULER
-        declare -p SLURM_SCHEDULER
-        declare -p BUILTIN_SCHEDULER
-        declare -p DISABLE_SCHEDULERS
-        declare -p OPT_FILE_LINES_PER_BLOCK
-        declare -p DEBASHER_SCRIPTS_DIRNAME
-        declare -p PROGRAM_OUTDIR
-        declare -p SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX
-        declare -p SCHED_OPTS_DIRNAME
-        declare -p MOD_VARS_AND_FUNCS_BASENAME
-        declare -p PROCESS_METHOD_NAME_OUTDIR
-        declare -p VALUE_DESCRIPTOR_NAME_PREFIX
-        declare -p FINISHED_PROCESS_FEXT
-        declare -p PROCESSID_FEXT
-        declare -p ARRAY_TASKID_FEXT
-        declare -p STDOUT_FEXT
-        declare -p ARG_SEP
-        declare -p OPT_NOT_FOUND
-        declare -p FUNCT_NOT_FOUND
-        declare -p DEBASHER_LOG_ERROR_MSG_START
-        declare -p DEBASHER_LOG_WARNING_MSG_START
-        declare -p BASH
-        declare -p BASENAME
-        declare -p DIRNAME
-        declare -p MKTEMP
-        declare -p RM
-        declare -p CAT
-        declare -p HEAD
-        declare -p TAIL
-        declare -p AWK
+        local dirname=$1
 
-        # Write functions
-        for conda_func in __conda_activate __conda_exe __conda_hashr __conda_reactivate conda; do
-            declare -f "${conda_func}"
-        done
-        declare -f pipe_fail
-        declare -f get_process_finished_filename
-        declare -f get_prg_scripts_dir
-        declare -f get_prg_scripts_dir_for_process
-        declare -f get_prg_scripts_dir_given_basedir
-        declare -f get_process_stdout_filename
-        declare -f read_opt_value_from_func_args
-        declare -f get_opt_value_from_func_args
-        declare -f str_is_val_descriptor
-        declare -f write_value_to_desc
-        declare -f read_value_from_desc
-        declare -f str_is_output_option
-        declare -f is_absolute_path
-        declare -f read_value_from_desc
-        declare -f get_nth_file_line
-        declare -f get_sched_opts_dir_given_basedir
-        declare -f get_sched_opts_fname_for_process
-        declare -f get_file_opts_for_process_and_task
-        declare -f get_opts_for_process_and_task
-        declare -f deserialize_args
-        declare -f deserialize_args_given_sep
-        declare -f display_begin_process_message
-        declare -f display_end_process_message
-        declare -f default_reset_outfiles_for_process
-        declare -f get_process_outdir_given_dirname
-        declare -f get_default_process_outdir_given_dirname
-        declare -f get_outdir_funcname
-        declare -f process_function_outdir
-        declare -f default_reset_outfiles_for_process_array
-        declare -f search_process_func
-        declare -f get_process_funcname
-        declare -f remove_suffix_from_processname
-        declare -f func_exists
-        declare -f signal_process_completion
-        declare -f get_scheduler
-        declare -f exclude_readonly_vars
-        declare -f init_bash_shebang_var
-        declare -f write_env_vars_and_funcs
-        declare -f get_mod_vars_and_funcs_fname
-        declare -f seq_execute
-        declare -f logmsg
-        declare -f get_script_log_filenames
-        declare -f filter_warnings_in_script_log_file
-        declare -f filter_errors_in_script_log_file
-        declare -f create_script_log_file_errwarn_entry
-        declare -f filter_errwarns_in_script_log_files_pref
+        # Write DeBasher start variables and functions
+        local vars_and_funcs_fname=`get_deblib_vars_and_funcs_fname "${dirname}"`
+        "${CAT}" "${vars_and_funcs_fname}"
+
+        # Write initialized variables
+        declare -p DEBASHER_SCHEDULER
+        declare -p INITIAL_PROCESS_SPEC
+        declare -p PROGRAM_OUTDIR
+        declare -p MEMOIZED_OPTS
+        declare -p OUT_VALUE_TO_PROCESSES
     }
 
     write_mod_env_vars_and_funcs()
@@ -422,7 +350,7 @@ write_env_vars_and_funcs()
     local dirname=$1
 
     # Write Debasher-related variables and functions
-    write_debasher_env_vars_and_funcs
+    write_debasher_env_vars_and_funcs "${dirname}"
 
     # Write module-related variables and functions
     write_mod_env_vars_and_funcs "${dirname}"
