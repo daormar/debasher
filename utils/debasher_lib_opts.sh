@@ -1174,6 +1174,8 @@ save_opt_list()
 
     # Try to extract process name from generate_opts function (no
     # functions are called to avoid subshell creation)
+    # KNOWN ISSUE: for performance reasons, the
+    # get_processname_from_caller function is not used
     local caller_method_name=${PROCESS_METHOD_NAME_GENERATE_OPTS}
     for element in "${FUNCNAME[@]}"; do
         if [[ "$element" == *"${caller_method_name}" ]]; then
