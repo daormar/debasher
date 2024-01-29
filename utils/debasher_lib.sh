@@ -154,6 +154,7 @@ SCHED_SCRIPT_INPUT_FEXT="opts"
 PPEXEC_INITIAL_PROCSPEC_BASENAME=".initial_program.${PROCSPEC_FEXT}"
 PPEXEC_PRG_PREF="program"
 PRG_COMMAND_LINE_BASENAME="command_line.sh"
+DEBLIB_VARS_AND_FUNCS_BASENAME=".deblib_vars_and_funcs.sh"
 MOD_VARS_AND_FUNCS_BASENAME=".mod_vars_and_funcs.sh"
 
 # DIR_NAMES
@@ -199,14 +200,18 @@ declare -a CURRENT_PROCESS_OPT_LIST
 # processes
 declare -A PROCESS_OPT_LIST_LEN
 
-# Declare associative array used to store process specification
-declare -A PROCESS_SPEC
+# Declare associative array used to store initial process specification
+declare -A INITIAL_PROCESS_SPEC
 
 # Declare associative array used to map output values to processes
 declare -A OUT_VALUE_TO_PROCESSES
 
 # Declare associative array used to store process dependencies
 declare -A PROCESS_DEPENDENCIES
+
+# Declare variable storing whether all process dependencies where
+# pre-specified in initial process specification
+declare ALL_PROCESS_DEPS_PRE_SPECIFIED
 
 # Declare variable to store name of output directory
 declare PROGRAM_OUTDIR

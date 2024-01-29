@@ -712,6 +712,17 @@ define_opt_from_proc_task_out()
     local out_opt=$4
     local varname=$5
 
+    # Check parameters
+    if [[ "${opt}" == "-out"* || "${opt}" == "--out"* ]]; then
+        errmsg "define_opt_from_proc_task_out: wrong input parameters, process option cannot start with ${opt} (it should not be an output option)"
+        return 1
+    else
+        if [[ ! "${out_opt}" != "-out"* && ! "${out_opt}" != "--out"* ]]; then
+            errmsg "define_opt_from_proc_task_out: wrong input parameters, connected process option should start with -out or --out"
+            return 1
+        fi
+    fi
+
     # Generate process info
     local process_opt_info="${proc}${ASSOC_ARRAY_ELEM_SEP}${task_idx}${ASSOC_ARRAY_ELEM_SEP}${out_opt}"
 
@@ -1033,7 +1044,7 @@ clear_curr_opt_list_array()
 # The function does not return any value
 save_opt_list()
 {
-    generate_opt_lists()
+    generate_opt_list()
     {
         local processname=$1
         local task_idx=$2
@@ -1126,31 +1137,30 @@ save_opt_list()
     save_opt_list_loop()
     {
         # Initialize variables
-        local optlist_varname=$1
-        local opts=${!optlist_varname}
+        local processname=$1
+        local opts=$2
 
         # Obtain task index and update list length for process
         local task_idx
-        if [ -z "${PROCESS_OPT_LIST_LEN[$DEFINE_OPTS_CURRENT_PROCESS]}" ]; then
+        if [ -z "${PROCESS_OPT_LIST_LEN[${processname}]}" ]; then
             task_idx=0
-            PROCESS_OPT_LIST_LEN[$DEFINE_OPTS_CURRENT_PROCESS]=1
+            PROCESS_OPT_LIST_LEN[${processname}]=1
         else
-            task_idx=${PROCESS_OPT_LIST_LEN[$DEFINE_OPTS_CURRENT_PROCESS]}
-            ((PROCESS_OPT_LIST_LEN[$DEFINE_OPTS_CURRENT_PROCESS]++))
+            task_idx=${PROCESS_OPT_LIST_LEN[${processname}]}
+            ((PROCESS_OPT_LIST_LEN[${processname}]++))
         fi
 
-        # Generate option lists for each process
-        generate_opt_lists "$DEFINE_OPTS_CURRENT_PROCESS" "${task_idx}" "${opts}"
+        # Generate option list for process
+        generate_opt_list "${processname}" "${task_idx}" "${opts}"
 
         # Update variables storing output option information
-        get_output_opts_info_given_opts "$DEFINE_OPTS_CURRENT_PROCESS" "${task_idx}" "${opts}"
+        get_output_opts_info_given_opts "${processname}" "${task_idx}" "${opts}"
     }
 
     save_opt_list_generator()
     {
         # Initialize variables
-        local optlist_varname=$1
-        local opts=${!optlist_varname}
+        local opts=$1
 
         # Put options in DESERIALIZED_ARGS (this is the only thing that
         # should be done by the generator here)
@@ -1160,17 +1170,44 @@ save_opt_list()
     # Initialize variables
     local optlist_varname=$1
     local opts=${!optlist_varname}
+    local processname=""
 
-    if uses_option_generator "$DEFINE_OPTS_CURRENT_PROCESS"; then
-        save_opt_list_generator "${optlist_varname}" "${opts}"
-    else
-        save_opt_list_loop "${optlist_varname}" "${opts}"
+    # Try to extract process name from generate_opts function (no
+    # functions are called to avoid subshell creation)
+    local caller_method_name=${PROCESS_METHOD_NAME_GENERATE_OPTS}
+    for element in "${FUNCNAME[@]}"; do
+        if [[ "$element" == *"${caller_method_name}" ]]; then
+            local processname=${element%"${caller_method_name}"}
+        fi
+    done
+    if [ -n "${processname}" ]; then
+        save_opt_list_generator "${opts}"
+        return 0
     fi
+
+    # Try to extract process name from define_opts_function
+    caller_method_name=${PROCESS_METHOD_NAME_DEFINE_OPTS}
+    for element in "${FUNCNAME[@]}"; do
+        if [[ "$element" == *"${caller_method_name}" ]]; then
+            local processname=${element%"${caller_method_name}"}
+        fi
+    done
+    if [ -n "${processname}" ]; then
+        save_opt_list_loop "${processname}" "${opts}"
+        return 0
+    fi
+
+    # If no process name was found, abort execution
+    echo "save_opts: critical error, process name could not be determined!" >&2
+    exit 1
 }
 
 ########
-load_curr_opt_list()
+load_curr_opt_list_loop()
 {
+    # WARNING: The resolve_proc_output_desc function should be called in
+    # a subshell, otherwise it may clash with the caller due to its use
+    # of the DESERIALIZE_ARGS variable
     resolve_proc_output_desc()
     {
         local cmdline=$1
@@ -1190,7 +1227,7 @@ load_curr_opt_list()
             local generate_opts_funcname=`get_generate_opts_funcname ${connected_proc}`
 
             # Call options generator (output stored into DESERIALIZED_ARGS)
-            local connected_proc_spec=${PROCESS_SPEC["${connected_proc}"]}
+            local connected_proc_spec=${INITIAL_PROCESS_SPEC["${connected_proc}"]}
             local connected_proc_outdir=`get_process_outdir "${connected_proc}"`
             ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${task_idx}" || return 1
 
@@ -1210,116 +1247,46 @@ load_curr_opt_list()
         fi
     }
 
-    load_curr_opt_list_loop()
-    {
-        local cmdline=$1
-        local processname=$2
-
-        # Clear array
-        clear_curr_opt_list_array
-
-        # Iterate over process options
-        local task_idx
-        for (( task_idx=0; task_idx<${PROCESS_OPT_LIST_LEN[$processname]}; task_idx++ )); do
-            # Initialize variables
-            local opt_list_name="opt_list_${processname}_${task_idx}"
-            declare -nl opt_list=${opt_list_name}
-            local opts=""
-
-            # Process options for task
-            local opt
-            for opt in "${!opt_list[@]}"; do
-                local value=${opt_list[$opt]}
-
-                # Resolve process output descriptor if necessary
-                if str_is_proc_out_opt_descriptor "${value}"; then
-                    value=`resolve_proc_output_desc "${cmdline}" "${value}"`
-                fi
-
-                # Define option
-                if [ -z "${value}" ]; then
-                    define_opt_wo_value "${opt}" "opts"
-                else
-                    define_opt "${opt}" "${value}" "opts"
-                fi
-            done
-            CURRENT_PROCESS_OPT_LIST+=("${opts}")
-        done
-    }
-
-    load_curr_opt_list_generator()
-    {
-        local cmdline=$1
-        local process_spec=$2
-        local processname=$3
-
-        # Clear array
-        clear_curr_opt_list_array
-
-        # Obtain generator function
-        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
-
-        # Obtain process output dir
-        local process_outdir=`get_process_outdir "${processname}"`
-
-        # Iterate over process options
-        local task_idx
-        for (( task_idx=0; task_idx<${PROCESS_OPT_LIST_LEN[$processname]}; task_idx++ )); do
-            # Execute option generator
-            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
-
-            # Iterate over options (calling option generator function
-            # puts the option in DESERIALIZED_ARGS)
-            local i=0
-            local opts=""
-            while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
-                # Check if option was found
-                if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
-                    local opt="${DESERIALIZED_ARGS[$i]}"
-                    i=$((i+1))
-                    # Obtain value if it exists
-                    local value=""
-                    # Check if next token is an option
-                    if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
-                        if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
-                            define_opt_wo_value "${opt}" "opts"
-                        else
-                            value="${DESERIALIZED_ARGS[$i]}"
-
-                            # Resolve process output descriptor if necessary
-                            if str_is_proc_out_opt_descriptor "${value}"; then
-                                value=`resolve_proc_output_desc "${cmdline}" "${value}"`
-                            fi
-
-                            define_opt "${opt}" "${value}" "opts"
-                            i=$((i+1))
-                        fi
-                    fi
-                else
-                    echo "Warning: unexpected value (${DESERIALIZED_ARGS[$i]}), skipping..." >&2
-                    i=$((i+1))
-                fi
-            done
-            CURRENT_PROCESS_OPT_LIST+=("${opts}")
-        done
-    }
-
-    # Initialize variables
     local cmdline=$1
-    local process_spec=$2
-    local processname=$3
+    local processname=$2
 
-    if uses_option_generator "$processname"; then
-        load_curr_opt_list_generator "${cmdline}" "${process_spec}" "${processname}"
-    else
-        load_curr_opt_list_loop "${cmdline}" "${processname}"
-    fi
+    # Clear array
+    clear_curr_opt_list_array
+
+    # Iterate over process options
+    local task_idx
+    for (( task_idx=0; task_idx<${PROCESS_OPT_LIST_LEN[${processname}]}; task_idx++ )); do
+        # Initialize variables
+        local opt_list_name="opt_list_${processname}_${task_idx}"
+        declare -nl opt_list=${opt_list_name}
+        local opts=""
+
+        # Process options for task
+        local opt
+        for opt in "${!opt_list[@]}"; do
+            local value=${opt_list[$opt]}
+
+            # Resolve process output descriptor if necessary
+            if str_is_proc_out_opt_descriptor "${value}"; then
+                value=`resolve_proc_output_desc "${cmdline}" "${value}"`
+            fi
+
+            # Define option
+            if [ -z "${value}" ]; then
+                define_opt_wo_value "${opt}" "opts"
+            else
+                define_opt "${opt}" "${value}" "opts"
+            fi
+        done
+        CURRENT_PROCESS_OPT_LIST+=("${opts}")
+    done
 }
 
 ########
 show_curr_opt_list()
 {
-    local processname=$1
+    local cmdline=$1
+    local processname=$2
 
     # Show array length
     local num_tasks=`get_numtasks_for_process "${processname}"`
@@ -1328,7 +1295,7 @@ show_curr_opt_list()
     # Show options
     local task_idx
     for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
-        local opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+        local opts=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
         echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx} -> ${opts}"
     done
 }
@@ -1336,17 +1303,19 @@ show_curr_opt_list()
 ########
 get_serial_process_opts()
 {
-    local processname=$1
-    local max_num_proc_opts_to_display=$2
+    local cmdline=$1
+    local processname=$2
+    local max_num_proc_opts_to_display=$3
 
     # Store options in array
     local process_opts_array=()
     local ellipsis=""
     local num_tasks=`get_numtasks_for_process "${processname}"`
+
     local task_idx
     for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
         # Obtain process options
-        local process_opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+        local process_opts=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
 
         # Obtain human-readable representation of process options
         hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
@@ -1363,7 +1332,7 @@ get_serial_process_opts()
     local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}"`
 
     # Return result
-    echo "${serial_process_opts}"
+    echo "${serial_process_opts} ${ellipsis}"
 }
 
 ########

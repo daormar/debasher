@@ -301,11 +301,70 @@ get_numtasks_for_process()
 ########
 get_opts_for_process_and_task()
 {
-    local processname=$1
-    local task_idx=$2
+    # WARNING: The resolve_proc_out_descriptor function should be called
+    # in a subshell, otherwise it may clash with the caller due to its
+    # use of the DESERIALIZE_ARGS variable
+    resolve_proc_out_descriptor()
+    {
+        local cmdline=$1
+        local value=$2
 
-    local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
-    get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
+        # Extract information of connected process
+        local connected_proc_info="${value#$PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
+        deserialize_args_given_sep "${connected_proc_info}" "${ASSOC_ARRAY_ELEM_SEP}"
+        local connected_proc=${DESERIALIZED_ARGS[0]}
+        local connected_proc_task_idx=${DESERIALIZED_ARGS[1]}
+        local connected_proc_opt=${DESERIALIZED_ARGS[2]}
+
+        # Resolve descriptor
+        sargs=`get_opts_for_process_and_task "${cmdline}" "${connected_proc}" "${connected_proc_task_idx}"`
+        deserialize_args "${sargs}"
+        value=`get_opt_value_from_func_args "${connected_proc_opt}" "${DESERIALIZED_ARGS[@]}"`
+
+        echo "${value}"
+    }
+
+    resolve_proc_out_descriptors()
+    {
+        local cmdline=$1
+
+        # Iterate over DESERIALIZED_ARGS array
+        i=0
+        while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
+            # Resolve process output descriptor if necessary
+            local elem=${DESERIALIZED_ARGS[$i]}
+            if ! str_is_option "${elem}" && str_is_proc_out_opt_descriptor "${elem}"; then
+                value=`resolve_proc_out_descriptor "${cmdline}" "${elem}"`
+                DESERIALIZED_ARGS[$i]=${value}
+            fi
+            i=$((i+1))
+        done
+    }
+
+    local cmdline=$1
+    local processname=$2
+    local task_idx=$3
+
+    if uses_option_generator "${processname}"; then
+        # Obtain name of options generator
+        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+
+        # Call options generator (output stored into DESERIALIZED_ARGS)
+        local proc_spec=${INITIAL_PROCESS_SPEC["${processname}"]}
+        local proc_outdir=`get_process_outdir "${processname}"`
+        ${generate_opts_funcname} "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
+
+        # Resove descriptors for connected processes
+        resolve_proc_out_descriptors "${cmdline}"
+
+        # Obtain serialized args
+        sargs=`serialize_args "${DESERIALIZED_ARGS[@]}"`
+
+        echo "${sargs}"
+    else
+        local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
+        get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
+    fi
 }
 
 ########
@@ -354,7 +413,6 @@ define_opts_for_process()
         copy_process_defopts_func "${processname}"
 
         # Obtain define_opts function name and call it
-        DEFINE_OPTS_CURRENT_PROCESS=${processname}
         local define_opts_funcname=`get_define_opts_funcname ${processname}`
         ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
     }
@@ -367,24 +425,39 @@ define_opts_for_process()
         local processname=`extract_processname_from_process_spec "${process_spec}"`
         local process_outdir=`get_process_outdir "${processname}"`
 
-        # Obtain define_opts_array function name and call it
-        DEFINE_OPTS_CURRENT_PROCESS=${processname}
-        local generate_opts_size_funcname=`get_generate_opts_size_funcname ${processname}`
-        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
-        local array_size=`${generate_opts_size_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
+        # Check if process dependencies were pre-specified for all processes
+        if [ "${ALL_PROCESS_DEPS_PRE_SPECIFIED}" -eq 0 ]; then
+            # There are process dependencies to be determined, so it is
+            # necessary to update output options information
 
-        # Iterate over array tasks
-        local task_idx
-        for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
-            # Call option generator
-            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
+            # Obtain define_opts_array function name and call it
+            local generate_opts_size_funcname=`get_generate_opts_size_funcname ${processname}`
+            local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+            local array_size=`${generate_opts_size_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
 
-            # Update output options information
-            get_output_opts_info "${processname}" "${task_idx}" "${DESERIALIZED_ARGS[@]}"
-        done
+            # Iterate over array tasks
+            local task_idx
+            for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
+                # Call option generator
+                ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
 
-        # Set option list length
-        PROCESS_OPT_LIST_LEN[$processname]=${array_size}
+                # Update output options information
+                get_output_opts_info "${processname}" "${task_idx}" "${DESERIALIZED_ARGS[@]}"
+            done
+
+            # Set option list length
+            PROCESS_OPT_LIST_LEN[$processname]=${array_size}
+        else
+            # There are no process dependencies to be determined, so it is
+            # only necessary to update option list length
+
+            # Obtain define_opts_array function name and call it
+            local generate_opts_size_funcname=`get_generate_opts_size_funcname ${processname}`
+            local array_size=`${generate_opts_size_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
+
+            # Set option list length
+            PROCESS_OPT_LIST_LEN[$processname]=${array_size}
+        fi
     }
 
     # Initialize variables
@@ -605,13 +678,14 @@ get_procdeps_for_process_cached()
         get_procdeps_for_process_task()
         {
             # Initialize variables
-            local processname=$1
-            local num_tasks=$2
-            local task_idx=$3
+            local cmdline=$1
+            local processname=$2
+            local num_tasks=$3
+            local task_idx=$4
             declare -A depdict
 
             # Iterate over task options
-            local opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+            local opts=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
             deserialize_args "${opts}"
             local i
             for i in "${!DESERIALIZED_ARGS[@]}"; do
@@ -702,14 +776,15 @@ get_procdeps_for_process_cached()
         get_procdeps_for_task_array()
         {
             # Initialize variables
-            local processname=$1
-            local num_tasks=$2
+            local cmdline=$1
+            local processname=$2
+            local num_tasks=$3
             declare -A depdict
 
             # Iterate over tasks indices
             for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
                 # Obtain dependencies for task
-                local prdeps_idx=`get_procdeps_for_process_task "${processname}" "${num_tasks}" "${task_idx}"`
+                local prdeps_idx=`get_procdeps_for_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}"`
 
                 # Iterate over dependencies
                 if [ -n "${prdeps_idx}" ]; then
@@ -741,18 +816,22 @@ get_procdeps_for_process_cached()
             echo "${processdeps}"
         }
 
-        local processname=$1
+        local cmdline=$1
+        local processname=$2
+
         # Determine whether the process has multiple tasks
         local num_tasks=`get_numtasks_for_process "${processname}"`
         if [ "${num_tasks}" -eq 1 ]; then
             # The process has only one task
-            get_procdeps_for_process_task "${processname}" "${num_tasks}" 0
+            get_procdeps_for_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
         else
             # The process is an array of tasks
-            get_procdeps_for_task_array "${processname}" "${num_tasks}"
+            get_procdeps_for_task_array "${cmdline}" "${processname}" "${num_tasks}"
         fi
     }
-    local process_spec=$1
+
+    local cmdline=$1
+    local process_spec=$2
 
     # Extract process information
     local processname=`extract_processname_from_process_spec "$process_spec"`
@@ -765,7 +844,7 @@ get_procdeps_for_process_cached()
         local deps=`extract_processdeps_from_process_spec "${process_spec}"`
         if [ "${deps}" = "${ATTR_NOT_FOUND}" ]; then
             # No dependencies are provided in specification
-            local deps=`get_procdeps_for_process "$processname"`
+            local deps=`get_procdeps_for_process "${cmdline}" "$processname"`
             if [ -z "${deps}" ]; then
                 deps="${NONE_PROCESSDEP_TYPE}"
             fi
@@ -790,12 +869,13 @@ register_fifos_used_by_process()
     register_fifos_used_by_process_task()
     {
         # Initialize variables
-        local processname=$1
-        local num_tasks=$2
-        local task_idx=$3
+        local cmdline=$1
+        local processname=$2
+        local num_tasks=$3
+        local task_idx=$4
 
         # Iterate over task options
-        local opts=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+        local opts=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
         deserialize_args "${opts}"
         for i in "${!DESERIALIZED_ARGS[@]}"; do
             # Check if a value represents an absolute path
@@ -827,27 +907,29 @@ register_fifos_used_by_process()
     register_fifos_used_by_task_array()
     {
         # Initialize variables
-        local processname=$1
-        local num_tasks=$2
+        local cmdline=$1
+        local processname=$2
+        local num_tasks=$3
         declare -A depdict
 
         # Iterate over tasks indices
         for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
             # Register fifos for task
-            register_fifos_used_by_process_task "${processname}" "${num_tasks}" "${task_idx}"
+            register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}"
         done
     }
 
-    local processname=$1
+    local cmdline=$1
+    local processname=$2
 
     # Determine whether the process has multiple tasks
     local num_tasks=`get_numtasks_for_process "${processname}"`
     if [ "${num_tasks}" -eq 1 ]; then
         # The process has only one task
-        register_fifos_used_by_process_task "${processname}" "${num_tasks}" 0
+        register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
     else
         # The process is an array of tasks
-        register_fifos_used_by_task_array "${processname}" "${num_tasks}"
+        register_fifos_used_by_task_array "${cmdline}" "${processname}" "${num_tasks}"
     fi
 }
 
@@ -923,7 +1005,11 @@ get_adaptive_processname()
     local processname=$1
 
     # Get caller process name
-    local caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+
+    if [ -z "${caller_processname}" ]; then
+        caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    fi
 
     # Get suffix of caller process name
     local caller_suffix=`get_suffix_from_processname "${caller_processname}"`

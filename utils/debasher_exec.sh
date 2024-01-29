@@ -257,6 +257,17 @@ load_module()
 }
 
 ########
+get_deblib_vars_and_funcs()
+{
+    echo "# Getting module variables and functions..." >&2
+
+    local vars_and_funcs_fname=`get_deblib_vars_and_funcs_fname "${outd}"`
+    "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${debasher_bindir}/debasher_lib" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
+
+    echo "" >&2
+}
+
+########
 get_mod_vars_and_funcs()
 {
     echo "# Getting module variables and functions..." >&2
@@ -351,7 +362,8 @@ gen_dependency_graph()
 ########
 gen_final_procspec_file()
 {
-    local initial_procspec_file=$1
+    local cmdline=$1
+    local initial_procspec_file=$2
 
     echo "# Generating final process specification file..." >&2
 
@@ -366,7 +378,7 @@ gen_final_procspec_file()
         # Check if dependencies were given
         if [ "${procdeps}" = "${ATTR_NOT_FOUND}" ]; then
             # Dependencies not given, so they should be obtained
-            procdeps=`get_procdeps_for_process_cached "${process_spec}"`
+            procdeps=`get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
 
             # Print process specification plus process dependencies
             echo "${process_spec}" "${procdeps}"
@@ -448,6 +460,26 @@ show_cmdline_opts()
 ########
 check_process_opts()
 {
+    get_initial_process_spec_info()
+    {
+        local procspec_file=$1
+
+        while read process_spec; do
+            # Store process specification
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+            INITIAL_PROCESS_SPEC["${processname}"]=${process_spec}
+
+            # Extract dependencies from process specification
+            local procdeps=`extract_processdeps_from_process_spec "${process_spec}"`
+
+            # Check if dependencies were given
+            ALL_PROCESS_DEPS_PRE_SPECIFIED=1
+            if [ "${procdeps}" = "${ATTR_NOT_FOUND}" ]; then
+                ALL_PROCESS_DEPS_PRE_SPECIFIED=0
+            fi
+        done < "${procspec_file}"
+    }
+
     init_option_info()
     {
         local cmdline=$1
@@ -457,13 +489,10 @@ check_process_opts()
             # Define options for process
             local processname=`extract_processname_from_process_spec "$process_spec"`
             define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
-
-            # Store process specification
-            PROCESS_SPEC["${processname}"]=${process_spec}
         done < "${procspec_file}"
     }
 
-    generate_option_array()
+    create_option_arrays()
     {
         local cmdline=$1
         local dirname=$2
@@ -473,42 +502,46 @@ check_process_opts()
             # Get process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            # Load current option list
-            load_curr_opt_list "${cmdline}" "${process_spec}" "${processname}"
+            if ! uses_option_generator "${processname}"; then
+                # Load current option list
+                load_curr_opt_list_loop "${cmdline}" "${processname}"
 
-            # Write option array to file (line by line)
-            local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
-            local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
-            write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
+                # Write option array to file (line by line)
+                local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
+                local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
+                write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
-            # Clear variables
-            clear_curr_opt_list_array
+                # Clear variables
+                clear_curr_opt_list_array
+            fi
         done < "${procspec_file}"
     }
 
     print_exh_opt_list_procs()
     {
-        local procspec_file=$1
+        local cmdline=$1
+        local procspec_file=$2
 
         while read process_spec; do
             # Get process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            show_curr_opt_list "${processname}"
+            show_curr_opt_list "${cmdline}" "${processname}"
         done < "${procspec_file}"
     }
 
     show_process_opts()
     {
-        local procspec_file=$1
-        local max_num_proc_opts_to_display=$2
+        local cmdline=$1
+        local procspec_file=$2
+        local max_num_proc_opts_to_display=$3
 
         while read process_spec; do
             # Get process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
             # Store process options in an array for visualization
-            local serial_process_opts=`get_serial_process_opts "${processname}" "${max_num_proc_opts_to_display}"`
+            local serial_process_opts=`get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}"`
 
             # Print info about options
             echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
@@ -518,7 +551,8 @@ check_process_opts()
 
     register_fifo_users()
     {
-        local procspec_file=$1
+        local cmdline=$1
+        local procspec_file=$2
 
         if program_uses_fifos; then
             while read process_spec; do
@@ -526,7 +560,7 @@ check_process_opts()
                 local processname=`extract_processname_from_process_spec "$process_spec"`
 
                 # Register fifos
-                register_fifos_used_by_process "${processname}"
+                register_fifos_used_by_process "${cmdline}" "${processname}"
             done < "${procspec_file}"
         fi
     }
@@ -549,23 +583,26 @@ check_process_opts()
     local sched_opts_dir=`get_sched_opts_dir_given_basedir "${dirname}"`
     "${RM}" -f "${sched_opts_dir}"/*
 
+    # Get initial process specification information
+    get_initial_process_spec_info "${procspec_file}"
+
     # Initialize option information
     init_option_info "${cmdline}" "${procspec_file}"
 
-    # Generate option array
-    generate_option_array "${cmdline}" "${dirname}" "${procspec_file}"
+    # Create option arrays
+    create_option_arrays "${cmdline}" "${dirname}" "${procspec_file}"
 
     # Print exhaustive option list for processes (only if process graph
     # should be generated)
     if [ "${gen_proc_graph_given}" -eq 1 ]; then
-        print_exh_opt_list_procs "${procspec_file}" > "${out_opts_exh_file}"
+        print_exh_opt_list_procs "${cmdline}" "${procspec_file}" > "${out_opts_exh_file}"
     fi
 
     # Show process options
-    show_process_opts "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}"
+    show_process_opts "${cmdline}" "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}"
 
     # Register fifo users
-    register_fifo_users "${procspec_file}"
+    register_fifo_users "${cmdline}" "${procspec_file}"
 
     # Print info about fifos
     show_program_fifos > "${out_fifos_file}"
@@ -1035,7 +1072,7 @@ launch_process()
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
         local opt_array_size=`get_numtasks_for_process "${processname}"`
-        create_script "${dirname}" "${processname}" "${opt_array_size}"
+        create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
         # Archive script
         archive_script "${dirname}" "${processname}"
@@ -1224,6 +1261,8 @@ configure_scheduler || exit 1
 
 load_module || exit 1
 
+get_deblib_vars_and_funcs || exit 1
+
 get_mod_vars_and_funcs || exit 1
 
 # Get name of initial process specification file
@@ -1252,7 +1291,7 @@ else
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
         procspec_file="${prg_file_pref}.${PROCSPEC_FEXT}"
-        gen_final_procspec_file "${initial_procspec_file}" > "${procspec_file}" || exit 1
+        gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
 
         check_procspec "${prg_file_pref}" || exit 1
 
