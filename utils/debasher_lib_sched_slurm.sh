@@ -99,20 +99,23 @@ print_script_header_slurm_sched()
 print_script_body_slurm_sched()
 {
     # Initialize variables
-    local dirname=$1
-    local processname=$2
-    local skip_funct=$3
-    local reset_funct=$4
-    local funct=$5
-    local post_funct=$6
-    local opt_array_size=$7
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local skip_funct=$4
+    local reset_funct=$5
+    local funct=$6
+    local post_funct=$7
+    local opt_array_size=$8
 
     # Retrieve and deserialize process options
     if [ "${opt_array_size}" -gt 1 ]; then
-        echo "sargs=\`get_opts_for_process_and_task \"${processname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
+        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
+        echo "sargs=\`get_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
         echo "deserialize_args \"\${sargs}\""
     else
-        echo "sargs=\`get_opts_for_process_and_task \"${processname}\" 0\`"
+        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
+        echo "sargs=\`get_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" 0\`"
         echo "deserialize_args \"\${sargs}\""
     fi
 
@@ -166,30 +169,21 @@ write_env_vars_and_funcs_slurm()
 
     # Write general environment variables and functions
     write_env_vars_and_funcs "${dirname}"
-
-    # Write slurm sched environment variables
-    declare -p SLURM_SCHED_LOG_FEXT
-    declare -p SLURM_EXEC_ATTEMPT_FEXT_STRING
-    declare -p SRUN
-
-    # Write slurm sched environment functions
-    declare -f write_env_vars_and_funcs_slurm
-    declare -f seq_execute_slurm
-    declare -f get_script_log_filenames_slurm
 }
 
 ########
 create_slurm_script()
 {
     # Init variables
-    local dirname=$1
-    local processname=$2
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local opt_array_size=$4
     local fname=`get_script_filename "${dirname}" ${processname}`
     local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
-    local opt_array_size=$3
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -202,7 +196,7 @@ create_slurm_script()
     print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
-    print_script_body_slurm_sched "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" >> "${fname}" || return 1
+    print_script_body_slurm_sched "${cmdline}" "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print foot
     print_script_foot_slurm_sched >> "${fname}" || return 1
