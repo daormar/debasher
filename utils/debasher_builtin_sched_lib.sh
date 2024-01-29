@@ -958,17 +958,18 @@ builtin_sched_print_script_header()
 ########
 builtin_sched_execute_funct_plus_postfunct()
 {
-    local dirname=$1
-    local processname=$2
-    local skip_funct=$3
-    local reset_funct=$4
-    local funct=$5
-    local post_funct=$6
-    local opt_array_size=$7
-    local task_idx=$8
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local skip_funct=$4
+    local reset_funct=$5
+    local funct=$6
+    local post_funct=$7
+    local opt_array_size=$8
+    local task_idx=$9
 
     # Get serialized arguments
-    local sargs=`get_opts_for_process_and_task "${processname}" "${task_idx}"`
+    local sargs=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
 
     # Convert serialized process options to array (result is placed into
     # the DESERIALIZED_ARGS variable)
@@ -1022,22 +1023,25 @@ builtin_sched_execute_funct_plus_postfunct()
 builtin_sched_print_script_body()
 {
     # Initialize variables
-    local dirname=$1
-    local processname=$2
-    local skip_funct=$3
-    local reset_funct=$4
-    local funct=$5
-    local post_funct=$6
-    local opt_array_size=$7
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local skip_funct=$4
+    local reset_funct=$5
+    local funct=$6
+    local post_funct=$7
+    local opt_array_size=$8
 
     # Write function to be executed
     local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
     if [ "${opt_array_size}" -gt 1 ]; then
+        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
         echo "builtin_task_log_filename=\`get_task_log_filename_builtin \"$(esc_dq "${scriptsdir}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
-        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
     else
+        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
         local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
-        echo "builtin_sched_execute_funct_plus_postfunct \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 }
 
@@ -1055,10 +1059,6 @@ write_env_vars_and_funcs_builtin()
     # Write general environment variables and functions
     write_env_vars_and_funcs "${dirname}"
 
-    # Write builtin sched environment variables
-    declare -p TEE
-    declare -p BUILTIN_SCHED_LOG_FEXT
-
     # Write builtin sched environment functions
     declare -f builtin_sched_print_pid_to_file
     declare -f get_task_log_filename_builtin
@@ -1071,14 +1071,15 @@ write_env_vars_and_funcs_builtin()
 builtin_sched_create_script()
 {
     # Init variables
-    local dirname=$1
-    local processname=$2
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local opt_array_size=$4
     local fname=`get_script_filename "${dirname}" ${processname}`
     local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
     local funct=`get_exec_funcname ${processname}`
     local post_funct=`get_post_funcname ${processname}`
-    local opt_array_size=$3
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -1091,7 +1092,7 @@ builtin_sched_create_script()
     builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
-    builtin_sched_print_script_body "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" >> "${fname}" || return 1
+    builtin_sched_print_script_body "${cmdline}" "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print foot
     builtin_sched_print_script_foot >> "${fname}" || return 1
@@ -1181,7 +1182,7 @@ builtin_sched_execute_process()
     # Create script
     local opt_array_size=`get_numtasks_for_process "${processname}"`
     if [ "${launched_tasks}" = "" ]; then
-        builtin_sched_create_script "${dirname}" "${processname}" "${opt_array_size}"
+        builtin_sched_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
     fi
 
     # Archive script
@@ -1234,7 +1235,7 @@ builtin_sched_exec_processes_and_update_status()
         task_idx=`builtinsched_extract_task_idx_from_knapsack_name "${knapsack_name}"`
 
         # Execute process
-        builtin_sched_execute_process "${cmdline}" "${dirname}" ${processname} ${task_idx} || return 1
+        builtin_sched_execute_process "${cmdline}" "${dirname}" "${processname}" "${task_idx}" || return 1
 
         # Update process status
         BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${INPROGRESS_PROCESS_STATUS}
