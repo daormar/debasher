@@ -682,3 +682,11 @@ get_nth_file_line()
 
     "${HEAD}" -n $n "${filename}" | "${TAIL}" -n 1
 }
+
+########
+get_deblib_vars_and_funcs_fname()
+{
+    local dirname=$1
+
+    echo "${dirname}/${DEBLIB_VARS_AND_FUNCS_BASENAME}"
+}
