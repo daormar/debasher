@@ -264,6 +264,9 @@ process_is_defined()
 ########
 uses_option_generator()
 {
+    # KNOWN ISSUE: this function avoids calling the
+    # "get_generate_opts_size_funcname" function to improve efficiency
+    # (otherwise, a subshell is created)
     local processname=$1
     local funcname=${processname}${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}
 
