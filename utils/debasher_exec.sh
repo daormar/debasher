@@ -492,7 +492,7 @@ check_process_opts()
         while read process_spec; do
             # Define options for process
             local processname=`extract_processname_from_process_spec "$process_spec"`
-            define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ;return 1; }
+            define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
         done < "${procspec_file}"
     }
 
@@ -588,28 +588,28 @@ check_process_opts()
     "${RM}" -f "${sched_opts_dir}"/*
 
     # Get initial process specification information
-    get_initial_process_spec_info "${procspec_file}"
+    get_initial_process_spec_info "${procspec_file}" || return 1
 
     # Initialize option information
-    init_option_info "${cmdline}" "${procspec_file}"
+    init_option_info "${cmdline}" "${procspec_file}" || return 1
 
     # Create option arrays
-    create_option_arrays "${cmdline}" "${dirname}" "${procspec_file}"
+    create_option_arrays "${cmdline}" "${dirname}" "${procspec_file}" || return 1
 
     # Print exhaustive option list for processes (only if process graph
     # should be generated)
     if [ "${gen_proc_graph_given}" -eq 1 ]; then
-        print_exh_opt_list_procs "${cmdline}" "${procspec_file}" > "${out_opts_exh_file}"
+        print_exh_opt_list_procs "${cmdline}" "${procspec_file}" > "${out_opts_exh_file}" || return 1
     fi
 
     # Show process options
-    show_process_opts "${cmdline}" "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}"
+    show_process_opts "${cmdline}" "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" || return 1
 
     # Register fifo users
-    register_fifo_users "${cmdline}" "${procspec_file}"
+    register_fifo_users "${cmdline}" "${procspec_file}" || return 1
 
     # Print info about fifos
-    show_program_fifos > "${out_fifos_file}"
+    show_program_fifos > "${out_fifos_file}" || return 1
 
     echo "" >&2
 }
