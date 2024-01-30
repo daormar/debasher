@@ -259,10 +259,12 @@ load_module()
 ########
 get_deblib_vars_and_funcs()
 {
-    echo "# Getting DeBasher variables and functions..." >&2
+    echo "# Extracting DeBasher variables and functions..." >&2
 
     local vars_and_funcs_fname=`get_deblib_vars_and_funcs_fname "${outd}"`
     "${debasher_libexecdir}"/debasher_get_deblib_vars_and_funcs > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
+
+    echo "Extraction complete" >&2
 
     echo "" >&2
 }
@@ -270,10 +272,12 @@ get_deblib_vars_and_funcs()
 ########
 get_mod_vars_and_funcs()
 {
-    echo "# Getting module variables and functions..." >&2
+    echo "# Extracting module variables and functions..." >&2
 
     local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${outd}"`
     "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
+
+    echo "Extraction complete" >&2
 
     echo "" >&2
 }
