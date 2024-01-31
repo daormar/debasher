@@ -42,7 +42,7 @@ decomposer_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local process_name=$3
     local process_outdir=$4
     local optlist=""
@@ -69,7 +69,7 @@ recomposer_define_opts()
 {
     # Initialize variables
     local cmdline=$1
-    local stepspec=$2
+    local process_spec=$2
     local process_name=$3
     local process_outdir=$4
     local optlist=""
