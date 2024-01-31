@@ -120,9 +120,7 @@ value_reader_define_opts()
 
     # Define value descriptor option related to output value of
     # value_writer
-    local value_writer=$(get_adaptive_processname "value_writer")
-    local val_desc=$(get_value_descriptor_name "${value_writer}" "-outv")
-    define_opt "-val-desc" "${val_desc}" optlist || return 1
+    define_opt_from_proc_out "-val-desc" "value_writer" "-outv" optlist || return 1
 
     # Define output file option
     local outf="${process_outdir}/${process_name}.out"

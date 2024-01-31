@@ -102,13 +102,8 @@ fifo_reader_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Get absolute name of FIFO
-    local fifo_writer=$(get_adaptive_processname "fifo_writer")
-    local fifoname="fifo"
-    local abs_fifoname=$(get_absolute_fifoname "${fifo_writer}" "${fifoname}")
-
-    # Define option for FIFO
-    define_opt "-inf" "${abs_fifoname}" optlist || return 1
+    # Define option for input FIFO
+    define_opt_from_proc_out "-inf" "fifo_writer" "-outf" optlist || return 1
 
     # Save option list
     save_opt_list optlist
