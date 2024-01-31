@@ -74,8 +74,9 @@ host1_generate_opts()
     local task_idx=$5
     local optlist=""
 
-    # Save option list
     define_opt "-id" ${task_idx} optlist || return 1
+
+    # Save option list
     save_opt_list optlist
 }
 
