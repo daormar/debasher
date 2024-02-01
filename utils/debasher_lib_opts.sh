@@ -568,6 +568,9 @@ define_fifo_opt()
 ########
 define_shared_dir()
 {
+    # TO-BE-DONE: Define behaviour for option generators (currently,
+    # this function does not work for them)
+
     local shared_dir=$1
 
     # Check whether the shared directory is being defined by a module or
@@ -811,6 +814,9 @@ get_value_descriptor_name()
 ########
 define_value_desc_opt()
 {
+    # TO-BE-DONE: Define behaviour for option generators (currently,
+    # this function does not work for them)
+
     local opt=$1
     local varname=$2
 
