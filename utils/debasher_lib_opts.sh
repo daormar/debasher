@@ -537,7 +537,7 @@ define_fifo()
 
     # TO-BE-DONE: Define behaviour for option generators
     # Get task index
-    task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
+    local task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
 
     # Get augmented fifo name
     local augm_fifoname="${processname}/${fifoname}"
