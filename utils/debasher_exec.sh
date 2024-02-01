@@ -549,7 +549,7 @@ check_process_opts()
 
             # Print info about options
             echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >> "${out_opts_file}"
+            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}"
         done < "${procspec_file}"
     }
 
@@ -579,10 +579,6 @@ check_process_opts()
     local out_opts_exh_file=$5
     local out_fifos_file=$6
 
-    # Remove output files
-    "${RM}" -f "${out_opts_file}"
-    "${RM}" -f "${out_opts_exh_file}"
-
     # Clear scheduler options directory
     local sched_opts_dir=`get_sched_opts_dir_given_basedir "${dirname}"`
     "${RM}" -f "${sched_opts_dir}"/*
@@ -603,7 +599,7 @@ check_process_opts()
     fi
 
     # Show process options
-    show_process_opts "${cmdline}" "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" || return 1
+    show_process_opts "${cmdline}" "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${out_opts_file}" || return 1
 
     # Register fifo users
     register_fifo_users "${cmdline}" "${procspec_file}" || return 1
