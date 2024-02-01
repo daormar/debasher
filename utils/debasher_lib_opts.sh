@@ -1235,30 +1235,17 @@ save_opt_list()
     # Initialize variables
     local optlist_varname=$1
     local opts=${!optlist_varname}
-    local processname=""
+    local processname
 
-    # Try to extract process name from generate_opts function (no
-    # functions are called to avoid subshell creation)
-    # KNOWN ISSUE: for performance reasons, the
-    # get_processname_from_caller function is not used
-    local caller_method_name=${PROCESS_METHOD_NAME_GENERATE_OPTS}
-    for element in "${FUNCNAME[@]}"; do
-        if [[ "$element" == *"${caller_method_name}" ]]; then
-            local processname=${element%"${caller_method_name}"}
-        fi
-    done
+    # Try to extract process name from generate_opts function
+    get_processname_from_caller_upvar "${PROCESS_METHOD_NAME_GENERATE_OPTS}" processname
     if [ -n "${processname}" ]; then
         save_opt_list_generator "${opts}"
         return 0
     fi
 
     # Try to extract process name from define_opts_function
-    caller_method_name=${PROCESS_METHOD_NAME_DEFINE_OPTS}
-    for element in "${FUNCNAME[@]}"; do
-        if [[ "$element" == *"${caller_method_name}" ]]; then
-            local processname=${element%"${caller_method_name}"}
-        fi
-    done
+    get_processname_from_caller_upvar "${PROCESS_METHOD_NAME_DEFINE_OPTS}" processname
     if [ -n "${processname}" ]; then
         save_opt_list_loop "${processname}" "${opts}"
         return 0
