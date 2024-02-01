@@ -58,15 +58,9 @@ decomposer_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Define FIFO
-    local fifoname="dc_fifo"
-    define_fifo "${fifoname}"
-
-    # Get absolute name of FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
-
     # Define option for decomposer FIFO
-    define_opt "-outf" "${abs_fifoname}" optlist || return 1
+    local fifoname="dc_fifo"
+    define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # -f option
     define_cmdline_opt "$cmdline" "-f" optlist || return 1

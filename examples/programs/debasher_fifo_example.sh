@@ -56,15 +56,9 @@ fifo_writer_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Define FIFO
-    local fifoname="fifo"
-    define_fifo "${fifoname}"
-
-    # Get absolute name of FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
-
     # Define option for FIFO
-    define_opt "-outf" "${abs_fifoname}" optlist || return 1
+    local fifoname="fifo"
+    define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist

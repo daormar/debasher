@@ -58,15 +58,9 @@ rseq_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Define FIFO
-    local fifoname="rseq_fifo"
-    define_fifo "${fifoname}"
-
-    # Get absolute name of FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
-
     # Define option for rseq FIFO
-    define_opt "-outf" "${abs_fifoname}" optlist || return 1
+    local fifoname="rseq_fifo"
+    define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # -f option
     define_cmdline_opt "$cmdline" "-f" optlist || return 1
@@ -111,15 +105,9 @@ decomposer_define_opts()
     # -inf option
     define_opt_from_proc_out "-inf" "rseq" "-outf" optlist || return 1
 
-    # Define FIFO
-    fifoname="dc_fifo"
-    define_fifo "${fifoname}"
-
-    # Get absolute name of FIFO
-    abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
-
     # Define option for decomposer FIFO
-    define_opt "-outf" "${abs_fifoname}" optlist || return 1
+    fifoname="dc_fifo"
+    define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -166,15 +154,9 @@ recomposer_define_opts()
     # -inf option
     define_opt_from_proc_out "-inf" "decomposer" "-outf" optlist || return 1
 
-    # Define FIFO
-    fifoname="rc_fifo"
-    define_fifo "${fifoname}"
-
-    # Get absolute name of FIFO
-    abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
-
     # Define option for decomposer FIFO
-    define_opt "-outf" "${abs_fifoname}" optlist || return 1
+    fifoname="rc_fifo"
+    define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Save option list
     save_opt_list optlist

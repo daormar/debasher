@@ -61,15 +61,9 @@ process_a_define_opts()
     # -f option
     define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
-    # Define output FIFO
-    local fifoname="proc_a_fifo"
-    define_fifo "${fifoname}"
-
-    # Get absolute name of output FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
-
     # Define option for output FIFO
-    define_opt "-outf" "${abs_fifoname}" optlist || return 1
+    local fifoname="proc_a_fifo"
+    define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Define option for input FIFO
     define_opt_from_proc_out "-inf" "process_b" "-outf" optlist || return 1
@@ -121,15 +115,9 @@ process_b_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Define output FIFO
-    local fifoname="proc_b_fifo"
-    define_fifo "${fifoname}"
-
-    # Get absolute name of output FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
-
     # Define option for output FIFO
-    define_opt "-outf" "${abs_fifoname}" optlist || return 1
+    local fifoname="proc_b_fifo"
+    define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Define option for input FIFO
     define_opt_from_proc_out "-inf" "process_a" "-outf" optlist || return 1
