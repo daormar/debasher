@@ -629,6 +629,29 @@ search_process_func()
 }
 
 ########
+search_process_func_upvar()
+{
+    local processname=$1
+    local method_name=$2
+    local result=$3
+
+    # Check if function exists
+    local process_function=`get_process_funcname "${processname}" "${method_name}"`
+    if func_exists "${process_function}"; then
+        upvar "${result}" "${process_function}"
+    else
+        # Check if function without process suffix exists
+        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
+        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${method_name}"`
+        if func_exists "${process_function}"; then
+            upvar "${result}" "${process_function}"
+        else
+            upvar "${result}" "${FUNCT_NOT_FOUND}"
+        fi
+    fi
+}
+
+########
 search_process_mandatory_func()
 {
     local processname=$1
