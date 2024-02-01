@@ -623,7 +623,7 @@ search_process_func()
         if func_exists "${process_function}"; then
             echo "${process_function}"
         else
-            echo ${FUNCT_NOT_FOUND}
+            echo "${FUNCT_NOT_FOUND}"
         fi
     fi
 }
