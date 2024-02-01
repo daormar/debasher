@@ -528,18 +528,11 @@ print_program_opts()
 }
 
 ########
-define_fifo()
+define_fifo_task_idx()
 {
-    # TO-BE-DONE: Define behaviour for option generators (currently,
-    # this function does not work for them)
-
     local fifoname=$1
-
-    # Get process name
-    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
-
-    # Get task index
-    local task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
+    local processname=$2
+    local task_idx=$3
 
     # Get augmented fifo name
     local augm_fifoname="${processname}/${fifoname}"
@@ -555,8 +548,49 @@ define_fifo_opt()
     local fifoname=$2
     local varname=$3
 
+    # Check that the call is valid
+    local proc_generate=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    if [ -n "${proc_generate}" ]; then
+        echo "define_fifo_opt: Error, this function cannot be called from an option generator" >&2
+        exit 1
+    fi
+
+    # Get process name
+    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+
+    # Get task index
+    local task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
+
     # Define FIFO
-    define_fifo "${fifoname}"
+    define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
+
+    # Get absolute name of FIFO
+    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
+
+    # Define option for FIFO
+    define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
+}
+
+########
+define_fifo_opt_generator()
+{
+    local opt=$1
+    local fifoname=$2
+    local task_idx=$3
+    local varname=$4
+
+    # Check that the call is valid
+    local proc_define=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    if [ -n "${proc_define}" ]; then
+        echo "define_fifo_opt_generator: Error, this function should only be called from an option generator" >&2
+        exit 1
+    fi
+
+    # Get process name
+    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+
+    # Define FIFO
+    define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
 
     # Get absolute name of FIFO
     local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
@@ -568,14 +602,19 @@ define_fifo_opt()
 ########
 define_shared_dir()
 {
-    # TO-BE-DONE: Define behaviour for option generators (currently,
-    # this function does not work for them)
-
     local shared_dir=$1
 
     # Check whether the shared directory is being defined by a module or
     # by a process
+
+    # Try to get process name from define_opts or generate_opts method
     local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    if [ -z "${processname}" ]; then
+        processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    fi
+
+    # If processname variable is void, then the shared directory was
+    # defined at module-level
     if [ -z "${processname}" ]; then
         PROGRAM_SHDIRS["${shared_dir}"]=${SHDIR_MODULE_OWNER}
     else
@@ -814,14 +853,14 @@ get_value_descriptor_name()
 ########
 define_value_desc_opt()
 {
-    # TO-BE-DONE: Define behaviour for option generators (currently,
-    # this function does not work for them)
-
     local opt=$1
     local varname=$2
 
     # Obtain caller process name
-    local caller_proc_name=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local caller_proc_name=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    if [ -z "${caller_proc_name}" ]; then
+        caller_proc_name=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    fi
 
     # Get name of value descriptor
     local val_desc=$(get_value_descriptor_name "${caller_proc_name}" "${opt}")
