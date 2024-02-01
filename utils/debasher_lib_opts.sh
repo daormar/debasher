@@ -546,6 +546,23 @@ define_fifo()
 }
 
 ########
+define_fifo_opt()
+{
+    local opt=$1
+    local fifoname=$2
+    local varname=$3
+
+    # Define FIFO
+    define_fifo "${fifoname}"
+
+    # Get absolute name of FIFO
+    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
+
+    # Define option for FIFO
+    define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
+}
+
+########
 define_shared_dir()
 {
     local shared_dir=$1
