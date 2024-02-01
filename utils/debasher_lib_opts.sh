@@ -530,12 +530,14 @@ print_program_opts()
 ########
 define_fifo()
 {
+    # TO-BE-DONE: Define behaviour for option generators (currently,
+    # this function does not work for them)
+
     local fifoname=$1
 
     # Get process name
     local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
 
-    # TO-BE-DONE: Define behaviour for option generators
     # Get task index
     local task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
 
