@@ -561,6 +561,24 @@ get_processname_from_caller()
 }
 
 ########
+get_processname_from_caller_upvar()
+{
+    local caller_method_name=$1
+    local result=$2
+
+    for element in "${FUNCNAME[@]}"; do
+        if [[ "$element" == *"${caller_method_name}" ]]; then
+            local processname=${element%"${caller_method_name}"}
+            upvar "${result}" "${processname}"
+            return 0
+        fi
+    done
+
+    upvar "${result}" ""
+    return 1
+}
+
+########
 get_suffix_from_processname()
 {
     local processname=$1
