@@ -848,13 +848,11 @@ define_opt()
     fi
 
     if [ -z "${!varname}" ]; then
-        local var=${varname}
         local value="${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
+        IFS= read -r "$varname" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
     else
-        local var=${varname}
         local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
+        IFS= read -r "$varname" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
     fi
 }
 
@@ -1235,18 +1233,18 @@ save_opt_list()
     # Initialize variables
     local optlist_varname=$1
     local opts=${!optlist_varname}
-    local processname
+    local processname_nr
 
     # Try to extract process name from generate_opts function
-    get_processname_from_caller_upvar "${PROCESS_METHOD_NAME_GENERATE_OPTS}" processname
-    if [ -n "${processname}" ]; then
+    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_GENERATE_OPTS}" processname_nr
+    if [ -n "${processname_nr}" ]; then
         save_opt_list_generator "${opts}"
         return 0
     fi
 
     # Try to extract process name from define_opts_function
-    get_processname_from_caller_upvar "${PROCESS_METHOD_NAME_DEFINE_OPTS}" processname
-    if [ -n "${processname}" ]; then
+    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_DEFINE_OPTS}" processname_nr
+    if [ -n "${processname_nr}" ]; then
         save_opt_list_loop "${processname}" "${opts}"
         return 0
     fi

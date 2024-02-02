@@ -33,26 +33,6 @@ version_to_number()
 }
 
 ########
-# Assign variable one scope above the caller
-# Usage: local "$1" && upvar $1 "value(s)"
-# Param: $1  Variable name to assign value to
-# Param: $*  Value(s) to assign.  If multiple values, an array is
-#            assigned, otherwise a single value is assigned.
-# NOTE: For assigning multiple variables, use 'upvars'.  Do NOT
-#       use multiple 'upvar' calls, since one 'upvar' call might
-#       reassign a variable to be used by another 'upvar' call.
-# See: http://fvue.nl/wiki/Bash:_Passing_variables_by_reference
-upvar() {
-    if unset -v "$1"; then           # Unset & validate varname
-        if (( $# == 2 )); then
-            eval $1=\"\$2\"          # Return single value
-        else
-            eval $1=\(\"\${@:2}\"\)  # Return array
-        fi
-    fi
-}
-
-########
 pipe_fail()
 {
     # test if there is at least one command to exit with a non-zero status
@@ -561,20 +541,19 @@ get_processname_from_caller()
 }
 
 ########
-get_processname_from_caller_upvar()
+get_processname_from_caller_nameref()
 {
     local caller_method_name=$1
-    local result=$2
+    local -n var_ref=$2
 
     for element in "${FUNCNAME[@]}"; do
         if [[ "$element" == *"${caller_method_name}" ]]; then
-            local processname=${element%"${caller_method_name}"}
-            upvar "${result}" "${processname}"
+            var_ref=${element%"${caller_method_name}"}
             return 0
         fi
     done
 
-    upvar "${result}" ""
+    var_ref=""
     return 1
 }
 
@@ -647,24 +626,24 @@ search_process_func()
 }
 
 ########
-search_process_func_upvar()
+search_process_func_nameref()
 {
     local processname=$1
     local method_name=$2
-    local result=$3
+    local -n var_ref=$3
 
     # Check if function exists
     local process_function=`get_process_funcname "${processname}" "${method_name}"`
     if func_exists "${process_function}"; then
-        upvar "${result}" "${process_function}"
+        var_ref="${process_function}"
     else
         # Check if function without process suffix exists
         local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
         process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${method_name}"`
         if func_exists "${process_function}"; then
-            upvar "${result}" "${process_function}"
+            var_ref="${process_function}"
         else
-            upvar "${result}" "${FUNCT_NOT_FOUND}"
+            var_ref="${FUNCT_NOT_FOUND}"
         fi
     fi
 }

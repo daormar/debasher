@@ -220,11 +220,11 @@ get_generate_opts_funcname()
 get_generate_opts_size_funcname()
 {
     local processname=$1
-    local result=$2
+    local -n var_ref=$2
 
-    local funcname
-    search_process_func_upvar "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "funcname"
-    upvar "${result}" "${funcname}"
+    local funcname_nr
+    search_process_func_nameref "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "funcname_nr"
+    var_ref="${funcname_nr}"
 }
 
 ########
