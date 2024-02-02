@@ -222,9 +222,9 @@ get_generate_opts_size_funcname()
     local processname=$1
     local -n var_ref=$2
 
-    local funcname_nr
-    search_process_func_nameref "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "funcname_nr"
-    var_ref="${funcname_nr}"
+    local get_generate_opts_size_funcname_nr
+    search_process_func_nameref "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "get_generate_opts_size_funcname_nr"
+    var_ref="${get_generate_opts_size_funcname_nr}"
 }
 
 ########
@@ -267,10 +267,10 @@ process_is_defined()
 ########
 uses_option_generator()
 {
-    local funcname
-    get_generate_opts_size_funcname "${processname}" funcname
+    local uses_option_generator_nr
+    get_generate_opts_size_funcname "${processname}" uses_option_generator_nr
 
-    if func_exists "${funcname}"; then
+    if func_exists "${uses_option_generator_nr}"; then
         return 0
     else
         return 1
@@ -434,11 +434,10 @@ define_opts_for_process()
             # necessary to update output options information
 
             # Obtain define_opts_array function name and call it
-            #local generate_opts_size_funcname=`get_generate_opts_size_funcname ${processname}`
-            local generate_opts_size_funcname
-            get_generate_opts_size_funcname "${processname}" generate_opts_size_funcname
+            local define_opts_generator_gen_opts_size_fname
+            get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
             local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
-            local array_size=`${generate_opts_size_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
+            local array_size=`${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
 
             # Iterate over array tasks
             local task_idx
@@ -457,10 +456,9 @@ define_opts_for_process()
             # only necessary to update option list length
 
             # Obtain define_opts_array function name and call it
-#            local generate_opts_size_funcname=`get_generate_opts_size_funcname ${processname}`
-            local generate_opts_size_funcname
-            get_generate_opts_size_funcname "${processname}" local generate_opts_size_funcname
-            local array_size=`${generate_opts_size_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
+            local define_opts_generator_gen_opts_size_fname
+            get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
+            local array_size=`${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
 
             # Set option list length
             PROCESS_OPT_LIST_LEN[$processname]=${array_size}
