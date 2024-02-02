@@ -922,27 +922,13 @@ define_infile_opt()
     local value=$2
     local varname=$3
 
-    # Check parameters
-    if [ "${opt}" = "" -o "${value}" = "" -o "${varname}" = "" ]; then
-        errmsg "define_infile_opt: wrong input parameters"
-        return 1
-    fi
-
     # Check if file exists
     file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
     value=`get_absolute_path "${value}"`
 
-    if [ -z "${!varname}" ]; then
-        local var=${varname}
-        local value="${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_infile_opt: execution error" ; return 1; }
-    else
-        local var=${varname}
-        local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_infile_opt: execution error" ; return 1; }
-    fi
+    define_opt "${opt}" "${value}" "${varname}"
 }
 
 ########
@@ -952,27 +938,13 @@ define_indir_opt()
     local value=$2
     local varname=$3
 
-    # Check parameters
-    if [ "${opt}" = "" -o "${value}" = "" -o "${varname}" = "" ]; then
-        errmsg "define_indir_opt: wrong input parameters"
-        return 1
-    fi
-
     # Check if file exists
     dir_exists "$value" || { errmsg "directory $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
     value=`get_absolute_path "${value}"`
 
-    if [ -z "${!varname}" ]; then
-        local var=${varname}
-        local value="${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_indir_opt: execution error" ; return 1; }
-    else
-        local var=${varname}
-        local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_indir_opt: execution error" ; return 1; }
-    fi
+    define_opt "${opt}" "${value}" "${varname}"
 }
 
 ########
