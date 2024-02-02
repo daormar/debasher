@@ -750,7 +750,7 @@ define_cmdline_infile_nonmand_opt()
     fi
 
     # Add option
-    define_opt $opt "$value" $varname
+    define_opt $opt "$value" "$varname"
 }
 
 ########
@@ -796,25 +796,58 @@ define_opt_from_proc_task_out()
 }
 
 ########
+optname_is_correct()
+{
+    local funcname=$1
+    local opt=$2
+
+    if [ "${opt}" = "" ]; then
+        errmsg "$funcname: option name could not be the empty string"
+        return 1
+    else
+        if [[ ! "${opt}" =~ ^(-|--) ]]; then
+            errmsg "$funcname: option name should start with '-' or '--'"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+########
+optlist_varname_is_correct()
+{
+    local funcname=$1
+    local varname=$2
+
+    if [ -z "${varname}" ]; then
+        errmsg "$funcname: name of option list variable should not be empty"
+        return 1
+    else
+        if [[ "${varname}" == *"${OPTLIST_VARNAME_SUFFIX}" ]]; then
+            return 0
+        else
+            errmsg "$funcname: name of option list variable should end with the suffix ${OPTLIST_VARNAME_SUFFIX}"
+            return 1
+        fi
+    fi
+}
+
+########
 define_opt_wo_value()
 {
     local opt=$1
     local varname=$2
+    local -n var_ref=$3
 
     # Check parameters
-    if [ "${opt}" = "" -o "${varname}" = "" ]; then
-        errmsg "define_opt_wo_value: wrong input parameters"
-        return 1
-    fi
+    optname_is_correct "${FUNCNAME}" "$opt" || return 1
+    optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
 
-    if [ -z "${!varname}" ]; then
-        local var=${varname}
-        local value="${opt}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
+    if [ -z "${var_ref}" ]; then
+        var_ref="${opt}"
     else
-        local var=${varname}
-        local value="${!varname}${ARG_SEP}${opt}"
-        IFS= read -r "$var" <<<"$value" || { errmsg "define_opt_wo_value: execution error" ; return 1; }
+        var_ref="${var_ref}${ARG_SEP}${opt}"
     fi
 }
 
@@ -835,24 +868,16 @@ define_opt()
     local opt=$1
     local value=$2
     local varname=$3
+    local -n var_ref=$3
 
     # Check parameters
-    if [ "${opt}" = "" -o "${varname}" = "" ]; then
-        errmsg "define_opt: wrong input parameters"
-        return 1
-    else
-        if [[ ! "${opt}" =~ ^(-|--) ]]; then
-            errmsg "define_opt: option name should start with '-' or '--'"
-            return 1
-        fi
-    fi
+    optname_is_correct "${FUNCNAME}" "$opt" || return 1
+    optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
 
-    if [ -z "${!varname}" ]; then
-        local value="${opt}${ARG_SEP}${value}"
-        IFS= read -r "$varname" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
+    if [ -z "${var_ref}" ]; then
+        var_ref="${opt}${ARG_SEP}${value}"
     else
-        local value="${!varname}${ARG_SEP}${opt}${ARG_SEP}${value}"
-        IFS= read -r "$varname" <<<"$value" || { errmsg "define_opt: execution error" ; return 1; }
+        var_ref="${var_ref}${ARG_SEP}${opt}${ARG_SEP}${value}"
     fi
 }
 
@@ -1231,21 +1256,20 @@ save_opt_list()
     }
 
     # Initialize variables
-    local optlist_varname=$1
-    local opts=${!optlist_varname}
-    local processname_nr
+    local -n opts=$1
+    local save_opt_list_proc
 
     # Try to extract process name from generate_opts function
-    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_GENERATE_OPTS}" processname_nr
-    if [ -n "${processname_nr}" ]; then
+    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_GENERATE_OPTS}" save_opt_list_proc
+    if [ -n "${save_opt_list_proc}" ]; then
         save_opt_list_generator "${opts}"
         return 0
     fi
 
     # Try to extract process name from define_opts_function
-    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_DEFINE_OPTS}" processname_nr
-    if [ -n "${processname_nr}" ]; then
-        save_opt_list_loop "${processname}" "${opts}"
+    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_DEFINE_OPTS}" save_opt_list_proc
+    if [ -n "${save_opt_list_proc}" ]; then
+        save_opt_list_loop "${save_opt_list_proc}" "${opts}"
         return 0
     fi
 
@@ -1311,7 +1335,7 @@ load_curr_opt_list_loop()
         # Initialize variables
         local opt_list_name="opt_list_${processname}_${task_idx}"
         declare -nl opt_list=${opt_list_name}
-        local opts=""
+        local _load_curr_opt_list_loop_optlist=""
 
         # Process options for task
         local opt
@@ -1325,12 +1349,12 @@ load_curr_opt_list_loop()
 
             # Define option
             if [ -z "${value}" ]; then
-                define_opt_wo_value "${opt}" "opts"
+                define_opt_wo_value "${opt}" "_load_curr_opt_list_loop_optlist"
             else
-                define_opt "${opt}" "${value}" "opts"
+                define_opt "${opt}" "${value}" "_load_curr_opt_list_loop_optlist"
             fi
         done
-        CURRENT_PROCESS_OPT_LIST+=("${opts}")
+        CURRENT_PROCESS_OPT_LIST+=("${_load_curr_opt_list_loop_optlist}")
     done
 }
 
