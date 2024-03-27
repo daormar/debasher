@@ -1074,9 +1074,6 @@ launch_process()
         local opt_array_size=`get_numtasks_for_process "${processname}"`
         create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
-        # Archive script
-        archive_script "${dirname}" "${processname}"
-
         # Launch process
         local task_array_list=`get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
         local processdeps_spec=`extract_processdeps_from_process_spec "${process_spec}"`
