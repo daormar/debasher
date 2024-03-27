@@ -19,36 +19,6 @@
 ############################################
 
 ########
-get_process_stdout_filename()
-{
-    local dirname=$1
-    local processname=$2
-    local opt_array_size=$3
-    local task_idx=$4
-
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
-
-    if [ "${opt_array_size}" -eq 1 ]; then
-        echo "${scriptsdir}/${processname}.${STDOUT_FEXT}"
-    else
-        echo "${scriptsdir}/${processname}_${task_idx}.${STDOUT_FEXT}"
-    fi
-}
-
-########
-get_script_filename()
-{
-    local dirname=$1
-    local processname=$2
-
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
-
-    echo "${scriptsdir}/${processname}"
-}
-
-########
 get_processid_filename()
 {
     local dirname=$1

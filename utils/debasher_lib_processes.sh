@@ -520,6 +520,18 @@ find_dependency_for_process()
 }
 
 ########
+get_prg_scripts_dir_for_process()
+{
+    local dirname=$1
+    local processname=$2
+
+    # Get base scripts dir
+    scriptsdir=`get_prg_scripts_dir_given_basedir "${dirname}"`
+
+    echo "${scriptsdir}/${processname}"
+}
+
+########
 create_scripts_dir_for_process()
 {
     local dirname=$1
@@ -532,15 +544,33 @@ create_scripts_dir_for_process()
 }
 
 ########
-get_prg_scripts_dir_for_process()
+get_script_filename()
 {
     local dirname=$1
     local processname=$2
 
-    # Get base scripts dir
-    scriptsdir=`get_prg_scripts_dir_given_basedir "${dirname}"`
+    # Get scripts dir
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
 
     echo "${scriptsdir}/${processname}"
+}
+
+########
+get_process_stdout_filename()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    # Get scripts dir
+    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+
+    if [ "${opt_array_size}" -eq 1 ]; then
+        echo "${scriptsdir}/${processname}.${STDOUT_FEXT}"
+    else
+        echo "${scriptsdir}/${processname}_${task_idx}.${STDOUT_FEXT}"
+    fi
 }
 
 ########
