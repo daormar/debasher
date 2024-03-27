@@ -124,18 +124,6 @@ create_script()
 }
 
 ########
-archive_script()
-{
-    local dirname=$1
-    local processname=$2
-    local script_filename=`get_script_filename "${dirname}" ${processname}`
-
-    # Archive script with date info
-    local curr_date=`date '+%Y_%m_%d'`
-    "${CP}" "${script_filename}" "${script_filename}.${curr_date}"
-}
-
-########
 get_scheduler_throttle()
 {
     local process_spec_throttle=$1
