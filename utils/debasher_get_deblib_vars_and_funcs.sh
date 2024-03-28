@@ -24,6 +24,27 @@ extract_funcs()
     declare -F | "${AWK}" '{print $3}'
 }
 
+unset_previous_vars_and_funcs()
+{
+    # Unset variables
+    while IFS= read -r varname; do
+        if [ "${varname}" != "debasher_libexecdir" ] && [ "${varname}" != "debasher_bindir" ] && [ "${varname}" != "funcs_to_unset" ]; then
+            unset "${varname}"
+        fi
+    done < <(compgen -v)
+
+    # Unset functions
+    while IFS= read -r varfunc; do
+        if [ "${varfunc}" != "unset_vars_and_funcs" ]; then
+            unset "${varfunc}"
+        fi
+    done < <(compgen -A function)
+
+    for conda_func in __conda_activate __conda_exe __conda_hashr __conda_reactivate conda; do
+        unset "${conda_func}"
+    done
+}
+
 unset_vars_and_funcs()
 {
     local funcs_to_unset=$1
@@ -40,11 +61,16 @@ fi
 # Extract functions to be unset
 funcs_to_unset=`extract_funcs "${debasher_libexecdir}/debasher_lib_sched"`
 
+# Unset previously defined variables and functions
+unset_previous_vars_and_funcs
+
+echo "${debasher_bindir}"
 # Load variables and functions
 source "${debasher_bindir}/debasher_lib"
 
 # Unset unnecessary variables and functions
 unset_vars_and_funcs "${funcs_to_unset}"
+unset "funcs_to_unset"
 
 # Print variables and functions
 set
