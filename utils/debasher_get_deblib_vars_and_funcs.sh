@@ -16,9 +16,35 @@
 
 # *- bash -*
 
+extract_funcs()
+{
+    local shfile=$1
+
+    source "${shfile}"
+    declare -F | "${AWK}" '{print $3}'
+}
+
+unset_vars_and_funcs()
+{
+    local funcs_to_unset=$1
+    while read -r funcname; do
+        unset "${funcname}"
+    done <<< "${funcs_to_unset}"
+}
+
 if [ "$#" -gt 0 ]; then
     echo "Usage: debasher_get_deblib_vars_and_funcs"
     exit 1
 fi
 
-"${debasher_libexecdir}"/debasher_get_vars_and_funcs "${debasher_bindir}/debasher_lib"
+# Extract functions to be unset
+funcs_to_unset=`extract_funcs "${debasher_libexecdir}/debasher_lib_sched"`
+
+# Load variables and functions
+source "${debasher_bindir}/debasher_lib"
+
+# Unset unnecessary variables and functions
+unset_vars_and_funcs "${funcs_to_unset}"
+
+# Print variables and functions
+set
