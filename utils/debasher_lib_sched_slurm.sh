@@ -173,7 +173,6 @@ write_env_vars_and_funcs_slurm()
     # Write slurm scheduler environment functions
     declare -f write_env_vars_and_funcs_slurm
     declare -f seq_execute_slurm
-    declare -f create_seq_execute_script
     declare -f get_script_log_filenames_slurm
 }
 
