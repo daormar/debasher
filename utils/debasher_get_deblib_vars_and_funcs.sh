@@ -16,12 +16,23 @@
 
 # *- bash -*
 
-extract_funcs()
+extract_sched_funcs()
 {
-    local shfile=$1
+    # Define functions to be kept
+    declare -A assoc_array
+    assoc_array["get_scheduler"]=1
+    assoc_array["seq_execute"]=1
+    assoc_array["write_env_vars_and_funcs"]=1
 
-    source "${shfile}"
-    declare -F | "${AWK}" '{print $3}'
+    # Load scheduler functions
+    source "${debasher_libexecdir}/debasher_lib_sched"
+
+    # Extract functions
+    while IFS= read -r varfunc; do
+        if [[ ! -v assoc_array["$varfunc"] ]]; then
+            echo "${varfunc}"
+        fi
+    done < <(compgen -A function)
 }
 
 unset_previous_vars_and_funcs()
@@ -60,7 +71,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 # Extract functions to be unset
-funcs_to_unset=`extract_funcs "${debasher_libexecdir}/debasher_lib_sched"`
+funcs_to_unset=`extract_sched_funcs`
 
 # Unset previously defined variables and functions
 unset_previous_vars_and_funcs
