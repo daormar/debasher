@@ -325,13 +325,6 @@ write_env_vars_and_funcs()
         declare -p PROGRAM_OUTDIR
         declare -p MEMOIZED_OPTS
         declare -p OUT_VALUE_TO_PROCESSES
-
-        # Write functions related to process scheduling
-        declare -f get_scheduler
-        declare -f seq_execute
-        declare -f write_env_vars_and_funcs
-        declare -f write_debasher_env_vars_and_funcs
-        declare -f write_mod_env_vars_and_funcs
     }
 
     write_mod_env_vars_and_funcs()
