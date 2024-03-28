@@ -40,6 +40,7 @@ unset_previous_vars_and_funcs()
         fi
     done < <(compgen -A function)
 
+    # Unset conda-related functions
     for conda_func in __conda_activate __conda_exe __conda_hashr __conda_reactivate conda; do
         unset "${conda_func}"
     done
