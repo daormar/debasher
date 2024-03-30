@@ -83,14 +83,8 @@ host1_generate_opts()
 ########
 host1()
 {
-    # Initialize variables
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
     # Show host name
     hostname
-
-    # Create file
-    echo -n "" > "${outf}"
 }
 
 #################################
