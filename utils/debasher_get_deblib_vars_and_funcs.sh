@@ -19,17 +19,17 @@
 extract_sched_funcs()
 {
     # Define functions to be kept
-    declare -A assoc_array
-    assoc_array["get_scheduler"]=1
-    assoc_array["seq_execute"]=1
-    assoc_array["write_env_vars_and_funcs"]=1
+    declare -A funcs_to_keep
+    funcs_to_keep["get_scheduler"]=1
+    funcs_to_keep["seq_execute"]=1
+    funcs_to_keep["write_env_vars_and_funcs"]=1
 
     # Load scheduler functions
     source "${debasher_libexecdir}/debasher_lib_sched"
 
     # Extract functions
     while IFS= read -r varfunc; do
-        if [[ ! -v assoc_array["$varfunc"] ]]; then
+        if [[ ! -v funcs_to_keep["$varfunc"] ]]; then
             echo "${varfunc}"
         fi
     done < <(compgen -A function)
