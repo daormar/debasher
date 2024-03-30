@@ -76,7 +76,6 @@ funcs_to_unset=`extract_sched_funcs`
 # Unset previously defined variables and functions
 unset_previous_vars_and_funcs
 
-echo "${debasher_bindir}"
 # Load variables and functions
 source "${debasher_bindir}/debasher_lib"
 
