@@ -44,7 +44,7 @@ hello_world_document()
 hello_world_explain_cmdline_opts()
 {
     # -s option
-    local description="String to be displayed ('Hello World!' by default")
+    local description="String to be displayed ('Hello World!' by default)"
     explain_cmdline_opt "-s" "<string>" "$description"
 }
 
