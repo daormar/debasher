@@ -43,9 +43,9 @@ hello_world_document()
 ########
 hello_world_explain_cmdline_opts()
 {
-    # -n option
-    local description="Name to be included in hello message"
-    explain_cmdline_opt "-n" "<string>" "$description"
+    # -s option
+    local description="String to be displayed ('Hello World!' by default")
+    explain_cmdline_opt "-s" "<string>" "$description"
 }
 
 ########
@@ -58,14 +58,14 @@ hello_world_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Obtain value of -n option
-    local name=`get_cmdline_opt "${cmdline}" "-n"`
+    # Obtain value of -s option
+    local str=`get_cmdline_opt "${cmdline}" "-s"`
 
-    # -n option
-    if [ "${name}" = "${OPT_NOT_FOUND}" ]; then
-        define_opt "-n" "World" optlist || return 1
+    # -s option
+    if [ "${str}" = "${OPT_NOT_FOUND}" ]; then
+        define_opt "-s" "Hello World!" optlist || return 1
     else
-        define_opt "-n" "$name" optlist || return 1
+        define_opt "-s" "$str" optlist || return 1
     fi
 
     # Save option list
@@ -76,10 +76,10 @@ hello_world_define_opts()
 hello_world()
 {
     # Initialize variables
-    local name=$(read_opt_value_from_func_args "-n" "$@")
+    local str=$(read_opt_value_from_func_args "-s" "$@")
 
     # Show message
-    echo "Hello ${name}!"
+    echo "${str}"
 }
 
 #################################
