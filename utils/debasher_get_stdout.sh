@@ -22,14 +22,14 @@
 ########
 print_desc()
 {
-    echo "debasher_stats gets statistics about program processes"
-    echo "type \"debasher_stats --help\" to get usage information"
+    echo "debasher_get_stdout gets stdout for a given process"
+    echo "type \"debasher_get_stdout --help\" to get usage information"
 }
 
 ########
 usage()
 {
-    echo "debasher_get_out          -d <string> [-p <string>] [-t <int>]"
+    echo "debasher_get_stdout       -d <string> [-p <string>] [-t <int>]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"

@@ -1,6 +1,6 @@
-bin_SCRIPTS= debasher_lib debasher_exec debasher_exec_batch	\
-debasher_get_out debasher_stop debasher_status debasher_stats	\
-debasher_exec_process debasher_doc_mod debasher_proc_dataset	\
+bin_SCRIPTS= debasher_lib debasher_exec debasher_exec_batch		\
+debasher_get_stdout debasher_stop debasher_status debasher_stats	\
+debasher_exec_process debasher_doc_mod debasher_proc_dataset		\
 debasher_reformat_status
 
 libexec_SCRIPTS= debasher_builtin_sched_lib debasher_lib_utils		\
@@ -22,7 +22,7 @@ debasher_lib_sched_slurm.sh debasher_lib_sched_builtin			\
 debasher_lib_processes.sh debasher_lib_programs.sh			\
 debasher_lib_modules.sh debasher_lib_opts.sh debasher_lib_conda.sh	\
 debasher_lib_docker.sh debasher_builtin_sched_lib.sh debasher_exec.sh	\
-debasher_exec_batch.sh debasher_get_out.sh				\
+debasher_exec_batch.sh debasher_get_stdout.sh				\
 debasher_get_vars_and_funcs.sh debasher_get_deblib_vars_and_funcs.sh	\
 debasher_check.py debasher_stop.sh debasher_status.sh debasher_stats.sh	\
 debasher_exec_process.sh debasher_doc_mod.sh debasher_proc_dataset.sh	\
