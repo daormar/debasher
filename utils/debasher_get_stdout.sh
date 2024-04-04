@@ -33,7 +33,7 @@ usage()
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
-    echo "-p <string>               Process name whose statistics should be obtained"
+    echo "-p <string>               Process name whose stdout should be displayed"
     echo "-t <int>                  Index of task array for process"
     echo "--help                    Display this help and exit"
 }
