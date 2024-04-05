@@ -59,7 +59,7 @@ hello_world_define_opts()
     local optlist=""
 
     # Obtain value of -s option
-    local str=`get_cmdline_opt "${cmdline}" "-s"`
+    local str=$(get_cmdline_opt "${cmdline}" "-s")
 
     # -s option
     if [ "${str}" = "${OPT_NOT_FOUND}" ]; then
