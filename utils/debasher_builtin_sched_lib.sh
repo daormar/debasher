@@ -1185,11 +1185,6 @@ builtin_sched_execute_process()
         builtin_sched_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
     fi
 
-    # Archive script
-    if [ "${launched_tasks}" = "" ]; then
-        archive_script "${dirname}" "${processname}"
-    fi
-
     # Launch script
     local task_array_list=${task_idx}
     builtin_sched_launch "${dirname}" "${processname}" "${task_idx}" || { echo "Error while launching process!" >&2 ; return 1; }
