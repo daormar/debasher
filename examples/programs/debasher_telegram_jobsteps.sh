@@ -50,14 +50,8 @@ decomposer_define_opts()
     # -f option
     define_cmdline_opt "$cmdline" "-f" optlist || return 1
 
-    # Define shared directory
-    define_shared_dir "data"
-
-    # Get absolute name of shared directory
-    local abs_shrdir=$(get_absolute_shdirname "data")
-
     # Define name of output file
-    local outf="${abs_shrdir}/words.txt"
+    local outf="${process_outdir}/words.txt"
     define_opt "-outf" "${outf}" optlist || return 1
 
     # Save option list
