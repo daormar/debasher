@@ -58,7 +58,7 @@ process_a_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # -f option
+    # -n option
     define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
     # Define option for output FIFO
