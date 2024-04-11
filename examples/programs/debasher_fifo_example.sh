@@ -126,7 +126,7 @@ fifo_reader()
     # Initialize variables
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
-    # Read strings from FIFO
+    # Read string from FIFO
     cat < "${inf}"
 }
 
