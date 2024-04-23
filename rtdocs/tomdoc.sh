@@ -113,7 +113,7 @@ generate_markdown() {
             last_was_option=true
 
             # shellcheck disable=SC2030
-        
+
             did_newline=false
         else
             case "$line" in
