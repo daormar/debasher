@@ -1,3 +1,5 @@
+.. _cmdline-opts:
+
 Program Command Line Options
 ============================
 

@@ -110,4 +110,110 @@ containers, favoring reproducibility of results.
 Quickstart Example
 ------------------
 
-TBD
+In order to provide a quick DeBasher usage example, we are going to see
+how the popular "Hello World!" program can be implemented. If we call
+our program ``debasher_hello_world``, we should create a file with the
+same name and Bash extension, ``debasher_hello_world.sh``, with the
+following content:
+
+..
+  NOTE: indent code block in emacs adding n spaces: C-u n C-x TAB
+
+.. code-block:: bash
+
+    hello_world_explain_cmdline_opts()
+    {
+        # -s option
+        local description="String to be displayed ('Hello World!' by default)"
+        explain_cmdline_opt "-s" "<string>" "$description"
+    }
+
+    hello_world_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local optlist=""
+
+        # Obtain value of -s option
+        local str=$(get_cmdline_opt "${cmdline}" "-s")
+
+        # -s option
+        if [ "${str}" = "${OPT_NOT_FOUND}" ]; then
+            define_opt "-s" "Hello World!" optlist || return 1
+        else
+            define_opt "-s" "$str" optlist || return 1
+        fi
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+    hello_world()
+    {
+        # Initialize variables
+        local str=$(read_opt_value_from_func_args "-s" "$@")
+
+        # Show message
+        echo "${str}"
+    }
+
+    debasher_hello_world_program()
+    {
+        add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
+    }
+
+DeBasher works with two main entities: processes and programs. A program
+is composed of a set of processes. Processes and programs are identified
+by a particular name, and their specific behavior is defined by means of
+a set of functions. DeBasher adopts an object-oriented programming (OOP)
+approach, where each function implements a specific method. Function
+names have two parts, first, the name of the program or function, and
+second, a suffix identifying the method. For instance, the function
+``hello_world_define_opts`` implement the method ``define_opts`` for the
+``hello_world`` process.
+
+In the "Hello World!" example shown above, we have a program called
+``debasher_hello_world``, which executes the process ``hello_world``.
+Below we describe the functions involved:
+
+* ``hello_world_explain_cmdline_opts``: this function implements the
+  ``explain_cmdline_opts`` method for ``hello_world``. Such method
+  defines the command line options that can be provided to the
+  process. In particular, ``hello_world`` may receive the ``-s`` option,
+  which allows to specify the string to be shown. To document the
+  option, the ``explain_cmdline_opt`` API function is used.
+
+* ``hello_world_explain_define_opts``: the ``define_opts`` method allows
+  to define the options that will be provided to the ``hello_world``
+  process, which will be implemented by the function of the same name
+  (see next item below). Those options are not necessarily the same as
+  the command-line options. Indeed, the function receives as input the
+  command-line options, and will use the ``optlist`` variable to store
+  the process options. In summary, the
+  ``hello_world_explain_define_opts`` will retrieve the value of the
+  ``-s`` command-line option (using the ``get_cmdline_opt`` API
+  function) and store it into the ``str`` variable.  If ``-s`` was not
+  provided, it will pass the option ``-s "Hello World!"`` to the
+  ``hello_world`` function. Otherwise, it will pass the option ``-s
+  "$str"``. The code uses the ``define_opt`` API function to register
+  options and the ``save_opt_list`` function to save the set of options
+  when all of them are defined.
+
+* ``hello_world``: this function implements the process itself (in this
+  case the function name does not incorporate any
+  suffix). ``hello_world`` reads its options using the
+  ``read_opt_value_from_func_args`` API function. Here, only the ``-s``
+  option should be read and stored into the ``str`` variable. Finally,
+  the content of the ``str`` variable is printed to the standard output.
+
+* ``debasher_hello_world_program``: the ``program`` method allows to
+  define the processes involved in the execution of the
+  ``debasher_hello_world`` program. In this case, only one process is
+  involved, ``hello_world``, which is added to the program by means of
+  the ``add_debasher_process`` function.
+
+To know the details of the DeBasher functions mentioned above, please
+refer to the :ref:`API` Section.
+
+In order to execute the program, DeBasher incorporates the
+``debasher_exec`` tool.

@@ -1,3 +1,5 @@
+.. _proc-opts:
+
 Process Options
 ===============
 
