@@ -8,6 +8,8 @@ Program Execution
 
 TBD
 
+.. _outdstruct:
+
 Structure of the Output Directory
 ---------------------------------
 
