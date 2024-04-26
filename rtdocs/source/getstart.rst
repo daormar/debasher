@@ -216,4 +216,28 @@ To know the details of the DeBasher functions mentioned above, please
 refer to the :ref:`API` Section.
 
 In order to execute the program, DeBasher incorporates the
-``debasher_exec`` tool.
+``debasher_exec`` tool. Provided that the ``debasher_hello_world.sh``
+script is in the current directory and that ``debasher_exec`` is
+included in the ``PATH`` variable, we can execute the following:
+
+::
+
+    $ debasher_exec --pfile debasher_hello_world.sh --outdir out
+
+The previous command executes the ``debasher_hello_world.sh`` using
+``out`` as the output directory (see the :ref:`outdstruct` Section for
+more details). Since the output of the program is just a string printed
+to the standard output by the ``hello_world`` process, we can now use
+the ``debasher_get_stdout`` command to visualize such a string. For this
+purpose, we should provide the name of the output directory and the name
+of the process whose standard output we want to visualize:
+
+::
+
+    $ debasher_get_stdout -d out -p hello_world
+
+The output of the previous command is:
+
+::
+
+    Hello World!
