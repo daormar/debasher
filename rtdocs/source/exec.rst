@@ -74,7 +74,8 @@ are useful for that purpose:
 * ``--debug``: this option carries out all the necessary steps to
   execute a DeBasher program, with the exception of the execution
   itself. This includes the option checking process that can be done
-  using the ``--check-proc-opts`` option.
+  using the ``--check-proc-opts`` option, but also the current status of
+  the different processes involved in the program.
 
 Executing Programs Using the Built-In Scheduler
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -130,7 +131,7 @@ Structure of the Output Directory
 
 TBD
 
-Program Status Visualization
+Process Status Visualization
 ----------------------------
 
 TBD
