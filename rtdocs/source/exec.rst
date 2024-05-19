@@ -3,10 +3,125 @@
 Executing DeBasher Programs
 ===========================
 
+This section explains how DeBasher programs are executed. Additionally,
+other important aspects related to program execution are also described,
+such as the structure of the output directory or how to visualize the
+program execution status.
+
 Program Execution
 -----------------
 
-TBD
+DeBasher incorporates a specific tool to execute programs called
+``debasher_exec``. The command provides help about its available options
+if executed as follows:
+
+::
+
+    $ debasher_exec --help
+
+``debasher_exec`` only has two mandatory input options:
+
+* ``--pfile <string>``: allows to define the DeBasher file specifying
+  the program to be executed.
+
+* ``--outdir <string>``: specifies the name of the output directory.
+
+Visualizing Command Line Options for a Program
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The command line options for the DeBasher program defined by the
+``--pfile`` option should be provided to ``debasher_exec``. In order to
+visualize such command line options, we can use the
+``--show-cmdline-opts`` option. Assuming that we are working with the
+"Hello World!" program described in the :ref:`quickstart_example`
+Section, we can execute the following:
+
+::
+
+    $ debasher_exec --pfile debasher_hello_world.sh --outdir out --show-cmdline-opts
+
+The output of the previous command incorporates a section related to the
+program's input options. For the ``debasher_hello_world`` program,
+this section contains the following:
+
+::
+
+   # Command line options for the program...
+   CATEGORY: GENERAL
+   -s <string> String to be displayed ('Hello World!' by default) [hello_world]
+
+Command line options can be divided into different categories, being the
+"GENERAL" category the default one. In this case, the "GENERAL" category
+contains the ``-s`` option, that is used to provide the string to be
+displayed by the ``debasher_hello_world`` program. Additionally, the
+process receiving the ``-s`` option (``hello_world``) is specified
+within square brackets.
+
+Troubleshooting Process Options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When working with complex programs, composed of many processes and
+connections between them, it is useful to ensure that all the options
+are passed correctly. ``debasher_exec`` incorporates two options that
+are useful for that purpose:
+
+* ``--check-proc-opts``: when providing this option, ``debasher_exec``
+  only checks if all the options are available for the different
+  processes that compose a program. If there are options missing, an
+  error message is shown. Otherwise, the options are shown and the tool
+  finishes its execution.
+
+* ``--debug``: this option carries out all the necessary steps to
+  execute a DeBasher program, with the exception of the execution
+  itself. This includes the option checking process that can be done
+  using the ``--check-proc-opts`` option.
+
+Executing Programs Using the Built-In Scheduler
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``debasher_exec`` incorporates the ``--sched`` option to specify which
+scheduler is used to orchestrate program execution. DeBasher
+incorporates a built-in scheduler that can be activated for the "Hello
+Word!" program as follows:
+
+::
+
+    $ debasher_exec --pfile debasher_hello_world.sh --outdir out --sched BUILTIN
+
+When using the built-in scheduler, it is possible to specify the number
+of CPUs and the amount of RAM that is available. For this purpose, the
+following two options can be used:
+
+* ``--builtinsched-cpus <int>``: this option allows to specify the
+  number CPUs available for the built-in scheduler. A value of zero
+  means unlimited CPUs.
+
+* ``--builtinsched-mem <int>``: indicates the amount of RAM in MB that
+  can be used by the built-in scheduler. A value of zero means unlimited
+  memory.
+
+Executing Programs Using External Schedulers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+It is also possible to combine ``debasher_exec`` with external
+schedulers. Currently, DeBasher provides support for the well known
+`Slurm scheduler <https://slurm.schedmd.com/>`__.
+
+Slurm
+"""""
+
+To make Slurm work in combination with DeBasher, it is necessary to
+install and properly configure the scheduler in the machine where
+DeBasher will be executed. Once Slurm is installed, we can proceed with
+the installation of DeBasher, which will automatically detect Slurm's
+availability.
+
+If Slurm and DeBasher are correctly configured, then we can combine them
+by means of the following command:
+
+::
+
+    $ debasher_exec --pfile debasher_hello_world.sh --outdir out --sched SLURM
 
 .. _outdstruct:
 
