@@ -146,11 +146,6 @@ content will be:
     │   ├── file1
     │   ├── file2
     │   └── ...
-    ├── __graphs__
-    │   ├── dependency_graph.dot
-    │   ├── dependency_graph.pdf
-    │   ├── process_graph.pdf (optional)
-    │   └── process_graph.pdf (optional)
     ├── __exec__
     │   ├── a
     │   │   ├── a
@@ -164,6 +159,11 @@ content will be:
     │       ├── b.id             (depends on execution status)
     │       ├── b.[sched_id]_out (depends on execution status)
     │       └── b.stdout         (depends on execution status)
+    ├── __graphs__
+    │   ├── dependency_graph.dot
+    │   ├── dependency_graph.pdf
+    │   ├── process_graph.pdf (optional)
+    │   └── process_graph.pdf (optional)
     ├── command_line.sh
     ├── program.fifos
     ├── program.opts_exh
