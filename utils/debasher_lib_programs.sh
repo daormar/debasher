@@ -148,17 +148,17 @@ exec_program_func_for_module()
 }
 
 ########
-get_prg_scripts_dir_given_basedir()
+get_prg_exec_dir_given_basedir()
 {
     local dirname=$1
 
-    echo "${dirname}/${DEBASHER_SCRIPTS_DIRNAME}"
+    echo "${dirname}/${DEBASHER_EXEC_DIRNAME}"
 }
 
 ########
-get_prg_scripts_dir()
+get_prg_exec_dir()
 {
-    get_prg_scripts_dir_given_basedir "${PROGRAM_OUTDIR}"
+    get_prg_exec_dir_given_basedir "${PROGRAM_OUTDIR}"
 }
 
 ########

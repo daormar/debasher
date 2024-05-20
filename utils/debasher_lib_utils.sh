@@ -284,15 +284,15 @@ log_warning_msg()
 ########
 get_script_log_filenames()
 {
-    local scripts_dirname=`get_prg_scripts_dir`
+    local exec_dirname=`get_prg_exec_dir`
 
-        local sched=`get_scheduler`
+    local sched=`get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            get_script_log_filenames_slurm "${scripts_dirname}"
+            get_script_log_filenames_slurm "${exec_dirname}"
             ;;
         ${BUILTIN_SCHEDULER})
-            get_script_log_filenames_builtin "${scripts_dirname}"
+            get_script_log_filenames_builtin "${exec_dirname}"
             ;;
     esac
 }

@@ -238,10 +238,10 @@ get_task_template_log_filename_slurm()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${scriptsdir}/${processname}_%a.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}_%a.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -826,10 +826,10 @@ get_process_log_filename_slurm()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${scriptsdir}/${processname}.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -860,10 +860,10 @@ get_process_log_preverif_filename_slurm()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${scriptsdir}/${processname}.preverif.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.preverif.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -872,10 +872,10 @@ get_process_log_verif_filename_slurm()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${scriptsdir}/${processname}.verif.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.verif.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -884,20 +884,20 @@ get_process_log_signcomp_filename_slurm()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${scriptsdir}/${processname}.signcomp.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.signcomp.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
 get_task_log_filename_slurm()
 {
-    local scriptsdir=$1
+    local execdir=$1
     local processname=$2
     local taskidx=$3
 
-    echo "${scriptsdir}/${processname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -907,11 +907,11 @@ get_task_last_attempt_logf_slurm()
     local processname=$2
     local taskidx=$3
 
-    # Get scripts dir
-    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     # Obtain number of log files
-    local logfname=`get_task_log_filename_slurm "$scriptsdir" "$processname" "$taskidx"`
+    local logfname=`get_task_log_filename_slurm "$execdir" "$processname" "$taskidx"`
     local numlogf=0
     for f in "${logfname}*"; do
         numlogf=$((numlogf + 1))
@@ -940,11 +940,11 @@ clean_process_files_slurm()
 
     clean_process_id_files_array()
     {
-        local scriptsdir=$1
+        local execdir=$1
         local processname=$2
         local idx=$3
 
-        local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
+        local array_taskid_file=`get_array_taskid_filename "${execdir}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
             "${RM}" "${array_taskid_file}"
         fi
@@ -967,11 +967,11 @@ clean_process_files_slurm()
 
     clean_process_log_files_array()
     {
-        local scriptsdir=$1
+        local execdir=$1
         local processname=$2
         local idx=$3
 
-        local slurm_task_log_filename=`get_task_log_filename_slurm "${scriptsdir}" "${processname}" "${idx}"`
+        local slurm_task_log_filename=`get_task_log_filename_slurm "${execdir}" "${processname}" "${idx}"`
         if [ -f "${slurm_task_log_filename}" ]; then
             "${RM}" "${slurm_task_log_filename}"
         fi
@@ -994,11 +994,11 @@ clean_process_files_slurm()
             IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
 
             # Iterate over pending tasks
-            local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+            local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
             local idx
             for idx in "${pending_tasks_array[@]}"; do
-                clean_process_id_files_array "${scriptsdir}" "${processname}" "${idx}"
-                clean_process_log_files_array "${scriptsdir}" "${processname}" "${idx}"
+                clean_process_id_files_array "${execdir}" "${processname}" "${idx}"
+                clean_process_log_files_array "${execdir}" "${processname}" "${idx}"
             done
         fi
     fi
@@ -1068,9 +1068,9 @@ get_elapsed_time_for_process_slurm()
 ########
 get_script_log_filenames_slurm()
 {
-    local scripts_dirname=$1
+    local exec_dirname=$1
 
-    find "${scripts_dirname}" -name "*.${SLURM_SCHED_LOG_FEXT}" -exec echo {} \;
+    find "${exec_dirname}" -name "*.${SLURM_SCHED_LOG_FEXT}" -exec echo {} \;
 }
 
 ########

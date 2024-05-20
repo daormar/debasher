@@ -258,8 +258,8 @@ builtin_sched_get_array_task_status()
     local processname=$2
     local task_idx=$3
     local processdirname=`get_process_outdir_given_dirname "${dirname}" ${processname}`
-    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
-    local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${task_idx}`
+    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    local array_taskid_file=`get_array_taskid_filename "${execdir}" ${processname} ${task_idx}`
 
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
@@ -1033,14 +1033,14 @@ builtin_sched_print_script_body()
     local opt_array_size=$8
 
     # Write function to be executed
-    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
     if [ "${opt_array_size}" -gt 1 ]; then
         echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
-        echo "builtin_task_log_filename=\`get_task_log_filename_builtin \"$(esc_dq "${scriptsdir}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
+        echo "builtin_task_log_filename=\`get_task_log_filename_builtin \"$(esc_dq "${execdir}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
         echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
     else
         echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
-        local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
+        local builtin_log_filename=`get_process_log_filename_builtin "${execdir}" ${processname}`
         echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 }
@@ -1139,11 +1139,11 @@ builtin_sched_launch()
         local pid_file=`get_processid_filename "${dirname}" ${processname}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
-        # Get scripts dir
-        local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+        # Get exec dir
+        local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
         # Write pid
-        local pid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${task_idx}`
+        local pid_file=`get_array_taskid_filename "${execdir}" ${processname} ${task_idx}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
@@ -1273,11 +1273,11 @@ builtin_sched_clean_process_files()
 
     clean_process_id_files_array()
     {
-        local scriptsdir=$1
+        local execdir=$1
         local processname=$2
         local idx=$3
 
-        local array_taskid_file=`get_array_taskid_filename "${scriptsdir}" ${processname} ${idx}`
+        local array_taskid_file=`get_array_taskid_filename "${execdir}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
             "${RM}" "${array_taskid_file}"
         fi
@@ -1288,18 +1288,18 @@ builtin_sched_clean_process_files()
         local dirname=$1
         local processname=$2
 
-        local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
-        local builtin_log_filename=`get_process_log_filename_builtin "${scriptsdir}" ${processname}`
+        local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+        local builtin_log_filename=`get_process_log_filename_builtin "${execdir}" ${processname}`
         "${RM}" -f "${builtin_log_filename}"
     }
 
     clean_process_log_files_array()
     {
-        local scriptsdir=$1
+        local execdir=$1
         local processname=$2
         local idx=$3
 
-        local builtin_task_log_filename=`get_task_log_filename_builtin "${scriptsdir}" ${processname} ${idx}`
+        local builtin_task_log_filename=`get_task_log_filename_builtin "${execdir}" ${processname} ${idx}`
         if [ -f "${builtin_task_log_filename}" ]; then
             "${RM}" "${builtin_task_log_filename}"
         fi
@@ -1323,11 +1323,11 @@ builtin_sched_clean_process_files()
             IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
 
             # Iterate over pending tasks
-            local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+            local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
             local idx
             for idx in "${pending_tasks_array[@]}"; do
-                clean_process_id_files_array "${scriptsdir}" "${processname}" "${idx}"
-                clean_process_log_files_array "${scriptsdir}" "${processname}" "${idx}"
+                clean_process_id_files_array "${execdir}" "${processname}" "${idx}"
+                clean_process_log_files_array "${execdir}" "${processname}" "${idx}"
             done
         fi
     fi
@@ -1348,7 +1348,7 @@ builtin_sched_prepare_files_and_dirs_for_process()
 
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
-            create_scripts_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating scripts directory for process" >&2 ; return 1; }
+            create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
             create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         else
             builtin_sched_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
@@ -1455,7 +1455,7 @@ builtin_sched_execute_program_processes()
 ########
 get_script_log_filenames_builtin()
 {
-    local scripts_dirname=$1
+    local exec_dirname=$1
 
-    find "${scripts_dirname}" -name "*.${BUILTIN_SCHED_LOG_FEXT}" -exec echo {} \;
+    find "${exec_dirname}" -name "*.${BUILTIN_SCHED_LOG_FEXT}" -exec echo {} \;
 }

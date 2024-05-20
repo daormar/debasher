@@ -24,20 +24,20 @@ get_processid_filename()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${scriptsdir}/$processname.${PROCESSID_FEXT}"
+    echo "${execdir}/$processname.${PROCESSID_FEXT}"
 }
 
 ########
 get_array_taskid_filename()
 {
-    local scriptsdir=$1
+    local execdir=$1
     local processname=$2
     local idx=$3
 
-    echo "${scriptsdir}/${processname}_${idx}.${ARRAY_TASKID_FEXT}"
+    echo "${execdir}/${processname}_${idx}.${ARRAY_TASKID_FEXT}"
 }
 
 ########
@@ -47,8 +47,8 @@ get_array_taskid()
     local processname=$2
     local idx=$3
 
-    # Get scripts dir
-    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
     if [ -f "${file}" ]; then
@@ -64,10 +64,10 @@ get_process_finished_filename()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${scriptsdir}/${processname}.${FINISHED_PROCESS_FEXT}"
+    echo "${execdir}/${processname}.${FINISHED_PROCESS_FEXT}"
 }
 
 ########
@@ -225,12 +225,12 @@ read_ids_from_files()
         ids=`"${CAT}" "$filename"`
     fi
 
-    # Get scripts dir
-    local scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     # Return ids for array tasks if any
     local id
-    for taskid_file in "${scriptsdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in "${execdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             id=`"${CAT}" "${taskid_file}"`
             if [ -z "${ids}" ]; then
@@ -372,11 +372,11 @@ get_launched_array_task_ids()
     local dirname=$1
     local processname=$2
 
-    # Get scripts dir
-    scriptsdir=`get_prg_scripts_dir_for_process "${dirname}" "${processname}"`
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     # Return ids for array tasks if any
-    for taskid_file in "${scriptsdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in "${execdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             "${CAT}" "${taskid_file}"
         fi

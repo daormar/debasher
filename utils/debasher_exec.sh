@@ -901,8 +901,8 @@ create_basic_dirs()
 {
     echo "# Creating basic directories..." >&2
 
-    local scriptsdir=`get_prg_scripts_dir`
-    "${MKDIR}" -p "${scriptsdir}" || { echo "Error! cannot create scripts directory" >&2; return 1; }
+    local execdir=`get_prg_exec_dir`
+    "${MKDIR}" -p "${execdir}" || { echo "Error! cannot create exec directory" >&2; return 1; }
 
     local sched_opts_dir=`get_sched_opts_dir`
     "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
@@ -1017,7 +1017,7 @@ prepare_files_and_dirs_for_process()
 
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
-            create_scripts_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating scripts directory for process" >&2 ; return 1; }
+            create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
             create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
             create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
         else
