@@ -22,7 +22,7 @@
 ########
 print_desc()
 {
-    echo "pipe_stop stops program execution"
+    echo "debasher_stop stops program execution"
     echo "type \"pipe_stop --help\" to get usage information"
 }
 
