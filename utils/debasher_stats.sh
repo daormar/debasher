@@ -87,8 +87,13 @@ check_pars()
 configure_scheduler()
 {
     local sched=$1
-    if [ ${sched} != ${OPT_NOT_FOUND} ]; then
-        set_debasher_scheduler ${sched} || return 1
+    if [ ${sched} = ${OPT_NOT_FOUND} ]; then
+        # If the scheduler was not set in the command line, it is
+        # automatically determined
+        local sched=`determine_scheduler`
+        set_debasher_scheduler "${sched}" || return 1
+    else
+        set_debasher_scheduler "${sched}" || return 1
     fi
 }
 
