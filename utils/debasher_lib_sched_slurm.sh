@@ -254,7 +254,7 @@ get_slurm_output()
     local attempt_suffix=`get_slurm_attempt_suffix ${attempt_no}`
 
     if [ ${array_size} -eq 1 ]; then
-        local slurm_log_filename=`get_process_log_filename_slurm "${dirname}" ${processname}`
+        local slurm_log_filename=`get_process_log_filename "${dirname}" ${processname}`
         echo ${slurm_log_filename}${attempt_suffix}
     else
         local slurm_task_template_log_filename=`get_task_template_log_filename_slurm "${dirname}" ${processname}`
@@ -839,7 +839,7 @@ get_process_last_attempt_logf_slurm()
     local processname=$2
 
     # Obtain number of log files
-    local logfname=`get_process_log_filename_slurm "$dirname" $processname`
+    local logfname=`get_process_log_filename "$dirname" $processname`
     local numlogf=0
     for f in "${logfname}"*; do
         numlogf=$((numlogf + 1))
@@ -891,27 +891,14 @@ get_process_log_signcomp_filename_slurm()
 }
 
 ########
-get_task_log_filename_slurm()
-{
-    local execdir=$1
-    local processname=$2
-    local taskidx=$3
-
-    echo "${execdir}/${processname}_${taskidx}.${SLURM_SCHED_LOG_FEXT}"
-}
-
-########
 get_task_last_attempt_logf_slurm()
 {
     local dirname=$1
     local processname=$2
     local taskidx=$3
 
-    # Get exec dir
-    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
-
     # Obtain number of log files
-    local logfname=`get_task_log_filename_slurm "$execdir" "$processname" "$taskidx"`
+    local logfname=`get_task_log_filename "$dirname" "$processname" "$taskidx"`
     local numlogf=0
     for f in "${logfname}*"; do
         numlogf=$((numlogf + 1))
@@ -940,9 +927,11 @@ clean_process_files_slurm()
 
     clean_process_id_files_array()
     {
-        local execdir=$1
+        local dirname=$1
         local processname=$2
         local idx=$3
+
+        local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
         local array_taskid_file=`get_array_taskid_filename "${execdir}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
@@ -955,7 +944,7 @@ clean_process_files_slurm()
         local dirname=$1
         local processname=$2
 
-        local slurm_log_filename=`get_process_log_filename_slurm "${dirname}" ${processname}`
+        local slurm_log_filename=`get_process_log_filename "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_filename}*"
         local slurm_log_preverif=`get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_preverif}"
@@ -967,11 +956,11 @@ clean_process_files_slurm()
 
     clean_process_log_files_array()
     {
-        local execdir=$1
+        local dirname=$1
         local processname=$2
         local idx=$3
 
-        local slurm_task_log_filename=`get_task_log_filename_slurm "${execdir}" "${processname}" "${idx}"`
+        local slurm_task_log_filename=`get_task_log_filename "${dirname}" "${processname}" "${idx}"`
         if [ -f "${slurm_task_log_filename}" ]; then
             "${RM}" "${slurm_task_log_filename}"
         fi
@@ -994,11 +983,10 @@ clean_process_files_slurm()
             IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
 
             # Iterate over pending tasks
-            local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
             local idx
             for idx in "${pending_tasks_array[@]}"; do
-                clean_process_id_files_array "${execdir}" "${processname}" "${idx}"
-                clean_process_log_files_array "${execdir}" "${processname}" "${idx}"
+                clean_process_id_files_array "${dirname}" "${processname}" "${idx}"
+                clean_process_log_files_array "${dirname}" "${processname}" "${idx}"
             done
         fi
     fi

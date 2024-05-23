@@ -1033,14 +1033,13 @@ builtin_sched_print_script_body()
     local opt_array_size=$8
 
     # Write function to be executed
-    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
     if [ "${opt_array_size}" -gt 1 ]; then
         echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
-        echo "builtin_task_log_filename=\`get_task_log_filename_builtin \"$(esc_dq "${execdir}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
+        echo "builtin_task_log_filename=\`get_task_log_filename \"$(esc_dq "${dirname}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
         echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
     else
         echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
-        local builtin_log_filename=`get_process_log_filename_builtin "${execdir}" ${processname}`
+        local builtin_log_filename=`get_process_log_filename "${dirname}" ${processname}`
         echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 }
@@ -1288,18 +1287,17 @@ builtin_sched_clean_process_files()
         local dirname=$1
         local processname=$2
 
-        local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
-        local builtin_log_filename=`get_process_log_filename_builtin "${execdir}" ${processname}`
+        local builtin_log_filename=`get_process_log_filename "${dirname}" ${processname}`
         "${RM}" -f "${builtin_log_filename}"
     }
 
     clean_process_log_files_array()
     {
-        local execdir=$1
+        local dirname=$1
         local processname=$2
         local idx=$3
 
-        local builtin_task_log_filename=`get_task_log_filename_builtin "${execdir}" ${processname} ${idx}`
+        local builtin_task_log_filename=`get_task_log_filename "${dirname}" ${processname} ${idx}`
         if [ -f "${builtin_task_log_filename}" ]; then
             "${RM}" "${builtin_task_log_filename}"
         fi

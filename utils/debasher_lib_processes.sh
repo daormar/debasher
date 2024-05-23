@@ -574,6 +574,46 @@ get_process_stdout_filename()
 }
 
 ########
+get_process_log_filename()
+{
+    local dirname=$1
+    local processname=$2
+
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+
+    echo "${execdir}/${processname}.${SCHED_LOG_FEXT}"
+}
+
+########
+get_task_log_filename()
+{
+    local dirname=$1
+    local processname=$2
+    local task_idx=$3
+
+    # Get exec dir
+    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+
+    echo "${execdir}/${processname}_${task_idx}.${SCHED_LOG_FEXT}"
+}
+
+########
+get_process_schedout_filename()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    if [ "${opt_array_size}" -eq 1 ]; then
+        get_process_log_filename "${dirname}" "${processname}"
+    else
+        get_task_log_filename "${dirname}" "${processname}" "${task_idx}"
+    fi
+}
+
+########
 get_outd_for_dep()
 {
     local dep=$1

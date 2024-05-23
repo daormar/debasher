@@ -29,25 +29,6 @@ builtin_sched_id_exists()
 }
 
 ########
-get_process_log_filename_builtin()
-{
-    local execdir=$1
-    local processname=$2
-
-    echo "${execdir}/${processname}.${BUILTIN_SCHED_LOG_FEXT}"
-}
-
-########
-get_task_log_filename_builtin()
-{
-    local execdir=$1
-    local processname=$2
-    local taskidx=$3
-
-    echo "${execdir}/${processname}_${taskidx}.${BUILTIN_SCHED_LOG_FEXT}"
-}
-
-########
 builtin_sched_stop_process()
 {
     # Initialize variables
