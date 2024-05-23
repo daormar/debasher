@@ -8,6 +8,8 @@ other important aspects related to program execution are also described,
 such as the structure of the output directory or how to visualize the
 program execution status.
 
+.. _prg_exec:
+
 Program Execution
 -----------------
 
@@ -268,9 +270,47 @@ process using the ``-p`` option:
 Program Stop
 ------------
 
-TBD
+When a DeBasher program is being executed, it is possible to stop a
+given process or the whole program by means of the ``debasher_stop``
+tool.
+
+For this purpose, the name of the output directory and, optionally, the
+name of a specific process should be provided.
+
+The following command stops the ``hello_word`` process that compose the
+"Hello World!" program that was mentioned above:
+
+::
+
+    $ debasher_stop -d out -p hello_world
+
+To stop the whole program, the ``-p`` option is omitted:
+
+::
+
+    $ debasher_stop -d out
 
 Program Statistics Generation
 -----------------------------
 
-TBD
+The ``debasher_stats`` tool allows to generate statistics for a DeBasher
+program. Specifically, the program report process statuses and the
+elapsed time in seconds until completion (if the process was executed).
+
+Again, the execution of this tool requires to provide the output
+directory of the program and, optionally, the name of the process for
+which we want to obtain the statistics.
+
+This command shows statistics for the ``hello_world`` process that
+belongs to the "Hello World!" program that we executed at the
+:ref:`prg_exec` Section:
+
+::
+
+    $ debasher_stats -d out -p hello_world
+
+To get statistics for all processes, we can simply type:
+
+::
+
+    $ debasher_stats -d out
