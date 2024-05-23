@@ -29,7 +29,7 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_get_stdout       -d <string> [-p <string>] [-t <int>]"
+    echo "debasher_get_stdout       -d <string> -p <string> [-t <int>]"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
@@ -57,7 +57,7 @@ read_pars()
                   ;;
             "-p") shift
                   if [ $# -ne 0 ]; then
-                      given_processname=$1
+                      process=$1
                       p_given=1
                   fi
                   ;;
@@ -86,6 +86,11 @@ check_pars()
 
         if [ ! -f "${pdir}/${PRG_COMMAND_LINE_BASENAME}" ]; then
             echo "Error! ${pdir}/${PRG_COMMAND_LINE_BASENAME} file is missing" >&2
+            exit 1
+        fi
+
+        if [ ${p_given} -eq 0 ]; then
+            echo "Error! -p parameter not given!" >&2
             exit 1
         fi
     fi
@@ -133,14 +138,14 @@ get_out()
 
     # Get output
     if [ "${t_given}" -eq 0 ]; then
-        local stdout_fname=`get_process_stdout_filename "${absdirname}" ${given_processname} 1`
+        local stdout_fname=`get_process_stdout_filename "${absdirname}" ${process} 1`
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else
             echo "Error: output file could not be found!" >&2
         fi
     else
-        local stdout_fname=`get_process_stdout_filename "${absdirname}" ${given_processname} 2 "${task_idx}"`
+        local stdout_fname=`get_process_stdout_filename "${absdirname}" ${process} 2 "${task_idx}"`
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else
