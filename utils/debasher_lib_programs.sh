@@ -176,6 +176,17 @@ get_prg_graphs_dir()
 }
 
 ########
+# Public: Reads the value of a given option from function arguments.
+#
+# $1 - Name of the process to add into the program.
+# $2 - Computational specifications.
+# $3 - Additional specifications for the process.
+#
+# Examples
+#
+#    add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
+#
+# The function prints the process definition to the standard output.
 add_debasher_process()
 {
     # Initialize variables
