@@ -50,7 +50,7 @@ done
 
 # Regular expression matching whitespace.
 SPACE_RE='[[:space:]]*'
-# The inverse of the above, must match at least one character
+# The inverse of the above, must match at least one character.
 NOT_SPACE_RE='[^[:space:]][^[:space:]]*'
 # Regular expression matching shell function or variable name.
 NAME_RE='[a-zA-Z_][a-zA-Z0-9_]*'
