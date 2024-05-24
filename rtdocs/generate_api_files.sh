@@ -20,3 +20,10 @@ rm -f rtdocs/source/api_proc_exec_doc.md
 for name in "${proc_exec_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_opts.sh >> rtdocs/source/api_proc_exec_doc.md
 done
+
+# Generate program definition API file
+prog_def_symbols=("add_debasher_process()")
+rm -f rtdocs/source/api_prog_def_doc.md
+for name in "${prog_def_symbols[@]}"; do
+    sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_programs.sh >> rtdocs/source/api_prog_def_doc.md
+done
