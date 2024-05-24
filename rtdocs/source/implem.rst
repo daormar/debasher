@@ -16,10 +16,14 @@ corresponding options. Option definition will implicitly define a
 network connecting the inputs and outputs of the different processes.
 
 The following sections explain how to implement a simple program with
-two processes: ``file_writer`` and ``file_reader``. The ``file_writer``
-process takes a string as input and writes it to a file. The
-``file_reader`` process takes this file and prints its content to the
-standard output.
+two processes: ``file_writer`` and ``file_reader``. We will call this
+process ``debasher_file_example``. The ``file_writer`` process takes a
+string as input and writes it to a file. The ``file_reader`` process
+takes this file and prints its content to the standard output.
+
+The whole code will be added to a single file called
+``debasher_file_example.sh`` (the program name plus the ``.sh``
+extension).
 
 Although it is not mandatory, it is recommended that the implementation
 is made in the same order in which the sections appear.
@@ -42,7 +46,23 @@ TBD
 Program Definition
 ------------------
 
-TBD
+Once the processes involved in the ``debasher_file_example`` program
+have been defined, we can proceed with the definition of the program
+itself.
+
+Defining a program is extremely simple. For this purpose, we only need
+to define the ``program`` method for ``debasher_file_example``. This
+method will incorporate into the program the processes to be
+executed. To add a process to a program we can use the
+``add_debasher_process`` function:
+
+.. code-block:: bash
+
+    debasher_file_example_program()
+    {
+        add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
+        add_debasher_process "file_reader" "cpus=1 mem=32 time=00:01:00"
+    }
 
 Additional Process and Program Characterization
 -----------------------------------------------
