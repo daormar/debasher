@@ -306,17 +306,17 @@ get_opt_value_from_func_args()
 }
 
 ########
-# Public: Reads option value from function arguments.
+# Public: Reads the value of a given option from function arguments.
 #
-# TO-BE-DONE
-#
-# $1 - Option name
+# $1 - Option name whose value we want to obtain.
+# $2,$3,...,$n - List of function arguments (typically they are provided
+#                by the caller using the special parameter "$@").
 #
 # Examples
 #
-#   TO-BE-DONE
+#   local str=$(read_opt_value_from_func_args "-s" "$@")
 #
-# The function prints the value of the option if it was given, or the "OPT_NOT_FOUND" constant otherwise
+# The function prints the value of the option if it was given, or the "OPT_NOT_FOUND" constant otherwise.
 read_opt_value_from_func_args()
 {
     local opt=$1
