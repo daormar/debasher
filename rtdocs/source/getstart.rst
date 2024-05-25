@@ -162,19 +162,24 @@ following content:
         add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
     }
 
-DeBasher works with two main entities: processes and programs. A program
-is composed of a set of processes. Processes and programs are identified
-by a particular name, and their specific behavior is defined by means of
-a set of functions. DeBasher adopts an object-oriented programming (OOP)
-approach, where each function implements a specific method. Function
-names have two parts, first, the name of the program or function, and
-second, a suffix identifying the method. For instance, the function
+**DeBasher works with three main entities: processes, programs and
+modules. A program is composed of a set of processes. A module is a file
+storing multiple processes and one program**. Processes and modules are
+identified by a particular name, and their specific behavior is defined
+by means of a set of functions. The program associated with a particular
+module is also defined by means of a function.
+
+DeBasher adopts an object-oriented programming (OOP) approach, where
+each function implements a specific method. Function names have two
+parts, first, the name of the program or function, and second, a suffix
+identifying the method. For instance, the function
 ``hello_world_define_opts`` implement the method ``define_opts`` for the
 ``hello_world`` process.
 
-In the "Hello World!" example shown above, we have a program called
-``debasher_hello_world``, which executes the process ``hello_world``.
-Below we describe the functions involved:
+In the "Hello World!" example shown above, we have a module stored in
+the ``debasher_hello_world.sh``, which defines a program called
+``debasher_hello_world``. Such program executes the process
+``hello_world``.  Below we describe the functions involved:
 
 * ``hello_world_explain_cmdline_opts``: this function implements the
   ``explain_cmdline_opts`` method for ``hello_world``. Such method
@@ -207,17 +212,17 @@ Below we describe the functions involved:
   the content of the ``str`` variable is printed to the standard output.
 
 * ``debasher_hello_world_program``: the ``program`` method allows to
-  define the processes involved in the execution of the
-  ``debasher_hello_world`` program. In this case, only one process is
-  involved, ``hello_world``, which is added to the program by means of
-  the ``add_debasher_process`` function.
+  define the processes involved in the execution of the program defined
+  in the ``debasher_hello_world.sh`` module. In this case, only one
+  process is involved, ``hello_world``, which is added to the program by
+  means of the ``add_debasher_process`` function.
 
 To know the details of the DeBasher functions mentioned above, please
 refer to the :ref:`API` Section.
 
 In order to execute the program, DeBasher incorporates the
 ``debasher_exec`` tool. Provided that the ``debasher_hello_world.sh``
-script is in the current directory and that ``debasher_exec`` is
+module is in the current directory and that ``debasher_exec`` is
 included in the ``PATH`` variable, we can execute the following:
 
 ::
