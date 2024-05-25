@@ -25,6 +25,19 @@ The whole code will be added to a single file called
 ``debasher_file_example.sh`` (the program name plus the ``.sh``
 extension).
 
+A process graph generated with ``debasher_exec`` using its
+``--gen-proc-graph`` for the ``debasher_file_example.sh`` program would
+look as follows:
+
+.. image:: images/file_example_graph.png
+  :width: 120
+  :align: center
+
+The graph shows the two processes involved in the program (using
+rectangles) as well as their input and output options (using ellipses)
+and how such options are connected, implicitly defining the program
+network.
+
 Although it is not mandatory, it is recommended that the implementation
 is made in the same order in which the sections appear.
 
@@ -51,7 +64,7 @@ have been defined, we can proceed with the definition of the program
 itself.
 
 Defining a program is extremely simple. For this purpose, we only need
-to define the ``program`` method for ``debasher_file_example``. This
+to implement the ``program`` method for ``debasher_file_example``. This
 method will incorporate into the program the processes to be
 executed. To add a process to a program we can use the
 ``add_debasher_process`` function:
