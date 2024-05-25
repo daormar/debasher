@@ -11,4 +11,6 @@ DeBasher API
 
    api_proc_exec_opts
 
-   api_mod_def
+   api_prog_def
+
+   api_mod_conf

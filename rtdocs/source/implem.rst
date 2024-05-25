@@ -41,6 +41,11 @@ network.
 Although it is not mandatory, it is recommended that the implementation
 is made in the same order in which the sections appear.
 
+Module Configuration
+--------------------
+
+TBD
+
 Process Implementation
 ----------------------
 
@@ -107,8 +112,8 @@ resources that the process requires. In the given example, both the
 ``file_writer`` and the ``file_reader`` processes will require 1 CPU,
 32MBs of RAM a 1 minute for their execution.
 
-Further Process and Program Characterization
---------------------------------------------
+Further Process, Program and Module Characterization
+----------------------------------------------------
 
 TBD
 

@@ -28,9 +28,9 @@ for name in "${prog_def_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_programs.sh >> rtdocs/source/api_prog_def_doc.md
 done
 
-# Generate module definition API file
-mod_def_symbols=("load_debasher_module()")
-rm -f rtdocs/source/api_mod_def_doc.md
-for name in "${mod_def_symbols[@]}"; do
-    sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_programs.sh >> rtdocs/source/api_mod_def_doc.md
+# Generate module configuration API file
+mod_conf_symbols=("load_debasher_module()")
+rm -f rtdocs/source/api_mod_conf_doc.md
+for name in "${mod_conf_symbols[@]}"; do
+    sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_programs.sh >> rtdocs/source/api_mod_conf_doc.md
 done
