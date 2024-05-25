@@ -1,6 +1,6 @@
 .. _proc-opts:
 
-Process Options
-===============
+Option Definition/Generation
+============================
 
 .. include:: api_proc_opts_doc.md

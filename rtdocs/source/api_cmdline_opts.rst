@@ -1,6 +1,6 @@
 .. _cmdline-opts:
 
-Program Command Line Options
-============================
+Command Line Option Explanation
+===============================
 
 .. include:: api_cmdline_opts_doc.md
