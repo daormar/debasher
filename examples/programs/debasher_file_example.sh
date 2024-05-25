@@ -43,7 +43,9 @@ file_writer_document()
 ########
 file_writer_explain_cmdline_opts()
 {
-    :
+    # -s option
+    local description="String to be displayed"
+    explain_cmdline_opt "-s" "<string>" "$description"
 }
 
 ########
