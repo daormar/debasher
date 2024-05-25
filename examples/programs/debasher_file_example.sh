@@ -56,6 +56,9 @@ file_writer_define_opts()
     local process_outdir=$4
     local optlist=""
 
+    # -s option
+    define_cmdline_opt "$cmdline" "-s" optlist || return 1
+
     # Define option for output file
     local filename="${process_outdir}/out.txt"
     define_opt "-outf" "${filename}" optlist || return 1
