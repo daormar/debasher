@@ -4,9 +4,11 @@ Implementing DeBasher Programs
 ==============================
 
 This section is devoted to explain the procedure of implementing new
-DeBasher programs. There are three main aspects involved in this
-procedure. First, implementing the different processes participating in
-the program. Second, handling command-line and process options. And
+DeBasher programs. There are four main aspects involved in this
+procedure. First, creating and configuring a new module to store the
+program and the different processes it executes. Second, implementing
+the processes themselves that participate in the program. Third,
+handling command-line and process options for the processes. And
 finally, defining which processes will compose the program.
 
 More specifically, the implementation of a DeBasher program can be
@@ -79,7 +81,30 @@ is shown):
     -s <string> String to be displayed [file_writer]
 
 In this case, the program only defines one command-line option, ``-s``,
-for the ``file_writer`` process.
+for the ``file_writer`` process. For this purpose, we define the
+``explain_cmdline_opts`` method for the process, with the following
+code:
+
+.. code-block:: bash
+
+    file_writer_explain_cmdline_opts()
+    {
+        # -s option
+        local description="String to be displayed"
+        explain_cmdline_opt "-s" "<string>" "$description"
+    }
+
+On the other hand, the ``file_reader`` process will not define any
+command line option. In those cases, we can define the corresponding
+``explain_cmdline_opts`` method for the process as follows:
+
+.. code-block:: bash
+
+    file_reader_explain_cmdline_opts()
+    {
+        :
+    }
+
 
 Option Definition/Generation
 ----------------------------
