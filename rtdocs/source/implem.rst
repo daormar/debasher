@@ -60,7 +60,7 @@ Program Definition
 ------------------
 
 Once the processes involved in the ``debasher_file_example`` program
-have been defined, we can proceed with the definition of the program
+have been implemented, we can proceed with the definition of the program
 itself.
 
 Defining a program is extremely simple. For this purpose, we only need
@@ -77,8 +77,13 @@ executed. To add a process to a program we can use the
         add_debasher_process "file_reader" "cpus=1 mem=32 time=00:01:00"
     }
 
-Additional Process and Program Characterization
------------------------------------------------
+When adding a process to a program, we can provide information about the
+resources that the process requires. In the given example, both the
+``file_writer`` and the ``file_reader`` processes will require 1 CPU,
+32MBs of RAM a 1 minute for their execution.
+
+Further Process and Program Characterization
+--------------------------------------------
 
 TBD
 
