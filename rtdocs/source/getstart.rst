@@ -171,15 +171,16 @@ module is also defined by means of a function.
 
 DeBasher adopts an object-oriented programming (OOP) approach, where
 each function implements a specific method. Function names have two
-parts, first, the name of the program or function, and second, a suffix
+parts, first, the name of the program or module, and second, a suffix
 identifying the method. For instance, the function
 ``hello_world_define_opts`` implement the method ``define_opts`` for the
 ``hello_world`` process.
 
-In the "Hello World!" example shown above, we have a module stored in
-the ``debasher_hello_world.sh``, which defines a program called
-``debasher_hello_world``. Such program executes the process
-``hello_world``.  Below we describe the functions involved:
+In the "Hello World!" example shown above, we have a module named
+``debasher_hello_world`` that is stored in the
+``debasher_hello_world.sh`` file. The module internally defines a
+program that executes the process ``hello_world``.  Below we describe
+the functions involved:
 
 * ``hello_world_explain_cmdline_opts``: this function implements the
   ``explain_cmdline_opts`` method for ``hello_world``. Such method
@@ -213,7 +214,7 @@ the ``debasher_hello_world.sh``, which defines a program called
 
 * ``debasher_hello_world_program``: the ``program`` method allows to
   define the processes involved in the execution of the program defined
-  in the ``debasher_hello_world.sh`` module. In this case, only one
+  by the ``debasher_hello_world`` module. In this case, only one
   process is involved, ``hello_world``, which is added to the program by
   means of the ``add_debasher_process`` function.
 
@@ -222,7 +223,7 @@ refer to the :ref:`API` Section.
 
 In order to execute the program, DeBasher incorporates the
 ``debasher_exec`` tool. Provided that the ``debasher_hello_world.sh``
-module is in the current directory and that ``debasher_exec`` is
+module file is in the current directory and that ``debasher_exec`` is
 included in the ``PATH`` variable, we can execute the following:
 
 ::
