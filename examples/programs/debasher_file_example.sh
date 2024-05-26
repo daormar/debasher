@@ -25,6 +25,12 @@
 #################
 
 ########
+debasher_file_example_document()
+{
+    module_description "This module implements a simple program with two processes, one writes a string to a file and the other one reads it and prints it to the standard output."
+}
+
+########
 debasher_file_example_shared_dirs()
 {
     :
