@@ -220,6 +220,9 @@ declare PROGRAM_OUTDIR
 # Declare array to store file names of loaded modules
 declare -a PROGRAM_MODULES
 
+# Declare associative array to store defined processes
+declare -A PROGRAM_PROCESSES
+
 # Declare associative arrays to store name of shared directories
 declare -A PROGRAM_SHDIRS
 

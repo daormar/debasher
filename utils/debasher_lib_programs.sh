@@ -187,6 +187,8 @@ get_prg_graphs_dir()
 #    add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
 #
 # The function prints the process definition to the standard output.
+# Additionally, it registers the process in a variable used by the
+# DeBasher library.
 add_debasher_process()
 {
     # Initialize variables
@@ -196,6 +198,9 @@ add_debasher_process()
 
     # Print process program line
     echo "${processname}" "${process_computational_specs}" "${process_additional_specs}"
+
+    # Store process name in associative array
+    PROGRAM_PROCESSES["${processname}"]=1
 }
 
 ########
