@@ -94,10 +94,18 @@ obtain_info_for_module()
     # Load module
     source "${module_fname}"
 
+    # Document module
+    document_module "${module_fname}"
+
+    # Get module name from file name
+    local modname=`get_modname_from_absmodname "${module_fname}"`
+
     # Iterate over process documentation functions
     while read process_doc_func; do
         local processname=${process_doc_func%"${PROCESS_METHOD_NAME_DOCUMENT}"}
-        document_process "${processname}" "${showopts_given}"
+        if [  "${processname}" != "${modname}" ]; then
+            document_process "${processname}" "${showopts_given}"
+        fi
     done < <(get_process_doc_funcnames)
 }
 

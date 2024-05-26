@@ -19,7 +19,7 @@
 #############################
 
 ########
-get_document_funcname()
+get_proc_document_funcname()
 {
     local processname=$1
 
@@ -61,17 +61,17 @@ document_process()
     local doc_options=$2
 
     # Print header
-    echo "# ${processname}"
+    echo "## ${processname}"
     echo ""
 
     # Print body
-    echo "## Description"
-    local document_funcname=`get_document_funcname ${processname}`
+    echo "### Description"
+    local document_funcname=`get_proc_document_funcname ${processname}`
     ${document_funcname}
     echo ""
 
     if [ ${doc_options} -eq 1 ]; then
-        echo "## Command Line Options"
+        echo "### Command Line Options"
         DIFFERENTIAL_CMDLINE_OPT_STR=""
         local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
         ${explain_cmdline_opts_funcname}

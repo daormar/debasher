@@ -31,6 +31,16 @@ get_modname_from_absmodname()
 }
 
 ########
+get_mod_document_funcname()
+{
+    local absmodname=$1
+
+    local modname=`get_modname_from_absmodname "${absmodname}"`
+
+    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_DOCUMENT}"
+}
+
+########
 get_shrdirs_funcname()
 {
     local absmodname=$1
@@ -158,4 +168,27 @@ get_mod_vars_and_funcs_fname()
     local dirname=$1
 
     echo "${dirname}/${MOD_VARS_AND_FUNCS_BASENAME}"
+}
+
+########
+module_description()
+{
+    local desc=$1
+    echo $desc
+}
+
+########
+document_module()
+{
+    local modulename=$1
+
+    # Print header
+    local modname=`get_modname_from_absmodname "${modulename}"`
+    echo "# ${modname}"
+    echo ""
+
+    # Print body
+    local document_funcname=`get_mod_document_funcname ${modulename}`
+    ${document_funcname}
+    echo ""
 }
