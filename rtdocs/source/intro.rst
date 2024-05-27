@@ -3,12 +3,11 @@ Introduction
 
 Bash, born out of the Unix shell tradition, is a valuable asset as the
 glue that orchestrates the execution of a set of computer programs. As a
-powerful and versatile command-line interpreter, Bash excels in
-automating repetitive tasks, stringing together disparate programs, and
-facilitating the flow of data between them. These abilities make Bash a
-particularly interesting option to implement computer pipelines or
-workflows, which typically combine programs written in different
-programming languages.
+versatile command-line interpreter, Bash excels in automating repetitive
+tasks, stringing together disparate programs, and facilitating the flow
+of data between them. These abilities make Bash a particularly
+interesting option to implement computer pipelines or workflows, which
+typically combine programs written in different programming languages.
 
 When implementing pipelines, it is necessary to consider not only
 standard software engineering principles such as modularity or code
