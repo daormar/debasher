@@ -4,12 +4,12 @@ Implementing DeBasher Programs
 ==============================
 
 This section is devoted to explain the procedure of implementing new
-DeBasher programs. There are four main aspects involved in this
-procedure. First, creating and configuring a new module to store the
-program and the different processes it executes. Second, implementing
-the processes themselves that participate in the program. Third,
-handling command-line and process options for the processes. And
-finally, defining which processes will compose the program.
+DeBasher programs. There are four main aspects involved. First, creating
+and configuring a new module to store the program and the different
+processes it executes. Second, implementing the processes themselves
+that participate in the program. Third, handling command-line and
+process options for the processes. And finally, defining which processes
+will compose the program.
 
 More specifically, the implementation of a DeBasher program can be
 carried out in a process-wise manner. For each process, we will define a
