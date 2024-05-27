@@ -79,10 +79,11 @@ file_writer_define_opts()
 file_writer()
 {
     # Initialize variables
+    local str=$(read_opt_value_from_func_args "-s" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Write string to file
-    echo "Hello World" > "${outf}"
+    echo "${str}" > "${outf}"
 }
 
 ########
