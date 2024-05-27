@@ -429,15 +429,16 @@ explain_cmdline_req_opt()
 ########
 # Public: Explains command-line option.
 #
-# TO-BE-DONE
-#
-# $1 - Option name
+# $1 - Option name.
+# $2 - Data type of option value.
+# $3 - Option description.
+# $4 - Option category ("GENERAL" category by default).
 #
 # Examples
 #
-#   TO-BE-DONE
+#   explain_cmdline_opt "-s" "<string>" "String to be displayed"
 #
-# The function does not return any value
+# The function does not return any value.
 explain_cmdline_opt()
 {
     local opt=$1

@@ -126,6 +126,15 @@ module_is_loaded()
 }
 
 ########
+# Public: Loads a DeBasher module.
+#
+# $1 - String containing the name of a module.
+#
+# Examples
+#
+#   load_debasher_module "module_name"
+#
+# The function does not return any value.
 load_debasher_module()
 {
     local module=$1
@@ -171,6 +180,15 @@ get_mod_vars_and_funcs_fname()
 }
 
 ########
+# Public: Generates a description for a module.
+#
+# $1 - Text describing the module
+#
+# Examples
+#
+#   module_description "This module implements the \"Hello World!\" program."
+#
+# The function prints the given module description to the standard output.
 module_description()
 {
     local desc=$1
