@@ -29,7 +29,7 @@ load_debasher_module "debasher_fifo_example"
 #################
 
 ########
-debasher_subworkflow_example_shared_dirs()
+debasher_subprogram_example_shared_dirs()
 {
     :
 }
@@ -39,7 +39,7 @@ debasher_subworkflow_example_shared_dirs()
 ######################
 
 ########
-debasher_subworkflow_example_program()
+debasher_subprogram_example_program()
 {
     add_debasher_program "debasher_array_example" "test"
     add_debasher_program "debasher_fifo_example" "test"
