@@ -33,10 +33,11 @@ File Writer and File Reader Example
     file_writer()
     {
         # Initialize variables
+        local str=$(read_opt_value_from_func_args "-s" "$@")
         local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
         # Write string to file
-        echo "Hello World" > "${outf}"
+        echo "${str}" > "${outf}"
     }
 
     file_reader_document()
