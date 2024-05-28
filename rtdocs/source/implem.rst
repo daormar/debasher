@@ -6,10 +6,9 @@ Implementing DeBasher Programs
 This section is devoted to explain the procedure of implementing new
 DeBasher programs. There are four main aspects involved. First, creating
 and configuring a new module to store the program and the different
-processes it executes. Second, implementing the processes themselves
-that participate in the program. Third, handling command-line and
-process options for the processes. And finally, defining which processes
-will compose the program.
+processes it executes. Second, implementing the processes
+themselves. Third, handling command-line and process options for the
+processes. And finally, incorporating the processes into the program.
 
 More specifically, the implementation of a DeBasher program can be
 carried out in a process-wise manner. For each process, we will define a
@@ -332,7 +331,7 @@ we would only need to put the following code in the
 
 As it can be seen, only the option-related code of the ``file_writer``
 required modification (the code related to the ``file_reader`` process
-remained unchanged).
+remains unchanged).
 
 Another way to reuse code would be to add whole programs when defining
 the ``program`` method. For this purpose, we could use the
