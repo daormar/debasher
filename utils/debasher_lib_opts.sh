@@ -40,6 +40,22 @@ serialize_args()
 }
 
 ########
+serialize_args_nameref()
+{
+    local -n var_ref=$1;
+    shift
+    local serial_args=""
+    for arg in "$@"; do
+        if [ -z "$serial_args" ]; then
+            serial_args=${arg}
+        else
+            serial_args=${serial_args}${ARG_SEP}${arg}
+        fi
+    done
+    var_ref="${serial_args}"
+}
+
+########
 deserialize_args_given_sep()
 {
     local serial_args=$1
