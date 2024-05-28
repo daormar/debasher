@@ -1455,5 +1455,5 @@ get_script_log_filenames_builtin()
 {
     local exec_dirname=$1
 
-    find "${exec_dirname}" -name "*.${BUILTIN_SCHED_LOG_FEXT}" -exec echo {} \;
+    find "${exec_dirname}" -name "*.${SCHED_LOG_FEXT}" -exec echo {} \;
 }

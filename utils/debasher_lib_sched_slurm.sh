@@ -241,7 +241,7 @@ get_task_template_log_filename_slurm()
     # Get exec dir
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}_%a.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}_%a.${SCHED_LOG_FEXT}"
 }
 
 ########
@@ -829,7 +829,7 @@ get_process_log_filename_slurm()
     # Get exec dir
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.${SCHED_LOG_FEXT}"
 }
 
 ########
@@ -863,7 +863,7 @@ get_process_log_preverif_filename_slurm()
     # Get exec dir
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}.preverif.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.preverif.${SCHED_LOG_FEXT}"
 }
 
 ########
@@ -875,7 +875,7 @@ get_process_log_verif_filename_slurm()
     # Get exec dir
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}.verif.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.verif.${SCHED_LOG_FEXT}"
 }
 
 ########
@@ -887,7 +887,7 @@ get_process_log_signcomp_filename_slurm()
     # Get exec dir
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}.signcomp.${SLURM_SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.signcomp.${SCHED_LOG_FEXT}"
 }
 
 ########
@@ -1058,7 +1058,7 @@ get_script_log_filenames_slurm()
 {
     local exec_dirname=$1
 
-    find "${exec_dirname}" -name "*.${SLURM_SCHED_LOG_FEXT}" -exec echo {} \;
+    find "${exec_dirname}" -name "*.${SCHED_LOG_FEXT}" -exec echo {} \;
 }
 
 ########
