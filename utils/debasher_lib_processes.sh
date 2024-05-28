@@ -302,7 +302,7 @@ get_numtasks_for_process()
 }
 
 ########
-get_opts_for_process_and_task()
+gen_opts_for_process_and_task()
 {
     # WARNING: The resolve_proc_out_descriptor function should be called
     # in a subshell, otherwise it may clash with the caller due to its
@@ -346,28 +346,20 @@ get_opts_for_process_and_task()
 
     local cmdline=$1
     local processname=$2
-    local task_idx=$3
+    local proc_outdir=$3
+    local generate_opts_funcname=$4
+    local task_idx=$5
 
-    if uses_option_generator "${processname}"; then
-        # Obtain name of options generator
-        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+    # Call options generator (output stored into DESERIALIZED_ARGS)
+    local proc_spec=${INITIAL_PROCESS_SPEC["${processname}"]}
+    ${generate_opts_funcname} "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
 
-        # Call options generator (output stored into DESERIALIZED_ARGS)
-        local proc_spec=${INITIAL_PROCESS_SPEC["${processname}"]}
-        local proc_outdir=`get_process_outdir "${processname}"`
-        ${generate_opts_funcname} "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
+    # Resove descriptors for connected processes
+    resolve_proc_out_descriptors "${cmdline}"
 
-        # Resove descriptors for connected processes
-        resolve_proc_out_descriptors "${cmdline}"
-
-        # Obtain serialized args
-        sargs=`serialize_args "${DESERIALIZED_ARGS[@]}"`
-
-        echo "${sargs}"
-    else
-        local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
-        get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
-    fi
+    # Obtain serialized args
+    serialize_args_nameref "sargs_nr" "${DESERIALIZED_ARGS[@]}"
+    echo "${sargs_nr}"
 }
 
 ########
@@ -390,9 +382,24 @@ get_file_opts_for_process_and_task()
 }
 
 ########
+get_opts_for_process_and_task()
+{
+    local cmdline=$1
+    local processname=$2
+    local task_idx=$3
+
+    if uses_option_generator "${processname}"; then
+        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+        local proc_outdir=`get_process_outdir "${processname}"`
+        gen_opts_for_process_and_task  "${cmdline}" "${processname}" "${proc_outdir}" "${generate_opts_funcname}" "${task_idx}"
+    else
+        local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
+        get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
+    fi
+}
+
+########
 # Public: Defines options for process.
-#
-# TO-BE-DONE
 #
 # $1 - Command line
 # $2 - Process specification

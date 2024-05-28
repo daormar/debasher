@@ -96,6 +96,31 @@ print_script_header_slurm_sched()
 }
 
 ########
+print_opt_code_slurm_sched()
+{
+    local cmdline=$1
+    local processname=$2
+    local opt_array_size=$3
+
+    if [ "${opt_array_size}" -gt 1 ]; then
+        local task_id="\${SLURM_ARRAY_TASK_ID}"
+    else
+        local task_id=0
+    fi
+
+    if uses_option_generator "${processname}"; then
+        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
+        local proc_outdir=`get_process_outdir "${processname}"`
+        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+        echo "sargs=\`gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" \"$(esc_dq "${proc_outdir}")\" \"${generate_opts_funcname}\" \"${task_id}\"\`"
+    else
+        local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
+        echo "sargs=\`get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\"\`"
+    fi
+    echo "deserialize_args \"\${sargs}\""
+}
+
+########
 print_script_body_slurm_sched()
 {
     # Initialize variables
@@ -109,15 +134,7 @@ print_script_body_slurm_sched()
     local opt_array_size=$8
 
     # Retrieve and deserialize process options
-    if [ "${opt_array_size}" -gt 1 ]; then
-        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
-        echo "sargs=\`get_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" \"\${SLURM_ARRAY_TASK_ID}\"\`"
-        echo "deserialize_args \"\${sargs}\""
-    else
-        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
-        echo "sargs=\`get_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" 0\`"
-        echo "deserialize_args \"\${sargs}\""
-    fi
+    print_opt_code_slurm_sched "${cmdline}" "${processname}" "${opt_array_size}"
 
     # Write skip function if it was provided
     if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
