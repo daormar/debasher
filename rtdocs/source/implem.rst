@@ -214,7 +214,143 @@ command line option. In those cases, we can define the corresponding
 Option Definition/Generation
 ----------------------------
 
-TBD
+After implementing the process and documenting its command-line options,
+we can proceed to add the code that will specify the particular options
+that the process receives. This step, when completed for all of the
+processes, can be seen as defining the program network.
+
+There are two alternatives to specify the process options, using the
+``define_opts`` method, or using the ``generate_opts`` method. The
+second one is more suited to those situations where we define a process
+array (see the :ref:`Examples` Section).
+
+Alternative 1: Implement the ``define_opts`` method
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Regarding the ``define_opts`` method, below it is shown a template of
+the function that should be completed when defining the options for a
+process called ``processname``:
+
+.. code-block:: bash
+
+    processname_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local optlist=""
+
+        # ADD CODE HERE...
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+The function receives four input parameters that can be used when
+necessary within the function. We store those input parameters into the
+following variables:
+
+* ``cmdline``: contains a serialized version of the command-line options
+  provided to the program. This variable will be useful to take the
+  required command-line options and pass them to the process.
+* ``process_spec``: contains the process specification, including for
+  instance the amount of memory and number of CPUs assigned to the
+  process. This information can also be relevant when defining the
+  process options.
+* ``process_name``: this variable will contain the name of the process.
+* ``process_outdir``: this variable stores the full path of the output
+  directory for the process.
+
+Using the previous elements, the goal of the function is to create a
+string in the ``optlist`` variable that ends up containing the options
+that our program needs to receive. For this purpose, DeBasher provides
+specific helper functions (See the API's :ref:`proc-opts` Section).
+
+**IMPORTANT_NOTE**: the variable used to store the option list should
+always have the ``optlist`` substring as suffix. For instance,
+``my_optlist`` would be a correct name for the variable, but
+``list_of_options`` would not.
+
+Alternative 2: Implement the ``generate_opts`` method
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+On the other hand, option definition can also be performed by means of
+the ``generate_opts`` method. TBD
+
+.. code-block:: bash
+
+    processname_generate_opts_size()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+
+        # ADD CODE HERE...
+        # local opts_size = ...
+
+        echo ${opts_size}
+    }
+
+    processname_generate_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        # ADD CODE HERE...
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+Option Definition for ``debasher_file_example``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+    file_writer_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local optlist=""
+
+        # -s option
+        define_cmdline_opt "$cmdline" "-s" optlist || return 1
+
+        # Define option for output file
+        local filename="${process_outdir}/out.txt"
+        define_opt "-outf" "${filename}" optlist || return 1
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+.. code-block:: bash
+
+    file_reader_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local optlist=""
+
+        # Define option for input file
+        define_opt_from_proc_out "-inf" "file_writer" "-outf" optlist || return 1
+
+        # Save option list
+        save_opt_list optlist
+    }
+
 
 .. _program_definition:
 
