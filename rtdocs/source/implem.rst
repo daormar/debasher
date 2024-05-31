@@ -261,8 +261,9 @@ following variables:
   required command-line options and pass them to the process.
 * ``process_spec``: contains the process specification, including for
   instance the amount of memory and number of CPUs assigned to the
-  process. This information can also be relevant when defining the
-  process options.
+  process (the process specification is shown by ``debasher_exec``
+  before launching process execution). This information can also be
+  relevant when defining the process options.
 * ``process_name``: this variable will contain the name of the process.
 * ``process_outdir``: this variable stores the full path of the output
   directory for the process.
@@ -513,13 +514,14 @@ be:
     PROCESS: file_writer ; OPTIONS: '-s' 'Hello World!' '-outf' '<path_to_out_dir>/out/file_writer/out.txt'
     PROCESS: file_reader ; OPTIONS: '-inf' '<path_to_out_dir>/out/file_writer/out.txt'
 
-.. _program_definition:
+.. _program_definition :
 
 Program Definition
 ------------------
 
-Once the processes involved in our program have been implemented, we can
-proceed with the definition of the program itself.
+Once the processes involved in our program have been implemented
+including the specification of their optins, we can proceed with the
+definition of the program itself.
 
 Defining a program is extremely simple. For this purpose, we only need
 to implement the ``program`` method for the ``debasher_file_example``
