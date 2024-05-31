@@ -654,6 +654,17 @@ get_cmdline_opt()
 }
 
 ########
+# Public: Defines process option from command-line option.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_opt "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
 define_cmdline_opt()
 {
     local cmdline=$1
@@ -771,6 +782,18 @@ define_cmdline_infile_nonmand_opt()
 }
 
 ########
+# Public: Defines process option from the output of another process.
+#
+# $1 - Option name.
+# $2 - Name of process that will be connected with current one.
+# $3 - Name of output option belonging to the the process to be connected.
+# $4 - Name of the variable to store the new option.
+#
+# Examples
+#
+#   define_opt_from_proc_out "-in" "process_to_be_connected" "-out" optlist
+#
+# The function does not return any value
 define_opt_from_proc_out()
 {
     local opt=$1
@@ -871,13 +894,13 @@ define_opt_wo_value()
 ########
 # Public: Defines process option.
 #
-# TO-BE-DONE
-#
-# $1 - Option name
+# $1 - Option name.
+# $2 - Value associated to the option being defined.
+# $3 - Name of variable that will store the information about the option to be added.
 #
 # Examples
 #
-#   TO-BE-DONE
+#   define_opt "-o" "${value}" "optlist"
 #
 # The function does not return any value
 define_opt()
@@ -1108,15 +1131,13 @@ clear_curr_opt_list_array()
 }
 
 ########
-# Public: Saves option list.
+# Public: Saves option list for a given process.
 #
-# TO-BE-DONE
-#
-# $1 - Option name
+# $1 - Name of variable storing the option list.
 #
 # Examples
 #
-#   TO-BE-DONE
+#   save_opt_list optlist
 #
 # The function does not return any value
 save_opt_list()
