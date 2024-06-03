@@ -111,10 +111,10 @@ Quickstart Example
 ------------------
 
 In order to provide a quick DeBasher usage example, we are going to see
-how the popular "Hello World!" program can be implemented. If we call
-our program ``debasher_hello_world``, we should create a file with the
-same name and Bash extension, ``debasher_hello_world.sh``, with the
-following content:
+how the popular "Hello World!" program can be implemented. We will
+define a DeBasher module called ``debasher_hello_world``, that will be
+stored in a file with the same name and Bash extension,
+``debasher_hello_world.sh``. The file will have the following content:
 
 ..
   NOTE: indent code block in emacs adding n spaces: C-u n C-x TAB
