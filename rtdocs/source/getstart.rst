@@ -173,7 +173,7 @@ DeBasher adopts an object-oriented programming (OOP) approach, where
 each function implements a specific method. Function names have two
 parts, first, the name of the program or module, and second, a suffix
 identifying the method. For instance, the function
-``hello_world_define_opts`` implement the method ``define_opts`` for the
+``hello_world_define_opts`` implements the method ``define_opts`` for the
 ``hello_world`` process.
 
 In the "Hello World!" example shown above, we have a module named
