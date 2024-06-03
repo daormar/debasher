@@ -1,5 +1,5 @@
-Please refer to:
+Project Information:
 
-- [http://daormar.github.io/debasher/](http://daormar.github.io/debasher/) to see project information, including installation instructions.
+- [Web Page](http://daormar.github.io/debasher/)
 
-- [https://debasher.readthedocs.io/en/latest/](https://debasher.readthedocs.io/en/latest/) to read the technical documentation of the project.
+- [Technical Documentation](https://debasher.readthedocs.io/en/latest/)
