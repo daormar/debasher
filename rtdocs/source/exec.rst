@@ -294,8 +294,8 @@ Program Statistics Generation
 -----------------------------
 
 The ``debasher_stats`` tool allows to generate statistics for a DeBasher
-program. Specifically, the program report process statuses and the
-elapsed time in seconds until completion (if the process was executed).
+program. Specifically, the tool report process statuses and the elapsed
+time in seconds until completion (if the process was executed).
 
 Again, the execution of this tool requires to provide the output
 directory of the program and, optionally, the name of the process for
