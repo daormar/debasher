@@ -41,6 +41,7 @@ CLUSTER_FILL_COLOR = "lightgrey"
 PROCESS_NODE_SHAPE = "box"
 OPTION_NODE_SHAPE = "ellipse"
 OPTION_HUB_SHAPE = "point"
+START_NODE_SHAPE = "point"
 FIFO_ARC_STYLE = "dashed"
 DEP_GRAPH_LINESTYLE_SEP_INT = "dashed"
 DEP_GRAPH_LINESTYLE_SEP_COMMA = "solid"
@@ -387,6 +388,7 @@ class DependencyGraph:
         print("K=1;")
 
         # Set representation for processes
+        print("node [shape = " + START_NODE_SHAPE + "];", "; ".join(["start"]))
         print("node [shape = " + PROCESS_NODE_SHAPE + "];")
 
         # Process processes
