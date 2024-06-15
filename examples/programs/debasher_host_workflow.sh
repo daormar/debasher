@@ -138,7 +138,7 @@ host2_generate_opts()
 host2()
 {
     # Initialize variables
-    local infile=$(read_opt_value_from_func_args "-infile" "$@")
+    local infile=$(read_opt_value_from_func_args "-id" "$@")
 
     # Show host name
     hostname
