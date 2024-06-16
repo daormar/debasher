@@ -83,8 +83,12 @@ host1_generate_opts()
 ########
 host1()
 {
+    # Initialize variables
+    local id=$(read_opt_value_from_func_args "-id" "$@")
+
     # Show host name
-    hostname
+    local hname=$(hostname)
+    echo "${id}: ${hname}"
 }
 
 #################################

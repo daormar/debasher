@@ -74,7 +74,11 @@ host1_generate_opts()
     local task_idx=$5
     local optlist=""
 
+    # -id option
     define_opt "-id" ${task_idx} optlist || return 1
+
+    # -outf option
+    define_opt "-outf" "${process_outdir}/outf_${task_idx}" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -88,10 +92,11 @@ host1()
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Show host name
-    hostname
+    local hname=$(hostname)
+    echo "${id}: ${hname}"
 
     # Create file
-    echo -n "" > "${outf}"
+    echo "${id}" > "${outf}"
 }
 
 ########
@@ -128,7 +133,11 @@ host2_generate_opts()
     local task_idx=$5
     local optlist=""
 
-    define_opt "-id" $task_idx optlist || return 1
+    # -id option
+    define_opt "-id" ${task_idx} optlist || return 1
+
+    # -inf option
+    define_opt_from_proc_task_out "-inf" "host1" "${task_idx}" "-outf" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -138,10 +147,12 @@ host2_generate_opts()
 host2()
 {
     # Initialize variables
-    local infile=$(read_opt_value_from_func_args "-id" "$@")
+    local id=$(read_opt_value_from_func_args "-id" "$@")
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
     # Show host name
-    hostname
+    local hname=$(hostname)
+    echo "${id}: ${hname}"
 }
 
 #################################
