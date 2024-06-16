@@ -49,5 +49,5 @@ process2_define_opts()
 ########
 debasher_net_reconf_b_program()
 {
-    add_debasher_program " debasher_net_reconf_a"
+    add_debasher_program "debasher_net_reconf_a"
 }
