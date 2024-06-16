@@ -17,20 +17,20 @@
 # *- bash -*
 
 # Load modules
-load_debasher_module "debasher_net_reconf_a"
+load_debasher_module "debasher_net_reconf_1"
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #
 #################################
 
 ########
-process2_explain_cmdline_opts()
+process_b_explain_cmdline_opts()
 {
     :
 }
 
 ########
-process2_define_opts()
+process_b_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -40,14 +40,14 @@ process2_define_opts()
     local optlist=""
 
     # -inf option
-    define_opt_from_proc_out "-inf" "process1" "-outf" optlist || return 1
+    define_opt_from_proc_out "-inf" "process_a" "-outf" optlist || return 1
 
     # Save option list
     save_opt_list optlist
 }
 
 ########
-debasher_net_reconf_b_program()
+debasher_net_reconf_2_program()
 {
-    add_debasher_program "debasher_net_reconf_a"
+    add_debasher_program "debasher_net_reconf_1"
 }

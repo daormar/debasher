@@ -35,13 +35,13 @@ debasher_host_workflow_shared_dirs()
 ######################################
 
 ########
-process1_document()
+process_a_document()
 {
     process_description "Takes a string as input and prints it to a file"
 }
 
 ########
-process1_explain_cmdline_opts()
+process_a_explain_cmdline_opts()
 {
     # -s option
     local description="Input string"
@@ -49,7 +49,7 @@ process1_explain_cmdline_opts()
 }
 
 ########
-process1_define_opts()
+process_a_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -69,7 +69,7 @@ process1_define_opts()
 }
 
 ########
-process1()
+process_a()
 {
     # Initialize variables
     local str=$(read_opt_value_from_func_args "-s" "$@")
@@ -80,7 +80,7 @@ process1()
 }
 
 ########
-process2_explain_cmdline_opts()
+process_b_explain_cmdline_opts()
 {
     # -inf option
     local description="Input file"
@@ -88,7 +88,7 @@ process2_explain_cmdline_opts()
 }
 
 ########
-process2_define_opts()
+process_b_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -105,7 +105,7 @@ process2_define_opts()
 }
 
 ########
-process2()
+process_b()
 {
     # Initialize variables
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
@@ -119,8 +119,8 @@ process2()
 #################################
 
 ########
-debasher_net_reconf_a_program()
+debasher_net_reconf_1_program()
 {
-    add_debasher_process "process1" "cpus=1 mem=32 time=00:10:00"
-    add_debasher_process "process2" "cpus=1 mem=32 time=00:10:00"
+    add_debasher_process "process_a" "cpus=1 mem=32 time=00:10:00"
+    add_debasher_process "process_b" "cpus=1 mem=32 time=00:10:00"
 }
