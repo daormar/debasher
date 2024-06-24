@@ -24,7 +24,9 @@ extract_sched_funcs()
     funcs_to_keep["seq_execute"]=1
     funcs_to_keep["write_env_vars_and_funcs"]=1
     funcs_to_keep["signal_process_completion"]=1
+    funcs_to_keep["get_process_finished_filename_prefix"]=1
     funcs_to_keep["get_process_finished_filename"]=1
+    funcs_to_keep["get_task_finished_filename"]=1
 
     # Load scheduler functions
     source "${debasher_libexecdir}/debasher_lib_sched"

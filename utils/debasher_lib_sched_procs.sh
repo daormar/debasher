@@ -59,7 +59,7 @@ get_array_taskid()
 }
 
 ########
-get_process_finished_filename()
+get_process_finished_filename_prefix()
 {
     local dirname=$1
     local processname=$2
@@ -68,6 +68,31 @@ get_process_finished_filename()
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.${FINISHED_PROCESS_FEXT}"
+}
+
+########
+get_process_finished_filename()
+{
+    local dirname=$1
+    local processname=$2
+
+    # Get prefix
+    local prefix=`get_process_finished_filename_prefix "${dirname}" "${processname}"`
+
+    echo "${prefix}"
+}
+
+########
+get_task_finished_filename()
+{
+    local dirname=$1
+    local processname=$2
+    local idx=$3
+
+    # Get prefix
+    local prefix=`get_process_finished_filename_prefix "${dirname}" "${processname}"`
+
+    echo "${prefix}_${idx}"
 }
 
 ########
@@ -107,17 +132,14 @@ get_list_of_pending_tasks_in_array()
 
     # Create associative map containing completed jobs
     local -A completed_tasks
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
-    if [ -f "${finished_filename}" ]; then
-        while read line; do
-            local fields=( $line )
-            local num_fields=${#fields[@]}
-            if [ ${num_fields} -eq 7 ]; then
-                local id=${fields[3]}
-                completed_tasks[${id}]="1"
-            fi
-        done < "${finished_filename}"
-    fi
+    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+    local file
+    for file in "${finished_filename_pref}"*; do
+        if [ -f "${file}" ]; then
+            local id="${file#$finished_filename_pref}"
+            completed_tasks[${id}]="1"
+        fi
+    done
 
     # Create string enumerating pending tasks
     local pending_tasks=""
@@ -137,20 +159,55 @@ get_list_of_pending_tasks_in_array()
 }
 
 ########
+get_num_array_tasks()
+{
+    local dirname=$1
+    local processname=$2
+    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+
+    local num_tasks=0
+    for file in "${finished_filename_pref}"*; do
+        if [ -f "${file}" ]; then
+            num_tasks=`"${AWK}" '{print $NF}' "${file}"`
+            break
+        fi
+    done
+
+    echo "${num_tasks}"
+}
+
+########
+get_num_tasks_completed()
+{
+    local dirname=$1
+    local processname=$2
+    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+
+    local num_tasks_completed=0
+    for file in "${finished_filename_pref}"*; do
+        if [ -f "${file}" ]; then
+            num_tasks_completed=$((num_tasks_completed + 1))
+        fi
+    done
+
+    echo "${num_tasks_completed}"
+}
+
+########
 get_task_array_list()
 {
     local dirname=$1
     local processname=$2
     local array_size=$3
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
 
-    if [ -f "${finished_filename}" ]; then
-        # Some jobs were completed, return list containing pending ones
-        get_list_of_pending_tasks_in_array "${dirname}" "${processname}" "${array_size}"
-    else
-        # No jobs were completed, return list containing all of them
+    local num_completed_tasks=`get_num_tasks_completed "${dirname}" "${processname}"`
+    if [ "${num_completed_tasks}" -eq 0 ]; then
+        # No tasks were completed, return list containing all of them
         local last_task_idx=$((array_size - 1))
         echo "0-${last_task_idx}"
+    else
+        # Some tasks were completed, return list containing pending ones
+        get_list_of_pending_tasks_in_array "${dirname}" "${processname}" "${array_size}"
     fi
 }
 
@@ -164,9 +221,9 @@ update_process_completion_signal()
     # If process will be reexecuted, file signaling process completion should
     # be removed. Additionally, this action should be registered in a
     # specific associative array
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
+    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
     if [ "${status}" = "${REEXEC_PROCESS_STATUS}" ]; then
-        "${RM}" -f "${finished_filename}"
+        "${RM}" -f "${finished_filename_pref}"*
         DEBASHER_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]=1
     fi
 }
@@ -299,12 +356,13 @@ signal_process_completion()
     local total=$4
 
     # Signal completion
-    # NOTE: A file lock is not necessary for the following operation
-    # since echo is atomic when writing short lines (for safety, up to
-    # 512 bytes, source:
-    # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
-    echo "Finished task idx: $idx ; Total: $total" >> "${finished_filename}"
+    if [ ${total} -eq 1 ]; then
+        local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
+        echo "Finished task idx: $idx ; Total: $total" > "${finished_filename}"
+    else
+        local finished_filename=`get_task_finished_filename "${dirname}" ${processname} ${idx}`
+        echo "Finished task idx: $idx ; Total: $total" > "${finished_filename}"
+    fi
 }
 
 ########
@@ -317,14 +375,10 @@ get_signal_process_completion_cmd()
     local total=$4
 
     # Signal completion
-    # NOTE: A file lock is not necessary for the following operation
-    # since echo is atomic when writing short lines (for safety, up to
-    # 512 bytes, source:
-    # https://stackoverflow.com/questions/9926616/is-echo-atomic-when-writing-single-lines/9927415#9927415)
     if [ ${total} -eq 1 ]; then
-        echo "echo \"Finished task idx: 0 ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
+        echo "echo \"Finished task idx: 0 ; Total: $total\" > `get_process_finished_filename "${dirname}" ${processname}`"
     else
-        echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" >> `get_process_finished_filename "${dirname}" ${processname}`"
+        echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" > \`get_task_finished_filename \"${dirname}\" ${processname} \${${taskidx_varname}}\`"
     fi
 }
 
@@ -376,6 +430,7 @@ get_launched_array_task_ids()
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     # Return ids for array tasks if any
+    local taskid_file
     for taskid_file in "${execdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             "${CAT}" "${taskid_file}"
@@ -390,10 +445,14 @@ get_finished_array_task_indices()
     local dirname=$1
     local processname=$2
 
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
-    if [ -f "${finished_filename}" ]; then
-        "${AWK}" '{print $4}' "${finished_filename}"
-    fi
+    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+    local file
+    for file in "${finished_filename_pref}"*; do
+        if [ -f "${file}" ]; then
+            local id="${file#$finished_filename_pref}"
+            echo ${id}
+        fi
+    done
 }
 
 ########
@@ -403,34 +462,11 @@ array_task_is_finished()
     local processname=$2
     local idx=$3
 
-    # Check file with finished tasks info exists
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
+    # Check if finished task file exists
+    local finished_filename=`get_task_finished_filename "${dirname}" ${processname} "${idx}"`
     if [ ! -f "${finished_filename}" ]; then
         return 1
     fi
-
-    # Check that task is in file
-    local task_in_file=1
-    "${GREP}" "idx: ${idx} ;" "${finished_filename}" > /dev/null || task_in_file=0
-    if [ ${task_in_file} -eq 1 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-get_num_finished_array_tasks_from_finished_file()
-{
-    local finished_filename=$1
-    "$WC" -l "${finished_filename}" | "$AWK" '{print $1}'
-}
-
-########
-get_num_array_tasks_from_finished_file()
-{
-    local finished_filename=$1
-    "$HEAD" -1 "${finished_filename}" | "$AWK" '{print $NF}'
 }
 
 ########
@@ -438,23 +474,18 @@ process_is_finished()
 {
     local dirname=$1
     local processname=$2
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
 
-    if [ -f "${finished_filename}" ]; then
-        # Obtain number of finished tasks
-        local num_array_tasks_finished=`get_num_finished_array_tasks_from_finished_file "${finished_filename}"`
-        if [ ${num_array_tasks_finished} -eq 0 ]; then
-            return 1
-        fi
-        # Check that all tasks are finished
-        local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file "${finished_filename}"`
-        if [ ${num_array_tasks_finished} -eq ${num_array_tasks_to_finish} ]; then
+    local num_tasks_completed=`get_num_tasks_completed "${dirname}" "${processname}"`
+
+    if [ "${num_tasks_completed}" -eq 0 ]; then
+        return 1
+    else
+        local num_tasks=`get_num_array_tasks "${dirname}" "${processname}"`
+        if [ "${num_tasks_completed}" -eq "${num_tasks}" ]; then
             return 0
         else
             return 1
         fi
-    else
-        return 1
     fi
 }
 

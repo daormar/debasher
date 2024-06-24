@@ -69,9 +69,10 @@ process_is_unfinished_but_runnable_builtin_sched()
         # Process is array with some tasks already launched
 
         # Check that not all array tasks were launched
-        local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
-        if [ -f "${finished_filename}" ] ; then
-            local num_array_tasks_to_finish=`get_num_array_tasks_from_finished_file "${finished_filename}"`
+
+        local num_tasks_completed=`get_num_tasks_completed "${dirname}" ${processname}`
+        if [ "${num_tasks_completed}" -gt 0 ]; then
+            local num_array_tasks_to_finish=`get_num_array_tasks "${dirname}" "${processname}"`
             if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
                 return 1
             fi
@@ -95,13 +96,12 @@ get_elapsed_time_for_process_builtin()
     local dirname=$1
     local processname=$2
 
-    # Obtain finished filename
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
+    # Obtain number of tasks completed
+    local num_tasks_completed=`get_num_tasks_completed "${dirname}" ${processname}`
 
-    if [ -f ${finished_filename} ]; then
+    if [ "${num_tasks_completed}" -gt 0 ]; then
         # Get number of array tasks
-        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`
-
+        local num_tasks=`get_num_array_tasks "${dirname}" "${processname}"`
         case $num_tasks in
             0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
                 ;;
