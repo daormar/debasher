@@ -67,7 +67,7 @@ get_process_finished_filename_prefix()
     # Get exec dir
     execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}.${FINISHED_PROCESS_FEXT}"
+    echo "${execdir}/${processname}"
 }
 
 ########
@@ -79,7 +79,7 @@ get_process_finished_filename()
     # Get prefix
     local prefix=`get_process_finished_filename_prefix "${dirname}" "${processname}"`
 
-    echo "${prefix}"
+    echo "${prefix}.${FINISHED_PROCESS_FEXT}"
 }
 
 ########
@@ -92,7 +92,7 @@ get_task_finished_filename()
     # Get prefix
     local prefix=`get_process_finished_filename_prefix "${dirname}" "${processname}"`
 
-    echo "${prefix}_${idx}"
+    echo "${prefix}_${idx}.${FINISHED_PROCESS_FEXT}"
 }
 
 ########
@@ -134,9 +134,10 @@ get_list_of_pending_tasks_in_array()
     local -A completed_tasks
     local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
     local file
-    for file in "${finished_filename_pref}"*; do
+    for file in "${finished_filename_pref}"_*.${FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
-            local id="${file#$finished_filename_pref}"
+            local temp="${file#${finished_filename_pref}_}"
+            local id="${temp%.$FINISHED_PROCESS_FEXT}"
             completed_tasks[${id}]="1"
         fi
     done
@@ -166,7 +167,7 @@ get_num_array_tasks()
     local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
 
     local num_tasks=0
-    for file in "${finished_filename_pref}"*; do
+    for file in "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
             num_tasks=`"${AWK}" '{print $NF}' "${file}"`
             break
@@ -184,7 +185,7 @@ get_num_tasks_completed()
     local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
 
     local num_tasks_completed=0
-    for file in "${finished_filename_pref}"*; do
+    for file in "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
             num_tasks_completed=$((num_tasks_completed + 1))
         fi
@@ -223,7 +224,7 @@ update_process_completion_signal()
     # specific associative array
     local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
     if [ "${status}" = "${REEXEC_PROCESS_STATUS}" ]; then
-        "${RM}" -f "${finished_filename_pref}"*
+        "${RM}" -f "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}
         DEBASHER_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]=1
     fi
 }
@@ -447,9 +448,10 @@ get_finished_array_task_indices()
 
     local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
     local file
-    for file in "${finished_filename_pref}"*; do
+    for file in "${finished_filename_pref}"_*.${FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
-            local id="${file#$finished_filename_pref}"
+            local temp="${file#${finished_filename_pref}_}"
+            local id="${temp%.$FINISHED_PROCESS_FEXT}"
             echo ${id}
         fi
     done
