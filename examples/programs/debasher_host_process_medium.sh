@@ -37,7 +37,7 @@ debasher_host_process_shared_dirs()
 ########
 host1_document()
 {
-    process_description "Executes an array of n tasks. Each task creates a file containing the host name."
+    process_description "Executes an array of n tasks."
 }
 
 ########
