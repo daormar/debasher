@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_host_workflow_shared_dirs()
+debasher_host_workflow_medium_shared_dirs()
 {
     :
 }

@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_host_process_shared_dirs()
+debasher_host_process_medium_shared_dirs()
 {
     :
 }
