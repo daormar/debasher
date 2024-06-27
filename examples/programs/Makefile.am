@@ -10,7 +10,7 @@ debasher_telegram.sh debasher_telegram_jobsteps.sh			\
 debasher_telegram_array.sh debasher_telegram_imperative.sh		\
 debasher_host_process.sh debasher_host_process_expl_deps.sh		\
 debasher_host_workflow.sh debasher_host_workflow_expl_deps.sh		\
-debasher_host_workflow_light.sh debasher_cycle.sh			\
-debasher_net_reconf_1.sh debasher_net_reconf_2.sh
+debasher_host_workflow_medium.sh debasher_host_workflow_light.sh	\
+debasher_cycle.sh debasher_net_reconf_1.sh debasher_net_reconf_2.sh
 
 EXTRA_DIST= $(prgfiles_DATA)
