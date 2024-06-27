@@ -76,6 +76,8 @@ host1_generate_opts()
 
     define_opt "-id" ${task_idx} optlist || return 1
 
+    define_opt "-outf" "${process_outdir}/outf_${task_idx}" optlist || return 1
+
     # Save option list
     save_opt_list optlist
 }
@@ -85,10 +87,14 @@ host1()
 {
     # Initialize variables
     local id=$(read_opt_value_from_func_args "-id" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Show host name
     local hname=$(hostname)
     echo "${id}: ${hname}"
+
+    # Create file
+    echo "${id}" > "${outf}"
 }
 
 #################################
