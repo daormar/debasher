@@ -98,5 +98,5 @@ host1()
 ########
 debasher_host_process_medium_program()
 {
-    add_debasher_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=64"
+    add_debasher_process "host1" "cpus=1 mem=32 time=00:10:00 throttle=64" "processdeps=none"
 }
