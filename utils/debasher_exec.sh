@@ -335,6 +335,8 @@ gen_process_graph()
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
     else
         "${DOT}" -T pdf "${procgraph_file_prefix}.${GRAPHS_FEXT}" > "${procgraph_file_prefix}.pdf"
+
+        "${DOT}" -T eps "${procgraph_file_prefix}.${GRAPHS_FEXT}" > "${procgraph_file_prefix}.eps"
     fi
 
     echo "Generation complete" >&2
