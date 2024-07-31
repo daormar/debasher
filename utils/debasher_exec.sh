@@ -358,6 +358,8 @@ gen_dependency_graph()
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
     else
         "${DOT}" -T pdf "${depgraph_file_prefix}.${GRAPHS_FEXT}" > "${depgraph_file_prefix}.pdf"
+
+        "${DOT}" -T eps "${depgraph_file_prefix}.${GRAPHS_FEXT}" > "${depgraph_file_prefix}.eps"
     fi
 
     echo "Generation complete" >&2
