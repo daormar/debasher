@@ -247,3 +247,23 @@ The output of the previous command is:
 ::
 
     Hello World!
+
+On the other hand, it is also possible to inspect the scheduler
+output. The scheduler output includes the standard and error output of a
+particular process, and also some scheduling-related information. The
+scheduler output is useful for debugging. To visualize the scheduler
+output we can use the following command:
+
+::
+
+    $ debasher_get_sched_out -d out -p hello_world
+
+The output returned by the command is:
+
+.. code-block:: bash
+
+    Process started at 07/30/24 18:17:06
+    * Resetting output directory for process...
+    Hello World!
+    Function hello_world successfully executed
+    Process finished at 07/30/24 18:17:06
