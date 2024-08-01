@@ -1236,6 +1236,32 @@ launch_program_processes_debug()
     echo "" >&2
 }
 
+########
+print_post_exec_wait_help()
+{
+    echo "Program execution finished, possible next steps:" >&2
+    echo "- Inspect program execution status:" >&2
+    echo "debasher_status -d <outdir>" >&2
+    echo "- Get standard output for a process:"
+    echo "debasher_get_stdout -d <outdir> -p <process_name>" >&2
+    echo "- Get scheduler output for a process (useful for debugging):"
+    echo "debasher_get_sched_out -d <outdir> -p <process_name>" >&2
+    echo "" >&2
+}
+
+########
+print_post_exec_nowait_help()
+{
+    echo "Program execution started, possible next steps:" >&2
+    echo "- Inspect program execution status:" >&2
+    echo "debasher_status -d <outdir>" >&2
+    echo "- Get standard output for a process:"
+    echo "debasher_get_stdout -d <outdir> -p <process_name>" >&2
+    echo "- Get scheduler output for a process (useful for debugging):"
+    echo "debasher_get_sched_out -d <outdir> -p <process_name>" >&2
+    echo "" >&2
+}
+
 #################
 # MAIN FUNCTION #
 #################
@@ -1335,11 +1361,15 @@ else
             sched=`determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
                 builtin_sched_execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                print_post_exec_wait_help
             else
                 prepare_files_and_dirs_for_processes "${command_line}" "${outd}" "${procspec_file}"
                 launch_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 if [ "${wait}" -eq 1 ]; then
                     wait_for_program_processes "${outd}" "${procspec_file}" || exit 1
+                    print_post_exec_wait_help
+                else
+                    print_post_exec_nowait_help
                 fi
             fi
         fi
