@@ -1448,6 +1448,8 @@ builtin_sched_execute_program_processes()
 
         iterno=$((iterno + 1))
     done
+
+    echo "" >&2
 }
 
 ########
