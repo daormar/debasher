@@ -16,6 +16,9 @@ set of Bash functions governing the process behavior and its
 corresponding options. Option definition will implicitly define a
 network connecting the inputs and outputs of the different processes.
 
+**HINT**: A whole range of DeBasher program examples can be found in the
+``example/programs`` folder after cloning the GitHub repository.
+
 The following sections explain how to implement a simple program with
 two processes: ``file_writer`` and ``file_reader``. We will store the
 program in the ``debasher_file_example`` module. The ``file_writer``
@@ -641,6 +644,10 @@ the ``program`` method. For this purpose, we could use the
 
 Examples
 --------
+
+Below we show a list of DeBasher program examples exploring the
+functionality offered by the tool. The examples can also be found in the
+``example/programs`` folder after cloning the GitHub repository.
 
 .. toctree::
 
