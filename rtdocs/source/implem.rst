@@ -16,7 +16,7 @@ set of Bash functions governing the process behavior and its
 corresponding options. Option definition will implicitly define a
 network connecting the inputs and outputs of the different processes.
 
-**HINT**: A whole range of DeBasher program examples can be found in the
+**HINT**: A wide range of DeBasher program examples can be found in the
 ``example/programs`` folder after cloning the GitHub repository.
 
 The following sections explain how to implement a simple program with
