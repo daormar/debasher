@@ -93,12 +93,6 @@ value_writer()
 ########
 value_reader_document()
 {
-    process_description "Executes an array of 4 tasks. Each task creates a file containing the task index."
-}
-
-########
-value_reader_document()
-{
     process_description "Gets a value produced by another process, increases it in one unit and writes it in own directory."
 }
 
