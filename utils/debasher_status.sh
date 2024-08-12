@@ -213,6 +213,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-process_status_for_pfile "${pdir}" "${pfile}"
+process_status_for_pfile "${pdir}"
 
 exit $?
