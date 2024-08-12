@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_value_pass_shared_dirs()
+debasher_value_pass_example_shared_dirs()
 {
     :
 }
@@ -149,7 +149,7 @@ value_reader()
 #################################
 
 ########
-debasher_value_pass_program()
+debasher_value_pass_example_program()
 {
     add_debasher_process "value_writer" "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "value_reader" "cpus=1 mem=32 time=00:01:00"
