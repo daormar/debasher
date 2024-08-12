@@ -34,7 +34,6 @@ usage()
     echo ""
     echo "-d <string>               Output directory for program processes"
     echo "-p <string>               Process name whose status should be determined"
-    echo "-i                        Show scheduler ids for program processes"
     echo "--help                    Display this help and exit"
 }
 
@@ -43,7 +42,6 @@ read_pars()
 {
     d_given=0
     p_given=0
-    i_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
