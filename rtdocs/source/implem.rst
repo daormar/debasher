@@ -652,3 +652,7 @@ functionality offered by the tool. The examples can also be found in the
 .. toctree::
 
    fwriter_freader
+
+   array
+
+   value_pass
