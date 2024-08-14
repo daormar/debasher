@@ -655,4 +655,8 @@ functionality offered by the tool. The examples can also be found in the
 
    array
 
+   generator
+
    value_pass
+
+   cycle
