@@ -653,6 +653,8 @@ functionality offered by the tool. The examples can also be found in the
 
    fwriter_freader
 
+   fifo
+
    array
 
    generator
@@ -660,3 +662,7 @@ functionality offered by the tool. The examples can also be found in the
    value_pass
 
    cycle
+
+   conda
+
+   docker
