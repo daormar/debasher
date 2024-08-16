@@ -661,6 +661,12 @@ functionality offered by the tool. The examples can also be found in the
 
    value_pass
 
+   skip
+
+   subprogram
+
+   explicit_deps
+
    cycle
 
    conda
