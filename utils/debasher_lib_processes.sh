@@ -169,6 +169,65 @@ get_exec_funcname()
 }
 
 ########
+get_pyexec_varname()
+{
+    local processname=$1
+
+    search_process_var "${processname}" "${PROCESS_METHOD_NAME_PYEXEC}"
+}
+
+########
+get_pyexec_command()
+{
+    local pyexec_varname=$1
+
+    echo "${PYTHON} -c"
+}
+
+########
+get_exec_commvar()
+{
+    local processname=$1
+
+    # Search for a suitable function or command to execute the process
+
+    # Try with Python
+    local pyexec_varname=`get_pyexec_varname "${processname}"`
+    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        echo "${pyexec_varname}"
+        return 0
+    fi
+}
+
+########
+serialize_exec_commvar()
+{
+    local exec_commvar=$1
+
+    if [ -n "${exec_commvar}" ]; then
+        echo "\"\$${exec_commvar}\""
+    fi
+}
+
+########
+get_exec_command_or_funcname()
+{
+    local processname=$1
+
+    # Search for a suitable function or command to execute the process
+
+    # Try with Python
+    local pyexec_varname=`get_pyexec_varname "${processname}"`
+    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        get_pyexec_command "${pyexec_varname}"
+        return 0
+    fi
+
+    # Finally, try with native function
+    search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXEC}"
+}
+
+########
 get_post_funcname()
 {
     local processname=$1

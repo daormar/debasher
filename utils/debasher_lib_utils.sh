@@ -254,6 +254,18 @@ func_exists()
 }
 
 ########
+var_exists()
+{
+    local varname=$1
+
+    if [ -v "${varname}" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 errmsg()
 {
     local msg=$1
@@ -604,6 +616,16 @@ get_process_funcname()
 }
 
 ########
+get_process_varname()
+{
+    local processname=$1
+    local method_name=$2
+
+    local process_function="${processname}${method_name}"
+    echo ${process_function}
+}
+
+########
 search_process_func()
 {
     local processname=$1
@@ -621,6 +643,28 @@ search_process_func()
             echo "${process_function}"
         else
             echo "${FUNCT_NOT_FOUND}"
+        fi
+    fi
+}
+
+########
+search_process_var()
+{
+    local processname=$1
+    local method_name=$2
+
+    # Check if function exists
+    local process_var=`get_process_varname "${processname}" "${method_name}"`
+    if var_exists "${process_var}"; then
+        echo "${process_var}"
+    else
+        # Check if function without process suffix exists
+        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
+        process_var=`get_process_varname "${processname_wo_proc_suffix}" "${method_name}"`
+        if var_exists "${process_var}"; then
+            echo "${process_var}"
+        else
+            echo "${VAR_NOT_FOUND}"
         fi
     fi
 }

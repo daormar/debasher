@@ -961,12 +961,13 @@ builtin_sched_execute_funct_plus_postfunct()
     local cmdline=$1
     local dirname=$2
     local processname=$3
-    local skip_funct=$4
-    local reset_funct=$5
-    local funct=$6
-    local post_funct=$7
-    local opt_array_size=$8
-    local task_idx=$9
+    local opt_array_size=$4
+    local task_idx=$5
+    local skip_funct=`get_skip_funcname ${processname}`
+    local reset_funct=`get_reset_funcname ${processname}`
+    local comm_or_funct=`get_exec_command_or_funcname ${processname}`
+    local comm_varname=`get_exec_commvar ${processname}`
+    local post_funct=`get_post_funcname ${processname}`
 
     # Get serialized arguments
     local sargs=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
@@ -995,12 +996,12 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Execute process function
     DEBASHER_PROCESS_STDOUT_FILENAME=`get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
-    $funct "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+    ${comm_or_funct} "${!comm_varname}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
     local funct_exit_code=${PIPESTATUS[0]}
     if [ ${funct_exit_code} -ne 0 ]; then
-        echo "Error: execution of ${funct} failed with exit code ${funct_exit_code}" >&2
+        echo "Error: execution of ${comm_or_funct} failed with exit code ${funct_exit_code}" >&2
     else
-        echo "Function ${funct} successfully executed" >&2
+        echo "Command or function ${comm_or_funct} successfully executed" >&2
     fi
 
     # Execute process post-function
@@ -1026,21 +1027,17 @@ builtin_sched_print_script_body()
     local cmdline=$1
     local dirname=$2
     local processname=$3
-    local skip_funct=$4
-    local reset_funct=$5
-    local funct=$6
-    local post_funct=$7
-    local opt_array_size=$8
+    local opt_array_size=$4
 
     # Write function to be executed
     if [ "${opt_array_size}" -gt 1 ]; then
         echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
         echo "builtin_task_log_filename=\`get_task_log_filename \"$(esc_dq "${dirname}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
-        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
     else
         echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
         local builtin_log_filename=`get_process_log_filename "${dirname}" ${processname}`
-        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${skip_funct} ${reset_funct} ${funct} ${post_funct} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
     fi
 }
 
@@ -1075,10 +1072,6 @@ builtin_sched_create_script()
     local processname=$3
     local opt_array_size=$4
     local fname=`get_script_filename "${dirname}" ${processname}`
-    local skip_funct=`get_skip_funcname ${processname}`
-    local reset_funct=`get_reset_funcname ${processname}`
-    local funct=`get_exec_funcname ${processname}`
-    local post_funct=`get_post_funcname ${processname}`
 
     # Write bash shebang
     local BASH_SHEBANG=`init_bash_shebang_var`
@@ -1091,7 +1084,7 @@ builtin_sched_create_script()
     builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
-    builtin_sched_print_script_body "${cmdline}" "${dirname}" "${processname}" "${skip_funct}" "${reset_funct}" "${funct}" "${post_funct}" "${opt_array_size}" >> "${fname}" || return 1
+    builtin_sched_print_script_body "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print foot
     builtin_sched_print_script_foot >> "${fname}" || return 1
