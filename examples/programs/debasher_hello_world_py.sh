@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_hello_world_shared_dirs()
+debasher_hello_world_py_shared_dirs()
 {
     :
 }
