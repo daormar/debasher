@@ -74,7 +74,6 @@ hello_world_define_opts()
 
 ########
 hello_world_r=$(cat <<'EOF'
-# Your R code goes here
 args <- commandArgs(trailingOnly = TRUE)
 
 # Function to parse arguments
