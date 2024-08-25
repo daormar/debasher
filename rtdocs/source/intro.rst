@@ -34,3 +34,8 @@ with `component-based software engineering
 <https://en.wikipedia.org/wiki/Component-based_software_engineering>`_,
 resulting in programs that naturally exploit process parallelism and at
 the same time optimize modularity and code reuse.
+
+In spite of the fact that DeBasher uses Bash as native language, it
+should be highlighted that flow-based programming is by nature language
+agnostic. Because of that, DeBasher allows the user to implement the
+program components in multiple programming languages and not only Bash.
