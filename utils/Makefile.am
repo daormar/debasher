@@ -90,6 +90,7 @@ SUFFIXES= .sh .py .r .R
 	echo "PANDOC=\"$(PANDOC)\"" >> $@
 	echo "PYTHON=\"$(PYTHON)\"" >> $@
 	echo "RSCRIPT=\"$(RSCRIPT)\"" >> $@
+	echo "PERL=\"$(PERL)\"" >> $@
 	echo "GROOVY=\"$(GROOVY)\"" >> $@
 	echo "JAVA=\"$(JAVA)\"" >> $@
 	echo "DOT=\"$(DOT)\"" >> $@
