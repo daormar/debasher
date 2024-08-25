@@ -177,11 +177,27 @@ get_pyexec_varname()
 }
 
 ########
+get_rexec_varname()
+{
+    local processname=$1
+
+    search_process_var "${processname}" "${PROCESS_METHOD_NAME_REXEC}"
+}
+
+########
 get_pyexec_command()
 {
     local pyexec_varname=$1
 
     echo "${PYTHON} -c"
+}
+
+########
+get_rexec_command()
+{
+    local pyexec_varname=$1
+
+    echo "${RSCRIPT} -e"
 }
 
 ########
@@ -195,6 +211,13 @@ get_exec_commvar()
     local pyexec_varname=`get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         echo "${pyexec_varname}"
+        return 0
+    fi
+
+    # Try with R
+    local rexec_varname=`get_rexec_varname "${processname}"`
+    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        echo "${rexec_varname}"
         return 0
     fi
 }
@@ -220,6 +243,13 @@ get_exec_command_or_funcname()
     local pyexec_varname=`get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         get_pyexec_command "${pyexec_varname}"
+        return 0
+    fi
+
+    # Try with R
+    local rexec_varname=`get_rexec_varname "${processname}"`
+    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        get_rexec_command "${rexec_varname}"
         return 0
     fi
 
