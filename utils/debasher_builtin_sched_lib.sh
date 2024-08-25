@@ -967,6 +967,7 @@ builtin_sched_execute_funct_plus_postfunct()
     local reset_funct=`get_reset_funcname ${processname}`
     local comm_or_funct=`get_exec_command_or_funcname ${processname}`
     local comm_varname=`get_exec_commvar ${processname}`
+    local end_of_opts_marker=`get_end_of_options_marker ${processname}`
     local post_funct=`get_post_funcname ${processname}`
 
     # Get serialized arguments
@@ -996,7 +997,7 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Execute process function
     DEBASHER_PROCESS_STDOUT_FILENAME=`get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
-    ${comm_or_funct} "${!comm_varname}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+    ${comm_or_funct} "${!comm_varname}" "${end_of_opts_marker}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
     local funct_exit_code=${PIPESTATUS[0]}
     if [ ${funct_exit_code} -ne 0 ]; then
         echo "Error: execution of ${comm_or_funct} failed with exit code ${funct_exit_code}" >&2

@@ -127,17 +127,13 @@ print_script_body_slurm_sched()
     local cmdline=$1
     local dirname=$2
     local processname=$3
-    # local skip_funct=$4
-    # local reset_funct=$5
-    # local comm_or_funct=$6
-    # local post_funct=$7
-    # local opt_array_size=$8
     local opt_array_size=$4
     local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
     local comm_or_funct=`get_exec_command_or_funcname ${processname}`
     local comm_varname=`get_exec_commvar ${processname}`
     local comm_varname_serial=`serialize_exec_commvar ${comm_varname}`
+    local end_of_opts_marker=`get_end_of_options_marker ${processname}`
     local post_funct=`get_post_funcname ${processname}`
 
     # Retrieve and deserialize process options
@@ -163,7 +159,7 @@ print_script_body_slurm_sched()
 
     # Write function to be executed
     echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`get_process_stdout_filename \"$(esc_dq "${dirname}")\" "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
-    echo "${comm_or_funct} ${comm_varname_serial} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
+    echo "${comm_or_funct} ${comm_varname_serial} ${end_of_opts_marker} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
     echo "funct_exit_code=\${PIPESTATUS[0]}"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${comm_or_funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${comm_or_funct} successfully executed\" >&2; fi"
 
