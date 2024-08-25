@@ -185,6 +185,14 @@ get_rexec_varname()
 }
 
 ########
+get_groovyexec_varname()
+{
+    local processname=$1
+
+    search_process_var "${processname}" "${PROCESS_METHOD_NAME_GROOVYEXEC}"
+}
+
+########
 get_pyexec_command()
 {
     local pyexec_varname=$1
@@ -198,6 +206,14 @@ get_rexec_command()
     local pyexec_varname=$1
 
     echo "${RSCRIPT} -e"
+}
+
+########
+get_groovyexec_command()
+{
+    local pyexec_varname=$1
+
+    echo "${GROOVY} -e"
 }
 
 ########
@@ -218,6 +234,13 @@ get_exec_commvar()
     local rexec_varname=`get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         echo "${rexec_varname}"
+        return 0
+    fi
+
+    # Try with Groovy
+    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
+    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        echo "${groovyexec_varname}"
         return 0
     fi
 }
@@ -250,6 +273,13 @@ get_exec_command_or_funcname()
     local rexec_varname=`get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         get_rexec_command "${rexec_varname}"
+        return 0
+    fi
+
+    # Try with Groovy
+    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
+    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        get_groovyexec_command "${groovyexec_varname}"
         return 0
     fi
 
