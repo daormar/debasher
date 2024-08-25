@@ -18,8 +18,17 @@
 
 unset_previous_vars_and_funcs()
 {
-    unset -v $(compgen -v) && unset -f $(compgen -A function)
+    # Unset variables
+    for var in `compgen -v`; do
+        if [ "${var}" != "PATH" ]; then
+            unset ${var}
+        fi
+    done
 
+    # Unset functions
+    unset -f $(compgen -A function)
+
+    # Handle conda-related functions
     for conda_func in __conda_activate __conda_exe __conda_hashr __conda_reactivate conda; do
         unset "${conda_func}"
     done
