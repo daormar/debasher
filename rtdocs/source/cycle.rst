@@ -46,11 +46,17 @@ Program with Cycles
             echo "${value}" > "${outf}"
             echo "Sent value ${value}"
             value=$(cat "${inf}")
-            value=$((value + 1))
+            echo "Received value ${value}"
+            echo ""
         done
 
         # Send END message
         echo "END" > "${outf}"
+    }
+
+    process_b_document()
+    {
+        process_description "Executes a process reading and writing from fifos."
     }
 
     process_b_explain_cmdline_opts()
@@ -90,6 +96,9 @@ Program with Cycles
             if [ "${value}" = "END" ]; then
                 break
             fi
+            value=$((value + 1))
+            echo "Transformed value ${value}"
+            echo ""
             echo "${value}" > "${outf}"
         done
     }
