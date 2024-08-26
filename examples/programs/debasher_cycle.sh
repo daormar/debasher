@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_host_workflow_shared_dirs()
+debasher_cycle_shared_dirs()
 {
     :
 }
@@ -86,7 +86,8 @@ process_a()
         echo "${value}" > "${outf}"
         echo "Sent value ${value}"
         value=$(cat "${inf}")
-        value=$((value + 1))
+        echo "Received value ${value}"
+        echo ""
     done
 
     # Send END message
@@ -139,6 +140,9 @@ process_b()
         if [ "${value}" = "END" ]; then
             break
         fi
+        value=$((value + 1))
+        echo "Transformed value ${value}"
+        echo ""
         echo "${value}" > "${outf}"
     done
 }
