@@ -1095,7 +1095,7 @@ get_absolute_shdirname()
 ########
 get_absolute_fifodir()
 {
-    echo "${PROGRAM_OUTDIR}/.fifos"
+    echo "${PROGRAM_OUTDIR}/${DEBASHER_FIFOS_DIRNAME}"
 }
 
 ########
@@ -1124,7 +1124,7 @@ get_augm_fifoname_from_absname()
 ########
 get_absolute_condadir()
 {
-    echo "${PROGRAM_OUTDIR}/.conda"
+    echo "${PROGRAM_OUTDIR}/${DEBASHER_CONDA_DIRNAME}"
 }
 
 ########
