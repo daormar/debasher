@@ -98,6 +98,9 @@ MODULE_METHOD_NAME_DOCUMENT="${MODULE_METHOD_SEP}document"
 MODULE_METHOD_NAME_SHRDIRS="${MODULE_METHOD_SEP}shared_dirs"
 MODULE_METHOD_NAME_PROGRAM="${MODULE_METHOD_SEP}program"
 
+# FIFO-RELATED CONSTANTS
+EXTERNAL_FIFO_USER="EXTERNAL${ASSOC_ARRAY_ELEM_SEP}0"
+
 # FLOW-BASED PROGRAMMING CONSTANTS
 SHUTDOWN_TOKEN="__SHUTDOWN_TOKEN__"
 
@@ -238,7 +241,8 @@ declare -A PROGRAM_SHDIRS
 # Declare associative arrays to store names of fifos
 declare -A PROGRAM_FIFOS
 
-# Declare associative array to store users of fifos
+# Declare associative array to store users of fifos (The process
+# defining the FIFO with define_fifo_opt becomes the owner)
 declare -A FIFO_USERS
 
 # Declare general scheduler-related variables

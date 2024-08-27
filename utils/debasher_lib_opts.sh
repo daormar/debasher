@@ -556,6 +556,10 @@ define_fifo_task_idx()
 
     # Store name of FIFO in associative arrays
     PROGRAM_FIFOS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+
+    # Register FIFO user as external initially (this registration will
+    # be corrected later when analyzing the FIFOs used by each process)
+    FIFO_USERS["${augm_fifoname}"]=${EXTERNAL_FIFO_USER}
 }
 
 ########
