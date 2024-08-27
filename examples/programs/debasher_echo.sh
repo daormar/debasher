@@ -70,11 +70,14 @@ stream_echo()
     # Initialize variables
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
 
-    # Increase value iteratively until it reaches n
-    local stream=$(cat "${inf}")
-    while [ "${stream}" != "${SHUTDOWN_TOKEN}" ]; do
-        echo "${stream}"
-        stream=$(cat "${inf}")
+    # Read input line by line
+    local line
+    while IFS= read -r line < "${inf}"; do
+        if [ "${line}" = "${SHUTDOWN_TOKEN}" ]; then
+            break
+        else
+            echo "${line}"
+        fi
     done
 }
 
