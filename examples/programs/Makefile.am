@@ -1,7 +1,7 @@
 prgfilesdir = $(datadir)/$(PACKAGE)/programs
 prgfiles_DATA= debasher_hello_world.sh debasher_hello_world_py.sh	\
 debasher_hello_world_r.sh debasher_hello_world_perl.sh			\
-debasher_hello_world_groovy.sh debasher_echo.sh				\
+debasher_hello_world_groovy.sh debasher_echo.sh debasher_counter.sh	\
 debasher_simple_process.sh debasher_value_pass_example.sh		\
 debasher_file_example.sh debasher_fifo_example.sh			\
 debasher_shared_dir_example.sh debasher_array_example.sh		\
