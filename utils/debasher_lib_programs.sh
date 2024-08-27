@@ -176,6 +176,16 @@ get_prg_graphs_dir()
 }
 
 ########
+is_valid_processname() {
+    local input="$1"
+    if [[ "$input" =~ ^[a-zA-Z_]+$ ]]; then
+        return 0  # True
+    else
+        return 1  # False
+    fi
+}
+
+########
 # Public: Reads the value of a given option from function arguments.
 #
 # $1 - Name of the process to add into the program.
@@ -195,6 +205,12 @@ add_debasher_process()
     local processname=$1
     local process_computational_specs=$2
     local process_additional_specs=$3
+
+    # Check correctness of process name and abort execution if necessary
+    if ! is_valid_processname "${processname}"; then
+        echo "Error: process name ${processname} not valid. It should contains letters or the underscore character. Aborting execution..." >&2
+        exit 1
+    fi
 
     # Print process program line
     echo "${processname}" "${process_computational_specs}" "${process_additional_specs}"
