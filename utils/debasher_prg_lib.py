@@ -36,6 +36,7 @@ ASSOC_ARRAY_KEY_LEN = "__LEN__"
 PROCESS_TASKIDX_SEP = "__PROCESS_TASKIDX_SEP__"
 OPT_PROCESS_SEP = "__OPT_PROCESS_SEP__"
 OPTPROC_HUB_SUFFIX = "__OPTPROC_HUB_SUFFIX"
+EXTERNAL_FIFO_USER="EXTERNAL" + ASSOC_ARRAY_ELEM_SEP + "0"
 CLUSTER_STYLE = "filled"
 CLUSTER_FILL_COLOR = "lightgrey"
 PROCESS_NODE_SHAPE = "box"
@@ -749,7 +750,7 @@ class ProcessGraph:
                 print(processname, "->", '"'+ opt_graph +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             else:
                 print(processname, "->", '"'+ opt_graph +'"', ";")
-        elif self.process_is_fifo_user(process_info, opt_val):
+        elif self.process_is_fifo_user(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
             print('"'+ opt_graph +'"', "->", processname, "[ style=" + FIFO_ARC_STYLE + " ] ;")
         else:
             print('"'+ opt_graph +'"', "->", processname, ";")
@@ -774,7 +775,7 @@ class ProcessGraph:
                 if task_idx == 0:
                     print(processname, "->", '"'+ opt_hub +'"', ";")
                 print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', ";")
-        elif self.process_is_fifo_user(process_info, opt_val):
+        elif self.process_is_fifo_user(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
             print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             if task_idx == 0:
                 print('"'+ opt_hub +'"', "->", processname, "[ style=" + FIFO_ARC_STYLE + " ] ;")
