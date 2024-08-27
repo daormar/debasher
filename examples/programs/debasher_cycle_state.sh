@@ -90,8 +90,8 @@ process_a()
         echo ""
    done
 
-    # Send END message
-    echo "END" > "${outf}"
+    # Send shutdown token
+    echo "${SHUTDOWN_TOKEN}" > "${outf}"
 }
 
 ########
@@ -139,12 +139,12 @@ process_b()
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Execute loop until the END message is received
+    # Execute loop until the shutdown token is received
     local sum=0
     while true; do
         value=$(cat "${inf}")
         echo "Received value ${value}"
-        if [ "${value}" = "END" ]; then
+        if [ "${value}" = "${SHUTDOWN_TOKEN}" ]; then
             break
         fi
 
