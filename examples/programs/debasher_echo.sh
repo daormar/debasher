@@ -37,7 +37,7 @@ debasher_echo_shared_dirs()
 ########
 stream_echo_document()
 {
-    process_description "Executes a process reading and writing from fifos."
+    process_description "Executes an echo process."
 }
 
 ########
