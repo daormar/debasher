@@ -585,7 +585,7 @@ define_fifo_opt()
     local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for FIFO
-    define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
+    define_opt "${opt}" "${abs_fifoname}" "${varname}" || return 1
 }
 
 ########
