@@ -165,6 +165,8 @@ process_b()
         # Send current value
         echo "${value}" > "${outf}"
     done
+
+    echo "Final value of sum: ${sum}"
 }
 
 #################################
