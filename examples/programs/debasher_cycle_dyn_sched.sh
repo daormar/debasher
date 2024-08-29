@@ -173,13 +173,14 @@ process_b()
     # Execute loop until the shutdown token is received
     local sum=0
     while true; do
+        # Read value
         local value=$(cat "${inf}")
         echo "Received value ${value}"
         if [ "${value}" = "${SHUTDOWN_TOKEN}" ]; then
             break
         fi
 
-        # Decide value increment depending on threshold
+        # Decide transformation function depending on threshold
         if [ "${sum}" -le "${threshold}" ]; then
             seq_execute_slurm transformation_a "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
