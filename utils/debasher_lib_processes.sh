@@ -270,28 +270,28 @@ get_end_of_options_marker()
     # Try with Python
     local pyexec_varname=`get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        echo ""
+        echo "${PY_END_OF_OPTIONS_MARKER}"
         return 0
     fi
 
     # Try with R
     local rexec_varname=`get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        echo "${END_OF_OPTIONS_MARKER}"
+        echo "${R_END_OF_OPTIONS_MARKER}"
         return 0
     fi
 
     # Try with Perl
     local perlexec_varname=`get_perlexec_varname "${processname}"`
     if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        echo "${END_OF_OPTIONS_MARKER}"
+        echo "${PL_END_OF_OPTIONS_MARKER}"
         return 0
     fi
 
     # Try with Groovy
     local groovyexec_varname=`get_groovyexec_varname "${processname}"`
     if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        echo "${END_OF_OPTIONS_MARKER}"
+        echo "${GROOVY_END_OF_OPTIONS_MARKER}"
         return 0
     fi
 }
@@ -306,19 +306,19 @@ get_end_of_options_marker_given_var()
 
     case "$suffix" in
         "py")
-            echo ""
+            echo "${PY_END_OF_OPTIONS_MARKER}"
             return 0
             ;;
         "R")
-            echo "${END_OF_OPTIONS_MARKER}"
+            echo "${R_END_OF_OPTIONS_MARKER}"
             return 0
             ;;
         "pl")
-            echo "${END_OF_OPTIONS_MARKER}"
+            echo "${PL_END_OF_OPTIONS_MARKER}"
             return 0
             ;;
         "groovy")
-            echo "${END_OF_OPTIONS_MARKER}"
+            echo "${GROOVY_END_OF_OPTIONS_MARKER}"
             return 0
             ;;
         *)
