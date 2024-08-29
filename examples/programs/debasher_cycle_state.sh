@@ -46,6 +46,10 @@ process_a_explain_cmdline_opts()
     # -n option
     local description="Value limit used to stop cycling"
     explain_cmdline_req_opt "-n" "<int>" "$description"
+
+    # -value option
+    local description="Initial value"
+    explain_cmdline_req_opt "-value" "<int>" "$description"
 }
 
 ########
@@ -60,6 +64,9 @@ process_a_define_opts()
 
     # -n option
     define_cmdline_opt "$cmdline" "-n" optlist || return 1
+
+    # -value option
+    define_cmdline_opt "$cmdline" "-value" optlist || return 1
 
     # Define option for output FIFO
     local fifoname="proc_a_fifo"
@@ -77,11 +84,11 @@ process_a()
 {
     # Initialize variables
     local n=$(read_opt_value_from_func_args "-n" "$@")
+    local value=$(read_opt_value_from_func_args "-value" "$@")
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
     # Send value for transformation until is equal or greater than n
-    local value=1
     while [ "${value}" -le "${n}" ]; do
         echo "${value}" > "${outf}"
         echo "Sent value ${value}"
