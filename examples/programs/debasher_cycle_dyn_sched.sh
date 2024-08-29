@@ -166,7 +166,8 @@ transformation_b()
 transformation_b_py=$(cat <<EOF
 import sys
 with open(sys.argv[2], 'w') as f:
-    f.write(str(int(sys.argv[1]) + 2))
+    value = int(sys.argv[1])
+    f.write(str(value + 2))
 EOF
 )
 
