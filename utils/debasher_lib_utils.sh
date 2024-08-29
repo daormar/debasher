@@ -768,6 +768,14 @@ get_nth_file_line()
 }
 
 ########
+read_fifo_line()
+{
+    local fifoname=$1
+
+    "${SED}" -u 1q $1 < "${fifoname}"
+}
+
+########
 get_deblib_vars_and_funcs_fname()
 {
     local dirname=$1
