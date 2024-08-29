@@ -163,6 +163,14 @@ transformation_b()
 }
 
 ########
+transformation_b_py=$(cat <<EOF
+import sys
+with open(sys.argv[2], 'w') as f:
+    f.write(str(int(sys.argv[1]) + 2))
+EOF
+)
+
+########
 process_b()
 {
     local threshold=$(read_opt_value_from_func_args "-threshold" "$@")
@@ -185,7 +193,8 @@ process_b()
             seq_execute_slurm transformation_a "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         else
-            seq_execute_slurm transformation_b "${value}" "${outd}/transformation_result.txt"
+#            seq_execute_slurm transformation_b "${value}" "${outd}/transformation_result.txt"
+            seq_execute_slurm transformation_b_py "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         fi
 
