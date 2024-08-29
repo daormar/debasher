@@ -35,9 +35,9 @@ fi
 # Infinite loop to write the string to the FIFO
 
 # NOTE: The timeout is necessary to prevent issues on the reader's end.
-# If the reader stops in the middle of a write operation, this script may
-# receive a SIGPIPE signal. The sleep command helps ensure that no additional
-# writes occur during a read operation.
+# If the reader stops in the middle of a write operation, this script
+# may receive a SIGPIPE signal. The sleep command helps ensure that no
+# additional writes occur during a read operation.
 while true; do
     echo "$STRING" > "$FIFO"
     sleep "${TIMEOUT}"
