@@ -1,7 +1,8 @@
 bin_SCRIPTS= debasher_lib debasher_exec debasher_exec_batch		\
 debasher_get_stdout debasher_get_sched_out debasher_stop		\
 debasher_status debasher_stats debasher_exec_process debasher_doc_mod	\
-debasher_proc_dataset debasher_reformat_status
+debasher_proc_dataset debasher_reformat_status				\
+debasher_fifo_writer_loop
 
 libexec_SCRIPTS= debasher_builtin_sched_lib debasher_lib_utils		\
 debasher_lib_sched debasher_lib_sched_slurm debasher_lib_sched_builtin	\
@@ -26,9 +27,10 @@ debasher_exec_batch.sh debasher_get_stdout.sh debasher_get_sched_out.sh	\
 debasher_get_vars_and_funcs.sh debasher_get_deblib_vars_and_funcs.sh	\
 debasher_check.py debasher_stop.sh debasher_status.sh debasher_stats.sh	\
 debasher_exec_process.sh debasher_doc_mod.sh debasher_proc_dataset.sh	\
-db_get_reexec_procs_due_to_deps.py debasher_reformat_status.py		\
-debasher_solve_knapsack_bb.py debasher_solve_knapsack_ga.py		\
-debasher_knapsack_ga.py debasher_gen_telegram_data.py
+debasher_fifo_writer_loop.sh db_get_reexec_procs_due_to_deps.py		\
+debasher_reformat_status.py debasher_solve_knapsack_bb.py		\
+debasher_solve_knapsack_ga.py debasher_knapsack_ga.py			\
+debasher_gen_telegram_data.py
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
