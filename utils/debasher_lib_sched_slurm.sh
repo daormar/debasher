@@ -1080,6 +1080,12 @@ get_script_log_filenames_slurm()
 ########
 seq_execute_slurm()
 {
+    is_variable()
+    {
+        local name="$1"
+        declare -p "$name" > /dev/null 2>&1
+    }
+
     create_seq_execute_script()
     {
         local dirname=$1
@@ -1093,8 +1099,15 @@ seq_execute_slurm()
         # Write environment variables
         write_env_vars_and_funcs_slurm "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
 
-        # Add call to process function
-        echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1
+        # Add call to command or function
+        if is_variable "${process_to_launch}"; then
+            local comm=`get_exec_command_given_var "${process_to_launch}"`
+            local varname_serial=`serialize_exec_commvar ${process_to_launch}`
+            local end_of_opts_marker=`get_end_of_options_marker_given_var "${process_to_launch}"`
+            echo "${comm} ${varname_serial} ${end_of_opts_marker} \"\$@\"" >> "${fname}" || return 1
+        else
+            echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1
+        fi
 
         # Give execution permission
         chmod u+x "${fname}" || return 1

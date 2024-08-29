@@ -270,7 +270,7 @@ get_end_of_options_marker()
     # Try with Python
     local pyexec_varname=`get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        echo "${END_OF_OPTIONS_MARKER}"
+        echo ""
         return 0
     fi
 
@@ -297,13 +297,76 @@ get_end_of_options_marker()
 }
 
 ########
+get_end_of_options_marker_given_var()
+{
+    local varname=$1
+
+    # Extract the part after the last underscore
+    local suffix="${varname##*_}"
+
+    case "$suffix" in
+        "py")
+            echo ""
+            return 0
+            ;;
+        "R")
+            echo "${END_OF_OPTIONS_MARKER}"
+            return 0
+            ;;
+        "pl")
+            echo "${END_OF_OPTIONS_MARKER}"
+            return 0
+            ;;
+        "groovy")
+            echo "${END_OF_OPTIONS_MARKER}"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+########
 serialize_exec_commvar()
 {
+    # Serialize a variable name storing a command for execution
     local exec_commvar=$1
 
     if [ -n "${exec_commvar}" ]; then
         echo "\"\$${exec_commvar}\""
     fi
+}
+
+########
+get_exec_command_given_var()
+{
+    local varname=$1
+
+    # Extract the part after the last underscore
+    local suffix="${varname##*_}"
+
+    case "$suffix" in
+        "py")
+            get_pyexec_command "${pyexec_varname}"
+            return 0
+            ;;
+        "R")
+            get_rexec_command "${rexec_varname}"
+            return 0
+            ;;
+        "pl")
+            get_perlexec_command "${perlexec_varname}"
+            return 0
+            ;;
+        "groovy")
+            get_groovyexec_command "${groovyexec_varname}"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 ########
