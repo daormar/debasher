@@ -173,7 +173,7 @@ process_b()
     # Execute loop until the shutdown token is received
     local sum=0
     while true; do
-        value=$(cat "${inf}")
+        local value=$(cat "${inf}")
         echo "Received value ${value}"
         if [ "${value}" = "${SHUTDOWN_TOKEN}" ]; then
             break
