@@ -95,7 +95,7 @@ process_a()
         value=$(cat "${inf}")
         echo "Received value ${value}"
         echo ""
-   done
+    done
 
     # Send shutdown token
     echo "${SHUTDOWN_TOKEN}" > "${outf}"
