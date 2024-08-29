@@ -193,7 +193,6 @@ process_b()
             seq_execute_slurm transformation_a "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         else
-#            seq_execute_slurm transformation_b "${value}" "${outd}/transformation_result.txt"
             seq_execute_slurm transformation_b_py "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         fi
