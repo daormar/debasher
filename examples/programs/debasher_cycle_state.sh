@@ -88,14 +88,14 @@ process_a()
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Send value for transformation until is equal or greater than n
+    # Send value for transformation until is greater than n
     while [ "${value}" -le "${n}" ]; do
         echo "${value}" > "${outf}"
         echo "Sent value ${value}"
         value=$(cat "${inf}")
         echo "Received value ${value}"
         echo ""
-   done
+    done
 
     # Send shutdown token
     echo "${SHUTDOWN_TOKEN}" > "${outf}"

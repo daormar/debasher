@@ -80,7 +80,7 @@ process_a()
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Increase value iteratively until it reaches n
+    # Increase value iteratively until is greater than n
     local value=1
     while [ "${value}" -le "${n}" ]; do
         echo "${value}" > "${outf}"
