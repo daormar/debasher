@@ -62,7 +62,7 @@ counter_define_opts()
     define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
     # Define option for output FIFO
-    local fifoname="counter_fifo"
+    local fifoname="counter_out"
     define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Save option list
