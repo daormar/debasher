@@ -35,13 +35,13 @@ debasher_cycle_dyn_sched_shared_dirs()
 ######################################
 
 ########
-process_a_document()
+master_document()
 {
     process_description "Executes a process reading and writing from fifos."
 }
 
 ########
-process_a_explain_cmdline_opts()
+master_explain_cmdline_opts()
 {
     # -n option
     local description="Value limit used to stop cycling"
@@ -53,7 +53,7 @@ process_a_explain_cmdline_opts()
 }
 
 ########
-process_a_define_opts()
+master_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -73,14 +73,14 @@ process_a_define_opts()
     define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Define option for input FIFO
-    define_opt_from_proc_out "-inf" "process_b" "-outf" optlist || return 1
+    define_opt_from_proc_out "-inf" "worker" "-outf" optlist || return 1
 
     # Save option list
     save_opt_list optlist
 }
 
 ########
-process_a()
+master()
 {
     # Initialize variables
     local n=$(read_opt_value_from_func_args "-n" "$@")
@@ -102,13 +102,13 @@ process_a()
 }
 
 ########
-process_b_document()
+worker_document()
 {
     process_description "Executes a process reading and writing from fifos."
 }
 
 ########
-process_b_explain_cmdline_opts()
+worker_explain_cmdline_opts()
 {
     # -threshold option
     local description="Threshold value used to influence number transformation"
@@ -116,7 +116,7 @@ process_b_explain_cmdline_opts()
 }
 
 ########
-process_b_define_opts()
+worker_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -133,7 +133,7 @@ process_b_define_opts()
     define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Define option for input FIFO
-    define_opt_from_proc_out "-inf" "process_a" "-outf" optlist || return 1
+    define_opt_from_proc_out "-inf" "master" "-outf" optlist || return 1
 
     # Define option for output directory
     define_opt "-outd" "${process_outdir}" optlist || return 1
@@ -173,7 +173,7 @@ EOF
 )
 
 ########
-process_b()
+worker()
 {
     local threshold=$(read_opt_value_from_func_args "-threshold" "$@")
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
@@ -220,6 +220,6 @@ process_b()
 ########
 debasher_cycle_dyn_sched_program()
 {
-    add_debasher_process "process_a" "cpus=1 mem=32 time=00:10:00"
-    add_debasher_process "process_b" "cpus=1 mem=32 time=00:10:00"
+    add_debasher_process "master" "cpus=1 mem=32 time=00:10:00"
+    add_debasher_process "worker" "cpus=1 mem=32 time=00:10:00"
 }
