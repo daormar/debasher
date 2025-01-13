@@ -1242,9 +1242,9 @@ print_post_exec_wait_help()
     echo "Program execution finished, possible next steps:" >&2
     echo "- Inspect program execution status:" >&2
     echo "debasher_status -d <outdir>" >&2
-    echo "- Get standard output for a process:"
+    echo "- Get standard output for a process:"  >&2
     echo "debasher_get_stdout -d <outdir> -p <process_name>" >&2
-    echo "- Get scheduler output for a process (useful for debugging):"
+    echo "- Get scheduler output for a process (useful for debugging):"  >&2
     echo "debasher_get_sched_out -d <outdir> -p <process_name>" >&2
     echo "" >&2
 }
