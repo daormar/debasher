@@ -8,6 +8,17 @@ to enable the implementation of highly modular programs that exploit the
 parallelism implicitly determined by data dependencies between
 components.
 
+DeBasher implements many features considered useful in similar tools,
+such as parallel process execution with data dependency handling;
+automatic error handling; result reproducibility through containers or
+package managers; generation of dependency graphs; and compatibility
+with high performance clusters or cloud infrastructure.
+
+However, DeBasher also implements advanced features that are not usual
+or cannot be found at all in other solutions, including workflow
+interactivity; support for complex workflows that include cycles; and
+ability to combine multiple workflows at runtime
+
 Check out the table of contents below for further information.
 
 Contents
