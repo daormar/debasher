@@ -18,7 +18,7 @@ However, DeBasher also implements advanced features that are not usual
 or cannot be found at all in other solutions, including workflow
 interactivity; support for complex workflows that include cycles;
 implementation of stateful processes; and ability to combine multiple
-workflows at runtime
+workflows at runtime.
 
 Check out the table of contents below for further information.
 
