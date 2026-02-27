@@ -14,12 +14,9 @@ Basic Installation Procedure
 
 To install DeBasher, first you need to install the autotools (autoconf,
 autoconf-archive, automake and libtool packages in Ubuntu). DeBasher
-requires Bash 4.0 or above as well as Python 3.x to work. If you are
-planning to use DeBasher on a Windows platform, you also need to install
-the `Cygwin <https://www.cygwin.com/>`__ environment. Alternatively, the
-tool can also be installed on Mac OS X systems using `MacPorts
-<https://www.macports.org/>`__. Finally, the Graphviz package is also
-required so as to generate graphic information about programs.
+requires Bash 4.0 or above as well as Python 3.x to work. Finally, the
+Graphviz package is also required so as to generate graphic information
+about programs.
 
 Assuming Ubuntu is being used, the required packages can be installed as
 follows:
@@ -32,9 +29,9 @@ On the other hand, some of the functionality incorporated by
 DeBasher requires the previous installation of third-party
 software (`see below <#third-party-software>`__).
 
-Once the autotools are available (as well as other required
-software such as Cygwin or MacPorts), you can proceed with the
-installation of the tool by following the next sequence of steps:
+Once the autotools are available (as well as other required software),
+you can proceed with the installation of the tool by following the next
+sequence of steps:
 
 #. Obtain the package using git:
 
