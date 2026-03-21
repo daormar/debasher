@@ -90,7 +90,7 @@ check_pars()
         fi
 
         if [ ${p_given} -eq 0 ]; then
-            echo "Error! -p parameter not given!" >&2
+            echo "Error! -p parameter not given" >&2
             exit 1
         fi
     fi
