@@ -143,6 +143,7 @@ get_out()
             cat "${stdout_fname}"
         else
             echo "Error: output file could not be found!" >&2
+            return 1
         fi
     else
         local stdout_fname=`get_process_stdout_filename "${absdirname}" ${process} 2 "${task_idx}"`
@@ -150,6 +151,7 @@ get_out()
             cat "${stdout_fname}"
         else
             echo "Error: output file could not be found!" >&2
+            return 1
         fi
     fi
 }
