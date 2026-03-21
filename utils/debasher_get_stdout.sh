@@ -142,7 +142,7 @@ get_out()
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else
-            echo "Error: output file could not be found!" >&2
+            echo "Error: stdout file for process ${process} could not be found!" >&2
             return 1
         fi
     else
@@ -150,7 +150,7 @@ get_out()
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else
-            echo "Error: output file could not be found!" >&2
+            echo "Error: stdout file for process ${process} could not be found!" >&2
             return 1
         fi
     fi
