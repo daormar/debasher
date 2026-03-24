@@ -148,9 +148,6 @@ serialize_cmdexec()
 {
     local pipe_exec_cmd=$1
 
-    # Create temporary file
-    local tmpfile=`"${MKTEMP}"`
-
     # Obtain command line
     local cmdline
     cmdline=`eval serialize_args "${pipe_exec_cmd}"`
