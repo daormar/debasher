@@ -25,6 +25,13 @@
 # PROCESS METHOD NAMES
 PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER="${PROCESS_METHOD_SEP}slurm_sigterm_handler"
 
+
+########
+validate_jid()
+{
+    [[ "$1" =~ ^[0-9]+(,[0-9]+)*$ ]] || return 1
+}
+
 ########
 get_slurm_version()
 {
@@ -716,6 +723,8 @@ slurm_launch()
         # Launch attempt
         jid=`slurm_launch_attempt "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_no} "${processdeps}" "${attempt_jids}" ${mem_attempt} ${time_attempt}` || return 1
 
+        validate_jid "$jid" || return 1
+
         # Update variable storing jids of previous attempts (after
         # launching all attempts this variable is also useful to launch
         # pre-verification job)
@@ -733,7 +742,11 @@ slurm_launch()
     # launch two jobs)
     if [ ${num_attempts} -gt 1 ]; then
         preverif_jid=`slurm_launch_preverif_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_jids}` || return 1
+        validate_jid "$preverif_jid" || return 1
+
         verif_jid=`slurm_launch_verif_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${preverif_jid}` || return 1
+        validate_jid "$verif_jid" || return 1
+
         # Set output value
         eval "${outvar}='${attempt_jids},${preverif_jid},${verif_jid}'"
     else
