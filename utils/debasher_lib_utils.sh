@@ -716,7 +716,10 @@ copy_func()
     local existing_funcname=$1
     local new_funcname=$2
 
-    eval "`echo "${new_funcname}()"; declare -f ${existing_funcname} | tail -n +2`"
+    [[ "$existing_funcname" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || return 1
+    [[ "$new_funcname" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || return 1
+
+    eval "$(echo "${new_funcname}()"; declare -f "${existing_funcname}" | tail -n +2)"
 }
 
 ########
