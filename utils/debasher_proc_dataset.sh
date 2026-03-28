@@ -185,20 +185,15 @@ get_prg_opts_str()
 }
 
 ########
-esc_dq()
-{
-    "$SED" 's/"/\\\"/g' <<< "$1"
-}
-
-########
 process_pars()
 {
     # Set options
     local prg_opts_str
     if [ ${prg_opts_given} -eq 1 ]; then
         prg_opts_str=`get_prg_opts_str`
+        eval "prg_opts_arr=(${prg_opts_str})"
     else
-        prg_opts_str=""
+        prg_opts_arr=()
     fi
 
     # Get pipe_exec path
@@ -208,13 +203,16 @@ process_pars()
     # Read metadata file
     local entry_num=1
     local prg_sopts_str
-    while read prg_sopts_str; do
+    while read -r prg_sopts_str; do
+
+        # Obtain program shared option array from string
+        eval "prg_sopts_arr=(${prg_sopts_str})"
 
         # Obtain --dflt-nodes option
         dflt_nodes_opt=`get_dflt_nodes_opt`
 
         # Print command to execute program
-        normalize_cmd "\"$(esc_dq "${debasher_exec_path}")\" --pfile \"$(esc_dq "${pfile}")\" --sched ${sched} ${dflt_nodes_opt} ${prg_sopts_str} ${prg_opts_str}"
+        serialize_cmd_as_qstr "${debasher_exec_path}" --pfile "${pfile}" --sched "${sched}" ${dflt_nodes_opt} "${prg_sopts_arr[@]}" "${prg_opts_arr[@]}"
 
         entry_num=$((entry_num + 1))
 

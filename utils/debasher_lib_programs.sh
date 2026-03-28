@@ -27,6 +27,13 @@ get_orig_workdir()
 }
 
 ########
+get_quoted_cmdline_from_command_line_file()
+{
+    local command_line_file=$1
+    "$TAIL" -1 "${command_line_file}"
+}
+
+########
 get_orig_outdir_from_command_line_file()
 {
     # initialize variables
@@ -36,8 +43,8 @@ get_orig_outdir_from_command_line_file()
     local workdir
     workdir=`get_orig_workdir "${command_line_file}"` || return 1
     local cmdline
-    cmdline=`get_cmdline_from_command_line_file "${command_line_file}"` || return 1
-    local outdir=`read_opt_value_from_line "$cmdline" "--outdir"`
+    qcmdline=`get_quoted_cmdline_from_command_line_file "${command_line_file}"` || return 1
+    local outdir=`get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
 
     # Retrieve original output directory
     if is_absolute_path "$outdir"; then
@@ -48,19 +55,11 @@ get_orig_outdir_from_command_line_file()
 }
 
 ########
-get_cmdline_from_command_line_file()
-{
-    local command_line_file=$1
-    local cmdline=`"$TAIL" -1 "${command_line_file}"`
-    sargsquotes_to_sargs "$cmdline"
-}
-
-########
 get_pfile_from_command_line_file()
 {
     local command_line_file=$1
-    local cmdline=`get_cmdline_from_command_line_file "${command_line_file}"`
-    local pfile=`read_opt_value_from_line "$cmdline" "--pfile"` || return 1
+    local qcmdline=`get_quoted_cmdline_from_command_line_file "${command_line_file}"`
+    local pfile=`get_opt_value_from_quoted_cmd "$qcmdline" "--pfile"` || return 1
     echo "${pfile}"
 }
 
@@ -76,36 +75,9 @@ get_currdir_from_command_line_file()
 get_sched_from_command_line_file()
 {
     local command_line_file=$1
-    local cmdline=`get_cmdline_from_command_line_file "${command_line_file}"`
-    local sched=`read_opt_value_from_line "${cmdline}" "--sched"` || return 1
+    local qcmdline=`get_quoted_cmdline_from_command_line_file "${command_line_file}"`
+    local sched=`get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"` || return 1
     echo "${sched}"
-}
-
-########
-replace_outdir_in_cmdline()
-{
-    local cmdline=$1
-    local newdir=$2
-
-    echo "$cmdline" | "$AWK" -v newdir="$newdir" 'BEGIN{
-                                replace=0
-                               }
-                               {
-                                for(i=1;i<=NF;++i)
-                                {
-                                 if(replace==0)
-                                 {
-                                  printf"%s",$i
-                                 }
-                                 else
-                                 {
-                                  printf"%s",newdir
-                                  replace=0
-                                 }
-                                 if($i=="--outdir") replace=1
-                                 if(i!=NF) printf" "
-                                }
-                               }'
 }
 
 ########
@@ -176,7 +148,8 @@ get_prg_graphs_dir()
 }
 
 ########
-is_valid_processname() {
+is_valid_processname()
+{
     local input="$1"
     if [[ "$input" =~ ^[a-zA-Z_]+$ ]]; then
         return 0  # True

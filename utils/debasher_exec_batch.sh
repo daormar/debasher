@@ -266,13 +266,7 @@ extract_outd_from_pipe_exec_cmd()
 {
     local pipe_exec_cmd=$1
 
-    # Obtain command line from command string
-    local cmdline=`serialize_cmdexec "${pipe_exec_cmd}"`
-
-    # Obtain out directory for pipe command
-    local pipe_cmd_outd=`read_opt_value_from_line "${cmdline}" "--outdir"`
-
-    echo ${pipe_cmd_outd}
+    get_opt_value_from_quoted_cmd "$pipe_exec_cmd" "--outdir"
 }
 
 ########
@@ -521,7 +515,7 @@ execute_batches()
     declare -A PROGRAM_COMMANDS
 
     # Process program execution commands...
-    while read pipe_exec_cmd; do
+    while read -r pipe_exec_cmd; do
 
         # Execute built-in tilde expansion to avoid problems with "~"
         # symbol in file and directory paths

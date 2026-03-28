@@ -82,86 +82,26 @@ deserialize_args()
 }
 
 ########
-sargs_to_sargsquotes()
+serialize_cmd_as_qstr()
 {
-    local sargs=$1
+    printf '%q ' "$@"
+    printf '\n'
+}
 
-    # Convert string to array
+########
+# Convert a string serialized with a custom separator to a printf '%q'
+# escaped string. The separator is passed as a parameter.
+sep_serialized_to_qstr()
+{
+    local sep=$1
+    local sargs=$2
     local preproc_sargs
-    preproc_sargs="${sargs//${ARG_SEP}/$'\n'}"
+    preproc_sargs="${sargs//${sep}/$'\n'}"
     local array=()
-    while IFS= read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargs}"
-
-    # Process array
-    local i=0
-    local sargsquotes
-    while [ $i -lt ${#array[@]} ]; do
-        elem=${array[$i]}
-        elem=$("${SED}" "s/'/'\\\''/g" <<<"$elem")
-        if [ -z "${sargsquotes}" ]; then
-            sargsquotes=${elem}
-        else
-            sargsquotes="${sargsquotes}${ARG_SEP_QUOTES}${elem}"
-        fi
-        i=$((i+1))
-    done
-    sargsquotes="'${sargsquotes}'"
-
-    echo "${sargsquotes}"
-}
-
-########
-sargsquotes_to_sargs()
-{
-    local sargsquotes=$1
-
-    # Remove first and last quotes
-    local preproc_sargsquotes
-    preproc_sargsquotes="${sargsquotes%\'*}"
-    preproc_sargsquotes="${preproc_sargsquotes#\'*}"
-
-    # Convert string to array
-    local new_sep=$'\n'
-    preproc_sargsquotes="${preproc_sargsquotes//${ARG_SEP_QUOTES}/$new_sep}"
-    local array=()
-    while IFS=$new_sep read -r; do array+=( "${REPLY}" ); done <<< "${preproc_sargsquotes}"
-
-    # Process array
-    local i=0
-    local sargs
-    while [ $i -lt ${#array[@]} ]; do
-        elem=${array[$i]}
-        elem="${elem//\\\'/\'}"
-        if [ -z "${sargs}" ]; then
-            sargs=${elem}
-        else
-            sargs="${sargs}${ARG_SEP}${elem}"
-        fi
-        i=$((i+1))
-    done
-
-    echo "${sargs}"
-}
-
-########
-serialize_cmdexec()
-{
-    local pipe_exec_cmd=$1
-
-    # Obtain command line
-    local cmdline
-    cmdline=`eval serialize_args "${pipe_exec_cmd}"`
-
-    echo ${cmdline}
-}
-
-########
-normalize_cmd()
-{
-    local args=$1
-    local sargs=`eval serialize_args "${args}"`
-    local sargsquotes=`sargs_to_sargsquotes "${sargs}"`
-    echo "${sargsquotes}"
+    while IFS= read -r; do
+        [[ -n "${REPLY}" ]] && array+=("${REPLY}")
+    done <<< "${preproc_sargs}"
+    printf '%q ' "${array[@]}"
 }
 
 ########
@@ -275,6 +215,29 @@ check_opt_given_memoiz()
         # Return result
         check_memoized_opt $opt || return 1
     fi
+}
+
+########
+# Get option value from a command string escaped with printf '%q'.
+# The use of eval to parse the command string is safe because printf '%q'
+# guarantees that all special characters are escaped, preventing code injection.
+# Returns 1 if option not found.
+get_opt_value_from_quoted_cmd()
+{
+    local cmd_str=$1
+    local opt=$2
+    local -a cmd
+
+    eval "cmd=(${cmd_str})"
+
+    local i
+    for (( i=0; i<${#cmd[@]}; i++ )); do
+        if [[ "${cmd[$i]}" == "$opt" ]]; then
+            echo "${cmd[$i+1]}"
+            return 0
+        fi
+    done
+    return 1
 }
 
 ########
@@ -1405,7 +1368,7 @@ get_serial_process_opts()
         local process_opts=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
 
         # Obtain human-readable representation of process options
-        hr_process_opts=$(sargs_to_sargsquotes "${process_opts}")
+        hr_process_opts=$(sep_serialized_to_qstr "${ARG_SEP}" "$process_opts")
         process_opts_array+=("${hr_process_opts}")
 
         # Exit loop if maximum number of options is exceeded

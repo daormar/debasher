@@ -129,7 +129,6 @@ get_out()
         local moved_outdir="no"
     else
         echo "Warning: program output directory was moved (original directory: ${orig_outdir})" >&2
-        cmdline=`replace_outdir_in_cmdline "${cmdline}" "${absdirname}"`
         local moved_outdir="yes"
     fi
 

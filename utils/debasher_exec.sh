@@ -950,7 +950,7 @@ create_mod_shared_dirs()
 print_command_line()
 {
     echo "cd $PWD" > "${outd}/${PRG_COMMAND_LINE_BASENAME}"
-    sargs_to_sargsquotes "${command_line}" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
+    sep_serialized_to_qstr "${ARG_SEP}" "${command_line}" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
 }
 
 ########
