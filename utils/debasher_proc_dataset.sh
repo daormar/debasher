@@ -207,7 +207,6 @@ process_pars()
 
     # Read metadata file
     local entry_num=1
-    entry_num=1
     local prg_sopts_str
     while read prg_sopts_str; do
 
