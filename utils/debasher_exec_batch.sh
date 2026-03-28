@@ -267,7 +267,7 @@ extract_outd_from_pipe_exec_cmd()
     local pipe_exec_cmd=$1
 
     # Obtain command line from command string
-    cmdline=`serialize_cmdexec "${pipe_exec_cmd}"`
+    local cmdline=`serialize_cmdexec "${pipe_exec_cmd}"`
 
     # Obtain out directory for pipe command
     local pipe_cmd_outd=`read_opt_value_from_line "${cmdline}" "--outdir"`
