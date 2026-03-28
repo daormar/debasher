@@ -25,7 +25,6 @@
 #############
 
 # MISC. CONSTANTS
-LOCKFD=99
 MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
 REEXEC_PROCESSES_LIST_FNAME=".reexec_processes_due_to_deps.txt"
 WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT=5
@@ -853,31 +852,33 @@ release_lock()
     local fd=$1
     local file=$2
 
-    # Drop lock
-    $FLOCK -u $fd || return 1
+    # Release the lock
+    "$FLOCK" -u "$fd" || return 1
 
-    # Try to acquire lock and remove associated file (if acquisition was
-    # successful)
-    $FLOCK -xn $fd && "${RM}" -f "$file" || return 1
+    # Try to acquire the lock again in non-blocking mode to safely remove the file
+    if "$FLOCK" -xn "$fd"; then
+        "$RM" -f "$file" || return 1
+    fi
 }
 
 ########
 prepare_lock()
 {
-    local fd=$1
+    local -n fd_ref=$1   # nameref: caller variable
     local file=$2
-    eval "exec $fd>\"$file\"" && trap "release_lock $fd $file" EXIT;
+
+    exec {fd_ref}>"$file" || return 1   # Bash assigns free fd, stores it in fd_ref
+    trap "release_lock $fd_ref '$file'" EXIT
 }
 
 ########
 ensure_exclusive_execution()
 {
-    local lockfile="${outd}"/lock
+    local outd=$1
+    local lockfile="${outd}/lock"
 
-    prepare_lock $LOCKFD "$lockfile" || return 1
-
-    # Try to acquire lock exclusively
-    "$FLOCK" -xn $LOCKFD || return 1
+    prepare_lock LOCKFD "$lockfile" || return 1
+    "$FLOCK" -xn "$LOCKFD" || return 1
 }
 
 ########
@@ -1329,7 +1330,7 @@ else
         gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
 
         # NOTE: exclusive execution should be ensured after creating the output directory
-        ensure_exclusive_execution || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
+        ensure_exclusive_execution "${outd}" || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
         create_mod_shared_dirs || exit 1
 
