@@ -96,8 +96,8 @@ print_script_header_slurm_sched()
         write_sigterm_handler "${sigterm_handler_funcname}"
     fi
     echo "trap '${sigterm_handler_funcname}' SIGTERM"
-    echo "DEBASHER_SCRIPT_FILENAME=\"$(esc_dq "${fname}")\""
-    echo "DEBASHER_DIR_NAME=\"$(esc_dq "${dirname}")\""
+    echo "DEBASHER_SCRIPT_FILENAME=$(printf '%q' "${fname}")"
+    echo "DEBASHER_DIR_NAME=$(printf '%q' "${dirname}")"
     echo "DEBASHER_PROCESS_NAME=${processname}"
     echo "DEBASHER_NUM_TASKS=${num_tasks}"
 }
@@ -116,10 +116,10 @@ print_opt_code_slurm_sched()
     fi
 
     if uses_option_generator "${processname}"; then
-        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
+        echo "CMDLINE=$(printf '%q' "${cmdline}")"
         local proc_outdir=`get_process_outdir "${processname}"`
         local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
-        echo "sargs=\`gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" \"$(esc_dq "${proc_outdir}")\" \"${generate_opts_funcname}\" \"${task_id}\"\`"
+        echo "sargs=\`gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\"\`"
     else
         local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
         echo "sargs=\`get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\"\`"
@@ -156,16 +156,16 @@ print_script_body_slurm_sched()
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ "${opt_array_size}" -eq 1 ]; then
-            echo "default_reset_outfiles_for_process \"$(esc_dq "${dirname}")\" ${processname}"
+            echo "default_reset_outfiles_for_process $(printf '%q' "${dirname}") ${processname}"
         else
-            echo "default_reset_outfiles_for_process_array \"$(esc_dq "${dirname}")\" ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
+            echo "default_reset_outfiles_for_process_array $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
         fi
     else
         echo "${reset_funct} \"\${DESERIALIZED_ARGS[@]}\""
     fi
 
     # Write function to be executed
-    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`get_process_stdout_filename \"$(esc_dq "${dirname}")\" "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
+    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
     echo "${comm_or_funct} ${comm_varname_serial} ${end_of_opts_marker} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
     echo "funct_exit_code=\${PIPESTATUS[0]}"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${comm_or_funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${comm_or_funct} successfully executed\" >&2; fi"

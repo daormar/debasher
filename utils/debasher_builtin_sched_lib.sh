@@ -1032,13 +1032,13 @@ builtin_sched_print_script_body()
 
     # Write function to be executed
     if [ "${opt_array_size}" -gt 1 ]; then
-        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
-        echo "builtin_task_log_filename=\`get_task_log_filename \"$(esc_dq "${dirname}")\" ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
-        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
+        echo "CMDLINE=$(printf '%q' "${cmdline}")"
+        echo "builtin_task_log_filename=\`get_task_log_filename $(printf '%q' "${dirname}") ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
+        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
     else
-        echo "CMDLINE=\"$(esc_dq "${cmdline}")\""
+        echo "CMDLINE=$(printf '%q' "${cmdline}")"
         local builtin_log_filename=`get_process_log_filename "${dirname}" ${processname}`
-        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" \"$(esc_dq "${dirname}")\" ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"$(esc_dq "${builtin_log_filename}")\" 2>&1"
+        echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > $(printf '%q' "${builtin_log_filename}") 2>&1"
     fi
 }
 
