@@ -951,6 +951,7 @@ print_command_line()
 {
     echo "cd $PWD" > "${outd}/${PRG_COMMAND_LINE_BASENAME}"
     sep_serialized_to_qstr "${ARG_SEP}" "${command_line}" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
+    echo "" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
 }
 
 ########
