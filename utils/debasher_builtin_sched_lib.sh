@@ -174,6 +174,22 @@ builtin_sched_init_process_info()
 }
 
 ########
+builtin_sched_revise_reexec_proc_status()
+{
+    # Iterate over defined processes
+    local processname
+    for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        # If process is marked as reexec and it was finished, its process completion is reset
+        if process_marked_as_reexec ${processname}; then
+            if [ ${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]} = ${FINISHED_PROCESS_STATUS} ]; then
+                reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
+                BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${UNFINISHED_PROCESS_STATUS}
+            fi
+        fi
+    done
+}
+
+########
 builtin_sched_release_mem()
 {
     local processname=$1
@@ -574,6 +590,7 @@ builtin_sched_check_process_deps()
     else
         local processdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
     fi
+
     local dep
     for dep in ${processdeps_blanks}; do
         # Extract information from dependency
@@ -602,7 +619,7 @@ builtin_sched_check_process_deps()
                 fi
                 ;;
             ${AFTERANY_PROCESSDEP_TYPE})
-                if [ ${depstatus} = ${FINISHED_PROCESS_STATUS} -o ${depstatus} = ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
+                if [ ${depstatus} != ${FINISHED_PROCESS_STATUS} -a ${depstatus} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
@@ -997,7 +1014,12 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Execute process function
     DEBASHER_PROCESS_STDOUT_FILENAME=`get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
-    ${comm_or_funct} "${!comm_varname}" "${end_of_opts_marker}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+    if [ -z "${comm_varname}" ]; then
+        ${comm_or_funct} "${end_of_opts_marker}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+    else
+        ${comm_or_funct} "${!comm_varname}" "${end_of_opts_marker}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+    fi
+
     local funct_exit_code=${PIPESTATUS[0]}
     if [ ${funct_exit_code} -ne 0 ]; then
         echo "Error: execution of ${comm_or_funct} failed with exit code ${funct_exit_code}" >&2
@@ -1331,8 +1353,10 @@ builtin_sched_prepare_files_and_dirs_for_process()
     local dirname=$1
     local processname=$2
     local script_filename=`get_script_filename "${dirname}" ${processname}`
-    local status=`get_process_status "${dirname}" ${processname}`
     local process_spec=${BUILTIN_SCHED_PROCESS_SPEC[${processname}]}
+
+    # Obtain process status
+    local status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
 
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Obtain array size
@@ -1346,7 +1370,6 @@ builtin_sched_prepare_files_and_dirs_for_process()
             builtin_sched_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         fi
         prepare_fifos_owned_by_process ${processname}
-        update_process_completion_signal "${dirname}" ${processname} ${status} || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
 
         # Create output directory
         create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
@@ -1401,10 +1424,13 @@ builtin_sched_execute_program_processes()
 
     echo "* Initializing data structures..." >&2
 
-    # Initialize process status
+    # Initialize process information
     builtin_sched_init_process_info "${cmdline}" "${dirname}" "${procspec_file}" || return 1
 
-    # Initialize current process status
+    # Revise process status for processes to be reexecuted
+    builtin_sched_revise_reexec_proc_status || return 1
+
+    # Initialize current computational resources
     builtin_sched_init_curr_comp_resources || return 1
 
     # Prepare files and directories for processes
