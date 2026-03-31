@@ -1001,6 +1001,31 @@ get_processdeps()
 }
 
 ########
+prepare_files_and_dirs_for_processes()
+{
+    echo "# Preparing files and directories for processes..." >&2
+
+    # Read input parameters
+    local cmdline=$1
+    local dirname=$2
+    local procspec_file=$3
+
+    local process_spec
+    while read process_spec; do
+        if program_process_spec_is_ok "$process_spec"; then
+            # Extract process name
+            local processname=`extract_processname_from_process_spec "$process_spec"`
+
+            prepare_files_and_dirs_for_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}"
+        fi
+    done < "${procspec_file}"
+
+    echo "Preparation complete" >&2
+
+    echo "" >&2
+}
+
+########
 prepare_files_and_dirs_for_process()
 {
     # Read input parameters
@@ -1030,14 +1055,13 @@ prepare_files_and_dirs_for_process()
             clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
         prepare_fifos_owned_by_process "${processname}"
-        update_process_completion_signal "${dirname}" "${processname}" "${status}" || { echo "Error when updating process completion signal for process" >&2 ; return 1; }
     fi
 }
 
 ########
-prepare_files_and_dirs_for_processes()
+revise_reexec_proc_status()
 {
-    echo "# Preparing files and directories for processes..." >&2
+    echo "# Revise process status for processes to be reexecuted..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -1050,11 +1074,17 @@ prepare_files_and_dirs_for_processes()
             # Extract process name
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
-            prepare_files_and_dirs_for_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}"
+            # Get process status
+            local status=`get_process_status ${dirname} ${processname}`
+
+            # Reset completion signal
+            if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
+                reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
+            fi
         fi
     done < "${procspec_file}"
 
-    echo "Preparation complete" >&2
+    echo "Revision complete" >&2
 
     echo "" >&2
 }
@@ -1365,6 +1395,7 @@ else
                 builtin_sched_execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 print_post_exec_wait_help
             else
+                revise_reexec_proc_status "${command_line}" "${outd}" "${procspec_file}" || return 1
                 prepare_files_and_dirs_for_processes "${command_line}" "${outd}" "${procspec_file}"
                 launch_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 if [ "${wait}" -eq 1 ]; then

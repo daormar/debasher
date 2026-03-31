@@ -213,20 +213,16 @@ get_task_array_list()
 }
 
 ########
-update_process_completion_signal()
+reset_process_completion_signal()
 {
     local dirname=$1
     local processname=$2
-    local status=$3
 
     # If process will be reexecuted, file signaling process completion should
     # be removed. Additionally, this action should be registered in a
     # specific associative array
     local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
-    if [ "${status}" = "${REEXEC_PROCESS_STATUS}" ]; then
-        "${RM}" -f "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}
-        DEBASHER_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]=1
-    fi
+    "${RM}" -f "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}
 }
 
 ########
@@ -332,18 +328,14 @@ get_reexec_processes_as_string()
 }
 
 ########
-process_should_be_reexec()
+process_marked_as_reexec()
 {
     local processname=$1
 
     if [ "${DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
         return 1
     else
-        if [ "${DEBASHER_REEXEC_PROCESSES_WITH_UPDATED_COMPLETION[${processname}]}" = "" ]; then
-            return 0
-        else
-            return 1
-        fi
+        return 0
     fi
 }
 
@@ -562,12 +554,6 @@ get_process_status()
         if process_is_in_progress "$dirname" "$processname"; then
             echo "${INPROGRESS_PROCESS_STATUS}"
             return ${INPROGRESS_PROCESS_EXIT_CODE}
-        fi
-
-        # Check if process should be reexecuted
-        if process_should_be_reexec "$processname"; then
-            echo "${REEXEC_PROCESS_STATUS}"
-            return ${REEXEC_PROCESS_EXIT_CODE}
         fi
 
         if process_is_finished "$dirname" "$processname"; then
