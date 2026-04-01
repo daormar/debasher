@@ -72,7 +72,7 @@ bs_cpus=1
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" || ret=1
 
-# Check debasher_hello_world program
+# Check debasher_hello_world_py program
 progname="debasher_hello_world_py"
 sched="BUILTIN"
 bs_cpus=1
