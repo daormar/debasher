@@ -1,12 +1,12 @@
 # *- bash -*
 
 ########
-print_test_failed_message()
+print_checks_failed_message()
 {
     local tmpdir=$1
 
     echo "================================================"
-    echo " Test failed!"
+    echo " There were failed checks!"
     echo " See additional information in ${tmpdir}"
     echo " Please report to "${debasher_bugreport}
     echo "================================================"
@@ -42,13 +42,13 @@ check_program()
 
     if test $ret -eq 0 ; then
         echo "OK"
+        echo ""
+        return 0
     else
         echo "Failed"
-        print_test_failed_message "${tmpdir}"
-        exit 1
+        echo ""
+        return 1
     fi
-
-    echo ""
 }
 
 ########
@@ -62,20 +62,28 @@ tmpdir=`mktemp -d $HOME/debasher_installcheck_XXXXXX`
 echo "Temporary files will be stored in ${tmpdir}"
 echo ""
 
+# Start checks
+ret=0
+
 # Check debasher_hello_world program
 progname="debasher_hello_world"
 sched="BUILTIN"
 bs_cpus=1
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
+check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" || ret=1
 
 # Check debasher_hello_world program
 progname="debasher_hello_world_py"
 sched="BUILTIN"
 bs_cpus=1
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
+check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" || ret=1
 
-# Remove directory for temporaries
-echo "**** Remove directory used to store temporary files..."
-rm -rf $tmpdir
+if test $ret -ne 0 ; then
+    print_checks_failed_message "${tmpdir}"
+    echo ""
+else
+    # Remove directory for temporaries
+    echo "**** Remove directory used to store temporary files..."
+    rm -rf $tmpdir
+fi
