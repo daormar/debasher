@@ -69,6 +69,13 @@ bs_cpus=1
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
 
+# Check debasher_hello_world program
+progname="debasher_hello_world_py"
+sched="BUILTIN"
+bs_cpus=1
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
+
 # Remove directory for temporaries
 echo "**** Remove directory used to store temporary files..."
 rm -rf $tmpdir
