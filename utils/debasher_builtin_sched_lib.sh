@@ -1013,11 +1013,15 @@ builtin_sched_execute_funct_plus_postfunct()
     fi
 
     # Execute process function
+
+    # (NOTE: end_of_opts_marker should be provided without quotes to
+    # avoid problems with those interpreters that do not require any
+    # marker)
     DEBASHER_PROCESS_STDOUT_FILENAME=`get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
     if [ -z "${comm_varname}" ]; then
-        ${comm_or_funct} "${end_of_opts_marker}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+        ${comm_or_funct} ${end_of_opts_marker} "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
     else
-        ${comm_or_funct} "${!comm_varname}" "${end_of_opts_marker}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+        ${comm_or_funct} "${!comm_varname}" ${end_of_opts_marker} "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
     fi
 
     local funct_exit_code=${PIPESTATUS[0]}
