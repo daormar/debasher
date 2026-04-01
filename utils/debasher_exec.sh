@@ -1077,8 +1077,8 @@ revise_reexec_proc_status()
             # Get process status
             local status=`get_process_status ${dirname} ${processname}`
 
-            # Reset completion signal
-            if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
+            # If process is marked as reexec and it was finished, its process completion is reset
+            if process_marked_as_reexec ${processname} && [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
                 reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
             fi
         fi
