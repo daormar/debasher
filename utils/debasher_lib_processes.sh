@@ -205,7 +205,7 @@ get_pyexec_command()
 {
     if [ -z "${PYTHON}" ]; then
         echo "Error: no Python interpreter was found!" >&2
-        exit 1
+        return 1
     fi
 
     echo "${PYTHON} -c"
@@ -216,7 +216,7 @@ get_rexec_command()
 {
     if [ -z "${RSCRIPT}" ]; then
         echo "Error: no R script interpreter was found!" >&2
-        exit 1
+        return 1
     fi
 
     echo "${RSCRIPT} -e"
@@ -227,7 +227,7 @@ get_perlexec_command()
 {
     if [ -z "${PERL}" ]; then
         echo "Error: no Perl interpreter was found!" >&2
-        exit 1
+        return 1
     fi
 
     echo "${PERL} -e"
@@ -238,7 +238,7 @@ get_groovyexec_command()
 {
     if [ -z "${GROOVY}" ]; then
         echo "Error: no Groovy interpreter was found!" >&2
-        exit 1
+        return 1
     fi
 
     echo "${GROOVY} -e"
@@ -368,19 +368,19 @@ get_exec_command_given_var()
 
     case "$suffix" in
         "py")
-            get_pyexec_command "${pyexec_varname}"
+            get_pyexec_command "${pyexec_varname}" || return 1
             return 0
             ;;
         "R")
-            get_rexec_command "${rexec_varname}"
+            get_rexec_command "${rexec_varname}" || return 1
             return 0
             ;;
         "pl")
-            get_perlexec_command "${perlexec_varname}"
+            get_perlexec_command "${perlexec_varname}" || return 1
             return 0
             ;;
         "groovy")
-            get_groovyexec_command "${groovyexec_varname}"
+            get_groovyexec_command "${groovyexec_varname}" || return 1
             return 0
             ;;
         *)
@@ -399,28 +399,28 @@ get_exec_command_or_funcname()
     # Try with Python
     local pyexec_varname=`get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_pyexec_command "${pyexec_varname}"
+        get_pyexec_command "${pyexec_varname}" || return 1
         return 0
     fi
 
     # Try with R
     local rexec_varname=`get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_rexec_command "${rexec_varname}"
+        get_rexec_command "${rexec_varname}" || return 1
         return 0
     fi
 
     # Try with Perl
     local perlexec_varname=`get_perlexec_varname "${processname}"`
     if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_perlexec_command "${perlexec_varname}"
+        get_perlexec_command "${perlexec_varname}" || return 1
         return 0
     fi
 
     # Try with Groovy
     local groovyexec_varname=`get_groovyexec_varname "${processname}"`
     if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_groovyexec_command "${groovyexec_varname}"
+        get_groovyexec_command "${groovyexec_varname}" || return 1
         return 0
     fi
 

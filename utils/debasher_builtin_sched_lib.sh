@@ -982,7 +982,8 @@ builtin_sched_execute_funct_plus_postfunct()
     local task_idx=$5
     local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
-    local comm_or_funct=`get_exec_command_or_funcname ${processname}`
+    local comm_or_funct
+    comm_or_funct=`get_exec_command_or_funcname ${processname}` || return 1
     local comm_varname=`get_exec_commvar ${processname}`
     local end_of_opts_marker=`get_end_of_options_marker ${processname}`
     local post_funct=`get_post_funcname ${processname}`

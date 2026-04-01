@@ -137,7 +137,8 @@ print_script_body_slurm_sched()
     local opt_array_size=$4
     local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
-    local comm_or_funct=`get_exec_command_or_funcname ${processname}`
+    local comm_or_funct
+    comm_or_funct=`get_exec_command_or_funcname ${processname}` || return 1
     local comm_varname=`get_exec_commvar ${processname}`
     local comm_varname_serial=`serialize_exec_commvar ${comm_varname}`
     local end_of_opts_marker=`get_end_of_options_marker ${processname}`
@@ -1114,7 +1115,8 @@ seq_execute_slurm()
 
         # Add call to command or function
         if is_variable "${process_to_launch}"; then
-            local comm=`get_exec_command_given_var "${process_to_launch}"`
+            local comm
+            comm=`get_exec_command_given_var "${process_to_launch}"` || return 1
             local varname_serial=`serialize_exec_commvar ${process_to_launch}`
             local end_of_opts_marker=`get_end_of_options_marker_given_var "${process_to_launch}"`
             echo "${comm} ${varname_serial} ${end_of_opts_marker} \"\$@\"" >> "${fname}" || return 1
