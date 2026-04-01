@@ -23,7 +23,7 @@ check_program()
     local pfile="${debasher_datadir}/programs/${progname}.sh"
     local outdir="${tmpdir}/${progname}"
 
-    echo -n "**** Checking ${progname}.sh ... "
+    echo -n "## Checking ${progname}.sh ... "
 
     local debasher_exec_out="${tmpdir}/${progname}_exec.out"
     "${debasher_bindir}/debasher_exec" --pfile "${pfile}" \
@@ -55,7 +55,7 @@ check_program()
 # Check the DeBasher package
 
 # Create directory for temporary files
-echo "**** Creating directory for temporary files..."
+echo "# Creating directory for temporary files..."
 echo ""
 tmpdir=`mktemp -d $HOME/debasher_installcheck_XXXXXX`
 # trap "rm -rf $tmpdir 2>/dev/null" EXIT
@@ -63,6 +63,8 @@ echo "Temporary files will be stored in ${tmpdir}"
 echo ""
 
 # Start checks
+echo "# Checks Execution"
+echo ""
 ret=0
 
 # Check debasher_hello_world program
@@ -84,6 +86,6 @@ if test $ret -ne 0 ; then
     echo ""
 else
     # Remove directory for temporaries
-    echo "**** Remove directory used to store temporary files..."
+    echo "# Remove directory used to store temporary files..."
     rm -rf $tmpdir
 fi
