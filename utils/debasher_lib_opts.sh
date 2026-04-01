@@ -238,7 +238,7 @@ get_opt_value_from_quoted_cmd()
         fi
     done
 
-    # Option not given
+    # Option not found
     echo "${OPT_NOT_FOUND}"
     return 1
 }
@@ -279,7 +279,7 @@ get_opt_value_from_func_args()
         i=$((i+1))
     done
 
-    # Option not given
+    # Option not found
     echo "${OPT_NOT_FOUND}"
     return 1
 }
