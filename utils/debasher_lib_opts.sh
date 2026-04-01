@@ -237,6 +237,9 @@ get_opt_value_from_quoted_cmd()
             return 0
         fi
     done
+
+    # Option not given
+    echo "${OPT_NOT_FOUND}"
     return 1
 }
 
