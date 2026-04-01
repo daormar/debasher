@@ -203,24 +203,44 @@ get_groovyexec_varname()
 ########
 get_pyexec_command()
 {
+    if [ -z "${PYTHON}" ]; then
+        echo "Error: no Python interpreter was found!" >&2
+        exit 1
+    fi
+
     echo "${PYTHON} -c"
 }
 
 ########
 get_rexec_command()
 {
+    if [ -z "${RSCRIPT}" ]; then
+        echo "Error: no R script interpreter was found!" >&2
+        exit 1
+    fi
+
     echo "${RSCRIPT} -e"
 }
 
 ########
 get_perlexec_command()
 {
+    if [ -z "${PERL}" ]; then
+        echo "Error: no Perl interpreter was found!" >&2
+        exit 1
+    fi
+
     echo "${PERL} -e"
 }
 
 ########
 get_groovyexec_command()
 {
+    if [ -z "${GROOVY}" ]; then
+        echo "Error: no Groovy interpreter was found!" >&2
+        exit 1
+    fi
+
     echo "${GROOVY} -e"
 }
 
