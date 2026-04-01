@@ -151,7 +151,7 @@ get_prg_graphs_dir()
 is_valid_processname()
 {
     local input="$1"
-    if [[ "$input" =~ ^[a-zA-Z_]+$ ]]; then
+    if [[ "$input" =~ ^[a-zA-Z_][a-zA-Z_0-9]*$ ]]; then
         return 0  # True
     else
         return 1  # False
@@ -181,7 +181,7 @@ add_debasher_process()
 
     # Check correctness of process name and abort execution if necessary
     if ! is_valid_processname "${processname}"; then
-        echo "Error: process name ${processname} not valid. It should contains letters or the underscore character. Aborting execution..." >&2
+        echo "Error: process name ${processname} not valid. It should contain letters or the underscore character. Aborting execution..." >&2
         exit 1
     fi
 
