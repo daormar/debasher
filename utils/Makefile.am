@@ -40,6 +40,7 @@ SUFFIXES= .sh .py .r .R
 	echo "#! " $(BASH) > $@
 	echo "debasher_pkgname=\"$(PACKAGE_NAME)\"" >> $@
 	echo "debasher_version=\"$(PACKAGE_VERSION)\"" >> $@
+	echo "debasher_bugreport=\"$(PACKAGE_BUGREPORT)\"" >> $@
 	echo "debasher_bindir=\"$(bindir)\"" >> $@
 	echo "debasher_libexecdir=\"$(libexecdir)\"" >> $@
 	echo "debasher_datadir=\"$(datadir)/$(PACKAGE_NAME)\"" >> $@
