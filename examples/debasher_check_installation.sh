@@ -139,7 +139,7 @@ bs_cpus=4
 bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f ${telegram_data_file}" || ret=1
+check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")" || ret=1
 
 if test $ret -ne 0 ; then
     print_checks_failed_message "${tmpdir}"
