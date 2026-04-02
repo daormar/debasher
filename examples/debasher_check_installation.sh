@@ -121,15 +121,15 @@ check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 
 # Check debasher_host_workflow program
 progname="debasher_host_workflow"
 sched="BUILTIN"
-bs_cpus=64
-bs_mem=32768
+bs_cpus=4
+bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4" || ret=1
 
 # Check debasher_host_workflow_expl_deps program
 progname="debasher_host_workflow_expl_deps"
 sched="BUILTIN"
-bs_cpus=64
-bs_mem=32768
+bs_cpus=4
+bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4" || ret=1
 
 # Check debasher_telegram_imperative program
