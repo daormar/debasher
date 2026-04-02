@@ -140,22 +140,11 @@ builtin_sched_init_process_info()
             mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }
             str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $processname should be a natural number" >&2; return 1; }
 
-            # Obtain full throttle cpus value
-            local full_throttle_cpus=${cpus}
-            if [ $array_size -gt 1 ]; then
-                full_throttle_cpus=$((cpus * sched_throttle))
-            fi
+            # Check cpus value
+            builtin_sched_cpus_within_limit ${cpus} || { echo "Error: number of cpus for process $processname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
-            # Check full_throttle_cpus value
-            builtin_sched_cpus_within_limit ${full_throttle_cpus} || { echo "Error: number of cpus for process $processname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
-
-            # Obtain full throttle mem value
-            local full_throttle_mem=${mem}
-            if [ $array_size -gt 1 ]; then
-                full_throttle_mem=$((mem * sched_throttle))
-            fi
             # Check mem value
-            builtin_sched_mem_within_limit ${full_throttle_mem} || { echo "Error: amount of memory for process $processname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
+            builtin_sched_mem_within_limit ${mem} || { echo "Error: amount of memory for process $processname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
 
             # Register process information
             builtin_sched_update_processname_to_idx_info ${processname}
