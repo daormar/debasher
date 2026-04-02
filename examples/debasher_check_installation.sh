@@ -67,70 +67,107 @@ echo ""
 # Start checks
 echo "# Checks Execution"
 echo ""
-ret=0
+checks_passed=0
+checks_failed=0
 
 # Check debasher_hello_world program
 progname="debasher_hello_world"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_hello_world_py program
 progname="debasher_hello_world_py"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_cycle program
 progname="debasher_cycle"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_value_pass_example program
 progname="debasher_value_pass_example"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_array_example program
 progname="debasher_array_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_file_example program
 progname="debasher_file_example"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-s Hello\ World!" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-s Hello\ World!"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_generator_example program
 progname="debasher_generator_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_host_workflow program
 progname="debasher_host_workflow"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_host_workflow_expl_deps program
 progname="debasher_host_workflow_expl_deps"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check debasher_telegram_imperative program
 progname="debasher_telegram_imperative"
@@ -139,13 +176,24 @@ bs_cpus=4
 bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")" || ret=1
+if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
-if test $ret -ne 0 ; then
+# Summary
+echo "# Summary"
+echo ""
+echo "Total Checks: $((checks_passed + checks_failed)) ; Passed: ${checks_passed} ; Failed: ${checks_failed}"
+echo ""
+
+if test $checks_failed -gt 0 ; then
     print_checks_failed_message "${tmpdir}"
     echo ""
 else
     # Remove directory for temporaries
     echo "# Remove directory used to store temporary files..."
     rm -rf $tmpdir
+    echo ""
 fi
