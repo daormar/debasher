@@ -58,6 +58,10 @@ check_program()
             echo ""
             return 124
             ;;
+        *)
+            echo "Unexepected error, aborting..."
+            echo ""
+            exit 1
     esac
 }
 
