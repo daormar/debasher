@@ -38,7 +38,7 @@ check_program()
     local ret=$?
     if test $ret -eq 0 ; then
         local debasher_status_out="${tmpdir}/${progname}_status.out"
-        timeout 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
+        timeout -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
         ret=$?
     fi
 
@@ -59,7 +59,7 @@ check_program()
             return 124
             ;;
         *)
-            echo "Unexepected error, aborting..."
+            echo "Unexepected error, see additional information in ${tmpdir}, aborting..."
             echo ""
             exit 1
     esac
