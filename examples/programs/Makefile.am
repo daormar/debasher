@@ -13,9 +13,9 @@ debasher_telegram_jobsteps.sh debasher_telegram_array.sh		\
 debasher_telegram_imperative.sh debasher_host_process.sh		\
 debasher_host_process_expl_deps.sh debasher_host_process_medium.sh	\
 debasher_host_process_light.sh debasher_host_workflow.sh		\
-debasher_host_workflow_expl_deps.sh debasher_host_workflow_medium.sh	\
-debasher_host_workflow_light.sh debasher_cycle.sh			\
-debasher_cycle_state.sh debasher_cycle_dyn_sched.sh			\
+debasher_host_workflow_force.sh debasher_host_workflow_expl_deps.sh	\
+debasher_host_workflow_medium.sh debasher_host_workflow_light.sh	\
+debasher_cycle.sh debasher_cycle_state.sh debasher_cycle_dyn_sched.sh	\
 debasher_cycle_trigger_interactive.sh debasher_net_reconf_1.sh		\
 debasher_net_reconf_2.sh
 
