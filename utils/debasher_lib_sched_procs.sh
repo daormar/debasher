@@ -33,9 +33,12 @@ get_processid_filename()
 ########
 get_array_taskid_filename()
 {
-    local execdir=$1
+    local dirname=$1
     local processname=$2
     local idx=$3
+
+    # Get exec dir
+    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}_${idx}.${ARRAY_TASKID_FEXT}"
 }
@@ -46,9 +49,6 @@ get_array_taskid()
     local dirname=$1
     local processname=$2
     local idx=$3
-
-    # Get exec dir
-    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
     if [ -f "${file}" ]; then
