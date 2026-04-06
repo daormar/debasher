@@ -263,8 +263,7 @@ builtin_sched_get_array_task_status()
     local processname=$2
     local task_idx=$3
     local processdirname=`get_process_outdir_given_dirname "${dirname}" ${processname}`
-    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
-    local array_taskid_file=`get_array_taskid_filename "${execdir}" ${processname} ${task_idx}`
+    local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${task_idx}`
 
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
@@ -1148,11 +1147,8 @@ builtin_sched_launch()
         local pid_file=`get_processid_filename "${dirname}" ${processname}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
-        # Get exec dir
-        local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
-
         # Write pid
-        local pid_file=`get_array_taskid_filename "${execdir}" ${processname} ${task_idx}`
+        local pid_file=`get_array_taskid_filename "${dirname}" ${processname} ${task_idx}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
@@ -1282,11 +1278,11 @@ builtin_sched_clean_process_files()
 
     clean_process_id_files_array()
     {
-        local execdir=$1
+        local dirname=$1
         local processname=$2
         local idx=$3
 
-        local array_taskid_file=`get_array_taskid_filename "${execdir}" ${processname} ${idx}`
+        local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
             "${RM}" "${array_taskid_file}"
         fi
@@ -1326,16 +1322,11 @@ builtin_sched_clean_process_files()
         # related to unfinished array tasks
         local pending_tasks=`builtin_sched_get_pending_array_task_indices "${dirname}" ${processname}`
         if [ "${pending_tasks}" != "" ]; then
-            # Store string of pending tasks into an array
-            local pending_tasks_array
-            IFS=',' read -ra pending_tasks_array <<< "${pending_tasks}"
-
             # Iterate over pending tasks
-            local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
             local idx
-            for idx in "${pending_tasks_array[@]}"; do
-                clean_process_id_files_array "${execdir}" "${processname}" "${idx}"
-                clean_process_log_files_array "${execdir}" "${processname}" "${idx}"
+            for idx in $pending_tasks; do
+                clean_process_id_files_array "${dirname}" "${processname}" "${idx}"
+                clean_process_log_files_array "${dirname}" "${processname}" "${idx}"
             done
         fi
     fi
