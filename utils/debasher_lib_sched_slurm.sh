@@ -961,9 +961,7 @@ clean_process_files_slurm()
         local processname=$2
         local idx=$3
 
-        local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
-
-        local array_taskid_file=`get_array_taskid_filename "${execdir}" ${processname} ${idx}`
+        local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
             "${RM}" "${array_taskid_file}"
         fi
