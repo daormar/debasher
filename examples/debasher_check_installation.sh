@@ -239,6 +239,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_host_workflow_force program
+progname="debasher_host_workflow_force"
+sched="BUILTIN"
+bs_cpus=4
+bs_mem=1024
+check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_telegram program
 progname="debasher_telegram"
 sched="BUILTIN"
