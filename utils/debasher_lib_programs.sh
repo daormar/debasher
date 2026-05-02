@@ -181,7 +181,7 @@ add_debasher_process()
 
     # Check correctness of process name and abort execution if necessary
     if ! is_valid_processname "${processname}"; then
-        echo "Error: process name ${processname} not valid. It should contain letters or the underscore character. Aborting execution..." >&2
+        echo "Error: process name ${processname} not valid. It should contain letters, digits or the underscore character. Aborting execution..." >&2
         exit 1
     fi
 
