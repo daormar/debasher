@@ -159,7 +159,7 @@ is_valid_processname()
 }
 
 ########
-# Public: Reads the value of a given option from function arguments.
+# Public: Adds a process to a DeBasher program.
 #
 # $1 - Name of the process to add into the program.
 # $2 - Computational specifications.
