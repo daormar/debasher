@@ -66,14 +66,14 @@ document_process()
 
     # Print body
     echo "### Description"
-    local document_funcname=`get_proc_document_funcname ${processname}`
+    local document_funcname=`get_proc_document_funcname "${processname}"`
     ${document_funcname}
     echo ""
 
     if [ ${doc_options} -eq 1 ]; then
         echo "### Command Line Options"
         DIFFERENTIAL_CMDLINE_OPT_STR=""
-        local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
+        local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname "${processname}"`
         ${explain_cmdline_opts_funcname}
         document_process_opts "${DIFFERENTIAL_CMDLINE_OPT_STR}"
     fi
@@ -150,6 +150,13 @@ extract_mem_from_process_spec()
 {
     local process_spec=$1
     extract_attr_from_process_spec "${process_spec}" "mem"
+}
+
+########
+extract_alias_from_process_spec()
+{
+    local process_spec=$1
+    extract_attr_from_process_spec "${process_spec}" "alias"
 }
 
 ########
@@ -649,7 +656,7 @@ get_opts_for_process_and_task()
     local task_idx=$3
 
     if uses_option_generator "${processname}"; then
-        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+        local generate_opts_funcname=`get_generate_opts_funcname "${processname}"`
         local proc_outdir=`get_process_outdir "${processname}"`
         gen_opts_for_process_and_task  "${cmdline}" "${processname}" "${proc_outdir}" "${generate_opts_funcname}" "${task_idx}"
     else
@@ -683,7 +690,7 @@ define_opts_for_process()
         copy_process_defopts_func "${processname}"
 
         # Obtain define_opts function name and call it
-        local define_opts_funcname=`get_define_opts_funcname ${processname}`
+        local define_opts_funcname=`get_define_opts_funcname "${processname}"`
         ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
     }
 
@@ -703,7 +710,7 @@ define_opts_for_process()
             # Obtain define_opts_array function name and call it
             local define_opts_generator_gen_opts_size_fname
             get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
-            local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
+            local generate_opts_funcname=`get_generate_opts_funcname "${processname}"`
             local array_size=`${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
 
             # Iterate over array tasks
@@ -777,7 +784,7 @@ find_dependency_for_process()
     local dep
     for dep in ${processdeps_blanks}; do
         local processname_part_in_dep=`get_processname_part_in_dep ${dep}`
-        if [ "${processname_part_in_dep}" = ${processname_part} ]; then
+        if [ "${processname_part_in_dep}" = "${processname_part}" ]; then
             echo ${dep}
             return 0
         fi
@@ -893,7 +900,7 @@ get_outd_for_dep()
 
         # Get processname
         local processname_part="${dep#*${PROCESS_PLUS_DEPTYPE_SEP}}"
-        get_process_outdir_given_dirname "${outd}" ${processname_part}
+        get_process_outdir_given_dirname "${outd}" "${processname_part}"
     fi
 }
 
@@ -1053,7 +1060,7 @@ get_procdeps_for_process_cached()
                                     local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                     if [ "${processowner}" != "${processname}" ]; then
                                         # The current process is not the owner of the FIFO
-                                        local deptype=`get_deptype_using_func ${processname} ${opt} ${processowner}`
+                                        local deptype=`get_deptype_using_func "${processname}" ${opt} ${processowner}`
                                         if [ -z "${deptype}" ]; then
                                             deptype="${NONE_PROCESSDEP_TYPE}"
                                         fi
@@ -1072,7 +1079,7 @@ get_procdeps_for_process_cached()
                                         local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
                                         if [ "${processname}" != "${proc}" ]; then
                                             # Determine dependency type
-                                            local deptype=`get_deptype_using_func ${processname} ${opt} ${proc}`
+                                            local deptype=`get_deptype_using_func "${processname}" ${opt} ${proc}`
                                             if [ -z "${deptype}" ]; then
                                                 if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
                                                     deptype=${AFTERCORR_PROCESSDEP_TYPE}
@@ -1193,13 +1200,13 @@ get_procdeps_for_process_cached()
             # Add prefix to result
             deps="${PROCESSDEPS_SPEC}=${deps}"
             # Cache dependencies
-            PROCESS_DEPENDENCIES[$processname]=${deps}
+            PROCESS_DEPENDENCIES["$processname"]=${deps}
             echo "$deps"
         else
             # Add prefix to result
             deps="${PROCESSDEPS_SPEC}=${deps}"
             # Cache dependencies
-            PROCESS_DEPENDENCIES[$processname]=${deps}
+            PROCESS_DEPENDENCIES["$processname"]=${deps}
             echo "$deps"
         fi
     fi
@@ -1320,7 +1327,7 @@ get_process_outdir_given_dirname()
     local processname=$2
 
     # Get name of process function to set output directory
-    process_function_outdir=`get_outdir_funcname ${processname}`
+    process_function_outdir=`get_outdir_funcname "${processname}"`
 
     if [ "${process_function_outdir}" = "${FUNCT_NOT_FOUND}" ]; then
         get_default_process_outdir_given_dirname "$dirname" "$processname"
@@ -1388,7 +1395,7 @@ get_process_outdir_given_process_spec()
 
     # Obtain output directory for process
     local processname=`extract_processname_from_process_spec ${process_spec}`
-    local process_outd=`get_process_outdir_given_dirname ${outd} ${processname}`
+    local process_outd=`get_process_outdir_given_dirname ${outd} "${processname}"`
 
     echo ${process_outd}
 }

@@ -234,6 +234,10 @@ declare PROGRAM_OUTDIR
 # Declare array to store file names of loaded modules
 declare -a PROGRAM_MODULES
 
+# Declare array to store a stack for the program files for each program
+# function that is invoked
+declare -a PROGRAM_FUNC_FOR_MODULE_PFILE_STACK
+
 # Declare associative array to store processes added to a program
 declare -A PROGRAM_PROCESSES
 

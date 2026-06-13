@@ -274,7 +274,12 @@ get_mod_vars_and_funcs()
     echo "# Extracting module variables and functions..." >&2
 
     local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${outd}"`
+
+    # Get variables and functions from program modules
     "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
+
+    # Get special functions
+    get_alias_related_funcs >> "${vars_and_funcs_fname}"
 
     echo "Extraction complete" >&2
 
@@ -629,7 +634,7 @@ handle_conda_requirements()
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
             # Process conda envs information
-            local conda_envs_funcname=`get_conda_envs_funcname ${processname}`
+            local conda_envs_funcname=`get_conda_envs_funcname "${processname}"`
             if func_exists ${conda_envs_funcname}; then
                 echo "Handling conda requirements for process ${processname}..." >&2
                 ${conda_envs_funcname} || exit 1
@@ -658,7 +663,7 @@ handle_docker_requirements()
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
             # Process conda envs information
-            local docker_imgs_funcname=`get_docker_imgs_funcname ${processname}`
+            local docker_imgs_funcname=`get_docker_imgs_funcname "${processname}"`
             if func_exists "${docker_imgs_funcname}"; then
                 echo "Handling docker requirements for process ${processname}..." >&2
                 "${docker_imgs_funcname}" || exit 1
@@ -783,8 +788,8 @@ define_reexec_processes_due_to_code_update()
         if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
-            local status=`get_process_status "${dirname}" ${processname}`
-            local script_filename=`get_script_filename "${dirname}" ${processname}`
+            local status=`get_process_status "${dirname}" "${processname}"`
+            local script_filename=`get_script_filename "${dirname}" "${processname}"`
 
             # Handle checkings depending of process status
             if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
@@ -1037,7 +1042,7 @@ prepare_files_and_dirs_for_process()
     echo "Preparing files and directories for process ${processname}" >&2
 
     # Obtain process status
-    local status=`get_process_status ${dirname} ${processname}`
+    local status=`get_process_status ${dirname} "${processname}"`
 
     # Decide whether the process should be executed (NOTE: for a
     # process that should not be executed, files and directories are
@@ -1075,7 +1080,7 @@ revise_reexec_proc_status()
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
             # Get process status
-            local status=`get_process_status ${dirname} ${processname}`
+            local status=`get_process_status ${dirname} "${processname}"`
 
             # If process is marked as reexec and it was finished, its process completion is reset
             if process_marked_as_reexec ${processname} && [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
@@ -1101,7 +1106,7 @@ launch_process()
     # Execute process
 
     # Obtain process status
-    local status=`get_process_status ${dirname} ${processname}`
+    local status=`get_process_status ${dirname} "${processname}"`
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Decide whether the process should be executed
@@ -1188,7 +1193,7 @@ there_are_in_progress_processes()
             local processname=`extract_processname_from_process_spec "$process_spec"`
 
             # Obtain process status
-            local status=`get_process_status ${dirname} ${processname}`
+            local status=`get_process_status ${dirname} "${processname}"`
 
             if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
                 return 0
@@ -1236,7 +1241,7 @@ debug_process()
     # Debug process
 
     # Obtain process status
-    local status=`get_process_status "${dirname}" ${processname}`
+    local status=`get_process_status "${dirname}" "${processname}"`
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 }
 
@@ -1320,10 +1325,6 @@ configure_scheduler || exit 1
 
 load_module || exit 1
 
-get_deblib_vars_and_funcs || exit 1
-
-get_mod_vars_and_funcs || exit 1
-
 # Get name of initial process specification file
 initial_procspec_file="${outd}/${PPEXEC_INITIAL_PROCSPEC_BASENAME}"
 
@@ -1332,6 +1333,14 @@ ensure_program_not_being_executed "${initial_procspec_file}"
 
 # Write initial process specification file
 gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
+
+# Write debasher library variables and functions
+get_deblib_vars_and_funcs || exit 1
+
+# Write module variables and functions (this function should be called
+# before calling gen_initial_procspec_file, since it executes the
+# program given in pfile input parameter)
+get_mod_vars_and_funcs || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts "${initial_procspec_file}" || exit 1

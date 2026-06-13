@@ -116,7 +116,13 @@ exec_program_func_for_module()
     local program_funcname
     program_funcname=`get_program_funcname "${pfile}"`
 
-    ${program_funcname}
+    # Add program file to stack
+    PROGRAM_FUNC_FOR_MODULE_PFILE_STACK+=("${pfile}")
+
+    ${program_funcname} || return 1
+
+    # Remove program file from stack
+    unset 'PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]'
 }
 
 ########
@@ -159,6 +165,73 @@ is_valid_processname()
 }
 
 ########
+get_alias_related_funcs()
+{
+    for processname in "${!PROGRAM_PROCESSES[@]}"; do
+        if [ "${PROGRAM_PROCESSES[${processname}]}" != "1" ]; then
+            declare -f "${processname}"
+        fi
+    done
+}
+
+########
+get_external_file_for_process_alias()
+{
+    local current_pfile_dir=$1
+    local process_alias=$2
+
+    echo "${current_pfile_dir}/${process_alias}"
+}
+
+########
+get_interpreter_for_file()
+{
+    local file=$1
+    local bfname=$("${BASENAME}" "${file}")
+
+    # Extract the part after the last dot
+    local extension="${bfname##*.}"
+
+    case "$extension" in
+        "py")
+            echo "${PYTHON}"
+            return 0
+            ;;
+        "R")
+            echo "${RSCRIPT}"
+            return 0
+            ;;
+        "pl")
+            echo "${PERL}"
+            return 0
+            ;;
+        "groovy")
+            echo "${GROOVY}"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+########
+create_process_func_given_expanded_alias()
+{
+    local processname=$1
+    local expanded_process_alias=$2
+    local interpreter_for_file=$(get_interpreter_for_file "${expanded_process_alias}")
+
+    if [ -n "${interpreter_for_file}" ]; then
+        printf -v escaped_interpreter '%q' "${interpreter_for_file}"
+        printf -v escaped_alias '%q' "${expanded_process_alias}"
+        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
+    else
+        eval "$processname() { ${expanded_process_alias} \"\$@\"; }"
+    fi
+}
+
+########
 # Public: Adds a process to a DeBasher program.
 #
 # $1 - Name of the process to add into the program.
@@ -178,6 +251,7 @@ add_debasher_process()
     local processname=$1
     local process_computational_specs=$2
     local process_additional_specs=$3
+    local current_pfile_dir=$("${DIRNAME}" "${PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
     # Check correctness of process name and abort execution if necessary
     if ! is_valid_processname "${processname}"; then
@@ -185,86 +259,51 @@ add_debasher_process()
         exit 1
     fi
 
-    # Print process program line
-    echo "${processname}" "${process_computational_specs}" "${process_additional_specs}"
-
-    # Store process name in associative array
-    PROGRAM_PROCESSES["${processname}"]=1
-}
-
-########
-apply_suffix_to_processdeps()
-{
-    local processdeps=$1
-    local suffix=$2
-
-    # Obtain process dependencies separated by blanks
-    local separator=`get_processdeps_separator ${processdeps}`
-    if [ "${separator}" = "" ]; then
-        local processdeps_blanks=${processdeps}
-    else
-        local processdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
+    # Check if process has already been defined
+    if [[ -v 'PROGRAM_PROCESSES["${processname}"]' ]]; then
+        echo "Error: process name ${processname} has already been defined. Aborting execution..." >&2
+        exit 1
     fi
 
-    # Process dependencies
-    local dep
-    local result=""
-    for dep in ${processdeps_blanks}; do
-        # Extract dependency components
-        local processname=`get_processname_part_in_dep ${dep}`
-        local deptype=`get_deptype_part_in_dep ${dep}`
-        # Obtain modified dependency
-        if [ "${deptype}" = "${NONE_PROCESSDEP_TYPE}" ]; then
-            local modified_dep="${deptype}"
+    # Treat process alias if provided
+    local process_alias=$(extract_alias_from_process_spec "${process_additional_specs}")
+    if [ "${process_alias}" = "${ATTR_NOT_FOUND}" ]; then
+        # No alias was given
+        # Store process name in associative array. For each process, the
+        # program file of the program that adds it is registered
+        PROGRAM_PROCESSES["${processname}"]=1
+    else
+        # Obtain expanded process alias
+        local expanded_process_alias
+
+        if is_valid_processname "${process_alias}"; then
+            expanded_process_alias="${process_alias}"
         else
-            local processname_with_suff=`get_processname_given_suffix "${processname}" "${suffix}"`
-            local modified_dep="${deptype}${PROCESS_PLUS_DEPTYPE_SEP}${processname_with_suff}"
-        fi
-        # Add modified dependency to result
-        if [ -z "${result}" ]; then
-            result="${modified_dep}"
-        else
-            result="${result}${separator}${modified_dep}"
-        fi
-    done
+            # Check if alias corresponds to an external file
 
-    echo "${result}"
-}
+            # Get tentative name of external file
+            local external_file
+            external_file="$(get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
 
-########
-apply_suffix_to_program_entry()
-{
-    local prg_entry=$1
-    local suffix=$2
-
-    # Read the string into an array using the IFS
-    local elements
-    IFS=" " read -ra elements <<< "$prg_entry"
-
-    # Initialize a variable to store the concatenated elements
-    local result=""
-
-    # Iterate over the indices of the elements array
-    for i in "${!elements[@]}"; do
-        # The first word is the process name
-        if [ "${i}" -eq 0 ]; then
-            # Add process with suffix to result
-            local processname="${elements[$i]}"
-            local processname_with_suff=`get_processname_given_suffix "${processname}" "${suffix}"`
-            result="${processname_with_suff}"
-        else
-            if [[ "${elements[$i]}" == "${PROCESSDEPS_SPEC}"* ]]; then
-                processdeps=`extract_processdeps_from_process_spec "${elements[$i]}"`
-                processdeps_with_suffix=`apply_suffix_to_processdeps "${processdeps}" "${suffix}"`
-                result="${result} ${PROCESSDEPS_SPEC}=${processdeps_with_suffix}"
-            else
-                result="${result} ${elements[$i]}"
+            # Check if file exists
+            if [ ! -f "${external_file}" ]; then
+                echo "Error: alias ${process_alias} for process ${processname} is not valid. Aborting execution..." >&2
+                exit 1
             fi
-        fi
-    done
 
-    # Print the concatenated result
-    echo "$result"
+            expanded_process_alias="${external_file}"
+        fi
+
+        # Create process function
+        create_process_func_given_expanded_alias "${processname}" "${expanded_process_alias}"
+
+        # Store process name in associative array. For each process, the
+        # program file of the program that adds it is registered
+        PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
+    fi
+
+    # Print process program line
+    echo "${processname}" "${process_computational_specs}" "${process_additional_specs}"
 }
 
 ########
@@ -272,23 +311,12 @@ add_debasher_program()
 {
     # Initialize variables
     local modname=$1
-    local suffix=$2
-
-    # Create temporary file
-    local tmpfile=`${MKTEMP}`
+    local pfile=$(determine_full_module_name "${modname}")
 
     # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution
     # without using any sub-shell)
-    exec_program_func_for_module "${modname}" > "${tmpfile}"
-
-    # Process resulting program entries
-    while read prg_entry; do
-        apply_suffix_to_program_entry "${prg_entry}" "${suffix}" || return 1
-    done < "${tmpfile}"
-
-    # Remove temporary file
-    "${RM}" "${tmpfile}"
+    exec_program_func_for_module "${pfile}"
 }
 
 ########
