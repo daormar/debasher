@@ -193,6 +193,10 @@ get_interpreter_for_file()
     local extension="${bfname##*.}"
 
     case "$extension" in
+        "sh")
+            echo "${BASH}"
+            return 0
+            ;;
         "py")
             echo "${PYTHON}"
             return 0
