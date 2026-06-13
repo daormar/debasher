@@ -220,7 +220,154 @@ get_interpreter_for_file()
 }
 
 ########
-create_process_func_given_expanded_alias()
+get_pyexec_command()
+{
+    if [ -z "${PYTHON}" ]; then
+        echo "Error: no Python interpreter was found!" >&2
+        return 1
+    fi
+
+    echo "${PYTHON} -c"
+}
+
+########
+get_rexec_command()
+{
+    if [ -z "${RSCRIPT}" ]; then
+        echo "Error: no R script interpreter was found!" >&2
+        return 1
+    fi
+
+    echo "${RSCRIPT} -e"
+}
+
+########
+get_perlexec_command()
+{
+    if [ -z "${PERL}" ]; then
+        echo "Error: no Perl interpreter was found!" >&2
+        return 1
+    fi
+
+    echo "${PERL} -e"
+}
+
+########
+get_groovyexec_command()
+{
+    if [ -z "${GROOVY}" ]; then
+        echo "Error: no Groovy interpreter was found!" >&2
+        return 1
+    fi
+
+    echo "${GROOVY} -e"
+}
+
+########
+get_exec_command_for_heredoc_process()
+{
+    local processname=$1
+
+    # Search for a suitable function or command to execute the process
+
+    # Try with Python
+    local pyexec_varname=`get_pyexec_varname "${processname}"`
+    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        get_pyexec_command "${pyexec_varname}" || return 1
+        return 0
+    fi
+
+    # Try with R
+    local rexec_varname=`get_rexec_varname "${processname}"`
+    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        get_rexec_command "${rexec_varname}" || return 1
+        return 0
+    fi
+
+    # Try with Perl
+    local perlexec_varname=`get_perlexec_varname "${processname}"`
+    if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        get_perlexec_command "${perlexec_varname}" || return 1
+        return 0
+    fi
+
+    # Try with Groovy
+    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
+    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        get_groovyexec_command "${groovyexec_varname}" || return 1
+        return 0
+    fi
+}
+
+########
+get_exec_commvar()
+{
+    local processname=$1
+
+    # Search for a suitable function or command to execute the process
+
+    # Try with Python
+    local pyexec_varname=`get_pyexec_varname "${processname}"`
+    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        echo "${pyexec_varname}"
+        return 0
+    fi
+
+    # Try with R
+    local rexec_varname=`get_rexec_varname "${processname}"`
+    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        echo "${rexec_varname}"
+        return 0
+    fi
+
+    # Try with Perl
+    local perlexec_varname=`get_perlexec_varname "${processname}"`
+    if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        echo "${perlexec_varname}"
+        return 0
+    fi
+
+    # Try with Groovy
+    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
+    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        echo "${groovyexec_varname}"
+        return 0
+    fi
+}
+
+########
+get_end_of_options_marker_given_var()
+{
+    local varname=$1
+
+    # Extract the part after the last underscore
+    local suffix="${varname##*_}"
+
+    case "$suffix" in
+        "${PY_VARNAME_SUFFIX}")
+            echo "${PY_END_OF_OPTIONS_MARKER}"
+            return 0
+            ;;
+        "${R_VARNAME_SUFFIX}")
+            echo "${R_END_OF_OPTIONS_MARKER}"
+            return 0
+            ;;
+        "${PL_VARNAME_SUFFIX}")
+            echo "${PL_END_OF_OPTIONS_MARKER}"
+            return 0
+            ;;
+        "${GROOVY_VARNAME_SUFFIX}")
+            echo "${GROOVY_END_OF_OPTIONS_MARKER}"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+########
+create_process_func_alias()
 {
     local processname=$1
     local expanded_process_alias=$2
@@ -233,6 +380,77 @@ create_process_func_given_expanded_alias()
     else
         eval "$processname() { ${expanded_process_alias} \"\$@\"; }"
     fi
+}
+
+########
+create_process_func_heredoc()
+{
+    local processname=$1
+    local comm_heredoc=$2
+    local comm_varname=$3
+    local end_of_opts_marker=$4
+
+    eval "$processname() { ${comm_heredoc} \"\${${comm_varname}}\" ${end_of_opts_marker} \"\$@\"; }"
+}
+
+########
+add_debasher_process_heredoc()
+{
+    local processname=$1
+    local comm_heredoc=$(get_exec_command_for_heredoc_process "${processname}")
+    local comm_varname=`get_exec_commvar ${processname}`
+    local end_of_opts_marker=`get_end_of_options_marker_given_var ${comm_varname}`
+    # Heredoc code was provided for process
+    create_process_func_heredoc "${processname}" "${comm_heredoc}" "${comm_varname}" "${end_of_opts_marker}"
+
+    # Store process name in associative array. For each process, the
+    # program file of the program that adds it is registered
+    PROGRAM_PROCESSES["${processname}"]="${comm_varname}"
+}
+
+########
+add_debasher_process_func()
+{
+    local processname=$1
+
+    # Store process name in associative array. For each process, the
+    # program file of the program that adds it is registered
+    PROGRAM_PROCESSES["${processname}"]=1
+}
+
+########
+add_debasher_process_alias()
+{
+    local processname=$1
+    local process_alias=$2
+
+    # Obtain expanded process alias
+    local expanded_process_alias
+
+    if is_valid_processname "${process_alias}"; then
+        expanded_process_alias="${process_alias}"
+    else
+        # Check if alias corresponds to an external file
+
+        # Get tentative name of external file
+        local external_file
+        external_file="$(get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
+
+        # Check if file exists
+        if [ ! -f "${external_file}" ]; then
+            echo "Error: alias ${process_alias} for process ${processname} is not valid. Aborting execution..." >&2
+            return 1
+        fi
+
+        expanded_process_alias="${external_file}"
+    fi
+
+    # Create process function
+    create_process_func_alias "${processname}" "${expanded_process_alias}"
+
+    # Store process name in associative array. For each process, the
+    # program file of the program that adds it is registered
+    PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
 }
 
 ########
@@ -269,41 +487,20 @@ add_debasher_process()
         exit 1
     fi
 
-    # Treat process alias if provided
-    local process_alias=$(extract_alias_from_process_spec "${process_additional_specs}")
-    if [ "${process_alias}" = "${ATTR_NOT_FOUND}" ]; then
-        # No alias was given
-        # Store process name in associative array. For each process, the
-        # program file of the program that adds it is registered
-        PROGRAM_PROCESSES["${processname}"]=1
+    # Treat heredoc code if provided
+    local comm_heredoc=$(get_exec_command_for_heredoc_process "${processname}")
+    if [ -n "${comm_heredoc}" ]; then
+        add_debasher_process_heredoc "${processname}"
     else
-        # Obtain expanded process alias
-        local expanded_process_alias
-
-        if is_valid_processname "${process_alias}"; then
-            expanded_process_alias="${process_alias}"
+        # Treat process alias if provided
+        local process_alias=$(extract_alias_from_process_spec "${process_additional_specs}")
+        if [ "${process_alias}" = "${ATTR_NOT_FOUND}" ]; then
+            # No heredoc nor alias were given
+            add_debasher_process_func "${processname}"
         else
-            # Check if alias corresponds to an external file
-
-            # Get tentative name of external file
-            local external_file
-            external_file="$(get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
-
-            # Check if file exists
-            if [ ! -f "${external_file}" ]; then
-                echo "Error: alias ${process_alias} for process ${processname} is not valid. Aborting execution..." >&2
-                exit 1
-            fi
-
-            expanded_process_alias="${external_file}"
+            # A process alias was given
+            add_debasher_process_alias "${processname}" "${process_alias}" || exit 1
         fi
-
-        # Create process function
-        create_process_func_given_expanded_alias "${processname}" "${expanded_process_alias}"
-
-        # Store process name in associative array. For each process, the
-        # program file of the program that adds it is registered
-        PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
     fi
 
     # Print process program line

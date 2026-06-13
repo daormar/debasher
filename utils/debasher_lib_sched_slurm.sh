@@ -137,11 +137,6 @@ print_script_body_slurm_sched()
     local opt_array_size=$4
     local skip_funct=`get_skip_funcname ${processname}`
     local reset_funct=`get_reset_funcname ${processname}`
-    local comm_or_funct
-    comm_or_funct=`get_exec_command_or_funcname ${processname}` || return 1
-    local comm_varname=`get_exec_commvar ${processname}`
-    local comm_varname_serial=`serialize_exec_commvar ${comm_varname}`
-    local end_of_opts_marker=`get_end_of_options_marker ${processname}`
     local post_funct=`get_post_funcname ${processname}`
 
     # Retrieve and deserialize process options
@@ -167,9 +162,9 @@ print_script_body_slurm_sched()
 
     # Write function to be executed
     echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
-    echo "${comm_or_funct} ${comm_varname_serial} ${end_of_opts_marker} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
+    echo "${processname} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
     echo "funct_exit_code=\${PIPESTATUS[0]}"
-    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${comm_or_funct} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${comm_or_funct} successfully executed\" >&2; fi"
+    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${processname} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${processname} successfully executed\" >&2; fi"
 
     # Write post function if it was provided
     if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
@@ -1112,15 +1107,7 @@ seq_execute_slurm()
         write_env_vars_and_funcs_slurm "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
 
         # Add call to command or function
-        if is_variable "${process_to_launch}"; then
-            local comm
-            comm=`get_exec_command_given_var "${process_to_launch}"` || return 1
-            local varname_serial=`serialize_exec_commvar ${process_to_launch}`
-            local end_of_opts_marker=`get_end_of_options_marker_given_var "${process_to_launch}"`
-            echo "${comm} ${varname_serial} ${end_of_opts_marker} \"\$@\"" >> "${fname}" || return 1
-        else
-            echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1
-        fi
+        echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1
 
         # Give execution permission
         chmod u+x "${fname}" || return 1
