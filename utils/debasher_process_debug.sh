@@ -22,7 +22,7 @@
 ########
 print_desc()
 {
-    echo "debasher_debug_process executes a program process for debugging purposes"
+    echo "debasher_process_debug executes a program process for debugging purposes"
     echo "Usage: debasher_process_debug <prgfile> <processname> <options>"
 }
 
