@@ -400,6 +400,7 @@ add_debasher_process_heredoc()
     local comm_heredoc=$(get_exec_command_for_heredoc_process "${processname}")
     local comm_varname=`get_exec_commvar ${processname}`
     local end_of_opts_marker=`get_end_of_options_marker_given_var ${comm_varname}`
+
     # Heredoc code was provided for process
     create_process_func_heredoc "${processname}" "${comm_heredoc}" "${comm_varname}" "${end_of_opts_marker}"
 
