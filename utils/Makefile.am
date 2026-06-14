@@ -6,12 +6,13 @@ debasher_reformat_status debasher_fifo_writer_loop
 
 libexec_SCRIPTS= debasher_builtin_sched_lib debasher_lib_utils		\
 debasher_lib_sched debasher_lib_sched_slurm debasher_lib_sched_builtin	\
-debasher_lib_sched_procs debasher_lib_processes debasher_lib_programs	\
-debasher_lib_modules debasher_lib_opts debasher_lib_conda		\
-debasher_lib_docker debasher_get_vars_and_funcs				\
-debasher_get_deblib_vars_and_funcs debasher_check			\
-db_get_reexec_procs_due_to_deps debasher_solve_knapsack_bb		\
-debasher_solve_knapsack_ga debasher_gen_telegram_data
+debasher_lib_sched_procs debasher_lib_process_spec			\
+debasher_lib_processes debasher_lib_programs debasher_lib_modules	\
+debasher_lib_opts debasher_lib_conda debasher_lib_docker		\
+debasher_get_vars_and_funcs debasher_get_deblib_vars_and_funcs		\
+debasher_check db_get_reexec_procs_due_to_deps				\
+debasher_solve_knapsack_bb debasher_solve_knapsack_ga			\
+debasher_gen_telegram_data
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS)
 
@@ -20,10 +21,11 @@ python_PYTHON= debasher_prg_lib.py debasher_knapsack_ga.py
 EXTRA_DIST = debasher_lib.sh debasher_lib_utils.sh			\
 debasher_lib_sched.sh debasher_lib_sched_procs.sh			\
 debasher_lib_sched_slurm.sh debasher_lib_sched_builtin			\
-debasher_lib_processes.sh debasher_lib_programs.sh			\
-debasher_lib_modules.sh debasher_lib_opts.sh debasher_lib_conda.sh	\
-debasher_lib_docker.sh debasher_builtin_sched_lib.sh debasher_exec.sh	\
-debasher_exec_batch.sh debasher_get_stdout.sh debasher_get_sched_out.sh	\
+debasher_lib_processes.sh debasher_lib_process_spec.sh			\
+debasher_lib_programs.sh debasher_lib_modules.sh debasher_lib_opts.sh	\
+debasher_lib_conda.sh debasher_lib_docker.sh				\
+debasher_builtin_sched_lib.sh debasher_exec.sh debasher_exec_batch.sh	\
+debasher_get_stdout.sh debasher_get_sched_out.sh			\
 debasher_get_vars_and_funcs.sh debasher_get_deblib_vars_and_funcs.sh	\
 debasher_check.py debasher_stop.sh debasher_status.sh debasher_stats.sh	\
 debasher_process_debug.sh debasher_exec_process.sh debasher_doc_mod.sh	\

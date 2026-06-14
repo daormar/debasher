@@ -80,86 +80,6 @@ document_process()
 }
 
 ########
-program_process_spec_is_ok()
-{
-    local process_spec=$1
-
-    local fieldno=1
-    local procdeps_correct=1
-    local field
-    for field in $process_spec; do
-        if [[ ${field} = "${PROCESSDEPS_SPEC}="* ]]; then
-            if [ "$fieldno" = 1 ]; then
-                procdeps_correct=0
-            fi
-        fi
-        fieldno=$((fieldno + 1))
-    done
-
-    if [ "${fieldno}" -gt 0 ] && [ "${procdeps_correct}" = 1 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-extract_attr_from_process_spec()
-{
-    local process_spec=$1
-    local attrname=$2
-
-    local field
-    for field in $process_spec; do
-        if [[ "${field}" = "${attrname}="* ]]; then
-            local attrname_len=${#attrname}
-            local start=$((attrname_len + 1))
-            local attr_val=${field:${start}}
-            echo ${attr_val}
-            return 0
-        fi
-    done
-
-    echo ${ATTR_NOT_FOUND}
-}
-
-########
-extract_processname_from_process_spec()
-{
-    local process_spec=$1
-    local fields=( $process_spec )
-    echo ${fields[0]}
-}
-
-########
-extract_processdeps_from_process_spec()
-{
-    local process_spec=$1
-    extract_attr_from_process_spec "${process_spec}" "${PROCESSDEPS_SPEC}"
-}
-
-########
-extract_cpus_from_process_spec()
-{
-    local process_spec=$1
-    extract_attr_from_process_spec "${process_spec}" "cpus"
-}
-
-########
-extract_mem_from_process_spec()
-{
-    local process_spec=$1
-    extract_attr_from_process_spec "${process_spec}" "mem"
-}
-
-########
-extract_alias_from_process_spec()
-{
-    local process_spec=$1
-    extract_attr_from_process_spec "${process_spec}" "alias"
-}
-
-########
 get_reset_funcname()
 {
     local processname=$1
@@ -181,7 +101,6 @@ get_pyexec_varname()
     local processname=$1
 
     search_process_var "${processname}" "${PROCESS_VARNAME_PYEXEC}"
-    echo search_process_var "${processname}" "${PROCESS_VARNAME_PYEXEC}" >&2
 }
 
 ########

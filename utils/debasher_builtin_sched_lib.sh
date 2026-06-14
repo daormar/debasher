@@ -124,7 +124,7 @@ builtin_sched_init_process_info()
             local script_filename=`get_script_filename "${dirname}" ${processname}`
             local status=`get_process_status "${dirname}" ${processname}`
             local processdeps=`extract_processdeps_from_process_spec "$process_spec"`
-            local spec_throttle=`extract_attr_from_process_spec "$process_spec" "throttle"`
+            local spec_throttle=`extract_throttle_from_process_spec "$process_spec"`
             local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
             local array_size=`get_numtasks_for_process "${processname}"`
 

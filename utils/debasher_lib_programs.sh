@@ -466,8 +466,11 @@ add_debasher_process_alias()
 #    add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
 #
 # The function prints the process definition to the standard output.
-# Additionally, it registers the process in a variable used by the
-# DeBasher library.
+# This process definition is later used debasher_exec to execute
+# the program.
+# Additionally, the function registers the process in a variable used
+# by the DeBasher library, and creates a wrapper function when an
+# alias or heredoc code is provided.
 add_debasher_process()
 {
     # Initialize variables
@@ -505,7 +508,7 @@ add_debasher_process()
     fi
 
     # Print process program line
-    echo "${processname}" "${process_computational_specs}" "${process_additional_specs}"
+    echo "${processname}" "${process_computational_specs}" "${BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}" "${process_additional_specs}"
 }
 
 ########

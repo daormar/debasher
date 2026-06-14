@@ -45,6 +45,8 @@ DEBASHER_MOD_DIR_SEP=":"
 DEBASHER_YML_DIR_SEP=":"
 PROCESS_METHOD_SEP="_"
 MODULE_METHOD_SEP="_"
+BEGIN_OF_ADDITIONAL_PROCSPECS_SEP="|||"
+ADDITIONAL_PROCSPECS_SEP=";"
 VALUE_DESCRIPTOR_NAME_PREFIX=".__VAL_DESCRIPTOR__"
 PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX="__PROC_OUT_OPT_DESCRIPTOR__"
 SCHED_OPTS_DIRNAME=".sched_opts"
@@ -168,6 +170,7 @@ PRGOPTS_EXHAUSTIVE_FEXT="opts_exh"
 FIFOS_FEXT="fifos"
 GRAPHS_FEXT="dot"
 SCHED_SCRIPT_INPUT_FEXT="opts"
+BASH_FEXT="sh"
 PYTHON_FEXT="py"
 PERL_FEXT="pl"
 R_FEXT="R"
@@ -278,6 +281,7 @@ declare -A EXIT_CODE
 . "${debasher_libexecdir}"/debasher_lib_utils
 . "${debasher_libexecdir}"/debasher_lib_programs
 . "${debasher_libexecdir}"/debasher_lib_modules
+. "${debasher_libexecdir}"/debasher_lib_process_spec
 . "${debasher_libexecdir}"/debasher_lib_processes
 . "${debasher_libexecdir}"/debasher_lib_opts
 . "${debasher_libexecdir}"/debasher_lib_sched

@@ -506,11 +506,11 @@ slurm_launch_attempt()
     local augmented_deps=`combine_slurm_deps ${processdeps} ${attempt_deps}`
 
     # Retrieve specification
-    local cpus=`extract_attr_from_process_spec "$process_spec" "cpus"`
-    local account=`extract_attr_from_process_spec "$process_spec" "account"`
-    local partition=`extract_attr_from_process_spec "$process_spec" "partition"`
-    local nodes=`extract_attr_from_process_spec "$process_spec" "nodes"`
-    local spec_throttle=`extract_attr_from_process_spec "$process_spec" "throttle"`
+    local cpus=`extract_cpus_from_process_spec "$process_spec"`
+    local account=`extract_account_from_process_spec "$process_spec"`
+    local partition=`extract_partition_from_process_spec "$process_spec"`
+    local nodes=`extract_nodes_from_process_spec "$process_spec"`
+    local spec_throttle=`extract_throttle_from_process_spec "$process_spec"`
     local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
 
     # Define options for sbatch
@@ -575,9 +575,9 @@ slurm_launch_preverif_job()
     local attempt_deps=`slurm_get_attempt_deps ${attempt_jids}`
 
     # Retrieve specification
-    local account=`extract_attr_from_process_spec "$process_spec" "account"`
-    local partition=`extract_attr_from_process_spec "$process_spec" "partition"`
-    local nodes=`extract_attr_from_process_spec "$process_spec" "nodes"`
+    local account=`extract_account_from_process_spec "$process_spec"`
+    local partition=`extract_partition_from_process_spec "$process_spec"`
+    local nodes=`extract_nodes_from_process_spec "$process_spec"`
 
     # Define options
     local jobname="${processname}__preverif"
@@ -638,9 +638,9 @@ slurm_launch_verif_job()
     local preverif_jid=$6
 
     # Retrieve specification
-    local account=`extract_attr_from_process_spec "$process_spec" "account"`
-    local partition=`extract_attr_from_process_spec "$process_spec" "partition"`
-    local nodes=`extract_attr_from_process_spec "$process_spec" "nodes"`
+    local account=`extract_account_from_process_spec "$process_spec"`
+    local partition=`extract_partition_from_process_spec "$process_spec"`
+    local nodes=`extract_nodes_from_process_spec "$process_spec"`
 
     # Define options
     local jobname="${processname}__verif"
@@ -706,8 +706,8 @@ slurm_launch()
     # Launch execution attempts
     local attempt_no=0
     local attempt_jids=""
-    local mem=`extract_attr_from_process_spec "$process_spec" "mem"`
-    local time=`extract_attr_from_process_spec "$process_spec" "time"`
+    local mem=`extract_mem_from_process_spec "$process_spec"`
+    local time=`extract_time_from_process_spec "$process_spec"`
     local num_attempts=`get_num_attempts ${time} ${mem}`
     local attempt_no=1
 

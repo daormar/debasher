@@ -393,7 +393,7 @@ gen_final_procspec_file()
             procdeps=`get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
 
             # Print process specification plus process dependencies
-            echo "${process_spec}" "${procdeps}"
+            add_additional_spec "${process_spec}" "${procdeps}"
         else
             # Since the dependencies were given, just print process
             # specification
@@ -731,7 +731,7 @@ define_forced_exec_processes()
         if program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`extract_processname_from_process_spec "$process_spec"`
-            local process_forced=`extract_attr_from_process_spec "$process_spec" "force"`
+            local process_forced=`extract_force_from_process_spec "$process_spec" "force"`
             if [ ${process_forced} = "yes" ]; then
                 mark_process_as_reexec $processname ${FORCED_REEXEC_REASON}
             fi
