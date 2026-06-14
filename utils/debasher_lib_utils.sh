@@ -500,6 +500,16 @@ str_is_val_descriptor()
 }
 
 ########
+str_trim()
+{
+    local var="$1"
+    # Remove beginning and ending blanks
+    var="${var#"${var%%[![:space:]]*}"}"
+    var="${var%"${var##*[![:space:]]}"}"
+    echo "$var"
+}
+
+########
 get_num_words_in_string()
 {
     local str=$1
