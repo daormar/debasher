@@ -193,23 +193,23 @@ get_interpreter_for_file()
     local extension="${bfname##*.}"
 
     case "$extension" in
-        "sh")
+        "${BASH_FEXT}")
             echo "${BASH}"
             return 0
             ;;
-        "py")
+        "${PYTHON_FEXT}")
             echo "${PYTHON}"
             return 0
             ;;
-        "R")
+        "${R_FEXT}")
             echo "${RSCRIPT}"
             return 0
             ;;
-        "pl")
+        "${PERL_FEXT}")
             echo "${PERL}"
             return 0
             ;;
-        "groovy")
+        "${GROOVY_FEXT}")
             echo "${GROOVY}"
             return 0
             ;;
