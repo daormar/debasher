@@ -220,87 +220,25 @@ get_interpreter_for_file()
 }
 
 ########
-get_pyexec_command()
-{
-    if [ -z "${PYTHON}" ]; then
-        echo "Error: no Python interpreter was found!" >&2
-        return 1
-    fi
-
-    echo "${PYTHON} -c"
-}
-
-########
-get_rexec_command()
-{
-    if [ -z "${RSCRIPT}" ]; then
-        echo "Error: no R script interpreter was found!" >&2
-        return 1
-    fi
-
-    echo "${RSCRIPT} -e"
-}
-
-########
-get_perlexec_command()
-{
-    if [ -z "${PERL}" ]; then
-        echo "Error: no Perl interpreter was found!" >&2
-        return 1
-    fi
-
-    echo "${PERL} -e"
-}
-
-########
-get_groovyexec_command()
-{
-    if [ -z "${GROOVY}" ]; then
-        echo "Error: no Groovy interpreter was found!" >&2
-        return 1
-    fi
-
-    echo "${GROOVY} -e"
-}
-
-########
-get_exec_command_for_heredoc_process()
+create_process_func_alias()
 {
     local processname=$1
+    local expanded_process_alias=$2
+    local interpreter_for_file=$(get_interpreter_for_file "${expanded_process_alias}")
 
-    # Search for a suitable function or command to execute the process
-
-    # Try with Python
-    local pyexec_varname=`get_pyexec_varname "${processname}"`
-    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_pyexec_command "${pyexec_varname}" || return 1
-        return 0
-    fi
-
-    # Try with R
-    local rexec_varname=`get_rexec_varname "${processname}"`
-    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_rexec_command "${rexec_varname}" || return 1
-        return 0
-    fi
-
-    # Try with Perl
-    local perlexec_varname=`get_perlexec_varname "${processname}"`
-    if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_perlexec_command "${perlexec_varname}" || return 1
-        return 0
-    fi
-
-    # Try with Groovy
-    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
-    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
-        get_groovyexec_command "${groovyexec_varname}" || return 1
-        return 0
+    if [ -n "${interpreter_for_file}" ]; then
+        local escaped_interpreter
+        printf -v escaped_interpreter '%q' "${interpreter_for_file}"
+        local escaped_alias
+        printf -v escaped_alias '%q' "${expanded_process_alias}"
+        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
+    else
+        eval "$processname() { ${expanded_process_alias} \"\$@\"; }"
     fi
 }
 
 ########
-get_exec_commvar()
+is_heredoc_process()
 {
     local processname=$1
 
@@ -333,76 +271,69 @@ get_exec_commvar()
         echo "${groovyexec_varname}"
         return 0
     fi
+
+    return 1
 }
 
 ########
-get_end_of_options_marker_given_var()
-{
-    local varname=$1
-
-    # Extract the part after the last underscore
-    local suffix="${varname##*_}"
-
-    case "$suffix" in
-        "${PY_VARNAME_SUFFIX}")
-            echo "${PY_END_OF_OPTIONS_MARKER}"
-            return 0
-            ;;
-        "${R_VARNAME_SUFFIX}")
-            echo "${R_END_OF_OPTIONS_MARKER}"
-            return 0
-            ;;
-        "${PL_VARNAME_SUFFIX}")
-            echo "${PL_END_OF_OPTIONS_MARKER}"
-            return 0
-            ;;
-        "${GROOVY_VARNAME_SUFFIX}")
-            echo "${GROOVY_END_OF_OPTIONS_MARKER}"
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-########
-create_process_func_alias()
+create_heredoc_func_body()
 {
     local processname=$1
-    local expanded_process_alias=$2
-    local interpreter_for_file=$(get_interpreter_for_file "${expanded_process_alias}")
+    local escaped_interpreter
 
-    if [ -n "${interpreter_for_file}" ]; then
-        printf -v escaped_interpreter '%q' "${interpreter_for_file}"
-        printf -v escaped_alias '%q' "${expanded_process_alias}"
-        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
-    else
-        eval "$processname() { ${expanded_process_alias} \"\$@\"; }"
+    # Search for a suitable function or command to execute the process
+
+    # Try with Python
+    local pyexec_varname=`get_pyexec_varname "${processname}"`
+    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        printf -v escaped_interpreter '%q' "${PYTHON}"
+        echo "${escaped_interpreter} -c \"\${${pyexec_varname}}\" ${PY_END_OF_OPTIONS_MARKER} \"\$@\""
+        return 0
     fi
+
+    # Try with R
+    local rexec_varname=`get_rexec_varname "${processname}"`
+    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        printf -v escaped_interpreter '%q' "${RSCRIPT}"
+        echo "${escaped_interpreter} -e \"\${${rexec_varname}}\" ${R_END_OF_OPTIONS_MARKER} \"\$@\""
+        return 0
+    fi
+
+    # Try with Perl
+    local perlexec_varname=`get_perlexec_varname "${processname}"`
+    if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        printf -v escaped_interpreter '%q' "${PERL}"
+        echo "${escaped_interpreter} -e \"\${${perlexec_varname}}\" ${PL_END_OF_OPTIONS_MARKER} \"\$@\""
+        return 0
+    fi
+
+    # Try with Groovy
+    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
+    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+        printf -v escaped_interpreter '%q' "${GROOVY}"
+        echo "${escaped_interpreter} -e \"\${${groovyexec_varname}}\" ${GROOVY_END_OF_OPTIONS_MARKER} \"\$@\""
+        return 0
+    fi
+
+    return 1
 }
 
 ########
 create_process_func_heredoc()
 {
     local processname=$1
-    local comm_heredoc=$2
-    local comm_varname=$3
-    local end_of_opts_marker=$4
-
-    eval "$processname() { ${comm_heredoc} \"\${${comm_varname}}\" ${end_of_opts_marker} \"\$@\"; }"
+    local funcbody
+    funcbody=$(create_heredoc_func_body "${processname}") || return 1
+    eval "$processname() { ${funcbody}; }"
 }
 
 ########
 add_debasher_process_heredoc()
 {
     local processname=$1
-    local comm_heredoc=$(get_exec_command_for_heredoc_process "${processname}")
-    local comm_varname=`get_exec_commvar ${processname}`
-    local end_of_opts_marker=`get_end_of_options_marker_given_var ${comm_varname}`
 
     # Heredoc code was provided for process
-    create_process_func_heredoc "${processname}" "${comm_heredoc}" "${comm_varname}" "${end_of_opts_marker}"
+    create_process_func_heredoc "${processname}" || return 1
 
     # Store process name in associative array. For each process, the
     # program file of the program that adds it is registered
@@ -492,9 +423,8 @@ add_debasher_process()
     fi
 
     # Treat heredoc code if provided
-    local comm_heredoc=$(get_exec_command_for_heredoc_process "${processname}")
-    if [ -n "${comm_heredoc}" ]; then
-        add_debasher_process_heredoc "${processname}"
+    if is_heredoc_process "${processname}" >/dev/null; then
+        add_debasher_process_heredoc "${processname}" || exit 1
     else
         # Treat process alias if provided
         local process_alias=$(extract_alias_from_process_spec "${process_additional_specs}")
