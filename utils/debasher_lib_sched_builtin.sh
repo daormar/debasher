@@ -36,7 +36,7 @@ debasher::builtin_sched_stop_process()
 
     # Process ids information for process (each element in ids_info is a pid)
     for id in ${ids_info}; do
-        stop_pid $id || { echo "Error while stopping process with id $id" >&2 ; return 1; }
+        debasher::stop_pid $id || { echo "Error while stopping process with id $id" >&2 ; return 1; }
     done
 }
 
@@ -80,7 +80,7 @@ debasher::process_is_unfinished_but_runnable_builtin_sched()
 
         # Check there are no tasks in progress
         for id in ${!launched_array_tids[@]}; do
-            if id_exists $id; then
+            if debasher::id_exists $id; then
                 return 1
             fi
         done

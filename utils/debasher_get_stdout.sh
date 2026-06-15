@@ -101,7 +101,7 @@ configure_scheduler()
 {
     local sched=$1
     if [ ${sched} != ${OPT_NOT_FOUND} ]; then
-        set_debasher_scheduler ${sched} || return 1
+        debasher::set_debasher_scheduler ${sched} || return 1
     fi
 }
 

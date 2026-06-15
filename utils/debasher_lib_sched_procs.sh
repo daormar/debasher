@@ -232,7 +232,7 @@ debasher::clean_process_files()
     local processname=$2
     local array_size=$3
 
-    local sched=`get_scheduler`
+    local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             clean_process_files_slurm "$dirname" "$processname" "$array_size"
@@ -382,7 +382,7 @@ debasher::stop_process()
     local ids_info=$1
 
     # Launch process
-    local sched=`get_scheduler`
+    local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
             slurm_stop_process ${ids_info} || return 1
@@ -404,8 +404,8 @@ debasher::process_is_in_progress()
     for id in ${ids}; do
         # Get global id (when executing multiple attempts, multiple ids
         # will be associated to a given process)
-        local global_id=`get_global_id "${id}"`
-        if id_exists "${global_id}"; then
+        local global_id=`debasher::get_global_id "${id}"`
+        if debasher::id_exists "${global_id}"; then
             return 0
         fi
     done
@@ -490,7 +490,7 @@ debasher::process_is_unfinished_but_runnable()
     local processname=$2
 
     # Check status depending on the scheduler
-    local sched=`get_scheduler`
+    local sched=`debasher::get_scheduler`
     local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
@@ -531,7 +531,7 @@ debasher::get_elapsed_time_for_process()
     local processname=$2
 
     # Get name of log file
-    local sched=`get_scheduler`
+    local sched=`debasher::get_scheduler`
     local log_filename
     case $sched in
         ${SLURM_SCHEDULER})

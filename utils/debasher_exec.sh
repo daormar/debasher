@@ -415,31 +415,31 @@ configure_scheduler()
 
     if [ ${sched_given} -eq 1 ]; then
         echo "## Setting scheduler type from value of \"--sched\" option..." >&2
-        set_debasher_scheduler "${sched_opt}" || return 1
+        debasher::set_debasher_scheduler "${sched_opt}" || return 1
         echo "scheduler: ${sched_opt}" >&2
         echo "" >&2
     else
         # If --sched option not given, the scheduler is first determined
         # based on information gathered during package configuration
-        # (see determine_scheduler function in debasher_lib.sh). Once the
+        # (see debasher::determine_scheduler function in debasher_lib.sh). Once the
         # scheduler is determined, it will be set using the
-        # set_debasher_scheduler function
+        # debasher::set_debasher_scheduler function
         echo "## Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
-        local sched=`determine_scheduler`
-        set_debasher_scheduler "${sched}" || return 1
+        local sched=`debasher::determine_scheduler`
+        debasher::set_debasher_scheduler "${sched}" || return 1
         echo "scheduler: ${sched}" >&2
         echo "" >&2
     fi
 
     if [ ${dflt_nodes_given} -eq 1 ]; then
         echo "## Setting default nodes for program execution... (${dflt_nodes})" >&2
-        set_debasher_default_nodes "${dflt_nodes}" || return 1
+        debasher::set_debasher_default_nodes "${dflt_nodes}" || return 1
         echo "" >&2
     fi
 
     if [ ${dflt_throttle_given} -eq 1 ]; then
         echo "## Setting default job array task throttle... (${dflt_throttle})" >&2
-        set_debasher_default_array_task_throttle "${dflt_throttle}" || return 1
+        debasher::set_debasher_default_array_task_throttle "${dflt_throttle}" || return 1
         echo "" >&2
     fi
 }
@@ -901,7 +901,7 @@ set_debasher_output_dir()
     outd=`get_absolute_path "${outd}"`
 
     # Set outd as the output directory of debasher
-    set_debasher_outdir "${outd}"
+    debasher::set_debasher_outdir "${outd}"
 
     echo "" >&2
 }
@@ -975,7 +975,7 @@ get_processdeps_from_detailed_spec()
     local dep_spec
     for dep_spec in ${processdeps_spec_blanks}; do
         local deptype=`get_deptype_part_in_dep ${dep_spec}`
-        local mapped_deptype=`map_deptype_if_necessary ${deptype}`
+        local mapped_deptype=`debasher::map_deptype_if_necessary ${deptype}`
         local processname=`get_processname_part_in_dep ${dep_spec}`
         # Check if there is an id for the process
         if [ ! -z "${PIPE_EXEC_PROCESS_IDS[${processname}]}" ]; then
@@ -1113,16 +1113,16 @@ launch_process()
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
         local opt_array_size=`get_numtasks_for_process "${processname}"`
-        create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
+        debasher::create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
         # Launch process
         local task_array_list=`debasher::get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
         local processdeps_spec=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
         local processdeps=`get_processdeps "${process_id_list}" "${processdeps_spec}"`
-        launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
+        debasher::launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
-        local primary_id=`get_primary_id "${launch_outvar}"`
+        local primary_id=`debasher::get_primary_id "${launch_outvar}"`
         PIPE_EXEC_PROCESS_IDS[${processname}]=${primary_id}
         process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
 
@@ -1133,7 +1133,7 @@ launch_process()
         # correctly express dependencies
         if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
             local sid_info=`debasher::read_process_id_info_from_file "${dirname}" "${processname}"` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
-            local global_id=`get_global_id "${sid_info}"`
+            local global_id=`debasher::get_global_id "${sid_info}"`
             PIPE_EXEC_PROCESS_IDS["${processname}"]=${global_id}
             process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
         fi
@@ -1399,7 +1399,7 @@ else
         if [ ${debug} -eq 1 ]; then
             launch_program_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
         else
-            sched=`determine_scheduler`
+            sched=`debasher::determine_scheduler`
             if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
                 builtin_sched_execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 print_post_exec_wait_help

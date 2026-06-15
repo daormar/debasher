@@ -191,7 +191,7 @@ write_env_vars_and_funcs_slurm()
     local dirname=$1
 
     # Write general environment variables and functions
-    write_env_vars_and_funcs "${dirname}"
+    debasher::write_env_vars_and_funcs "${dirname}"
 
     # Write slurm scheduler environment functions
     declare -f write_env_vars_and_funcs_slurm
@@ -511,7 +511,7 @@ slurm_launch_attempt()
     local partition=`debasher::extract_partition_from_process_spec "$process_spec"`
     local nodes=`debasher::extract_nodes_from_process_spec "$process_spec"`
     local spec_throttle=`debasher::extract_throttle_from_process_spec "$process_spec"`
-    local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
+    local sched_throttle=`debasher::get_scheduler_throttle ${spec_throttle}`
 
     # Define options for sbatch
     local jobname=`get_slurm_jobname $processname $attempt_no`
@@ -708,13 +708,13 @@ slurm_launch()
     local attempt_jids=""
     local mem=`debasher::extract_mem_from_process_spec "$process_spec"`
     local time=`debasher::extract_time_from_process_spec "$process_spec"`
-    local num_attempts=`get_num_attempts ${time} ${mem}`
+    local num_attempts=`debasher::get_num_attempts ${time} ${mem}`
     local attempt_no=1
 
     while [ ${attempt_no} -le ${num_attempts} ]; do
         # Obtain attempt-dependent parameters
-        local mem_attempt=`get_mem_attempt_value ${mem} ${attempt_no}`
-        local time_attempt=`get_time_attempt_value ${time} ${attempt_no}`
+        local mem_attempt=`debasher::get_mem_attempt_value ${mem} ${attempt_no}`
+        local time_attempt=`debasher::get_time_attempt_value ${time} ${attempt_no}`
 
         # Launch attempt
         jid=`slurm_launch_attempt "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_no} "${processdeps}" "${attempt_jids}" ${mem_attempt} ${time_attempt}` || return 1
@@ -722,7 +722,7 @@ slurm_launch()
         validate_jid "$jid" || return 1
 
         # Update variable storing jids of previous attempts (after
-        # launching all attempts this variable is also useful to launch
+        # launching all attempts this variable is also useful to debasher::launch
         # pre-verification job)
         if [ "${attempt_jids}" = "" ]; then
             attempt_jids=${jid}
@@ -735,7 +735,7 @@ slurm_launch()
 
     # If more than one attempt was requested, verify if any of the
     # attempts were successful (currently, verification requires to
-    # launch two jobs)
+    # debasher::launch two jobs)
     if [ ${num_attempts} -gt 1 ]; then
         preverif_jid=`slurm_launch_preverif_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_jids}` || return 1
         validate_jid "$preverif_jid" || return 1
@@ -780,7 +780,7 @@ get_global_id_slurm()
     local sep=","
     IFS="$sep" read -r -a str_array <<< "${launch_id_info}"
 
-    # Return last id stored in launch output variable, which corresponds
+    # Return last id stored in debasher::launch output variable, which corresponds
     # to the global id
     local array_len=${#str_array[@]}
     local last_array_idx=$(( array_len - 1 ))

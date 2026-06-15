@@ -298,7 +298,7 @@ get_script_log_filenames()
 {
     local exec_dirname=`debasher::get_prg_exec_dir`
 
-    local sched=`get_scheduler`
+    local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
             get_script_log_filenames_slurm "${exec_dirname}"

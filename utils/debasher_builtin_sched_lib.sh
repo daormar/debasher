@@ -125,7 +125,7 @@ builtin_sched_init_process_info()
             local status=`debasher::get_process_status "${dirname}" ${processname}`
             local processdeps=`debasher::extract_processdeps_from_process_spec "$process_spec"`
             local spec_throttle=`debasher::extract_throttle_from_process_spec "$process_spec"`
-            local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
+            local sched_throttle=`debasher::get_scheduler_throttle ${spec_throttle}`
             local array_size=`get_numtasks_for_process "${processname}"`
 
             # Get cpus info
@@ -136,7 +136,7 @@ builtin_sched_init_process_info()
             # memory specification of the first one)
             local mem=`debasher::extract_mem_from_process_spec "$process_spec"`
             local attempt_no=1
-            mem=`get_mem_attempt_value ${mem} ${attempt_no}`
+            mem=`debasher::get_mem_attempt_value ${mem} ${attempt_no}`
             mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }
             str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $processname should be a natural number" >&2; return 1; }
 
@@ -275,7 +275,7 @@ builtin_sched_get_array_task_status()
         else
             # Task is not finished
             local id=`"${CAT}" "${array_taskid_file}"`
-            if id_exists $id; then
+            if debasher::id_exists $id; then
                 echo ${BUILTIN_SCHED_INPROGRESS_TASK_STATUS}
             else
                 echo ${BUILTIN_SCHED_FAILED_TASK_STATUS}
@@ -1058,7 +1058,7 @@ write_env_vars_and_funcs_builtin()
     local dirname=$1
 
     # Write general environment variables and functions
-    write_env_vars_and_funcs "${dirname}"
+    debasher::write_env_vars_and_funcs "${dirname}"
 
     # Write builtin sched environment functions
     declare -f builtin_sched_print_pid_to_file

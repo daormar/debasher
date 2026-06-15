@@ -90,10 +90,10 @@ configure_scheduler()
     if [ ${sched} = ${OPT_NOT_FOUND} ]; then
         # If the scheduler was not set in the command line, it is
         # automatically determined
-        local sched=`determine_scheduler`
-        set_debasher_scheduler "${sched}" || return 1
+        local sched=`debasher::determine_scheduler`
+        debasher::set_debasher_scheduler "${sched}" || return 1
     else
-        set_debasher_scheduler "${sched}" || return 1
+        debasher::set_debasher_scheduler "${sched}" || return 1
     fi
 }
 

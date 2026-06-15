@@ -20,9 +20,10 @@ extract_sched_funcs()
 {
     # Define functions to be kept
     declare -A funcs_to_keep
-    funcs_to_keep["get_scheduler"]=1
+    funcs_to_keep["debasher::get_scheduler"]=1
+    funcs_to_keep["debasher::seq_execute"]=1
     funcs_to_keep["seq_execute"]=1
-    funcs_to_keep["write_env_vars_and_funcs"]=1
+    funcs_to_keep["debasher::write_env_vars_and_funcs"]=1
     funcs_to_keep["debasher::signal_process_completion"]=1
     funcs_to_keep["debasher::get_process_finished_filename_prefix"]=1
     funcs_to_keep["debasher::get_process_finished_filename"]=1
