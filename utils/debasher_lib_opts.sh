@@ -312,6 +312,18 @@ debasher::read_opt_value_from_func_args()
     fi
 }
 
+########
+# Public: Reads the value of a given option from function arguments.
+#
+# $1 - Option name whose value we want to obtain.
+# $2,$3,...,$n - List of function arguments (typically they are provided
+#                by the caller using the special parameter "$@").
+#
+# Examples
+#
+#   local str=$(read_opt_value_from_func_args "-s" "$@")
+#
+# The function prints the value of the option if it was given, or the "DEBASHER_OPT_NOT_FOUND" constant otherwise.
 read_opt_value_from_func_args() { debasher::read_opt_value_from_func_args "$@"; }
 
 ########
@@ -447,6 +459,21 @@ debasher::explain_cmdline_opt()
 }
 
 ########
+# Public: Explains command-line option.
+#
+# $1 - Option name.
+# $2 - Data type of option value.
+# $3 - Option description.
+# $4 - Option category ("GENERAL" category by default).
+#
+# Examples
+#
+#   explain_cmdline_opt "-s" "<string>" "String to be displayed"
+#
+# The function does not return any value.
+explain_cmdline_opt() { debasher::explain_cmdline_opt "$@"; }
+
+########
 debasher::explain_cmdline_opt_wo_value()
 {
     local opt=$1
@@ -471,6 +498,8 @@ debasher::explain_cmdline_opt_wo_value()
         DIFFERENTIAL_CMDLINE_OPT_STR="${DIFFERENTIAL_CMDLINE_OPT_STR} ${opt}"
     fi
 }
+
+explain_cmdline_opt_wo_value() { debasher::explain_cmdline_opt_wo_value "$@"; }
 
 ########
 debasher::print_program_opts()
@@ -656,6 +685,19 @@ debasher::define_cmdline_opt()
     debasher::define_opt $opt "$value" $varname
 }
 
+########
+# Public: Defines process option from command-line option.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_opt "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
+debasher::define_cmdline_opt()
 define_cmdline_opt() { debasher::define_cmdline_opt "$@"; }
 
 ########
@@ -794,6 +836,19 @@ debasher::define_opt_from_proc_out()
     debasher::define_opt_from_proc_task_out "${opt}" "${proc}" "${task_idx}" "${out_opt}" "${varname}"
 }
 
+########
+# Public: Defines process option from the output of another process.
+#
+# $1 - Option name.
+# $2 - Name of process that will be connected with current one.
+# $3 - Name of output option belonging to the the process to be connected.
+# $4 - Name of the variable to store the new option.
+#
+# Examples
+#
+#   define_opt_from_proc_out "-in" "process_to_be_connected" "-out" optlist
+#
+# The function does not return any value
 define_opt_from_proc_out() { debasher::define_opt_from_proc_out "$@"; }
 
 ########
@@ -916,6 +971,18 @@ debasher::define_opt()
     fi
 }
 
+########
+# Public: Defines process option.
+#
+# $1 - Option name.
+# $2 - Value associated to the option being defined.
+# $3 - Name of variable that will store the information about the option to be added.
+#
+# Examples
+#
+#   define_opt "-o" "${value}" "optlist"
+#
+# The function does not return any value
 define_opt() { debasher::define_opt "$@"; }
 
 ########
@@ -1287,6 +1354,16 @@ debasher::save_opt_list()
     exit 1
 }
 
+########
+# Public: Saves option list for a given process.
+#
+# $1 - Name of variable storing the option list.
+#
+# Examples
+#
+#   save_opt_list optlist
+#
+# The function does not return any value
 save_opt_list() { debasher::save_opt_list "$@"; }
 
 ########
