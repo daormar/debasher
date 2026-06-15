@@ -301,7 +301,7 @@ get_script_log_filenames()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            get_script_log_filenames_slurm "${exec_dirname}"
+            debasher::get_script_log_filenames_slurm "${exec_dirname}"
             ;;
         ${BUILTIN_SCHEDULER})
             get_script_log_filenames_builtin "${exec_dirname}"

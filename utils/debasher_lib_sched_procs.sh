@@ -235,7 +235,7 @@ debasher::clean_process_files()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            clean_process_files_slurm "$dirname" "$processname" "$array_size"
+            debasher::clean_process_files_slurm "$dirname" "$processname" "$array_size"
             ;;
     esac
 }
@@ -385,7 +385,7 @@ debasher::stop_process()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_stop_process ${ids_info} || return 1
+            debasher::slurm_stop_process ${ids_info} || return 1
             ;;
         ${BUILTIN_SCHEDULER})
             debasher::builtin_sched_stop_process ${ids_info} || return 1
@@ -535,7 +535,7 @@ debasher::get_elapsed_time_for_process()
     local log_filename
     case $sched in
         ${SLURM_SCHEDULER})
-            get_elapsed_time_for_process_slurm "${dirname}" "${processname}"
+            debasher::get_elapsed_time_for_process_slurm "${dirname}" "${processname}"
             ;;
         ${BUILTIN_SCHEDULER})
             debasher::get_elapsed_time_for_process_builtin "${dirname}" "${processname}"

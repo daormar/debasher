@@ -50,7 +50,7 @@ debasher::set_debasher_scheduler()
                 return 1
             fi
             DEBASHER_SCHEDULER=${SLURM_SCHEDULER}
-            init_slurm_scheduler
+            debasher::init_slurm_scheduler
             ;;
         ${BUILTIN_SCHEDULER})
             DEBASHER_SCHEDULER=${BUILTIN_SCHEDULER}
@@ -118,7 +118,7 @@ debasher::create_script()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            create_slurm_script "${cmdline}" "${dirname}" "$processname" "${opt_array_size}"
+            debasher::create_slurm_script "${cmdline}" "${dirname}" "$processname" "${opt_array_size}"
             ;;
     esac
 }
@@ -216,7 +216,7 @@ debasher::launch()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER}) ## Launch using slurm
-            slurm_launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "${outvar}" || return 1
+            debasher::slurm_launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "${outvar}" || return 1
             ;;
     esac
 }
@@ -232,7 +232,7 @@ debasher::get_primary_id()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            get_primary_id_slurm "${launch_id_info}"
+            debasher::get_primary_id_slurm "${launch_id_info}"
             ;;
         ${BUILTIN_SCHEDULER})
             echo "${launch_id_info}"
@@ -251,7 +251,7 @@ debasher::get_global_id()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            get_global_id_slurm "${launch_id_info}"
+            debasher::get_global_id_slurm "${launch_id_info}"
             ;;
         ${BUILTIN_SCHEDULER})
             echo "${launch_id_info}"
@@ -279,7 +279,7 @@ debasher::id_exists()
     local exit_code
     case $sched in
         ${SLURM_SCHEDULER})
-            slurm_id_exists "$id"
+            debasher::slurm_id_exists "$id"
             exit_code=$?
             return "${exit_code}"
             ;;
@@ -299,7 +299,7 @@ debasher::map_deptype_if_necessary()
     local sched=`debasher::get_scheduler`
     case $sched in
         ${SLURM_SCHEDULER})
-            map_deptype_if_necessary_slurm "${deptype}"
+            debasher::map_deptype_if_necessary_slurm "${deptype}"
             ;;
         *)
             echo "${deptype}"
@@ -351,7 +351,7 @@ debasher::seq_execute()
 
     case $sched in
         ${SLURM_SCHEDULER})
-            seq_execute_slurm "$@"
+            debasher::seq_execute_slurm "$@"
             ;;
         ${BUILTIN_SCHEDULER})
             debasher::seq_execute_builtin "$@"
