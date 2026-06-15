@@ -46,7 +46,7 @@ debasher::extract_comp_specs()
 
     # Keep text before the separator marking the beginning of additional
     # specs
-    local specs="${process_spec%%${BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}*}"
+    local specs="${process_spec%%${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}*}"
 
     # Keep everything except the first word, which is the name of
     # process
@@ -61,7 +61,7 @@ debasher::extract_additional_specs()
 
     # Keep text after the separator marking the beginning of additional
     # specs
-    local specs="${process_spec#*${BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}}"
+    local specs="${process_spec#*${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}}"
     echo "$specs"
 }
 
@@ -75,7 +75,7 @@ debasher::add_additional_spec()
     if [ -z "${additional_specs}" ]; then
         echo "${process_spec} ${procdeps}"
     else
-        echo "${process_spec} ${ADDITIONAL_PROCSPECS_SEP} ${procdeps}"
+        echo "${process_spec} ${DEBASHER_ADDITIONAL_PROCSPECS_SEP} ${procdeps}"
     fi
 }
 
@@ -96,7 +96,7 @@ debasher::extract_attr_from_process_comp_specs()
         fi
     done
 
-    echo ${ATTR_NOT_FOUND}
+    echo ${DEBASHER_ATTR_NOT_FOUND}
 }
 
 ########
@@ -105,7 +105,7 @@ debasher::extract_attr_from_process_additional_specs()
     local process_comp_specs=$1
     local attrname=$2
 
-    IFS="${ADDITIONAL_PROCSPECS_SEP}" read -r -a fields <<< "${process_comp_specs}"
+    IFS="${DEBASHER_ADDITIONAL_PROCSPECS_SEP}" read -r -a fields <<< "${process_comp_specs}"
 
     local field
     for field in "${fields[@]}"; do
@@ -119,7 +119,7 @@ debasher::extract_attr_from_process_additional_specs()
         fi
     done
 
-    echo ${ATTR_NOT_FOUND}
+    echo ${DEBASHER_ATTR_NOT_FOUND}
 }
 
 ########
@@ -191,7 +191,7 @@ debasher::extract_processdeps_from_process_spec()
 {
     local process_spec=$1
     local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
-    debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "${PROCESSDEPS_SPEC}"
+    debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "${DEBASHER_PROCESSDEPS_SPEC}"
 }
 
 ########

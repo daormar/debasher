@@ -276,7 +276,7 @@ get_mod_vars_and_funcs()
     local vars_and_funcs_fname=`debasher::get_mod_vars_and_funcs_fname "${outd}"`
 
     # Get variables and functions from program modules
-    "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
+    "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${DEBASHER_PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
 
     # Get special functions
     debasher::get_alias_related_funcs >> "${vars_and_funcs_fname}"
@@ -333,14 +333,14 @@ gen_process_graph()
 
     echo "# Generating process graph..." >&2
 
-    "${debasher_libexecdir}"/debasher_check -p "${prefix_of_prg_files}" -a > "${procgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
+    "${debasher_libexecdir}"/debasher_check -p "${prefix_of_prg_files}" -a > "${procgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" || return 1
 
     if [ -z "${DOT}" ]; then
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
     else
-        "${DOT}" -T pdf "${procgraph_file_prefix}.${GRAPHS_FEXT}" > "${procgraph_file_prefix}.pdf"
+        "${DOT}" -T pdf "${procgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" > "${procgraph_file_prefix}.pdf"
 
-        "${DOT}" -T eps "${procgraph_file_prefix}.${GRAPHS_FEXT}" > "${procgraph_file_prefix}.eps"
+        "${DOT}" -T eps "${procgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" > "${procgraph_file_prefix}.eps"
     fi
 
     echo "Generation complete" >&2
@@ -356,14 +356,14 @@ gen_dependency_graph()
 
     echo "# Generating dependency graph..." >&2
 
-    "${debasher_libexecdir}"/debasher_check -p "${prefix_of_prg_files}" -g > "${depgraph_file_prefix}.${GRAPHS_FEXT}" || return 1
+    "${debasher_libexecdir}"/debasher_check -p "${prefix_of_prg_files}" -g > "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" || return 1
 
     if [ -z "${DOT}" ]; then
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
     else
-        "${DOT}" -T pdf "${depgraph_file_prefix}.${GRAPHS_FEXT}" > "${depgraph_file_prefix}.pdf"
+        "${DOT}" -T pdf "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" > "${depgraph_file_prefix}.pdf"
 
-        "${DOT}" -T eps "${depgraph_file_prefix}.${GRAPHS_FEXT}" > "${depgraph_file_prefix}.eps"
+        "${DOT}" -T eps "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" > "${depgraph_file_prefix}.eps"
     fi
 
     echo "Generation complete" >&2
@@ -388,7 +388,7 @@ gen_final_procspec_file()
         local procdeps=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
 
         # Check if dependencies were given
-        if [ "${procdeps}" = "${ATTR_NOT_FOUND}" ]; then
+        if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # Dependencies not given, so they should be obtained
             procdeps=`debasher::get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
 
@@ -479,15 +479,15 @@ check_process_opts()
         while read process_spec; do
             # Store process specification
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
-            INITIAL_PROCESS_SPEC["${processname}"]=${process_spec}
+            DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]=${process_spec}
 
             # Extract dependencies from process specification
             local procdeps=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
 
             # Check if dependencies were given
-            ALL_PROCESS_DEPS_PRE_SPECIFIED=1
-            if [ "${procdeps}" = "${ATTR_NOT_FOUND}" ]; then
-                ALL_PROCESS_DEPS_PRE_SPECIFIED=0
+            DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=1
+            if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+                DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=0
             fi
         done < "${procspec_file}"
     }
@@ -519,9 +519,9 @@ check_process_opts()
                 debasher::load_curr_opt_list_loop "${cmdline}" "${processname}"
 
                 # Write option array to file (line by line)
-                local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
+                local opt_array_size=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}
                 local opts_fname=`debasher::get_sched_opts_fname_for_process "${dirname}" "${processname}"`
-                debasher::write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
+                debasher::write_opt_array "DEBASHER_CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
                 # Clear variables
                 debasher::clear_curr_opt_list_array
@@ -700,12 +700,12 @@ define_reexec_processes_due_to_fifos()
 
             # Mark process and fifo owners for reexecution
             if [ -n "${fifo_owners}" ]; then
-                if [ "${status}" = "${TODO_PROCESS_EXIT_CODE}" ] \
-                       || [ "${status}" = "${UNFINISHED_PROCESS_STATUS}" ] \
-                       || [ "${status}" = "${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ] ; then
-                    debasher::mark_process_as_reexec "${processname}" "${FIFO_REEXEC_REASON}"
+                if [ "${status}" = "${DEBASHER_TODO_PROCESS_EXIT_CODE}" ] \
+                       || [ "${status}" = "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ] \
+                       || [ "${status}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ] ; then
+                    debasher::mark_process_as_reexec "${processname}" "${DEBASHER_FIFO_REEXEC_REASON}"
                     while read -r fifo_owner; do
-                        debasher::mark_process_as_reexec "${fifo_owner}" "${FIFO_REEXEC_REASON}"
+                        debasher::mark_process_as_reexec "${fifo_owner}" "${DEBASHER_FIFO_REEXEC_REASON}"
                     done <<< "${fifo_owners}"
                 fi
             fi
@@ -733,7 +733,7 @@ define_forced_exec_processes()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             local process_forced=`debasher::extract_force_from_process_spec "$process_spec" "force"`
             if [ ${process_forced} = "yes" ]; then
-                debasher::mark_process_as_reexec $processname ${FORCED_REEXEC_REASON}
+                debasher::mark_process_as_reexec $processname ${DEBASHER_FORCED_REEXEC_REASON}
             fi
         fi
     done < "${procspec_file}"
@@ -753,8 +753,8 @@ check_script_is_older_than_modules()
         # script exists
         script_older=0
         local mod
-        for mod in "${!PROGRAM_MODULES[@]}"; do
-            fullmod="${PROGRAM_MODULES[$mod]}"
+        for mod in "${!DEBASHER_PROGRAM_MODULES[@]}"; do
+            fullmod="${DEBASHER_PROGRAM_MODULES[$mod]}"
             if [ "${script_filename}" -ot "${fullmod}" ]; then
                 script_older=1
                 echo "Warning: ${script_filename} is older than module ${fullmod}" >&2
@@ -792,14 +792,14 @@ define_reexec_processes_due_to_code_update()
             local script_filename=`debasher::get_script_filename "${dirname}" "${processname}"`
 
             # Handle checkings depending of process status
-            if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
+            if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
                 if check_script_is_older_than_modules "${script_filename}"; then
                     echo "Warning: last execution of process ${processname} used outdated modules">&2
-                    debasher::mark_process_as_reexec "$processname" "${OUTDATED_CODE_REEXEC_REASON}"
+                    debasher::mark_process_as_reexec "$processname" "${DEBASHER_OUTDATED_CODE_REEXEC_REASON}"
                 fi
             fi
 
-            if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
+            if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
                 if check_script_is_older_than_modules "${script_filename}"; then
                     echo "Warning: current execution of process ${processname} is using outdated modules">&2
                 fi
@@ -829,7 +829,7 @@ define_reexec_processes_due_to_deps()
     local processname
     while read processname; do
         if [ "${processname}" != "" ]; then
-            debasher::mark_process_as_reexec "$processname" "${DEPS_REEXEC_REASON}"
+            debasher::mark_process_as_reexec "$processname" "${DEBASHER_DEPS_REEXEC_REASON}"
         fi
     done < "${reexec_processes_file}"
 
@@ -846,7 +846,7 @@ print_reexec_processes()
     if [ ! -z "${reexec_processes_string}" ]; then
         echo "# Printing list of processes to be reexecuted..." >&2
         echo "${reexec_processes_string}" >&2
-        echo "${DEBASHER_REEXEC_PROCESSES_WARNING}" >&2
+        echo "${DEBASHER_DEBASHER_REEXEC_PROCESSES_WARNING}" >&2
         echo "" >&2
     fi
 }
@@ -954,9 +954,9 @@ create_mod_shared_dirs()
 ########
 print_command_line()
 {
-    echo "cd $PWD" > "${outd}/${PRG_COMMAND_LINE_BASENAME}"
-    debasher::sep_serialized_to_qstr "${ARG_SEP}" "${command_line}" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
-    echo "" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
+    echo "cd $PWD" > "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    debasher::sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${command_line}" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    echo "" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 }
 
 ########
@@ -980,9 +980,9 @@ get_processdeps_from_detailed_spec()
         # Check if there is an id for the process
         if [ ! -z "${PIPE_EXEC_PROCESS_IDS[${processname}]}" ]; then
             if [ -z "${pdeps}" ]; then
-                pdeps=${mapped_deptype}${PROCESS_PLUS_DEPTYPE_SEP}${PIPE_EXEC_PROCESS_IDS[${processname}]}
+                pdeps=${mapped_deptype}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${PIPE_EXEC_PROCESS_IDS[${processname}]}
             else
-                pdeps=${pdeps}"${separator}"${mapped_deptype}${PROCESS_PLUS_DEPTYPE_SEP}${PIPE_EXEC_PROCESS_IDS[${processname}]}
+                pdeps=${pdeps}"${separator}"${mapped_deptype}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${PIPE_EXEC_PROCESS_IDS[${processname}]}
             fi
         fi
     done
@@ -996,7 +996,7 @@ get_processdeps()
     local process_id_list=$1
     local processdeps_spec=$2
     case ${processdeps_spec} in
-            "${AFTEROK_PROCESSDEP_TYPE}${PROCESS_PLUS_DEPTYPE_SEP}all") debasher::apply_deptype_to_processids "${process_id_list}" "${AFTEROK_PROCESSDEP_TYPE}"
+            "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}all") debasher::apply_deptype_to_processids "${process_id_list}" "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}"
                     ;;
             "none") echo ""
                     ;;
@@ -1047,12 +1047,12 @@ prepare_files_and_dirs_for_process()
     # Decide whether the process should be executed (NOTE: for a
     # process that should not be executed, files and directories are
     # still prepared)
-    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
+    if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
         # Obtain array size
         local array_size=`debasher::get_numtasks_for_process "${processname}"`
 
         # Prepare files and directories for process
-        if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
+        if [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
             debasher::create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
             debasher::create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
             debasher::create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
@@ -1083,7 +1083,7 @@ revise_reexec_proc_status()
             local status=`debasher::get_process_status ${dirname} "${processname}"`
 
             # If process is marked as reexec and it was finished, its process completion is reset
-            if debasher::process_marked_as_reexec ${processname} && [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
+            if debasher::process_marked_as_reexec ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
                 debasher::reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
             fi
         fi
@@ -1110,7 +1110,7 @@ launch_process()
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Decide whether the process should be executed
-    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
+    if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
         local opt_array_size=`debasher::get_numtasks_for_process "${processname}"`
         debasher::create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
@@ -1131,7 +1131,7 @@ launch_process()
     else
         # If process is in progress, its id should be retrieved so as to
         # correctly express dependencies
-        if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
+        if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
             local sid_info=`debasher::read_process_id_info_from_file "${dirname}" "${processname}"` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
             local global_id=`debasher::get_global_id "${sid_info}"`
             PIPE_EXEC_PROCESS_IDS["${processname}"]=${global_id}
@@ -1195,7 +1195,7 @@ there_are_in_progress_processes()
             # Obtain process status
             local status=`debasher::get_process_status ${dirname} "${processname}"`
 
-            if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
+            if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
                 return 0
             fi
         fi
@@ -1326,7 +1326,7 @@ configure_scheduler || exit 1
 load_module || exit 1
 
 # Get name of initial process specification file
-initial_procspec_file="${outd}/${PPEXEC_INITIAL_PROCSPEC_BASENAME}"
+initial_procspec_file="${outd}/${DEBASHER_PPEXEC_INITIAL_PROCSPEC_BASENAME}"
 
 # Check if there are running processes and abort execution if true
 ensure_program_not_being_executed "${initial_procspec_file}"
@@ -1345,10 +1345,10 @@ get_mod_vars_and_funcs || exit 1
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts "${initial_procspec_file}" || exit 1
 else
-    prg_file_pref="${outd}/${PPEXEC_PRG_PREF}"
-    program_opts_file="${prg_file_pref}.${PRGOPTS_FEXT}"
-    program_opts_exh_file="${prg_file_pref}.${PRGOPTS_EXHAUSTIVE_FEXT}"
-    program_fifos_file="${prg_file_pref}.${FIFOS_FEXT}"
+    prg_file_pref="${outd}/${DEBASHER_PPEXEC_PRG_PREF}"
+    program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
+    program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
+    program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
     prg_graphs_dir=`debasher::get_prg_graphs_dir`
     procgraph_file_prefix="${prg_graphs_dir}/process_graph"
     depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
@@ -1358,7 +1358,7 @@ else
     else
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
-        procspec_file="${prg_file_pref}.${PROCSPEC_FEXT}"
+        procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
         gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
 
         check_procspec "${prg_file_pref}" || exit 1
@@ -1400,7 +1400,7 @@ else
             launch_program_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
         else
             sched=`debasher::determine_scheduler`
-            if [ ${sched} = ${BUILTIN_SCHEDULER} ]; then
+            if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
                 builtin_sched_execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 print_post_exec_wait_help
             else

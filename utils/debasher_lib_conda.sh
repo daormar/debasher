@@ -82,12 +82,12 @@ debasher::get_abs_yml_fname()
     local yml_fname=$1
 
     # Obtain array with directories
-    debasher::deserialize_args_given_sep "${DEBASHER_YML_DIR}" "${DEBASHER_YML_DIR_SEP}"
+    debasher::deserialize_args_given_sep "${DEBASHER_YML_DIR}" "${DEBASHER_DEBASHER_YML_DIR_SEP}"
 
     # Search module in directories listed in DEBASHER_YML_DIR
     local dir
     local abs_yml_fname
-    for dir in "${DESERIALIZED_ARGS[@]}"; do
+    for dir in "${DEBASHER_DESERIALIZED_ARGS[@]}"; do
         if [ -f "${dir}/${yml_fname}" ]; then
             abs_yml_fname="${dir}/${yml_fname}"
             break

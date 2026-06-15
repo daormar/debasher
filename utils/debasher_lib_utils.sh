@@ -183,11 +183,11 @@ debasher::exclude_readonly_vars()
 debasher::exclude_other_vars()
 {
     "$AWK" -F "=" 'BEGIN{
-                         othervars["MEMOIZED_OPTS"]=1
-                         othervars["OUT_VALUE_TO_PROCESSES"]=1
-                         othervars["FIFO_USERS"]=1
-                         othervars["PROGRAM_FIFOS"]=1
-                         othervars["CURRENT_PROCESS_OPT_LIST"]=1 # This variable may become huge when working with arrays and is loaded from a separate file
+                         othervars["DEBASHER_MEMOIZED_OPTS"]=1
+                         othervars["DEBASHER_OUT_VALUE_TO_PROCESSES"]=1
+                         othervars["DEBASHER_FIFO_USERS"]=1
+                         othervars["DEBASHER_PROGRAM_FIFOS"]=1
+                         othervars["DEBASHER_CURRENT_PROCESS_OPT_LIST"]=1 # This variable may become huge when working with arrays and is loaded from a separate file
                          othervars["PROCESS_OPT_LIST"]=1 # This variable is not necessary and may become huge when working with arrays
                         }
                         {
@@ -296,7 +296,7 @@ debasher::log_err_msg()
 debasher::log_warning_msg()
 {
     local msg=$1
-    echo "${DEBASHER_LOG_WARNING_MSG_START} $msg" >&2
+    echo "${DEBASHER_DEBASHER_LOG_WARNING_MSG_START} $msg" >&2
 }
 
 ########
@@ -306,10 +306,10 @@ debasher::get_script_log_filenames()
 
     local sched=`debasher::get_scheduler`
     case $sched in
-        ${SLURM_SCHEDULER})
+        ${DEBASHER_SLURM_SCHEDULER})
             debasher::get_script_log_filenames_slurm "${exec_dirname}"
             ;;
-        ${BUILTIN_SCHEDULER})
+        ${DEBASHER_BUILTIN_SCHEDULER})
             get_script_log_filenames_builtin "${exec_dirname}"
             ;;
     esac
@@ -321,7 +321,7 @@ debasher::filter_errors_in_script_log_file()
     local prefix=$1
     local filename=$2
 
-    "${GREP}" "${DEBASHER_LOG_ERROR_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
+    "${GREP}" "${DEBASHER_DEBASHER_LOG_ERROR_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
 }
 
 ########
@@ -330,7 +330,7 @@ debasher::filter_warnings_in_script_log_file()
     local prefix=$1
     local filename=$2
 
-    "${GREP}" "${DEBASHER_LOG_WARNING_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
+    "${GREP}" "${DEBASHER_DEBASHER_LOG_WARNING_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
 }
 
 ########
@@ -481,7 +481,7 @@ debasher::str_is_proc_out_opt_descriptor()
 {
     local str=$1
 
-    if [[ "${str}" == "${PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"* ]]; then
+    if [[ "${str}" == "${DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"* ]]; then
         return 0
     else
         return 1
@@ -495,7 +495,7 @@ debasher::str_is_val_descriptor()
 
     if debasher::is_absolute_path "${str}"; then
         local basename=`"${BASENAME}" "${str}"`
-        if [[ "${basename}" == "${VALUE_DESCRIPTOR_NAME_PREFIX}"* ]]; then
+        if [[ "${basename}" == "${DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX}"* ]]; then
             return 0
         else
             return 1
@@ -616,7 +616,7 @@ debasher::search_process_func()
     if debasher::func_exists "${process_function}"; then
         echo "${process_function}"
     else
-        echo "${FUNCT_NOT_FOUND}"
+        echo "${DEBASHER_FUNCT_NOT_FOUND}"
     fi
 }
 
@@ -631,7 +631,7 @@ debasher::search_process_var()
     if debasher::var_exists "${process_var}"; then
         echo "${process_var}"
     else
-        echo "${VAR_NOT_FOUND}"
+        echo "${DEBASHER_VAR_NOT_FOUND}"
     fi
 }
 
@@ -647,7 +647,7 @@ debasher::search_process_func_nameref()
     if debasher::func_exists "${process_function}"; then
         var_ref="${process_function}"
     else
-        var_ref="${FUNCT_NOT_FOUND}"
+        var_ref="${DEBASHER_FUNCT_NOT_FOUND}"
     fi
 }
 
@@ -737,5 +737,5 @@ debasher::get_deblib_vars_and_funcs_fname()
 {
     local dirname=$1
 
-    echo "${dirname}/${DEBLIB_VARS_AND_FUNCS_BASENAME}"
+    echo "${dirname}/${DEBASHER_DEBLIB_VARS_AND_FUNCS_BASENAME}"
 }

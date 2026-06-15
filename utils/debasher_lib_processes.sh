@@ -23,7 +23,7 @@ debasher::get_proc_document_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCUMENT}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_DOCUMENT}"
 }
 
 ########
@@ -38,17 +38,17 @@ debasher::document_process_opts()
 {
     local opts=$1
     for opt in ${opts}; do
-        if [ "${PROGRAM_OPT_REQ[${opt}]}" != "" ]; then
+        if [ "${DEBASHER_PROGRAM_OPT_REQ[${opt}]}" != "" ]; then
             reqflag=" (required) "
         else
             reqflag=" "
         fi
 
         # Print option
-        if [ -z ${PROGRAM_OPT_TYPE[$opt]} ]; then
-            echo "\`${opt}\` ${PROGRAM_OPT_DESC[$opt]}${reqflag}"
+        if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ]; then
+            echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}"
         else
-            echo "\`${opt}\` ${PROGRAM_OPT_TYPE[$opt]} ${PROGRAM_OPT_DESC[$opt]}${reqflag}"
+            echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}"
         fi
         echo ""
     done
@@ -84,7 +84,7 @@ debasher::get_reset_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_RESET_OUTFILES}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_RESET_OUTFILES}"
 }
 
 ########
@@ -92,7 +92,7 @@ debasher::get_exec_funcname()
 {
     local processname=$1
 
-    debasher::search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXEC}"
+    debasher::search_process_mandatory_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"
 }
 
 ########
@@ -100,7 +100,7 @@ debasher::get_pyexec_varname()
 {
     local processname=$1
 
-    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_PYEXEC}"
+    debasher::search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAME_PYEXEC}"
 }
 
 ########
@@ -108,7 +108,7 @@ debasher::get_rexec_varname()
 {
     local processname=$1
 
-    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_REXEC}"
+    debasher::search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAME_REXEC}"
 }
 
 ########
@@ -116,7 +116,7 @@ debasher::get_perlexec_varname()
 {
     local processname=$1
 
-    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_PERLEXEC}"
+    debasher::search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAME_PERLEXEC}"
 }
 
 ########
@@ -124,7 +124,7 @@ debasher::get_groovyexec_varname()
 {
     local processname=$1
 
-    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_GROOVYEXEC}"
+    debasher::search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAME_GROOVYEXEC}"
 }
 
 ########
@@ -132,7 +132,7 @@ debasher::get_post_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_POST}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_POST}"
 }
 
 ########
@@ -140,7 +140,7 @@ debasher::get_outdir_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_OUTDIR}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_OUTDIR}"
 }
 
 ########
@@ -148,7 +148,7 @@ debasher::get_explain_cmdline_opts_funcname()
 {
     local processname=$1
 
-    debasher::search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
+    debasher::search_process_mandatory_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
 }
 
 ########
@@ -156,7 +156,7 @@ debasher::get_define_opts_funcname()
 {
     local processname=$1
 
-    debasher::search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPTS}"
+    debasher::search_process_mandatory_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"
 }
 
 ########
@@ -164,7 +164,7 @@ debasher::get_define_opt_deps_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPT_DEPS}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPT_DEPS}"
 }
 
 ########
@@ -172,7 +172,7 @@ debasher::get_generate_opts_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"
 }
 
 ########
@@ -182,7 +182,7 @@ debasher::get_generate_opts_size_funcname()
     local -n var_ref=$2
 
     local get_generate_opts_size_funcname_nr
-    debasher::search_process_func_nameref "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "get_generate_opts_size_funcname_nr"
+    debasher::search_process_func_nameref "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "get_generate_opts_size_funcname_nr"
     var_ref="${get_generate_opts_size_funcname_nr}"
 }
 
@@ -191,7 +191,7 @@ debasher::get_skip_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_SKIP}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_SKIP}"
 }
 
 ########
@@ -199,7 +199,7 @@ debasher::get_conda_envs_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_CONDA_ENVS}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_CONDA_ENVS}"
 }
 
 ########
@@ -207,7 +207,7 @@ debasher::get_docker_imgs_funcname()
 {
     local processname=$1
 
-    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCKER_IMGS}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_DOCKER_IMGS}"
 }
 
 ########
@@ -243,11 +243,11 @@ debasher::write_opt_array()
     local opt_array_size=$2
     local opts_fname=$3
 
-    if [ "${OPT_FILE_LINES_PER_BLOCK}" -le 0 ] || [ "${opt_array_size}" -le "${OPT_FILE_LINES_PER_BLOCK}" ]; then
+    if [ "${DEBASHER_OPT_FILE_LINES_PER_BLOCK}" -le 0 ] || [ "${opt_array_size}" -le "${DEBASHER_OPT_FILE_LINES_PER_BLOCK}" ]; then
         debasher::print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
     else
         debasher::print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
-        debasher::split_file_in_blocks "${opts_fname}" "${opts_fname}" "${OPT_FILE_LINES_PER_BLOCK}"
+        debasher::split_file_in_blocks "${opts_fname}" "${opts_fname}" "${DEBASHER_OPT_FILE_LINES_PER_BLOCK}"
         "${RM}" "${opts_fname}"
     fi
 }
@@ -257,7 +257,7 @@ debasher::get_numtasks_for_process()
 {
     local processname=$1
 
-    echo ${PROCESS_OPT_LIST_LEN["${processname}"]}
+    echo ${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}
 }
 
 ########
@@ -272,16 +272,16 @@ debasher::gen_opts_for_process_and_task()
         local value=$2
 
         # Extract information of connected process
-        local connected_proc_info="${value#$PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
-        debasher::deserialize_args_given_sep "${connected_proc_info}" "${ASSOC_ARRAY_ELEM_SEP}"
-        local connected_proc=${DESERIALIZED_ARGS[0]}
-        local connected_proc_task_idx=${DESERIALIZED_ARGS[1]}
-        local connected_proc_opt=${DESERIALIZED_ARGS[2]}
+        local connected_proc_info="${value#$DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
+        debasher::deserialize_args_given_sep "${connected_proc_info}" "${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+        local connected_proc=${DEBASHER_DESERIALIZED_ARGS[0]}
+        local connected_proc_task_idx=${DEBASHER_DESERIALIZED_ARGS[1]}
+        local connected_proc_opt=${DEBASHER_DESERIALIZED_ARGS[2]}
 
         # Resolve descriptor
         sargs=`debasher::get_opts_for_process_and_task "${cmdline}" "${connected_proc}" "${connected_proc_task_idx}"`
         debasher::deserialize_args "${sargs}"
-        value=`debasher::get_opt_value_from_func_args "${connected_proc_opt}" "${DESERIALIZED_ARGS[@]}"`
+        value=`debasher::get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}"`
 
         echo "${value}"
     }
@@ -290,14 +290,14 @@ debasher::gen_opts_for_process_and_task()
     {
         local cmdline=$1
 
-        # Iterate over DESERIALIZED_ARGS array
+        # Iterate over DEBASHER_DESERIALIZED_ARGS array
         i=0
-        while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
+        while [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; do
             # Resolve process output descriptor if necessary
-            local elem=${DESERIALIZED_ARGS[$i]}
+            local elem=${DEBASHER_DESERIALIZED_ARGS[$i]}
             if ! debasher::str_is_option "${elem}" && debasher::str_is_proc_out_opt_descriptor "${elem}"; then
                 value=`resolve_proc_out_descriptor "${cmdline}" "${elem}"`
-                DESERIALIZED_ARGS[$i]=${value}
+                DEBASHER_DESERIALIZED_ARGS[$i]=${value}
             fi
             i=$((i+1))
         done
@@ -309,15 +309,15 @@ debasher::gen_opts_for_process_and_task()
     local generate_opts_funcname=$4
     local task_idx=$5
 
-    # Call options generator (output stored into DESERIALIZED_ARGS)
-    local proc_spec=${INITIAL_PROCESS_SPEC["${processname}"]}
+    # Call options generator (output stored into DEBASHER_DESERIALIZED_ARGS)
+    local proc_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}
     ${generate_opts_funcname} "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
 
     # Resove descriptors for connected processes
     resolve_proc_out_descriptors "${cmdline}"
 
     # Obtain serialized args
-    debasher::serialize_args_nameref "sargs_nr" "${DESERIALIZED_ARGS[@]}"
+    debasher::serialize_args_nameref "sargs_nr" "${DEBASHER_DESERIALIZED_ARGS[@]}"
     echo "${sargs_nr}"
 }
 
@@ -331,8 +331,8 @@ debasher::get_file_opts_for_process_and_task()
         local line=$((task_idx + 1))
         debasher::get_nth_file_line "${opts_fname}" "${line}"
     else
-        local block_number=$((task_idx / OPT_FILE_LINES_PER_BLOCK))
-        local block_idx=$((task_idx % OPT_FILE_LINES_PER_BLOCK))
+        local block_number=$((task_idx / DEBASHER_OPT_FILE_LINES_PER_BLOCK))
+        local block_idx=$((task_idx % DEBASHER_OPT_FILE_LINES_PER_BLOCK))
         local block_fname="${opts_fname}_${block_number}"
 
         local line=$((block_idx + 1))
@@ -352,7 +352,7 @@ debasher::get_opts_for_process_and_task()
         local proc_outdir=`debasher::get_process_outdir "${processname}"`
         debasher::gen_opts_for_process_and_task  "${cmdline}" "${processname}" "${proc_outdir}" "${generate_opts_funcname}" "${task_idx}"
     else
-        local opts_fname=`debasher::get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
+        local opts_fname=`debasher::get_sched_opts_fname_for_process "${DEBASHER_PROGRAM_OUTDIR}" "${processname}"`
         debasher::get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
     fi
 }
@@ -392,7 +392,7 @@ debasher::define_opts_for_process()
         local process_outdir=`debasher::get_process_outdir "${processname}"`
 
         # Check if process dependencies were pre-specified for all processes
-        if [ "${ALL_PROCESS_DEPS_PRE_SPECIFIED}" -eq 0 ]; then
+        if [ "${DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED}" -eq 0 ]; then
             # There are process dependencies to be determined, so it is
             # necessary to update output options information
 
@@ -409,11 +409,11 @@ debasher::define_opts_for_process()
                 ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
 
                 # Update output options information
-                get_output_opts_info "${processname}" "${task_idx}" "${DESERIALIZED_ARGS[@]}"
+                get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
             done
 
             # Set option list length
-            PROCESS_OPT_LIST_LEN[$processname]=${array_size}
+            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
         else
             # There are no process dependencies to be determined, so it is
             # only necessary to update option list length
@@ -424,7 +424,7 @@ debasher::define_opts_for_process()
             local array_size=`${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
 
             # Set option list length
-            PROCESS_OPT_LIST_LEN[$processname]=${array_size}
+            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
         fi
     }
 
@@ -443,11 +443,11 @@ debasher::define_opts_for_process()
 debasher::get_processdeps_separator()
 {
     local processdeps=$1
-    if [[ "${processdeps}" == *"${PROCESSDEPS_SEP_COMMA}"* ]]; then
-        echo "${PROCESSDEPS_SEP_COMMA}"
+    if [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_COMMA}"* ]]; then
+        echo "${DEBASHER_PROCESSDEPS_SEP_COMMA}"
     else
-        if [[ "${processdeps}" == *"${PROCESSDEPS_SEP_INTERR}"* ]]; then
-            echo "${PROCESSDEPS_SEP_INTERR}"
+        if [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}"* ]]; then
+            echo "${DEBASHER_PROCESSDEPS_SEP_INTERR}"
         else
             echo ""
         fi
@@ -478,7 +478,7 @@ debasher::find_dependency_for_process()
             return 0
         fi
     done
-    echo ${DEP_NOT_FOUND}
+    echo ${DEBASHER_DEP_NOT_FOUND}
     return 1
 }
 
@@ -530,9 +530,9 @@ debasher::get_process_stdout_filename()
     execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     if [ "${opt_array_size}" -eq 1 ]; then
-        echo "${execdir}/${processname}.${STDOUT_FEXT}"
+        echo "${execdir}/${processname}.${DEBASHER_STDOUT_FEXT}"
     else
-        echo "${execdir}/${processname}_${task_idx}.${STDOUT_FEXT}"
+        echo "${execdir}/${processname}_${task_idx}.${DEBASHER_STDOUT_FEXT}"
     fi
 }
 
@@ -545,7 +545,7 @@ debasher::get_process_log_filename()
     # Get exec dir
     execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}.${SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}.${DEBASHER_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -558,7 +558,7 @@ debasher::get_task_log_filename()
     # Get exec dir
     execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}_${task_idx}.${SCHED_LOG_FEXT}"
+    echo "${execdir}/${processname}_${task_idx}.${DEBASHER_SCHED_LOG_FEXT}"
 }
 
 ########
@@ -585,10 +585,10 @@ debasher::get_outd_for_dep()
         echo ""
     else
         # Get name of output directory
-        local outd="${PROGRAM_OUTDIR}"
+        local outd="${DEBASHER_PROGRAM_OUTDIR}"
 
         # Get processname
-        local processname_part="${dep#*${PROCESS_PLUS_DEPTYPE_SEP}}"
+        local processname_part="${dep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
         debasher::get_process_outdir_given_dirname "${outd}" "${processname_part}"
     fi
 }
@@ -600,7 +600,7 @@ debasher::get_outd_for_dep_given_process_spec()
     local depname=$2
 
     local dep=`debasher::find_dependency_for_process "${process_spec}" $depname`
-    if [ ${dep} = ${DEP_NOT_FOUND} ]; then
+    if [ ${dep} = ${DEBASHER_DEP_NOT_FOUND} ]; then
         return 1
     else
         local outd=`debasher::get_outd_for_dep "${dep}"`
@@ -614,7 +614,7 @@ debasher::get_deptype_part_in_dep()
 {
     local dep=$1
     local str_array
-    IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${dep}"
+    IFS="${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${dep}"
 
     echo ${str_array[0]}
 }
@@ -623,11 +623,11 @@ debasher::get_deptype_part_in_dep()
 debasher::get_processname_part_in_dep()
 {
     local dep=$1
-    if [ ${dep} = "${NONE_PROCESSDEP_TYPE}" ]; then
+    if [ ${dep} = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ]; then
         echo ${dep}
     else
         local str_array
-        IFS="${PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${dep}"
+        IFS="${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${dep}"
         echo ${str_array[1]}
     fi
 }
@@ -681,14 +681,14 @@ debasher::get_highest_priority_deptype()
     local deptype_b=$2
 
     if [ -z "${deptype_a}" ]; then
-        deptype_a=${NONE_PROCESSDEP_TYPE}
+        deptype_a=${DEBASHER_NONE_PROCESSDEP_TYPE}
     fi
 
     if [ -z "${deptype_b}" ]; then
-        deptype_b=${NONE_PROCESSDEP_TYPE}
+        deptype_b=${DEBASHER_NONE_PROCESSDEP_TYPE}
     fi
 
-    if [ "${PROCESSDEP_PRIORITY[$deptype_a]}" -gt "${PROCESSDEP_PRIORITY[$deptype_b]}" ]; then
+    if [ "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_a]}" -gt "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_b]}" ]; then
         echo "${deptype_a}"
     else
         echo "${deptype_b}"
@@ -706,7 +706,7 @@ debasher::get_procdeps_for_process_cached()
             local opt=$2
             local producer_process=$3
             local funcname=`debasher::get_define_opt_deps_funcname "${processname}"`
-            if [ "${funcname}" = ${FUNCT_NOT_FOUND} ]; then
+            if [ "${funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
                 :
             else
                 "${funcname}" "${opt}" "${producer_process}"
@@ -726,54 +726,54 @@ debasher::get_procdeps_for_process_cached()
             local opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
             debasher::deserialize_args "${opts}"
             local i
-            for i in "${!DESERIALIZED_ARGS[@]}"; do
+            for i in "${!DEBASHER_DESERIALIZED_ARGS[@]}"; do
                 # Check if a value represents an absolute path
-                local value="${DESERIALIZED_ARGS[i]}"
+                local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
                 if debasher::is_absolute_path "${value}"; then
                     local j=$((i-1))
                     if [ $j -ge 0 ]; then
-                        opt="${DESERIALIZED_ARGS[j]}"
+                        opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
                         # Check if the option associated to the value is
                         # not an output option
                         if debasher::str_is_option "${opt}" && ! debasher::str_is_output_option "${opt}"; then
-                            if [[ -v OUT_VALUE_TO_PROCESSES[${value}] ]]; then
+                            if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES[${value}] ]]; then
                                 # The value is generated as output by
                                 # another process (or processes)
 
                                 # Check if the value represents a FIFO
                                 local augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
-                                if [[ -v PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
+                                if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
                                     # The value represents a FIFO
-                                    local proc_plus_idx=${PROGRAM_FIFOS["${augm_fifoname}"]}
-                                    local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
-                                    local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
+                                    local proc_plus_idx=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
+                                    local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+                                    local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
                                     if [ "${processowner}" != "${processname}" ]; then
                                         # The current process is not the owner of the FIFO
                                         local deptype=`get_deptype_using_func "${processname}" ${opt} ${processowner}`
                                         if [ -z "${deptype}" ]; then
-                                            deptype="${NONE_PROCESSDEP_TYPE}"
+                                            deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
                                         fi
-                                        if [ "${deptype}" != "${NONE_PROCESSDEP_TYPE}" ]; then
+                                        if [ "${deptype}" != "${DEBASHER_NONE_PROCESSDEP_TYPE}" ]; then
                                             local highest_pri_deptype=`debasher::get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}"`
                                             depdict["${processowner}"]=${highest_pri_deptype}
                                         fi
                                     fi
                                 else
                                     # The value represents a file
-                                    local processes="${OUT_VALUE_TO_PROCESSES[${value}]}"
+                                    local processes="${DEBASHER_OUT_VALUE_TO_PROCESSES[${value}]}"
                                     while [ -n "${processes}" ]; do
                                         # Extract process information
-                                        local proc_plus_idx="${processes%%${ASSOC_ARRAY_PROC_SEP}*}"
-                                        local proc="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
-                                        local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
+                                        local proc_plus_idx="${processes%%${DEBASHER_ASSOC_ARRAY_PROC_SEP}*}"
+                                        local proc="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+                                        local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
                                         if [ "${processname}" != "${proc}" ]; then
                                             # Determine dependency type
                                             local deptype=`get_deptype_using_func "${processname}" ${opt} ${proc}`
                                             if [ -z "${deptype}" ]; then
                                                 if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
-                                                    deptype=${AFTERCORR_PROCESSDEP_TYPE}
+                                                    deptype=${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}
                                                 else
-                                                    deptype=${AFTEROK_PROCESSDEP_TYPE}
+                                                    deptype=${DEBASHER_AFTEROK_PROCESSDEP_TYPE}
                                                 fi
                                             fi
                                             local highest_pri_deptype=`debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
@@ -781,7 +781,7 @@ debasher::get_procdeps_for_process_cached()
                                             depdict["${proc}"]=${highest_pri_deptype}
                                         fi
                                         # Update processes variable
-                                        local processes_aux="${processes#"${proc_plus_idx}${ASSOC_ARRAY_PROC_SEP}"}"
+                                        local processes_aux="${processes#"${proc_plus_idx}${DEBASHER_ASSOC_ARRAY_PROC_SEP}"}"
                                         if [ "${processes}" = "${processes_aux}" ]; then
                                             processes=""
                                         else
@@ -799,11 +799,11 @@ debasher::get_procdeps_for_process_cached()
             local processdeps=""
             local proc
             for proc in "${!depdict[@]}"; do
-                local dep="${depdict[$proc]}${PROCESS_PLUS_DEPTYPE_SEP}${proc}"
+                local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
                 if [ -z "$processdeps" ]; then
                     processdeps=${dep}
                 else
-                    processdeps="${processdeps}${PROCESSDEPS_SEP_COMMA}${dep}"
+                    processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
                 fi
             done
 
@@ -826,10 +826,10 @@ debasher::get_procdeps_for_process_cached()
 
                 # Iterate over dependencies
                 if [ -n "${prdeps_idx}" ]; then
-                    while IFS=${PROCESSDEPS_SEP_COMMA} read -r processdep; do
+                    while IFS=${DEBASHER_PROCESSDEPS_SEP_COMMA} read -r processdep; do
                         # Extract dependency information
-                        local deptype="${processdep%%${PROCESS_PLUS_DEPTYPE_SEP}*}"
-                        local proc="${processdep#*${PROCESS_PLUS_DEPTYPE_SEP}}"
+                        local deptype="${processdep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
+                        local proc="${processdep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
 
                         # Update associative array of dependencies
                         local highest_pri_deptype=`debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
@@ -842,11 +842,11 @@ debasher::get_procdeps_for_process_cached()
             local processdeps=""
             local proc
             for proc in "${!depdict[@]}"; do
-                local dep="${depdict[$proc]}${PROCESS_PLUS_DEPTYPE_SEP}${proc}"
+                local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
                 if [ -z "$processdeps" ]; then
                     processdeps=${dep}
                 else
-                    processdeps="${processdeps}${PROCESSDEPS_SEP_COMMA}${dep}"
+                    processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
                 fi
             done
 
@@ -875,27 +875,27 @@ debasher::get_procdeps_for_process_cached()
     local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
     # Check if process dependencies were already obtained
-    if [[ -v PROCESS_DEPENDENCIES["$processname"] ]]; then
-        echo "${PROCESS_DEPENDENCIES[$processname]}"
+    if [[ -v DEBASHER_PROCESS_DEPENDENCIES["$processname"] ]]; then
+        echo "${DEBASHER_PROCESS_DEPENDENCIES[$processname]}"
     else
         # Extract dependencies from process specification if given
         local deps=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
-        if [ "${deps}" = "${ATTR_NOT_FOUND}" ]; then
+        if [ "${deps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # No dependencies are provided in specification
             local deps=`get_procdeps_for_process "${cmdline}" "$processname"`
             if [ -z "${deps}" ]; then
-                deps="${NONE_PROCESSDEP_TYPE}"
+                deps="${DEBASHER_NONE_PROCESSDEP_TYPE}"
             fi
             # Add prefix to result
-            deps="${PROCESSDEPS_SPEC}=${deps}"
+            deps="${DEBASHER_PROCESSDEPS_SPEC}=${deps}"
             # Cache dependencies
-            PROCESS_DEPENDENCIES["$processname"]=${deps}
+            DEBASHER_PROCESS_DEPENDENCIES["$processname"]=${deps}
             echo "$deps"
         else
             # Add prefix to result
-            deps="${PROCESSDEPS_SPEC}=${deps}"
+            deps="${DEBASHER_PROCESSDEPS_SPEC}=${deps}"
             # Cache dependencies
-            PROCESS_DEPENDENCIES["$processname"]=${deps}
+            DEBASHER_PROCESS_DEPENDENCIES["$processname"]=${deps}
             echo "$deps"
         fi
     fi
@@ -915,25 +915,25 @@ debasher::register_fifos_used_by_process()
         # Iterate over task options
         local opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
         debasher::deserialize_args "${opts}"
-        for i in "${!DESERIALIZED_ARGS[@]}"; do
+        for i in "${!DEBASHER_DESERIALIZED_ARGS[@]}"; do
             # Check if a value represents an absolute path
-            local value="${DESERIALIZED_ARGS[i]}"
+            local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
             if debasher::is_absolute_path "${value}"; then
                 j=$((i-1))
                 if [ $j -ge 0 ]; then
-                    opt="${DESERIALIZED_ARGS[j]}"
+                    opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
                     # Check if the option associated to the value is
                     # not an output option
                     if debasher::str_is_option "${opt}" && ! debasher::str_is_output_option "${opt}"; then
                         augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
-                        if [[ -v PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
+                        if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
                             # The value is a FIFO
-                            local proc_plus_idx=${PROGRAM_FIFOS["${augm_fifoname}"]}
-                            local processowner="${proc_plus_idx%%${ASSOC_ARRAY_ELEM_SEP}*}"
-                            local idx="${proc_plus_idx#*${ASSOC_ARRAY_ELEM_SEP}}"
+                            local proc_plus_idx=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
+                            local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+                            local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
                             if [ "${processowner}" != "${processname}" ]; then
                                 # The current process is not the owner of the FIFO
-                                FIFO_USERS["${augm_fifoname}"]=${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}
+                                DEBASHER_FIFO_USERS["${augm_fifoname}"]=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}
                             fi
                         fi
                     fi
@@ -978,12 +978,12 @@ debasher::get_fifo_owners_for_process()
     declare -A owners
 
     # Iterate over fifo users
-    for augm_fifoname in "${!FIFO_USERS[@]}"; do
-        local user=${FIFO_USERS["${augm_fifoname}"]}
-        local user_proc="${user%%${ASSOC_ARRAY_ELEM_SEP}*}"
+    for augm_fifoname in "${!DEBASHER_FIFO_USERS[@]}"; do
+        local user=${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
+        local user_proc="${user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
         if [ "${user_proc}" = "${processname}" ]; then
-            local owner=${PROGRAM_FIFOS["${augm_fifoname}"]}
-            local owner_proc="${owner%%${ASSOC_ARRAY_ELEM_SEP}*}"
+            local owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
+            local owner_proc="${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
             owners["${owner_proc}"]=1
         fi
     done
@@ -1018,7 +1018,7 @@ debasher::get_process_outdir_given_dirname()
     # Get name of process function to set output directory
     process_function_outdir=`debasher::get_outdir_funcname "${processname}"`
 
-    if [ "${process_function_outdir}" = "${FUNCT_NOT_FOUND}" ]; then
+    if [ "${process_function_outdir}" = "${DEBASHER_FUNCT_NOT_FOUND}" ]; then
         debasher::get_default_process_outdir_given_dirname "$dirname" "$processname"
     else
         local outdir_basename=${process_function_outdir}
@@ -1032,7 +1032,7 @@ debasher::get_process_outdir()
     local processname=$1
 
     # Get full path of output directory
-    local outd=${PROGRAM_OUTDIR}
+    local outd=${DEBASHER_PROGRAM_OUTDIR}
 
     debasher::get_process_outdir_given_dirname "${outd}" "${processname}"
 }
@@ -1043,7 +1043,7 @@ debasher::get_process_outdir_given_process_spec()
     local process_spec=$1
 
     # Get full path of output directory
-    local outd=${PROGRAM_OUTDIR}
+    local outd=${DEBASHER_PROGRAM_OUTDIR}
 
     # Obtain output directory for process
     local processname=`debasher::extract_processname_from_process_spec ${process_spec}`

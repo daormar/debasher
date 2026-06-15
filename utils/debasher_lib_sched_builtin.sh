@@ -103,7 +103,7 @@ debasher::get_elapsed_time_for_process_builtin()
         # Get number of array tasks
         local num_tasks=`debasher::get_num_array_tasks "${dirname}" "${processname}"`
         case $num_tasks in
-            0)  echo ${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
+            0)  echo ${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
                 ;;
             1)  # Process is not a task array
                 log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
@@ -125,7 +125,7 @@ debasher::get_elapsed_time_for_process_builtin()
                 ;;
         esac
     else
-        echo ${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
+        echo ${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
     fi
 }
 

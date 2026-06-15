@@ -117,12 +117,12 @@ debasher::exec_program_func_for_module()
     program_funcname=`debasher::get_program_funcname "${pfile}"`
 
     # Add program file to stack
-    PROGRAM_FUNC_FOR_MODULE_PFILE_STACK+=("${pfile}")
+    DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK+=("${pfile}")
 
     ${program_funcname} || return 1
 
     # Remove program file from stack
-    unset 'PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]'
+    unset 'DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]'
 }
 
 ########
@@ -130,13 +130,13 @@ debasher::get_prg_exec_dir_given_basedir()
 {
     local dirname=$1
 
-    echo "${dirname}/${DEBASHER_EXEC_DIRNAME}"
+    echo "${dirname}/${DEBASHER_DEBASHER_EXEC_DIRNAME}"
 }
 
 ########
 debasher::get_prg_exec_dir()
 {
-    debasher::get_prg_exec_dir_given_basedir "${PROGRAM_OUTDIR}"
+    debasher::get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
 }
 
 ########
@@ -144,13 +144,13 @@ debasher::get_prg_graphs_dir_given_basedir()
 {
     local dirname=$1
 
-    echo "${dirname}/${DEBASHER_GRAPHS_DIRNAME}"
+    echo "${dirname}/${DEBASHER_DEBASHER_GRAPHS_DIRNAME}"
 }
 
 ########
 debasher::get_prg_graphs_dir()
 {
-    debasher::get_prg_graphs_dir_given_basedir "${PROGRAM_OUTDIR}"
+    debasher::get_prg_graphs_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
 }
 
 ########
@@ -167,8 +167,8 @@ debasher::is_valid_processname()
 ########
 debasher::get_alias_related_funcs()
 {
-    for processname in "${!PROGRAM_PROCESSES[@]}"; do
-        if [ "${PROGRAM_PROCESSES[${processname}]}" != "1" ]; then
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "1" ]; then
             declare -f "${processname}"
         fi
     done
@@ -193,23 +193,23 @@ debasher::get_interpreter_for_file()
     local extension="${bfname##*.}"
 
     case "$extension" in
-        "${BASH_FEXT}")
+        "${DEBASHER_BASH_FEXT}")
             echo "${BASH}"
             return 0
             ;;
-        "${PYTHON_FEXT}")
+        "${DEBASHER_PYTHON_FEXT}")
             echo "${PYTHON}"
             return 0
             ;;
-        "${R_FEXT}")
+        "${DEBASHER_R_FEXT}")
             echo "${RSCRIPT}"
             return 0
             ;;
-        "${PERL_FEXT}")
+        "${DEBASHER_PERL_FEXT}")
             echo "${PERL}"
             return 0
             ;;
-        "${GROOVY_FEXT}")
+        "${DEBASHER_GROOVY_FEXT}")
             echo "${GROOVY}"
             return 0
             ;;
@@ -246,28 +246,28 @@ debasher::is_heredoc_process()
 
     # Try with Python
     local pyexec_varname=`debasher::get_pyexec_varname "${processname}"`
-    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${pyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${pyexec_varname}"
         return 0
     fi
 
     # Try with R
     local rexec_varname=`debasher::get_rexec_varname "${processname}"`
-    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${rexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${rexec_varname}"
         return 0
     fi
 
     # Try with Perl
     local perlexec_varname=`debasher::get_perlexec_varname "${processname}"`
-    if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${perlexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${perlexec_varname}"
         return 0
     fi
 
     # Try with Groovy
     local groovyexec_varname=`debasher::get_groovyexec_varname "${processname}"`
-    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${groovyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${groovyexec_varname}"
         return 0
     fi
@@ -285,33 +285,33 @@ debasher::create_heredoc_func_body()
 
     # Try with Python
     local pyexec_varname=`debasher::get_pyexec_varname "${processname}"`
-    if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${pyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${PYTHON}"
-        echo "${escaped_interpreter} -c \"\${${pyexec_varname}}\" ${PY_END_OF_OPTIONS_MARKER} \"\$@\""
+        echo "${escaped_interpreter} -c \"\${${pyexec_varname}}\" ${DEBASHER_PY_END_OF_OPTIONS_MARKER} \"\$@\""
         return 0
     fi
 
     # Try with R
     local rexec_varname=`debasher::get_rexec_varname "${processname}"`
-    if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${rexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${RSCRIPT}"
-        echo "${escaped_interpreter} -e \"\${${rexec_varname}}\" ${R_END_OF_OPTIONS_MARKER} \"\$@\""
+        echo "${escaped_interpreter} -e \"\${${rexec_varname}}\" ${DEBASHER_R_END_OF_OPTIONS_MARKER} \"\$@\""
         return 0
     fi
 
     # Try with Perl
     local perlexec_varname=`debasher::get_perlexec_varname "${processname}"`
-    if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${perlexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${PERL}"
-        echo "${escaped_interpreter} -e \"\${${perlexec_varname}}\" ${PL_END_OF_OPTIONS_MARKER} \"\$@\""
+        echo "${escaped_interpreter} -e \"\${${perlexec_varname}}\" ${DEBASHER_PL_END_OF_OPTIONS_MARKER} \"\$@\""
         return 0
     fi
 
     # Try with Groovy
     local groovyexec_varname=`debasher::get_groovyexec_varname "${processname}"`
-    if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
+    if [ "${groovyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${GROOVY}"
-        echo "${escaped_interpreter} -e \"\${${groovyexec_varname}}\" ${GROOVY_END_OF_OPTIONS_MARKER} \"\$@\""
+        echo "${escaped_interpreter} -e \"\${${groovyexec_varname}}\" ${DEBASHER_GROOVY_END_OF_OPTIONS_MARKER} \"\$@\""
         return 0
     fi
 
@@ -337,7 +337,7 @@ debasher::add_debasher_process_heredoc()
 
     # Store process name in associative array. For each process, the
     # program file of the program that adds it is registered
-    PROGRAM_PROCESSES["${processname}"]="${comm_varname}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${comm_varname}"
 }
 
 ########
@@ -347,7 +347,7 @@ debasher::add_debasher_process_func()
 
     # Store process name in associative array. For each process, the
     # program file of the program that adds it is registered
-    PROGRAM_PROCESSES["${processname}"]=1
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]=1
 }
 
 ########
@@ -382,7 +382,7 @@ debasher::add_debasher_process_alias()
 
     # Store process name in associative array. For each process, the
     # program file of the program that adds it is registered
-    PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
 }
 
 ########
@@ -408,7 +408,7 @@ debasher::add_debasher_process()
     local processname=$1
     local process_computational_specs=$2
     local process_additional_specs=$3
-    local current_pfile_dir=$("${DIRNAME}" "${PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
+    local current_pfile_dir=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
     # Check correctness of process name and abort execution if necessary
     if ! debasher::is_valid_processname "${processname}"; then
@@ -417,7 +417,7 @@ debasher::add_debasher_process()
     fi
 
     # Check if process has already been defined
-    if [[ -v 'PROGRAM_PROCESSES["${processname}"]' ]]; then
+    if [[ -v 'DEBASHER_PROGRAM_PROCESSES["${processname}"]' ]]; then
         echo "Error: process name ${processname} has already been defined. Aborting execution..." >&2
         exit 1
     fi
@@ -428,7 +428,7 @@ debasher::add_debasher_process()
     else
         # Treat process alias if provided
         local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
-        if [ "${process_alias}" = "${ATTR_NOT_FOUND}" ]; then
+        if [ "${process_alias}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # No heredoc nor alias were given
             debasher::add_debasher_process_func "${processname}"
         else
@@ -438,7 +438,7 @@ debasher::add_debasher_process()
     fi
 
     # Print process program line
-    echo "${processname}" "${process_computational_specs}" "${BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}" "${process_additional_specs}"
+    echo "${processname}" "${process_computational_specs}" "${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}" "${process_additional_specs}"
 }
 
 add_debasher_process() { debasher::add_debasher_process "$@"; }
@@ -461,7 +461,7 @@ add_debasher_program() { debasher::add_debasher_program "$@"; }
 ########
 debasher::program_uses_fifos()
 {
-    if [ "${#PROGRAM_FIFOS[@]}" -eq 0 ]; then
+    if [ "${#DEBASHER_PROGRAM_FIFOS[@]}" -eq 0 ]; then
         return 1
     else
         return 0
@@ -471,5 +471,5 @@ debasher::program_uses_fifos()
 ########
 debasher::get_number_of_program_fifos()
 {
-    echo "${#PROGRAM_FIFOS[@]}"
+    echo "${#DEBASHER_PROGRAM_FIFOS[@]}"
 }

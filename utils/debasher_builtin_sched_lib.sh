@@ -170,9 +170,9 @@ builtin_sched_revise_reexec_proc_status()
     for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
         # If process is marked as reexec and it was finished, its process completion is reset
         if debasher::process_marked_as_reexec ${processname}; then
-            if [ ${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]} = ${FINISHED_PROCESS_STATUS} ]; then
+            if [ ${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
                 debasher::reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
-                BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${UNFINISHED_PROCESS_STATUS}
+                BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${DEBASHER_UNFINISHED_PROCESS_STATUS}
             fi
         fi
     done
@@ -344,7 +344,7 @@ builtin_sched_get_inprogress_array_task_indices()
     local last_task_idx=$((array_size - 1))
     for task_idx in `"${SEQ}" 0 ${last_task_idx}`; do
         local task_status=`builtin_sched_get_array_task_status "${dirname}" $processname $task_idx`
-        if [ ${task_status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+        if [ ${task_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} ]; then
             if [ "${result}" = "" ]; then
                 result=$task_idx
             else
@@ -437,7 +437,7 @@ builtin_sched_init_curr_comp_resources()
     local processname
     for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
         status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
-        if [ ${status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+        if [ ${status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} ]; then
             builtin_sched_reserve_mem $processname
             builtin_sched_reserve_cpus $processname
         fi
@@ -453,7 +453,7 @@ builtin_sched_get_updated_process_status()
     local processname
     for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
         status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[$processname]}
-        if [ ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a ${status} != ${FINISHED_PROCESS_STATUS} ]; then
+        if [ ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a ${status} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
             local updated_status=`debasher::get_process_status "${dirname}" ${processname}`
             BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${updated_status}
         fi
@@ -475,13 +475,13 @@ builtin_sched_update_comp_resources()
             process_array_size=${BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
             # Check if resources should be released
-            if [ ${prev_status} = ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${INPROGRESS_PROCESS_STATUS} ]; then
+            if [ ${prev_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_INPROGRESS_PROCESS_STATUS} ]; then
                 builtin_sched_release_mem $processname
                 builtin_sched_release_cpus $processname
             fi
 
             # Check if resources should be reserved
-            if [ ${prev_status} != ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+            if [ ${prev_status} != ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} ]; then
                 if [ ${process_array_size} -eq 1 ]; then
                     builtin_sched_reserve_mem $processname
                     builtin_sched_reserve_cpus $processname
@@ -493,7 +493,7 @@ builtin_sched_update_comp_resources()
             fi
 
             # Check if resources of job array should be revised
-            if [ ${process_array_size} -gt 1 -a ${prev_status} = ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+            if [ ${process_array_size} -gt 1 -a ${prev_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} ]; then
                 builtin_sched_revise_array_mem "${dirname}" $processname
                 builtin_sched_revise_array_cpus "${dirname}" $processname
             fi
@@ -510,7 +510,7 @@ builtin_sched_fix_updated_process_status()
         prev_status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
         updated_status=${BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]}
         if [ "${updated_status}" != "" ]; then
-            if [ ${prev_status} = ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS} -a ${updated_status} != ${FINISHED_PROCESS_STATUS} ]; then
+            if [ ${prev_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
                 # Status will be set to failed if previous status was
                 # in-progress and new status is unfinished
                 BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${BUILTIN_SCHED_FAILED_PROCESS_STATUS}
@@ -591,31 +591,31 @@ builtin_sched_check_process_deps()
         # Process exit code
         local dep_ok=1
         case ${deptype} in
-            ${AFTER_PROCESSDEP_TYPE})
-                if [ ${depstatus} = ${TODO_PROCESS_STATUS} -o  ${depstatus} = ${UNFINISHED_PROCESS_STATUS} ]; then
+            ${DEBASHER_AFTER_PROCESSDEP_TYPE})
+                if [ ${depstatus} = ${DEBASHER_TODO_PROCESS_STATUS} -o  ${depstatus} = ${DEBASHER_UNFINISHED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTEROK_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${FINISHED_PROCESS_STATUS} ]; then
+            ${DEBASHER_AFTEROK_PROCESSDEP_TYPE})
+                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTERNOTOK_PROCESSDEP_TYPE})
+            ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE})
                 if [ ${depstatus} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTERANY_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${FINISHED_PROCESS_STATUS} -a ${depstatus} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
+            ${DEBASHER_AFTERANY_PROCESSDEP_TYPE})
+                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a ${depstatus} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
-            ${AFTERCORR_PROCESSDEP_TYPE})
-                # NOTE: AFTERCORR_PROCESSDEP_TYPE dependency type currently
-                # treated in the same way as AFTEROK_PROCESSDEP_TYPE
+            ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE})
+                # NOTE: DEBASHER_AFTERCORR_PROCESSDEP_TYPE dependency type currently
+                # treated in the same way as DEBASHER_AFTEROK_PROCESSDEP_TYPE
                 # dependency
-                if [ ${depstatus} != ${FINISHED_PROCESS_STATUS} ]; then
+                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
                     dep_ok=0
                 fi
                 ;;
@@ -687,8 +687,8 @@ builtin_sched_update_executable_non_array_process()
     local processname=$1
     local status=$2
 
-    if [ ${status} != ${INPROGRESS_PROCESS_STATUS} -a \
-         ${status} != ${FINISHED_PROCESS_STATUS} -a \
+    if [ ${status} != ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a \
+         ${status} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a \
          ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
         if builtin_sched_process_can_be_executed ${processname}; then
             BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${BUILTIN_SCHED_NO_ARRAY_TASK}
@@ -702,7 +702,7 @@ builtin_sched_update_executable_array_process()
     local processname=$1
     local status=$2
 
-    if [ ${status} != ${FINISHED_PROCESS_STATUS} -a \
+    if [ ${status} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a \
          ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
         if builtin_sched_process_can_be_executed ${processname}; then
             local max_task_num=`builtin_sched_get_max_num_tasks ${processname}`
@@ -851,7 +851,7 @@ builtin_sched_inprogress_processes_pending()
     local processname
     for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
         status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
-        if [ ${status} = ${INPROGRESS_PROCESS_STATUS} ]; then
+        if [ ${status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} ]; then
             return 0
         fi
     done
@@ -976,31 +976,31 @@ builtin_sched_execute_funct_plus_postfunct()
     local sargs=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
 
     # Convert serialized process options to array (result is placed into
-    # the DESERIALIZED_ARGS variable)
+    # the DEBASHER_DESERIALIZED_ARGS variable)
     debasher::deserialize_args "${sargs}"
 
     # Execute process skip function if it was provided
-    if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        ${skip_funct} "${DESERIALIZED_ARGS[@]}" && { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
+    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        ${skip_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}" && { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
     fi
 
     debasher::display_begin_process_message
 
     # Reset output directory
-    if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
+    if [ "${reset_funct}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
         if [ "${opt_array_size}" -eq 1 ]; then
             debasher::default_reset_outfiles_for_process "${dirname}" "${processname}"
         else
             debasher::default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
         fi
     else
-        ${reset_funct} "${DESERIALIZED_ARGS[@]}"
+        ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
     fi
 
     # Execute process function
 
     DEBASHER_PROCESS_STDOUT_FILENAME=`debasher::get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
-    "${processname}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
 
     local funct_exit_code=${PIPESTATUS[0]}
     if [ ${funct_exit_code} -ne 0 ]; then
@@ -1010,8 +1010,8 @@ builtin_sched_execute_funct_plus_postfunct()
     fi
 
     # Execute process post-function
-    if [ "${post_funct}" != ${FUNCT_NOT_FOUND} ]; then
-        ${post_funct} "${DESERIALIZED_ARGS[@]}" || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
+    if [ "${post_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        ${post_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}" || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
     fi
 
     # Treat errors
@@ -1227,7 +1227,7 @@ builtin_sched_exec_processes_and_update_status()
         builtin_sched_execute_process "${cmdline}" "${dirname}" "${processname}" "${task_idx}" || return 1
 
         # Update process status
-        BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${INPROGRESS_PROCESS_STATUS}
+        BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${DEBASHER_INPROGRESS_PROCESS_STATUS}
     done
 
     # Reset variable
@@ -1332,12 +1332,12 @@ builtin_sched_prepare_files_and_dirs_for_process()
     # Obtain process status
     local status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
 
-    if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
+    if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
         # Obtain array size
         local array_size=`debasher::get_numtasks_for_process "${processname}"`
 
         # Prepare files and directories for process
-        if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
+        if [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
             debasher::create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
             debasher::create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         else
@@ -1451,5 +1451,5 @@ get_script_log_filenames_builtin()
 {
     local exec_dirname=$1
 
-    find "${exec_dirname}" -name "*.${SCHED_LOG_FEXT}" -exec echo {} \;
+    find "${exec_dirname}" -name "*.${DEBASHER_SCHED_LOG_FEXT}" -exec echo {} \;
 }

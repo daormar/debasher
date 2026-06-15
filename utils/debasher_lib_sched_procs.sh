@@ -27,7 +27,7 @@ debasher::get_processid_filename()
     # Get exec dir
     execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/$processname.${PROCESSID_FEXT}"
+    echo "${execdir}/$processname.${DEBASHER_PROCESSID_FEXT}"
 }
 
 ########
@@ -40,7 +40,7 @@ debasher::get_array_taskid_filename()
     # Get exec dir
     local execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
-    echo "${execdir}/${processname}_${idx}.${ARRAY_TASKID_FEXT}"
+    echo "${execdir}/${processname}_${idx}.${DEBASHER_ARRAY_TASKID_FEXT}"
 }
 
 ########
@@ -54,7 +54,7 @@ debasher::get_array_taskid()
     if [ -f "${file}" ]; then
         "${CAT}" "$file"
     else
-        echo ${INVALID_ARRAY_TID}
+        echo ${DEBASHER_INVALID_ARRAY_TID}
     fi
 }
 
@@ -79,7 +79,7 @@ debasher::get_process_finished_filename()
     # Get prefix
     local prefix=`debasher::get_process_finished_filename_prefix "${dirname}" "${processname}"`
 
-    echo "${prefix}.${FINISHED_PROCESS_FEXT}"
+    echo "${prefix}.${DEBASHER_FINISHED_PROCESS_FEXT}"
 }
 
 ########
@@ -92,7 +92,7 @@ debasher::get_task_finished_filename()
     # Get prefix
     local prefix=`debasher::get_process_finished_filename_prefix "${dirname}" "${processname}"`
 
-    echo "${prefix}_${idx}.${FINISHED_PROCESS_FEXT}"
+    echo "${prefix}_${idx}.${DEBASHER_FINISHED_PROCESS_FEXT}"
 }
 
 ########
@@ -134,10 +134,10 @@ debasher::get_list_of_pending_tasks_in_array()
     local -A completed_tasks
     local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
     local file
-    for file in "${finished_filename_pref}"_*.${FINISHED_PROCESS_FEXT}; do
+    for file in "${finished_filename_pref}"_*.${DEBASHER_FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
             local temp="${file#${finished_filename_pref}_}"
-            local id="${temp%.$FINISHED_PROCESS_FEXT}"
+            local id="${temp%.$DEBASHER_FINISHED_PROCESS_FEXT}"
             completed_tasks[${id}]="1"
         fi
     done
@@ -167,7 +167,7 @@ debasher::get_num_array_tasks()
     local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
 
     local num_tasks=0
-    for file in "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}; do
+    for file in "${finished_filename_pref}"*.${DEBASHER_FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
             num_tasks=`"${AWK}" '{print $NF}' "${file}"`
             break
@@ -185,7 +185,7 @@ debasher::get_num_tasks_completed()
     local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
 
     local num_tasks_completed=0
-    for file in "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}; do
+    for file in "${finished_filename_pref}"*.${DEBASHER_FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
             num_tasks_completed=$((num_tasks_completed + 1))
         fi
@@ -222,7 +222,7 @@ debasher::reset_process_completion_signal()
     # be removed. Additionally, this action should be registered in a
     # specific associative array
     local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
-    "${RM}" -f "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}
+    "${RM}" -f "${finished_filename_pref}"*.${DEBASHER_FINISHED_PROCESS_FEXT}
 }
 
 ########
@@ -234,7 +234,7 @@ debasher::clean_process_files()
 
     local sched=`debasher::get_scheduler`
     case $sched in
-        ${SLURM_SCHEDULER})
+        ${DEBASHER_SLURM_SCHEDULER})
             debasher::clean_process_files_slurm "$dirname" "$processname" "$array_size"
             ;;
     esac
@@ -262,7 +262,7 @@ debasher::read_process_id_info_from_file()
     if [ -f "$filename" ]; then
         "${CAT}" "$filename"
     else
-        echo ${INVALID_SID}
+        echo ${DEBASHER_INVALID_SID}
     fi
 }
 
@@ -284,7 +284,7 @@ debasher::read_ids_from_files()
 
     # Return ids for array tasks if any
     local id
-    for taskid_file in "${execdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in "${execdir}"/${processname}_*.${DEBASHER_ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             id=`"${CAT}" "${taskid_file}"`
             if [ -z "${ids}" ]; then
@@ -304,11 +304,11 @@ debasher::mark_process_as_reexec()
     local processname=$1
     local reason=$2
 
-    if [ "${DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
-        DEBASHER_REEXEC_PROCESSES[${processname}]=${reason}
+    if [ "${DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
+        DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]=${reason}
     else
-        local curr_val=DEBASHER_REEXEC_PROCESSES[${processname}]
-        DEBASHER_REEXEC_PROCESSES[${processname}]="${curr_val},${reason}"
+        local curr_val=DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]
+        DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]="${curr_val},${reason}"
     fi
 }
 
@@ -316,7 +316,7 @@ debasher::mark_process_as_reexec()
 debasher::get_reexec_processes_as_string()
 {
     local result=""
-    for processname in "${!DEBASHER_REEXEC_PROCESSES[@]}"; do
+    for processname in "${!DEBASHER_DEBASHER_REEXEC_PROCESSES[@]}"; do
         if [ "${result}" = "" ]; then
             result=${processname}
         else
@@ -332,7 +332,7 @@ debasher::process_marked_as_reexec()
 {
     local processname=$1
 
-    if [ "${DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
+    if [ "${DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
         return 1
     else
         return 0
@@ -384,10 +384,10 @@ debasher::stop_process()
     # Launch process
     local sched=`debasher::get_scheduler`
     case $sched in
-        ${SLURM_SCHEDULER}) ## Launch using slurm
+        ${DEBASHER_SLURM_SCHEDULER}) ## Launch using slurm
             debasher::slurm_stop_process ${ids_info} || return 1
             ;;
-        ${BUILTIN_SCHEDULER})
+        ${DEBASHER_BUILTIN_SCHEDULER})
             debasher::builtin_sched_stop_process ${ids_info} || return 1
             ;;
     esac
@@ -424,7 +424,7 @@ debasher::get_launched_array_task_ids()
 
     # Return ids for array tasks if any
     local taskid_file
-    for taskid_file in "${execdir}"/${processname}_*.${ARRAY_TASKID_FEXT}; do
+    for taskid_file in "${execdir}"/${processname}_*.${DEBASHER_ARRAY_TASKID_FEXT}; do
         if [ -f "${taskid_file}" ]; then
             "${CAT}" "${taskid_file}"
         fi
@@ -440,10 +440,10 @@ debasher::get_finished_array_task_indices()
 
     local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
     local file
-    for file in "${finished_filename_pref}"_*.${FINISHED_PROCESS_FEXT}; do
+    for file in "${finished_filename_pref}"_*.${DEBASHER_FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
             local temp="${file#${finished_filename_pref}_}"
-            local id="${temp%.$FINISHED_PROCESS_FEXT}"
+            local id="${temp%.$DEBASHER_FINISHED_PROCESS_FEXT}"
             echo ${id}
         fi
     done
@@ -493,13 +493,13 @@ debasher::process_is_unfinished_but_runnable()
     local sched=`debasher::get_scheduler`
     local exit_code
     case $sched in
-        ${SLURM_SCHEDULER})
-            # UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS status is not
+        ${DEBASHER_SLURM_SCHEDULER})
+            # DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS status is not
             # considered for SLURM scheduler, since task arrays are
             # executed as a single job
             return 1
             ;;
-        ${BUILTIN_SCHEDULER})
+        ${DEBASHER_BUILTIN_SCHEDULER})
             debasher::process_is_unfinished_but_runnable_builtin_sched "${dirname}" "${processname}"
             exit_code=$?
             return ${exit_code}
@@ -520,7 +520,7 @@ debasher::get_elapsed_time_from_logfile()
         local finish_date_secs=`date -d "${start_date}" +%s`
         echo $(( start_date_secs - finish_date_secs ))
     else
-        echo "${UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"
+        echo "${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"
     fi
 }
 
@@ -534,10 +534,10 @@ debasher::get_elapsed_time_for_process()
     local sched=`debasher::get_scheduler`
     local log_filename
     case $sched in
-        ${SLURM_SCHEDULER})
+        ${DEBASHER_SLURM_SCHEDULER})
             debasher::get_elapsed_time_for_process_slurm "${dirname}" "${processname}"
             ;;
-        ${BUILTIN_SCHEDULER})
+        ${DEBASHER_BUILTIN_SCHEDULER})
             debasher::get_elapsed_time_for_process_builtin "${dirname}" "${processname}"
             ;;
     esac
@@ -552,24 +552,24 @@ debasher::get_process_status()
 
     if [ -f "${script_filename}" ]; then
         if debasher::process_is_in_progress "$dirname" "$processname"; then
-            echo "${INPROGRESS_PROCESS_STATUS}"
-            return ${INPROGRESS_PROCESS_EXIT_CODE}
+            echo "${DEBASHER_INPROGRESS_PROCESS_STATUS}"
+            return ${DEBASHER_INPROGRESS_PROCESS_EXIT_CODE}
         fi
 
         if debasher::process_is_finished "$dirname" "$processname"; then
-            echo "${FINISHED_PROCESS_STATUS}"
-            return ${FINISHED_PROCESS_EXIT_CODE}
+            echo "${DEBASHER_FINISHED_PROCESS_STATUS}"
+            return ${DEBASHER_FINISHED_PROCESS_EXIT_CODE}
         else
             if debasher::process_is_unfinished_but_runnable "$dirname" "$processname"; then
-                echo "${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}"
-                return ${UNFINISHED_BUT_RUNNABLE_PROCESS_EXIT_CODE}
+                echo "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}"
+                return ${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_EXIT_CODE}
             fi
         fi
 
-        echo "${UNFINISHED_PROCESS_STATUS}"
-        return ${UNFINISHED_PROCESS_EXIT_CODE}
+        echo "${DEBASHER_UNFINISHED_PROCESS_STATUS}"
+        return ${DEBASHER_UNFINISHED_PROCESS_EXIT_CODE}
     else
-        echo "${TODO_PROCESS_STATUS}"
-        return ${TODO_PROCESS_EXIT_CODE}
+        echo "${DEBASHER_TODO_PROCESS_STATUS}"
+        return ${DEBASHER_TODO_PROCESS_EXIT_CODE}
     fi
 }

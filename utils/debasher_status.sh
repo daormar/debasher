@@ -82,8 +82,8 @@ check_pars()
             exit 1
         fi
 
-        if [ ! -f "${pdir}/${PRG_COMMAND_LINE_BASENAME}" ]; then
-            echo "Error! ${pdir}/${PRG_COMMAND_LINE_BASENAME} file is missing" >&2
+        if [ ! -f "${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}" ]; then
+            echo "Error! ${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME} file is missing" >&2
             exit 1
         fi
     fi
@@ -93,7 +93,7 @@ check_pars()
 configure_scheduler()
 {
     local sched=$1
-    if [ ${sched} = ${OPT_NOT_FOUND} ]; then
+    if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
         # If the scheduler was not set in the command line, it is
         # automatically determined
         local sched=`debasher::determine_scheduler`
@@ -108,9 +108,9 @@ process_status_for_pfile()
 {
     local dirname=$1
     local absdirname=`debasher::get_absolute_path "${dirname}"`
-    local command_line_file="${absdirname}/${PRG_COMMAND_LINE_BASENAME}"
+    local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
-    # Extract information from PRG_COMMAND_LINE_BASENAME file
+    # Extract information from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local pfile
     pfile=`debasher::get_abspfile_from_command_line_file "${command_line_file}"` || return 1
     local sched
@@ -173,15 +173,15 @@ process_status_for_pfile()
 
         # Treat process status
         case $status in
-            ${FINISHED_PROCESS_STATUS}) num_finished=$((num_finished + 1))
+            ${DEBASHER_FINISHED_PROCESS_STATUS}) num_finished=$((num_finished + 1))
                                         ;;
-            ${INPROGRESS_PROCESS_STATUS}) num_inprogress=$((num_inprogress + 1))
+            ${DEBASHER_INPROGRESS_PROCESS_STATUS}) num_inprogress=$((num_inprogress + 1))
                                           ;;
-            ${UNFINISHED_PROCESS_STATUS}) num_unfinished=$((num_unfinished + 1))
+            ${DEBASHER_UNFINISHED_PROCESS_STATUS}) num_unfinished=$((num_unfinished + 1))
                                           ;;
-            ${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}) num_unfinished_but_runnable=$((num_unfinished_but_runnable + 1))
+            ${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}) num_unfinished_but_runnable=$((num_unfinished_but_runnable + 1))
                                                        ;;
-            ${TODO_PROCESS_STATUS}) num_todo=$((num_todo + 1))
+            ${DEBASHER_TODO_PROCESS_STATUS}) num_todo=$((num_todo + 1))
                                     ;;
         esac
     done < <(debasher::exec_program_func_for_module "${pfile}")
@@ -191,12 +191,12 @@ process_status_for_pfile()
 
     # Return error if program is not finished
     if [ ${num_finished} -eq ${num_processes} ]; then
-        return ${PROGRAM_FINISHED_EXIT_CODE}
+        return ${DEBASHER_PROGRAM_FINISHED_EXIT_CODE}
     else
         if [ ${num_inprogress} -gt 0 ]; then
-            return ${PROGRAM_IN_PROGRESS_EXIT_CODE}
+            return ${DEBASHER_PROGRAM_IN_PROGRESS_EXIT_CODE}
         else
-            return ${PROGRAM_UNFINISHED_EXIT_CODE}
+            return ${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE}
         fi
     fi
 }

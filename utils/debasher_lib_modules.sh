@@ -37,7 +37,7 @@ debasher::get_mod_document_funcname()
 
     local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
 
-    debasher::get_module_funcname "${modname}" "${MODULE_METHOD_NAME_DOCUMENT}"
+    debasher::get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_DOCUMENT}"
 }
 
 ########
@@ -47,7 +47,7 @@ debasher::get_shrdirs_funcname()
 
     local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
 
-    debasher::get_module_funcname "${modname}" "${MODULE_METHOD_NAME_SHRDIRS}"
+    debasher::get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_SHRDIRS}"
 }
 
 ########
@@ -57,7 +57,7 @@ debasher::get_program_funcname()
 
     local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
 
-    debasher::get_module_funcname "${modname}" "${MODULE_METHOD_NAME_PROGRAM}"
+    debasher::get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_PROGRAM}"
 }
 
 ########
@@ -66,15 +66,15 @@ debasher::search_mod_in_dirs()
     local module=$1
 
     # Obtain array with directories
-    debasher::deserialize_args_given_sep "${DEBASHER_MOD_DIR}" "${DEBASHER_MOD_DIR_SEP}"
+    debasher::deserialize_args_given_sep "${DEBASHER_MOD_DIR}" "${DEBASHER_DEBASHER_MOD_DIR_SEP}"
 
     # Add current directory
-    DESERIALIZED_ARGS+=( "." )
+    DEBASHER_DESERIALIZED_ARGS+=( "." )
 
     # Search module in directories listed in DEBASHER_MOD_DIR
     local dir
     local fullmodname
-    for dir in "${DESERIALIZED_ARGS[@]}"; do
+    for dir in "${DEBASHER_DESERIALIZED_ARGS[@]}"; do
         for fname in "${dir}/${module}" "${dir}/${module}.sh"; do
             if [ -f "${fname}" ]; then
                 if debasher::is_absolute_path "${fname}"; then
@@ -115,7 +115,7 @@ debasher::module_is_loaded()
 
     # Search module name in the array of loaded modules
     local absmodname
-    for absmodname in "${PROGRAM_MODULES[@]}"; do
+    for absmodname in "${DEBASHER_PROGRAM_MODULES[@]}"; do
         if [ "${absmodname}" = "${fullmodname}" ]; then
             return 0
         fi
@@ -163,7 +163,7 @@ debasher::load_debasher_module()
             popd > /dev/null
 
             # Store module file name in array
-            PROGRAM_MODULES+=("${fullmodname}")
+            DEBASHER_PROGRAM_MODULES+=("${fullmodname}")
         fi
     else
         echo "File not found (consider setting an appropriate value for DEBASHER_MOD_DIR environment variable)">&2
@@ -178,7 +178,7 @@ debasher::get_mod_vars_and_funcs_fname()
 {
     local dirname=$1
 
-    echo "${dirname}/${MOD_VARS_AND_FUNCS_BASENAME}"
+    echo "${dirname}/${DEBASHER_MOD_VARS_AND_FUNCS_BASENAME}"
 }
 
 ########

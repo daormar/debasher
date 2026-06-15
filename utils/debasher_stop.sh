@@ -76,8 +76,8 @@ check_pars()
             exit 1
         fi
 
-        if [ ! -f "${pdir}/${PRG_COMMAND_LINE_BASENAME}" ]; then
-            echo "Error! ${pdir}/${PRG_COMMAND_LINE_BASENAME} file is missing" >&2
+        if [ ! -f "${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}" ]; then
+            echo "Error! ${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME} file is missing" >&2
             exit 1
         fi
     fi
@@ -87,7 +87,7 @@ check_pars()
 configure_scheduler()
 {
     local sched=$1
-    if [ ${sched} = ${OPT_NOT_FOUND} ]; then
+    if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
         # If the scheduler was not set in the command line, it is
         # automatically determined
         local sched=`debasher::determine_scheduler`
@@ -102,9 +102,9 @@ process_status_for_pfile()
 {
     local dirname=$1
     local absdirname=`debasher::get_absolute_path "${dirname}"`
-    local command_line_file="${absdirname}/${PRG_COMMAND_LINE_BASENAME}"
+    local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
-    # Extract information from PRG_COMMAND_LINE_BASENAME file
+    # Extract information from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local pfile
     pfile=`debasher::get_abspfile_from_command_line_file "${command_line_file}"` || return 1
     local sched
@@ -157,7 +157,7 @@ process_status_for_pfile()
         ids_info=`debasher::read_ids_from_files "${absdirname}" ${processname}`
 
         # Print status
-        if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
+        if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
             echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (Stopping...)"
             debasher::stop_process "${ids_info}"
         else

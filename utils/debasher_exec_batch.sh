@@ -300,13 +300,13 @@ get_prg_status()
 
         # Evaluate exit code of pipe_status
         case $exit_code in
-            ${PROGRAM_FINISHED_EXIT_CODE}) if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
+            ${DEBASHER_PROGRAM_FINISHED_EXIT_CODE}) if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
                                                 return ${PRG_IS_COMPLETED}
                                             else
                                                 return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
                                             fi
                                             ;;
-            ${PROGRAM_UNFINISHED_EXIT_CODE}) if [ ${unfinished_process_perc} -gt ${max_unfinished_process_perc} ]; then
+            ${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE}) if [ ${unfinished_process_perc} -gt ${max_unfinished_process_perc} ]; then
                                                   return ${PRG_FAILED}
                                               else
                                                   if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
@@ -344,7 +344,7 @@ prg_has_processes_to_reexec()
     fi
 
     # Check if pipe_exec reports processes to be re-executed
-    local reexec_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_REEXEC_PROCESSES_WARNING}")
+    local reexec_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_DEBASHER_REEXEC_PROCESSES_WARNING}")
     if [ ! -z "${reexec_processes_warning}" ]; then
         return 0
     else
