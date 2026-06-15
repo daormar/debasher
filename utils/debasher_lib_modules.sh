@@ -37,7 +37,7 @@ debasher::get_mod_document_funcname()
 
     local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
 
-    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_DOCUMENT}"
+    debasher::get_module_funcname "${modname}" "${MODULE_METHOD_NAME_DOCUMENT}"
 }
 
 ########
@@ -47,7 +47,7 @@ debasher::get_shrdirs_funcname()
 
     local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
 
-    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_SHRDIRS}"
+    debasher::get_module_funcname "${modname}" "${MODULE_METHOD_NAME_SHRDIRS}"
 }
 
 ########
@@ -57,7 +57,7 @@ debasher::get_program_funcname()
 
     local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
 
-    get_module_funcname "${modname}" "${MODULE_METHOD_NAME_PROGRAM}"
+    debasher::get_module_funcname "${modname}" "${MODULE_METHOD_NAME_PROGRAM}"
 }
 
 ########
@@ -77,10 +77,10 @@ debasher::search_mod_in_dirs()
     for dir in "${DESERIALIZED_ARGS[@]}"; do
         for fname in "${dir}/${module}" "${dir}/${module}.sh"; do
             if [ -f "${fname}" ]; then
-                if is_absolute_path "${fname}"; then
+                if debasher::is_absolute_path "${fname}"; then
                     fullmodname="${fname}"
                 else
-                    fullmodname=`get_absolute_path "${fname}"`
+                    fullmodname=`debasher::get_absolute_path "${fname}"`
                 fi
                 break
             fi
@@ -99,7 +99,7 @@ debasher::search_mod_in_dirs()
 debasher::determine_full_module_name()
 {
     local module=$1
-    if is_absolute_path "${module}"; then
+    if debasher::is_absolute_path "${module}"; then
         fullmodname="${module}"
     else
         fullmodname=`debasher::search_mod_in_dirs "${module}"`

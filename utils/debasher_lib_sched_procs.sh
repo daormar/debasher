@@ -108,7 +108,7 @@ debasher::apply_deptype_to_processids()
     if [ "${separator}" = "" ]; then
         local processids_blanks=${processids}
     else
-        local processids_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processids}`
+        local processids_blanks=`debasher::replace_str_elem_sep_with_blank "${separator}" ${processids}`
     fi
     local id
     for id in ${processids_blanks}; do

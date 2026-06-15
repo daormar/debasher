@@ -23,7 +23,7 @@ get_proc_document_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCUMENT}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCUMENT}"
 }
 
 ########
@@ -84,7 +84,7 @@ get_reset_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_RESET_OUTFILES}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_RESET_OUTFILES}"
 }
 
 ########
@@ -92,7 +92,7 @@ get_exec_funcname()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXEC}"
+    debasher::search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXEC}"
 }
 
 ########
@@ -100,7 +100,7 @@ get_pyexec_varname()
 {
     local processname=$1
 
-    search_process_var "${processname}" "${PROCESS_VARNAME_PYEXEC}"
+    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_PYEXEC}"
 }
 
 ########
@@ -108,7 +108,7 @@ get_rexec_varname()
 {
     local processname=$1
 
-    search_process_var "${processname}" "${PROCESS_VARNAME_REXEC}"
+    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_REXEC}"
 }
 
 ########
@@ -116,7 +116,7 @@ get_perlexec_varname()
 {
     local processname=$1
 
-    search_process_var "${processname}" "${PROCESS_VARNAME_PERLEXEC}"
+    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_PERLEXEC}"
 }
 
 ########
@@ -124,7 +124,7 @@ get_groovyexec_varname()
 {
     local processname=$1
 
-    search_process_var "${processname}" "${PROCESS_VARNAME_GROOVYEXEC}"
+    debasher::search_process_var "${processname}" "${PROCESS_VARNAME_GROOVYEXEC}"
 }
 
 ########
@@ -132,7 +132,7 @@ get_post_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_POST}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_POST}"
 }
 
 ########
@@ -140,7 +140,7 @@ get_outdir_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_OUTDIR}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_OUTDIR}"
 }
 
 ########
@@ -148,7 +148,7 @@ get_explain_cmdline_opts_funcname()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
+    debasher::search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
 }
 
 ########
@@ -156,7 +156,7 @@ get_define_opts_funcname()
 {
     local processname=$1
 
-    search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPTS}"
+    debasher::search_process_mandatory_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPTS}"
 }
 
 ########
@@ -164,7 +164,7 @@ get_define_opt_deps_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPT_DEPS}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_DEFINE_OPT_DEPS}"
 }
 
 ########
@@ -172,7 +172,7 @@ get_generate_opts_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS}"
 }
 
 ########
@@ -182,7 +182,7 @@ get_generate_opts_size_funcname()
     local -n var_ref=$2
 
     local get_generate_opts_size_funcname_nr
-    search_process_func_nameref "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "get_generate_opts_size_funcname_nr"
+    debasher::search_process_func_nameref "${processname}" "${PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE}" "get_generate_opts_size_funcname_nr"
     var_ref="${get_generate_opts_size_funcname_nr}"
 }
 
@@ -191,7 +191,7 @@ get_skip_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_SKIP}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_SKIP}"
 }
 
 ########
@@ -199,7 +199,7 @@ get_conda_envs_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_CONDA_ENVS}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_CONDA_ENVS}"
 }
 
 ########
@@ -207,7 +207,7 @@ get_docker_imgs_funcname()
 {
     local processname=$1
 
-    search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCKER_IMGS}"
+    debasher::search_process_func "${processname}" "${PROCESS_METHOD_NAME_DOCKER_IMGS}"
 }
 
 ########
@@ -216,7 +216,7 @@ process_is_defined()
     local processname=$1
     local funcname=`get_define_opts_funcname "${processname}"`
 
-    if func_exists "${funcname}"; then
+    if debasher::func_exists "${funcname}"; then
         return 0
     else
         return 1
@@ -229,7 +229,7 @@ uses_option_generator()
     local uses_option_generator_nr
     get_generate_opts_size_funcname "${processname}" uses_option_generator_nr
 
-    if func_exists "${uses_option_generator_nr}"; then
+    if debasher::func_exists "${uses_option_generator_nr}"; then
         return 0
     else
         return 1
@@ -244,10 +244,10 @@ write_opt_array()
     local opts_fname=$3
 
     if [ "${OPT_FILE_LINES_PER_BLOCK}" -le 0 ] || [ "${opt_array_size}" -le "${OPT_FILE_LINES_PER_BLOCK}" ]; then
-        print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
+        debasher::print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
     else
-        print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
-        split_file_in_blocks "${opts_fname}" "${opts_fname}" "${OPT_FILE_LINES_PER_BLOCK}"
+        debasher::print_array_elems "${varname}" "${opt_array_size}" > "${opts_fname}"
+        debasher::split_file_in_blocks "${opts_fname}" "${opts_fname}" "${OPT_FILE_LINES_PER_BLOCK}"
         "${RM}" "${opts_fname}"
     fi
 }
@@ -295,7 +295,7 @@ gen_opts_for_process_and_task()
         while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
             # Resolve process output descriptor if necessary
             local elem=${DESERIALIZED_ARGS[$i]}
-            if ! str_is_option "${elem}" && str_is_proc_out_opt_descriptor "${elem}"; then
+            if ! debasher::str_is_option "${elem}" && debasher::str_is_proc_out_opt_descriptor "${elem}"; then
                 value=`resolve_proc_out_descriptor "${cmdline}" "${elem}"`
                 DESERIALIZED_ARGS[$i]=${value}
             fi
@@ -329,14 +329,14 @@ get_file_opts_for_process_and_task()
 
     if [ -f "${opts_fname}" ]; then
         local line=$((task_idx + 1))
-        get_nth_file_line "${opts_fname}" "${line}"
+        debasher::get_nth_file_line "${opts_fname}" "${line}"
     else
         local block_number=$((task_idx / OPT_FILE_LINES_PER_BLOCK))
         local block_idx=$((task_idx % OPT_FILE_LINES_PER_BLOCK))
         local block_fname="${opts_fname}_${block_number}"
 
         local line=$((block_idx + 1))
-        get_nth_file_line "${block_fname}" "${line}"
+        debasher::get_nth_file_line "${block_fname}" "${line}"
     fi
 }
 
@@ -466,7 +466,7 @@ find_dependency_for_process()
     if [ "${separator}" = "" ]; then
         local processdeps_blanks=${processdeps}
     else
-        local processdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
+        local processdeps_blanks=`debasher::replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
     fi
 
     # Process dependencies
@@ -729,13 +729,13 @@ get_procdeps_for_process_cached()
             for i in "${!DESERIALIZED_ARGS[@]}"; do
                 # Check if a value represents an absolute path
                 local value="${DESERIALIZED_ARGS[i]}"
-                if is_absolute_path "${value}"; then
+                if debasher::is_absolute_path "${value}"; then
                     local j=$((i-1))
                     if [ $j -ge 0 ]; then
                         opt="${DESERIALIZED_ARGS[j]}"
                         # Check if the option associated to the value is
                         # not an output option
-                        if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
+                        if debasher::str_is_option "${opt}" && ! debasher::str_is_output_option "${opt}"; then
                             if [[ -v OUT_VALUE_TO_PROCESSES[${value}] ]]; then
                                 # The value is generated as output by
                                 # another process (or processes)
@@ -918,13 +918,13 @@ register_fifos_used_by_process()
         for i in "${!DESERIALIZED_ARGS[@]}"; do
             # Check if a value represents an absolute path
             local value="${DESERIALIZED_ARGS[i]}"
-            if is_absolute_path "${value}"; then
+            if debasher::is_absolute_path "${value}"; then
                 j=$((i-1))
                 if [ $j -ge 0 ]; then
                     opt="${DESERIALIZED_ARGS[j]}"
                     # Check if the option associated to the value is
                     # not an output option
-                    if str_is_option "${opt}" && ! str_is_output_option "${opt}"; then
+                    if debasher::str_is_option "${opt}" && ! debasher::str_is_output_option "${opt}"; then
                         augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
                         if [[ -v PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
                             # The value is a FIFO

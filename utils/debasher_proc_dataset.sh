@@ -132,15 +132,15 @@ check_pars()
 absolutize_file_paths()
 {
     if [ ${pfile_given} -eq 1 ]; then
-        pfile=`get_absolute_path "${pfile}"`
+        pfile=`debasher::get_absolute_path "${pfile}"`
     fi
 
     if [ ${prg_sopts_given} -eq 1 ]; then
-        prg_sopts=`get_absolute_path "${prg_sopts}"`
+        prg_sopts=`debasher::get_absolute_path "${prg_sopts}"`
     fi
 
     if [ ${prg_opts_given} -eq 1 ]; then
-        prg_opts=`get_absolute_path "${prg_opts}"`
+        prg_opts=`debasher::get_absolute_path "${prg_opts}"`
     fi
 }
 
@@ -198,7 +198,7 @@ process_pars()
 
     # Get pipe_exec path
     local pipe_exec_path
-    debasher_exec_path=`get_debasher_exec_path`
+    debasher_exec_path=`debasher::get_debasher_exec_path`
 
     # Read metadata file
     local entry_num=1

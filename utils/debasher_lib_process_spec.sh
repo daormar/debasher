@@ -109,7 +109,7 @@ debasher::extract_attr_from_process_additional_specs()
 
     local field
     for field in "${fields[@]}"; do
-        field=$(str_trim "${field}")
+        field=$(debasher::str_trim "${field}")
         if [[ "${field}" = "${attrname}="* ]]; then
             local attrname_len=${#attrname}
             local start=$((attrname_len + 1))

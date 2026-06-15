@@ -107,7 +107,7 @@ configure_scheduler()
 process_status_for_pfile()
 {
     local dirname=$1
-    local absdirname=`get_absolute_path "${dirname}"`
+    local absdirname=`debasher::get_absolute_path "${dirname}"`
     local command_line_file="${absdirname}/${PRG_COMMAND_LINE_BASENAME}"
 
     # Extract information from PRG_COMMAND_LINE_BASENAME file
@@ -122,7 +122,7 @@ process_status_for_pfile()
 
     # Show warning if directory provided as option is different than the
     # original working directory
-    if dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
+    if debasher::dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
         local moved_outdir="no"
     else
         echo "Warning: program output directory was moved (original directory: ${orig_outdir})" >&2

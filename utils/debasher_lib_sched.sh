@@ -316,7 +316,7 @@ debasher::write_env_vars_and_funcs()
         local dirname=$1
 
         # Write DeBasher start variables and functions
-        local vars_and_funcs_fname=`get_deblib_vars_and_funcs_fname "${dirname}"`
+        local vars_and_funcs_fname=`debasher::get_deblib_vars_and_funcs_fname "${dirname}"`
         "${CAT}" "${vars_and_funcs_fname}"
 
         # Write initialized variables

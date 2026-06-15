@@ -22,7 +22,7 @@
 debasher::get_orig_workdir()
 {
     local command_line_file=$1
-    local workdir=`$HEAD -1 ${command_line_file} | "$AWK" '{print $2}'` ; pipe_fail || return 1
+    local workdir=`$HEAD -1 ${command_line_file} | "$AWK" '{print $2}'` ; debasher::pipe_fail || return 1
     echo $workdir
 }
 
@@ -47,7 +47,7 @@ debasher::get_orig_outdir_from_command_line_file()
     local outdir=`get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
 
     # Retrieve original output directory
-    if is_absolute_path "$outdir"; then
+    if debasher::is_absolute_path "$outdir"; then
         echo "$outdir"
     else
         echo "${workdir}/${outdir}"
@@ -95,7 +95,7 @@ debasher::get_abspfile_from_command_line_file()
     # Obtain absolute program file name
     local abspfile
     pushd "${cmdline_currdir}" > /dev/null
-    abspfile=`get_absolute_path "${cmdline_pfile}"`
+    abspfile=`debasher::get_absolute_path "${cmdline_pfile}"`
     popd > /dev/null
 
     # Check if resulting program file exists

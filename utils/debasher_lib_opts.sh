@@ -132,14 +132,14 @@ memoize_opts()
     # Scan DESERIALIZED_ARGS
     local i=1
     while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
-        if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
+        if debasher::str_is_option "${DESERIALIZED_ARGS[$i]}"; then
             local opt="${DESERIALIZED_ARGS[$i]}"
             i=$((i+1))
             # Obtain value if it exists
             local value=""
             # Check if next token is an option
             if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
-                if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
+                if debasher::str_is_option "${DESERIALIZED_ARGS[$i]}"; then
                     :
                 else
                     value="${DESERIALIZED_ARGS[$i]}"
@@ -305,7 +305,7 @@ read_opt_value_from_func_args()
 
     # If the value is a descriptor and opt is not an output option, then
     # we should read the descriptor
-    if str_is_val_descriptor "${value}" && ! str_is_output_option "${opt}"; then
+    if debasher::str_is_val_descriptor "${value}" && ! debasher::str_is_output_option "${opt}"; then
         read_value_from_desc "${value}" || return 1
     else
         echo "${value}"
@@ -533,14 +533,14 @@ define_fifo_opt()
     local varname=$3
 
     # Check that the call is valid
-    local proc_generate=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    local proc_generate=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
     if [ -n "${proc_generate}" ]; then
         echo "define_fifo_opt: Error, this function cannot be called from an option generator" >&2
         exit 1
     fi
 
     # Get process name
-    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local processname=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
 
     # Get task index
     local task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
@@ -564,14 +564,14 @@ define_fifo_opt_generator()
     local varname=$4
 
     # Check that the call is valid
-    local proc_define=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local proc_define=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
     if [ -n "${proc_define}" ]; then
         echo "define_fifo_opt_generator: Error, this function should only be called from an option generator" >&2
         exit 1
     fi
 
     # Get process name
-    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    local processname=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
 
     # Define FIFO
     define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
@@ -592,9 +592,9 @@ define_shared_dir()
     # by a process
 
     # Try to get process name from define_opts or generate_opts method
-    local processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local processname=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
     if [ -z "${processname}" ]; then
-        processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+        processname=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
     fi
 
     # If processname variable is void, then the shared directory was
@@ -639,7 +639,7 @@ define_cmdline_opt()
     local varname=$3
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" "$opt" || { errmsg "$opt option not found" ; return 1; }
+    read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
     local value="${_OPT_VALUE_}"
 
     # Add option
@@ -654,7 +654,7 @@ define_cmdline_opt_wo_value()
     local varname=$3
 
     # Get value for option
-    check_opt_given "$cmdline" "$opt" || { errmsg "$opt option not found" ; return 1; }
+    check_opt_given "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
 
     # Add option
     define_opt_wo_value "$opt" "$varname"
@@ -705,15 +705,15 @@ define_cmdline_infile_opt()
     local varname=$3
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" $opt || { errmsg "$opt option not found" ; return 1; }
+    read_opt_value_from_line_memoiz "$cmdline" $opt || { debasher::errmsg "$opt option not found" ; return 1; }
     local value="${_OPT_VALUE_}"
 
     if [ "$value" != ${NOFILE} ]; then
         # Check if file exists
-        file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+        debasher::file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
 
         # Absolutize path
-        value=`get_absolute_path "${value}"`
+        value=`debasher::get_absolute_path "${value}"`
     fi
 
     # Add option
@@ -738,10 +738,10 @@ define_cmdline_infile_nonmand_opt()
 
     if [ "$value" != ${NOFILE} ]; then
         # Check if file exists
-        file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+        debasher::file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
 
         # Absolutize path
-        value=`get_absolute_path "${value}"`
+        value=`debasher::get_absolute_path "${value}"`
     fi
 
     # Add option
@@ -783,11 +783,11 @@ define_opt_from_proc_task_out()
 
     # Check parameters
     if [[ "${opt}" == "-out"* || "${opt}" == "--out"* ]]; then
-        errmsg "define_opt_from_proc_task_out: wrong input parameters, process option cannot start with ${opt} (it should not be an output option)"
+        debasher::errmsg "define_opt_from_proc_task_out: wrong input parameters, process option cannot start with ${opt} (it should not be an output option)"
         return 1
     else
         if [[ ! "${out_opt}" != "-out"* && ! "${out_opt}" != "--out"* ]]; then
-            errmsg "define_opt_from_proc_task_out: wrong input parameters, connected process option should start with -out or --out"
+            debasher::errmsg "define_opt_from_proc_task_out: wrong input parameters, connected process option should start with -out or --out"
             return 1
         fi
     fi
@@ -809,11 +809,11 @@ optname_is_correct()
     local opt=$2
 
     if [ "${opt}" = "" ]; then
-        errmsg "$funcname: option name could not be the empty string"
+        debasher::errmsg "$funcname: option name could not be the empty string"
         return 1
     else
         if [[ ! "${opt}" =~ ^(-|--) ]]; then
-            errmsg "$funcname: option name should start with '-' or '--'"
+            debasher::errmsg "$funcname: option name should start with '-' or '--'"
             return 1
         fi
     fi
@@ -828,13 +828,13 @@ optlist_varname_is_correct()
     local varname=$2
 
     if [ -z "${varname}" ]; then
-        errmsg "$funcname: name of option list variable should not be empty"
+        debasher::errmsg "$funcname: name of option list variable should not be empty"
         return 1
     else
         if [[ "${varname}" == *"${OPTLIST_VARNAME_SUFFIX}" ]]; then
             return 0
         else
-            errmsg "$funcname: name of option list variable should end with the suffix ${OPTLIST_VARNAME_SUFFIX}"
+            debasher::errmsg "$funcname: name of option list variable should end with the suffix ${OPTLIST_VARNAME_SUFFIX}"
             return 1
         fi
     fi
@@ -910,9 +910,9 @@ define_value_desc_opt()
     local varname=$2
 
     # Obtain caller process name
-    local caller_proc_name=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    local caller_proc_name=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
     if [ -z "${caller_proc_name}" ]; then
-        caller_proc_name=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+        caller_proc_name=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
     fi
 
     # Get name of value descriptor
@@ -930,10 +930,10 @@ define_infile_opt()
     local varname=$3
 
     # Check if file exists
-    file_exists "$value" || { errmsg "file $value does not exist ($opt option)" ; return 1; }
+    debasher::file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
-    value=`get_absolute_path "${value}"`
+    value=`debasher::get_absolute_path "${value}"`
 
     define_opt "${opt}" "${value}" "${varname}"
 }
@@ -946,10 +946,10 @@ define_indir_opt()
     local varname=$3
 
     # Check if file exists
-    dir_exists "$value" || { errmsg "directory $value does not exist ($opt option)" ; return 1; }
+    debasher::dir_exists "$value" || { debasher::errmsg "directory $value does not exist ($opt option)" ; return 1; }
 
     # Absolutize path
-    value=`get_absolute_path "${value}"`
+    value=`debasher::get_absolute_path "${value}"`
 
     define_opt "${opt}" "${value}" "${varname}"
 }
@@ -972,7 +972,7 @@ register_module_program_shdirs()
     local absmodname
     for absmodname in "${PROGRAM_MODULES[@]}"; do
         local shrdirs_funcname=`debasher::get_shrdirs_funcname ${absmodname}`
-        if func_exists "${shrdirs_funcname}"; then
+        if debasher::func_exists "${shrdirs_funcname}"; then
             ${shrdirs_funcname} || exit 1
         fi
     done
@@ -1126,14 +1126,14 @@ save_opt_list()
         local i=0
         while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
             # Check if option was found
-            if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
+            if debasher::str_is_option "${DESERIALIZED_ARGS[$i]}"; then
                 local opt="${DESERIALIZED_ARGS[$i]}"
                 i=$((i+1))
                 # Obtain value if it exists
                 local value=""
                 # Check if next token is an option
                 if [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; then
-                    if str_is_option "${DESERIALIZED_ARGS[$i]}"; then
+                    if debasher::str_is_option "${DESERIALIZED_ARGS[$i]}"; then
                         opt_list["${opt}"]=""
                     else
                         value="${DESERIALIZED_ARGS[$i]}"
@@ -1159,18 +1159,18 @@ save_opt_list()
         local i=1
         while [ $i -le $# ]; do
             # Check if option was found
-            if str_is_option "${!i}"; then
+            if debasher::str_is_option "${!i}"; then
                 local opt=${!i}
                 i=$((i+1))
                 # Obtain value if it exists
                 local value=""
                 # Check if next token is an option
                 if [ "$i" -le $# ]; then
-                    if str_is_option "${!i}"; then
+                    if debasher::str_is_option "${!i}"; then
                         :
                     else
                         value="${!i}"
-                        if is_absolute_path "${value}" && str_is_output_option "${opt}"; then
+                        if debasher::is_absolute_path "${value}" && debasher::str_is_output_option "${opt}"; then
                             # Update out value to processes array
                             local process_info="${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx}"
                             if [[ -v OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
@@ -1237,14 +1237,14 @@ save_opt_list()
     local save_opt_list_proc
 
     # Try to extract process name from generate_opts function
-    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_GENERATE_OPTS}" save_opt_list_proc
+    debasher::get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_GENERATE_OPTS}" save_opt_list_proc
     if [ -n "${save_opt_list_proc}" ]; then
         save_opt_list_generator "${opts}"
         return 0
     fi
 
     # Try to extract process name from define_opts_function
-    get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_DEFINE_OPTS}" save_opt_list_proc
+    debasher::get_processname_from_caller_nameref "${PROCESS_METHOD_NAME_DEFINE_OPTS}" save_opt_list_proc
     if [ -n "${save_opt_list_proc}" ]; then
         save_opt_list_loop "${save_opt_list_proc}" "${opts}"
         return 0
@@ -1320,7 +1320,7 @@ load_curr_opt_list_loop()
             local value=${opt_list[$opt]}
 
             # Resolve process output descriptor if necessary
-            if str_is_proc_out_opt_descriptor "${value}"; then
+            if debasher::str_is_proc_out_opt_descriptor "${value}"; then
                 value=`resolve_proc_output_desc "${cmdline}" "${value}"`
             fi
 
@@ -1382,7 +1382,7 @@ get_serial_process_opts()
     done
 
     # Serialize array
-    local serial_process_opts=`serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}"`
+    local serial_process_opts=`debasher::serialize_string_array "process_opts_array" "${ARRAY_TASK_SEP}"`
 
     # Return result
     echo "${serial_process_opts} ${ellipsis}"

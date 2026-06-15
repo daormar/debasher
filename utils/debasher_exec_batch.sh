@@ -148,15 +148,15 @@ check_pars()
 absolutize_file_paths()
 {
     if [ ${f_given} -eq 1 ]; then
-        file=`get_absolute_path "${file}"`
+        file=`debasher::get_absolute_path "${file}"`
     fi
 
     if [ ${o_given} -eq 1 ]; then
-        outd=`get_absolute_path "${outd}"`
+        outd=`debasher::get_absolute_path "${outd}"`
     fi
 
     if [ ${k_given} -eq 1 ]; then
-        k_val=`get_absolute_path "${k_val}"`
+        k_val=`debasher::get_absolute_path "${k_val}"`
     fi
 }
 
@@ -519,7 +519,7 @@ execute_batches()
 
         # Execute built-in tilde expansion to avoid problems with "~"
         # symbol in file and directory paths
-        pipe_exec_cmd=`expand_tildes "${pipe_exec_cmd}"`
+        pipe_exec_cmd=`debasher::expand_tildes "${pipe_exec_cmd}"`
 
         echo "* Processing line ${lineno}..." >&2
         echo "" >&2
@@ -540,7 +540,7 @@ execute_batches()
 
         echo "** Check correctness of output directory..." >&2
         local base_pipe_cmd_outd=`"${DIRNAME}" "${pipe_cmd_outd}"`
-        if dirnames_are_equal "${outd}" "${base_pipe_cmd_outd}"; then
+        if debasher::dirnames_are_equal "${outd}" "${base_pipe_cmd_outd}"; then
             echo "Error: final output directory is equal to the directory containing the output directory for program">&2
             return 1;
         else

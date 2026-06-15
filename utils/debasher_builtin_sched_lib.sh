@@ -130,15 +130,15 @@ builtin_sched_init_process_info()
 
             # Get cpus info
             local cpus=`debasher::extract_cpus_from_process_spec "$process_spec"`
-            str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $processname should be a natural number" >&2; return 1; }
+            debasher::str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $processname should be a natural number" >&2; return 1; }
 
             # Get mem info (NOTE: if multiple attempts specified, keep
             # memory specification of the first one)
             local mem=`debasher::extract_mem_from_process_spec "$process_spec"`
             local attempt_no=1
             mem=`debasher::get_mem_attempt_value ${mem} ${attempt_no}`
-            mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }
-            str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $processname should be a natural number" >&2; return 1; }
+            mem=`debasher::convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }
+            debasher::str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $processname should be a natural number" >&2; return 1; }
 
             # Check cpus value
             builtin_sched_cpus_within_limit ${cpus} || { echo "Error: number of cpus for process $processname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
@@ -411,7 +411,7 @@ builtin_sched_revise_array_mem()
     local processname=$2
 
     local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" ${processname}`
-    local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
+    local num_inprogress_tasks=`debasher::get_num_words_in_string "${inprogress_tasks}"`
     local process_revised_mem=`builtin_sched_get_process_mem_given_num_tasks ${processname} ${num_inprogress_tasks}`
     BUILTIN_SCHED_ALLOC_MEM=$((BUILTIN_SCHED_ALLOC_MEM - ${BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]} + process_revised_mem))
     BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]=${process_revised_mem}
@@ -424,7 +424,7 @@ builtin_sched_revise_array_cpus()
     local processname=$2
 
     local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" ${processname}`
-    local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
+    local num_inprogress_tasks=`debasher::get_num_words_in_string "${inprogress_tasks}"`
     local process_revised_cpus=`builtin_sched_get_process_cpus_given_num_tasks ${processname} ${num_inprogress_tasks}`
     BUILTIN_SCHED_ALLOC_CPUS=$((BUILTIN_SCHED_ALLOC_CPUS - ${BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]} + process_revised_cpus))
     BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]=${process_revised_cpus}
@@ -576,7 +576,7 @@ builtin_sched_check_process_deps()
     if [ "${separator}" = "" ]; then
         local processdeps_blanks=${processdeps}
     else
-        local processdeps_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
+        local processdeps_blanks=`debasher::replace_str_elem_sep_with_blank "${separator}" ${processdeps}`
     fi
 
     local dep
@@ -676,7 +676,7 @@ builtin_sched_get_max_num_tasks()
     local processname=$1
     local throttle=${BUILTIN_SCHED_PROCESS_THROTTLE[${processname}]}
     local inprogress_tasks=`builtin_sched_get_inprogress_array_task_indices "${dirname}" $processname`
-    local num_inprogress_tasks=`get_num_words_in_string "${inprogress_tasks}"`
+    local num_inprogress_tasks=`debasher::get_num_words_in_string "${inprogress_tasks}"`
     local result=$((throttle - num_inprogress_tasks))
     echo ${result}
 }
@@ -708,7 +708,7 @@ builtin_sched_update_executable_array_process()
             local max_task_num=`builtin_sched_get_max_num_tasks ${processname}`
             if [ ${max_task_num} -gt 0 ]; then
                 todo_task_indices=`builtin_sched_get_todo_array_task_indices "${dirname}" ${processname}`
-                todo_task_indices_truncated=`get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num}`
+                todo_task_indices_truncated=`debasher::get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num}`
                 if [ "${todo_task_indices_truncated}" != "" ]; then
                     BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${todo_task_indices_truncated}
                 fi
@@ -1079,11 +1079,11 @@ builtin_sched_create_script()
     local fname=`get_script_filename "${dirname}" ${processname}`
 
     # Write bash shebang
-    local BASH_SHEBANG=`init_bash_shebang_var`
+    local BASH_SHEBANG=`debasher::init_bash_shebang_var`
     echo ${BASH_SHEBANG} > "${fname}" || return 1
 
     # Write environment variables
-    write_env_vars_and_funcs_builtin "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
+    write_env_vars_and_funcs_builtin "${dirname}" | debasher::exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
 
     # Print header
     builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1

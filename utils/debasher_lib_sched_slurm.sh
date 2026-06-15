@@ -46,8 +46,8 @@ debasher::get_slurm_version()
 debasher::slurm_supports_aftercorr_deptype()
 {
     local slurm_ver=`debasher::get_slurm_version`
-    local slurm_ver_num=`version_to_number ${slurm_ver}`
-    local slurm_ver_aftercorr_num=`version_to_number ${FIRST_SLURM_VERSION_WITH_AFTERCORR}`
+    local slurm_ver_num=`debasher::version_to_number ${slurm_ver}`
+    local slurm_ver_aftercorr_num=`debasher::version_to_number ${FIRST_SLURM_VERSION_WITH_AFTERCORR}`
     if [ "${slurm_ver_num}" -ge "${slurm_ver_aftercorr_num}" ]; then
         return 0
     else
@@ -92,7 +92,7 @@ debasher::print_script_header_slurm_sched()
     local num_tasks=$4
 
     local sigterm_handler_funcname=`get_sigterm_handler_funcname "${processname}"`
-    if ! func_exists "${sigterm_handler_funcname}"; then
+    if ! debasher::func_exists "${sigterm_handler_funcname}"; then
         write_sigterm_handler "${sigterm_handler_funcname}"
     fi
     echo "trap '${sigterm_handler_funcname}' SIGTERM"
@@ -210,11 +210,11 @@ debasher::create_slurm_script()
     local fname=`get_script_filename "${dirname}" ${processname}`
 
     # Write bash shebang
-    local BASH_SHEBANG=`init_bash_shebang_var`
+    local BASH_SHEBANG=`debasher::init_bash_shebang_var`
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
     # Write environment variables
-    debasher::write_env_vars_and_funcs_slurm "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
+    debasher::write_env_vars_and_funcs_slurm "${dirname}" | debasher::exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
 
     # Print header
     debasher::print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
@@ -473,7 +473,7 @@ debasher::slurm_get_attempt_deps()
     local attempt_deps
 
     # Iterate of attempt jids
-    local attempt_jids_blanks=`replace_str_elem_sep_with_blank "," ${attempt_jids}`
+    local attempt_jids_blanks=`debasher::replace_str_elem_sep_with_blank "," ${attempt_jids}`
     local attempt_jid
     for attempt_jid in ${attempt_jids_blanks}; do
         if [ "${attempt_deps}" = "" ]; then
@@ -1026,7 +1026,7 @@ debasher::slurm_stop_process()
     for jid_list in ${ids_info}; do
         # Process comma separated list of job ids
         local separator=","
-        local jid_list_blanks=`replace_str_elem_sep_with_blank "${separator}" ${jid_list}`
+        local jid_list_blanks=`debasher::replace_str_elem_sep_with_blank "${separator}" ${jid_list}`
         for jid in ${jid_list_blanks}; do
             debasher::slurm_stop_jid $jid || { echo "Error while stopping job with id $jid" >&2 ; return 1; }
         done
@@ -1100,11 +1100,11 @@ debasher::seq_execute_slurm()
         local fname=$3
 
         # Write bash shebang
-        local BASH_SHEBANG=`init_bash_shebang_var`
+        local BASH_SHEBANG=`debasher::init_bash_shebang_var`
         echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
         # Write environment variables
-        debasher::write_env_vars_and_funcs_slurm "${dirname}" | exclude_readonly_vars >> "${fname}" ; pipe_fail || return 1
+        debasher::write_env_vars_and_funcs_slurm "${dirname}" | debasher::exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
 
         # Add call to command or function
         echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1

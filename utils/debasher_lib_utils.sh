@@ -19,13 +19,13 @@
 ######################
 
 ########
-debasher_version()
+debasher::debasher_version()
 {
-    echo "${debasher_pkgname} version: ${debasher_version}" >&2
+    echo "${debasher_pkgname} version: ${debasher::debasher_version}" >&2
 }
 
 ########
-version_to_number()
+debasher::version_to_number()
 {
     local ver=$1
 
@@ -33,7 +33,7 @@ version_to_number()
 }
 
 ########
-pipe_fail()
+debasher::pipe_fail()
 {
     # test if there is at least one command to exit with a non-zero status
     local pipestatus=${PIPESTATUS[*]}
@@ -46,14 +46,16 @@ pipe_fail()
     return 0
 }
 
+pipe_fail() { debasher::pipe_fail "$@"; }
+
 ########
-init_bash_shebang_var()
+debasher::init_bash_shebang_var()
 {
     echo "#!${BASH}"
 }
 
 ########
-is_absolute_path()
+debasher::is_absolute_path()
 {
     local file=$1
     case "$file" in
@@ -65,7 +67,7 @@ is_absolute_path()
 }
 
 ########
-get_absolute_path()
+debasher::get_absolute_path()
 {
   local relative_path=$1
   local current_dir="$(pwd)"
@@ -86,14 +88,14 @@ get_absolute_path()
 }
 
 ########
-get_absolute_path_existing()
+debasher::get_absolute_path_existing()
 {
     # IMPORTANT WARNING: This function just returns the given path if it
     # does not correspond with a existing file or directory.
     local file=$1
 
     # Check if an absolute path was given
-    if is_absolute_path "$file"; then
+    if debasher::is_absolute_path "$file"; then
         echo "$file"
         return 0
     else
@@ -129,7 +131,7 @@ get_absolute_path_existing()
 }
 
 ########
-normalize_dirname()
+debasher::normalize_dirname()
 {
     local dir=$1
 
@@ -137,13 +139,13 @@ normalize_dirname()
 }
 
 ########
-dirnames_are_equal()
+debasher::dirnames_are_equal()
 {
     local dir1=$1
     local dir2=$2
 
-    norm_dir1=`normalize_dirname "$dir1"`
-    norm_dir2=`normalize_dirname "$dir2"`
+    norm_dir1=`debasher::normalize_dirname "$dir1"`
+    norm_dir2=`debasher::normalize_dirname "$dir2"`
 
     if [ "${norm_dir1}" = "${norm_dir2}" ]; then
         return 0
@@ -153,7 +155,7 @@ dirnames_are_equal()
 }
 
 ########
-expand_tildes()
+debasher::expand_tildes()
 {
     local str=$1
     str="${str/#\~/$HOME}"
@@ -162,7 +164,7 @@ expand_tildes()
 }
 
 ########
-exclude_readonly_vars()
+debasher::exclude_readonly_vars()
 {
     "$AWK" -F "=" 'BEGIN{
                          readonlyvars["BASHOPTS"]=1
@@ -178,7 +180,7 @@ exclude_readonly_vars()
 }
 
 ########
-exclude_other_vars()
+debasher::exclude_other_vars()
 {
     "$AWK" -F "=" 'BEGIN{
                          othervars["MEMOIZED_OPTS"]=1
@@ -194,7 +196,7 @@ exclude_other_vars()
 }
 
 ########
-replace_str_elem_sep_with_blank()
+debasher::replace_str_elem_sep_with_blank()
 {
     local sep=$1
     local str=$2
@@ -209,7 +211,7 @@ replace_str_elem_sep_with_blank()
 }
 
 ########
-serialize_string_array()
+debasher::serialize_string_array()
 {
     local str_array_name=$1[@]
     local str_array=("${!str_array_name}")
@@ -244,7 +246,7 @@ serialize_string_array()
 }
 
 ########
-func_exists()
+debasher::func_exists()
 {
     local funcname=$1
 
@@ -254,7 +256,7 @@ func_exists()
 }
 
 ########
-var_exists()
+debasher::var_exists()
 {
     local varname=$1
 
@@ -266,35 +268,39 @@ var_exists()
 }
 
 ########
-errmsg()
+debasher::errmsg()
 {
     local msg=$1
     echo "$msg" >&2
 }
 
+errmsg() { debasher::errmsg "$@"; }
+
 ########
-logmsg()
+debasher::logmsg()
 {
     local msg=$1
     echo "$msg" >&2
 }
 
+logmsg() { debasher::logmsg "$@"; }
+
 ########
-log_err_msg()
+debasher::log_err_msg()
 {
     local msg=$1
     echo "${DEBASHER_LOG_ERR_MSG_START} $msg" >&2
 }
 
 ########
-log_warning_msg()
+debasher::log_warning_msg()
 {
     local msg=$1
     echo "${DEBASHER_LOG_WARNING_MSG_START} $msg" >&2
 }
 
 ########
-get_script_log_filenames()
+debasher::get_script_log_filenames()
 {
     local exec_dirname=`debasher::get_prg_exec_dir`
 
@@ -310,25 +316,25 @@ get_script_log_filenames()
 }
 
 ########
-filter_errors_in_script_log_file()
+debasher::filter_errors_in_script_log_file()
 {
     local prefix=$1
     local filename=$2
 
-    "${GREP}" "${DEBASHER_LOG_ERROR_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; pipe_fail || return 1
+    "${GREP}" "${DEBASHER_LOG_ERROR_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
 }
 
 ########
-filter_warnings_in_script_log_file()
+debasher::filter_warnings_in_script_log_file()
 {
     local prefix=$1
     local filename=$2
 
-    "${GREP}" "${DEBASHER_LOG_WARNING_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; pipe_fail || return 1
+    "${GREP}" "${DEBASHER_LOG_WARNING_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
 }
 
 ########
-create_script_log_file_errwarn_entry()
+debasher::create_script_log_file_errwarn_entry()
 {
     local errpref=$1
     local warnpref=$2
@@ -339,13 +345,13 @@ create_script_log_file_errwarn_entry()
         "md")
             echo "[${filename}](file://${filename})"
             echo ""
-            filter_errors_in_script_log_file "${errpref}" "${filename}"
-            filter_warnings_in_script_log_file "${warnpref}" "${filename}"
+            debasher::filter_errors_in_script_log_file "${errpref}" "${filename}"
+            debasher::filter_warnings_in_script_log_file "${warnpref}" "${filename}"
             ;;
         *)
             echo "File: ${filename}"
-            if ! filter_errors_in_script_log_file "${errpref}" "${filename}"; then
-                if ! filter_warnings_in_script_log_file "${warnpref}" "${filename}"; then
+            if ! debasher::filter_errors_in_script_log_file "${errpref}" "${filename}"; then
+                if ! debasher::filter_warnings_in_script_log_file "${warnpref}" "${filename}"; then
                     echo "NONE"
                 fi
             fi
@@ -354,7 +360,7 @@ create_script_log_file_errwarn_entry()
 }
 
 ########
-filter_errwarns_in_script_log_files_pref()
+debasher::filter_errwarns_in_script_log_files_pref()
 {
     local errpref=$1
     local warnpref=$2
@@ -366,20 +372,20 @@ filter_errwarns_in_script_log_files_pref()
             echo ""
         fi
 
-        create_script_log_file_errwarn_entry "${errpref}" "${warnpref}" "${format}" "${filename}"
+        debasher::create_script_log_file_errwarn_entry "${errpref}" "${warnpref}" "${format}" "${filename}"
 
         i=$((i+1))
-    done < <(get_script_log_filenames)
+    done < <(debasher::get_script_log_filenames)
 }
 
 ########
-filter_errwarns_in_script_log_files()
+debasher::filter_errwarns_in_script_log_files()
 {
     filter_warnings_in_script_log_files_pref "" "" "md"
 }
 
 ########
-replace_tilde_by_homedir()
+debasher::replace_tilde_by_homedir()
 {
     local file=$1
 
@@ -391,7 +397,7 @@ replace_tilde_by_homedir()
 }
 
 ########
-file_exists()
+debasher::file_exists()
 {
     local file=$1
     if [ -f "$file" ]; then
@@ -402,7 +408,7 @@ file_exists()
 }
 
 ########
-dir_exists()
+debasher::dir_exists()
 {
     local dir=$1
     if [ -d "$dir" ]; then
@@ -413,7 +419,7 @@ dir_exists()
 }
 
 ########
-convert_mem_value_to_mb()
+debasher::convert_mem_value_to_mb()
 {
     local mem_value=$1
 
@@ -438,7 +444,7 @@ convert_mem_value_to_mb()
 }
 
 ########
-str_is_natural_number()
+debasher::str_is_natural_number()
 {
     local str=$1
 
@@ -449,7 +455,7 @@ str_is_natural_number()
 }
 
 ########
-str_is_option()
+debasher::str_is_option()
 {
     local str=$1
     if [ "${str:0:1}" = "-" ] || [ "${str:0:2}" = "--" ]; then
@@ -460,7 +466,7 @@ str_is_option()
 }
 
 ########
-str_is_output_option()
+debasher::str_is_output_option()
 {
     local str=$1
     if [ "${str:0:4}" = "-out" ] || [ "${str:0:5}" = "--out" ]; then
@@ -471,7 +477,7 @@ str_is_output_option()
 }
 
 ########
-str_is_proc_out_opt_descriptor()
+debasher::str_is_proc_out_opt_descriptor()
 {
     local str=$1
 
@@ -483,11 +489,11 @@ str_is_proc_out_opt_descriptor()
 }
 
 ########
-str_is_val_descriptor()
+debasher::str_is_val_descriptor()
 {
     local str=$1
 
-    if is_absolute_path "${str}"; then
+    if debasher::is_absolute_path "${str}"; then
         local basename=`"${BASENAME}" "${str}"`
         if [[ "${basename}" == "${VALUE_DESCRIPTOR_NAME_PREFIX}"* ]]; then
             return 0
@@ -500,7 +506,7 @@ str_is_val_descriptor()
 }
 
 ########
-str_trim()
+debasher::str_trim()
 {
     local var="$1"
     # Remove beginning and ending blanks
@@ -510,14 +516,14 @@ str_trim()
 }
 
 ########
-get_num_words_in_string()
+debasher::get_num_words_in_string()
 {
     local str=$1
     echo "${str}" | "${WC}" -w
 }
 
 ########
-get_first_n_fields_of_str()
+debasher::get_first_n_fields_of_str()
 {
     local str=$1
     local n_val=$2
@@ -541,13 +547,13 @@ get_first_n_fields_of_str()
 }
 
 ########
-get_debasher_exec_path()
+debasher::get_debasher_exec_path()
 {
     echo "${debasher_bindir}/debasher_exec"
 }
 
 ########
-get_processname_from_caller()
+debasher::get_processname_from_caller()
 {
     local caller_method_name=$1
 
@@ -563,7 +569,7 @@ get_processname_from_caller()
 }
 
 ########
-get_processname_from_caller_nameref()
+debasher::get_processname_from_caller_nameref()
 {
     local caller_method_name=$1
     local -n var_ref=$2
@@ -580,7 +586,7 @@ get_processname_from_caller_nameref()
 }
 
 ########
-get_process_funcname()
+debasher::get_process_funcname()
 {
     local processname=$1
     local method_name=$2
@@ -590,7 +596,7 @@ get_process_funcname()
 }
 
 ########
-get_process_varname()
+debasher::get_process_varname()
 {
     local processname=$1
     local method_name=$2
@@ -600,14 +606,14 @@ get_process_varname()
 }
 
 ########
-search_process_func()
+debasher::search_process_func()
 {
     local processname=$1
     local method_name=$2
 
     # Check if function exists
-    local process_function=`get_process_funcname "${processname}" "${method_name}"`
-    if func_exists "${process_function}"; then
+    local process_function=`debasher::get_process_funcname "${processname}" "${method_name}"`
+    if debasher::func_exists "${process_function}"; then
         echo "${process_function}"
     else
         echo "${FUNCT_NOT_FOUND}"
@@ -615,14 +621,14 @@ search_process_func()
 }
 
 ########
-search_process_var()
+debasher::search_process_var()
 {
     local processname=$1
     local method_name=$2
 
     # Check if function exists
-    local process_var=`get_process_varname "${processname}" "${method_name}"`
-    if var_exists "${process_var}"; then
+    local process_var=`debasher::get_process_varname "${processname}" "${method_name}"`
+    if debasher::var_exists "${process_var}"; then
         echo "${process_var}"
     else
         echo "${VAR_NOT_FOUND}"
@@ -630,15 +636,15 @@ search_process_var()
 }
 
 ########
-search_process_func_nameref()
+debasher::search_process_func_nameref()
 {
     local processname=$1
     local method_name=$2
     local -n var_ref=$3
 
     # Check if function exists
-    local process_function=`get_process_funcname "${processname}" "${method_name}"`
-    if func_exists "${process_function}"; then
+    local process_function=`debasher::get_process_funcname "${processname}" "${method_name}"`
+    if debasher::func_exists "${process_function}"; then
         var_ref="${process_function}"
     else
         var_ref="${FUNCT_NOT_FOUND}"
@@ -646,20 +652,20 @@ search_process_func_nameref()
 }
 
 ########
-search_process_mandatory_func()
+debasher::search_process_mandatory_func()
 {
     local processname=$1
     local method_name=$2
 
     # Check if function exists
-    local process_function=`get_process_funcname "${processname}" "${method_name}"`
-    if func_exists "${process_function}"; then
+    local process_function=`debasher::get_process_funcname "${processname}" "${method_name}"`
+    if debasher::func_exists "${process_function}"; then
         echo "${process_function}"
     fi
 }
 
 ########
-copy_func()
+debasher::copy_func()
 {
     local existing_funcname=$1
     local new_funcname=$2
@@ -671,7 +677,7 @@ copy_func()
 }
 
 ########
-get_module_funcname()
+debasher::get_module_funcname()
 {
     local modname=$1
     local method_name=$2
@@ -681,7 +687,7 @@ get_module_funcname()
 }
 
 ########
-print_array_elems()
+debasher::print_array_elems()
 {
     local arr_name=$1
     local arr_size=$2
@@ -693,7 +699,7 @@ print_array_elems()
 }
 
 ########
-split_file_in_blocks()
+debasher::split_file_in_blocks()
 {
     local filename=$1
     local outpref=$2
@@ -710,7 +716,7 @@ split_file_in_blocks()
 }
 
 ########
-get_nth_file_line()
+debasher::get_nth_file_line()
 {
     local filename=$1
     local n=$2
@@ -719,7 +725,7 @@ get_nth_file_line()
 }
 
 ########
-read_fifo_line()
+debasher::read_fifo_line()
 {
     local fifoname=$1
 
@@ -727,7 +733,7 @@ read_fifo_line()
 }
 
 ########
-get_deblib_vars_and_funcs_fname()
+debasher::get_deblib_vars_and_funcs_fname()
 {
     local dirname=$1
 

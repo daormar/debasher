@@ -61,7 +61,7 @@ debasher::conda_env_prepare()
     local abs_yml_fname=$2
     local condadir=$3
 
-    if is_absolute_path "${env_name}"; then
+    if debasher::is_absolute_path "${env_name}"; then
         # Install packages given prefix name
         conda env create -f "${abs_yml_fname}" -p "${env_name}" > "${condadir}"/"${env_name}".log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/"${env_name}".log file for more information">&2 ; return 1; }
     else

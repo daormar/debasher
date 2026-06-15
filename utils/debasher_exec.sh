@@ -111,7 +111,7 @@ read_pars()
             "--help") usage
                       exit 1
                       ;;
-            "--version") debasher_version
+            "--version") debasher::debasher_version
                          exit 1
                          ;;
             "--pfile") shift
@@ -135,7 +135,7 @@ read_pars()
             "--builtinsched-cpus") shift
                   if [ $# -ne 0 ]; then
                       builtinsched_cpus=$1
-                      if ! str_is_natural_number ${builtinsched_cpus}; then
+                      if ! debasher::str_is_natural_number ${builtinsched_cpus}; then
                           echo "Value for --builtinsched_cpus option should be a natural number" >&2
                           return 1
                       fi
@@ -145,8 +145,8 @@ read_pars()
             "--builtinsched-mem") shift
                   if [ $# -ne 0 ]; then
                       builtinsched_mem=$1
-                      builtinsched_mem=`convert_mem_value_to_mb ${builtinsched_mem}` || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
-                      if ! str_is_natural_number ${builtinsched_mem}; then
+                      builtinsched_mem=`debasher::convert_mem_value_to_mb ${builtinsched_mem}` || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
+                      if ! debasher::str_is_natural_number ${builtinsched_mem}; then
                           echo "Value for --builtinsched_mem option should be a natural number" >&2
                           return 1
                       fi
@@ -212,7 +212,7 @@ check_pars()
             exit 1
         else
             # Absolutize file path
-            pfile=`get_absolute_path "${pfile}"`
+            pfile=`debasher::get_absolute_path "${pfile}"`
         fi
     fi
 
@@ -260,7 +260,7 @@ get_deblib_vars_and_funcs()
 {
     echo "# Extracting DeBasher variables and functions..." >&2
 
-    local vars_and_funcs_fname=`get_deblib_vars_and_funcs_fname "${outd}"`
+    local vars_and_funcs_fname=`debasher::get_deblib_vars_and_funcs_fname "${outd}"`
     "${debasher_libexecdir}"/debasher_get_deblib_vars_and_funcs > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
 
     echo "Extraction complete" >&2
@@ -635,7 +635,7 @@ handle_conda_requirements()
 
             # Process conda envs information
             local conda_envs_funcname=`get_conda_envs_funcname "${processname}"`
-            if func_exists ${conda_envs_funcname}; then
+            if debasher::func_exists ${conda_envs_funcname}; then
                 echo "Handling conda requirements for process ${processname}..." >&2
                 ${conda_envs_funcname} || exit 1
             fi
@@ -664,7 +664,7 @@ handle_docker_requirements()
 
             # Process conda envs information
             local docker_imgs_funcname=`get_docker_imgs_funcname "${processname}"`
-            if func_exists "${docker_imgs_funcname}"; then
+            if debasher::func_exists "${docker_imgs_funcname}"; then
                 echo "Handling docker requirements for process ${processname}..." >&2
                 "${docker_imgs_funcname}" || exit 1
             fi
@@ -898,7 +898,7 @@ set_debasher_output_dir()
 
     # Get absolute file path (very important so as to ensure correct
     # execution of processes)
-    outd=`get_absolute_path "${outd}"`
+    outd=`debasher::get_absolute_path "${outd}"`
 
     # Set outd as the output directory of debasher
     debasher::set_debasher_outdir "${outd}"
@@ -970,7 +970,7 @@ get_processdeps_from_detailed_spec()
     if [ "${separator}" = "" ]; then
         local processdeps_spec_blanks=${processdeps_spec}
     else
-        local processdeps_spec_blanks=`replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec}`
+        local processdeps_spec_blanks=`debasher::replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec}`
     fi
     local dep_spec
     for dep_spec in ${processdeps_spec_blanks}; do
