@@ -19,7 +19,7 @@
 ##########################################
 
 ########
-builtin_sched_id_exists()
+debasher::builtin_sched_id_exists()
 {
     local pid=$1
 
@@ -29,7 +29,7 @@ builtin_sched_id_exists()
 }
 
 ########
-builtin_sched_stop_process()
+debasher::builtin_sched_stop_process()
 {
     # Initialize variables
     local ids_info=$1
@@ -41,7 +41,7 @@ builtin_sched_stop_process()
 }
 
 ########
-process_is_unfinished_but_runnable_builtin_sched()
+debasher::process_is_unfinished_but_runnable_builtin_sched()
 {
     # Processes where the following is true are assigned this status:
     #  - process is an array of tasks
@@ -91,7 +91,7 @@ process_is_unfinished_but_runnable_builtin_sched()
 }
 
 ########
-get_elapsed_time_for_process_builtin()
+debasher::get_elapsed_time_for_process_builtin()
 {
     local dirname=$1
     local processname=$2
@@ -130,7 +130,7 @@ get_elapsed_time_for_process_builtin()
 }
 
 ########
-seq_execute_builtin()
+debasher::seq_execute_builtin()
 {
     local process_to_launch=$1
 

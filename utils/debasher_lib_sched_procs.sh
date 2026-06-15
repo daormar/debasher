@@ -388,7 +388,7 @@ stop_process()
             slurm_stop_process ${ids_info} || return 1
             ;;
         ${BUILTIN_SCHEDULER})
-            builtin_sched_stop_process ${ids_info} || return 1
+            debasher::builtin_sched_stop_process ${ids_info} || return 1
             ;;
     esac
 }
@@ -500,7 +500,7 @@ process_is_unfinished_but_runnable()
             return 1
             ;;
         ${BUILTIN_SCHEDULER})
-            process_is_unfinished_but_runnable_builtin_sched "${dirname}" "${processname}"
+            debasher::process_is_unfinished_but_runnable_builtin_sched "${dirname}" "${processname}"
             exit_code=$?
             return ${exit_code}
         ;;
@@ -538,7 +538,7 @@ get_elapsed_time_for_process()
             get_elapsed_time_for_process_slurm "${dirname}" "${processname}"
             ;;
         ${BUILTIN_SCHEDULER})
-            get_elapsed_time_for_process_builtin "${dirname}" "${processname}"
+            debasher::get_elapsed_time_for_process_builtin "${dirname}" "${processname}"
             ;;
     esac
 }

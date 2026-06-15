@@ -284,7 +284,7 @@ id_exists()
             return "${exit_code}"
             ;;
         ${BUILTIN_SCHEDULER})
-            builtin_sched_id_exists "$id"
+            debasher::builtin_sched_id_exists "$id"
             exit_code=$?
             return "${exit_code}"
         ;;
@@ -354,7 +354,7 @@ seq_execute()
             seq_execute_slurm "$@"
             ;;
         ${BUILTIN_SCHEDULER})
-            seq_execute_builtin "$@"
+            debasher::seq_execute_builtin "$@"
             ;;
         *)
             local process_to_launch=$1
