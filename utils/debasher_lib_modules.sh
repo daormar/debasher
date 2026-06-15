@@ -171,6 +171,16 @@ debasher::load_debasher_module()
     fi
 }
 
+########
+# Public: Loads a DeBasher module.
+#
+# $1 - String containing the name of a module.
+#
+# Examples
+#
+#   load_debasher_module "module_name"
+#
+# The function does not return any value.
 load_debasher_module() { debasher::load_debasher_module "$@"; }
 
 ########
