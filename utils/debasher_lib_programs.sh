@@ -427,7 +427,7 @@ add_debasher_process()
         add_debasher_process_heredoc "${processname}" || exit 1
     else
         # Treat process alias if provided
-        local process_alias=$(extract_alias_from_process_spec "${process_additional_specs}")
+        local process_alias=$(extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
         if [ "${process_alias}" = "${ATTR_NOT_FOUND}" ]; then
             # No heredoc nor alias were given
             add_debasher_process_func "${processname}"
