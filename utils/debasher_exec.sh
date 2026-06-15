@@ -279,7 +279,7 @@ get_mod_vars_and_funcs()
     "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
 
     # Get special functions
-    get_alias_related_funcs >> "${vars_and_funcs_fname}"
+    debasher::get_alias_related_funcs >> "${vars_and_funcs_fname}"
 
     echo "Extraction complete" >&2
 
@@ -304,7 +304,7 @@ gen_initial_procspec_file()
 {
     echo "# Generating initial process specification from $pfile..." >&2
 
-    exec_program_func_for_module "${pfile}" || exit 1
+    debasher::exec_program_func_for_module "${pfile}" || exit 1
 
     echo "Generation complete" >&2
 
@@ -566,7 +566,7 @@ check_process_opts()
         local cmdline=$1
         local procspec_file=$2
 
-        if program_uses_fifos; then
+        if debasher::program_uses_fifos; then
             while read process_spec; do
                 # Extract process information
                 local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
@@ -911,13 +911,13 @@ create_basic_dirs()
 {
     echo "# Creating basic directories..." >&2
 
-    local execdir=`get_prg_exec_dir`
+    local execdir=`debasher::get_prg_exec_dir`
     "${MKDIR}" -p "${execdir}" || { echo "Error! cannot create exec directory" >&2; return 1; }
 
     local sched_opts_dir=`get_sched_opts_dir`
     "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
 
-    local graphsdir=`get_prg_graphs_dir`
+    local graphsdir=`debasher::get_prg_graphs_dir`
     "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 
     local fifodir=`get_absolute_fifodir`
@@ -1349,7 +1349,7 @@ else
     program_opts_file="${prg_file_pref}.${PRGOPTS_FEXT}"
     program_opts_exh_file="${prg_file_pref}.${PRGOPTS_EXHAUSTIVE_FEXT}"
     program_fifos_file="${prg_file_pref}.${FIFOS_FEXT}"
-    prg_graphs_dir=`get_prg_graphs_dir`
+    prg_graphs_dir=`debasher::get_prg_graphs_dir`
     procgraph_file_prefix="${prg_graphs_dir}/process_graph"
     depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 

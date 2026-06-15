@@ -19,7 +19,7 @@
 ##############################
 
 ########
-get_orig_workdir()
+debasher::get_orig_workdir()
 {
     local command_line_file=$1
     local workdir=`$HEAD -1 ${command_line_file} | "$AWK" '{print $2}'` ; pipe_fail || return 1
@@ -27,23 +27,23 @@ get_orig_workdir()
 }
 
 ########
-get_quoted_cmdline_from_command_line_file()
+debasher::get_quoted_cmdline_from_command_line_file()
 {
     local command_line_file=$1
     "$TAIL" -1 "${command_line_file}"
 }
 
 ########
-get_orig_outdir_from_command_line_file()
+debasher::get_orig_outdir_from_command_line_file()
 {
     # initialize variables
     local command_line_file=$1
 
     # Extract information from command line file
     local workdir
-    workdir=`get_orig_workdir "${command_line_file}"` || return 1
+    workdir=`debasher::get_orig_workdir "${command_line_file}"` || return 1
     local cmdline
-    qcmdline=`get_quoted_cmdline_from_command_line_file "${command_line_file}"` || return 1
+    qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"` || return 1
     local outdir=`get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
 
     # Retrieve original output directory
@@ -55,16 +55,16 @@ get_orig_outdir_from_command_line_file()
 }
 
 ########
-get_pfile_from_command_line_file()
+debasher::get_pfile_from_command_line_file()
 {
     local command_line_file=$1
-    local qcmdline=`get_quoted_cmdline_from_command_line_file "${command_line_file}"`
+    local qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"`
     local pfile=`get_opt_value_from_quoted_cmd "$qcmdline" "--pfile"` || return 1
     echo "${pfile}"
 }
 
 ########
-get_currdir_from_command_line_file()
+debasher::get_currdir_from_command_line_file()
 {
     local command_line_file=$1
     local currdir=`"${HEAD}" -1 "${command_line_file}" | "${AWK}" '{print $2}'`
@@ -72,25 +72,25 @@ get_currdir_from_command_line_file()
 }
 
 ########
-get_sched_from_command_line_file()
+debasher::get_sched_from_command_line_file()
 {
     local command_line_file=$1
-    local qcmdline=`get_quoted_cmdline_from_command_line_file "${command_line_file}"`
+    local qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"`
     local sched=`get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"` || return 1
     echo "${sched}"
 }
 
 ########
-get_abspfile_from_command_line_file()
+debasher::get_abspfile_from_command_line_file()
 {
     # Initialize variables
     local command_line_file=$1
 
     # Obtain program file and current dir
     local cmdline_pfile
-    cmdline_pfile=`get_pfile_from_command_line_file "${command_line_file}"` || return 1
+    cmdline_pfile=`debasher::get_pfile_from_command_line_file "${command_line_file}"` || return 1
     local cmdline_currdir
-    cmdline_currdir=`get_currdir_from_command_line_file "${command_line_file}"` || return 1
+    cmdline_currdir=`debasher::get_currdir_from_command_line_file "${command_line_file}"` || return 1
 
     # Obtain absolute program file name
     local abspfile
@@ -109,7 +109,7 @@ get_abspfile_from_command_line_file()
 }
 
 ########
-exec_program_func_for_module()
+debasher::exec_program_func_for_module()
 {
     local pfile=$1
 
@@ -126,7 +126,7 @@ exec_program_func_for_module()
 }
 
 ########
-get_prg_exec_dir_given_basedir()
+debasher::get_prg_exec_dir_given_basedir()
 {
     local dirname=$1
 
@@ -134,13 +134,13 @@ get_prg_exec_dir_given_basedir()
 }
 
 ########
-get_prg_exec_dir()
+debasher::get_prg_exec_dir()
 {
-    get_prg_exec_dir_given_basedir "${PROGRAM_OUTDIR}"
+    debasher::get_prg_exec_dir_given_basedir "${PROGRAM_OUTDIR}"
 }
 
 ########
-get_prg_graphs_dir_given_basedir()
+debasher::get_prg_graphs_dir_given_basedir()
 {
     local dirname=$1
 
@@ -148,13 +148,13 @@ get_prg_graphs_dir_given_basedir()
 }
 
 ########
-get_prg_graphs_dir()
+debasher::get_prg_graphs_dir()
 {
-    get_prg_graphs_dir_given_basedir "${PROGRAM_OUTDIR}"
+    debasher::get_prg_graphs_dir_given_basedir "${PROGRAM_OUTDIR}"
 }
 
 ########
-is_valid_processname()
+debasher::is_valid_processname()
 {
     local input="$1"
     if [[ "$input" =~ ^[a-zA-Z_][a-zA-Z_0-9]*$ ]]; then
@@ -165,7 +165,7 @@ is_valid_processname()
 }
 
 ########
-get_alias_related_funcs()
+debasher::get_alias_related_funcs()
 {
     for processname in "${!PROGRAM_PROCESSES[@]}"; do
         if [ "${PROGRAM_PROCESSES[${processname}]}" != "1" ]; then
@@ -175,7 +175,7 @@ get_alias_related_funcs()
 }
 
 ########
-get_external_file_for_process_alias()
+debasher::get_external_file_for_process_alias()
 {
     local current_pfile_dir=$1
     local process_alias=$2
@@ -184,7 +184,7 @@ get_external_file_for_process_alias()
 }
 
 ########
-get_interpreter_for_file()
+debasher::get_interpreter_for_file()
 {
     local file=$1
     local bfname=$("${BASENAME}" "${file}")
@@ -220,11 +220,11 @@ get_interpreter_for_file()
 }
 
 ########
-create_process_func_alias()
+debasher::create_process_func_alias()
 {
     local processname=$1
     local expanded_process_alias=$2
-    local interpreter_for_file=$(get_interpreter_for_file "${expanded_process_alias}")
+    local interpreter_for_file=$(debasher::get_interpreter_for_file "${expanded_process_alias}")
 
     if [ -n "${interpreter_for_file}" ]; then
         local escaped_interpreter
@@ -238,7 +238,7 @@ create_process_func_alias()
 }
 
 ########
-is_heredoc_process()
+debasher::is_heredoc_process()
 {
     local processname=$1
 
@@ -276,7 +276,7 @@ is_heredoc_process()
 }
 
 ########
-create_heredoc_func_body()
+debasher::create_heredoc_func_body()
 {
     local processname=$1
     local escaped_interpreter
@@ -319,21 +319,21 @@ create_heredoc_func_body()
 }
 
 ########
-create_process_func_heredoc()
+debasher::create_process_func_heredoc()
 {
     local processname=$1
     local funcbody
-    funcbody=$(create_heredoc_func_body "${processname}") || return 1
+    funcbody=$(debasher::create_heredoc_func_body "${processname}") || return 1
     eval "$processname() { ${funcbody}; }"
 }
 
 ########
-add_debasher_process_heredoc()
+debasher::add_debasher_process_heredoc()
 {
     local processname=$1
 
     # Heredoc code was provided for process
-    create_process_func_heredoc "${processname}" || return 1
+    debasher::create_process_func_heredoc "${processname}" || return 1
 
     # Store process name in associative array. For each process, the
     # program file of the program that adds it is registered
@@ -341,7 +341,7 @@ add_debasher_process_heredoc()
 }
 
 ########
-add_debasher_process_func()
+debasher::add_debasher_process_func()
 {
     local processname=$1
 
@@ -351,7 +351,7 @@ add_debasher_process_func()
 }
 
 ########
-add_debasher_process_alias()
+debasher::add_debasher_process_alias()
 {
     local processname=$1
     local process_alias=$2
@@ -359,14 +359,14 @@ add_debasher_process_alias()
     # Obtain expanded process alias
     local expanded_process_alias
 
-    if is_valid_processname "${process_alias}"; then
+    if debasher::is_valid_processname "${process_alias}"; then
         expanded_process_alias="${process_alias}"
     else
         # Check if alias corresponds to an external file
 
         # Get tentative name of external file
         local external_file
-        external_file="$(get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
+        external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
 
         # Check if file exists
         if [ ! -f "${external_file}" ]; then
@@ -378,7 +378,7 @@ add_debasher_process_alias()
     fi
 
     # Create process function
-    create_process_func_alias "${processname}" "${expanded_process_alias}"
+    debasher::create_process_func_alias "${processname}" "${expanded_process_alias}"
 
     # Store process name in associative array. For each process, the
     # program file of the program that adds it is registered
@@ -394,7 +394,7 @@ add_debasher_process_alias()
 #
 # Examples
 #
-#    add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
+#    debasher::add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
 #
 # The function prints the process definition to the standard output.
 # This process definition is later used debasher_exec to execute
@@ -402,7 +402,7 @@ add_debasher_process_alias()
 # Additionally, the function registers the process in a variable used
 # by the DeBasher library, and creates a wrapper function when an
 # alias or heredoc code is provided.
-add_debasher_process()
+debasher::add_debasher_process()
 {
     # Initialize variables
     local processname=$1
@@ -411,7 +411,7 @@ add_debasher_process()
     local current_pfile_dir=$("${DIRNAME}" "${PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
     # Check correctness of process name and abort execution if necessary
-    if ! is_valid_processname "${processname}"; then
+    if ! debasher::is_valid_processname "${processname}"; then
         echo "Error: process name ${processname} not valid. It should contain letters, digits or the underscore character. Aborting execution..." >&2
         exit 1
     fi
@@ -423,17 +423,17 @@ add_debasher_process()
     fi
 
     # Treat heredoc code if provided
-    if is_heredoc_process "${processname}" >/dev/null; then
-        add_debasher_process_heredoc "${processname}" || exit 1
+    if debasher::is_heredoc_process "${processname}" >/dev/null; then
+        debasher::add_debasher_process_heredoc "${processname}" || exit 1
     else
         # Treat process alias if provided
         local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
         if [ "${process_alias}" = "${ATTR_NOT_FOUND}" ]; then
             # No heredoc nor alias were given
-            add_debasher_process_func "${processname}"
+            debasher::add_debasher_process_func "${processname}"
         else
             # A process alias was given
-            add_debasher_process_alias "${processname}" "${process_alias}" || exit 1
+            debasher::add_debasher_process_alias "${processname}" "${process_alias}" || exit 1
         fi
     fi
 
@@ -441,8 +441,10 @@ add_debasher_process()
     echo "${processname}" "${process_computational_specs}" "${BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}" "${process_additional_specs}"
 }
 
+add_debasher_process() { debasher::add_debasher_process "$@"; }
+
 ########
-add_debasher_program()
+debasher::add_debasher_program()
 {
     # Initialize variables
     local modname=$1
@@ -451,11 +453,13 @@ add_debasher_program()
     # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution
     # without using any sub-shell)
-    exec_program_func_for_module "${pfile}"
+    debasher::exec_program_func_for_module "${pfile}"
 }
 
+add_debasher_program() { debasher::add_debasher_program "$@"; }
+
 ########
-program_uses_fifos()
+debasher::program_uses_fifos()
 {
     if [ "${#PROGRAM_FIFOS[@]}" -eq 0 ]; then
         return 1
@@ -465,7 +469,7 @@ program_uses_fifos()
 }
 
 ########
-get_number_of_program_fifos()
+debasher::get_number_of_program_fifos()
 {
     echo "${#PROGRAM_FIFOS[@]}"
 }

@@ -489,7 +489,7 @@ get_prg_exec_dir_for_process()
     local processname=$2
 
     # Get base exec dir
-    execdir=`get_prg_exec_dir_given_basedir "${dirname}"`
+    execdir=`debasher::get_prg_exec_dir_given_basedir "${dirname}"`
 
     echo "${execdir}/${processname}"
 }

@@ -112,13 +112,13 @@ process_status_for_pfile()
 
     # Extract information from PRG_COMMAND_LINE_BASENAME file
     local pfile
-    pfile=`get_abspfile_from_command_line_file "${command_line_file}"` || return 1
+    pfile=`debasher::get_abspfile_from_command_line_file "${command_line_file}"` || return 1
     local sched
-    sched=`get_sched_from_command_line_file "${command_line_file}"` || return 1
+    sched=`debasher::get_sched_from_command_line_file "${command_line_file}"` || return 1
 
     # Get original output directory
     local orig_outdir
-    orig_outdir=`get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
+    orig_outdir=`debasher::get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
@@ -184,7 +184,7 @@ process_status_for_pfile()
             ${TODO_PROCESS_STATUS}) num_todo=$((num_todo + 1))
                                     ;;
         esac
-    done < <(exec_program_func_for_module "${pfile}")
+    done < <(debasher::exec_program_func_for_module "${pfile}")
 
     # Print summary
     echo "* SUMMARY: num_processes= ${num_processes} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2

@@ -296,7 +296,7 @@ log_warning_msg()
 ########
 get_script_log_filenames()
 {
-    local exec_dirname=`get_prg_exec_dir`
+    local exec_dirname=`debasher::get_prg_exec_dir`
 
     local sched=`get_scheduler`
     case $sched in

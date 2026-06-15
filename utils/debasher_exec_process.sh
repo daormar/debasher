@@ -54,7 +54,7 @@ load_modules "${pfile}" || exit 1
 echo "" >&2
 
 echo "Executing program function given in module..." >&2
-exec_program_func_for_module "${pfile}"
+debasher::exec_program_func_for_module "${pfile}"
 echo "" >&2
 
 echo "Executing: $processname $opts" >&2
