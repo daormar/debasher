@@ -25,7 +25,7 @@ debasher::get_processid_filename()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/$processname.${PROCESSID_FEXT}"
 }
@@ -38,7 +38,7 @@ debasher::get_array_taskid_filename()
     local idx=$3
 
     # Get exec dir
-    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    local execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}_${idx}.${ARRAY_TASKID_FEXT}"
 }
@@ -65,7 +65,7 @@ debasher::get_process_finished_filename_prefix()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}"
 }
@@ -104,7 +104,7 @@ debasher::apply_deptype_to_processids()
 
     # Apply deptype
     local result=""
-    local separator=`get_processdeps_separator ${processids}`
+    local separator=`debasher::get_processdeps_separator ${processids}`
     if [ "${separator}" = "" ]; then
         local processids_blanks=${processids}
     else
@@ -280,7 +280,7 @@ debasher::read_ids_from_files()
     fi
 
     # Get exec dir
-    local execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    local execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     # Return ids for array tasks if any
     local id
@@ -420,7 +420,7 @@ debasher::get_launched_array_task_ids()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     # Return ids for array tasks if any
     local taskid_file
@@ -511,8 +511,8 @@ debasher::process_is_unfinished_but_runnable()
 debasher::get_elapsed_time_from_logfile()
 {
     local log_filename=$1
-    local start_date=`get_process_start_date "${log_filename}"`
-    local finish_date=`get_process_finish_date "${log_filename}"`
+    local start_date=`debasher::get_process_start_date "${log_filename}"`
+    local finish_date=`debasher::get_process_finish_date "${log_filename}"`
 
     # Obtain difference
     if [ ! -z "${start_date}" -a ! -z "${finish_date}" ]; then
@@ -548,7 +548,7 @@ debasher::get_process_status()
 {
     local dirname=$1
     local processname=$2
-    local script_filename=`get_script_filename "${dirname}" ${processname}`
+    local script_filename=`debasher::get_script_filename "${dirname}" ${processname}`
 
     if [ -f "${script_filename}" ]; then
         if debasher::process_is_in_progress "$dirname" "$processname"; then

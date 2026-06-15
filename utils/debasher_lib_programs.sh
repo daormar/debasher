@@ -245,28 +245,28 @@ debasher::is_heredoc_process()
     # Search for a suitable function or command to execute the process
 
     # Try with Python
-    local pyexec_varname=`get_pyexec_varname "${processname}"`
+    local pyexec_varname=`debasher::get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         echo "${pyexec_varname}"
         return 0
     fi
 
     # Try with R
-    local rexec_varname=`get_rexec_varname "${processname}"`
+    local rexec_varname=`debasher::get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         echo "${rexec_varname}"
         return 0
     fi
 
     # Try with Perl
-    local perlexec_varname=`get_perlexec_varname "${processname}"`
+    local perlexec_varname=`debasher::get_perlexec_varname "${processname}"`
     if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         echo "${perlexec_varname}"
         return 0
     fi
 
     # Try with Groovy
-    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
+    local groovyexec_varname=`debasher::get_groovyexec_varname "${processname}"`
     if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         echo "${groovyexec_varname}"
         return 0
@@ -284,7 +284,7 @@ debasher::create_heredoc_func_body()
     # Search for a suitable function or command to execute the process
 
     # Try with Python
-    local pyexec_varname=`get_pyexec_varname "${processname}"`
+    local pyexec_varname=`debasher::get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${PYTHON}"
         echo "${escaped_interpreter} -c \"\${${pyexec_varname}}\" ${PY_END_OF_OPTIONS_MARKER} \"\$@\""
@@ -292,7 +292,7 @@ debasher::create_heredoc_func_body()
     fi
 
     # Try with R
-    local rexec_varname=`get_rexec_varname "${processname}"`
+    local rexec_varname=`debasher::get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${RSCRIPT}"
         echo "${escaped_interpreter} -e \"\${${rexec_varname}}\" ${R_END_OF_OPTIONS_MARKER} \"\$@\""
@@ -300,7 +300,7 @@ debasher::create_heredoc_func_body()
     fi
 
     # Try with Perl
-    local perlexec_varname=`get_perlexec_varname "${processname}"`
+    local perlexec_varname=`debasher::get_perlexec_varname "${processname}"`
     if [ "${perlexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${PERL}"
         echo "${escaped_interpreter} -e \"\${${perlexec_varname}}\" ${PL_END_OF_OPTIONS_MARKER} \"\$@\""
@@ -308,7 +308,7 @@ debasher::create_heredoc_func_body()
     fi
 
     # Try with Groovy
-    local groovyexec_varname=`get_groovyexec_varname "${processname}"`
+    local groovyexec_varname=`debasher::get_groovyexec_varname "${processname}"`
     if [ "${groovyexec_varname}" != "${VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${GROOVY}"
         echo "${escaped_interpreter} -e \"\${${groovyexec_varname}}\" ${GROOVY_END_OF_OPTIONS_MARKER} \"\$@\""

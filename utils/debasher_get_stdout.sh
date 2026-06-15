@@ -137,7 +137,7 @@ get_out()
 
     # Get output
     if [ "${t_given}" -eq 0 ]; then
-        local stdout_fname=`get_process_stdout_filename "${absdirname}" ${process} 1`
+        local stdout_fname=`debasher::get_process_stdout_filename "${absdirname}" ${process} 1`
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else
@@ -145,7 +145,7 @@ get_out()
             return 1
         fi
     else
-        local stdout_fname=`get_process_stdout_filename "${absdirname}" ${process} 2 "${task_idx}"`
+        local stdout_fname=`debasher::get_process_stdout_filename "${absdirname}" ${process} 2 "${task_idx}"`
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else

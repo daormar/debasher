@@ -121,12 +121,12 @@ builtin_sched_init_process_info()
         if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
-            local script_filename=`get_script_filename "${dirname}" ${processname}`
+            local script_filename=`debasher::get_script_filename "${dirname}" ${processname}`
             local status=`debasher::get_process_status "${dirname}" ${processname}`
             local processdeps=`debasher::extract_processdeps_from_process_spec "$process_spec"`
             local spec_throttle=`debasher::extract_throttle_from_process_spec "$process_spec"`
             local sched_throttle=`debasher::get_scheduler_throttle ${spec_throttle}`
-            local array_size=`get_numtasks_for_process "${processname}"`
+            local array_size=`debasher::get_numtasks_for_process "${processname}"`
 
             # Get cpus info
             local cpus=`debasher::extract_cpus_from_process_spec "$process_spec"`
@@ -262,7 +262,7 @@ builtin_sched_get_array_task_status()
     local dirname=$1
     local processname=$2
     local task_idx=$3
-    local processdirname=`get_process_outdir_given_dirname "${dirname}" ${processname}`
+    local processdirname=`debasher::get_process_outdir_given_dirname "${dirname}" ${processname}`
     local array_taskid_file=`debasher::get_array_taskid_filename "${dirname}" ${processname} ${task_idx}`
 
     if [ ! -f ${array_taskid_file} ]; then
@@ -572,7 +572,7 @@ builtin_sched_check_process_deps()
     local processdeps=${BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
 
     # Iterate over dependencies
-    local separator=`get_processdeps_separator ${processdeps}`
+    local separator=`debasher::get_processdeps_separator ${processdeps}`
     if [ "${separator}" = "" ]; then
         local processdeps_blanks=${processdeps}
     else
@@ -582,8 +582,8 @@ builtin_sched_check_process_deps()
     local dep
     for dep in ${processdeps_blanks}; do
         # Extract information from dependency
-        local deptype=`get_deptype_part_in_dep ${dep}`
-        local depsname=`get_processname_part_in_dep ${dep}`
+        local deptype=`debasher::get_deptype_part_in_dep ${dep}`
+        local depsname=`debasher::get_processname_part_in_dep ${dep}`
 
         # Process dependency
         depstatus=${BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
@@ -968,12 +968,12 @@ builtin_sched_execute_funct_plus_postfunct()
     local processname=$3
     local opt_array_size=$4
     local task_idx=$5
-    local skip_funct=`get_skip_funcname ${processname}`
-    local reset_funct=`get_reset_funcname ${processname}`
-    local post_funct=`get_post_funcname ${processname}`
+    local skip_funct=`debasher::get_skip_funcname ${processname}`
+    local reset_funct=`debasher::get_reset_funcname ${processname}`
+    local post_funct=`debasher::get_post_funcname ${processname}`
 
     # Get serialized arguments
-    local sargs=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
+    local sargs=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
 
     # Convert serialized process options to array (result is placed into
     # the DESERIALIZED_ARGS variable)
@@ -984,14 +984,14 @@ builtin_sched_execute_funct_plus_postfunct()
         ${skip_funct} "${DESERIALIZED_ARGS[@]}" && { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
     fi
 
-    display_begin_process_message
+    debasher::display_begin_process_message
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ "${opt_array_size}" -eq 1 ]; then
-            default_reset_outfiles_for_process "${dirname}" "${processname}"
+            debasher::default_reset_outfiles_for_process "${dirname}" "${processname}"
         else
-            default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
+            debasher::default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
         fi
     else
         ${reset_funct} "${DESERIALIZED_ARGS[@]}"
@@ -999,7 +999,7 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Execute process function
 
-    DEBASHER_PROCESS_STDOUT_FILENAME=`get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
+    DEBASHER_PROCESS_STDOUT_FILENAME=`debasher::get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"`
     "${processname}" "${DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
 
     local funct_exit_code=${PIPESTATUS[0]}
@@ -1022,7 +1022,7 @@ builtin_sched_execute_funct_plus_postfunct()
     # Signal process completion
     debasher::signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
 
-    display_end_process_message
+    debasher::display_end_process_message
 }
 
 ########
@@ -1037,11 +1037,11 @@ builtin_sched_print_script_body()
     # Write function to be executed
     if [ "${opt_array_size}" -gt 1 ]; then
         echo "CMDLINE=$(printf '%q' "${cmdline}")"
-        echo "builtin_task_log_filename=\`get_task_log_filename $(printf '%q' "${dirname}") ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
+        echo "builtin_task_log_filename=\`debasher::get_task_log_filename $(printf '%q' "${dirname}") ${processname} \${BUILTIN_ARRAY_TASK_ID}\`"
         echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
     else
         echo "CMDLINE=$(printf '%q' "${cmdline}")"
-        local builtin_log_filename=`get_process_log_filename "${dirname}" ${processname}`
+        local builtin_log_filename=`debasher::get_process_log_filename "${dirname}" ${processname}`
         echo "builtin_sched_execute_funct_plus_postfunct \"\${CMDLINE}\" $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > $(printf '%q' "${builtin_log_filename}") 2>&1"
     fi
 }
@@ -1076,7 +1076,7 @@ builtin_sched_create_script()
     local dirname=$2
     local processname=$3
     local opt_array_size=$4
-    local fname=`get_script_filename "${dirname}" ${processname}`
+    local fname=`debasher::get_script_filename "${dirname}" ${processname}`
 
     # Write bash shebang
     local BASH_SHEBANG=`debasher::init_bash_shebang_var`
@@ -1122,7 +1122,7 @@ builtin_sched_launch()
     local dirname=$1
     local processname=$2
     local task_idx=$3
-    local file=`get_script_filename "${dirname}" ${processname}`
+    local file=`debasher::get_script_filename "${dirname}" ${processname}`
 
     # Enable execution of specific task id
     if [ ${task_idx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
@@ -1174,7 +1174,7 @@ builtin_sched_execute_process()
     echo "PROCESS: ${processname} (TASK_IDX: ${task_idx}) ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Create script
-    local opt_array_size=`get_numtasks_for_process "${processname}"`
+    local opt_array_size=`debasher::get_numtasks_for_process "${processname}"`
     if [ "${launched_tasks}" = "" ]; then
         builtin_sched_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
     fi
@@ -1282,7 +1282,7 @@ builtin_sched_clean_process_files()
         local dirname=$1
         local processname=$2
 
-        local builtin_log_filename=`get_process_log_filename "${dirname}" ${processname}`
+        local builtin_log_filename=`debasher::get_process_log_filename "${dirname}" ${processname}`
         "${RM}" -f "${builtin_log_filename}"
     }
 
@@ -1292,7 +1292,7 @@ builtin_sched_clean_process_files()
         local processname=$2
         local idx=$3
 
-        local builtin_task_log_filename=`get_task_log_filename "${dirname}" ${processname} ${idx}`
+        local builtin_task_log_filename=`debasher::get_task_log_filename "${dirname}" ${processname} ${idx}`
         if [ -f "${builtin_task_log_filename}" ]; then
             "${RM}" "${builtin_task_log_filename}"
         fi
@@ -1326,7 +1326,7 @@ builtin_sched_prepare_files_and_dirs_for_process()
 {
     local dirname=$1
     local processname=$2
-    local script_filename=`get_script_filename "${dirname}" ${processname}`
+    local script_filename=`debasher::get_script_filename "${dirname}" ${processname}`
     local process_spec=${BUILTIN_SCHED_PROCESS_SPEC[${processname}]}
 
     # Obtain process status
@@ -1334,11 +1334,11 @@ builtin_sched_prepare_files_and_dirs_for_process()
 
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Obtain array size
-        local array_size=`get_numtasks_for_process "${processname}"`
+        local array_size=`debasher::get_numtasks_for_process "${processname}"`
 
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
-            create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
+            debasher::create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
             create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         else
             builtin_sched_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
@@ -1346,7 +1346,7 @@ builtin_sched_prepare_files_and_dirs_for_process()
         prepare_fifos_owned_by_process ${processname}
 
         # Create output directory
-        create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
+        debasher::create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
     fi
 }
 

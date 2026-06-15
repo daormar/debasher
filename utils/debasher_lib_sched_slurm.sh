@@ -115,14 +115,14 @@ debasher::print_opt_code_slurm_sched()
         local task_id=0
     fi
 
-    if uses_option_generator "${processname}"; then
+    if debasher::uses_option_generator "${processname}"; then
         echo "CMDLINE=$(printf '%q' "${cmdline}")"
-        local proc_outdir=`get_process_outdir "${processname}"`
-        local generate_opts_funcname=`get_generate_opts_funcname ${processname}`
-        echo "sargs=\`gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\"\`"
+        local proc_outdir=`debasher::get_process_outdir "${processname}"`
+        local generate_opts_funcname=`debasher::get_generate_opts_funcname ${processname}`
+        echo "sargs=\`debasher::gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\"\`"
     else
         local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
-        echo "sargs=\`get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\"\`"
+        echo "sargs=\`debasher::get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\"\`"
     fi
     echo "deserialize_args \"\${sargs}\""
 }
@@ -135,9 +135,9 @@ debasher::print_script_body_slurm_sched()
     local dirname=$2
     local processname=$3
     local opt_array_size=$4
-    local skip_funct=`get_skip_funcname ${processname}`
-    local reset_funct=`get_reset_funcname ${processname}`
-    local post_funct=`get_post_funcname ${processname}`
+    local skip_funct=`debasher::get_skip_funcname ${processname}`
+    local reset_funct=`debasher::get_reset_funcname ${processname}`
+    local post_funct=`debasher::get_post_funcname ${processname}`
 
     # Retrieve and deserialize process options
     debasher::print_opt_code_slurm_sched "${cmdline}" "${processname}" "${opt_array_size}"
@@ -147,21 +147,21 @@ debasher::print_script_body_slurm_sched()
         echo "${skip_funct} \"\${DESERIALIZED_ARGS[@]}\" && { echo \"Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code \$?\" >&2; exit 1; }"
     fi
 
-    echo "display_begin_process_message"
+    echo "debasher::display_begin_process_message"
 
     # Reset output directory
     if [ "${reset_funct}" = ${FUNCT_NOT_FOUND} ]; then
         if [ "${opt_array_size}" -eq 1 ]; then
-            echo "default_reset_outfiles_for_process $(printf '%q' "${dirname}") ${processname}"
+            echo "debasher::default_reset_outfiles_for_process $(printf '%q' "${dirname}") ${processname}"
         else
-            echo "default_reset_outfiles_for_process_array $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
+            echo "debasher::default_reset_outfiles_for_process_array $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
         fi
     else
         echo "${reset_funct} \"\${DESERIALIZED_ARGS[@]}\""
     fi
 
     # Write function to be executed
-    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
+    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`debasher::get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
     echo "${processname} \"\${DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
     echo "funct_exit_code=\${PIPESTATUS[0]}"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${processname} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${processname} successfully executed\" >&2; fi"
@@ -182,7 +182,7 @@ debasher::print_script_body_slurm_sched()
 ########
 debasher::print_script_foot_slurm_sched()
 {
-    echo "display_end_process_message"
+    echo "debasher::display_end_process_message"
 }
 
 ########
@@ -207,7 +207,7 @@ debasher::create_slurm_script()
     local dirname=$2
     local processname=$3
     local opt_array_size=$4
-    local fname=`get_script_filename "${dirname}" ${processname}`
+    local fname=`debasher::get_script_filename "${dirname}" ${processname}`
 
     # Write bash shebang
     local BASH_SHEBANG=`debasher::init_bash_shebang_var`
@@ -258,7 +258,7 @@ debasher::get_task_template_log_filename_slurm()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}_%a.${SCHED_LOG_FEXT}"
 }
@@ -273,7 +273,7 @@ debasher::get_slurm_output()
     local attempt_suffix=`debasher::get_slurm_attempt_suffix ${attempt_no}`
 
     if [ ${array_size} -eq 1 ]; then
-        local slurm_log_filename=`get_process_log_filename "${dirname}" ${processname}`
+        local slurm_log_filename=`debasher::get_process_log_filename "${dirname}" ${processname}`
         echo ${slurm_log_filename}${attempt_suffix}
     else
         local slurm_task_template_log_filename=`debasher::get_task_template_log_filename_slurm "${dirname}" ${processname}`
@@ -696,7 +696,7 @@ debasher::slurm_launch()
     # Initialize variables
     local dirname=$1
     local processname=$2
-    local file=`get_script_filename "${dirname}" ${processname}`
+    local file=`debasher::get_script_filename "${dirname}" ${processname}`
     local array_size=$3
     local task_array_list=$4
     local process_spec=$5
@@ -852,7 +852,7 @@ debasher::get_process_log_filename_slurm()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.${SCHED_LOG_FEXT}"
 }
@@ -864,7 +864,7 @@ debasher::get_process_last_attempt_logf_slurm()
     local processname=$2
 
     # Obtain number of log files
-    local logfname=`get_process_log_filename "$dirname" $processname`
+    local logfname=`debasher::get_process_log_filename "$dirname" $processname`
     local numlogf=0
     for f in "${logfname}"*; do
         numlogf=$((numlogf + 1))
@@ -886,7 +886,7 @@ debasher::get_process_log_preverif_filename_slurm()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.preverif.${SCHED_LOG_FEXT}"
 }
@@ -898,7 +898,7 @@ debasher::get_process_log_verif_filename_slurm()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.verif.${SCHED_LOG_FEXT}"
 }
@@ -910,7 +910,7 @@ debasher::get_process_log_signcomp_filename_slurm()
     local processname=$2
 
     # Get exec dir
-    execdir=`get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.signcomp.${SCHED_LOG_FEXT}"
 }
@@ -923,7 +923,7 @@ debasher::get_task_last_attempt_logf_slurm()
     local taskidx=$3
 
     # Obtain number of log files
-    local logfname=`get_task_log_filename "$dirname" "$processname" "$taskidx"`
+    local logfname=`debasher::get_task_log_filename "$dirname" "$processname" "$taskidx"`
     local numlogf=0
     for f in "${logfname}*"; do
         numlogf=$((numlogf + 1))
@@ -967,7 +967,7 @@ debasher::clean_process_files_slurm()
         local dirname=$1
         local processname=$2
 
-        local slurm_log_filename=`get_process_log_filename "${dirname}" ${processname}`
+        local slurm_log_filename=`debasher::get_process_log_filename "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_filename}*"
         local slurm_log_preverif=`debasher::get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_preverif}"
@@ -983,7 +983,7 @@ debasher::clean_process_files_slurm()
         local processname=$2
         local idx=$3
 
-        local slurm_task_log_filename=`get_task_log_filename "${dirname}" "${processname}" "${idx}"`
+        local slurm_task_log_filename=`debasher::get_task_log_filename "${dirname}" "${processname}" "${idx}"`
         if [ -f "${slurm_task_log_filename}" ]; then
             "${RM}" "${slurm_task_log_filename}"
         fi

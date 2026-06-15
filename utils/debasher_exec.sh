@@ -390,7 +390,7 @@ gen_final_procspec_file()
         # Check if dependencies were given
         if [ "${procdeps}" = "${ATTR_NOT_FOUND}" ]; then
             # Dependencies not given, so they should be obtained
-            procdeps=`get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
+            procdeps=`debasher::get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
 
             # Print process specification plus process dependencies
             debasher::add_additional_spec "${process_spec}" "${procdeps}"
@@ -457,7 +457,7 @@ show_cmdline_opts()
     while read process_spec; do
         # Extract process information
         local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
-        local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
+        local explain_cmdline_opts_funcname=`debasher::get_explain_cmdline_opts_funcname ${processname}`
         DIFFERENTIAL_CMDLINE_OPT_STR=""
         ${explain_cmdline_opts_funcname} || exit 1
         update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
@@ -500,7 +500,7 @@ check_process_opts()
         while read process_spec; do
             # Define options for process
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
-            define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
+            debasher::define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
         done < "${procspec_file}"
     }
 
@@ -514,14 +514,14 @@ check_process_opts()
             # Get process name
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
-            if ! uses_option_generator "${processname}"; then
+            if ! debasher::uses_option_generator "${processname}"; then
                 # Load current option list
                 load_curr_opt_list_loop "${cmdline}" "${processname}"
 
                 # Write option array to file (line by line)
                 local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
                 local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
-                write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
+                debasher::write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
                 # Clear variables
                 clear_curr_opt_list_array
@@ -572,7 +572,7 @@ check_process_opts()
                 local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
                 # Register fifos
-                register_fifos_used_by_process "${cmdline}" "${processname}"
+                debasher::register_fifos_used_by_process "${cmdline}" "${processname}"
             done < "${procspec_file}"
         fi
     }
@@ -634,7 +634,7 @@ handle_conda_requirements()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Process conda envs information
-            local conda_envs_funcname=`get_conda_envs_funcname "${processname}"`
+            local conda_envs_funcname=`debasher::get_conda_envs_funcname "${processname}"`
             if debasher::func_exists ${conda_envs_funcname}; then
                 echo "Handling conda requirements for process ${processname}..." >&2
                 ${conda_envs_funcname} || exit 1
@@ -663,7 +663,7 @@ handle_docker_requirements()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Process conda envs information
-            local docker_imgs_funcname=`get_docker_imgs_funcname "${processname}"`
+            local docker_imgs_funcname=`debasher::get_docker_imgs_funcname "${processname}"`
             if debasher::func_exists "${docker_imgs_funcname}"; then
                 echo "Handling docker requirements for process ${processname}..." >&2
                 "${docker_imgs_funcname}" || exit 1
@@ -693,7 +693,7 @@ define_reexec_processes_due_to_fifos()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Get fifo owners for process
-            local fifo_owners=`get_fifo_owners_for_process "${processname}"`
+            local fifo_owners=`debasher::get_fifo_owners_for_process "${processname}"`
 
             # Get status for process
             local status=`debasher::get_process_status "${dirname}" "${processname}"`
@@ -789,7 +789,7 @@ define_reexec_processes_due_to_code_update()
             # Extract process information
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             local status=`debasher::get_process_status "${dirname}" "${processname}"`
-            local script_filename=`get_script_filename "${dirname}" "${processname}"`
+            local script_filename=`debasher::get_script_filename "${dirname}" "${processname}"`
 
             # Handle checkings depending of process status
             if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
@@ -966,7 +966,7 @@ get_processdeps_from_detailed_spec()
     local pdeps=""
 
     # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
-    local separator=`get_processdeps_separator ${processdeps_spec}`
+    local separator=`debasher::get_processdeps_separator ${processdeps_spec}`
     if [ "${separator}" = "" ]; then
         local processdeps_spec_blanks=${processdeps_spec}
     else
@@ -974,9 +974,9 @@ get_processdeps_from_detailed_spec()
     fi
     local dep_spec
     for dep_spec in ${processdeps_spec_blanks}; do
-        local deptype=`get_deptype_part_in_dep ${dep_spec}`
+        local deptype=`debasher::get_deptype_part_in_dep ${dep_spec}`
         local mapped_deptype=`debasher::map_deptype_if_necessary ${deptype}`
-        local processname=`get_processname_part_in_dep ${dep_spec}`
+        local processname=`debasher::get_processname_part_in_dep ${dep_spec}`
         # Check if there is an id for the process
         if [ ! -z "${PIPE_EXEC_PROCESS_IDS[${processname}]}" ]; then
             if [ -z "${pdeps}" ]; then
@@ -1049,13 +1049,13 @@ prepare_files_and_dirs_for_process()
     # still prepared)
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Obtain array size
-        local array_size=`get_numtasks_for_process "${processname}"`
+        local array_size=`debasher::get_numtasks_for_process "${processname}"`
 
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
-            create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
+            debasher::create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
             create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
-            create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
+            debasher::create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
         else
             debasher::clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
@@ -1112,7 +1112,7 @@ launch_process()
     # Decide whether the process should be executed
     if [ "${status}" != "${FINISHED_PROCESS_STATUS}" -a "${status}" != "${INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
-        local opt_array_size=`get_numtasks_for_process "${processname}"`
+        local opt_array_size=`debasher::get_numtasks_for_process "${processname}"`
         debasher::create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
         # Launch process

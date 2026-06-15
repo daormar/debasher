@@ -895,7 +895,7 @@ get_value_descriptor_name()
     local opt=$2
 
     # Obtain output directory for process
-    local process_outdir=$(get_process_outdir "${process_name}")
+    local process_outdir=$(debasher::get_process_outdir "${process_name}")
 
     # Obtain value descriptor name
     local val_desc="${process_outdir}/${VALUE_DESCRIPTOR_NAME_PREFIX}${opt}"
@@ -1275,13 +1275,13 @@ load_curr_opt_list_loop()
 
         # If connected process uses a generator, the treatment should be
         # different
-        if uses_option_generator "${connected_proc}"; then
+        if debasher::uses_option_generator "${connected_proc}"; then
             # Obtain name of options generator
-            local generate_opts_funcname=`get_generate_opts_funcname ${connected_proc}`
+            local generate_opts_funcname=`debasher::get_generate_opts_funcname ${connected_proc}`
 
             # Call options generator (output stored into DESERIALIZED_ARGS)
             local connected_proc_spec=${INITIAL_PROCESS_SPEC["${connected_proc}"]}
-            local connected_proc_outdir=`get_process_outdir "${connected_proc}"`
+            local connected_proc_outdir=`debasher::get_process_outdir "${connected_proc}"`
             ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${task_idx}" || return 1
 
             # Option value from options
@@ -1342,13 +1342,13 @@ show_curr_opt_list()
     local processname=$2
 
     # Show array length
-    local num_tasks=`get_numtasks_for_process "${processname}"`
+    local num_tasks=`debasher::get_numtasks_for_process "${processname}"`
     echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${ASSOC_ARRAY_KEY_LEN} -> ${num_tasks}"
 
     # Show options
     local task_idx
     for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
-        local opts=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
+        local opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
         echo "${processname}${ASSOC_ARRAY_ELEM_SEP}${task_idx} -> ${opts}"
     done
 }
@@ -1363,12 +1363,12 @@ get_serial_process_opts()
     # Store options in array
     local process_opts_array=()
     local ellipsis=""
-    local num_tasks=`get_numtasks_for_process "${processname}"`
+    local num_tasks=`debasher::get_numtasks_for_process "${processname}"`
 
     local task_idx
     for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
         # Obtain process options
-        local process_opts=`get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
+        local process_opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
 
         # Obtain human-readable representation of process options
         hr_process_opts=$(sep_serialized_to_qstr "${ARG_SEP}" "$process_opts")

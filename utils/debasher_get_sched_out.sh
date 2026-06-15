@@ -137,14 +137,14 @@ get_out()
 
     # Get output
     if [ "${t_given}" -eq 0 ]; then
-        local sched_out_fname=`get_process_schedout_filename "${absdirname}" ${process} 1`
+        local sched_out_fname=`debasher::get_process_schedout_filename "${absdirname}" ${process} 1`
         if [ -f "${sched_out_fname}" ]; then
             cat "${sched_out_fname}"
         else
             echo "Error: scheduler output file could not be found!" >&2
         fi
     else
-        local sched_out_fname=`get_process_schedout_filename "${absdirname}" ${process} 2 "${task_idx}"`
+        local sched_out_fname=`debasher::get_process_schedout_filename "${absdirname}" ${process} 2 "${task_idx}"`
         if [ -f "${sched_out_fname}" ]; then
             cat "${sched_out_fname}"
         else

@@ -104,7 +104,7 @@ obtain_info_for_module()
     while read process_doc_func; do
         local processname=${process_doc_func%"${PROCESS_METHOD_NAME_DOCUMENT}"}
         if [  "${processname}" != "${modname}" ]; then
-            document_process "${processname}" "${showopts_given}"
+            debasher::document_process "${processname}" "${showopts_given}"
         fi
     done < <(get_process_doc_funcnames)
 }
