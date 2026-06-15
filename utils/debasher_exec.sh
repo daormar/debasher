@@ -250,7 +250,7 @@ load_module()
     echo "# Loading module ($pfile)..." >&2
 
     # Load debasher module containing the program to be executed
-    load_debasher_module "${pfile}" || exit 1
+    debasher::load_debasher_module "${pfile}" || exit 1
 
     echo "" >&2
 }
@@ -273,7 +273,7 @@ get_mod_vars_and_funcs()
 {
     echo "# Extracting module variables and functions..." >&2
 
-    local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${outd}"`
+    local vars_and_funcs_fname=`debasher::get_mod_vars_and_funcs_fname "${outd}"`
 
     # Get variables and functions from program modules
     "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log

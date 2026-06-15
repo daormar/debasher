@@ -124,7 +124,7 @@ process_status_for_pfile()
     fi
 
     # Load debasher modules
-    load_debasher_module "$pfile" || return 1
+    debasher::load_debasher_module "$pfile" || return 1
 
     # Configure scheduler
     configure_scheduler $sched || return 1

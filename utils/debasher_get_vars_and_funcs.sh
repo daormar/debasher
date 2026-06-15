@@ -34,7 +34,7 @@ unset_previous_vars_and_funcs()
     done
 }
 
-load_debasher_module()
+debasher::load_debasher_module()
 {
     # NOTE: this function is intentionally defined void
     :

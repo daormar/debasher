@@ -114,7 +114,7 @@ exec_program_func_for_module()
     local pfile=$1
 
     local program_funcname
-    program_funcname=`get_program_funcname "${pfile}"`
+    program_funcname=`debasher::get_program_funcname "${pfile}"`
 
     # Add program file to stack
     PROGRAM_FUNC_FOR_MODULE_PFILE_STACK+=("${pfile}")
@@ -446,7 +446,7 @@ add_debasher_program()
 {
     # Initialize variables
     local modname=$1
-    local pfile=$(determine_full_module_name "${modname}")
+    local pfile=$(debasher::determine_full_module_name "${modname}")
 
     # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution

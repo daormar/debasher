@@ -33,7 +33,7 @@ load_modules()
 
     local pfile=$1
 
-    load_debasher_module "${pfile}" || return 1
+    debasher::load_debasher_module "${pfile}" || return 1
 
     echo "" >&2
 }

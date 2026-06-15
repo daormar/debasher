@@ -971,7 +971,7 @@ register_module_program_shdirs()
     # modules
     local absmodname
     for absmodname in "${PROGRAM_MODULES[@]}"; do
-        local shrdirs_funcname=`get_shrdirs_funcname ${absmodname}`
+        local shrdirs_funcname=`debasher::get_shrdirs_funcname ${absmodname}`
         if func_exists "${shrdirs_funcname}"; then
             ${shrdirs_funcname} || exit 1
         fi

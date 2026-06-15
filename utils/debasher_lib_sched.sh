@@ -331,7 +331,7 @@ write_env_vars_and_funcs()
     {
         local dirname=$1
 
-        local vars_and_funcs_fname=`get_mod_vars_and_funcs_fname "${dirname}"`
+        local vars_and_funcs_fname=`debasher::get_mod_vars_and_funcs_fname "${dirname}"`
         "${CAT}" "${vars_and_funcs_fname}"
     }
 
