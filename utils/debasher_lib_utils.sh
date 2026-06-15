@@ -580,42 +580,6 @@ get_processname_from_caller_nameref()
 }
 
 ########
-get_suffix_from_processname()
-{
-    local processname=$1
-
-    # Check if processname incorporates a suffix
-    if [[ "$processname" == *"${PROCESSNAME_SUFFIX_SEP}"* ]]; then
-        suffix="${processname##*${PROCESSNAME_SUFFIX_SEP}}"
-        echo "${suffix}"
-    else
-        # The processname variable does not contain any suffix
-        echo ""
-    fi
-}
-
-########
-remove_suffix_from_processname()
-{
-    local processname=$1
-
-    echo "${processname%%${PROCESSNAME_SUFFIX_SEP}*}"
-}
-
-########
-get_processname_given_suffix()
-{
-    local processname=$1
-    local suffix=$2
-
-    if [ -z "${suffix}" ]; then
-        echo "${processname}"
-    else
-        echo "${processname}${PROCESSNAME_SUFFIX_SEP}${suffix}"
-    fi
-}
-
-########
 get_process_funcname()
 {
     local processname=$1
@@ -646,14 +610,7 @@ search_process_func()
     if func_exists "${process_function}"; then
         echo "${process_function}"
     else
-        # Check if function without process suffix exists
-        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${method_name}"`
-        if func_exists "${process_function}"; then
-            echo "${process_function}"
-        else
-            echo "${FUNCT_NOT_FOUND}"
-        fi
+        echo "${FUNCT_NOT_FOUND}"
     fi
 }
 
@@ -668,14 +625,7 @@ search_process_var()
     if var_exists "${process_var}"; then
         echo "${process_var}"
     else
-        # Check if function without process suffix exists
-        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        process_var=`get_process_varname "${processname_wo_proc_suffix}" "${method_name}"`
-        if var_exists "${process_var}"; then
-            echo "${process_var}"
-        else
-            echo "${VAR_NOT_FOUND}"
-        fi
+        echo "${VAR_NOT_FOUND}"
     fi
 }
 
@@ -691,14 +641,7 @@ search_process_func_nameref()
     if func_exists "${process_function}"; then
         var_ref="${process_function}"
     else
-        # Check if function without process suffix exists
-        local processname_wo_proc_suffix=`remove_suffix_from_processname ${processname}`
-        process_function=`get_process_funcname "${processname_wo_proc_suffix}" "${method_name}"`
-        if func_exists "${process_function}"; then
-            var_ref="${process_function}"
-        else
-            var_ref="${FUNCT_NOT_FOUND}"
-        fi
+        var_ref="${FUNCT_NOT_FOUND}"
     fi
 }
 
@@ -712,11 +655,6 @@ search_process_mandatory_func()
     local process_function=`get_process_funcname "${processname}" "${method_name}"`
     if func_exists "${process_function}"; then
         echo "${process_function}"
-    else
-        # Return function name without process suffix
-        local processname_wo_suffix=`remove_suffix_from_processname ${processname}`
-        process_wo_suffix_function=`get_process_funcname "${processname_wo_suffix}" "${method_name}"`
-        echo "${process_wo_suffix_function}"
     fi
 }
 

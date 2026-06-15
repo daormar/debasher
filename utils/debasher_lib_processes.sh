@@ -1041,43 +1041,6 @@ get_process_outdir()
 }
 
 ########
-get_adaptive_processname()
-{
-    local processname=$1
-
-    # Get caller process name
-    local caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
-
-    if [ -z "${caller_processname}" ]; then
-        caller_processname=`get_processname_from_caller "${PROCESS_METHOD_NAME_DEFINE_OPTS}"`
-    fi
-
-    # Get suffix of caller process name
-    local caller_suffix=`get_suffix_from_processname "${caller_processname}"`
-
-    # Get adaptive process name
-    local adaptive_processname=`get_processname_given_suffix "${processname}" "${caller_suffix}"`
-
-    if process_is_defined "${adaptive_processname}"; then
-        echo "${adaptive_processname}"
-    else
-        echo "${processname}"
-    fi
-}
-
-########
-get_process_outdir_adaptive()
-{
-    local processname=$1
-
-    # Get adaptive process name
-    local adaptive_processname=`get_adaptive_processname "${processname}"`
-
-    # Return result
-    get_process_outdir "${adaptive_processname}"
-}
-
-########
 get_process_outdir_given_process_spec()
 {
     local process_spec=$1
@@ -1090,31 +1053,6 @@ get_process_outdir_given_process_spec()
     local process_outd=`get_process_outdir_given_dirname ${outd} "${processname}"`
 
     echo ${process_outd}
-}
-
-########
-copy_process_func()
-{
-    local methodname=$1
-    local processname=$2
-    local processname_wo_suffix=`remove_suffix_from_processname "${processname}"`
-    local suffix=`get_suffix_from_processname "${processname}"`
-
-    if [ -n "${suffix}" ]; then
-        local process_function_wo_suffix=`get_process_funcname "${processname_wo_suffix}" "${methodname}"`
-        local process_function=`get_process_funcname "${processname}" "${methodname}"`
-        if func_exists "${process_function_wo_suffix}" && ! func_exists "${process_function}"; then
-            copy_func "${process_function_wo_suffix}" "${process_function}"
-        fi
-    fi
-}
-
-########
-copy_process_defopts_func()
-{
-    local processname=$1
-
-    copy_process_func "${PROCESS_METHOD_NAME_DEFINE_OPTS}" "${processname}"
 }
 
 ########
