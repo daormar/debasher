@@ -136,7 +136,7 @@ process_status_for_pfile()
         num_processes=$((num_processes + 1))
 
         # Extract process information
-        local processname=`extract_processname_from_process_spec "$process_spec"`
+        local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
         # If s option was given, continue to next iteration if process
         # name does not match with the given one

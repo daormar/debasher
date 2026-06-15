@@ -375,7 +375,7 @@ define_opts_for_process()
         # Initialize variables
         local cmdline=$1
         local process_spec=$2
-        local processname=`extract_processname_from_process_spec "${process_spec}"`
+        local processname=`debasher::extract_processname_from_process_spec "${process_spec}"`
         local process_outdir=`get_process_outdir "${processname}"`
 
         # Obtain define_opts function name and call it
@@ -388,7 +388,7 @@ define_opts_for_process()
         # Initialize variables
         local cmdline=$1
         local process_spec=$2
-        local processname=`extract_processname_from_process_spec "${process_spec}"`
+        local processname=`debasher::extract_processname_from_process_spec "${process_spec}"`
         local process_outdir=`get_process_outdir "${processname}"`
 
         # Check if process dependencies were pre-specified for all processes
@@ -461,7 +461,7 @@ find_dependency_for_process()
     local processname_part=$2
 
     # Obtain process dependencies separated by blanks
-    local processdeps=`extract_processdeps_from_process_spec "$process_spec"`
+    local processdeps=`debasher::extract_processdeps_from_process_spec "$process_spec"`
     local separator=`get_processdeps_separator ${processdeps}`
     if [ "${separator}" = "" ]; then
         local processdeps_blanks=${processdeps}
@@ -872,14 +872,14 @@ get_procdeps_for_process_cached()
     local process_spec=$2
 
     # Extract process information
-    local processname=`extract_processname_from_process_spec "$process_spec"`
+    local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
     # Check if process dependencies were already obtained
     if [[ -v PROCESS_DEPENDENCIES["$processname"] ]]; then
         echo "${PROCESS_DEPENDENCIES[$processname]}"
     else
         # Extract dependencies from process specification if given
-        local deps=`extract_processdeps_from_process_spec "${process_spec}"`
+        local deps=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
         if [ "${deps}" = "${ATTR_NOT_FOUND}" ]; then
             # No dependencies are provided in specification
             local deps=`get_procdeps_for_process "${cmdline}" "$processname"`
@@ -1046,7 +1046,7 @@ get_process_outdir_given_process_spec()
     local outd=${PROGRAM_OUTDIR}
 
     # Obtain output directory for process
-    local processname=`extract_processname_from_process_spec ${process_spec}`
+    local processname=`debasher::extract_processname_from_process_spec ${process_spec}`
     local process_outd=`get_process_outdir_given_dirname ${outd} "${processname}"`
 
     echo ${process_outd}

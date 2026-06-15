@@ -382,10 +382,10 @@ gen_final_procspec_file()
     # Iterate over process specifications
     while read process_spec; do
         # Extract process information
-        local processname=`extract_processname_from_process_spec "$process_spec"`
+        local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
         # Extract dependencies from process specification
-        local procdeps=`extract_processdeps_from_process_spec "${process_spec}"`
+        local procdeps=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
 
         # Check if dependencies were given
         if [ "${procdeps}" = "${ATTR_NOT_FOUND}" ]; then
@@ -393,7 +393,7 @@ gen_final_procspec_file()
             procdeps=`get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
 
             # Print process specification plus process dependencies
-            add_additional_spec "${process_spec}" "${procdeps}"
+            debasher::add_additional_spec "${process_spec}" "${procdeps}"
         else
             # Since the dependencies were given, just print process
             # specification
@@ -456,7 +456,7 @@ show_cmdline_opts()
     local process_spec
     while read process_spec; do
         # Extract process information
-        local processname=`extract_processname_from_process_spec "$process_spec"`
+        local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
         local explain_cmdline_opts_funcname=`get_explain_cmdline_opts_funcname ${processname}`
         DIFFERENTIAL_CMDLINE_OPT_STR=""
         ${explain_cmdline_opts_funcname} || exit 1
@@ -478,11 +478,11 @@ check_process_opts()
 
         while read process_spec; do
             # Store process specification
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             INITIAL_PROCESS_SPEC["${processname}"]=${process_spec}
 
             # Extract dependencies from process specification
-            local procdeps=`extract_processdeps_from_process_spec "${process_spec}"`
+            local procdeps=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
 
             # Check if dependencies were given
             ALL_PROCESS_DEPS_PRE_SPECIFIED=1
@@ -499,7 +499,7 @@ check_process_opts()
 
         while read process_spec; do
             # Define options for process
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
         done < "${procspec_file}"
     }
@@ -512,7 +512,7 @@ check_process_opts()
 
         while read process_spec; do
             # Get process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             if ! uses_option_generator "${processname}"; then
                 # Load current option list
@@ -536,7 +536,7 @@ check_process_opts()
 
         while read process_spec; do
             # Get process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             show_curr_opt_list "${cmdline}" "${processname}"
         done < "${procspec_file}"
@@ -550,7 +550,7 @@ check_process_opts()
 
         while read process_spec; do
             # Get process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Store process options in an array for visualization
             local serial_process_opts=`get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}"`
@@ -569,7 +569,7 @@ check_process_opts()
         if program_uses_fifos; then
             while read process_spec; do
                 # Extract process information
-                local processname=`extract_processname_from_process_spec "$process_spec"`
+                local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
                 # Register fifos
                 register_fifos_used_by_process "${cmdline}" "${processname}"
@@ -629,9 +629,9 @@ handle_conda_requirements()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Process conda envs information
             local conda_envs_funcname=`get_conda_envs_funcname "${processname}"`
@@ -658,9 +658,9 @@ handle_docker_requirements()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Process conda envs information
             local docker_imgs_funcname=`get_docker_imgs_funcname "${processname}"`
@@ -688,9 +688,9 @@ define_reexec_processes_due_to_fifos()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Get fifo owners for process
             local fifo_owners=`get_fifo_owners_for_process "${processname}"`
@@ -728,10 +728,10 @@ define_forced_exec_processes()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
-            local process_forced=`extract_force_from_process_spec "$process_spec" "force"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
+            local process_forced=`debasher::extract_force_from_process_spec "$process_spec" "force"`
             if [ ${process_forced} = "yes" ]; then
                 mark_process_as_reexec $processname ${FORCED_REEXEC_REASON}
             fi
@@ -785,9 +785,9 @@ define_reexec_processes_due_to_code_update()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             local status=`get_process_status "${dirname}" "${processname}"`
             local script_filename=`get_script_filename "${dirname}" "${processname}"`
 
@@ -1017,9 +1017,9 @@ prepare_files_and_dirs_for_processes()
 
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             prepare_files_and_dirs_for_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}"
         fi
@@ -1075,9 +1075,9 @@ revise_reexec_proc_status()
 
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Get process status
             local status=`get_process_status ${dirname} "${processname}"`
@@ -1117,7 +1117,7 @@ launch_process()
 
         # Launch process
         local task_array_list=`get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
-        local processdeps_spec=`extract_processdeps_from_process_spec "${process_spec}"`
+        local processdeps_spec=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
         local processdeps=`get_processdeps "${process_id_list}" "${processdeps_spec}"`
         launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
@@ -1150,9 +1150,9 @@ launch_processes()
 
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             launch_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
         fi
@@ -1188,9 +1188,9 @@ there_are_in_progress_processes()
 
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Obtain process status
             local status=`get_process_status ${dirname} "${processname}"`
@@ -1262,9 +1262,9 @@ launch_program_processes_debug()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process name
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             debug_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
         fi

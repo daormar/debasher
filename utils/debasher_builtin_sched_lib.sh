@@ -118,23 +118,23 @@ builtin_sched_init_process_info()
     # Read information about the processes to be executed
     local process_spec
     while read process_spec; do
-        if program_process_spec_is_ok "$process_spec"; then
+        if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
-            local processname=`extract_processname_from_process_spec "$process_spec"`
+            local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             local script_filename=`get_script_filename "${dirname}" ${processname}`
             local status=`get_process_status "${dirname}" ${processname}`
-            local processdeps=`extract_processdeps_from_process_spec "$process_spec"`
-            local spec_throttle=`extract_throttle_from_process_spec "$process_spec"`
+            local processdeps=`debasher::extract_processdeps_from_process_spec "$process_spec"`
+            local spec_throttle=`debasher::extract_throttle_from_process_spec "$process_spec"`
             local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
             local array_size=`get_numtasks_for_process "${processname}"`
 
             # Get cpus info
-            local cpus=`extract_cpus_from_process_spec "$process_spec"`
+            local cpus=`debasher::extract_cpus_from_process_spec "$process_spec"`
             str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $processname should be a natural number" >&2; return 1; }
 
             # Get mem info (NOTE: if multiple attempts specified, keep
             # memory specification of the first one)
-            local mem=`extract_mem_from_process_spec "$process_spec"`
+            local mem=`debasher::extract_mem_from_process_spec "$process_spec"`
             local attempt_no=1
             mem=`get_mem_attempt_value ${mem} ${attempt_no}`
             mem=`convert_mem_value_to_mb ${mem}` || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }

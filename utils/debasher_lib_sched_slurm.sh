@@ -506,11 +506,11 @@ slurm_launch_attempt()
     local augmented_deps=`combine_slurm_deps ${processdeps} ${attempt_deps}`
 
     # Retrieve specification
-    local cpus=`extract_cpus_from_process_spec "$process_spec"`
-    local account=`extract_account_from_process_spec "$process_spec"`
-    local partition=`extract_partition_from_process_spec "$process_spec"`
-    local nodes=`extract_nodes_from_process_spec "$process_spec"`
-    local spec_throttle=`extract_throttle_from_process_spec "$process_spec"`
+    local cpus=`debasher::extract_cpus_from_process_spec "$process_spec"`
+    local account=`debasher::extract_account_from_process_spec "$process_spec"`
+    local partition=`debasher::extract_partition_from_process_spec "$process_spec"`
+    local nodes=`debasher::extract_nodes_from_process_spec "$process_spec"`
+    local spec_throttle=`debasher::extract_throttle_from_process_spec "$process_spec"`
     local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
 
     # Define options for sbatch
@@ -575,9 +575,9 @@ slurm_launch_preverif_job()
     local attempt_deps=`slurm_get_attempt_deps ${attempt_jids}`
 
     # Retrieve specification
-    local account=`extract_account_from_process_spec "$process_spec"`
-    local partition=`extract_partition_from_process_spec "$process_spec"`
-    local nodes=`extract_nodes_from_process_spec "$process_spec"`
+    local account=`debasher::extract_account_from_process_spec "$process_spec"`
+    local partition=`debasher::extract_partition_from_process_spec "$process_spec"`
+    local nodes=`debasher::extract_nodes_from_process_spec "$process_spec"`
 
     # Define options
     local jobname="${processname}__preverif"
@@ -638,9 +638,9 @@ slurm_launch_verif_job()
     local preverif_jid=$6
 
     # Retrieve specification
-    local account=`extract_account_from_process_spec "$process_spec"`
-    local partition=`extract_partition_from_process_spec "$process_spec"`
-    local nodes=`extract_nodes_from_process_spec "$process_spec"`
+    local account=`debasher::extract_account_from_process_spec "$process_spec"`
+    local partition=`debasher::extract_partition_from_process_spec "$process_spec"`
+    local nodes=`debasher::extract_nodes_from_process_spec "$process_spec"`
 
     # Define options
     local jobname="${processname}__verif"
@@ -706,8 +706,8 @@ slurm_launch()
     # Launch execution attempts
     local attempt_no=0
     local attempt_jids=""
-    local mem=`extract_mem_from_process_spec "$process_spec"`
-    local time=`extract_time_from_process_spec "$process_spec"`
+    local mem=`debasher::extract_mem_from_process_spec "$process_spec"`
+    local time=`debasher::extract_time_from_process_spec "$process_spec"`
     local num_attempts=`get_num_attempts ${time} ${mem}`
     local attempt_no=1
 
