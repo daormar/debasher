@@ -122,7 +122,7 @@ builtin_sched_init_process_info()
             # Extract process information
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             local script_filename=`get_script_filename "${dirname}" ${processname}`
-            local status=`get_process_status "${dirname}" ${processname}`
+            local status=`debasher::get_process_status "${dirname}" ${processname}`
             local processdeps=`debasher::extract_processdeps_from_process_spec "$process_spec"`
             local spec_throttle=`debasher::extract_throttle_from_process_spec "$process_spec"`
             local sched_throttle=`get_scheduler_throttle ${spec_throttle}`
@@ -169,9 +169,9 @@ builtin_sched_revise_reexec_proc_status()
     local processname
     for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
         # If process is marked as reexec and it was finished, its process completion is reset
-        if process_marked_as_reexec ${processname}; then
+        if debasher::process_marked_as_reexec ${processname}; then
             if [ ${BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]} = ${FINISHED_PROCESS_STATUS} ]; then
-                reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
+                debasher::reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
                 BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${UNFINISHED_PROCESS_STATUS}
             fi
         fi
@@ -263,14 +263,14 @@ builtin_sched_get_array_task_status()
     local processname=$2
     local task_idx=$3
     local processdirname=`get_process_outdir_given_dirname "${dirname}" ${processname}`
-    local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${task_idx}`
+    local array_taskid_file=`debasher::get_array_taskid_filename "${dirname}" ${processname} ${task_idx}`
 
     if [ ! -f ${array_taskid_file} ]; then
         # Task is not started
         echo ${BUILTIN_SCHED_TODO_TASK_STATUS}
     else
         # Task was started
-        if array_task_is_finished "${dirname}" ${processname} ${task_idx}; then
+        if debasher::array_task_is_finished "${dirname}" ${processname} ${task_idx}; then
             echo ${BUILTIN_SCHED_FINISHED_TASK_STATUS}
         else
             # Task is not finished
@@ -454,7 +454,7 @@ builtin_sched_get_updated_process_status()
     for processname in "${!BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
         status=${BUILTIN_SCHED_CURR_PROCESS_STATUS[$processname]}
         if [ ${status} != ${BUILTIN_SCHED_FAILED_PROCESS_STATUS} -a ${status} != ${FINISHED_PROCESS_STATUS} ]; then
-            local updated_status=`get_process_status "${dirname}" ${processname}`
+            local updated_status=`debasher::get_process_status "${dirname}" ${processname}`
             BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]=${updated_status}
         fi
     done
@@ -1020,7 +1020,7 @@ builtin_sched_execute_funct_plus_postfunct()
     fi
 
     # Signal process completion
-    signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
+    debasher::signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
 
     display_end_process_message
 }
@@ -1133,11 +1133,11 @@ builtin_sched_launch()
 
     # Set variable indicating name of file storing PID
     if [ ${task_idx} = ${BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        local pid_file=`get_processid_filename "${dirname}" ${processname}`
+        local pid_file=`debasher::get_processid_filename "${dirname}" ${processname}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
         # Write pid
-        local pid_file=`get_array_taskid_filename "${dirname}" ${processname} ${task_idx}`
+        local pid_file=`debasher::get_array_taskid_filename "${dirname}" ${processname} ${task_idx}`
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
@@ -1170,7 +1170,7 @@ builtin_sched_execute_process()
     # Execute process
 
     ## Obtain process status
-    local status=`get_process_status "${dirname}" ${processname}`
+    local status=`debasher::get_process_status "${dirname}" ${processname}`
     echo "PROCESS: ${processname} (TASK_IDX: ${task_idx}) ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Create script
@@ -1261,7 +1261,7 @@ builtin_sched_clean_process_files()
         local dirname=$1
         local processname=$2
 
-        local processid_file=`get_processid_filename "${dirname}" ${processname}`
+        local processid_file=`debasher::get_processid_filename "${dirname}" ${processname}`
         "${RM}" -f "${processid_file}"
     }
 
@@ -1271,7 +1271,7 @@ builtin_sched_clean_process_files()
         local processname=$2
         local idx=$3
 
-        local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
+        local array_taskid_file=`debasher::get_array_taskid_filename "${dirname}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
             "${RM}" "${array_taskid_file}"
         fi

@@ -696,16 +696,16 @@ define_reexec_processes_due_to_fifos()
             local fifo_owners=`get_fifo_owners_for_process "${processname}"`
 
             # Get status for process
-            local status=`get_process_status "${dirname}" "${processname}"`
+            local status=`debasher::get_process_status "${dirname}" "${processname}"`
 
             # Mark process and fifo owners for reexecution
             if [ -n "${fifo_owners}" ]; then
                 if [ "${status}" = "${TODO_PROCESS_EXIT_CODE}" ] \
                        || [ "${status}" = "${UNFINISHED_PROCESS_STATUS}" ] \
                        || [ "${status}" = "${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ] ; then
-                    mark_process_as_reexec "${processname}" "${FIFO_REEXEC_REASON}"
+                    debasher::mark_process_as_reexec "${processname}" "${FIFO_REEXEC_REASON}"
                     while read -r fifo_owner; do
-                        mark_process_as_reexec "${fifo_owner}" "${FIFO_REEXEC_REASON}"
+                        debasher::mark_process_as_reexec "${fifo_owner}" "${FIFO_REEXEC_REASON}"
                     done <<< "${fifo_owners}"
                 fi
             fi
@@ -733,7 +733,7 @@ define_forced_exec_processes()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
             local process_forced=`debasher::extract_force_from_process_spec "$process_spec" "force"`
             if [ ${process_forced} = "yes" ]; then
-                mark_process_as_reexec $processname ${FORCED_REEXEC_REASON}
+                debasher::mark_process_as_reexec $processname ${FORCED_REEXEC_REASON}
             fi
         fi
     done < "${procspec_file}"
@@ -788,14 +788,14 @@ define_reexec_processes_due_to_code_update()
         if debasher::program_process_spec_is_ok "$process_spec"; then
             # Extract process information
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
-            local status=`get_process_status "${dirname}" "${processname}"`
+            local status=`debasher::get_process_status "${dirname}" "${processname}"`
             local script_filename=`get_script_filename "${dirname}" "${processname}"`
 
             # Handle checkings depending of process status
             if [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
                 if check_script_is_older_than_modules "${script_filename}"; then
                     echo "Warning: last execution of process ${processname} used outdated modules">&2
-                    mark_process_as_reexec "$processname" "${OUTDATED_CODE_REEXEC_REASON}"
+                    debasher::mark_process_as_reexec "$processname" "${OUTDATED_CODE_REEXEC_REASON}"
                 fi
             fi
 
@@ -820,7 +820,7 @@ define_reexec_processes_due_to_deps()
     local prg_file_pref=$1
 
     # Obtain list of processes to be reexecuted due to dependencies
-    local reexec_processes_string=`get_reexec_processes_as_string`
+    local reexec_processes_string=`debasher::get_reexec_processes_as_string`
     local reexec_processes_file="${outd}/${REEXEC_PROCESSES_LIST_FNAME}"
     "${debasher_libexecdir}"/db_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -p "${prg_file_pref}" > "${reexec_processes_file}" || return 1
 
@@ -829,7 +829,7 @@ define_reexec_processes_due_to_deps()
     local processname
     while read processname; do
         if [ "${processname}" != "" ]; then
-            mark_process_as_reexec "$processname" "${DEPS_REEXEC_REASON}"
+            debasher::mark_process_as_reexec "$processname" "${DEPS_REEXEC_REASON}"
         fi
     done < "${reexec_processes_file}"
 
@@ -841,7 +841,7 @@ define_reexec_processes_due_to_deps()
 ########
 print_reexec_processes()
 {
-    local reexec_processes_string=`get_reexec_processes_as_string`
+    local reexec_processes_string=`debasher::get_reexec_processes_as_string`
 
     if [ ! -z "${reexec_processes_string}" ]; then
         echo "# Printing list of processes to be reexecuted..." >&2
@@ -996,7 +996,7 @@ get_processdeps()
     local process_id_list=$1
     local processdeps_spec=$2
     case ${processdeps_spec} in
-            "${AFTEROK_PROCESSDEP_TYPE}${PROCESS_PLUS_DEPTYPE_SEP}all") apply_deptype_to_processids "${process_id_list}" "${AFTEROK_PROCESSDEP_TYPE}"
+            "${AFTEROK_PROCESSDEP_TYPE}${PROCESS_PLUS_DEPTYPE_SEP}all") debasher::apply_deptype_to_processids "${process_id_list}" "${AFTEROK_PROCESSDEP_TYPE}"
                     ;;
             "none") echo ""
                     ;;
@@ -1042,7 +1042,7 @@ prepare_files_and_dirs_for_process()
     echo "Preparing files and directories for process ${processname}" >&2
 
     # Obtain process status
-    local status=`get_process_status ${dirname} "${processname}"`
+    local status=`debasher::get_process_status ${dirname} "${processname}"`
 
     # Decide whether the process should be executed (NOTE: for a
     # process that should not be executed, files and directories are
@@ -1057,7 +1057,7 @@ prepare_files_and_dirs_for_process()
             create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
             create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
         else
-            clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
+            debasher::clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
         prepare_fifos_owned_by_process "${processname}"
     fi
@@ -1080,11 +1080,11 @@ revise_reexec_proc_status()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Get process status
-            local status=`get_process_status ${dirname} "${processname}"`
+            local status=`debasher::get_process_status ${dirname} "${processname}"`
 
             # If process is marked as reexec and it was finished, its process completion is reset
-            if process_marked_as_reexec ${processname} && [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
-                reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
+            if debasher::process_marked_as_reexec ${processname} && [ "${status}" = "${FINISHED_PROCESS_STATUS}" ]; then
+                debasher::reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
             fi
         fi
     done < "${procspec_file}"
@@ -1106,7 +1106,7 @@ launch_process()
     # Execute process
 
     # Obtain process status
-    local status=`get_process_status ${dirname} "${processname}"`
+    local status=`debasher::get_process_status ${dirname} "${processname}"`
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Decide whether the process should be executed
@@ -1116,7 +1116,7 @@ launch_process()
         create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
         # Launch process
-        local task_array_list=`get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
+        local task_array_list=`debasher::get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
         local processdeps_spec=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
         local processdeps=`get_processdeps "${process_id_list}" "${processdeps_spec}"`
         launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
@@ -1127,12 +1127,12 @@ launch_process()
         process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
 
         # Write id to file
-        write_process_id_info_to_file "${dirname}" "${processname}" "${launch_outvar}"
+        debasher::write_process_id_info_to_file "${dirname}" "${processname}" "${launch_outvar}"
     else
         # If process is in progress, its id should be retrieved so as to
         # correctly express dependencies
         if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
-            local sid_info=`read_process_id_info_from_file "${dirname}" "${processname}"` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
+            local sid_info=`debasher::read_process_id_info_from_file "${dirname}" "${processname}"` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
             local global_id=`get_global_id "${sid_info}"`
             PIPE_EXEC_PROCESS_IDS["${processname}"]=${global_id}
             process_id_list="${process_id_list}:${PIPE_EXEC_PROCESS_IDS[${processname}]}"
@@ -1193,7 +1193,7 @@ there_are_in_progress_processes()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Obtain process status
-            local status=`get_process_status ${dirname} "${processname}"`
+            local status=`debasher::get_process_status ${dirname} "${processname}"`
 
             if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
                 return 0
@@ -1241,7 +1241,7 @@ debug_process()
     # Debug process
 
     # Obtain process status
-    local status=`get_process_status "${dirname}" "${processname}"`
+    local status=`debasher::get_process_status "${dirname}" "${processname}"`
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 }
 

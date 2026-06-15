@@ -175,7 +175,7 @@ print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
-    local sign_process_completion_cmd=`get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}"`
+    local sign_process_completion_cmd=`debasher::get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}"`
     echo "${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 }
 
@@ -946,7 +946,7 @@ clean_process_files_slurm()
         local dirname=$1
         local processname=$2
 
-        local processid_file=`get_processid_filename "${dirname}" ${processname}`
+        local processid_file=`debasher::get_processid_filename "${dirname}" ${processname}`
         "${RM}" -f "${processid_file}"
     }
 
@@ -956,7 +956,7 @@ clean_process_files_slurm()
         local processname=$2
         local idx=$3
 
-        local array_taskid_file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
+        local array_taskid_file=`debasher::get_array_taskid_filename "${dirname}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
             "${RM}" "${array_taskid_file}"
         fi
@@ -999,7 +999,7 @@ clean_process_files_slurm()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
+        local pending_tasks=`debasher::get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             # Store string of pending tasks into an array
             local pending_tasks_array
@@ -1040,7 +1040,7 @@ get_elapsed_time_for_process_slurm()
     local processname=$2
 
     # Obtain finished filename
-    local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
+    local finished_filename=`debasher::get_process_finished_filename "${dirname}" ${processname}`
 
     if [ -f "${finished_filename}" ]; then
         # Get number of array tasks
@@ -1051,16 +1051,16 @@ get_elapsed_time_for_process_slurm()
                 ;;
             1)  # Process is not a task array
                 log_filename=`get_process_last_attempt_logf_slurm "${dirname}" ${processname}`
-                local difft=`get_elapsed_time_from_logfile "${log_filename}"`
+                local difft=`debasher::get_elapsed_time_from_logfile "${log_filename}"`
                 echo ${difft}
                ;;
             *)  # Process is a task array
                 local result=""
                 local taskidx
                 local sum_difft=0
-                for taskidx in `get_finished_array_task_indices "${dirname}" ${processname}`; do
+                for taskidx in `debasher::get_finished_array_task_indices "${dirname}" ${processname}`; do
                     local log_filename=`get_task_last_attempt_logf_slurm "${dirname}" ${processname} ${taskidx}`
-                    local difft=`get_elapsed_time_from_logfile "${log_filename}"`
+                    local difft=`debasher::get_elapsed_time_from_logfile "${log_filename}"`
                     sum_difft=$((sum_difft + difft))
                     if [ ! -z "${result}" ]; then
                         result="${result} "

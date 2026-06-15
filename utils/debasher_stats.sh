@@ -145,10 +145,10 @@ process_status_for_pfile()
         fi
 
         # Check process status
-        local status=`get_process_status "${absdirname}" ${processname}`
+        local status=`debasher::get_process_status "${absdirname}" ${processname}`
 
         # Get elapsed time if process finished
-        elapsed_time=`get_elapsed_time_for_process "${absdirname}" ${processname}`
+        elapsed_time=`debasher::get_elapsed_time_for_process "${absdirname}" ${processname}`
 
         # Print status
         echo "PROCESS: $processname ; STATUS: $status ; ELAPSED_TIME(s): ${elapsed_time}"

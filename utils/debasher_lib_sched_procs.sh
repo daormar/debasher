@@ -19,7 +19,7 @@
 ############################################
 
 ########
-get_processid_filename()
+debasher::get_processid_filename()
 {
     local dirname=$1
     local processname=$2
@@ -31,7 +31,7 @@ get_processid_filename()
 }
 
 ########
-get_array_taskid_filename()
+debasher::get_array_taskid_filename()
 {
     local dirname=$1
     local processname=$2
@@ -44,13 +44,13 @@ get_array_taskid_filename()
 }
 
 ########
-get_array_taskid()
+debasher::get_array_taskid()
 {
     local dirname=$1
     local processname=$2
     local idx=$3
 
-    file=`get_array_taskid_filename "${dirname}" ${processname} ${idx}`
+    file=`debasher::get_array_taskid_filename "${dirname}" ${processname} ${idx}`
     if [ -f "${file}" ]; then
         "${CAT}" "$file"
     else
@@ -59,7 +59,7 @@ get_array_taskid()
 }
 
 ########
-get_process_finished_filename_prefix()
+debasher::get_process_finished_filename_prefix()
 {
     local dirname=$1
     local processname=$2
@@ -71,32 +71,32 @@ get_process_finished_filename_prefix()
 }
 
 ########
-get_process_finished_filename()
+debasher::get_process_finished_filename()
 {
     local dirname=$1
     local processname=$2
 
     # Get prefix
-    local prefix=`get_process_finished_filename_prefix "${dirname}" "${processname}"`
+    local prefix=`debasher::get_process_finished_filename_prefix "${dirname}" "${processname}"`
 
     echo "${prefix}.${FINISHED_PROCESS_FEXT}"
 }
 
 ########
-get_task_finished_filename()
+debasher::get_task_finished_filename()
 {
     local dirname=$1
     local processname=$2
     local idx=$3
 
     # Get prefix
-    local prefix=`get_process_finished_filename_prefix "${dirname}" "${processname}"`
+    local prefix=`debasher::get_process_finished_filename_prefix "${dirname}" "${processname}"`
 
     echo "${prefix}_${idx}.${FINISHED_PROCESS_FEXT}"
 }
 
 ########
-apply_deptype_to_processids()
+debasher::apply_deptype_to_processids()
 {
     # Initialize variables
     local processids=$1
@@ -123,7 +123,7 @@ apply_deptype_to_processids()
 }
 
 ########
-get_list_of_pending_tasks_in_array()
+debasher::get_list_of_pending_tasks_in_array()
 {
     # NOTE: a pending task here is just one that is not finished
     local dirname=$1
@@ -132,7 +132,7 @@ get_list_of_pending_tasks_in_array()
 
     # Create associative map containing completed jobs
     local -A completed_tasks
-    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+    local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
     local file
     for file in "${finished_filename_pref}"_*.${FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
@@ -160,11 +160,11 @@ get_list_of_pending_tasks_in_array()
 }
 
 ########
-get_num_array_tasks()
+debasher::get_num_array_tasks()
 {
     local dirname=$1
     local processname=$2
-    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+    local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
 
     local num_tasks=0
     for file in "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}; do
@@ -178,11 +178,11 @@ get_num_array_tasks()
 }
 
 ########
-get_num_tasks_completed()
+debasher::get_num_tasks_completed()
 {
     local dirname=$1
     local processname=$2
-    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+    local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
 
     local num_tasks_completed=0
     for file in "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}; do
@@ -195,25 +195,25 @@ get_num_tasks_completed()
 }
 
 ########
-get_task_array_list()
+debasher::get_task_array_list()
 {
     local dirname=$1
     local processname=$2
     local array_size=$3
 
-    local num_completed_tasks=`get_num_tasks_completed "${dirname}" "${processname}"`
+    local num_completed_tasks=`debasher::get_num_tasks_completed "${dirname}" "${processname}"`
     if [ "${num_completed_tasks}" -eq 0 ]; then
         # No tasks were completed, return list containing all of them
         local last_task_idx=$((array_size - 1))
         echo "0-${last_task_idx}"
     else
         # Some tasks were completed, return list containing pending ones
-        get_list_of_pending_tasks_in_array "${dirname}" "${processname}" "${array_size}"
+        debasher::get_list_of_pending_tasks_in_array "${dirname}" "${processname}" "${array_size}"
     fi
 }
 
 ########
-reset_process_completion_signal()
+debasher::reset_process_completion_signal()
 {
     local dirname=$1
     local processname=$2
@@ -221,12 +221,12 @@ reset_process_completion_signal()
     # If process will be reexecuted, file signaling process completion should
     # be removed. Additionally, this action should be registered in a
     # specific associative array
-    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+    local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
     "${RM}" -f "${finished_filename_pref}"*.${FINISHED_PROCESS_FEXT}
 }
 
 ########
-clean_process_files()
+debasher::clean_process_files()
 {
     local dirname=$1
     local processname=$2
@@ -241,24 +241,24 @@ clean_process_files()
 }
 
 ########
-write_process_id_info_to_file()
+debasher::write_process_id_info_to_file()
 {
     local dirname=$1
     local processname=$2
     local id_info=$3
-    local filename=`get_processid_filename "${dirname}" ${processname}`
+    local filename=`debasher::get_processid_filename "${dirname}" ${processname}`
 
     echo ${id_info} > "$filename"
 }
 
 ########
-read_process_id_info_from_file()
+debasher::read_process_id_info_from_file()
 {
     local dirname=$1
     local processname=$2
 
     # Return id for process
-    local filename=`get_processid_filename "${dirname}" ${processname}`
+    local filename=`debasher::get_processid_filename "${dirname}" ${processname}`
     if [ -f "$filename" ]; then
         "${CAT}" "$filename"
     else
@@ -267,14 +267,14 @@ read_process_id_info_from_file()
 }
 
 ########
-read_ids_from_files()
+debasher::read_ids_from_files()
 {
     local dirname=$1
     local processname=$2
     local ids
 
     # Return id for process
-    local filename=`get_processid_filename "${dirname}" ${processname}`
+    local filename=`debasher::get_processid_filename "${dirname}" ${processname}`
     if [ -f "$filename" ]; then
         ids=`"${CAT}" "$filename"`
     fi
@@ -299,7 +299,7 @@ read_ids_from_files()
 }
 
 ########
-mark_process_as_reexec()
+debasher::mark_process_as_reexec()
 {
     local processname=$1
     local reason=$2
@@ -313,7 +313,7 @@ mark_process_as_reexec()
 }
 
 ########
-get_reexec_processes_as_string()
+debasher::get_reexec_processes_as_string()
 {
     local result=""
     for processname in "${!DEBASHER_REEXEC_PROCESSES[@]}"; do
@@ -328,7 +328,7 @@ get_reexec_processes_as_string()
 }
 
 ########
-process_marked_as_reexec()
+debasher::process_marked_as_reexec()
 {
     local processname=$1
 
@@ -340,7 +340,7 @@ process_marked_as_reexec()
 }
 
 ########
-signal_process_completion()
+debasher::signal_process_completion()
 {
     # Initialize variables
     local dirname=$1
@@ -350,16 +350,16 @@ signal_process_completion()
 
     # Signal completion
     if [ ${total} -eq 1 ]; then
-        local finished_filename=`get_process_finished_filename "${dirname}" ${processname}`
+        local finished_filename=`debasher::get_process_finished_filename "${dirname}" ${processname}`
         echo "Finished task idx: $idx ; Total: $total" > "${finished_filename}"
     else
-        local finished_filename=`get_task_finished_filename "${dirname}" ${processname} ${idx}`
+        local finished_filename=`debasher::get_task_finished_filename "${dirname}" ${processname} ${idx}`
         echo "Finished task idx: $idx ; Total: $total" > "${finished_filename}"
     fi
 }
 
 ########
-get_signal_process_completion_cmd()
+debasher::get_signal_process_completion_cmd()
 {
     # Initialize variables
     local dirname=$1
@@ -369,14 +369,14 @@ get_signal_process_completion_cmd()
 
     # Signal completion
     if [ ${total} -eq 1 ]; then
-        echo "echo \"Finished task idx: 0 ; Total: $total\" > `get_process_finished_filename "${dirname}" ${processname}`"
+        echo "echo \"Finished task idx: 0 ; Total: $total\" > `debasher::get_process_finished_filename "${dirname}" ${processname}`"
     else
-        echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" > \`get_task_finished_filename \"${dirname}\" ${processname} \${${taskidx_varname}}\`"
+        echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" > \`debasher::get_task_finished_filename \"${dirname}\" ${processname} \${${taskidx_varname}}\`"
     fi
 }
 
 ########
-stop_process()
+debasher::stop_process()
 {
     # Initialize variables
     local ids_info=$1
@@ -394,11 +394,11 @@ stop_process()
 }
 
 ########
-process_is_in_progress()
+debasher::process_is_in_progress()
 {
     local dirname=$1
     local processname=$2
-    local ids=`read_ids_from_files "$dirname" "$processname"`
+    local ids=`debasher::read_ids_from_files "$dirname" "$processname"`
 
     # Iterate over ids
     for id in ${ids}; do
@@ -414,7 +414,7 @@ process_is_in_progress()
 }
 
 ########
-get_launched_array_task_ids()
+debasher::get_launched_array_task_ids()
 {
     local dirname=$1
     local processname=$2
@@ -433,12 +433,12 @@ get_launched_array_task_ids()
 }
 
 ########
-get_finished_array_task_indices()
+debasher::get_finished_array_task_indices()
 {
     local dirname=$1
     local processname=$2
 
-    local finished_filename_pref=`get_process_finished_filename_prefix "${dirname}" ${processname}`
+    local finished_filename_pref=`debasher::get_process_finished_filename_prefix "${dirname}" ${processname}`
     local file
     for file in "${finished_filename_pref}"_*.${FINISHED_PROCESS_FEXT}; do
         if [ -f "${file}" ]; then
@@ -450,31 +450,31 @@ get_finished_array_task_indices()
 }
 
 ########
-array_task_is_finished()
+debasher::array_task_is_finished()
 {
     local dirname=$1
     local processname=$2
     local idx=$3
 
     # Check if finished task file exists
-    local finished_filename=`get_task_finished_filename "${dirname}" ${processname} "${idx}"`
+    local finished_filename=`debasher::get_task_finished_filename "${dirname}" ${processname} "${idx}"`
     if [ ! -f "${finished_filename}" ]; then
         return 1
     fi
 }
 
 ########
-process_is_finished()
+debasher::process_is_finished()
 {
     local dirname=$1
     local processname=$2
 
-    local num_tasks_completed=`get_num_tasks_completed "${dirname}" "${processname}"`
+    local num_tasks_completed=`debasher::get_num_tasks_completed "${dirname}" "${processname}"`
 
     if [ "${num_tasks_completed}" -eq 0 ]; then
         return 1
     else
-        local num_tasks=`get_num_array_tasks "${dirname}" "${processname}"`
+        local num_tasks=`debasher::get_num_array_tasks "${dirname}" "${processname}"`
         if [ "${num_tasks_completed}" -eq "${num_tasks}" ]; then
             return 0
         else
@@ -484,7 +484,7 @@ process_is_finished()
 }
 
 ########
-process_is_unfinished_but_runnable()
+debasher::process_is_unfinished_but_runnable()
 {
     local dirname=$1
     local processname=$2
@@ -508,7 +508,7 @@ process_is_unfinished_but_runnable()
 }
 
 ########
-get_elapsed_time_from_logfile()
+debasher::get_elapsed_time_from_logfile()
 {
     local log_filename=$1
     local start_date=`get_process_start_date "${log_filename}"`
@@ -525,7 +525,7 @@ get_elapsed_time_from_logfile()
 }
 
 ########
-get_elapsed_time_for_process()
+debasher::get_elapsed_time_for_process()
 {
     local dirname=$1
     local processname=$2
@@ -544,23 +544,23 @@ get_elapsed_time_for_process()
 }
 
 ########
-get_process_status()
+debasher::get_process_status()
 {
     local dirname=$1
     local processname=$2
     local script_filename=`get_script_filename "${dirname}" ${processname}`
 
     if [ -f "${script_filename}" ]; then
-        if process_is_in_progress "$dirname" "$processname"; then
+        if debasher::process_is_in_progress "$dirname" "$processname"; then
             echo "${INPROGRESS_PROCESS_STATUS}"
             return ${INPROGRESS_PROCESS_EXIT_CODE}
         fi
 
-        if process_is_finished "$dirname" "$processname"; then
+        if debasher::process_is_finished "$dirname" "$processname"; then
             echo "${FINISHED_PROCESS_STATUS}"
             return ${FINISHED_PROCESS_EXIT_CODE}
         else
-            if process_is_unfinished_but_runnable "$dirname" "$processname"; then
+            if debasher::process_is_unfinished_but_runnable "$dirname" "$processname"; then
                 echo "${UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}"
                 return ${UNFINISHED_BUT_RUNNABLE_PROCESS_EXIT_CODE}
             fi

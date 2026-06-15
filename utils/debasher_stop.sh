@@ -150,16 +150,16 @@ process_status_for_pfile()
         fi
 
         # Check process status
-        local status=`get_process_status "${absdirname}" ${processname}`
+        local status=`debasher::get_process_status "${absdirname}" ${processname}`
 
         # Obtain ids
         local ids_info
-        ids_info=`read_ids_from_files "${absdirname}" ${processname}`
+        ids_info=`debasher::read_ids_from_files "${absdirname}" ${processname}`
 
         # Print status
         if [ "${status}" = "${INPROGRESS_PROCESS_STATUS}" ]; then
             echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (Stopping...)"
-            stop_process "${ids_info}"
+            debasher::stop_process "${ids_info}"
         else
             echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (The process is not running)"
         fi

@@ -156,12 +156,12 @@ process_status_for_pfile()
         fi
 
         # Check process status
-        local status=`get_process_status "${absdirname}" ${processname}`
+        local status=`debasher::get_process_status "${absdirname}" ${processname}`
 
         # Obtain ids if requested
         local ids_info
         if [ ${i_given} -eq 1 ]; then
-            ids_info=`read_ids_from_files "${absdirname}" ${processname}`
+            ids_info=`debasher::read_ids_from_files "${absdirname}" ${processname}`
         fi
 
         # Print status
