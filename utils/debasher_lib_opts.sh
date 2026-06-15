@@ -697,7 +697,6 @@ debasher::define_cmdline_opt()
 #   define_cmdline_opt "${cmdline}" "-o" "optlist"
 #
 # The function does not return any value
-debasher::define_cmdline_opt()
 define_cmdline_opt() { debasher::define_cmdline_opt "$@"; }
 
 ########
