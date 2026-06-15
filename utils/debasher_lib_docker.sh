@@ -19,17 +19,19 @@
 ############################
 
 ########
-pull_docker_img()
+debasher::pull_docker_img()
 {
     local img_name=$1
 
-    if ! docker_img_exists "${img_name}"; then
+    if ! debasher::docker_img_exists "${img_name}"; then
         "${DOCKER}" pull "${img_name}" || return 1
     fi
 }
 
+pull_docker_img() { debasher::pull_docker_img "$@"; }
+
 ########
-docker_img_exists()
+debasher::docker_img_exists()
 {
     local img_name=$1
 
