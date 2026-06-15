@@ -29,8 +29,6 @@ print_desc()
 ########
 load_modules()
 {
-    echo "* Loading debasher modules..." >&2
-
     local pfile=$1
 
     debasher::load_debasher_module "${pfile}" || return 1
@@ -51,7 +49,13 @@ shift
 processname=$1
 shift
 
+echo "Loading debasher modules..." >&2
 load_modules "${pfile}" || exit 1
+echo "" >&2
+
+echo "Executing program function given in module..." >&2
+exec_program_func_for_module "${pfile}"
+echo "" >&2
 
 echo "Executing: $processname $opts" >&2
 "${processname}" "$@" || exit 1
