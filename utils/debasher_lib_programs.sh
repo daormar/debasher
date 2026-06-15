@@ -44,7 +44,7 @@ debasher::get_orig_outdir_from_command_line_file()
     workdir=`debasher::get_orig_workdir "${command_line_file}"` || return 1
     local cmdline
     qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"` || return 1
-    local outdir=`get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
+    local outdir=`debasher::get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
 
     # Retrieve original output directory
     if debasher::is_absolute_path "$outdir"; then
@@ -59,7 +59,7 @@ debasher::get_pfile_from_command_line_file()
 {
     local command_line_file=$1
     local qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"`
-    local pfile=`get_opt_value_from_quoted_cmd "$qcmdline" "--pfile"` || return 1
+    local pfile=`debasher::get_opt_value_from_quoted_cmd "$qcmdline" "--pfile"` || return 1
     echo "${pfile}"
 }
 
@@ -76,7 +76,7 @@ debasher::get_sched_from_command_line_file()
 {
     local command_line_file=$1
     local qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"`
-    local sched=`get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"` || return 1
+    local sched=`debasher::get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"` || return 1
     echo "${sched}"
 }
 

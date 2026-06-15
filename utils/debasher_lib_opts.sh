@@ -19,14 +19,14 @@
 ###############################
 
 ########
-esc_dq()
+debasher::esc_dq()
 {
     local escaped_str=${1//\"/\\\"};
     echo "${escaped_str}"
 }
 
 ########
-serialize_args()
+debasher::serialize_args()
 {
     local serial_args=""
     for arg in "$@"; do
@@ -40,7 +40,7 @@ serialize_args()
 }
 
 ########
-serialize_args_nameref()
+debasher::serialize_args_nameref()
 {
     local -n var_ref=$1;
     shift
@@ -56,7 +56,7 @@ serialize_args_nameref()
 }
 
 ########
-deserialize_args_given_sep()
+debasher::deserialize_args_given_sep()
 {
     local serial_args=$1
     local sep=$2
@@ -74,15 +74,15 @@ deserialize_args_given_sep()
 }
 
 ########
-deserialize_args()
+debasher::deserialize_args()
 {
     local serial_args=$1
 
-    deserialize_args_given_sep "${serial_args}" "${ARG_SEP}"
+    debasher::deserialize_args_given_sep "${serial_args}" "${ARG_SEP}"
 }
 
 ########
-serialize_cmd_as_qstr()
+debasher::serialize_cmd_as_qstr()
 {
     printf '%q ' "$@"
     printf '\n'
@@ -91,7 +91,7 @@ serialize_cmd_as_qstr()
 ########
 # Convert a string serialized with a custom separator to a printf '%q'
 # escaped string. The separator is passed as a parameter.
-sep_serialized_to_qstr()
+debasher::sep_serialized_to_qstr()
 {
     local sep=$1
     local sargs=$2
@@ -105,7 +105,7 @@ sep_serialized_to_qstr()
 }
 
 ########
-replace_blank_with_word()
+debasher::replace_blank_with_word()
 {
     local str=$1
     local word=$2
@@ -113,7 +113,7 @@ replace_blank_with_word()
 }
 
 ########
-replace_word_with_blank()
+debasher::replace_word_with_blank()
 {
     local str=$1
     local word=$2
@@ -121,13 +121,13 @@ replace_word_with_blank()
 }
 
 ########
-memoize_opts()
+debasher::memoize_opts()
 {
     local cmdline=$1
 
     # Convert string to array (result is placed into the
     # DESERIALIZED_ARGS variable)
-    deserialize_args "${cmdline}"
+    debasher::deserialize_args "${cmdline}"
 
     # Scan DESERIALIZED_ARGS
     local i=1
@@ -161,14 +161,14 @@ memoize_opts()
 }
 
 ########
-check_opt_given()
+debasher::check_opt_given()
 {
     local cmdline=$1
     local opt=$2
 
     # Convert string to array (result is placed into the
     # DESERIALIZED_ARGS variable)
-    deserialize_args "${cmdline}"
+    debasher::deserialize_args "${cmdline}"
 
     # Scan DESERIALIZED_ARGS
     i=0
@@ -184,7 +184,7 @@ check_opt_given()
 }
 
 ########
-check_memoized_opt()
+debasher::check_memoized_opt()
 {
     local opt=$1
 
@@ -197,23 +197,23 @@ check_memoized_opt()
 }
 
 ########
-check_opt_given_memoiz()
+debasher::check_opt_given_memoiz()
 {
     local cmdline=$1
     local opt=$2
 
     if [ "${LAST_PROC_LINE_MEMOPTS}" = "$cmdline" ]; then
         # Given line was previously processed, return memoized result
-        check_memoized_opt $opt || return 1
+        debasher::check_memoized_opt $opt || return 1
     else
         # Process not memoized line
-        memoize_opts "$cmdline"
+        debasher::memoize_opts "$cmdline"
 
         # Store processed line
         LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
-        check_memoized_opt $opt || return 1
+        debasher::check_memoized_opt $opt || return 1
     fi
 }
 
@@ -222,7 +222,7 @@ check_opt_given_memoiz()
 # The use of eval to parse the command string is safe because printf '%q'
 # guarantees that all special characters are escaped, preventing code injection.
 # Returns 1 if option not found.
-get_opt_value_from_quoted_cmd()
+debasher::get_opt_value_from_quoted_cmd()
 {
     local cmd_str=$1
     local opt=$2
@@ -244,7 +244,7 @@ get_opt_value_from_quoted_cmd()
 }
 
 ########
-get_opt_value_from_func_args()
+debasher::get_opt_value_from_func_args()
 {
     local opt=$1
 
@@ -293,41 +293,43 @@ get_opt_value_from_func_args()
 #
 # Examples
 #
-#   local str=$(read_opt_value_from_func_args "-s" "$@")
+#   local str=$(debasher::read_opt_value_from_func_args "-s" "$@")
 #
 # The function prints the value of the option if it was given, or the "OPT_NOT_FOUND" constant otherwise.
-read_opt_value_from_func_args()
+debasher::read_opt_value_from_func_args()
 {
     local opt=$1
 
     # Get value for option
-    local value=`get_opt_value_from_func_args "$@"`
+    local value=`debasher::get_opt_value_from_func_args "$@"`
 
     # If the value is a descriptor and opt is not an output option, then
     # we should read the descriptor
     if debasher::str_is_val_descriptor "${value}" && ! debasher::str_is_output_option "${opt}"; then
-        read_value_from_desc "${value}" || return 1
+        debasher::read_value_from_desc "${value}" || return 1
     else
         echo "${value}"
     fi
 }
 
+read_opt_value_from_func_args() { debasher::read_opt_value_from_func_args "$@"; }
+
 ########
-read_opt_value_from_line()
+debasher::read_opt_value_from_line()
 {
     local cmdline=$1
     local opt=$2
 
     # Convert string to array (result is placed into the
     # DESERIALIZED_ARGS variable)
-    deserialize_args "${cmdline}"
+    debasher::deserialize_args "${cmdline}"
 
     # Get opt value
-    get_opt_value_from_func_args "${opt}" "${DESERIALIZED_ARGS[@]}"
+    debasher::get_opt_value_from_func_args "${opt}" "${DESERIALIZED_ARGS[@]}"
 }
 
 ########
-read_memoized_opt_value()
+debasher::read_memoized_opt_value()
 {
     local opt=$1
 
@@ -342,28 +344,28 @@ read_memoized_opt_value()
 }
 
 ########
-read_opt_value_from_line_memoiz()
+debasher::read_opt_value_from_line_memoiz()
 {
     local cmdline=$1
     local opt=$2
 
     if [ "${LAST_PROC_LINE_MEMOPTS}" = "$cmdline" ]; then
         # Given line was previously processed, return memoized result
-        _OPT_VALUE_=`read_memoized_opt_value $opt` || return 1
+        _OPT_VALUE_=`debasher::read_memoized_opt_value $opt` || return 1
     else
         # Process not memoized line
-        memoize_opts "$cmdline"
+        debasher::memoize_opts "$cmdline"
 
         # Store processed line
         LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
-        _OPT_VALUE_=`read_memoized_opt_value $opt` || return 1
+        _OPT_VALUE_=`debasher::read_memoized_opt_value $opt` || return 1
     fi
 }
 
 ########
-update_opt_to_process_map()
+debasher::update_opt_to_process_map()
 {
     local processname=$1
     local opts=$2
@@ -378,7 +380,7 @@ update_opt_to_process_map()
 }
 
 ########
-explain_cmdline_req_opt()
+debasher::explain_cmdline_req_opt()
 {
     local opt=$1
     local type=$2
@@ -415,10 +417,10 @@ explain_cmdline_req_opt()
 #
 # Examples
 #
-#   explain_cmdline_opt "-s" "<string>" "String to be displayed"
+#   debasher::explain_cmdline_opt "-s" "<string>" "String to be displayed"
 #
 # The function does not return any value.
-explain_cmdline_opt()
+debasher::explain_cmdline_opt()
 {
     local opt=$1
     local type=$2
@@ -445,7 +447,7 @@ explain_cmdline_opt()
 }
 
 ########
-explain_cmdline_opt_wo_value()
+debasher::explain_cmdline_opt_wo_value()
 {
     local opt=$1
     local desc=$2
@@ -471,7 +473,7 @@ explain_cmdline_opt_wo_value()
 }
 
 ########
-print_program_opts()
+debasher::print_program_opts()
 {
     local lineno=0
 
@@ -508,7 +510,7 @@ print_program_opts()
 }
 
 ########
-define_fifo_task_idx()
+debasher::define_fifo_task_idx()
 {
     local fifoname=$1
     local processname=$2
@@ -526,7 +528,7 @@ define_fifo_task_idx()
 }
 
 ########
-define_fifo_opt()
+debasher::define_fifo_opt()
 {
     local opt=$1
     local fifoname=$2
@@ -546,17 +548,19 @@ define_fifo_opt()
     local task_idx=${#CURRENT_PROCESS_OPT_LIST[@]}
 
     # Define FIFO
-    define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
+    debasher::define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
 
     # Get absolute name of FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
+    local abs_fifoname=$(debasher::get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for FIFO
-    define_opt "${opt}" "${abs_fifoname}" "${varname}" || return 1
+    debasher::define_opt "${opt}" "${abs_fifoname}" "${varname}" || return 1
 }
 
+define_fifo_opt() { debasher::define_fifo_opt "$@"; }
+
 ########
-define_fifo_opt_generator()
+debasher::define_fifo_opt_generator()
 {
     local opt=$1
     local fifoname=$2
@@ -574,17 +578,19 @@ define_fifo_opt_generator()
     local processname=`debasher::get_processname_from_caller "${PROCESS_METHOD_NAME_GENERATE_OPTS}"`
 
     # Define FIFO
-    define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
+    debasher::define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
 
     # Get absolute name of FIFO
-    local abs_fifoname=$(get_absolute_fifoname "${process_name}" "${fifoname}")
+    local abs_fifoname=$(debasher::get_absolute_fifoname "${process_name}" "${fifoname}")
 
     # Define option for FIFO
-    define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
+    debasher::define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
 }
 
+define_fifo_opt_generator() { debasher::define_fifo_opt_generator "$@"; }
+
 ########
-define_shared_dir()
+debasher::define_shared_dir()
 {
     local shared_dir=$1
 
@@ -606,19 +612,23 @@ define_shared_dir()
     fi
 }
 
+define_shared_dir() { debasher::define_shared_dir "$@"; }
+
 ########
-get_cmdline_opt()
+debasher::get_cmdline_opt()
 {
     local cmdline=$1
     local opt=$2
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    debasher::read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value="${_OPT_VALUE_}"
 
     # Return option
     echo "${value}"
 }
+
+get_cmdline_opt() { debasher::get_cmdline_opt "$@"; }
 
 ########
 # Public: Defines process option from command-line option.
@@ -629,39 +639,43 @@ get_cmdline_opt()
 #
 # Examples
 #
-#   define_cmdline_opt "${cmdline}" "-o" "optlist"
+#   debasher::define_cmdline_opt "${cmdline}" "-o" "optlist"
 #
 # The function does not return any value
-define_cmdline_opt()
+debasher::define_cmdline_opt()
 {
     local cmdline=$1
     local opt=$2
     local varname=$3
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
+    debasher::read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
     local value="${_OPT_VALUE_}"
 
     # Add option
-    define_opt $opt "$value" $varname
+    debasher::define_opt $opt "$value" $varname
 }
 
+define_cmdline_opt() { debasher::define_cmdline_opt "$@"; }
+
 ########
-define_cmdline_opt_wo_value()
+debasher::define_cmdline_opt_wo_value()
 {
     local cmdline=$1
     local opt=$2
     local varname=$3
 
     # Get value for option
-    check_opt_given "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
+    debasher::check_opt_given "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
 
     # Add option
-    define_opt_wo_value "$opt" "$varname"
+    debasher::define_opt_wo_value "$opt" "$varname"
 }
 
+define_cmdline_opt_wo_value() { debasher::define_cmdline_opt_wo_value "$@"; }
+
 ########
-define_cmdline_nonmandatory_opt()
+debasher::define_cmdline_nonmandatory_opt()
 {
     local cmdline=$1
     local opt=$2
@@ -669,7 +683,7 @@ define_cmdline_nonmandatory_opt()
     local varname=$4
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    debasher::read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value="${_OPT_VALUE_}"
 
     if [ "$value" = ${OPT_NOT_FOUND} ]; then
@@ -677,35 +691,39 @@ define_cmdline_nonmandatory_opt()
     fi
 
     # Add option
-    define_opt "$opt" "$value" "$varname"
+    debasher::define_opt "$opt" "$value" "$varname"
 }
 
+define_cmdline_nonmandatory_opt() { debasher::define_cmdline_nonmandatory_opt "$@"; }
+
 ########
-define_cmdline_opt_if_given()
+debasher::define_cmdline_opt_if_given()
 {
     local cmdline=$1
     local opt=$2
     local varname=$3
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    debasher::read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value=${_OPT_VALUE_}
 
     if [ "$value" != ${OPT_NOT_FOUND} ]; then
         # Add option
-        define_opt "$opt" "$value" "$varname"
+        debasher::define_opt "$opt" "$value" "$varname"
     fi
 }
 
+define_cmdline_opt_if_given() { debasher::define_cmdline_opt_if_given "$@"; }
+
 ########
-define_cmdline_infile_opt()
+debasher::define_cmdline_infile_opt()
 {
     local cmdline=$1
     local opt=$2
     local varname=$3
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" $opt || { debasher::errmsg "$opt option not found" ; return 1; }
+    debasher::read_opt_value_from_line_memoiz "$cmdline" $opt || { debasher::errmsg "$opt option not found" ; return 1; }
     local value="${_OPT_VALUE_}"
 
     if [ "$value" != ${NOFILE} ]; then
@@ -717,11 +735,13 @@ define_cmdline_infile_opt()
     fi
 
     # Add option
-    define_opt "$opt" "$value" "$varname"
+    debasher::define_opt "$opt" "$value" "$varname"
 }
 
+define_cmdline_infile_opt() { debasher::define_cmdline_infile_opt "$@"; }
+
 ########
-define_cmdline_infile_nonmand_opt()
+debasher::define_cmdline_infile_nonmand_opt()
 {
     local cmdline=$1
     local opt=$2
@@ -729,7 +749,7 @@ define_cmdline_infile_nonmand_opt()
     local varname=$4
 
     # Get value for option
-    read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    debasher::read_opt_value_from_line_memoiz "$cmdline" "$opt"
     local value="${_OPT_VALUE_}"
 
     if [ "$value" = ${OPT_NOT_FOUND} ]; then
@@ -745,8 +765,10 @@ define_cmdline_infile_nonmand_opt()
     fi
 
     # Add option
-    define_opt $opt "$value" "$varname"
+    debasher::define_opt $opt "$value" "$varname"
 }
+
+define_cmdline_infile_nonmand_opt() { debasher::define_cmdline_infile_nonmand_opt "$@"; }
 
 ########
 # Public: Defines process option from the output of another process.
@@ -758,10 +780,10 @@ define_cmdline_infile_nonmand_opt()
 #
 # Examples
 #
-#   define_opt_from_proc_out "-in" "process_to_be_connected" "-out" optlist
+#   debasher::define_opt_from_proc_out "-in" "process_to_be_connected" "-out" optlist
 #
 # The function does not return any value
-define_opt_from_proc_out()
+debasher::define_opt_from_proc_out()
 {
     local opt=$1
     local proc=$2
@@ -769,11 +791,13 @@ define_opt_from_proc_out()
     local varname=$4
 
     local task_idx=0
-    define_opt_from_proc_task_out "${opt}" "${proc}" "${task_idx}" "${out_opt}" "${varname}"
+    debasher::define_opt_from_proc_task_out "${opt}" "${proc}" "${task_idx}" "${out_opt}" "${varname}"
 }
 
+define_opt_from_proc_out() { debasher::define_opt_from_proc_out "$@"; }
+
 ########
-define_opt_from_proc_task_out()
+debasher::define_opt_from_proc_task_out()
 {
     local opt=$1
     local proc=$2
@@ -799,11 +823,13 @@ define_opt_from_proc_task_out()
     local value=${PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}${process_opt_info}
 
     # Add option
-    define_opt "$opt" "$value" "$varname"
+    debasher::define_opt "$opt" "$value" "$varname"
 }
 
+define_opt_from_proc_task_out() { debasher::define_opt_from_proc_task_out "$@"; }
+
 ########
-optname_is_correct()
+debasher::optname_is_correct()
 {
     local funcname=$1
     local opt=$2
@@ -822,7 +848,7 @@ optname_is_correct()
 }
 
 ########
-optlist_varname_is_correct()
+debasher::optlist_varname_is_correct()
 {
     local funcname=$1
     local varname=$2
@@ -841,15 +867,15 @@ optlist_varname_is_correct()
 }
 
 ########
-define_opt_wo_value()
+debasher::define_opt_wo_value()
 {
     local opt=$1
     local varname=$2
     local -n var_ref=$3
 
     # Check parameters
-    optname_is_correct "${FUNCNAME}" "$opt" || return 1
-    optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
+    debasher::optname_is_correct "${FUNCNAME}" "$opt" || return 1
+    debasher::optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
 
     if [ -z "${var_ref}" ]; then
         var_ref="${opt}"
@@ -857,6 +883,8 @@ define_opt_wo_value()
         var_ref="${var_ref}${ARG_SEP}${opt}"
     fi
 }
+
+define_opt_wo_value() { debasher::define_opt_wo_value "$@"; }
 
 ########
 # Public: Defines process option.
@@ -867,10 +895,10 @@ define_opt_wo_value()
 #
 # Examples
 #
-#   define_opt "-o" "${value}" "optlist"
+#   debasher::define_opt "-o" "${value}" "optlist"
 #
 # The function does not return any value
-define_opt()
+debasher::define_opt()
 {
     local opt=$1
     local value=$2
@@ -878,8 +906,8 @@ define_opt()
     local -n var_ref=$3
 
     # Check parameters
-    optname_is_correct "${FUNCNAME}" "$opt" || return 1
-    optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
+    debasher::optname_is_correct "${FUNCNAME}" "$opt" || return 1
+    debasher::optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
 
     if [ -z "${var_ref}" ]; then
         var_ref="${opt}${ARG_SEP}${value}"
@@ -888,8 +916,10 @@ define_opt()
     fi
 }
 
+define_opt() { debasher::define_opt "$@"; }
+
 ########
-get_value_descriptor_name()
+debasher::get_value_descriptor_name()
 {
     local process_name=$1
     local opt=$2
@@ -904,7 +934,7 @@ get_value_descriptor_name()
 }
 
 ########
-define_value_desc_opt()
+debasher::define_value_desc_opt()
 {
     local opt=$1
     local varname=$2
@@ -916,14 +946,16 @@ define_value_desc_opt()
     fi
 
     # Get name of value descriptor
-    local val_desc=$(get_value_descriptor_name "${caller_proc_name}" "${opt}")
+    local val_desc=$(debasher::get_value_descriptor_name "${caller_proc_name}" "${opt}")
 
     # Define option
-    define_opt "${opt}" "${val_desc}" "${varname}"
+    debasher::define_opt "${opt}" "${val_desc}" "${varname}"
 }
 
+define_value_desc_opt() { debasher::define_value_desc_opt "$@"; }
+
 ########
-define_infile_opt()
+debasher::define_infile_opt()
 {
     local opt=$1
     local value=$2
@@ -935,11 +967,11 @@ define_infile_opt()
     # Absolutize path
     value=`debasher::get_absolute_path "${value}"`
 
-    define_opt "${opt}" "${value}" "${varname}"
+    debasher::define_opt "${opt}" "${value}" "${varname}"
 }
 
 ########
-define_indir_opt()
+debasher::define_indir_opt()
 {
     local opt=$1
     local value=$2
@@ -951,21 +983,21 @@ define_indir_opt()
     # Absolutize path
     value=`debasher::get_absolute_path "${value}"`
 
-    define_opt "${opt}" "${value}" "${varname}"
+    debasher::define_opt "${opt}" "${value}" "${varname}"
 }
 
 ########
-show_program_shdirs()
+debasher::show_program_shdirs()
 {
     local dirname
     for dirname in "${!PROGRAM_SHDIRS[@]}"; do
-        local absdir=`get_absolute_shdirname "$dirname"`
+        local absdir=`debasher::get_absolute_shdirname "$dirname"`
         echo "${absdir}"
     done
 }
 
 ########
-register_module_program_shdirs()
+debasher::register_module_program_shdirs()
 {
     # Populate associative array of shared directories for the loaded
     # modules
@@ -979,14 +1011,14 @@ register_module_program_shdirs()
 }
 
 ########
-create_mod_shdirs()
+debasher::create_mod_shdirs()
 {
     # Create shared directories for modules
     local dirname
     for dirname in "${!PROGRAM_SHDIRS[@]}"; do
         local owner=${PROGRAM_SHDIRS["${dirname}"]}
         if [ "${owner}" = "${SHDIR_MODULE_OWNER}" ]; then
-            local absdir=`get_absolute_shdirname "$dirname"`
+            local absdir=`debasher::get_absolute_shdirname "$dirname"`
             if [ ! -d "${absdir}" ]; then
                 "${MKDIR}" -p "${absdir}" || exit 1
             fi
@@ -995,7 +1027,7 @@ create_mod_shdirs()
 }
 
 ########
-create_shdirs_owned_by_process()
+debasher::create_shdirs_owned_by_process()
 {
     local processname=$1
     # Create shared directories for process
@@ -1003,7 +1035,7 @@ create_shdirs_owned_by_process()
     for dirname in "${!PROGRAM_SHDIRS[@]}"; do
         local owner=${PROGRAM_SHDIRS["${dirname}"]}
         if [ "${processname}" = "${owner}" ]; then
-            local absdir=`get_absolute_shdirname "$dirname"`
+            local absdir=`debasher::get_absolute_shdirname "$dirname"`
             if [ ! -d "${absdir}" ]; then
                 "${MKDIR}" -p "${absdir}" || exit 1
             fi
@@ -1012,7 +1044,7 @@ create_shdirs_owned_by_process()
 }
 
 ########
-show_program_fifos()
+debasher::show_program_fifos()
 {
     local augm_fifoname
     for augm_fifoname in "${!PROGRAM_FIFOS[@]}"; do
@@ -1021,12 +1053,12 @@ show_program_fifos()
 }
 
 ########
-prepare_fifos_owned_by_process()
+debasher::prepare_fifos_owned_by_process()
 {
     local processname=$1
 
     # Obtain name of directory for FIFOS
-    local fifodir=`get_absolute_fifodir`
+    local fifodir=`debasher::get_absolute_fifodir`
 
     # Create FIFOS
     local augm_fifoname
@@ -1047,7 +1079,7 @@ prepare_fifos_owned_by_process()
 }
 
 ########
-get_absolute_shdirname()
+debasher::get_absolute_shdirname()
 {
     local shdirname=$1
 
@@ -1056,24 +1088,24 @@ get_absolute_shdirname()
 }
 
 ########
-get_absolute_fifodir()
+debasher::get_absolute_fifodir()
 {
     echo "${PROGRAM_OUTDIR}/${DEBASHER_FIFOS_DIRNAME}"
 }
 
 ########
-get_absolute_fifoname()
+debasher::get_absolute_fifoname()
 {
     local owner_process=$1
     local fifoname=$2
     local augm_fifoname="${owner_process}/${fifoname}"
-    local fifodir=`get_absolute_fifodir`
+    local fifodir=`debasher::get_absolute_fifodir`
 
     echo "${fifodir}/${augm_fifoname}"
 }
 
 ########
-get_augm_fifoname_from_absname()
+debasher::get_augm_fifoname_from_absname()
 {
     local absname=$1
 
@@ -1085,13 +1117,13 @@ get_augm_fifoname_from_absname()
 }
 
 ########
-get_absolute_condadir()
+debasher::get_absolute_condadir()
 {
     echo "${PROGRAM_OUTDIR}/${DEBASHER_CONDA_DIRNAME}"
 }
 
 ########
-clear_curr_opt_list_array()
+debasher::clear_curr_opt_list_array()
 {
     unset CURRENT_PROCESS_OPT_LIST
     declare -ga CURRENT_PROCESS_OPT_LIST
@@ -1104,10 +1136,10 @@ clear_curr_opt_list_array()
 #
 # Examples
 #
-#   save_opt_list optlist
+#   debasher::save_opt_list optlist
 #
 # The function does not return any value
-save_opt_list()
+debasher::save_opt_list()
 {
     generate_opt_list()
     {
@@ -1122,7 +1154,7 @@ save_opt_list()
         declare -nl opt_list=${opt_list_name}
 
         # Iterate over options
-        deserialize_args "${opts}"
+        debasher::deserialize_args "${opts}"
         local i=0
         while [ $i -lt ${#DESERIALIZED_ARGS[@]} ]; do
             # Check if option was found
@@ -1195,7 +1227,7 @@ save_opt_list()
         local task_idx=$2
         local opts=$3
 
-        deserialize_args "${opts}"
+        debasher::deserialize_args "${opts}"
         get_output_opts_info "${processname}" "${task_idx}" "${DESERIALIZED_ARGS[@]}"
     }
 
@@ -1229,7 +1261,7 @@ save_opt_list()
 
         # Put options in DESERIALIZED_ARGS (this is the only thing that
         # should be done by the generator here)
-        deserialize_args "${opts}"
+        debasher::deserialize_args "${opts}"
     }
 
     # Initialize variables
@@ -1255,8 +1287,10 @@ save_opt_list()
     exit 1
 }
 
+save_opt_list() { debasher::save_opt_list "$@"; }
+
 ########
-load_curr_opt_list_loop()
+debasher::load_curr_opt_list_loop()
 {
     # WARNING: The resolve_proc_output_desc function should be called in
     # a subshell, otherwise it may clash with the caller due to its use
@@ -1268,7 +1302,7 @@ load_curr_opt_list_loop()
 
         # Extract information of connected process
         local connected_proc_info="${value#$PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
-        deserialize_args_given_sep "${connected_proc_info}" "${ASSOC_ARRAY_ELEM_SEP}"
+        debasher::deserialize_args_given_sep "${connected_proc_info}" "${ASSOC_ARRAY_ELEM_SEP}"
         local connected_proc=${DESERIALIZED_ARGS[0]}
         local connected_proc_task_idx=${DESERIALIZED_ARGS[1]}
         local connected_proc_opt=${DESERIALIZED_ARGS[2]}
@@ -1285,7 +1319,7 @@ load_curr_opt_list_loop()
             ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${task_idx}" || return 1
 
             # Option value from options
-            value=`get_opt_value_from_func_args "${connected_proc_opt}" "${DESERIALIZED_ARGS[@]}"`
+            value=`debasher::get_opt_value_from_func_args "${connected_proc_opt}" "${DESERIALIZED_ARGS[@]}"`
 
             # Obtain value from list
             echo ${value}
@@ -1304,7 +1338,7 @@ load_curr_opt_list_loop()
     local processname=$2
 
     # Clear array
-    clear_curr_opt_list_array
+    debasher::clear_curr_opt_list_array
 
     # Iterate over process options
     local task_idx
@@ -1326,9 +1360,9 @@ load_curr_opt_list_loop()
 
             # Define option
             if [ -z "${value}" ]; then
-                define_opt_wo_value "${opt}" "_load_curr_opt_list_loop_optlist"
+                debasher::define_opt_wo_value "${opt}" "_load_curr_opt_list_loop_optlist"
             else
-                define_opt "${opt}" "${value}" "_load_curr_opt_list_loop_optlist"
+                debasher::define_opt "${opt}" "${value}" "_load_curr_opt_list_loop_optlist"
             fi
         done
         CURRENT_PROCESS_OPT_LIST+=("${_load_curr_opt_list_loop_optlist}")
@@ -1336,7 +1370,7 @@ load_curr_opt_list_loop()
 }
 
 ########
-show_curr_opt_list()
+debasher::show_curr_opt_list()
 {
     local cmdline=$1
     local processname=$2
@@ -1354,7 +1388,7 @@ show_curr_opt_list()
 }
 
 ########
-get_serial_process_opts()
+debasher::get_serial_process_opts()
 {
     local cmdline=$1
     local processname=$2
@@ -1371,7 +1405,7 @@ get_serial_process_opts()
         local process_opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
 
         # Obtain human-readable representation of process options
-        hr_process_opts=$(sep_serialized_to_qstr "${ARG_SEP}" "$process_opts")
+        hr_process_opts=$(debasher::sep_serialized_to_qstr "${ARG_SEP}" "$process_opts")
         process_opts_array+=("${hr_process_opts}")
 
         # Exit loop if maximum number of options is exceeded
@@ -1389,7 +1423,7 @@ get_serial_process_opts()
 }
 
 ########
-show_out_values_for_processes()
+debasher::show_out_values_for_processes()
 {
     for outval in "${!OUT_VALUE_TO_PROCESSES[@]}"; do
         echo "${outval} -> ${OUT_VALUE_TO_PROCESSES[${outval}]}"
@@ -1397,7 +1431,7 @@ show_out_values_for_processes()
 }
 
 ########
-get_proc_out_opt_from_desc()
+debasher::get_proc_out_opt_from_desc()
 {
     local proc_out_opt_descriptor=$1
 
@@ -1408,7 +1442,7 @@ get_proc_out_opt_from_desc()
 }
 
 ########
-write_value_to_desc()
+debasher::write_value_to_desc()
 {
     local value=$1
     local value_descriptor=$2
@@ -1416,16 +1450,20 @@ write_value_to_desc()
     echo "${value}" > "${value_descriptor}"
 }
 
+write_value_to_desc() { debasher::write_value_to_desc "$@"; }
+
 ########
-read_value_from_desc()
+debasher::read_value_from_desc()
 {
     local value_descriptor=$1
 
     cat "${value_descriptor}"
 }
 
+read_value_to_desc() { debasher::read_value_to_desc "$@"; }
+
 ########
-get_sched_opts_dir_given_basedir()
+debasher::get_sched_opts_dir_given_basedir()
 {
     local dirname=$1
 
@@ -1433,17 +1471,17 @@ get_sched_opts_dir_given_basedir()
 }
 
 ########
-get_sched_opts_dir()
+debasher::get_sched_opts_dir()
 {
-    get_sched_opts_dir_given_basedir "${PROGRAM_OUTDIR}"
+    debasher::get_sched_opts_dir_given_basedir "${PROGRAM_OUTDIR}"
 }
 
 ########
-get_sched_opts_fname_for_process()
+debasher::get_sched_opts_fname_for_process()
 {
     local dirname=$1
     local processname=$2
 
-    local sched_opts_dir=`get_sched_opts_dir_given_basedir "${dirname}"`
+    local sched_opts_dir=`debasher::get_sched_opts_dir_given_basedir "${dirname}"`
     echo "${sched_opts_dir}/${SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX}${processname}"
 }

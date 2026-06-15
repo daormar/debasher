@@ -212,7 +212,7 @@ process_pars()
         dflt_nodes_opt=`get_dflt_nodes_opt`
 
         # Print command to execute program
-        serialize_cmd_as_qstr "${debasher_exec_path}" --pfile "${pfile}" --sched "${sched}" ${dflt_nodes_opt} "${prg_sopts_arr[@]}" "${prg_opts_arr[@]}"
+        debasher::serialize_cmd_as_qstr "${debasher_exec_path}" --pfile "${pfile}" --sched "${sched}" ${dflt_nodes_opt} "${prg_sopts_arr[@]}" "${prg_opts_arr[@]}"
 
         entry_num=$((entry_num + 1))
 

@@ -266,7 +266,7 @@ extract_outd_from_pipe_exec_cmd()
 {
     local pipe_exec_cmd=$1
 
-    get_opt_value_from_quoted_cmd "$pipe_exec_cmd" "--outdir"
+    debasher::get_opt_value_from_quoted_cmd "$pipe_exec_cmd" "--outdir"
 }
 
 ########

@@ -977,7 +977,7 @@ builtin_sched_execute_funct_plus_postfunct()
 
     # Convert serialized process options to array (result is placed into
     # the DESERIALIZED_ARGS variable)
-    deserialize_args "${sargs}"
+    debasher::deserialize_args "${sargs}"
 
     # Execute process skip function if it was provided
     if [ "${skip_funct}" != ${FUNCT_NOT_FOUND} ]; then
@@ -1339,11 +1339,11 @@ builtin_sched_prepare_files_and_dirs_for_process()
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
             debasher::create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
-            create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
+            debasher::create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         else
             builtin_sched_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         fi
-        prepare_fifos_owned_by_process ${processname}
+        debasher::prepare_fifos_owned_by_process ${processname}
 
         # Create output directory
         debasher::create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }

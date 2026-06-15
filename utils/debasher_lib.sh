@@ -260,7 +260,7 @@ declare -A PROGRAM_SHDIRS
 declare -A PROGRAM_FIFOS
 
 # Declare associative array to store users of fifos (The process
-# defining the FIFO with define_fifo_opt becomes the owner)
+# defining the FIFO with debasher::define_fifo_opt becomes the owner)
 declare -A FIFO_USERS
 
 # Declare general scheduler-related variables

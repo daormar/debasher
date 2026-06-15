@@ -121,10 +121,10 @@ debasher::print_opt_code_slurm_sched()
         local generate_opts_funcname=`debasher::get_generate_opts_funcname ${processname}`
         echo "sargs=\`debasher::gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\"\`"
     else
-        local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
+        local opts_fname=`debasher::get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
         echo "sargs=\`debasher::get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\"\`"
     fi
-    echo "deserialize_args \"\${sargs}\""
+    echo "debasher::deserialize_args \"\${sargs}\""
 }
 
 ########

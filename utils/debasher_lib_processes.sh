@@ -273,15 +273,15 @@ debasher::gen_opts_for_process_and_task()
 
         # Extract information of connected process
         local connected_proc_info="${value#$PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
-        deserialize_args_given_sep "${connected_proc_info}" "${ASSOC_ARRAY_ELEM_SEP}"
+        debasher::deserialize_args_given_sep "${connected_proc_info}" "${ASSOC_ARRAY_ELEM_SEP}"
         local connected_proc=${DESERIALIZED_ARGS[0]}
         local connected_proc_task_idx=${DESERIALIZED_ARGS[1]}
         local connected_proc_opt=${DESERIALIZED_ARGS[2]}
 
         # Resolve descriptor
         sargs=`debasher::get_opts_for_process_and_task "${cmdline}" "${connected_proc}" "${connected_proc_task_idx}"`
-        deserialize_args "${sargs}"
-        value=`get_opt_value_from_func_args "${connected_proc_opt}" "${DESERIALIZED_ARGS[@]}"`
+        debasher::deserialize_args "${sargs}"
+        value=`debasher::get_opt_value_from_func_args "${connected_proc_opt}" "${DESERIALIZED_ARGS[@]}"`
 
         echo "${value}"
     }
@@ -317,7 +317,7 @@ debasher::gen_opts_for_process_and_task()
     resolve_proc_out_descriptors "${cmdline}"
 
     # Obtain serialized args
-    serialize_args_nameref "sargs_nr" "${DESERIALIZED_ARGS[@]}"
+    debasher::serialize_args_nameref "sargs_nr" "${DESERIALIZED_ARGS[@]}"
     echo "${sargs_nr}"
 }
 
@@ -352,7 +352,7 @@ debasher::get_opts_for_process_and_task()
         local proc_outdir=`debasher::get_process_outdir "${processname}"`
         debasher::gen_opts_for_process_and_task  "${cmdline}" "${processname}" "${proc_outdir}" "${generate_opts_funcname}" "${task_idx}"
     else
-        local opts_fname=`get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
+        local opts_fname=`debasher::get_sched_opts_fname_for_process "${PROGRAM_OUTDIR}" "${processname}"`
         debasher::get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
     fi
 }
@@ -724,7 +724,7 @@ debasher::get_procdeps_for_process_cached()
 
             # Iterate over task options
             local opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
-            deserialize_args "${opts}"
+            debasher::deserialize_args "${opts}"
             local i
             for i in "${!DESERIALIZED_ARGS[@]}"; do
                 # Check if a value represents an absolute path
@@ -741,7 +741,7 @@ debasher::get_procdeps_for_process_cached()
                                 # another process (or processes)
 
                                 # Check if the value represents a FIFO
-                                local augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
+                                local augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
                                 if [[ -v PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
                                     # The value represents a FIFO
                                     local proc_plus_idx=${PROGRAM_FIFOS["${augm_fifoname}"]}
@@ -914,7 +914,7 @@ debasher::register_fifos_used_by_process()
 
         # Iterate over task options
         local opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
-        deserialize_args "${opts}"
+        debasher::deserialize_args "${opts}"
         for i in "${!DESERIALIZED_ARGS[@]}"; do
             # Check if a value represents an absolute path
             local value="${DESERIALIZED_ARGS[i]}"
@@ -925,7 +925,7 @@ debasher::register_fifos_used_by_process()
                     # Check if the option associated to the value is
                     # not an output option
                     if debasher::str_is_option "${opt}" && ! debasher::str_is_output_option "${opt}"; then
-                        augm_fifoname=`get_augm_fifoname_from_absname "${value}"`
+                        augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
                         if [[ -v PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
                             # The value is a FIFO
                             local proc_plus_idx=${PROGRAM_FIFOS["${augm_fifoname}"]}

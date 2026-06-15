@@ -25,7 +25,7 @@ debasher::define_conda_env()
     local yml_file=$2
 
     if ! debasher::conda_env_exists "${env_name}"; then
-        local condadir=`get_absolute_condadir`
+        local condadir=`debasher::get_absolute_condadir`
 
         # Obtain absolute yml file name
         local abs_yml_fname=`debasher::get_abs_yml_fname "${yml_file}"`
@@ -82,7 +82,7 @@ debasher::get_abs_yml_fname()
     local yml_fname=$1
 
     # Obtain array with directories
-    deserialize_args_given_sep "${DEBASHER_YML_DIR}" "${DEBASHER_YML_DIR_SEP}"
+    debasher::deserialize_args_given_sep "${DEBASHER_YML_DIR}" "${DEBASHER_YML_DIR_SEP}"
 
     # Search module in directories listed in DEBASHER_YML_DIR
     local dir

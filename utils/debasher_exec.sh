@@ -460,11 +460,11 @@ show_cmdline_opts()
         local explain_cmdline_opts_funcname=`debasher::get_explain_cmdline_opts_funcname ${processname}`
         DIFFERENTIAL_CMDLINE_OPT_STR=""
         ${explain_cmdline_opts_funcname} || exit 1
-        update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+        debasher::update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
     done < "${procspec_file}"
 
     # Print options
-    print_program_opts
+    debasher::print_program_opts
 
     echo "" >&2
 }
@@ -516,15 +516,15 @@ check_process_opts()
 
             if ! debasher::uses_option_generator "${processname}"; then
                 # Load current option list
-                load_curr_opt_list_loop "${cmdline}" "${processname}"
+                debasher::load_curr_opt_list_loop "${cmdline}" "${processname}"
 
                 # Write option array to file (line by line)
                 local opt_array_size=${PROCESS_OPT_LIST_LEN["${processname}"]}
-                local opts_fname=`get_sched_opts_fname_for_process "${dirname}" "${processname}"`
+                local opts_fname=`debasher::get_sched_opts_fname_for_process "${dirname}" "${processname}"`
                 debasher::write_opt_array "CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
                 # Clear variables
-                clear_curr_opt_list_array
+                debasher::clear_curr_opt_list_array
             fi
         done < "${procspec_file}"
     }
@@ -538,7 +538,7 @@ check_process_opts()
             # Get process name
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
-            show_curr_opt_list "${cmdline}" "${processname}"
+            debasher::show_curr_opt_list "${cmdline}" "${processname}"
         done < "${procspec_file}"
     }
 
@@ -553,7 +553,7 @@ check_process_opts()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             # Store process options in an array for visualization
-            local serial_process_opts=`get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}"`
+            local serial_process_opts=`debasher::get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}"`
 
             # Print info about options
             echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
@@ -588,7 +588,7 @@ check_process_opts()
     local out_fifos_file=$6
 
     # Clear scheduler options directory
-    local sched_opts_dir=`get_sched_opts_dir_given_basedir "${dirname}"`
+    local sched_opts_dir=`debasher::get_sched_opts_dir_given_basedir "${dirname}"`
     "${RM}" -f "${sched_opts_dir}"/*
 
     # Get initial process specification information
@@ -613,7 +613,7 @@ check_process_opts()
     register_fifo_users "${cmdline}" "${procspec_file}" || return 1
 
     # Print info about fifos
-    show_program_fifos > "${out_fifos_file}" || return 1
+    debasher::show_program_fifos > "${out_fifos_file}" || return 1
 
     echo "" >&2
 }
@@ -914,16 +914,16 @@ create_basic_dirs()
     local execdir=`debasher::get_prg_exec_dir`
     "${MKDIR}" -p "${execdir}" || { echo "Error! cannot create exec directory" >&2; return 1; }
 
-    local sched_opts_dir=`get_sched_opts_dir`
+    local sched_opts_dir=`debasher::get_sched_opts_dir`
     "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
 
     local graphsdir=`debasher::get_prg_graphs_dir`
     "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 
-    local fifodir=`get_absolute_fifodir`
+    local fifodir=`debasher::get_absolute_fifodir`
     "${MKDIR}" -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
 
-    local condadir=`get_absolute_condadir`
+    local condadir=`debasher::get_absolute_condadir`
     if [ ${conda_support_given} -eq 1 ]; then
         "${MKDIR}" -p "${condadir}"
     fi
@@ -941,10 +941,10 @@ create_mod_shared_dirs()
     # Create shared directories required by the program processes
     # IMPORTANT NOTE: the following functions can only be executed after
     # loading program modules
-    register_module_program_shdirs
-    create_mod_shdirs
+    debasher::register_module_program_shdirs
+    debasher::create_mod_shdirs
 
-    show_program_shdirs >&2
+    debasher::show_program_shdirs >&2
 
     echo "Creation complete" >&2
 
@@ -955,7 +955,7 @@ create_mod_shared_dirs()
 print_command_line()
 {
     echo "cd $PWD" > "${outd}/${PRG_COMMAND_LINE_BASENAME}"
-    sep_serialized_to_qstr "${ARG_SEP}" "${command_line}" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
+    debasher::sep_serialized_to_qstr "${ARG_SEP}" "${command_line}" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
     echo "" >> "${outd}/${PRG_COMMAND_LINE_BASENAME}"
 }
 
@@ -1054,12 +1054,12 @@ prepare_files_and_dirs_for_process()
         # Prepare files and directories for process
         if [ "${status}" = "${TODO_PROCESS_STATUS}" ]; then
             debasher::create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
-            create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
+            debasher::create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
             debasher::create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
         else
             debasher::clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
-        prepare_fifos_owned_by_process "${processname}"
+        debasher::prepare_fifos_owned_by_process "${processname}"
     fi
 }
 
@@ -1311,7 +1311,7 @@ if [ $# -eq 0 ]; then
 fi
 
 # Save command line
-command_line=`serialize_args "$0" "$@"`
+command_line=`debasher::serialize_args "$0" "$@"`
 
 read_pars "$@" || exit 1
 
