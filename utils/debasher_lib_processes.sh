@@ -378,9 +378,6 @@ define_opts_for_process()
         local processname=`extract_processname_from_process_spec "${process_spec}"`
         local process_outdir=`get_process_outdir "${processname}"`
 
-        # Copy processname_def_opts function if necessary
-        copy_process_defopts_func "${processname}"
-
         # Obtain define_opts function name and call it
         local define_opts_funcname=`get_define_opts_funcname "${processname}"`
         ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
