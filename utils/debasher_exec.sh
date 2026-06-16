@@ -1401,7 +1401,7 @@ else
         else
             sched=`debasher::determine_scheduler`
             if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
-                debasher_builtin_sched_execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 print_post_exec_wait_help
             else
                 revise_reexec_proc_status "${command_line}" "${outd}" "${procspec_file}" || return 1
