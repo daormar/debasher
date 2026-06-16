@@ -154,14 +154,58 @@ debasher::get_prg_graphs_dir()
 }
 
 ########
+debasher::processname_contains_invalid_characters()
+{
+    local processname="$1"
+
+    # Check characters
+    if [[ "$processname" =~ ^[a-zA-Z_][a-zA-Z_0-9]*$ ]]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+########
+debasher::processname_contains_reserved_suffixes()
+{
+    local processname="$1"
+
+    # Check process methods
+    for method in "${DEBASHER_PROCESS_METHODS[@]}"; do
+        if [[ "$processname" == "$method" || "$processname" == *_"$method" ]]; then
+            return 0
+        fi
+    done
+
+    # Check HereDoc suffixes
+    for suffix in "${DEBASHER_HEREDOC_SUFFIXES[@]}"; do
+        if [[ "$processname" == "$suffix" || "$processname" == *_"$suffix" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+########
 debasher::is_valid_processname()
 {
-    local input="$1"
-    if [[ "$input" =~ ^[a-zA-Z_][a-zA-Z_0-9]*$ ]]; then
-        return 0  # True
-    else
-        return 1  # False
+    local processname="$1"
+
+    # Check characters
+    if debasher::processname_contains_invalid_characters "${processname}"; then
+        echo "Process name ${processname} contains invalid characters. The name should only contain letters, digits or the underscore character" >&2
+        return 1
     fi
+
+    # Check suffixes
+    if debasher::processname_contains_reserved_suffixes "${processname}"; then
+        echo "Process name '${processname}' collides with method '${method}'" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 ########
@@ -411,7 +455,7 @@ debasher::add_debasher_process()
 
     # Check correctness of process name and abort execution if necessary
     if ! debasher::is_valid_processname "${processname}"; then
-        echo "Error: process name ${processname} not valid. It should contain letters, digits or the underscore character. Aborting execution..." >&2
+        echo "Error: process name ${processname} not valid. Aborting execution..." >&2
         exit 1
     fi
 
