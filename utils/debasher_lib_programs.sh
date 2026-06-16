@@ -335,8 +335,8 @@ debasher::add_debasher_process_heredoc()
     # Heredoc code was provided for process
     debasher::create_process_func_heredoc "${processname}" || return 1
 
-    # Store process name in associative array. For each process, the
-    # program file of the program that adds it is registered
+    # Store process name in associative array (the variable name
+    # containing the heredoc is also stored)
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${comm_varname}"
 }
 
@@ -345,8 +345,7 @@ debasher::add_debasher_process_func()
 {
     local processname=$1
 
-    # Store process name in associative array. For each process, the
-    # program file of the program that adds it is registered
+    # Store process name in associative array
     DEBASHER_PROGRAM_PROCESSES["${processname}"]=1
 }
 
@@ -380,8 +379,8 @@ debasher::add_debasher_process_alias()
     # Create process function
     debasher::create_process_func_alias "${processname}" "${expanded_process_alias}"
 
-    # Store process name in associative array. For each process, the
-    # program file of the program that adds it is registered
+    # Store process name in associative array (alias information is also
+    # stored)
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
 }
 
