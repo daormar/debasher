@@ -1153,6 +1153,8 @@ debasher::get_absolute_shdirname()
     echo "${DEBASHER_PROGRAM_OUTDIR}/${shdirname}"
 }
 
+get_absolute_shdirname() { debasher::get_absolute_shdirname "$@"; }
+
 ########
 debasher::get_absolute_fifodir()
 {
