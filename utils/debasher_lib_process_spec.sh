@@ -102,11 +102,10 @@ debasher::extract_attr_from_process_comp_specs()
 ########
 debasher::extract_attr_from_process_additional_specs()
 {
-    local process_comp_specs=$1
+    local process_additional_specs=$1
     local attrname=$2
 
-    IFS="${DEBASHER_ADDITIONAL_PROCSPECS_SEP}" read -r -a fields <<< "${process_comp_specs}"
-
+    IFS="${DEBASHER_ADDITIONAL_PROCSPECS_SEP}" read -r -a fields <<< "${process_additional_specs}"
     local field
     for field in "${fields[@]}"; do
         field=$(debasher::str_trim "${field}")
@@ -199,7 +198,7 @@ debasher::extract_force_from_process_spec()
 {
     local process_spec=$1
     local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
-    debasher::extract_attr_from_process_additional_specs "${process_addictional_specs}" "force"
+    debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "force"
 }
 
 ########
@@ -207,5 +206,5 @@ debasher::extract_alias_from_process_spec()
 {
     local process_spec=$1
     local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
-    debasher::extract_attr_from_process_additional_specs "${process_addictional_specs}" "alias"
+    debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias"
 }
