@@ -310,7 +310,7 @@ debasher::get_script_log_filenames()
             debasher::get_script_log_filenames_slurm "${exec_dirname}"
             ;;
         ${DEBASHER_BUILTIN_SCHEDULER})
-            get_script_log_filenames_builtin "${exec_dirname}"
+            builtin_sched_get_script_log_filenames "${exec_dirname}"
             ;;
     esac
 }

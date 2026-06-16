@@ -1053,7 +1053,7 @@ builtin_sched_print_script_foot()
 }
 
 ########
-write_env_vars_and_funcs_builtin()
+builtin_sched_write_env_vars_and_funcs()
 {
     local dirname=$1
 
@@ -1062,10 +1062,9 @@ write_env_vars_and_funcs_builtin()
 
     # Write builtin sched environment functions
     declare -f builtin_sched_print_pid_to_file
-    declare -f get_task_log_filename_builtin
     declare -f builtin_sched_execute_funct_plus_postfunct
     declare -f debasher::seq_execute_builtin
-    declare -f get_script_log_filenames_builtin
+    declare -f builtin_sched_get_script_log_filenames
 }
 
 ########
@@ -1083,7 +1082,7 @@ builtin_sched_create_script()
     echo ${BASH_SHEBANG} > "${fname}" || return 1
 
     # Write environment variables
-    write_env_vars_and_funcs_builtin "${dirname}" | debasher::exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
+    builtin_sched_write_env_vars_and_funcs "${dirname}" | debasher::exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
 
     # Print header
     builtin_sched_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
@@ -1099,7 +1098,7 @@ builtin_sched_create_script()
 }
 
 ########
-wait_until_file_exists()
+builtin_sched_wait_until_file_exists()
 {
     local pid_file=$1
     local max_num_iters=$2
@@ -1147,7 +1146,7 @@ builtin_sched_launch()
 
     # Wait for PID file to be created
     local max_num_iters=10000
-    wait_until_file_exists "${pid_file}" ${max_num_iters} || return 1
+    builtin_sched_wait_until_file_exists "${pid_file}" ${max_num_iters} || return 1
 
     # Unset variables
     if [ ${task_idx} != ${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
@@ -1447,7 +1446,7 @@ builtin_sched_execute_program_processes()
 }
 
 ########
-get_script_log_filenames_builtin()
+builtin_sched_get_script_log_filenames()
 {
     local exec_dirname=$1
 

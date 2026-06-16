@@ -106,7 +106,7 @@ debasher::get_elapsed_time_for_process_builtin()
             0)  echo ${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
                 ;;
             1)  # Process is not a task array
-                log_filename=`get_process_log_filename_builtin "${dirname}" ${processname}`
+                log_filename=`debasher::get_process_log_filename "${dirname}" ${processname}`
                 local difft=`debasher::get_elapsed_time_from_logfile "${log_filename}"`
                 echo ${difft}
                 ;;
@@ -114,7 +114,7 @@ debasher::get_elapsed_time_for_process_builtin()
                 local result=""
                 local taskidx
                 for taskidx in `debasher::get_finished_array_task_indices "${dirname}" ${processname}`; do
-                    local log_filename=`get_task_log_filename_builtin "${dirname}" ${processname} ${taskidx}`
+                    local log_filename=`debasher::get_task_log_filename "${dirname}" ${processname} ${taskidx}`
                     local difft=`debasher::get_elapsed_time_from_logfile "${log_filename}"`
                     if [ ! -z "${result}" ]; then
                         result="${result} "
