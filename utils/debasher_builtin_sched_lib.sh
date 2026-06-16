@@ -886,8 +886,8 @@ builtin_sched_get_debug_sel_processes_info()
     local sel_processes
     local knapsack_name
     for knapsack_name in ${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES}; do
-        sname=`builtinsched_extract_process_from_knapsack_name ${knapsack_name}`
-        tidx=`builtinsched_extract_task_idx_from_knapsack_name ${knapsack_name}`
+        sname=`builtin_sched_extract_process_from_knapsack_name ${knapsack_name}`
+        tidx=`builtin_sched_extract_task_idx_from_knapsack_name ${knapsack_name}`
         sel_processes="${sel_processes} ${knapsack_name} -> ${sname},${tidx};"
     done
     echo $sel_processes
@@ -912,7 +912,7 @@ builtin_sched_select_processes_to_be_exec()
     local -A BUILTIN_SCHED_EXECUTABLE_PROCESSES
     builtin_sched_get_executable_processes "${dirname}"
 
-    if [ ${builtinsched_debug} -eq 1 ]; then
+    if [ ${builtin_sched_debug} -eq 1 ]; then
         local process_status=`builtin_sched_get_debug_process_status_info`
         echo "[BUILTIN_SCHED] - DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS: ${process_status}"
         echo "[BUILTIN_SCHED] - COMPUTATIONAL RESOURCES: total cpus= ${DEBASHER_BUILTIN_SCHED_CPUS}, allocated cpus= ${DEBASHER_BUILTIN_SCHED_ALLOC_CPUS}; total mem= ${DEBASHER_BUILTIN_SCHED_MEM}, allocated mem= ${DEBASHER_BUILTIN_SCHED_ALLOC_MEM}"
@@ -925,7 +925,7 @@ builtin_sched_select_processes_to_be_exec()
     if [ ${num_exec_processes} -gt 0 ]; then
         builtin_sched_solve_knapsack "${dirname}"
 
-        if [ ${builtinsched_debug} -eq 1 ]; then
+        if [ ${builtin_sched_debug} -eq 1 ]; then
             local sel_processes=`builtin_sched_get_debug_sel_processes_info`
             echo "[BUILTIN_SCHED] - DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES: ${sel_processes}" 2>&1
         fi
@@ -1192,7 +1192,7 @@ builtin_sched_execute_process()
 }
 
 ########
-builtinsched_extract_process_from_knapsack_name()
+builtin_sched_extract_process_from_knapsack_name()
 {
     local knapsack_name=$1
     local process_idx=`echo "${knapsack_name}" | "${AWK}" -F "_" '{print $1}'`
@@ -1200,7 +1200,7 @@ builtinsched_extract_process_from_knapsack_name()
 }
 
 ########
-builtinsched_extract_task_idx_from_knapsack_name()
+builtin_sched_extract_task_idx_from_knapsack_name()
 {
     local knapsack_name=$1
     local tidx=`echo "${knapsack_name}" | "${AWK}" -F "_" '{print $2}'`
@@ -1220,8 +1220,8 @@ builtin_sched_exec_processes_and_update_status()
     local knapsack_name
     for knapsack_name in ${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES}; do
         # Extract process name and task id
-        processname=`builtinsched_extract_process_from_knapsack_name "${knapsack_name}"`
-        task_idx=`builtinsched_extract_task_idx_from_knapsack_name "${knapsack_name}"`
+        processname=`builtin_sched_extract_process_from_knapsack_name "${knapsack_name}"`
+        task_idx=`builtin_sched_extract_task_idx_from_knapsack_name "${knapsack_name}"`
 
         # Execute process
         builtin_sched_execute_process "${cmdline}" "${dirname}" "${processname}" "${task_idx}" || return 1
@@ -1385,12 +1385,12 @@ builtin_sched_execute_program_processes()
     local iterno=1
 
     echo "* Configuring scheduler..." >&2
-    if [ ${builtinsched_cpus_given} -eq 1 ]; then
-        DEBASHER_BUILTIN_SCHED_CPUS=${builtinsched_cpus}
+    if [ ${builtin_sched_cpus_given} -eq 1 ]; then
+        DEBASHER_BUILTIN_SCHED_CPUS=${builtin_sched_cpus}
     fi
 
-    if [ ${builtinsched_mem_given} -eq 1 ]; then
-        DEBASHER_BUILTIN_SCHED_MEM=${builtinsched_mem}
+    if [ ${builtin_sched_mem_given} -eq 1 ]; then
+        DEBASHER_BUILTIN_SCHED_MEM=${builtin_sched_mem}
     fi
     echo "- Available CPUS: ${DEBASHER_BUILTIN_SCHED_CPUS}" >&2
     echo "- Available memory: ${DEBASHER_BUILTIN_SCHED_MEM}" >&2
@@ -1417,7 +1417,7 @@ builtin_sched_execute_program_processes()
     # Execute scheduling loop
     local end=0
     while [ ${end} -eq 0 ]; do
-        if [ ${builtinsched_debug} -eq 1 ]; then
+        if [ ${builtin_sched_debug} -eq 1 ]; then
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
         fi
 

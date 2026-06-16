@@ -93,8 +93,8 @@ read_pars()
     pfile_given=0
     outdir_given=0
     sched_given=0
-    builtinsched_cpus_given=0
-    builtinsched_mem_given=0
+    builtin_sched_cpus_given=0
+    builtin_sched_mem_given=0
     dflt_nodes_given=0
     dflt_throttle_given=0
     reexec_outdated_processes_given=0
@@ -105,7 +105,7 @@ read_pars()
     check_proc_opts_given=0
     debug=0
     wait=0
-    builtinsched_debug=0
+    builtin_sched_debug=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -134,23 +134,23 @@ read_pars()
                   ;;
             "--builtinsched-cpus") shift
                   if [ $# -ne 0 ]; then
-                      builtinsched_cpus=$1
-                      if ! debasher::str_is_natural_number ${builtinsched_cpus}; then
+                      builtin_sched_cpus=$1
+                      if ! debasher::str_is_natural_number ${builtin_sched_cpus}; then
                           echo "Value for --builtinsched_cpus option should be a natural number" >&2
                           return 1
                       fi
-                      builtinsched_cpus_given=1
+                      builtin_sched_cpus_given=1
                   fi
                   ;;
             "--builtinsched-mem") shift
                   if [ $# -ne 0 ]; then
-                      builtinsched_mem=$1
-                      builtinsched_mem=`debasher::convert_mem_value_to_mb ${builtinsched_mem}` || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
-                      if ! debasher::str_is_natural_number ${builtinsched_mem}; then
+                      builtin_sched_mem=$1
+                      builtin_sched_mem=`debasher::convert_mem_value_to_mb ${builtin_sched_mem}` || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
+                      if ! debasher::str_is_natural_number ${builtin_sched_mem}; then
                           echo "Value for --builtinsched_mem option should be a natural number" >&2
                           return 1
                       fi
-                      builtinsched_mem_given=1
+                      builtin_sched_mem_given=1
                   fi
                   ;;
             "--dflt-nodes") shift
@@ -193,7 +193,7 @@ read_pars()
                        ;;
             "--wait") wait=1
                        ;;
-            "--builtinsched-debug") builtinsched_debug=1
+            "--builtinsched-debug") builtin_sched_debug=1
                                     ;;
         esac
         shift
