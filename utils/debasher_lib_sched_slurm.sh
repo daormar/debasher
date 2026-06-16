@@ -23,7 +23,7 @@
 #############
 
 # PROCESS METHOD NAMES
-PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER="${DEBASHER_PROCESS_METHOD_SEP}slurm_sigterm_handler"
+DEBASHER_PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER="${DEBASHER_PROCESS_METHOD_SEP}slurm_sigterm_handler"
 
 
 ########
@@ -73,7 +73,7 @@ debasher::print_script_header_slurm_sched()
     {
         local processname=$1
 
-        echo "${processname}${PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER}"
+        echo "${processname}${DEBASHER_PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER}"
     }
 
     write_sigterm_handler()
