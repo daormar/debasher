@@ -402,7 +402,7 @@ debasher::add_debasher_process_alias()
     # Obtain expanded process alias
     local expanded_process_alias
 
-    if debasher::is_valid_processname "${process_alias}"; then
+    if debasher::is_valid_processname "${process_alias}" 2>/dev/null; then
         expanded_process_alias="${process_alias}"
     else
         # Check if alias corresponds to an external file
