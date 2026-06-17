@@ -1358,6 +1358,11 @@ load_module || exit 1
 # Get name of initial process specification file
 initial_procspec_file="${outd}/${DEBASHER_PPEXEC_INITIAL_PROCSPEC_BASENAME}"
 
+# Remove initial process specification file if it exists
+if [ -f "${initial_procspec_file}" ]; then
+    rm "${initial_procspec_file}"
+fi
+
 # Write initial process specification file
 gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
 
