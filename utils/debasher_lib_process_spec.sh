@@ -23,20 +23,15 @@ debasher::program_process_spec_is_ok()
 {
     # NOTE: Process specification is a set of entries, each one
     # containing the process name, computational specifications and
-    # additional specifications
+    # additional specifications. The two types of specifications are
+    # separated by a especial symbol
     local process_spec=$1
 
-    local fieldno=1
-    local field
-    for field in $process_spec; do
-        fieldno=$((fieldno + 1))
-    done
-
-    if [ "${fieldno}" -gt 1 ]; then
-        return 0
-    else
+    if [[ "${process_spec}" == *"${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"* ]]; then
         return 1
     fi
+
+    return 0
 }
 
 ########
@@ -80,32 +75,13 @@ debasher::add_additional_spec()
 }
 
 ########
-debasher::extract_attr_from_process_comp_specs()
+debasher::extract_attr_from_list_given_sep()
 {
-    local process_comp_specs=$1
+    local attr_list=$1
     local attrname=$2
+    local sep=$3
 
-    local field
-    for field in $process_comp_specs; do
-        if [[ "${field}" = "${attrname}="* ]]; then
-            local attrname_len=${#attrname}
-            local start=$((attrname_len + 1))
-            local attr_val=${field:${start}}
-            echo ${attr_val}
-            return 0
-        fi
-    done
-
-    echo ${DEBASHER_ATTR_NOT_FOUND}
-}
-
-########
-debasher::extract_attr_from_process_additional_specs()
-{
-    local process_additional_specs=$1
-    local attrname=$2
-
-    IFS="${DEBASHER_ADDITIONAL_PROCSPECS_SEP}" read -r -a fields <<< "${process_additional_specs}"
+    IFS="${sep}" read -r -a fields <<< "${attr_list}"
     local field
     for field in "${fields[@]}"; do
         field=$(debasher::str_trim "${field}")
@@ -119,6 +95,28 @@ debasher::extract_attr_from_process_additional_specs()
     done
 
     echo ${DEBASHER_ATTR_NOT_FOUND}
+}
+
+########
+debasher::extract_attr_from_process_comp_specs()
+{
+    local process_comp_specs=$1
+    local attrname=$2
+
+    if [[ "${process_comp_specs}" == *"${DEBASHER_PROCSPECS_SEP}"* ]]; then
+        debasher::extract_attr_from_list_given_sep "${process_comp_specs}" "${attrname}" "${DEBASHER_PROCSPECS_SEP}"
+    else
+        debasher::extract_attr_from_list_given_sep "${process_comp_specs}" "${attrname}" "${DEBASHER_LEGACY_PROCSPECS_SEP}"
+    fi
+}
+
+########
+debasher::extract_attr_from_process_additional_specs()
+{
+    local process_additional_specs=$1
+    local attrname=$2
+
+    debasher::extract_attr_from_list_given_sep "${process_additional_specs}" "${attrname}" "${DEBASHER_PROCSPECS_SEP}"
 }
 
 ########
