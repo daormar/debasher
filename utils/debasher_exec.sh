@@ -639,6 +639,9 @@ handle_conda_requirements()
                 echo "Handling conda requirements for process ${processname}..." >&2
                 ${conda_envs_funcname} || exit 1
             fi
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
@@ -668,6 +671,9 @@ handle_docker_requirements()
                 echo "Handling docker requirements for process ${processname}..." >&2
                 "${docker_imgs_funcname}" || exit 1
             fi
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
@@ -709,6 +715,9 @@ define_reexec_processes_due_to_fifos()
                     done <<< "${fifo_owners}"
                 fi
             fi
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
@@ -735,6 +744,9 @@ define_forced_exec_processes()
             if [ ${process_forced} = "yes" ]; then
                 debasher::mark_process_as_reexec $processname ${DEBASHER_FORCED_REEXEC_REASON}
             fi
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
@@ -804,6 +816,9 @@ define_reexec_processes_due_to_code_update()
                     echo "Warning: current execution of process ${processname} is using outdated modules">&2
                 fi
             fi
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
@@ -1022,6 +1037,9 @@ prepare_files_and_dirs_for_processes()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             prepare_files_and_dirs_for_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}"
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
@@ -1086,6 +1104,9 @@ revise_reexec_proc_status()
             if debasher::process_marked_as_reexec ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
                 debasher::reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
             fi
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
@@ -1155,6 +1176,9 @@ launch_processes()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             launch_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 }
@@ -1198,6 +1222,9 @@ there_are_in_progress_processes()
             if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
                 return 0
             fi
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${initial_procspec_file}"
 
@@ -1267,6 +1294,9 @@ launch_program_processes_debug()
             local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
 
             debug_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
+        else
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
         fi
     done < "${procspec_file}"
 
