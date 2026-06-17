@@ -1358,11 +1358,11 @@ load_module || exit 1
 # Get name of initial process specification file
 initial_procspec_file="${outd}/${DEBASHER_PPEXEC_INITIAL_PROCSPEC_BASENAME}"
 
-# Check if there are running processes and abort execution if true
-ensure_program_not_being_executed "${initial_procspec_file}"
-
 # Write initial process specification file
 gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
+
+# Check if there are running processes and abort execution if true
+ensure_program_not_being_executed "${initial_procspec_file}"
 
 # Write debasher library variables and functions
 get_deblib_vars_and_funcs || exit 1
