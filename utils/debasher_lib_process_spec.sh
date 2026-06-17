@@ -27,7 +27,7 @@ debasher::program_process_spec_is_ok()
     # separated by a especial symbol
     local process_spec=$1
 
-    if [[ "${process_spec}" == *"${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"* ]]; then
+    if [[ "${process_spec}" != *"${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"* ]]; then
         return 1
     fi
 
@@ -70,7 +70,7 @@ debasher::add_additional_spec()
     if [ -z "${additional_specs}" ]; then
         echo "${process_spec} ${procdeps}"
     else
-        echo "${process_spec} ${DEBASHER_ADDITIONAL_PROCSPECS_SEP} ${procdeps}"
+        echo "${process_spec} ${DEBASHER_PROCSPECS_SEP} ${procdeps}"
     fi
 }
 
