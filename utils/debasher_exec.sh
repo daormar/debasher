@@ -278,8 +278,8 @@ get_mod_vars_and_funcs()
     # Get variables and functions from program modules
     "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${DEBASHER_PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
 
-    # Get special functions
-    debasher::get_alias_related_funcs >> "${vars_and_funcs_fname}"
+    # Get newly created process functions
+    debasher::get_newly_created_process_funcs >> "${vars_and_funcs_fname}"
 
     echo "Extraction complete" >&2
 

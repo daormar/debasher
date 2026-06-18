@@ -450,11 +450,11 @@ debasher::add_debasher_process_ext_alias()
 }
 
 ########
-debasher::get_alias_related_funcs()
+debasher::get_newly_created_process_funcs()
 {
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        if [[ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" == *"alias="* ]]; then
+        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != 1 ]; then
             declare -f "${processname}"
         fi
     done
