@@ -321,6 +321,39 @@ debasher::add_debasher_process_func()
 }
 
 ########
+debasher::create_process_func_alias()
+{
+    local processname=$1
+    local process_alias=$2
+
+    eval "$processname() { ${process_alias} \"\$@\"; }"
+}
+
+########
+debasher::add_debasher_process_alias()
+{
+    local processname=$1
+    local process_alias=$2
+
+    # Obtain expanded process alias
+    local expanded_process_alias
+
+    if debasher::is_valid_processname "${process_alias}" 2>/dev/null; then
+        expanded_process_alias="${process_alias}"
+    else
+        echo "Error: alias ${process_alias} for process ${processname} has not a valid name. Aborting execution..." >&2
+        return 1
+    fi
+
+    # Create process function
+    debasher::create_process_func_alias "${processname}" "${process_alias}"
+
+    # Store process name in associative array (alias information is also
+    # stored)
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${process_alias}"
+}
+
+########
 debasher::get_interpreter_for_file()
 {
     local file=$1
@@ -357,6 +390,25 @@ debasher::get_interpreter_for_file()
 }
 
 ########
+debasher::create_process_func_ext_alias()
+{
+    local processname=$1
+    local process_ext_alias=$2
+    local interpreter_for_file=$(debasher::get_interpreter_for_file "${process_ext_alias}")
+
+    if [ -n "${interpreter_for_file}" ]; then
+        local escaped_interpreter
+        printf -v escaped_interpreter '%q' "${interpreter_for_file}"
+        local escaped_alias
+        printf -v escaped_alias '%q' "${process_ext_alias}"
+        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
+    else
+        echo "Error: extern alias ${process_ext_alias} for process ${processname} is not valid: no valid interpreter was found. Aborting execution..." >&2
+        return 1
+    fi
+}
+
+########
 debasher::get_external_file_for_process_alias()
 {
     local current_pfile_dir=$1
@@ -366,56 +418,30 @@ debasher::get_external_file_for_process_alias()
 }
 
 ########
-debasher::create_process_func_alias()
-{
-    local processname=$1
-    local expanded_process_alias=$2
-    local interpreter_for_file=$(debasher::get_interpreter_for_file "${expanded_process_alias}")
-
-    if [ -n "${interpreter_for_file}" ]; then
-        local escaped_interpreter
-        printf -v escaped_interpreter '%q' "${interpreter_for_file}"
-        local escaped_alias
-        printf -v escaped_alias '%q' "${expanded_process_alias}"
-        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
-    else
-        eval "$processname() { ${expanded_process_alias} \"\$@\"; }"
-    fi
-}
-
-########
-debasher::add_debasher_process_alias()
+debasher::add_debasher_process_ext_alias()
 {
     local processname=$1
     local process_alias=$2
+    local current_pfile_dir=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
-    # Obtain expanded process alias
-    local expanded_process_alias
+    # Check if alias corresponds to an external file
 
-    if debasher::is_valid_processname "${process_alias}" 2>/dev/null; then
-        expanded_process_alias="${process_alias}"
-    else
-        # Check if alias corresponds to an external file
+    # Get tentative name of external file
+    local external_file
+    external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
 
-        # Get tentative name of external file
-        local external_file
-        external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
-
-        # Check if file exists
-        if [ ! -f "${external_file}" ]; then
-            echo "Error: alias ${process_alias} for process ${processname} is not valid. Aborting execution..." >&2
-            return 1
-        fi
-
-        expanded_process_alias="${external_file}"
+    # Check if file exists
+    if [ ! -f "${external_file}" ]; then
+        echo "Error: external alias ${process_alias} for process ${processname} is not valid. Aborting execution..." >&2
+        return 1
     fi
 
     # Create process function
-    debasher::create_process_func_alias "${processname}" "${expanded_process_alias}"
+    debasher::create_process_func_ext_alias "${processname}" "${external_file}" || return 1
 
     # Store process name in associative array (alias information is also
     # stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${external_file}"
 }
 
 ########
@@ -451,7 +477,6 @@ debasher::add_debasher_process()
     local processname=$1
     local process_computational_specs=$2
     local process_additional_specs=$3
-    local current_pfile_dir=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
     # Check correctness of process name and abort execution if necessary
     if ! debasher::is_valid_processname "${processname}"; then
@@ -471,12 +496,18 @@ debasher::add_debasher_process()
     else
         # Treat process alias if provided
         local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
-        if [ "${process_alias}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-            # No heredoc nor alias were given
-            debasher::add_debasher_process_func "${processname}"
-        else
+        if [ "${process_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # A process alias was given
             debasher::add_debasher_process_alias "${processname}" "${process_alias}" || exit 1
+        else
+            local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
+            if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+                # A process external alias was given
+                debasher::add_debasher_process_ext_alias "${processname}" "${process_ext_alias}" || exit 1
+            else
+                # No heredoc nor aliases were given
+                debasher::add_debasher_process_func "${processname}"
+            fi
         fi
     fi
 

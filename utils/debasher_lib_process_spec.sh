@@ -206,3 +206,11 @@ debasher::extract_alias_from_process_spec()
     local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
     debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias"
 }
+
+########
+debasher::extract_ext_alias_from_process_spec()
+{
+    local process_spec=$1
+    local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
+    debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias"
+}
