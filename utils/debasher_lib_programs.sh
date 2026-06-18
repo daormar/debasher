@@ -403,7 +403,7 @@ debasher::create_process_func_ext_alias()
         printf -v escaped_alias '%q' "${process_ext_alias}"
         eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
     else
-        echo "Error: extern alias ${process_ext_alias} for process ${processname} is not valid: no valid interpreter was found. Aborting execution..." >&2
+        echo "Error: extern alias ${process_ext_alias} for process ${processname} is not valid: no suitable interpreter was found. Aborting execution..." >&2
         return 1
     fi
 }
