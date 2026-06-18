@@ -1373,8 +1373,9 @@ ensure_program_not_being_executed "${initial_procspec_file}"
 get_deblib_vars_and_funcs || exit 1
 
 # Write module variables and functions (this function should be called
-# before calling gen_initial_procspec_file, since it executes the
-# program given in pfile input parameter)
+# after calling gen_initial_procspec_file, since it executes the program
+# given in pfile input parameter, possibly defining new functions that
+# should be written as well)
 get_mod_vars_and_funcs || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
