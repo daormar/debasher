@@ -264,24 +264,6 @@ debasher::get_interpreter_for_file()
 }
 
 ########
-debasher::create_process_func_alias()
-{
-    local processname=$1
-    local expanded_process_alias=$2
-    local interpreter_for_file=$(debasher::get_interpreter_for_file "${expanded_process_alias}")
-
-    if [ -n "${interpreter_for_file}" ]; then
-        local escaped_interpreter
-        printf -v escaped_interpreter '%q' "${interpreter_for_file}"
-        local escaped_alias
-        printf -v escaped_alias '%q' "${expanded_process_alias}"
-        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
-    else
-        eval "$processname() { ${expanded_process_alias} \"\$@\"; }"
-    fi
-}
-
-########
 debasher::is_heredoc_process()
 {
     local processname=$1
@@ -391,6 +373,24 @@ debasher::add_debasher_process_func()
 
     # Store process name in associative array
     DEBASHER_PROGRAM_PROCESSES["${processname}"]=1
+}
+
+########
+debasher::create_process_func_alias()
+{
+    local processname=$1
+    local expanded_process_alias=$2
+    local interpreter_for_file=$(debasher::get_interpreter_for_file "${expanded_process_alias}")
+
+    if [ -n "${interpreter_for_file}" ]; then
+        local escaped_interpreter
+        printf -v escaped_interpreter '%q' "${interpreter_for_file}"
+        local escaped_alias
+        printf -v escaped_alias '%q' "${expanded_process_alias}"
+        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
+    else
+        eval "$processname() { ${expanded_process_alias} \"\$@\"; }"
+    fi
 }
 
 ########
