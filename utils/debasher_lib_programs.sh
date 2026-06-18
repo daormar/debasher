@@ -209,61 +209,6 @@ debasher::is_valid_processname()
 }
 
 ########
-debasher::get_alias_related_funcs()
-{
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "1" ]; then
-            declare -f "${processname}"
-        fi
-    done
-}
-
-########
-debasher::get_external_file_for_process_alias()
-{
-    local current_pfile_dir=$1
-    local process_alias=$2
-
-    echo "${current_pfile_dir}/${process_alias}"
-}
-
-########
-debasher::get_interpreter_for_file()
-{
-    local file=$1
-    local bfname=$("${BASENAME}" "${file}")
-
-    # Extract the part after the last dot
-    local extension="${bfname##*.}"
-
-    case "$extension" in
-        "${DEBASHER_BASH_FEXT}")
-            echo "${BASH}"
-            return 0
-            ;;
-        "${DEBASHER_PYTHON_FEXT}")
-            echo "${PYTHON}"
-            return 0
-            ;;
-        "${DEBASHER_R_FEXT}")
-            echo "${RSCRIPT}"
-            return 0
-            ;;
-        "${DEBASHER_PERL_FEXT}")
-            echo "${PERL}"
-            return 0
-            ;;
-        "${DEBASHER_GROOVY_FEXT}")
-            echo "${GROOVY}"
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-########
 debasher::is_heredoc_process()
 {
     local processname=$1
@@ -376,6 +321,51 @@ debasher::add_debasher_process_func()
 }
 
 ########
+debasher::get_interpreter_for_file()
+{
+    local file=$1
+    local bfname=$("${BASENAME}" "${file}")
+
+    # Extract the part after the last dot
+    local extension="${bfname##*.}"
+
+    case "$extension" in
+        "${DEBASHER_BASH_FEXT}")
+            echo "${BASH}"
+            return 0
+            ;;
+        "${DEBASHER_PYTHON_FEXT}")
+            echo "${PYTHON}"
+            return 0
+            ;;
+        "${DEBASHER_R_FEXT}")
+            echo "${RSCRIPT}"
+            return 0
+            ;;
+        "${DEBASHER_PERL_FEXT}")
+            echo "${PERL}"
+            return 0
+            ;;
+        "${DEBASHER_GROOVY_FEXT}")
+            echo "${GROOVY}"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+########
+debasher::get_external_file_for_process_alias()
+{
+    local current_pfile_dir=$1
+    local process_alias=$2
+
+    echo "${current_pfile_dir}/${process_alias}"
+}
+
+########
 debasher::create_process_func_alias()
 {
     local processname=$1
@@ -426,6 +416,16 @@ debasher::add_debasher_process_alias()
     # Store process name in associative array (alias information is also
     # stored)
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${expanded_process_alias}"
+}
+
+########
+debasher::get_alias_related_funcs()
+{
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "1" ]; then
+            declare -f "${processname}"
+        fi
+    done
 }
 
 ########
