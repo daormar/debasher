@@ -350,7 +350,7 @@ debasher::add_debasher_process_alias()
 
     # Store process name in associative array (alias information is also
     # stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${process_alias}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="alias=${process_alias}"
 }
 
 ########
@@ -421,18 +421,23 @@ debasher::get_external_file_for_process_alias()
 debasher::add_debasher_process_ext_alias()
 {
     local processname=$1
-    local process_alias=$2
+    local process_ext_alias=$2
     local current_pfile_dir=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
     # Check if alias corresponds to an external file
 
     # Get tentative name of external file
     local external_file
-    external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_alias}")"
+    if debasher::is_absolute_path "${process_ext_alias}"; then
+        external_file="${process_ext_alias}"
+        echo "Warning: ext_alias uses an absolute path (${external_file}). This workflow is not portable across machines." >&2
+    else
+        external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_ext_alias}")"
+    fi
 
     # Check if file exists
     if [ ! -f "${external_file}" ]; then
-        echo "Error: external alias ${process_alias} for process ${processname} is not valid. Aborting execution..." >&2
+        echo "Error: external alias ${process_ext_alias} for process ${processname} is not valid. Aborting execution..." >&2
         return 1
     fi
 
@@ -441,14 +446,15 @@ debasher::add_debasher_process_ext_alias()
 
     # Store process name in associative array (alias information is also
     # stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${external_file}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="ext_alias=${external_file}"
 }
 
 ########
 debasher::get_alias_related_funcs()
 {
+    local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "1" ]; then
+        if [[ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" == *"alias="* ]]; then
             declare -f "${processname}"
         fi
     done
