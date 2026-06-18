@@ -16,6 +16,9 @@
 
 # *- bash -*
 
+# Load modules
+load_debasher_module "debasher_hello_world"
+
 #############
 # CONSTANTS #
 #############
@@ -25,7 +28,7 @@
 #################
 
 ########
-debasher_hello_world_alias_extern_shared_dirs()
+debasher_hello_world_alias_shared_dirs()
 {
     :
 }
@@ -35,13 +38,13 @@ debasher_hello_world_alias_extern_shared_dirs()
 ######################################
 
 ########
-hello_world_document()
+hello_world_alternative_document()
 {
     process_description "Prints a hello world message."
 }
 
 ########
-hello_world_explain_cmdline_opts()
+hello_world_alternative_explain_cmdline_opts()
 {
     # -s option
     local description="String to be displayed ('Hello World!' by default)"
@@ -49,7 +52,7 @@ hello_world_explain_cmdline_opts()
 }
 
 ########
-hello_world_define_opts()
+hello_world_alternative_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -77,7 +80,7 @@ hello_world_define_opts()
 #################################
 
 ########
-debasher_hello_world_alias_extern_program()
+debasher_hello_world_alias_program()
 {
-    add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00" "alias=./hello_world.py"
+    add_debasher_process "hello_world_alternative" "cpus=1 mem=32 time=00:01:00" "alias=hello_world"
 }
