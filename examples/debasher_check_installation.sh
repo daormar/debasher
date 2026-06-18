@@ -121,7 +121,7 @@ case $? in
 esac
 
 # Check debasher_hello_world_alias_func program
-progname="debasher_hello_world_alias_func"
+progname="debasher_hello_world_alias"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
@@ -139,7 +139,7 @@ case $? in
 esac
 
 # Check debasher_hello_world_alias_extern program
-progname="debasher_hello_world_alias_extern"
+progname="debasher_hello_world_ext_alias"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
