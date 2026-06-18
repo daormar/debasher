@@ -403,7 +403,7 @@ debasher::create_process_func_ext_alias()
         printf -v escaped_alias '%q' "${process_ext_alias}"
         eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
     else
-        echo "Error: extern alias ${process_ext_alias} for process ${processname} is not valid: no suitable interpreter was found. Aborting execution..." >&2
+        echo "Error: external alias ${process_ext_alias} for process ${processname} is not valid: no suitable interpreter was found. Aborting execution..." >&2
         return 1
     fi
 }
@@ -430,7 +430,7 @@ debasher::add_debasher_process_ext_alias()
     local external_file
     if debasher::is_absolute_path "${process_ext_alias}"; then
         external_file="${process_ext_alias}"
-        echo "Warning: ext_alias uses an absolute path (${external_file}). This workflow is not portable across machines." >&2
+        echo "Warning: external alias for process ${processname} uses an absolute path (${external_file}). This workflow is not portable across machines." >&2
     else
         external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_ext_alias}")"
     fi
