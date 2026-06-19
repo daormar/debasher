@@ -338,10 +338,15 @@ debasher::add_debasher_process_alias()
     # Obtain expanded process alias
     local expanded_process_alias
 
-    if debasher::is_valid_processname "${process_alias}" 2>/dev/null; then
-        expanded_process_alias="${process_alias}"
-    else
+    # Check if alias is a valid process name
+    if ! debasher::is_valid_processname "${process_alias}" 2>/dev/null; then
         echo "Error: alias ${process_alias} for process ${processname} has not a valid name. Aborting execution..." >&2
+        return 1
+    fi
+
+    # Check if alias exists
+    if ! debasher::func_exists "${process_alias}" 2>/dev/null; then
+        echo "Error: alias ${process_alias} for process ${processname} is not defined. Aborting execution..." >&2
         return 1
     fi
 
