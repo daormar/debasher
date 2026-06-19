@@ -68,6 +68,11 @@ host1_generate_opts()
 {
     # Initialize variables
     local optlist=""
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local task_idx=$5
 
     # -id option
     define_opt "-id" ${task_idx} optlist || return 1
@@ -115,6 +120,11 @@ host2_generate_opts()
 {
     # Initialize variables
     local optlist=""
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local task_idx=$5
 
     # -id option
     define_opt "-id" ${task_idx} optlist || return 1
