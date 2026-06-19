@@ -308,16 +308,16 @@ debasher::add_debasher_process_heredoc()
 
     # Store process name in associative array (the variable name
     # containing the heredoc is also stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${comm_varname}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_HEREDOC_PROCESS_TYPE}"
 }
 
 ########
-debasher::add_debasher_process_func()
+debasher::add_debasher_regular_process()
 {
     local processname=$1
 
     # Store process name in associative array
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]=1
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_REGULAR_PROCESS_TYPE}"
 }
 
 ########
@@ -330,7 +330,7 @@ debasher::create_process_func_alias()
 }
 
 ########
-debasher::add_debasher_process_alias()
+debasher::add_debasher_alias_process()
 {
     local processname=$1
     local process_alias=$2
@@ -355,7 +355,7 @@ debasher::add_debasher_process_alias()
 
     # Store process name in associative array (alias information is also
     # stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="alias=${process_alias}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_ALIAS_PROCESS_TYPE}"
 }
 
 ########
@@ -423,7 +423,7 @@ debasher::get_external_file_for_process_alias()
 }
 
 ########
-debasher::add_debasher_process_ext_alias()
+debasher::add_debasher_ext_alias_process()
 {
     local processname=$1
     local process_ext_alias=$2
@@ -451,7 +451,7 @@ debasher::add_debasher_process_ext_alias()
 
     # Store process name in associative array (alias information is also
     # stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="ext_alias=${external_file}"
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_EXT_ALIAS_PROCESS_TYPE}"
 }
 
 ########
@@ -459,7 +459,7 @@ debasher::get_newly_created_process_funcs()
 {
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != 1 ]; then
+        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "${DEBASHER_REGULAR_PROCESS_TYPE}" ]; then
             declare -f "${processname}"
         fi
     done
@@ -509,15 +509,15 @@ debasher::add_debasher_process()
         local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
         if [ "${process_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # A process alias was given
-            debasher::add_debasher_process_alias "${processname}" "${process_alias}" || exit 1
+            debasher::add_debasher_alias_process "${processname}" "${process_alias}" || exit 1
         else
             local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
             if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
                 # A process external alias was given
-                debasher::add_debasher_process_ext_alias "${processname}" "${process_ext_alias}" || exit 1
+                debasher::add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" || exit 1
             else
                 # No heredoc nor aliases were given
-                debasher::add_debasher_process_func "${processname}"
+                debasher::add_debasher_regular_process "${processname}"
             fi
         fi
     fi
