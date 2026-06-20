@@ -615,8 +615,10 @@ debasher::search_process_func()
     local process_function=`debasher::get_process_funcname "${processname}" "${method_name}"`
     if debasher::func_exists "${process_function}"; then
         echo "${process_function}"
+        return 0
     else
         echo "${DEBASHER_FUNCT_NOT_FOUND}"
+        return 1
     fi
 }
 
@@ -630,8 +632,10 @@ debasher::search_process_var()
     local process_var=`debasher::get_process_varname "${processname}" "${method_name}"`
     if debasher::var_exists "${process_var}"; then
         echo "${process_var}"
+        return 0
     else
         echo "${DEBASHER_VAR_NOT_FOUND}"
+        return 1
     fi
 }
 
@@ -646,21 +650,10 @@ debasher::search_process_func_nameref()
     local process_function=`debasher::get_process_funcname "${processname}" "${method_name}"`
     if debasher::func_exists "${process_function}"; then
         var_ref="${process_function}"
+        return 0
     else
         var_ref="${DEBASHER_FUNCT_NOT_FOUND}"
-    fi
-}
-
-########
-debasher::search_process_mandatory_func()
-{
-    local processname=$1
-    local method_name=$2
-
-    # Check if function exists
-    local process_function=`debasher::get_process_funcname "${processname}" "${method_name}"`
-    if debasher::func_exists "${process_function}"; then
-        echo "${process_function}"
+        return 1
     fi
 }
 

@@ -316,6 +316,12 @@ debasher::add_debasher_regular_process()
 {
     local processname=$1
 
+    # Check if function for process exists
+    if ! debasher::get_exec_funcname "${processname}" >/dev/null; then
+        echo "Error: process ${processname} has not a function implementing it. Aborting execution..." >&2
+        return 1
+    fi
+
     # Store process name in associative array
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_REGULAR_PROCESS_TYPE}"
 }
@@ -344,9 +350,9 @@ debasher::add_debasher_alias_process()
         return 1
     fi
 
-    # Check if alias exists
-    if ! debasher::func_exists "${process_alias}" 2>/dev/null; then
-        echo "Error: alias ${process_alias} for process ${processname} is not defined. Aborting execution..." >&2
+    # Check if exec function for alias exists
+    if ! debasher::get_exec_funcname "${process_alias}" >/dev/null; then
+        echo "Error: alias ${process_alias} for process ${processname} has not a function implementing it. Aborting execution..." >&2
         return 1
     fi
 
@@ -517,7 +523,7 @@ debasher::add_debasher_process()
                 debasher::add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" || exit 1
             else
                 # No heredoc nor aliases were given
-                debasher::add_debasher_regular_process "${processname}"
+                debasher::add_debasher_regular_process "${processname}" || exit 1
             fi
         fi
     fi

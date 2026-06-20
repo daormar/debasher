@@ -92,7 +92,7 @@ debasher::get_exec_funcname()
 {
     local processname=$1
 
-    debasher::search_process_mandatory_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"
 }
 
 ########
@@ -148,7 +148,7 @@ debasher::get_explain_cmdline_opts_funcname()
 {
     local processname=$1
 
-    debasher::search_process_mandatory_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
 }
 
 ########
@@ -156,7 +156,7 @@ debasher::get_define_opts_funcname()
 {
     local processname=$1
 
-    debasher::search_process_mandatory_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"
+    debasher::search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"
 }
 
 ########
