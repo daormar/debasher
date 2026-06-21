@@ -72,7 +72,7 @@ debasher::document_process()
 
     if [ ${doc_options} -eq 1 ]; then
         echo "### Command Line Options"
-        DIFFERENTIAL_CMDLINE_OPT_STR=""
+        local DIFFERENTIAL_CMDLINE_OPT_STR=""
         local explain_cmdline_opts_funcname=`debasher::get_explain_cmdline_opts_funcname "${processname}"`
         ${explain_cmdline_opts_funcname}
         debasher::document_process_opts "${DIFFERENTIAL_CMDLINE_OPT_STR}"
