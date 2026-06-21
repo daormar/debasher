@@ -79,7 +79,7 @@ import argparse
 # Create the parser
 parser = argparse.ArgumentParser()
 
-# Add the "-s" option with an integer argument
+# Add the "-s" option with a string argument
 parser.add_argument('-s', type=str, required=True, help='String to be displayed')
 
 # Parse the arguments
