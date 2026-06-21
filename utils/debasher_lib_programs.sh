@@ -517,6 +517,7 @@ debasher::add_debasher_process()
             # A process alias was given
             debasher::add_debasher_alias_process "${processname}" "${process_alias}" || exit 1
         else
+            # Treat process external alias if provided
             local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
             if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
                 # A process external alias was given
