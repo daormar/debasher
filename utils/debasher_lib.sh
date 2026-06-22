@@ -308,7 +308,10 @@ declare DEBASHER_AFTERCORR_PROCESSDEP_TYPE_AVAILABLE_IN_SLURM=0
 # Declare associative array to store exit code for processes
 declare -A DEBASHER_EXIT_CODE
 
-# INCLUDE BASH FILES
+######################
+# INCLUDE BASH FILES #
+######################
+
 . "${debasher_libexecdir}"/debasher_lib_utils
 . "${debasher_libexecdir}"/debasher_lib_programs
 . "${debasher_libexecdir}"/debasher_lib_modules
