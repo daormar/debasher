@@ -461,17 +461,6 @@ debasher::add_debasher_ext_alias_process()
 }
 
 ########
-debasher::get_newly_created_process_funcs()
-{
-    local processname
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "${DEBASHER_REGULAR_PROCESS_TYPE}" ]; then
-            declare -f "${processname}"
-        fi
-    done
-}
-
-########
 debasher::print_process_entry()
 {
     local processname=$1
@@ -561,6 +550,17 @@ debasher::add_debasher_process()
 # by the DeBasher library, and creates a wrapper function when an
 # alias or heredoc code is provided.
 add_debasher_process() { debasher::add_debasher_process "$@"; }
+
+########
+debasher::get_newly_created_process_funcs()
+{
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "${DEBASHER_REGULAR_PROCESS_TYPE}" ]; then
+            declare -f "${processname}"
+        fi
+    done
+}
 
 ########
 debasher::add_debasher_program()
