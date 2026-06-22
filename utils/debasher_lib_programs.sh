@@ -299,7 +299,7 @@ debasher::create_process_func_heredoc()
 }
 
 ########
-debasher::add_debasher_process_heredoc()
+debasher::add_debasher_heredoc_process()
 {
     local processname=$1
 
@@ -508,7 +508,7 @@ debasher::add_debasher_process()
 
     # Treat heredoc code if provided
     if debasher::is_heredoc_process "${processname}" >/dev/null; then
-        debasher::add_debasher_process_heredoc "${processname}" || exit 1
+        debasher::add_debasher_heredoc_process "${processname}" || exit 1
     else
         # Treat process alias if provided
         local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
