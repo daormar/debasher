@@ -472,6 +472,16 @@ debasher::get_newly_created_process_funcs()
 }
 
 ########
+debasher::print_process_entry()
+{
+    local processname=$1
+    local process_computational_specs=$2
+    local process_additional_specs=$3
+
+    echo "${processname}" "${process_computational_specs}" "${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}" "${process_additional_specs}"
+}
+
+########
 # Public: Adds a process to a DeBasher program.
 #
 # $1 - Name of the process to add into the program.
@@ -529,8 +539,8 @@ debasher::add_debasher_process()
         fi
     fi
 
-    # Print process program line
-    echo "${processname}" "${process_computational_specs}" "${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}" "${process_additional_specs}"
+    # Print process program entry
+    debasher::print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}"
 }
 
 ########
