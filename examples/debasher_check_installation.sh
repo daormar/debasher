@@ -59,7 +59,7 @@ check_program()
             return 124
             ;;
         *)
-            echo "Unexepected error, see additional information in ${tmpdir}, aborting..."
+            echo "Unexepected error (code $ret), see additional information in ${tmpdir}, aborting..."
             echo ""
             exit 1
     esac
