@@ -27,14 +27,6 @@ print_desc()
 }
 
 ########
-load_modules()
-{
-    local pfile=$1
-
-    debasher::load_debasher_module "${pfile}" || return 1
-}
-
-########
 
 if [ $# -lt 3 ]; then
     print_desc
@@ -48,7 +40,7 @@ processname=$1
 shift
 
 echo "Loading debasher modules..." >&2
-load_modules "${pfile}" || exit 1
+debasher::load_debasher_module "${pfile}" "${pfile}" || exit 1
 echo "" >&2
 
 echo "Executing program function given in module..." >&2
