@@ -98,7 +98,7 @@ obtain_info_for_module()
     document_module "${module_fname}"
 
     # Get module name from file name
-    local modname=`get_modname_from_absmodname "${module_fname}"`
+    local modname=`debasher::get_modname_from_absmodname "${module_fname}"`
 
     # Iterate over process documentation functions
     while read process_doc_func; do
