@@ -318,7 +318,7 @@ check_procspec()
 
     echo "# Checking process specification..." >&2
 
-    "${debasher_libexecdir}"/debasher_check -p "${prefix_of_prg_files}" || return 1
+    "${debasher_libexecdir}"/debasher_check_prg_files -p "${prefix_of_prg_files}" || return 1
 
     echo "Checking complete" >&2
 
@@ -333,7 +333,7 @@ gen_process_graph()
 
     echo "# Generating process graph..." >&2
 
-    "${debasher_libexecdir}"/debasher_check -p "${prefix_of_prg_files}" -a > "${procgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" || return 1
+    "${debasher_libexecdir}"/debasher_check_prg_files -p "${prefix_of_prg_files}" -a > "${procgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" || return 1
 
     if [ -z "${DOT}" ]; then
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
@@ -356,7 +356,7 @@ gen_dependency_graph()
 
     echo "# Generating dependency graph..." >&2
 
-    "${debasher_libexecdir}"/debasher_check -p "${prefix_of_prg_files}" -g > "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" || return 1
+    "${debasher_libexecdir}"/debasher_check_prg_files -p "${prefix_of_prg_files}" -g > "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" || return 1
 
     if [ -z "${DOT}" ]; then
         echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
