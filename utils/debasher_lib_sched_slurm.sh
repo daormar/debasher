@@ -1044,7 +1044,7 @@ debasher::get_elapsed_time_for_process_slurm()
 
     if [ -f "${finished_filename}" ]; then
         # Get number of array tasks
-        local num_tasks=`get_num_array_tasks_from_finished_file "${finished_filename}"`
+        local num_tasks=`debasher::get_num_array_tasks "${dirname}" "${processname}"`
 
         case $num_tasks in
             0)  echo ${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
