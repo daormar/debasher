@@ -419,6 +419,8 @@ debasher::explain_cmdline_req_opt()
     fi
 }
 
+explain_cmdline_req_opt() { debasher::explain_cmdline_req_opt "$@"; }
+
 ########
 # Public: Explains command-line option.
 #
