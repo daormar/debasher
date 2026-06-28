@@ -221,8 +221,13 @@ debasher::document_module()
 
     # Print body
     local document_funcname=`debasher::get_mod_document_funcname ${modulename}`
-    ${document_funcname}
-    echo ""
+    if debasher::func_exists ${document_funcname}; then
+        ${document_funcname}
+        echo ""
+    else
+        echo "Warning: no document function was defined"
+        echo ""
+    fi
 }
 
 document_module() { debasher::document_module "$@"; }
