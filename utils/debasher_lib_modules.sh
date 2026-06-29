@@ -225,8 +225,8 @@ debasher::document_module()
         ${document_funcname}
         echo ""
     else
-        echo "Warning: no document function was defined"
-        echo ""
+        echo "Warning: no document function was defined" >&2
+        echo "" >&2
     fi
 }
 
