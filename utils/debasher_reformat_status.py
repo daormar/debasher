@@ -134,7 +134,6 @@ def print_process_info(process_map,excl_processes_set,format,fieldlen):
                 else:
                     status=status+" "+norm_str_len(process_map[process],fieldlen)
         print(status)
-
     elif format==ROW_WO_HEADER_FORMAT:
         status=""
         for process in process_map:
@@ -144,6 +143,9 @@ def print_process_info(process_map,excl_processes_set,format,fieldlen):
                 else:
                     status=status+" "+norm_str_len(process_map[process],fieldlen)
         print(status)
+    else:
+        print("Error: provided output format", format, "is invalid", file=sys.stderr)
+        sys.exit(1)
 
 ##################################################
 def extract_excl_process_info(excl_processes):
