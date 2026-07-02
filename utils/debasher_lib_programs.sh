@@ -441,7 +441,7 @@ debasher::add_debasher_ext_alias_process()
     local external_file
     if debasher::is_absolute_path "${process_ext_alias}"; then
         external_file="${process_ext_alias}"
-        echo "Warning: external alias for process ${processname} uses an absolute path (${external_file}). This workflow is not portable across machines" >&2
+        echo "Warning: external alias for process ${processname} uses an absolute path (${external_file}). This program is not portable across machines" >&2
     else
         external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_ext_alias}")"
     fi
