@@ -1211,7 +1211,7 @@ debasher::clear_curr_opt_list_array()
 # The function does not return any value
 debasher::save_opt_list()
 {
-    generate_opt_list()
+    debasher::generate_opt_list()
     {
         local processname=$1
         local task_idx=$2
@@ -1250,7 +1250,7 @@ debasher::save_opt_list()
         done
     }
 
-    get_output_opts_info()
+    debasher::get_output_opts_info()
     {
         local processname=$1
         local task_idx=$2
@@ -1291,17 +1291,17 @@ debasher::save_opt_list()
         done
     }
 
-    get_output_opts_info_given_opts()
+    debasher::get_output_opts_info_given_opts()
     {
         local processname=$1
         local task_idx=$2
         local opts=$3
 
         debasher::deserialize_args "${opts}"
-        get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
+        debasher::get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
     }
 
-    save_opt_list_loop()
+    debasher::save_opt_list_loop()
     {
         # Initialize variables
         local processname=$1
@@ -1318,13 +1318,13 @@ debasher::save_opt_list()
         fi
 
         # Generate option list for process
-        generate_opt_list "${processname}" "${task_idx}" "${opts}"
+        debasher::generate_opt_list "${processname}" "${task_idx}" "${opts}"
 
         # Update variables storing output option information
-        get_output_opts_info_given_opts "${processname}" "${task_idx}" "${opts}"
+        debasher::get_output_opts_info_given_opts "${processname}" "${task_idx}" "${opts}"
     }
 
-    save_opt_list_generator()
+    debasher::save_opt_list_generator()
     {
         # Initialize variables
         local opts=$1
@@ -1341,14 +1341,14 @@ debasher::save_opt_list()
     # Try to extract process name from generate_opts function
     debasher::get_processname_from_caller_nameref "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}" save_opt_list_proc
     if [ -n "${save_opt_list_proc}" ]; then
-        save_opt_list_generator "${opts}"
+        debasher::save_opt_list_generator "${opts}"
         return 0
     fi
 
     # Try to extract process name from define_opts_function
     debasher::get_processname_from_caller_nameref "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}" save_opt_list_proc
     if [ -n "${save_opt_list_proc}" ]; then
-        save_opt_list_loop "${save_opt_list_proc}" "${opts}"
+        debasher::save_opt_list_loop "${save_opt_list_proc}" "${opts}"
         return 0
     fi
 
@@ -1372,10 +1372,10 @@ save_opt_list() { debasher::save_opt_list "$@"; }
 ########
 debasher::load_curr_opt_list_loop()
 {
-    # WARNING: The resolve_proc_output_desc function should be called in
-    # a subshell, otherwise it may clash with the caller due to its use
-    # of the DESERIALIZE_ARGS variable
-    resolve_proc_output_desc()
+    # WARNING: The debasher::resolve_proc_output_desc function should be
+    # called in a subshell, otherwise it may clash with the caller due
+    # to its use of the DESERIALIZE_ARGS variable
+    debasher::resolve_proc_output_desc()
     {
         local cmdline=$1
         local value=$2
@@ -1435,7 +1435,7 @@ debasher::load_curr_opt_list_loop()
 
             # Resolve process output descriptor if necessary
             if debasher::str_is_proc_out_opt_descriptor "${value}"; then
-                value=`resolve_proc_output_desc "${cmdline}" "${value}"`
+                value=`debasher::resolve_proc_output_desc "${cmdline}" "${value}"`
             fi
 
             # Define option
