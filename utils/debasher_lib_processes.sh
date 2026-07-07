@@ -266,7 +266,7 @@ debasher::gen_opts_for_process_and_task()
     # WARNING: The resolve_proc_out_descriptor function should be called
     # in a subshell, otherwise it may clash with the caller due to its
     # use of the DESERIALIZE_ARGS variable
-    resolve_proc_out_descriptor()
+    debasher::resolve_proc_out_descriptor()
     {
         local cmdline=$1
         local value=$2
@@ -296,7 +296,7 @@ debasher::gen_opts_for_process_and_task()
             # Resolve process output descriptor if necessary
             local elem=${DEBASHER_DESERIALIZED_ARGS[$i]}
             if ! debasher::str_is_option "${elem}" && debasher::str_is_proc_out_opt_descriptor "${elem}"; then
-                value=`resolve_proc_out_descriptor "${cmdline}" "${elem}"`
+                value=`debasher::resolve_proc_out_descriptor "${cmdline}" "${elem}"`
                 DEBASHER_DESERIALIZED_ARGS[$i]=${value}
             fi
             i=$((i+1))
@@ -314,7 +314,7 @@ debasher::gen_opts_for_process_and_task()
     ${generate_opts_funcname} "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
 
     # Resove descriptors for connected processes
-    resolve_proc_out_descriptors "${cmdline}"
+    debasher::resolve_proc_out_descriptors "${cmdline}"
 
     # Obtain serialized args
     debasher::serialize_args_nameref "sargs_nr" "${DEBASHER_DESERIALIZED_ARGS[@]}"
@@ -370,7 +370,7 @@ debasher::get_opts_for_process_and_task()
 # The function does not return any value
 debasher::define_opts_for_process()
 {
-    define_opts_loop()
+    debasher::define_opts_loop()
     {
         # Initialize variables
         local cmdline=$1
@@ -383,7 +383,7 @@ debasher::define_opts_for_process()
         ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
     }
 
-    define_opts_generator()
+    debasher::define_opts_generator()
     {
         # Initialize variables
         local cmdline=$1
@@ -433,9 +433,9 @@ debasher::define_opts_for_process()
     local process_spec=$2
 
     if debasher::uses_option_generator "$processname"; then
-        define_opts_generator "${cmdline}" "${process_spec}"
+        debasher::define_opts_generator "${cmdline}" "${process_spec}"
     else
-        define_opts_loop "${cmdline}" "${process_spec}"
+        debasher::define_opts_loop "${cmdline}" "${process_spec}"
     fi
 }
 
@@ -698,9 +698,9 @@ debasher::get_highest_priority_deptype()
 ########
 debasher::get_procdeps_for_process_cached()
 {
-    get_procdeps_for_process()
+    debasher::get_procdeps_for_process()
     {
-        get_deptype_using_func()
+        debasher::get_deptype_using_func()
         {
             local processname=$1
             local opt=$2
@@ -713,7 +713,7 @@ debasher::get_procdeps_for_process_cached()
             fi
         }
 
-        get_procdeps_for_process_task()
+        debasher::get_procdeps_for_process_task()
         {
             # Initialize variables
             local cmdline=$1
@@ -749,7 +749,7 @@ debasher::get_procdeps_for_process_cached()
                                     local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
                                     if [ "${processowner}" != "${processname}" ]; then
                                         # The current process is not the owner of the FIFO
-                                        local deptype=`get_deptype_using_func "${processname}" ${opt} ${processowner}`
+                                        local deptype=`debasher::get_deptype_using_func "${processname}" ${opt} ${processowner}`
                                         if [ -z "${deptype}" ]; then
                                             deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
                                         fi
@@ -768,7 +768,7 @@ debasher::get_procdeps_for_process_cached()
                                         local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
                                         if [ "${processname}" != "${proc}" ]; then
                                             # Determine dependency type
-                                            local deptype=`get_deptype_using_func "${processname}" ${opt} ${proc}`
+                                            local deptype=`debasher::get_deptype_using_func "${processname}" ${opt} ${proc}`
                                             if [ -z "${deptype}" ]; then
                                                 if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
                                                     deptype=${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}
@@ -811,7 +811,7 @@ debasher::get_procdeps_for_process_cached()
             echo "${processdeps}"
         }
 
-        get_procdeps_for_task_array()
+        debasher::get_procdeps_for_task_array()
         {
             # Initialize variables
             local cmdline=$1
@@ -822,7 +822,7 @@ debasher::get_procdeps_for_process_cached()
             # Iterate over tasks indices
             for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
                 # Obtain dependencies for task
-                local prdeps_idx=`get_procdeps_for_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}"`
+                local prdeps_idx=`debasher::get_procdeps_for_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}"`
 
                 # Iterate over dependencies
                 if [ -n "${prdeps_idx}" ]; then
@@ -861,10 +861,10 @@ debasher::get_procdeps_for_process_cached()
         local num_tasks=`debasher::get_numtasks_for_process "${processname}"`
         if [ "${num_tasks}" -eq 1 ]; then
             # The process has only one task
-            get_procdeps_for_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
+            debasher::get_procdeps_for_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
         else
             # The process is an array of tasks
-            get_procdeps_for_task_array "${cmdline}" "${processname}" "${num_tasks}"
+            debasher::get_procdeps_for_task_array "${cmdline}" "${processname}" "${num_tasks}"
         fi
     }
 
@@ -882,7 +882,7 @@ debasher::get_procdeps_for_process_cached()
         local deps=`debasher::extract_processdeps_from_process_spec "${process_spec}"`
         if [ "${deps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # No dependencies are provided in specification
-            local deps=`get_procdeps_for_process "${cmdline}" "$processname"`
+            local deps=`debasher::get_procdeps_for_process "${cmdline}" "$processname"`
             if [ -z "${deps}" ]; then
                 deps="${DEBASHER_NONE_PROCESSDEP_TYPE}"
             fi
@@ -904,7 +904,7 @@ debasher::get_procdeps_for_process_cached()
 ########
 debasher::register_fifos_used_by_process()
 {
-    register_fifos_used_by_process_task()
+    debasher::register_fifos_used_by_process_task()
     {
         # Initialize variables
         local cmdline=$1
@@ -942,7 +942,7 @@ debasher::register_fifos_used_by_process()
         done
     }
 
-    register_fifos_used_by_task_array()
+    debasher::register_fifos_used_by_task_array()
     {
         # Initialize variables
         local cmdline=$1
@@ -953,7 +953,7 @@ debasher::register_fifos_used_by_process()
         # Iterate over tasks indices
         for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
             # Register fifos for task
-            register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}"
+            debasher::register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}"
         done
     }
 
@@ -964,10 +964,10 @@ debasher::register_fifos_used_by_process()
     local num_tasks=`debasher::get_numtasks_for_process "${processname}"`
     if [ "${num_tasks}" -eq 1 ]; then
         # The process has only one task
-        register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
+        debasher::register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
     else
         # The process is an array of tasks
-        register_fifos_used_by_task_array "${cmdline}" "${processname}" "${num_tasks}"
+        debasher::register_fifos_used_by_task_array "${cmdline}" "${processname}" "${num_tasks}"
     fi
 }
 
