@@ -1200,6 +1200,15 @@ debasher::clear_curr_opt_list_array()
 }
 
 ########
+debasher::get_opt_list_name()
+{
+    local processname=$1
+    local task_idx=$2
+
+    echo "DEBASHER_OPT_LIST_${processname}_${task_idx}"
+}
+
+########
 # Public: Saves option list for a given process.
 #
 # $1 - Name of variable storing the option list.
@@ -1219,9 +1228,9 @@ debasher::save_opt_list()
 
         # Initialize reference to associative array storing the option
         # list
-        local opt_list_name="opt_list_${processname}_${task_idx}"
+        local opt_list_name=$(debasher::get_opt_list_name ${processname} ${task_idx})
         declare -gA "${opt_list_name}"
-        declare -nl opt_list=${opt_list_name}
+        declare -n opt_list=${opt_list_name}
 
         # Iterate over options
         debasher::deserialize_args "${opts}"
@@ -1405,8 +1414,8 @@ debasher::load_curr_opt_list_loop()
             echo ${value}
         else
             # Obtain reference to option list of connected process
-            local connected_proc_opt_list_name="opt_list_${connected_proc}_${connected_proc_task_idx}"
-            declare -nl connected_proc_opt_list=${connected_proc_opt_list_name}
+            local connected_proc_opt_list_name=$(debasher::get_opt_list_name ${connected_proc} ${connected_proc_task_idx})
+            declare -n connected_proc_opt_list=${connected_proc_opt_list_name}
 
             # Obtain value from list
             value=${connected_proc_opt_list[$connected_proc_opt]}
@@ -1424,8 +1433,8 @@ debasher::load_curr_opt_list_loop()
     local task_idx
     for (( task_idx=0; task_idx<${DEBASHER_PROCESS_OPT_LIST_LEN[${processname}]}; task_idx++ )); do
         # Initialize variables
-        local opt_list_name="opt_list_${processname}_${task_idx}"
-        declare -nl opt_list=${opt_list_name}
+        local opt_list_name=$(debasher::get_opt_list_name ${processname} ${task_idx})
+        declare -n opt_list=${opt_list_name}
         local _load_curr_opt_list_loop_optlist=""
 
         # Process options for task
