@@ -158,45 +158,6 @@ debasher::memoize_opts()
     done
 }
 
-# debasher::memoize_opts()
-# {
-#     local cmdline=$1
-
-#     # Convert string to array (result is placed into the
-#     # DEBASHER_DESERIALIZED_ARGS variable)
-#     debasher::deserialize_args "${cmdline}"
-
-#     # Scan DEBASHER_DESERIALIZED_ARGS
-#     local i=1
-#     while [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; do
-#         if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
-#             local opt="${DEBASHER_DESERIALIZED_ARGS[$i]}"
-#             i=$((i+1))
-#             # Obtain value if it exists
-#             local value=""
-#             # Check if next token is an option
-#             if [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; then
-#                 if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
-#                     :
-#                 else
-#                     value="${DEBASHER_DESERIALIZED_ARGS[$i]}"
-#                     i=$((i+1))
-#                 fi
-#             fi
-
-#             # Store option
-#             if [ -z "${value}" ]; then
-#                 DEBASHER_MEMOIZED_OPTS[$opt]=${DEBASHER_VOID_VALUE}
-#             else
-#                 DEBASHER_MEMOIZED_OPTS[$opt]="$value"
-#             fi
-#         else
-#             echo "Warning: unexpected value (${DEBASHER_DESERIALIZED_ARGS[$i]}), skipping..." >&2
-#             i=$((i+1))
-#         fi
-#     done
-# }
-
 ########
 debasher::check_opt_given()
 {
