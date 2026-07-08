@@ -286,7 +286,7 @@ debasher::gen_opts_for_process_and_task()
         echo "${value}"
     }
 
-    resolve_proc_out_descriptors()
+    debasher::resolve_proc_out_descriptors()
     {
         local cmdline=$1
 
