@@ -708,208 +708,209 @@ debasher::deserialized_args_idx_is_dep_candidate()
 }
 
 ########
-debasher::get_procdeps_for_process_cached()
+debasher::get_procdeps_for_process()
 {
-    debasher::get_procdeps_for_process()
+    # Writes the result into the caller-provided variable name (no subshell,
+    # no fork: this avoids the cost of command substitution at the call site).
+    # Still forks internally when invoking the user-defined callback, since
+    # that callback's contract is to echo its result.
+    debasher::get_deptype_using_func()
     {
-        # Writes the result into the caller-provided variable name (no subshell,
-        # no fork: this avoids the cost of command substitution at the call site).
-        # Still forks internally when invoking the user-defined callback, since
-        # that callback's contract is to echo its result.
-        debasher::get_deptype_using_func()
-        {
-            local define_opt_deps_funcname=$1
-            local opt=$2
-            local producer_process=$3
-            local -n result_ref=$4
+        local define_opt_deps_funcname=$1
+        local opt=$2
+        local producer_process=$3
+        local -n result_ref=$4
 
-            if [ "${define_opt_deps_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-                result_ref=""
-            else
-                result_ref=`"${define_opt_deps_funcname}" "${opt}" "${producer_process}"`
-            fi
-        }
-
-        # Writes the result into the caller-provided variable name (no subshell,
-        # no fork: this avoids the cost of command substitution entirely).
-        debasher::get_highest_priority_deptype()
-        {
-            local deptype_a=$1
-            local deptype_b=$2
-            local -n result_ref=$3
-
-            if [ -z "${deptype_a}" ]; then
-                deptype_a=${DEBASHER_NONE_PROCESSDEP_TYPE}
-            fi
-            if [ -z "${deptype_b}" ]; then
-                deptype_b=${DEBASHER_NONE_PROCESSDEP_TYPE}
-            fi
-
-            if [ "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_a]}" -gt "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_b]}" ]; then
-                result_ref=${deptype_a}
-            else
-                result_ref=${deptype_b}
-            fi
-        }
-
-        debasher::get_procdeps_for_process_task()
-        {
-            local cmdline=$1
-            local processname=$2
-            local define_opt_deps_funcname=$3
-            local num_tasks=$4
-            local task_idx=$5
-            declare -A depdict
-
-            local opts
-            opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
-            debasher::deserialize_args "${opts}"
-
-            local i
-            for i in "${!DEBASHER_DESERIALIZED_ARGS[@]}"; do
-                # Skip early: is this argument even a dependency candidate?
-                local j
-                if ! debasher::deserialized_args_idx_is_dep_candidate "$i" j; then
-                    continue
-                fi
-
-                local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
-                local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
-                local processes="${DEBASHER_OUT_VALUE_TO_PROCESSES[${value}]}"
-
-                # Case 1: value is a FIFO
-                local augm_fifoname
-                augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
-                if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
-                    local proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}"
-                    local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-
-                    [ "${processowner}" = "${processname}" ] && continue
-
-                    local deptype
-                    debasher::get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${processowner}" deptype
-                    [ -z "${deptype}" ] && deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
-                    [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
-
-                    local highest_pri_deptype
-                    debasher::get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}" highest_pri_deptype
-                    depdict["${processowner}"]=${highest_pri_deptype}
-                    continue
-                fi
-
-                # Case 2: value is a file, possibly owned by several processes
-                while [ -n "${processes}" ]; do
-                    local proc_plus_idx="${processes%%${DEBASHER_ASSOC_ARRAY_PROC_SEP}*}"
-                    local proc="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-                    local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-
-                    # Advance to the next process in the list up-front, so any
-                    # "continue" below doesn't risk an infinite loop
-                    local processes_aux="${processes#"${proc_plus_idx}${DEBASHER_ASSOC_ARRAY_PROC_SEP}"}"
-                    if [ "${processes}" = "${processes_aux}" ]; then
-                        processes=""
-                    else
-                        processes=${processes_aux}
-                    fi
-
-                    [ "${processname}" = "${proc}" ] && continue
-
-                    local deptype
-                    debasher::get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${proc}" deptype
-                    if [ -z "${deptype}" ]; then
-                        if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
-                            deptype=${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}
-                        else
-                            deptype=${DEBASHER_AFTEROK_PROCESSDEP_TYPE}
-                        fi
-                    fi
-
-                    local highest_pri_deptype
-                    debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}" highest_pri_deptype
-                    depdict["${proc}"]=${highest_pri_deptype}
-                done
-            done
-
-            # Serialize depdict into the final "dep,dep,..." format
-            local processdeps=""
-            local proc
-            for proc in "${!depdict[@]}"; do
-                local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
-                if [ -z "$processdeps" ]; then
-                    processdeps=${dep}
-                else
-                    processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
-                fi
-            done
-
-            echo "${processdeps}"
-        }
-
-        debasher::get_procdeps_for_task_array()
-        {
-            # Initialize variables
-            local cmdline=$1
-            local processname=$2
-            local define_opt_deps_funcname=$3
-            local num_tasks=$4
-            declare -A depdict
-
-            # Iterate over tasks indices
-            for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
-                # Obtain dependencies for task
-                local prdeps_idx=`debasher::get_procdeps_for_process_task "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}" "${task_idx}"`
-
-                # Iterate over dependencies
-                if [ -n "${prdeps_idx}" ]; then
-                    while IFS=${DEBASHER_PROCESSDEPS_SEP_COMMA} read -r processdep; do
-                        # Extract dependency information
-                        local deptype="${processdep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
-                        local proc="${processdep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
-
-                        # Update associative array of dependencies
-                        local highest_pri_deptype
-                        debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}" highest_pri_deptype
-                        # local highest_pri_deptype=`debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
-                        depdict["${proc}"]=${highest_pri_deptype}
-                    done <<< "${prdeps_idx}"
-                fi
-            done
-
-            # Instantiate processdeps variable
-            local processdeps=""
-            local proc
-            for proc in "${!depdict[@]}"; do
-                local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
-                if [ -z "$processdeps" ]; then
-                    processdeps=${dep}
-                else
-                    processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
-                fi
-            done
-
-            # Return dependencies
-            echo "${processdeps}"
-        }
-
-        local cmdline=$1
-        local processname=$2
-
-        # Get name of function to define option dependencies for process
-        # (if defined)
-        local define_opt_deps_funcname
-        define_opt_deps_funcname=`debasher::get_define_opt_deps_funcname "${processname}"`
-
-        # Determine whether the process has multiple tasks
-        local num_tasks=`debasher::get_numtasks_for_process "${processname}"`
-        if [ "${num_tasks}" -eq 1 ]; then
-            # The process has only one task
-            debasher::get_procdeps_for_process_task "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}" 0
+        if [ "${define_opt_deps_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            result_ref=""
         else
-            # The process is an array of tasks
-            debasher::get_procdeps_for_task_array "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}"
+            result_ref=`"${define_opt_deps_funcname}" "${opt}" "${producer_process}"`
         fi
     }
 
+    # Writes the result into the caller-provided variable name (no subshell,
+    # no fork: this avoids the cost of command substitution entirely).
+    debasher::get_highest_priority_deptype()
+    {
+        local deptype_a=$1
+        local deptype_b=$2
+        local -n result_ref=$3
+
+        if [ -z "${deptype_a}" ]; then
+            deptype_a=${DEBASHER_NONE_PROCESSDEP_TYPE}
+        fi
+        if [ -z "${deptype_b}" ]; then
+            deptype_b=${DEBASHER_NONE_PROCESSDEP_TYPE}
+        fi
+
+        if [ "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_a]}" -gt "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_b]}" ]; then
+            result_ref=${deptype_a}
+        else
+            result_ref=${deptype_b}
+        fi
+    }
+
+    debasher::get_procdeps_for_process_task()
+    {
+        local cmdline=$1
+        local processname=$2
+        local define_opt_deps_funcname=$3
+        local num_tasks=$4
+        local task_idx=$5
+        declare -A depdict
+
+        local opts
+        opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
+        debasher::deserialize_args "${opts}"
+
+        local i
+        for i in "${!DEBASHER_DESERIALIZED_ARGS[@]}"; do
+            # Skip early: is this argument even a dependency candidate?
+            local j
+            if ! debasher::deserialized_args_idx_is_dep_candidate "$i" j; then
+                continue
+            fi
+
+            local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
+            local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
+            local processes="${DEBASHER_OUT_VALUE_TO_PROCESSES[${value}]}"
+
+            # Case 1: value is a FIFO
+            local augm_fifoname
+            augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
+            if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
+                local proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}"
+                local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+
+                [ "${processowner}" = "${processname}" ] && continue
+
+                local deptype
+                debasher::get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${processowner}" deptype
+                [ -z "${deptype}" ] && deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
+                [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
+
+                local highest_pri_deptype
+                debasher::get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}" highest_pri_deptype
+                depdict["${processowner}"]=${highest_pri_deptype}
+                continue
+            fi
+
+            # Case 2: value is a file, possibly owned by several processes
+            while [ -n "${processes}" ]; do
+                local proc_plus_idx="${processes%%${DEBASHER_ASSOC_ARRAY_PROC_SEP}*}"
+                local proc="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+                local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+                # Advance to the next process in the list up-front, so any
+                # "continue" below doesn't risk an infinite loop
+                local processes_aux="${processes#"${proc_plus_idx}${DEBASHER_ASSOC_ARRAY_PROC_SEP}"}"
+                if [ "${processes}" = "${processes_aux}" ]; then
+                    processes=""
+                else
+                    processes=${processes_aux}
+                fi
+
+                [ "${processname}" = "${proc}" ] && continue
+
+                local deptype
+                debasher::get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${proc}" deptype
+                if [ -z "${deptype}" ]; then
+                    if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                        deptype=${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}
+                    else
+                        deptype=${DEBASHER_AFTEROK_PROCESSDEP_TYPE}
+                    fi
+                fi
+
+                local highest_pri_deptype
+                debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}" highest_pri_deptype
+                depdict["${proc}"]=${highest_pri_deptype}
+            done
+        done
+
+        # Serialize depdict into the final "dep,dep,..." format
+        local processdeps=""
+        local proc
+        for proc in "${!depdict[@]}"; do
+            local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
+            if [ -z "$processdeps" ]; then
+                processdeps=${dep}
+            else
+                processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
+            fi
+        done
+
+        echo "${processdeps}"
+    }
+
+    debasher::get_procdeps_for_task_array()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local processname=$2
+        local define_opt_deps_funcname=$3
+        local num_tasks=$4
+        declare -A depdict
+
+        # Iterate over tasks indices
+        for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
+            # Obtain dependencies for task
+            local prdeps_idx=`debasher::get_procdeps_for_process_task "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}" "${task_idx}"`
+
+            # Iterate over dependencies
+            if [ -n "${prdeps_idx}" ]; then
+                while IFS=${DEBASHER_PROCESSDEPS_SEP_COMMA} read -r processdep; do
+                    # Extract dependency information
+                    local deptype="${processdep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
+                    local proc="${processdep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
+
+                    # Update associative array of dependencies
+                    local highest_pri_deptype
+                    debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}" highest_pri_deptype
+                    # local highest_pri_deptype=`debasher::get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
+                    depdict["${proc}"]=${highest_pri_deptype}
+                done <<< "${prdeps_idx}"
+            fi
+        done
+
+        # Instantiate processdeps variable
+        local processdeps=""
+        local proc
+        for proc in "${!depdict[@]}"; do
+            local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
+            if [ -z "$processdeps" ]; then
+                processdeps=${dep}
+            else
+                processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
+            fi
+        done
+
+        # Return dependencies
+        echo "${processdeps}"
+    }
+
+    local cmdline=$1
+    local processname=$2
+
+    # Get name of function to define option dependencies for process
+    # (if defined)
+    local define_opt_deps_funcname
+    define_opt_deps_funcname=`debasher::get_define_opt_deps_funcname "${processname}"`
+
+    # Determine whether the process has multiple tasks
+    local num_tasks=`debasher::get_numtasks_for_process "${processname}"`
+    if [ "${num_tasks}" -eq 1 ]; then
+        # The process has only one task
+        debasher::get_procdeps_for_process_task "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}" 0
+    else
+        # The process is an array of tasks
+        debasher::get_procdeps_for_task_array "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}"
+    fi
+}
+
+########
+debasher::get_procdeps_for_process_cached()
+{
     local cmdline=$1
     local process_spec=$2
 
