@@ -125,40 +125,77 @@ debasher::memoize_opts()
 {
     local cmdline=$1
 
-    # Convert string to array (result is placed into the
-    # DEBASHER_DESERIALIZED_ARGS variable)
     debasher::deserialize_args "${cmdline}"
 
-    # Scan DEBASHER_DESERIALIZED_ARGS
-    local i=1
-    while [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; do
-        if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
-            local opt="${DEBASHER_DESERIALIZED_ARGS[$i]}"
-            i=$((i+1))
-            # Obtain value if it exists
-            local value=""
-            # Check if next token is an option
-            if [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; then
-                if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
-                    :
-                else
-                    value="${DEBASHER_DESERIALIZED_ARGS[$i]}"
-                    i=$((i+1))
-                fi
-            fi
+    # memoize_opts receives the full command line, so
+    # DEBASHER_DESERIALIZED_ARGS[0] is the command name itself and must
+    # be skipped before scanning for options.
+    local cmdname="${DEBASHER_DESERIALIZED_ARGS[0]}"
+    set -- "${DEBASHER_DESERIALIZED_ARGS[@]:1}"
 
-            # Store option
-            if [ -z "${value}" ]; then
-                DEBASHER_MEMOIZED_OPTS[$opt]=${DEBASHER_VOID_VALUE}
-            else
-                DEBASHER_MEMOIZED_OPTS[$opt]="$value"
-            fi
-        else
-            echo "Warning: unexpected value (${DEBASHER_DESERIALIZED_ARGS[$i]}), skipping..." >&2
-            i=$((i+1))
+    while [ $# -gt 0 ]; do
+        if ! debasher::str_is_option "$1"; then
+            echo "Warning: unexpected value ($1), skipping..." >&2
+            shift
+            continue
         fi
+
+        local opt="$1"
+        shift
+
+        if [ $# -eq 0 ]; then
+            DEBASHER_MEMOIZED_OPTS[$opt]=${DEBASHER_VOID_VALUE}
+            continue
+        fi
+
+        if debasher::str_is_option "$1"; then
+            DEBASHER_MEMOIZED_OPTS[$opt]=${DEBASHER_VOID_VALUE}
+            continue
+        fi
+
+        DEBASHER_MEMOIZED_OPTS[$opt]="$1"
+        shift
     done
 }
+
+# debasher::memoize_opts()
+# {
+#     local cmdline=$1
+
+#     # Convert string to array (result is placed into the
+#     # DEBASHER_DESERIALIZED_ARGS variable)
+#     debasher::deserialize_args "${cmdline}"
+
+#     # Scan DEBASHER_DESERIALIZED_ARGS
+#     local i=1
+#     while [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; do
+#         if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
+#             local opt="${DEBASHER_DESERIALIZED_ARGS[$i]}"
+#             i=$((i+1))
+#             # Obtain value if it exists
+#             local value=""
+#             # Check if next token is an option
+#             if [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; then
+#                 if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
+#                     :
+#                 else
+#                     value="${DEBASHER_DESERIALIZED_ARGS[$i]}"
+#                     i=$((i+1))
+#                 fi
+#             fi
+
+#             # Store option
+#             if [ -z "${value}" ]; then
+#                 DEBASHER_MEMOIZED_OPTS[$opt]=${DEBASHER_VOID_VALUE}
+#             else
+#                 DEBASHER_MEMOIZED_OPTS[$opt]="$value"
+#             fi
+#         else
+#             echo "Warning: unexpected value (${DEBASHER_DESERIALIZED_ARGS[$i]}), skipping..." >&2
+#             i=$((i+1))
+#         fi
+#     done
+# }
 
 ########
 debasher::check_opt_given()
@@ -247,36 +284,30 @@ debasher::get_opt_value_from_quoted_cmd()
 debasher::get_opt_value_from_func_args()
 {
     local opt=$1
-
-    # Process function arguments
     shift
-    local i=1
-    while [ $i -le $# ]; do
-        # Check if option was found
-        if [ "${!i}" = "${opt}" ]; then
-            i=$((i+1))
-            # Obtain value if it exists
-            local value=""
-            # Check if next token is an option
-            if [ $i -le $# ]; then
-                if [ "${!i:0:1}" = "-" ] || [ "${!i:0:2}" = "--" ]; then
-                    :
-                else
-                    value="${!i}"
-                    i=$((i+1))
-                fi
-            fi
 
-            # Show value if it exists and return
-            if [ -z "${value}" ]; then
-                echo "${DEBASHER_VOID_VALUE}"
-                return 1
-            else
-                echo "${value}"
-                return 0
-            fi
+    while [ $# -gt 0 ]; do
+        if [ "$1" != "${opt}" ]; then
+            shift
+            continue
         fi
-        i=$((i+1))
+
+        shift
+
+        # No token left after this option: no value present
+        if [ $# -eq 0 ]; then
+            echo "${DEBASHER_VOID_VALUE}"
+            return 1
+        fi
+
+        # If the next token is itself an option, this option has no value
+        if [ "${1:0:1}" = "-" ] || [ "${1:0:2}" = "--" ]; then
+            echo "${DEBASHER_VOID_VALUE}"
+            return 1
+        fi
+
+        echo "$1"
+        return 0
     done
 
     # Option not found
@@ -1231,36 +1262,44 @@ debasher::save_opt_list()
         local task_idx=$2
         local opts=$3
 
-        # Initialize reference to associative array storing the option
-        # list
-        local opt_list_name=$(debasher::get_opt_list_name ${processname} ${task_idx})
+        # Reference to the (dynamically named) associative array storing
+        # the option list.
+        local opt_list_name
+        opt_list_name=$(debasher::get_opt_list_name "${processname}" "${task_idx}")
         declare -gA "${opt_list_name}"
-        declare -n opt_list=${opt_list_name}
+        local -n opt_list=${opt_list_name}
 
-        # Iterate over options
         debasher::deserialize_args "${opts}"
-        local i=0
-        while [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; do
-            # Check if option was found
-            if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
-                local opt="${DEBASHER_DESERIALIZED_ARGS[$i]}"
-                i=$((i+1))
-                # Obtain value if it exists
-                local value=""
-                # Check if next token is an option
-                if [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; then
-                    if debasher::str_is_option "${DEBASHER_DESERIALIZED_ARGS[$i]}"; then
-                        opt_list["${opt}"]=""
-                    else
-                        value="${DEBASHER_DESERIALIZED_ARGS[$i]}"
-                        opt_list["${opt}"]=${value}
-                        i=$((i+1))
-                    fi
-                fi
-            else
-                echo "Warning: unexpected value (${DEBASHER_DESERIALIZED_ARGS[$i]}), skipping..." >&2
-                i=$((i+1))
+
+        # Copy the deserialized args into the positional parameters so we
+        # can use shift instead of a manually managed index counter
+        set -- "${DEBASHER_DESERIALIZED_ARGS[@]}"
+
+        while [ $# -gt 0 ]; do
+            local token="$1"
+
+            if ! debasher::str_is_option "${token}"; then
+                echo "Warning: unexpected value (${token}), skipping..." >&2
+                shift
+                continue
             fi
+
+            local opt="${token}"
+            shift
+
+            # No token left after this option: nothing more to process
+            [ $# -eq 0 ] && continue
+
+            # If the next token is itself an option, this option has no
+            # value; record it as empty and don't shift, so it's picked
+            # up as a new option next iteration
+            if debasher::str_is_option "$1"; then
+                opt_list["${opt}"]=""
+                continue
+            fi
+
+            opt_list["${opt}"]="$1"
+            shift
         done
     }
 
@@ -1268,39 +1307,36 @@ debasher::save_opt_list()
     {
         local processname=$1
         local task_idx=$2
+        shift 2
 
-        # Process function arguments
-        shift
-        shift
-        local i=1
-        while [ $i -le $# ]; do
-            # Check if option was found
-            if debasher::str_is_option "${!i}"; then
-                local opt=${!i}
-                i=$((i+1))
-                # Obtain value if it exists
-                local value=""
-                # Check if next token is an option
-                if [ "$i" -le $# ]; then
-                    if debasher::str_is_option "${!i}"; then
-                        :
-                    else
-                        value="${!i}"
-                        if debasher::is_absolute_path "${value}" && debasher::str_is_output_option "${opt}"; then
-                            # Update out value to processes array
-                            local process_info="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
-                            if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
-                                DEBASHER_OUT_VALUE_TO_PROCESSES["$value"]=${DEBASHER_OUT_VALUE_TO_PROCESSES["$value"]}${DEBASHER_ASSOC_ARRAY_PROC_SEP}${process_info}
-                            else
-                                DEBASHER_OUT_VALUE_TO_PROCESSES["$value"]=${process_info}
-                            fi
-                        fi
-                        i=$((i+1))
-                    fi
+        while [ $# -gt 0 ]; do
+            local opt="$1"
+
+            if ! debasher::str_is_option "${opt}"; then
+                echo "Warning: unexpected value (${opt}), skipping..." >&2
+                shift
+                continue
+            fi
+
+            shift
+
+            # No token left after this option: nothing more to process
+            [ $# -eq 0 ] && continue
+
+            # If the next token is itself an option, this option has no value;
+            # don't shift, so it's picked up as a new option next iteration
+            debasher::str_is_option "$1" && continue
+
+            local value="$1"
+            shift
+
+            if debasher::is_absolute_path "${value}" && debasher::str_is_output_option "${opt}"; then
+                local process_info="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+                if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
+                    DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]="${DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]}${DEBASHER_ASSOC_ARRAY_PROC_SEP}${process_info}"
+                else
+                    DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]=${process_info}
                 fi
-            else
-                echo "Warning: unexpected value (${!i}), skipping..." >&2
-                i=$((i+1))
             fi
         done
     }
