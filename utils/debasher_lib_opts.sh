@@ -1345,7 +1345,7 @@ debasher::save_opt_list()
         return 0
     fi
 
-    # Try to extract process name from define_opts_function
+    # Try to extract process name from define_opts function
     debasher::get_processname_from_caller_nameref "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}" save_opt_list_proc
     if [ -n "${save_opt_list_proc}" ]; then
         debasher::save_opt_list_loop "${save_opt_list_proc}" "${opts}"
