@@ -1179,9 +1179,14 @@ debasher::get_augm_fifoname_from_absname()
 {
     local absname=$1
 
-    local fifoname=`${BASENAME} "${absname}"`
-    local dirname=`${DIRNAME} "${absname}"`
-    local owner_process=`${BASENAME} "${dirname}"`
+    # basename: strip everything up to and including the last '/'
+    local fifoname="${absname##*/}"
+
+    # dirname: strip the last '/' and everything after it
+    local dirpart="${absname%/*}"
+
+    # basename of dirpart: the owner process directory name
+    local owner_process="${dirpart##*/}"
 
     echo "${owner_process}/${fifoname}"
 }
