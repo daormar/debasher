@@ -103,6 +103,71 @@ SUFFIXES= .sh .py .r .R
 	cat $< >> $@
 	chmod ugo+x $@
 
+debasher_lib_utils: debasher_lib_utils.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_programs: debasher_lib_programs.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_modules: debasher_lib_modules.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_process_spec: debasher_lib_process_spec.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_processes: debasher_lib_processes.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_opts: debasher_lib_opts.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_sched: debasher_lib_sched.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_sched_procs: debasher_lib_sched_procs.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_sched_builtin: debasher_lib_sched_builtin.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_sched_slurm: debasher_lib_sched_slurm.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_sched: debasher_lib_sched.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_conda: debasher_lib_conda.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
+debasher_lib_docker: debasher_lib_docker.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
 .py:
 	rm -f $@
 	echo "#! " $(PYTHON) > $@
