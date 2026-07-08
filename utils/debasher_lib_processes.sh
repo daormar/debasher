@@ -946,7 +946,6 @@ debasher::get_procdeps_for_process_cached()
 ########
 debasher::register_fifos_used_by_process()
 {
-
     debasher::register_fifos_used_by_process_task()
     {
         local cmdline=$1
