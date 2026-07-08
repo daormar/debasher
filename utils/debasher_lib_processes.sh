@@ -675,6 +675,39 @@ debasher::get_end_idx_in_range()
 }
 
 ########
+# Check whether the argument at position $1 is a candidate to generate
+# a process dependency. Returns 0 and writes the associated option index
+# into the caller-provided variable if it is a candidate; returns 1
+# otherwise.
+debasher::deserialized_args_idx_is_dep_candidate()
+{
+    local i=$1
+    local -n idx_ref=$2
+
+    local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
+    if ! debasher::is_absolute_path "${value}"; then
+        return 1
+    fi
+
+    local j=$((i-1))
+    if [ $j -lt 0 ]; then
+        return 1
+    fi
+
+    local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
+    if ! debasher::str_is_option "${opt}" || debasher::str_is_output_option "${opt}"; then
+        return 1
+    fi
+
+    if [[ ! -v DEBASHER_OUT_VALUE_TO_PROCESSES[${value}] ]]; then
+        return 1
+    fi
+
+    idx_ref=$j
+    return 0
+}
+
+########
 debasher::get_procdeps_for_process_cached()
 {
     debasher::get_procdeps_for_process()
@@ -719,38 +752,6 @@ debasher::get_procdeps_for_process_cached()
             fi
         }
 
-        # Check whether the argument at position $1 is a candidate to generate
-        # a process dependency. Returns 0 and writes the associated option index
-        # into the caller-provided variable if it is a candidate; returns 1
-        # otherwise.
-        debasher::_get_dep_candidate_opt_idx()
-        {
-            local i=$1
-            local -n idx_ref=$2
-
-            local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
-            if ! debasher::is_absolute_path "${value}"; then
-                return 1
-            fi
-
-            local j=$((i-1))
-            if [ $j -lt 0 ]; then
-                return 1
-            fi
-
-            local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
-            if ! debasher::str_is_option "${opt}" || debasher::str_is_output_option "${opt}"; then
-                return 1
-            fi
-
-            if [[ ! -v DEBASHER_OUT_VALUE_TO_PROCESSES[${value}] ]]; then
-                return 1
-            fi
-
-            idx_ref=$j
-            return 0
-        }
-
         debasher::get_procdeps_for_process_task()
         {
             local cmdline=$1
@@ -768,7 +769,7 @@ debasher::get_procdeps_for_process_cached()
             for i in "${!DEBASHER_DESERIALIZED_ARGS[@]}"; do
                 # Skip early: is this argument even a dependency candidate?
                 local j
-                if ! debasher::_get_dep_candidate_opt_idx "$i" j; then
+                if ! debasher::deserialized_args_idx_is_dep_candidate "$i" j; then
                     continue
                 fi
 
@@ -945,41 +946,39 @@ debasher::get_procdeps_for_process_cached()
 ########
 debasher::register_fifos_used_by_process()
 {
+
     debasher::register_fifos_used_by_process_task()
     {
-        # Initialize variables
         local cmdline=$1
         local processname=$2
         local num_tasks=$3
         local task_idx=$4
 
-        # Iterate over task options
-        local opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
+        local opts
+        opts=`debasher::get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
         debasher::deserialize_args "${opts}"
+
+        local i
         for i in "${!DEBASHER_DESERIALIZED_ARGS[@]}"; do
-            # Check if a value represents an absolute path
-            local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
-            if debasher::is_absolute_path "${value}"; then
-                j=$((i-1))
-                if [ $j -ge 0 ]; then
-                    opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
-                    # Check if the option associated to the value is
-                    # not an output option
-                    if debasher::str_is_option "${opt}" && ! debasher::str_is_output_option "${opt}"; then
-                        augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
-                        if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
-                            # The value is a FIFO
-                            local proc_plus_idx=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
-                            local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-                            local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-                            if [ "${processowner}" != "${processname}" ]; then
-                                # The current process is not the owner of the FIFO
-                                DEBASHER_FIFO_USERS["${augm_fifoname}"]=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}
-                            fi
-                        fi
-                    fi
-                fi
+            # Skip early: is this argument even a dependency candidate?
+            local j
+            if ! debasher::deserialized_args_idx_is_dep_candidate "$i" j; then
+                continue
             fi
+
+            local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
+
+            local augm_fifoname
+            augm_fifoname=`debasher::get_augm_fifoname_from_absname "${value}"`
+            [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || continue
+
+            local proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}"
+            local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+
+            [ "${processowner}" = "${processname}" ] && continue
+
+            # The current process is not the owner of the FIFO: register it as a user
+            DEBASHER_FIFO_USERS["${augm_fifoname}"]=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}
         done
     }
 
