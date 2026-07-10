@@ -90,10 +90,10 @@ configure_scheduler()
     if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
         # If the scheduler was not set in the command line, it is
         # automatically determined
-        local sched=`debasher::determine_scheduler`
-        debasher::set_debasher_scheduler "${sched}" || return 1
+        local sched=`debasher::_determine_scheduler`
+        debasher::_set_debasher_scheduler "${sched}" || return 1
     else
-        debasher::set_debasher_scheduler "${sched}" || return 1
+        debasher::_set_debasher_scheduler "${sched}" || return 1
     fi
 }
 
@@ -101,22 +101,22 @@ configure_scheduler()
 process_status_for_pfile()
 {
     local dirname=$1
-    local absdirname=`debasher::get_absolute_path "${dirname}"`
+    local absdirname=`debasher::_get_absolute_path "${dirname}"`
     local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
     # Extract information from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local pfile
-    pfile=`debasher::get_abspfile_from_command_line_file "${command_line_file}"` || return 1
+    pfile=`debasher::_get_abspfile_from_command_line_file "${command_line_file}"` || return 1
     local sched
-    sched=`debasher::get_sched_from_command_line_file "${command_line_file}"` || return 1
+    sched=`debasher::_get_sched_from_command_line_file "${command_line_file}"` || return 1
 
     # Get original output directory
     local orig_outdir
-    orig_outdir=`debasher::get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
+    orig_outdir=`debasher::_get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
-    if debasher::dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
+    if debasher::_dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
         local moved_outdir="no"
     else
         echo "Warning: program output directory was moved (original directory: ${orig_outdir})" >&2
@@ -141,7 +141,7 @@ process_status_for_pfile()
         num_processes=$((num_processes + 1))
 
         # Extract process information
-        local processname=`debasher::extract_processname_from_process_spec "$process_spec"`
+        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
 
         # If s option was given, continue to next iteration if process
         # name does not match with the given one
@@ -150,22 +150,22 @@ process_status_for_pfile()
         fi
 
         # Check process status
-        local status=`debasher::get_process_status "${absdirname}" ${processname}`
+        local status=`debasher::_get_process_status "${absdirname}" ${processname}`
 
         # Obtain ids
         local ids_info
-        ids_info=`debasher::read_ids_from_files "${absdirname}" ${processname}`
+        ids_info=`debasher::_read_ids_from_files "${absdirname}" ${processname}`
 
         # Print status
         if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
             echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (Stopping...)"
-            debasher::stop_process "${ids_info}"
+            debasher::_stop_process "${ids_info}"
         else
             echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (The process is not running)"
         fi
 
         # Increase lineno
-    done < <(debasher::exec_program_func_for_module "${pfile}")
+    done < <(debasher::_exec_program_func_for_module "${pfile}")
 }
 
 ########

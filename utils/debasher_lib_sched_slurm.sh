@@ -27,13 +27,13 @@ DEBASHER_PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER="${DEBASHER_PROCESS_METHOD_SE
 
 
 ########
-debasher::validate_jid()
+debasher::_validate_jid()
 {
     [[ "$1" =~ ^[0-9]+(,[0-9]+)*$ ]] || return 1
 }
 
 ########
-debasher::get_slurm_version()
+debasher::_get_slurm_version()
 {
     if [ "$SBATCH" = "" ]; then
         echo "0"
@@ -43,11 +43,11 @@ debasher::get_slurm_version()
 }
 
 ########
-debasher::slurm_supports_aftercorr_deptype()
+debasher::_slurm_supports_aftercorr_deptype()
 {
-    local slurm_ver=`debasher::get_slurm_version`
-    local slurm_ver_num=`debasher::version_to_number ${slurm_ver}`
-    local slurm_ver_aftercorr_num=`debasher::version_to_number ${DEBASHER_FIRST_SLURM_VERSION_WITH_AFTERCORR}`
+    local slurm_ver=`debasher::_get_slurm_version`
+    local slurm_ver_num=`debasher::_version_to_number ${slurm_ver}`
+    local slurm_ver_aftercorr_num=`debasher::_version_to_number ${DEBASHER_FIRST_SLURM_VERSION_WITH_AFTERCORR}`
     if [ "${slurm_ver_num}" -ge "${slurm_ver_aftercorr_num}" ]; then
         return 0
     else
@@ -56,10 +56,10 @@ debasher::slurm_supports_aftercorr_deptype()
 }
 
 ########
-debasher::init_slurm_scheduler()
+debasher::_init_slurm_scheduler()
 {
     # Verify if aftercorr dependency type is supported by SLURM
-    if debasher::slurm_supports_aftercorr_deptype; then
+    if debasher::_slurm_supports_aftercorr_deptype; then
         DEBASHER_AFTERCORR_PROCESSDEP_TYPE_AVAILABLE_IN_SLURM=1
     else
         DEBASHER_AFTERCORR_PROCESSDEP_TYPE_AVAILABLE_IN_SLURM=0
@@ -67,7 +67,7 @@ debasher::init_slurm_scheduler()
 }
 
 ########
-debasher::print_script_header_slurm_sched()
+debasher::_print_script_header_slurm_sched()
 {
     get_sigterm_handler_funcname()
     {
@@ -92,7 +92,7 @@ debasher::print_script_header_slurm_sched()
     local num_tasks=$4
 
     local sigterm_handler_funcname=`get_sigterm_handler_funcname "${processname}"`
-    if ! debasher::func_exists "${sigterm_handler_funcname}"; then
+    if ! debasher::_func_exists "${sigterm_handler_funcname}"; then
         write_sigterm_handler "${sigterm_handler_funcname}"
     fi
     echo "trap '${sigterm_handler_funcname}' SIGTERM"
@@ -103,7 +103,7 @@ debasher::print_script_header_slurm_sched()
 }
 
 ########
-debasher::print_opt_code_slurm_sched()
+debasher::_print_opt_code_slurm_sched()
 {
     local cmdline=$1
     local processname=$2
@@ -115,53 +115,53 @@ debasher::print_opt_code_slurm_sched()
         local task_id=0
     fi
 
-    if debasher::uses_option_generator "${processname}"; then
+    if debasher::_uses_option_generator "${processname}"; then
         echo "CMDLINE=$(printf '%q' "${cmdline}")"
-        local proc_outdir=`debasher::get_process_outdir "${processname}"`
-        local generate_opts_funcname=`debasher::get_generate_opts_funcname ${processname}`
-        echo "sargs=\`debasher::gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\"\`"
+        local proc_outdir=`debasher::_get_process_outdir "${processname}"`
+        local generate_opts_funcname=`debasher::_get_generate_opts_funcname ${processname}`
+        echo "sargs=\`debasher::_gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\"\`"
     else
-        local opts_fname=`debasher::get_sched_opts_fname_for_process "${DEBASHER_PROGRAM_OUTDIR}" "${processname}"`
-        echo "sargs=\`debasher::get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\"\`"
+        local opts_fname=`debasher::_get_sched_opts_fname_for_process "${DEBASHER_PROGRAM_OUTDIR}" "${processname}"`
+        echo "sargs=\`debasher::_get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\"\`"
     fi
-    echo "debasher::deserialize_args \"\${sargs}\""
+    echo "debasher::_deserialize_args \"\${sargs}\""
 }
 
 ########
-debasher::print_script_body_slurm_sched()
+debasher::_print_script_body_slurm_sched()
 {
     # Initialize variables
     local cmdline=$1
     local dirname=$2
     local processname=$3
     local opt_array_size=$4
-    local skip_funct=`debasher::get_skip_funcname ${processname}`
-    local reset_funct=`debasher::get_reset_funcname ${processname}`
-    local post_funct=`debasher::get_post_funcname ${processname}`
+    local skip_funct=`debasher::_get_skip_funcname ${processname}`
+    local reset_funct=`debasher::_get_reset_funcname ${processname}`
+    local post_funct=`debasher::_get_post_funcname ${processname}`
 
     # Retrieve and deserialize process options
-    debasher::print_opt_code_slurm_sched "${cmdline}" "${processname}" "${opt_array_size}"
+    debasher::_print_opt_code_slurm_sched "${cmdline}" "${processname}" "${opt_array_size}"
 
     # Write skip function if it was provided
     if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
         echo "${skip_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" && { echo \"Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code \$?\" >&2; exit 1; }"
     fi
 
-    echo "debasher::display_begin_process_message"
+    echo "debasher::_display_begin_process_message"
 
     # Reset output directory
     if [ "${reset_funct}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
         if [ "${opt_array_size}" -eq 1 ]; then
-            echo "debasher::default_reset_outfiles_for_process $(printf '%q' "${dirname}") ${processname}"
+            echo "debasher::_default_reset_outfiles_for_process $(printf '%q' "${dirname}") ${processname}"
         else
-            echo "debasher::default_reset_outfiles_for_process_array $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
+            echo "debasher::_default_reset_outfiles_for_process_array $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
         fi
     else
         echo "${reset_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\""
     fi
 
     # Write function to be executed
-    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`debasher::get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
+    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\`debasher::_get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\"\`"
     echo "${processname} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
     echo "funct_exit_code=\${PIPESTATUS[0]}"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${processname} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${processname} successfully executed\" >&2; fi"
@@ -175,62 +175,62 @@ debasher::print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
-    local sign_process_completion_cmd=`debasher::get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}"`
+    local sign_process_completion_cmd=`debasher::_get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}"`
     echo "${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 }
 
 ########
-debasher::print_script_foot_slurm_sched()
+debasher::_print_script_foot_slurm_sched()
 {
-    echo "debasher::display_end_process_message"
+    echo "debasher::_display_end_process_message"
 }
 
 ########
-debasher::write_env_vars_and_funcs_slurm()
+debasher::_write_env_vars_and_funcs_slurm()
 {
     local dirname=$1
 
     # Write general environment variables and functions
-    debasher::write_env_vars_and_funcs "${dirname}"
+    debasher::_write_env_vars_and_funcs "${dirname}"
 
     # Write slurm scheduler environment functions
-    declare -f debasher::write_env_vars_and_funcs_slurm
-    declare -f debasher::seq_execute_slurm
-    declare -f debasher::get_script_log_filenames_slurm
+    declare -f debasher::_write_env_vars_and_funcs_slurm
+    declare -f debasher::_seq_execute_slurm
+    declare -f debasher::_get_script_log_filenames_slurm
 }
 
 ########
-debasher::create_slurm_script()
+debasher::_create_slurm_script()
 {
     # Init variables
     local cmdline=$1
     local dirname=$2
     local processname=$3
     local opt_array_size=$4
-    local fname=`debasher::get_script_filename "${dirname}" ${processname}`
+    local fname=`debasher::_get_script_filename "${dirname}" ${processname}`
 
     # Write bash shebang
-    local BASH_SHEBANG=`debasher::init_bash_shebang_var`
+    local BASH_SHEBANG=`debasher::_init_bash_shebang_var`
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
     # Write environment variables
-    debasher::write_env_vars_and_funcs_slurm "${dirname}" | debasher::exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
+    debasher::_write_env_vars_and_funcs_slurm "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
 
     # Print header
-    debasher::print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
+    debasher::_print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
-    debasher::print_script_body_slurm_sched "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
+    debasher::_print_script_body_slurm_sched "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print foot
-    debasher::print_script_foot_slurm_sched >> "${fname}" || return 1
+    debasher::_print_script_foot_slurm_sched >> "${fname}" || return 1
 
     # Give execution permission
     chmod u+x "${fname}" || return 1
 }
 
 ########
-debasher::get_slurm_attempt_suffix()
+debasher::_get_slurm_attempt_suffix()
 {
     local attempt_no=$1
 
@@ -242,47 +242,47 @@ debasher::get_slurm_attempt_suffix()
 }
 
 ########
-debasher::get_slurm_jobname()
+debasher::_get_slurm_jobname()
 {
     local processname=$1
     local attempt_no=$2
-    local attempt_suffix=`debasher::get_slurm_attempt_suffix ${attempt_no}`
+    local attempt_suffix=`debasher::_get_slurm_attempt_suffix ${attempt_no}`
 
     echo ${processname}${attempt_suffix}
 }
 
 ########
-debasher::get_task_template_log_filename_slurm()
+debasher::_get_task_template_log_filename_slurm()
 {
     local dirname=$1
     local processname=$2
 
     # Get exec dir
-    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}_%a.${DEBASHER_SCHED_LOG_FEXT}"
 }
 
 ########
-debasher::get_slurm_output()
+debasher::_get_slurm_output()
 {
     local dirname=$1
     local processname=$2
     local array_size=$3
     local attempt_no=$4
-    local attempt_suffix=`debasher::get_slurm_attempt_suffix ${attempt_no}`
+    local attempt_suffix=`debasher::_get_slurm_attempt_suffix ${attempt_no}`
 
     if [ ${array_size} -eq 1 ]; then
-        local slurm_log_filename=`debasher::get_process_log_filename "${dirname}" ${processname}`
+        local slurm_log_filename=`debasher::_get_process_log_filename "${dirname}" ${processname}`
         echo ${slurm_log_filename}${attempt_suffix}
     else
-        local slurm_task_template_log_filename=`debasher::get_task_template_log_filename_slurm "${dirname}" ${processname}`
+        local slurm_task_template_log_filename=`debasher::_get_task_template_log_filename_slurm "${dirname}" ${processname}`
         echo ${slurm_task_template_log_filename}${attempt_suffix}
     fi
 }
 
 ########
-debasher::get_slurm_cpus_opt()
+debasher::_get_slurm_cpus_opt()
 {
     local cpus=$1
 
@@ -294,7 +294,7 @@ debasher::get_slurm_cpus_opt()
 }
 
 ########
-debasher::get_slurm_mem_opt()
+debasher::_get_slurm_mem_opt()
 {
     local mem=$1
 
@@ -306,7 +306,7 @@ debasher::get_slurm_mem_opt()
 }
 
 ########
-debasher::get_slurm_time_opt()
+debasher::_get_slurm_time_opt()
 {
     local time=$1
 
@@ -318,7 +318,7 @@ debasher::get_slurm_time_opt()
 }
 
 ########
-debasher::get_slurm_account_opt()
+debasher::_get_slurm_account_opt()
 {
     local account=$1
 
@@ -330,7 +330,7 @@ debasher::get_slurm_account_opt()
 }
 
 ########
-debasher::get_slurm_nodes_opt()
+debasher::_get_slurm_nodes_opt()
 {
     local nodes=$1
 
@@ -346,7 +346,7 @@ debasher::get_slurm_nodes_opt()
 }
 
 ########
-debasher::get_slurm_partition_opt()
+debasher::_get_slurm_partition_opt()
 {
     local partition=$1
 
@@ -358,7 +358,7 @@ debasher::get_slurm_partition_opt()
 }
 
 ########
-debasher::get_slurm_dependency_opt()
+debasher::_get_slurm_dependency_opt()
 {
     local processdeps=$1
 
@@ -371,7 +371,7 @@ debasher::get_slurm_dependency_opt()
 }
 
 ########
-debasher::get_slurm_task_array_opt()
+debasher::_get_slurm_task_array_opt()
 {
     local file=$1
     local task_array_list=$2
@@ -385,7 +385,7 @@ debasher::get_slurm_task_array_opt()
 }
 
 ########
-debasher::set_slurm_jobcorr_like_deps_for_listitem()
+debasher::_set_slurm_jobcorr_like_deps_for_listitem()
 {
     local specified_jids=$1
     local jid=$2
@@ -429,7 +429,7 @@ debasher::set_slurm_jobcorr_like_deps_for_listitem()
 }
 
 ########
-debasher::set_slurm_jobcorr_like_deps()
+debasher::_set_slurm_jobcorr_like_deps()
 {
     local specified_jids=$1
     local jid=$2
@@ -444,12 +444,12 @@ debasher::set_slurm_jobcorr_like_deps()
     IFS="$sep" read -r -a array <<< "${task_array_list}"
     local listitem
     for listitem in ${array[@]}; do
-        debasher::set_slurm_jobcorr_like_deps_for_listitem ${specified_jids} ${jid} ${deptype} "${additional_deps}" ${listitem} || return 1
+        debasher::_set_slurm_jobcorr_like_deps_for_listitem ${specified_jids} ${jid} ${deptype} "${additional_deps}" ${listitem} || return 1
     done
 }
 
 ########
-debasher::combine_slurm_deps()
+debasher::_combine_slurm_deps()
 {
     local deps1=$1
     local deps2=$2
@@ -466,14 +466,14 @@ debasher::combine_slurm_deps()
 }
 
 ########
-debasher::slurm_get_attempt_deps()
+debasher::_slurm_get_attempt_deps()
 {
     # Initialize variables
     local attempt_jids=$1
     local attempt_deps
 
     # Iterate of attempt jids
-    local attempt_jids_blanks=`debasher::replace_str_elem_sep_with_blank "," ${attempt_jids}`
+    local attempt_jids_blanks=`debasher::_replace_str_elem_sep_with_blank "," ${attempt_jids}`
     local attempt_jid
     for attempt_jid in ${attempt_jids_blanks}; do
         if [ "${attempt_deps}" = "" ]; then
@@ -487,7 +487,7 @@ debasher::slurm_get_attempt_deps()
 }
 
 ########
-debasher::slurm_launch_attempt()
+debasher::_slurm_launch_attempt()
 {
     # Initialize variables
     local dirname=$1
@@ -502,29 +502,29 @@ debasher::slurm_launch_attempt()
     local time_attempt=${10}
 
     # Obtain augmented dependencies
-    local attempt_deps=`debasher::slurm_get_attempt_deps ${prev_attempt_jids}`
-    local augmented_deps=`debasher::combine_slurm_deps ${processdeps} ${attempt_deps}`
+    local attempt_deps=`debasher::_slurm_get_attempt_deps ${prev_attempt_jids}`
+    local augmented_deps=`debasher::_combine_slurm_deps ${processdeps} ${attempt_deps}`
 
     # Retrieve specification
-    local cpus=`debasher::extract_cpus_from_process_spec "$process_spec"`
-    local account=`debasher::extract_account_from_process_spec "$process_spec"`
-    local partition=`debasher::extract_partition_from_process_spec "$process_spec"`
-    local nodes=`debasher::extract_nodes_from_process_spec "$process_spec"`
-    local spec_throttle=`debasher::extract_throttle_from_process_spec "$process_spec"`
-    local sched_throttle=`debasher::get_scheduler_throttle ${spec_throttle}`
+    local cpus=`debasher::_extract_cpus_from_process_spec "$process_spec"`
+    local account=`debasher::_extract_account_from_process_spec "$process_spec"`
+    local partition=`debasher::_extract_partition_from_process_spec "$process_spec"`
+    local nodes=`debasher::_extract_nodes_from_process_spec "$process_spec"`
+    local spec_throttle=`debasher::_extract_throttle_from_process_spec "$process_spec"`
+    local sched_throttle=`debasher::_get_scheduler_throttle ${spec_throttle}`
 
     # Define options for sbatch
-    local jobname=`debasher::get_slurm_jobname $processname $attempt_no`
-    local output=`debasher::get_slurm_output "$dirname" $processname $array_size $attempt_no`
-    local cpus_opt=`debasher::get_slurm_cpus_opt ${cpus}`
-    local mem_opt=`debasher::get_slurm_mem_opt ${mem_attempt}`
-    local time_opt=`debasher::get_slurm_time_opt ${time_attempt}`
-    local account_opt=`debasher::get_slurm_account_opt ${account}`
-    local nodes_opt=`debasher::get_slurm_nodes_opt ${nodes}`
-    local partition_opt=`debasher::get_slurm_partition_opt ${partition}`
-    local dependency_opt=`debasher::get_slurm_dependency_opt "${augmented_deps}"`
+    local jobname=`debasher::_get_slurm_jobname $processname $attempt_no`
+    local output=`debasher::_get_slurm_output "$dirname" $processname $array_size $attempt_no`
+    local cpus_opt=`debasher::_get_slurm_cpus_opt ${cpus}`
+    local mem_opt=`debasher::_get_slurm_mem_opt ${mem_attempt}`
+    local time_opt=`debasher::_get_slurm_time_opt ${time_attempt}`
+    local account_opt=`debasher::_get_slurm_account_opt ${account}`
+    local nodes_opt=`debasher::_get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`debasher::_get_slurm_partition_opt ${partition}`
+    local dependency_opt=`debasher::_get_slurm_dependency_opt "${augmented_deps}"`
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=`debasher::get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
+        local jobarray_opt=`debasher::_get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle}`
     fi
 
     # Submit job (initially it is put on hold)
@@ -543,7 +543,7 @@ debasher::slurm_launch_attempt()
     # further attempts
     if [ ${array_size} -gt 1 -a ${attempt_no} -ge 2 ]; then
         local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
-        debasher::set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${processdeps}" || { return 1 ; echo "Error while launching attempt job for process ${processname} (debasher::set_slurm_jobcorr_like_deps)" >&2; }
+        debasher::_set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${processdeps}" || { return 1 ; echo "Error while launching attempt job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; }
     fi
 
     # Release job
@@ -561,7 +561,7 @@ debasher::slurm_launch_attempt()
 }
 
 ########
-debasher::slurm_launch_preverif_job()
+debasher::_slurm_launch_preverif_job()
 {
     # Initialize variables
     local dirname=$1
@@ -572,25 +572,25 @@ debasher::slurm_launch_preverif_job()
     local attempt_jids=$6
 
     # Obtain dependencies for attempts
-    local attempt_deps=`debasher::slurm_get_attempt_deps ${attempt_jids}`
+    local attempt_deps=`debasher::_slurm_get_attempt_deps ${attempt_jids}`
 
     # Retrieve specification
-    local account=`debasher::extract_account_from_process_spec "$process_spec"`
-    local partition=`debasher::extract_partition_from_process_spec "$process_spec"`
-    local nodes=`debasher::extract_nodes_from_process_spec "$process_spec"`
+    local account=`debasher::_extract_account_from_process_spec "$process_spec"`
+    local partition=`debasher::_extract_partition_from_process_spec "$process_spec"`
+    local nodes=`debasher::_extract_nodes_from_process_spec "$process_spec"`
 
     # Define options
     local jobname="${processname}__preverif"
-    local preverif_logf=`debasher::get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
-    local cpus_opt=`debasher::get_slurm_cpus_opt 1`
-    local mem_opt=`debasher::get_slurm_mem_opt 16`
-    local time_opt=`debasher::get_slurm_time_opt 00:01:00`
-    local account_opt=`debasher::get_slurm_account_opt ${account}`
-    local nodes_opt=`debasher::get_slurm_nodes_opt ${nodes}`
-    local partition_opt=`debasher::get_slurm_partition_opt ${partition}`
-    local dependency_opt=`debasher::get_slurm_dependency_opt "${attempt_deps}"`
+    local preverif_logf=`debasher::_get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
+    local cpus_opt=`debasher::_get_slurm_cpus_opt 1`
+    local mem_opt=`debasher::_get_slurm_mem_opt 16`
+    local time_opt=`debasher::_get_slurm_time_opt 00:01:00`
+    local account_opt=`debasher::_get_slurm_account_opt ${account}`
+    local nodes_opt=`debasher::_get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`debasher::_get_slurm_partition_opt ${partition}`
+    local dependency_opt=`debasher::_get_slurm_dependency_opt "${attempt_deps}"`
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=`debasher::get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_DEBASHER_ARRAY_TASK_NOTHROTTLE}`
+        local jobarray_opt=`debasher::_get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_DEBASHER_ARRAY_TASK_NOTHROTTLE}`
     fi
 
     # Submit preliminary verification job (the job will fail if all
@@ -609,7 +609,7 @@ debasher::slurm_launch_preverif_job()
     if [ ${array_size} -gt 1 ]; then
         local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
         local additional_deps=""
-        debasher::set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching preliminary verification job for process ${processname} (debasher::set_slurm_jobcorr_like_deps)" >&2; }
+        debasher::_set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching preliminary verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; }
     fi
 
     # Release job
@@ -627,7 +627,7 @@ debasher::slurm_launch_preverif_job()
 }
 
 ########
-debasher::slurm_launch_verif_job()
+debasher::_slurm_launch_verif_job()
 {
     # Initialize variables
     local dirname=$1
@@ -638,23 +638,23 @@ debasher::slurm_launch_verif_job()
     local preverif_jid=$6
 
     # Retrieve specification
-    local account=`debasher::extract_account_from_process_spec "$process_spec"`
-    local partition=`debasher::extract_partition_from_process_spec "$process_spec"`
-    local nodes=`debasher::extract_nodes_from_process_spec "$process_spec"`
+    local account=`debasher::_extract_account_from_process_spec "$process_spec"`
+    local partition=`debasher::_extract_partition_from_process_spec "$process_spec"`
+    local nodes=`debasher::_extract_nodes_from_process_spec "$process_spec"`
 
     # Define options
     local jobname="${processname}__verif"
-    local verif_logf=`debasher::get_process_log_verif_filename_slurm "${dirname}" ${processname}`
-    local cpus_opt=`debasher::get_slurm_cpus_opt 1`
-    local mem_opt=`debasher::get_slurm_mem_opt 16`
-    local time_opt=`debasher::get_slurm_time_opt 00:01:00`
-    local account_opt=`debasher::get_slurm_account_opt ${account}`
-    local nodes_opt=`debasher::get_slurm_nodes_opt ${nodes}`
-    local partition_opt=`debasher::get_slurm_partition_opt ${partition}`
+    local verif_logf=`debasher::_get_process_log_verif_filename_slurm "${dirname}" ${processname}`
+    local cpus_opt=`debasher::_get_slurm_cpus_opt 1`
+    local mem_opt=`debasher::_get_slurm_mem_opt 16`
+    local time_opt=`debasher::_get_slurm_time_opt 00:01:00`
+    local account_opt=`debasher::_get_slurm_account_opt ${account}`
+    local nodes_opt=`debasher::_get_slurm_nodes_opt ${nodes}`
+    local partition_opt=`debasher::_get_slurm_partition_opt ${partition}`
     local verjob_deps="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}:${preverif_jid}"
-    local dependency_opt=`debasher::get_slurm_dependency_opt "${verjob_deps}"`
+    local dependency_opt=`debasher::_get_slurm_dependency_opt "${verjob_deps}"`
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=`debasher::get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_DEBASHER_ARRAY_TASK_NOTHROTTLE}`
+        local jobarray_opt=`debasher::_get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_DEBASHER_ARRAY_TASK_NOTHROTTLE}`
     fi
 
     # Submit verification job (the job will succeed if preliminary
@@ -673,7 +673,7 @@ debasher::slurm_launch_verif_job()
     if [ ${array_size} -gt 1 ]; then
         local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
         local additional_deps=""
-        debasher::set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching verification job for process ${processname} (debasher::set_slurm_jobcorr_like_deps)" >&2; }
+        debasher::_set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; }
     fi
 
     # Release job
@@ -691,12 +691,12 @@ debasher::slurm_launch_verif_job()
 }
 
 ########
-debasher::slurm_launch()
+debasher::_slurm_launch()
 {
     # Initialize variables
     local dirname=$1
     local processname=$2
-    local file=`debasher::get_script_filename "${dirname}" ${processname}`
+    local file=`debasher::_get_script_filename "${dirname}" ${processname}`
     local array_size=$3
     local task_array_list=$4
     local process_spec=$5
@@ -706,23 +706,23 @@ debasher::slurm_launch()
     # Launch execution attempts
     local attempt_no=0
     local attempt_jids=""
-    local mem=`debasher::extract_mem_from_process_spec "$process_spec"`
-    local time=`debasher::extract_time_from_process_spec "$process_spec"`
-    local num_attempts=`debasher::get_num_attempts ${time} ${mem}`
+    local mem=`debasher::_extract_mem_from_process_spec "$process_spec"`
+    local time=`debasher::_extract_time_from_process_spec "$process_spec"`
+    local num_attempts=`debasher::_get_num_attempts ${time} ${mem}`
     local attempt_no=1
 
     while [ ${attempt_no} -le ${num_attempts} ]; do
         # Obtain attempt-dependent parameters
-        local mem_attempt=`debasher::get_mem_attempt_value ${mem} ${attempt_no}`
-        local time_attempt=`debasher::get_time_attempt_value ${time} ${attempt_no}`
+        local mem_attempt=`debasher::_get_mem_attempt_value ${mem} ${attempt_no}`
+        local time_attempt=`debasher::_get_time_attempt_value ${time} ${attempt_no}`
 
         # Launch attempt
-        jid=`debasher::slurm_launch_attempt "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_no} "${processdeps}" "${attempt_jids}" ${mem_attempt} ${time_attempt}` || return 1
+        jid=`debasher::_slurm_launch_attempt "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_no} "${processdeps}" "${attempt_jids}" ${mem_attempt} ${time_attempt}` || return 1
 
-        debasher::validate_jid "$jid" || return 1
+        debasher::_validate_jid "$jid" || return 1
 
         # Update variable storing jids of previous attempts (after
-        # launching all attempts this variable is also useful to debasher::launch
+        # launching all attempts this variable is also useful to debasher::_launch
         # pre-verification job)
         if [ "${attempt_jids}" = "" ]; then
             attempt_jids=${jid}
@@ -735,13 +735,13 @@ debasher::slurm_launch()
 
     # If more than one attempt was requested, verify if any of the
     # attempts were successful (currently, verification requires to
-    # debasher::launch two jobs)
+    # debasher::_launch two jobs)
     if [ ${num_attempts} -gt 1 ]; then
-        preverif_jid=`debasher::slurm_launch_preverif_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_jids}` || return 1
-        debasher::validate_jid "$preverif_jid" || return 1
+        preverif_jid=`debasher::_slurm_launch_preverif_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${attempt_jids}` || return 1
+        debasher::_validate_jid "$preverif_jid" || return 1
 
-        verif_jid=`debasher::slurm_launch_verif_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${preverif_jid}` || return 1
-        debasher::validate_jid "$verif_jid" || return 1
+        verif_jid=`debasher::_slurm_launch_verif_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" ${preverif_jid}` || return 1
+        debasher::_validate_jid "$verif_jid" || return 1
 
         # Set output value
         eval "${outvar}='${attempt_jids},${preverif_jid},${verif_jid}'"
@@ -751,7 +751,7 @@ debasher::slurm_launch()
 }
 
 ########
-debasher::get_primary_id_slurm()
+debasher::_get_primary_id_slurm()
 {
     local launch_id_info=$1
     local str_array
@@ -772,7 +772,7 @@ debasher::get_primary_id_slurm()
 }
 
 ########
-debasher::get_global_id_slurm()
+debasher::_get_global_id_slurm()
 {
     # Initialize variables
     local launch_id_info=$1
@@ -780,7 +780,7 @@ debasher::get_global_id_slurm()
     local sep=","
     IFS="$sep" read -r -a str_array <<< "${launch_id_info}"
 
-    # Return last id stored in debasher::launch output variable, which corresponds
+    # Return last id stored in debasher::_launch output variable, which corresponds
     # to the global id
     local array_len=${#str_array[@]}
     local last_array_idx=$(( array_len - 1 ))
@@ -788,14 +788,14 @@ debasher::get_global_id_slurm()
 }
 
 ########
-debasher::get_slurm_state_code()
+debasher::_get_slurm_state_code()
 {
     local jid=$1
     "${SQUEUE}" -j $jid -h -o "%t" 2>/dev/null
 }
 
 ########
-debasher::slurm_id_exists()
+debasher::_slurm_id_exists()
 {
     local jid=$1
 
@@ -805,7 +805,7 @@ debasher::slurm_id_exists()
 
     if [ ${squeue_success} -eq 1 ]; then
         # If squeue succeeds, determine if it returns a state code
-        local job_state_code=`debasher::get_slurm_state_code $jid`
+        local job_state_code=`debasher::_get_slurm_state_code $jid`
         if [ -z "${job_state_code}" ]; then
             return 1
         else
@@ -818,7 +818,7 @@ debasher::slurm_id_exists()
 }
 
 ########
-debasher::slurm_stop_jid()
+debasher::_slurm_stop_jid()
 {
     local jid=$1
 
@@ -828,7 +828,7 @@ debasher::slurm_stop_jid()
 }
 
 ########
-debasher::map_deptype_if_necessary_slurm()
+debasher::_map_deptype_if_necessary_slurm()
 {
     local deptype=$1
     case $deptype in
@@ -846,25 +846,25 @@ debasher::map_deptype_if_necessary_slurm()
 }
 
 ########
-debasher::get_process_log_filename_slurm()
+debasher::_get_process_log_filename_slurm()
 {
     local dirname=$1
     local processname=$2
 
     # Get exec dir
-    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.${DEBASHER_SCHED_LOG_FEXT}"
 }
 
 ########
-debasher::get_process_last_attempt_logf_slurm()
+debasher::_get_process_last_attempt_logf_slurm()
 {
     local dirname=$1
     local processname=$2
 
     # Obtain number of log files
-    local logfname=`debasher::get_process_log_filename "$dirname" $processname`
+    local logfname=`debasher::_get_process_log_filename "$dirname" $processname`
     local numlogf=0
     for f in "${logfname}"*; do
         numlogf=$((numlogf + 1))
@@ -874,56 +874,56 @@ debasher::get_process_last_attempt_logf_slurm()
     if [ ${numlogf} -eq 0 ]; then
         echo ${DEBASHER_NOFILE}
     else
-        local suff=`debasher::get_slurm_attempt_suffix ${numlogf}`
+        local suff=`debasher::_get_slurm_attempt_suffix ${numlogf}`
         echo "${logfname}${suff}"
     fi
 }
 
 ########
-debasher::get_process_log_preverif_filename_slurm()
+debasher::_get_process_log_preverif_filename_slurm()
 {
     local dirname=$1
     local processname=$2
 
     # Get exec dir
-    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.preverif.${DEBASHER_SCHED_LOG_FEXT}"
 }
 
 ########
-debasher::get_process_log_verif_filename_slurm()
+debasher::_get_process_log_verif_filename_slurm()
 {
     local dirname=$1
     local processname=$2
 
     # Get exec dir
-    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.verif.${DEBASHER_SCHED_LOG_FEXT}"
 }
 
 ########
-debasher::get_process_log_signcomp_filename_slurm()
+debasher::_get_process_log_signcomp_filename_slurm()
 {
     local dirname=$1
     local processname=$2
 
     # Get exec dir
-    execdir=`debasher::get_prg_exec_dir_for_process "${dirname}" "${processname}"`
+    execdir=`debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}"`
 
     echo "${execdir}/${processname}.signcomp.${DEBASHER_SCHED_LOG_FEXT}"
 }
 
 ########
-debasher::get_task_last_attempt_logf_slurm()
+debasher::_get_task_last_attempt_logf_slurm()
 {
     local dirname=$1
     local processname=$2
     local taskidx=$3
 
     # Obtain number of log files
-    local logfname=`debasher::get_task_log_filename "$dirname" "$processname" "$taskidx"`
+    local logfname=`debasher::_get_task_log_filename "$dirname" "$processname" "$taskidx"`
     local numlogf=0
     for f in "${logfname}*"; do
         numlogf=$((numlogf + 1))
@@ -933,20 +933,20 @@ debasher::get_task_last_attempt_logf_slurm()
     if [ ${numlogf} -eq 0 ]; then
         echo ${DEBASHER_NOFILE}
     else
-        local suff=`debasher::get_slurm_attempt_suffix ${numlogf}`
+        local suff=`debasher::_get_slurm_attempt_suffix ${numlogf}`
         echo "${logfname}${suff}"
     fi
 }
 
 ########
-debasher::clean_process_files_slurm()
+debasher::_clean_process_files_slurm()
 {
     clean_process_id_files_non_array()
     {
         local dirname=$1
         local processname=$2
 
-        local processid_file=`debasher::get_processid_filename "${dirname}" ${processname}`
+        local processid_file=`debasher::_get_processid_filename "${dirname}" ${processname}`
         "${RM}" -f "${processid_file}"
     }
 
@@ -956,7 +956,7 @@ debasher::clean_process_files_slurm()
         local processname=$2
         local idx=$3
 
-        local array_taskid_file=`debasher::get_array_taskid_filename "${dirname}" ${processname} ${idx}`
+        local array_taskid_file=`debasher::_get_array_taskid_filename "${dirname}" ${processname} ${idx}`
         if [ -f "${array_taskid_file}" ]; then
             "${RM}" "${array_taskid_file}"
         fi
@@ -967,13 +967,13 @@ debasher::clean_process_files_slurm()
         local dirname=$1
         local processname=$2
 
-        local slurm_log_filename=`debasher::get_process_log_filename "${dirname}" ${processname}`
+        local slurm_log_filename=`debasher::_get_process_log_filename "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_filename}*"
-        local slurm_log_preverif=`debasher::get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
+        local slurm_log_preverif=`debasher::_get_process_log_preverif_filename_slurm "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_preverif}"
-        local slurm_log_verif=`debasher::get_process_log_verif_filename_slurm "${dirname}" ${processname}`
+        local slurm_log_verif=`debasher::_get_process_log_verif_filename_slurm "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_verif}"
-        local slurm_log_signcomp=`debasher::get_process_log_signcomp_filename_slurm "${dirname}" ${processname}`
+        local slurm_log_signcomp=`debasher::_get_process_log_signcomp_filename_slurm "${dirname}" ${processname}`
         "${RM}" -f "${slurm_log_signcomp}"
     }
 
@@ -983,7 +983,7 @@ debasher::clean_process_files_slurm()
         local processname=$2
         local idx=$3
 
-        local slurm_task_log_filename=`debasher::get_task_log_filename "${dirname}" "${processname}" "${idx}"`
+        local slurm_task_log_filename=`debasher::_get_task_log_filename "${dirname}" "${processname}" "${idx}"`
         if [ -f "${slurm_task_log_filename}" ]; then
             "${RM}" "${slurm_task_log_filename}"
         fi
@@ -999,7 +999,7 @@ debasher::clean_process_files_slurm()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=`debasher::get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
+        local pending_tasks=`debasher::_get_list_of_pending_tasks_in_array "${dirname}" ${processname} ${array_size}`
         if [ "${pending_tasks}" != "" ]; then
             # Store string of pending tasks into an array
             local pending_tasks_array
@@ -1016,7 +1016,7 @@ debasher::clean_process_files_slurm()
 }
 
 ########
-debasher::slurm_stop_process()
+debasher::_slurm_stop_process()
 {
     # Initialize variables
     local ids_info=$1
@@ -1026,41 +1026,41 @@ debasher::slurm_stop_process()
     for jid_list in ${ids_info}; do
         # Process comma separated list of job ids
         local separator=","
-        local jid_list_blanks=`debasher::replace_str_elem_sep_with_blank "${separator}" ${jid_list}`
+        local jid_list_blanks=`debasher::_replace_str_elem_sep_with_blank "${separator}" ${jid_list}`
         for jid in ${jid_list_blanks}; do
-            debasher::slurm_stop_jid $jid || { echo "Error while stopping job with id $jid" >&2 ; return 1; }
+            debasher::_slurm_stop_jid $jid || { echo "Error while stopping job with id $jid" >&2 ; return 1; }
         done
     done
 }
 
 ########
-debasher::get_elapsed_time_for_process_slurm()
+debasher::_get_elapsed_time_for_process_slurm()
 {
     local dirname=$1
     local processname=$2
 
     # Obtain finished filename
-    local finished_filename=`debasher::get_process_finished_filename "${dirname}" ${processname}`
+    local finished_filename=`debasher::_get_process_finished_filename "${dirname}" ${processname}`
 
     if [ -f "${finished_filename}" ]; then
         # Get number of array tasks
-        local num_tasks=`debasher::get_num_array_tasks "${dirname}" "${processname}"`
+        local num_tasks=`debasher::_get_num_array_tasks "${dirname}" "${processname}"`
 
         case $num_tasks in
             0)  echo ${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
                 ;;
             1)  # Process is not a task array
-                log_filename=`debasher::get_process_last_attempt_logf_slurm "${dirname}" ${processname}`
-                local difft=`debasher::get_elapsed_time_from_logfile "${log_filename}"`
+                log_filename=`debasher::_get_process_last_attempt_logf_slurm "${dirname}" ${processname}`
+                local difft=`debasher::_get_elapsed_time_from_logfile "${log_filename}"`
                 echo ${difft}
                ;;
             *)  # Process is a task array
                 local result=""
                 local taskidx
                 local sum_difft=0
-                for taskidx in `debasher::get_finished_array_task_indices "${dirname}" ${processname}`; do
-                    local log_filename=`debasher::get_task_last_attempt_logf_slurm "${dirname}" ${processname} ${taskidx}`
-                    local difft=`debasher::get_elapsed_time_from_logfile "${log_filename}"`
+                for taskidx in `debasher::_get_finished_array_task_indices "${dirname}" ${processname}`; do
+                    local log_filename=`debasher::_get_task_last_attempt_logf_slurm "${dirname}" ${processname} ${taskidx}`
+                    local difft=`debasher::_get_elapsed_time_from_logfile "${log_filename}"`
                     sum_difft=$((sum_difft + difft))
                     if [ ! -z "${result}" ]; then
                         result="${result} "
@@ -1077,7 +1077,7 @@ debasher::get_elapsed_time_for_process_slurm()
 }
 
 ########
-debasher::get_script_log_filenames_slurm()
+debasher::_get_script_log_filenames_slurm()
 {
     local exec_dirname=$1
 
@@ -1085,7 +1085,7 @@ debasher::get_script_log_filenames_slurm()
 }
 
 ########
-debasher::seq_execute_slurm()
+debasher::_seq_execute_slurm()
 {
     is_variable()
     {
@@ -1100,11 +1100,11 @@ debasher::seq_execute_slurm()
         local fname=$3
 
         # Write bash shebang
-        local BASH_SHEBANG=`debasher::init_bash_shebang_var`
+        local BASH_SHEBANG=`debasher::_init_bash_shebang_var`
         echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
         # Write environment variables
-        debasher::write_env_vars_and_funcs_slurm "${dirname}" | debasher::exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
+        debasher::_write_env_vars_and_funcs_slurm "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
 
         # Add call to command or function
         echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1

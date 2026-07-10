@@ -19,7 +19,7 @@
 ############################
 
 ########
-debasher::get_modname_from_absmodname()
+debasher::_get_modname_from_absmodname()
 {
     local absmodname=$1
 
@@ -31,42 +31,42 @@ debasher::get_modname_from_absmodname()
 }
 
 ########
-debasher::get_mod_document_funcname()
+debasher::_get_mod_document_funcname()
 {
     local absmodname=$1
 
-    local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
+    local modname=`debasher::_get_modname_from_absmodname "${absmodname}"`
 
-    debasher::get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_DOCUMENT}"
+    debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_DOCUMENT}"
 }
 
 ########
-debasher::get_shrdirs_funcname()
+debasher::_get_shrdirs_funcname()
 {
     local absmodname=$1
 
-    local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
+    local modname=`debasher::_get_modname_from_absmodname "${absmodname}"`
 
-    debasher::get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_SHRDIRS}"
+    debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_SHRDIRS}"
 }
 
 ########
-debasher::get_program_funcname()
+debasher::_get_program_funcname()
 {
     local absmodname=$1
 
-    local modname=`debasher::get_modname_from_absmodname "${absmodname}"`
+    local modname=`debasher::_get_modname_from_absmodname "${absmodname}"`
 
-    debasher::get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_PROGRAM}"
+    debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_PROGRAM}"
 }
 
 ########
-debasher::search_mod_in_dirs()
+debasher::_search_mod_in_dirs()
 {
     local module=$1
 
     # Obtain array with directories
-    debasher::deserialize_args_given_sep "${DEBASHER_MOD_DIR}" "${DEBASHER_DEBASHER_MOD_DIR_SEP}"
+    debasher::_deserialize_args_given_sep "${DEBASHER_MOD_DIR}" "${DEBASHER_DEBASHER_MOD_DIR_SEP}"
 
     # Add current directory
     DEBASHER_DESERIALIZED_ARGS+=( "." )
@@ -77,10 +77,10 @@ debasher::search_mod_in_dirs()
     for dir in "${DEBASHER_DESERIALIZED_ARGS[@]}"; do
         for fname in "${dir}/${module}" "${dir}/${module}.sh"; do
             if [ -f "${fname}" ]; then
-                if debasher::is_absolute_path "${fname}"; then
+                if debasher::_is_absolute_path "${fname}"; then
                     fullmodname="${fname}"
                 else
-                    fullmodname=`debasher::get_absolute_path "${fname}"`
+                    fullmodname=`debasher::_get_absolute_path "${fname}"`
                 fi
                 break
             fi
@@ -96,20 +96,20 @@ debasher::search_mod_in_dirs()
 }
 
 ########
-debasher::determine_full_module_name()
+debasher::_determine_full_module_name()
 {
     local module=$1
-    if debasher::is_absolute_path "${module}"; then
+    if debasher::_is_absolute_path "${module}"; then
         fullmodname="${module}"
     else
-        fullmodname=`debasher::search_mod_in_dirs "${module}"`
+        fullmodname=`debasher::_search_mod_in_dirs "${module}"`
     fi
 
     echo "$fullmodname"
 }
 
 ########
-debasher::module_is_loaded()
+debasher::_module_is_loaded()
 {
     local fullmodname=$1
 
@@ -140,14 +140,14 @@ debasher::load_debasher_module()
     local module=$1
 
     # Determine full module name
-    local fullmodname=`debasher::determine_full_module_name "$module"`
+    local fullmodname=`debasher::_determine_full_module_name "$module"`
 
     echo "Loading module $module (${fullmodname})..." >&2
 
     # Check that module file exists
     if [ -f "${fullmodname}" ]; then
         # Check that module has not been loaded previously
-        if debasher::module_is_loaded "${fullmodname}"; then
+        if debasher::_module_is_loaded "${fullmodname}"; then
             :
         else
             # Obtain directory for module
@@ -184,7 +184,7 @@ debasher::load_debasher_module()
 load_debasher_module() { debasher::load_debasher_module "$@"; }
 
 ########
-debasher::get_mod_vars_and_funcs_fname()
+debasher::_get_mod_vars_and_funcs_fname()
 {
     local dirname=$1
 
@@ -215,13 +215,13 @@ debasher::document_module()
     local modulename=$1
 
     # Print header
-    local modname=`debasher::get_modname_from_absmodname "${modulename}"`
+    local modname=`debasher::_get_modname_from_absmodname "${modulename}"`
     echo "# ${modname}"
     echo ""
 
     # Print body
-    local document_funcname=`debasher::get_mod_document_funcname ${modulename}`
-    if debasher::func_exists ${document_funcname}; then
+    local document_funcname=`debasher::_get_mod_document_funcname ${modulename}`
+    if debasher::_func_exists ${document_funcname}; then
         ${document_funcname}
         echo ""
     else

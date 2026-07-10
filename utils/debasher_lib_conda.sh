@@ -24,14 +24,14 @@ debasher::define_conda_env()
     local env_name=$1
     local yml_file=$2
 
-    if ! debasher::conda_env_exists "${env_name}"; then
-        local condadir=`debasher::get_absolute_condadir`
+    if ! debasher::_conda_env_exists "${env_name}"; then
+        local condadir=`debasher::_get_absolute_condadir`
 
         # Obtain absolute yml file name
-        local abs_yml_fname=`debasher::get_abs_yml_fname "${yml_file}"`
+        local abs_yml_fname=`debasher::_get_abs_yml_fname "${yml_file}"`
 
         echo "Creating conda environment ${env_name} from file ${abs_yml_fname}..." >&2
-        debasher::conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
+        debasher::_conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
         echo "Package successfully installed"
     fi
 }
@@ -39,7 +39,7 @@ debasher::define_conda_env()
 define_conda_env() { debasher::define_conda_env "$@"; }
 
 ########
-debasher::conda_env_exists()
+debasher::_conda_env_exists()
 {
     local envname=$1
     local env_exists=1
@@ -55,13 +55,13 @@ debasher::conda_env_exists()
 }
 
 ########
-debasher::conda_env_prepare()
+debasher::_conda_env_prepare()
 {
     local env_name=$1
     local abs_yml_fname=$2
     local condadir=$3
 
-    if debasher::is_absolute_path "${env_name}"; then
+    if debasher::_is_absolute_path "${env_name}"; then
         # Install packages given prefix name
         conda env create -f "${abs_yml_fname}" -p "${env_name}" > "${condadir}"/"${env_name}".log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/"${env_name}".log file for more information">&2 ; return 1; }
     else
@@ -71,18 +71,18 @@ debasher::conda_env_prepare()
 }
 
 ########
-debasher::get_debasher_yml_dir()
+debasher::_get_debasher_yml_dir()
 {
     echo "${debasher_datadir}/conda_envs"
 }
 
 ########
-debasher::get_abs_yml_fname()
+debasher::_get_abs_yml_fname()
 {
     local yml_fname=$1
 
     # Obtain array with directories
-    debasher::deserialize_args_given_sep "${DEBASHER_YML_DIR}" "${DEBASHER_DEBASHER_YML_DIR_SEP}"
+    debasher::_deserialize_args_given_sep "${DEBASHER_YML_DIR}" "${DEBASHER_DEBASHER_YML_DIR_SEP}"
 
     # Search module in directories listed in DEBASHER_YML_DIR
     local dir
@@ -96,7 +96,7 @@ debasher::get_abs_yml_fname()
 
     # Fallback to debasher yml package
     if [ -z "${abs_yml_fname}" ]; then
-        debasher_yml_dir=`debasher::get_debasher_yml_dir`
+        debasher_yml_dir=`debasher::_get_debasher_yml_dir`
         abs_yml_fname="${debasher_yml_dir}/${yml_fname}"
     fi
 

@@ -98,13 +98,13 @@ obtain_info_for_module()
     document_module "${module_fname}"
 
     # Get module name from file name
-    local modname=`debasher::get_modname_from_absmodname "${module_fname}"`
+    local modname=`debasher::_get_modname_from_absmodname "${module_fname}"`
 
     # Iterate over process documentation functions
     while read process_doc_func; do
         local processname=${process_doc_func%"${DEBASHER_PROCESS_METHOD_NAME_DOCUMENT}"}
         if [  "${processname}" != "${modname}" ]; then
-            debasher::document_process "${processname}" "${showopts_given}"
+            debasher::_document_process "${processname}" "${showopts_given}"
         fi
     done < <(get_process_doc_funcnames)
 }

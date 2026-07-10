@@ -19,7 +19,7 @@
 #############################
 
 ########
-debasher::get_orig_workdir()
+debasher::_get_orig_workdir()
 {
     local command_line_file=$1
     local workdir=`$HEAD -1 ${command_line_file} | "$AWK" '{print $2}'` ; debasher::pipe_fail || return 1
@@ -27,27 +27,27 @@ debasher::get_orig_workdir()
 }
 
 ########
-debasher::get_quoted_cmdline_from_command_line_file()
+debasher::_get_quoted_cmdline_from_command_line_file()
 {
     local command_line_file=$1
     "$TAIL" -1 "${command_line_file}"
 }
 
 ########
-debasher::get_orig_outdir_from_command_line_file()
+debasher::_get_orig_outdir_from_command_line_file()
 {
     # initialize variables
     local command_line_file=$1
 
     # Extract information from command line file
     local workdir
-    workdir=`debasher::get_orig_workdir "${command_line_file}"` || return 1
+    workdir=`debasher::_get_orig_workdir "${command_line_file}"` || return 1
     local cmdline
-    qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"` || return 1
-    local outdir=`debasher::get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
+    qcmdline=`debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}"` || return 1
+    local outdir=`debasher::_get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
 
     # Retrieve original output directory
-    if debasher::is_absolute_path "$outdir"; then
+    if debasher::_is_absolute_path "$outdir"; then
         echo "$outdir"
     else
         echo "${workdir}/${outdir}"
@@ -55,16 +55,16 @@ debasher::get_orig_outdir_from_command_line_file()
 }
 
 ########
-debasher::get_pfile_from_command_line_file()
+debasher::_get_pfile_from_command_line_file()
 {
     local command_line_file=$1
-    local qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"`
-    local pfile=`debasher::get_opt_value_from_quoted_cmd "$qcmdline" "--pfile"` || return 1
+    local qcmdline=`debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}"`
+    local pfile=`debasher::_get_opt_value_from_quoted_cmd "$qcmdline" "--pfile"` || return 1
     echo "${pfile}"
 }
 
 ########
-debasher::get_currdir_from_command_line_file()
+debasher::_get_currdir_from_command_line_file()
 {
     local command_line_file=$1
     local currdir=`"${HEAD}" -1 "${command_line_file}" | "${AWK}" '{print $2}'`
@@ -72,30 +72,30 @@ debasher::get_currdir_from_command_line_file()
 }
 
 ########
-debasher::get_sched_from_command_line_file()
+debasher::_get_sched_from_command_line_file()
 {
     local command_line_file=$1
-    local qcmdline=`debasher::get_quoted_cmdline_from_command_line_file "${command_line_file}"`
-    local sched=`debasher::get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"` || return 1
+    local qcmdline=`debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}"`
+    local sched=`debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"` || return 1
     echo "${sched}"
 }
 
 ########
-debasher::get_abspfile_from_command_line_file()
+debasher::_get_abspfile_from_command_line_file()
 {
     # Initialize variables
     local command_line_file=$1
 
     # Obtain program file and current dir
     local cmdline_pfile
-    cmdline_pfile=`debasher::get_pfile_from_command_line_file "${command_line_file}"` || return 1
+    cmdline_pfile=`debasher::_get_pfile_from_command_line_file "${command_line_file}"` || return 1
     local cmdline_currdir
-    cmdline_currdir=`debasher::get_currdir_from_command_line_file "${command_line_file}"` || return 1
+    cmdline_currdir=`debasher::_get_currdir_from_command_line_file "${command_line_file}"` || return 1
 
     # Obtain absolute program file name
     local abspfile
     pushd "${cmdline_currdir}" > /dev/null
-    abspfile=`debasher::get_absolute_path "${cmdline_pfile}"`
+    abspfile=`debasher::_get_absolute_path "${cmdline_pfile}"`
     popd > /dev/null
 
     # Check if resulting program file exists
@@ -109,12 +109,12 @@ debasher::get_abspfile_from_command_line_file()
 }
 
 ########
-debasher::exec_program_func_for_module()
+debasher::_exec_program_func_for_module()
 {
     local pfile=$1
 
     local program_funcname
-    program_funcname=`debasher::get_program_funcname "${pfile}"`
+    program_funcname=`debasher::_get_program_funcname "${pfile}"`
 
     # Add program file to stack
     DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK+=("${pfile}")
@@ -134,7 +134,7 @@ debasher::get_prg_exec_dir_given_basedir()
 }
 
 ########
-debasher::get_prg_exec_dir()
+debasher::_get_prg_exec_dir()
 {
     debasher::get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
 }
@@ -148,13 +148,13 @@ debasher::get_prg_graphs_dir_given_basedir()
 }
 
 ########
-debasher::get_prg_graphs_dir()
+debasher::_get_prg_graphs_dir()
 {
     debasher::get_prg_graphs_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
 }
 
 ########
-debasher::processname_contains_invalid_characters()
+debasher::_processname_contains_invalid_characters()
 {
     local processname="$1"
 
@@ -167,7 +167,7 @@ debasher::processname_contains_invalid_characters()
 }
 
 ########
-debasher::processname_contains_reserved_suffixes()
+debasher::_processname_contains_reserved_suffixes()
 {
     local processname="$1"
 
@@ -189,18 +189,18 @@ debasher::processname_contains_reserved_suffixes()
 }
 
 ########
-debasher::is_valid_processname()
+debasher::_is_valid_processname()
 {
     local processname="$1"
 
     # Check characters
-    if debasher::processname_contains_invalid_characters "${processname}"; then
+    if debasher::_processname_contains_invalid_characters "${processname}"; then
         echo "Process name ${processname} contains invalid characters. The name should only contain letters, digits or the underscore character" >&2
         return 1
     fi
 
     # Check suffixes
-    if debasher::processname_contains_reserved_suffixes "${processname}"; then
+    if debasher::_processname_contains_reserved_suffixes "${processname}"; then
         echo "Process name '${processname}' collides with method '${method}'" >&2
         return 1
     fi
@@ -209,35 +209,35 @@ debasher::is_valid_processname()
 }
 
 ########
-debasher::is_heredoc_process()
+debasher::_is_heredoc_process()
 {
     local processname=$1
 
     # Search for a suitable function or command to execute the process
 
     # Try with Python
-    local pyexec_varname=`debasher::get_pyexec_varname "${processname}"`
+    local pyexec_varname=`debasher::_get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${pyexec_varname}"
         return 0
     fi
 
     # Try with R
-    local rexec_varname=`debasher::get_rexec_varname "${processname}"`
+    local rexec_varname=`debasher::_get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${rexec_varname}"
         return 0
     fi
 
     # Try with Perl
-    local perlexec_varname=`debasher::get_perlexec_varname "${processname}"`
+    local perlexec_varname=`debasher::_get_perlexec_varname "${processname}"`
     if [ "${perlexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${perlexec_varname}"
         return 0
     fi
 
     # Try with Groovy
-    local groovyexec_varname=`debasher::get_groovyexec_varname "${processname}"`
+    local groovyexec_varname=`debasher::_get_groovyexec_varname "${processname}"`
     if [ "${groovyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         echo "${groovyexec_varname}"
         return 0
@@ -247,7 +247,7 @@ debasher::is_heredoc_process()
 }
 
 ########
-debasher::create_heredoc_func_body()
+debasher::_create_heredoc_func_body()
 {
     local processname=$1
     local escaped_interpreter
@@ -255,7 +255,7 @@ debasher::create_heredoc_func_body()
     # Search for a suitable function or command to execute the process
 
     # Try with Python
-    local pyexec_varname=`debasher::get_pyexec_varname "${processname}"`
+    local pyexec_varname=`debasher::_get_pyexec_varname "${processname}"`
     if [ "${pyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${PYTHON}"
         echo "${escaped_interpreter} -c \"\${${pyexec_varname}}\" ${DEBASHER_PY_END_OF_OPTIONS_MARKER} \"\$@\""
@@ -263,7 +263,7 @@ debasher::create_heredoc_func_body()
     fi
 
     # Try with R
-    local rexec_varname=`debasher::get_rexec_varname "${processname}"`
+    local rexec_varname=`debasher::_get_rexec_varname "${processname}"`
     if [ "${rexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${RSCRIPT}"
         echo "${escaped_interpreter} -e \"\${${rexec_varname}}\" ${DEBASHER_R_END_OF_OPTIONS_MARKER} \"\$@\""
@@ -271,7 +271,7 @@ debasher::create_heredoc_func_body()
     fi
 
     # Try with Perl
-    local perlexec_varname=`debasher::get_perlexec_varname "${processname}"`
+    local perlexec_varname=`debasher::_get_perlexec_varname "${processname}"`
     if [ "${perlexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${PERL}"
         echo "${escaped_interpreter} -e \"\${${perlexec_varname}}\" ${DEBASHER_PL_END_OF_OPTIONS_MARKER} \"\$@\""
@@ -279,7 +279,7 @@ debasher::create_heredoc_func_body()
     fi
 
     # Try with Groovy
-    local groovyexec_varname=`debasher::get_groovyexec_varname "${processname}"`
+    local groovyexec_varname=`debasher::_get_groovyexec_varname "${processname}"`
     if [ "${groovyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
         printf -v escaped_interpreter '%q' "${GROOVY}"
         echo "${escaped_interpreter} -e \"\${${groovyexec_varname}}\" ${DEBASHER_GROOVY_END_OF_OPTIONS_MARKER} \"\$@\""
@@ -290,21 +290,21 @@ debasher::create_heredoc_func_body()
 }
 
 ########
-debasher::create_process_func_heredoc()
+debasher::_create_process_func_heredoc()
 {
     local processname=$1
     local funcbody
-    funcbody=$(debasher::create_heredoc_func_body "${processname}") || return 1
+    funcbody=$(debasher::_create_heredoc_func_body "${processname}") || return 1
     eval "$processname() { ${funcbody}; }"
 }
 
 ########
-debasher::add_debasher_heredoc_process()
+debasher::_add_debasher_heredoc_process()
 {
     local processname=$1
 
     # Heredoc code was provided for process
-    debasher::create_process_func_heredoc "${processname}" || return 1
+    debasher::_create_process_func_heredoc "${processname}" || return 1
 
     # Store process name in associative array (the variable name
     # containing the heredoc is also stored)
@@ -312,12 +312,12 @@ debasher::add_debasher_heredoc_process()
 }
 
 ########
-debasher::add_debasher_regular_process()
+debasher::_add_debasher_regular_process()
 {
     local processname=$1
 
     # Check if function for process exists
-    if ! debasher::get_exec_funcname "${processname}" >/dev/null; then
+    if ! debasher::_get_exec_funcname "${processname}" >/dev/null; then
         echo "Error: process ${processname} has not a function implementing it. Aborting execution..." >&2
         return 1
     fi
@@ -327,7 +327,7 @@ debasher::add_debasher_regular_process()
 }
 
 ########
-debasher::create_process_func_alias()
+debasher::_create_process_func_alias()
 {
     local processname=$1
     local process_alias=$2
@@ -336,7 +336,7 @@ debasher::create_process_func_alias()
 }
 
 ########
-debasher::add_debasher_alias_process()
+debasher::_add_debasher_alias_process()
 {
     local processname=$1
     local process_alias=$2
@@ -345,19 +345,19 @@ debasher::add_debasher_alias_process()
     local expanded_process_alias
 
     # Check if alias is a valid process name
-    if ! debasher::is_valid_processname "${process_alias}" 2>/dev/null; then
+    if ! debasher::_is_valid_processname "${process_alias}" 2>/dev/null; then
         echo "Error: alias ${process_alias} for process ${processname} has not a valid name. Aborting execution..." >&2
         return 1
     fi
 
     # Check if exec function for alias exists
-    if ! debasher::get_exec_funcname "${process_alias}" >/dev/null; then
+    if ! debasher::_get_exec_funcname "${process_alias}" >/dev/null; then
         echo "Error: alias ${process_alias} for process ${processname} has not a function implementing it. Aborting execution..." >&2
         return 1
     fi
 
     # Create process function
-    debasher::create_process_func_alias "${processname}" "${process_alias}"
+    debasher::_create_process_func_alias "${processname}" "${process_alias}"
 
     # Store process name in associative array (alias information is also
     # stored)
@@ -365,7 +365,7 @@ debasher::add_debasher_alias_process()
 }
 
 ########
-debasher::get_interpreter_for_file()
+debasher::_get_interpreter_for_file()
 {
     local file=$1
     local bfname=$("${BASENAME}" "${file}")
@@ -401,11 +401,11 @@ debasher::get_interpreter_for_file()
 }
 
 ########
-debasher::create_process_func_ext_alias()
+debasher::_create_process_func_ext_alias()
 {
     local processname=$1
     local process_ext_alias=$2
-    local interpreter_for_file=$(debasher::get_interpreter_for_file "${process_ext_alias}")
+    local interpreter_for_file=$(debasher::_get_interpreter_for_file "${process_ext_alias}")
 
     if [ -n "${interpreter_for_file}" ]; then
         local escaped_interpreter
@@ -420,7 +420,7 @@ debasher::create_process_func_ext_alias()
 }
 
 ########
-debasher::get_external_file_for_process_alias()
+debasher::_get_external_file_for_process_alias()
 {
     local current_pfile_dir=$1
     local process_alias=$2
@@ -429,7 +429,7 @@ debasher::get_external_file_for_process_alias()
 }
 
 ########
-debasher::add_debasher_ext_alias_process()
+debasher::_add_debasher_ext_alias_process()
 {
     local processname=$1
     local process_ext_alias=$2
@@ -439,11 +439,11 @@ debasher::add_debasher_ext_alias_process()
 
     # Get tentative name of external file
     local external_file
-    if debasher::is_absolute_path "${process_ext_alias}"; then
+    if debasher::_is_absolute_path "${process_ext_alias}"; then
         external_file="${process_ext_alias}"
         echo "Warning: external alias for process ${processname} uses an absolute path (${external_file}). This program is not portable across machines" >&2
     else
-        external_file="$(debasher::get_external_file_for_process_alias "${current_pfile_dir}" "${process_ext_alias}")"
+        external_file="$(debasher::_get_external_file_for_process_alias "${current_pfile_dir}" "${process_ext_alias}")"
     fi
 
     # Check if file exists
@@ -453,7 +453,7 @@ debasher::add_debasher_ext_alias_process()
     fi
 
     # Create process function
-    debasher::create_process_func_ext_alias "${processname}" "${external_file}" || return 1
+    debasher::_create_process_func_ext_alias "${processname}" "${external_file}" || return 1
 
     # Store process name in associative array (alias information is also
     # stored)
@@ -461,7 +461,7 @@ debasher::add_debasher_ext_alias_process()
 }
 
 ########
-debasher::print_process_entry()
+debasher::_print_process_entry()
 {
     local processname=$1
     local process_computational_specs=$2
@@ -495,7 +495,7 @@ debasher::add_debasher_process()
     local process_additional_specs=$3
 
     # Check correctness of process name and abort execution if necessary
-    if ! debasher::is_valid_processname "${processname}"; then
+    if ! debasher::_is_valid_processname "${processname}"; then
         echo "Error: process name ${processname} not valid. Aborting execution..." >&2
         exit 1
     fi
@@ -507,29 +507,29 @@ debasher::add_debasher_process()
     fi
 
     # Treat heredoc code if provided
-    if debasher::is_heredoc_process "${processname}" >/dev/null; then
-        debasher::add_debasher_heredoc_process "${processname}" || exit 1
+    if debasher::_is_heredoc_process "${processname}" >/dev/null; then
+        debasher::_add_debasher_heredoc_process "${processname}" || exit 1
     else
         # Treat process alias if provided
-        local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
+        local process_alias=$(debasher::_extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
         if [ "${process_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # A process alias was given
-            debasher::add_debasher_alias_process "${processname}" "${process_alias}" || exit 1
+            debasher::_add_debasher_alias_process "${processname}" "${process_alias}" || exit 1
         else
             # Treat process external alias if provided
-            local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
+            local process_ext_alias=$(debasher::_extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
             if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
                 # A process external alias was given
-                debasher::add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" || exit 1
+                debasher::_add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" || exit 1
             else
                 # No heredoc nor aliases were given
-                debasher::add_debasher_regular_process "${processname}" || exit 1
+                debasher::_add_debasher_regular_process "${processname}" || exit 1
             fi
         fi
     fi
 
     # Print process program entry
-    debasher::print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}"
+    debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}"
 }
 
 ########
@@ -552,7 +552,7 @@ debasher::add_debasher_process()
 add_debasher_process() { debasher::add_debasher_process "$@"; }
 
 ########
-debasher::get_newly_created_process_funcs()
+debasher::_get_newly_created_process_funcs()
 {
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
@@ -567,18 +567,18 @@ debasher::add_debasher_program()
 {
     # Initialize variables
     local modname=$1
-    local pfile=$(debasher::determine_full_module_name "${modname}")
+    local pfile=$(debasher::_determine_full_module_name "${modname}")
 
     # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution
     # without using any sub-shell)
-    debasher::exec_program_func_for_module "${pfile}"
+    debasher::_exec_program_func_for_module "${pfile}"
 }
 
 add_debasher_program() { debasher::add_debasher_program "$@"; }
 
 ########
-debasher::program_uses_fifos()
+debasher::_program_uses_fifos()
 {
     if [ "${#DEBASHER_PROGRAM_FIFOS[@]}" -eq 0 ]; then
         return 1
@@ -588,7 +588,7 @@ debasher::program_uses_fifos()
 }
 
 ########
-debasher::get_number_of_program_fifos()
+debasher::_get_number_of_program_fifos()
 {
     echo "${#DEBASHER_PROGRAM_FIFOS[@]}"
 }

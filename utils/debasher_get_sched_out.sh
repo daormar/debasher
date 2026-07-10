@@ -101,7 +101,7 @@ configure_scheduler()
 {
     local sched=$1
     if [ ${sched} != ${DEBASHER_OPT_NOT_FOUND} ]; then
-        debasher::set_debasher_scheduler ${sched} || return 1
+        debasher::_set_debasher_scheduler ${sched} || return 1
     fi
 }
 
@@ -110,22 +110,22 @@ get_out()
 {
     local dirname=$1
     local process=$2
-    local absdirname=`debasher::get_absolute_path "${dirname}"`
+    local absdirname=`debasher::_get_absolute_path "${dirname}"`
     local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
     # Extract information from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local pfile
-    pfile=`debasher::get_abspfile_from_command_line_file "${command_line_file}"` || return 1
+    pfile=`debasher::_get_abspfile_from_command_line_file "${command_line_file}"` || return 1
     local sched
-    sched=`debasher::get_sched_from_command_line_file "${command_line_file}"` || return 1
+    sched=`debasher::_get_sched_from_command_line_file "${command_line_file}"` || return 1
 
     # Get original output directory
     local orig_outdir
-    orig_outdir=`debasher::get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
+    orig_outdir=`debasher::_get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
-    if debasher::dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
+    if debasher::_dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
         local moved_outdir="no"
     else
         echo "Warning: program output directory was moved (original directory: ${orig_outdir})" >&2
@@ -137,14 +137,14 @@ get_out()
 
     # Get output
     if [ "${t_given}" -eq 0 ]; then
-        local sched_out_fname=`debasher::get_process_schedout_filename "${absdirname}" ${process} 1`
+        local sched_out_fname=`debasher::_get_process_schedout_filename "${absdirname}" ${process} 1`
         if [ -f "${sched_out_fname}" ]; then
             cat "${sched_out_fname}"
         else
             echo "Error: scheduler output file could not be found!" >&2
         fi
     else
-        local sched_out_fname=`debasher::get_process_schedout_filename "${absdirname}" ${process} 2 "${task_idx}"`
+        local sched_out_fname=`debasher::_get_process_schedout_filename "${absdirname}" ${process} 2 "${task_idx}"`
         if [ -f "${sched_out_fname}" ]; then
             cat "${sched_out_fname}"
         else

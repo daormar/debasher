@@ -44,7 +44,7 @@ debasher::load_debasher_module "${pfile}" "${pfile}" || exit 1
 echo "" >&2
 
 echo "Executing program function given in module..." >&2
-debasher::exec_program_func_for_module "${pfile}" >&2
+debasher::_exec_program_func_for_module "${pfile}" >&2
 echo "" >&2
 
 echo "Executing: $processname $opts" >&2
