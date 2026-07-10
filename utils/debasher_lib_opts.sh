@@ -319,7 +319,7 @@ debasher::read_opt_value_from_func_args()
 read_opt_value_from_func_args() { debasher::read_opt_value_from_func_args "$@"; }
 
 ########
-debasher::_read_opt_value_from_line()
+debasher::read_opt_value_from_line()
 {
     local cmdline=$1
     local opt=$2
