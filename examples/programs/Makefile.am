@@ -19,6 +19,6 @@ debasher_host_workflow_expl_deps.sh debasher_host_workflow_medium.sh	\
 debasher_host_workflow_light.sh debasher_cycle.sh			\
 debasher_cycle_state.sh debasher_cycle_dyn_sched.sh			\
 debasher_cycle_trigger_interactive.sh debasher_net_reconf_1.sh		\
-debasher_net_reconf_2.sh
+debasher_net_reconf_2.sh debasher_dynamic_fanout.sh
 
 EXTRA_DIST= $(prgfiles_DATA)
