@@ -675,10 +675,16 @@ debasher_builtin_sched::_get_max_num_tasks()
 {
     local processname=$1
     local throttle=${DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE[${processname}]}
-    local inprogress_tasks=`debasher_builtin_sched::_get_inprogress_array_task_indices "${dirname}" $processname`
-    local num_inprogress_tasks=`debasher::_get_num_words_in_string "${inprogress_tasks}"`
-    local result=$((throttle - num_inprogress_tasks))
-    echo ${result}
+    if [ "${throttle}" -eq "${DEBASHER_DEBASHER_ARRAY_TASK_NOTHROTTLE}" ]; then
+        local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
+        local result=$((array_size - num_inprogress_tasks))
+        echo ${result}
+    else
+        local inprogress_tasks=`debasher_builtin_sched::_get_inprogress_array_task_indices "${dirname}" $processname`
+        local num_inprogress_tasks=`debasher::_get_num_words_in_string "${inprogress_tasks}"`
+        local result=$((throttle - num_inprogress_tasks))
+        echo ${result}
+    fi
 }
 
 ########
@@ -787,7 +793,7 @@ debasher_builtin_sched::_get_knapsack_name()
 ########
 debasher_builtin_sched::_print_knapsack_spec()
 {
-    # Process each executable process generating its required
+    # Iterate over each executable process generating its required
     # information for the knapsack solver
     local processname
     for processname in "${!BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}"; do
@@ -815,9 +821,10 @@ debasher_builtin_sched::_print_knapsack_spec()
 ########
 debasher_builtin_sched::_print_knapsack_sol()
 {
+    local knapsack_spec=$1
     local available_cpus=`debasher_builtin_sched::_get_available_cpus`
     local available_mem=`debasher_builtin_sched::_get_available_mem`
-    "${debasher_libexecdir}"/debasher_solve_knapsack_ga -s "${specfile}" -c ${available_cpus},${available_mem} -t ${DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT}
+    "${debasher_libexecdir}"/debasher_solve_knapsack_ga -s "${knapsack_spec}" -c ${available_cpus},${available_mem} -t ${DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT}
 }
 
 ########
@@ -826,13 +833,13 @@ debasher_builtin_sched::_solve_knapsack()
     local dirname=$1
 
     # Create file with item and weight specification
-    specfile="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SPEC_FNAME}"
-    "${RM}" -f "${specfile}"
-    debasher_builtin_sched::_print_knapsack_spec > "${specfile}"
+    local knapsack_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SPEC_FNAME}"
+    "${RM}" -f "${knapsack_spec}"
+    debasher_builtin_sched::_print_knapsack_spec > "${knapsack_spec}"
 
     # Solve knapsack problem
     local knapsack_sol="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
-    debasher_builtin_sched::_print_knapsack_sol > "${knapsack_sol}"
+    debasher_builtin_sched::_print_knapsack_sol "${knapsack_spec}" > "${knapsack_sol}"
 
     # Store solution in output variable
     DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
