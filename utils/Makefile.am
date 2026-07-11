@@ -16,7 +16,8 @@ debasher_gen_telegram_data debasher_list_deblib_pub_funcs
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS)
 
-python_PYTHON= debasher_prg_lib.py debasher_knapsack_ga.py
+python_PYTHON= debasher_runtime_lib.py debasher_prg_lib.py	\
+debasher_knapsack_ga.py
 
 EXTRA_DIST = debasher_lib.sh debasher_lib_utils.sh			\
 debasher_lib_sched.sh debasher_lib_sched_procs.sh			\
