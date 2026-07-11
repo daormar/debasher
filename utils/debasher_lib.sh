@@ -53,6 +53,7 @@ DEBASHER_SCHED_OPTS_DIRNAME=".sched_opts"
 DEBASHER_SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX="sched_opts_"
 DEBASHER_SHDIR_MODULE_OWNER="__SHDIR_MODULE_OWNER__"
 DEBASHER_OPTLIST_VARNAME_SUFFIX="optlist"
+DEBASHER_DEBASHER_LIB_NAMESPACE="debasher"
 
 # PROCESS TYPES
 DEBASHER_REGULAR_PROCESS_TYPE=1
@@ -321,3 +322,12 @@ declare -A DEBASHER_EXIT_CODE
 . "${debasher_libexecdir}"/debasher_lib_sched
 . "${debasher_libexecdir}"/debasher_lib_conda
 . "${debasher_libexecdir}"/debasher_lib_docker
+
+#####################
+# UTILITY FUNCTIONS #
+#####################
+
+debasher::list_public_functions()
+{
+    declare -F | "${AWK}" '{print $3}' | "${GREP}" -E "^${DEBASHER_DEBASHER_LIB_NAMESPACE}::[^_][A-Za-z0-9_]*$" | "${SORT}"
+}
