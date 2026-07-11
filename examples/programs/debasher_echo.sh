@@ -73,7 +73,7 @@ stream_echo()
     # Read input line by line
     local line
     while IFS= read -r line < "${inf}"; do
-        if [ "${line}" = "${SHUTDOWN_TOKEN}" ]; then
+        if [ "${line}" = "${DEBASHER_SHUTDOWN_TOKEN}" ]; then
             break
         else
             echo "${line}"

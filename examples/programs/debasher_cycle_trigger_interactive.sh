@@ -88,7 +88,7 @@ master()
     # Set initial value
     local initial_value=$(cat "${trigger_fifo}")
 
-    while [ "${initial_value}" != "${SHUTDOWN_TOKEN}" ]; do
+    while [ "${initial_value}" != "${DEBASHER_SHUTDOWN_TOKEN}" ]; do
         # Send value for transformation until is equal or greater than n
         local value="${initial_value}"
         echo "* Initial value ${value}"
@@ -105,7 +105,7 @@ master()
     done
 
     # Send shutdown token
-    echo "${SHUTDOWN_TOKEN}" > "${outf}"
+    echo "${DEBASHER_SHUTDOWN_TOKEN}" > "${outf}"
 }
 
 ########
@@ -184,7 +184,7 @@ worker()
         # Read value
         value=$(cat "${inf}")
         echo "Received value ${value}"
-        if [ "${value}" = "${SHUTDOWN_TOKEN}" ]; then
+        if [ "${value}" = "${DEBASHER_SHUTDOWN_TOKEN}" ]; then
             break
         fi
 

@@ -98,7 +98,7 @@ master()
     done
 
     # Send shutdown token
-    echo "${SHUTDOWN_TOKEN}" > "${outf}"
+    echo "${DEBASHER_SHUTDOWN_TOKEN}" > "${outf}"
 }
 
 ########
@@ -186,7 +186,7 @@ worker()
         # Read value
         local value=$(cat "${inf}")
         echo "Received value ${value}"
-        if [ "${value}" = "${SHUTDOWN_TOKEN}" ]; then
+        if [ "${value}" = "${DEBASHER_SHUTDOWN_TOKEN}" ]; then
             break
         fi
 
