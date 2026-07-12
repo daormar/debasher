@@ -128,7 +128,7 @@ fragment_define_opts()
     define_opt "-outd" "${process_outdir}" optlist || return 1
 
     # Define option for output FIFO
-    local fifoname="fragms_fifo"
+    local fifoname="fragment_fifo"
     define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Save option list
