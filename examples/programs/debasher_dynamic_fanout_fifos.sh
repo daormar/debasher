@@ -157,6 +157,7 @@ fragment()
     split -l "$lines_per_block" -d -a 4 "$inf" "$tmpd/part_"
 
     # Process each block: reverse the characters of each line
+    exec 3> "${outf}"
     local i=0
     for part in "$tmpd"/part_*; do
         [ -e "$part" ] || continue
@@ -164,9 +165,7 @@ fragment()
         echo "$outd/blk${i}.txt" > "${outf}"
         ((i++))
     done
-
-    # Send shutdown token
-    echo "${DEBASHER_SHUTDOWN_TOKEN}" > "${outf}"
+    exec 3>&-
 
     # Clean up the temporary directory
     rm -rf "$tmpd"
@@ -184,6 +183,10 @@ dispatch_explain_cmdline_opts()
     # -w option
     local description="Number of workers."
     explain_cmdline_req_opt "-w" "<int>" "$description"
+
+    # --log-level option
+    local description="Logging verbosity. Choices: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)."
+    explain_cmdline_opt "--log-level" "<string>" "$description"
 }
 
 ########
@@ -199,8 +202,8 @@ dispatch_define_opts()
     # -w option
     define_cmdline_opt "$cmdline" "-w" optlist || return 1
 
-    # # -ind option
-    # define_opt_from_proc_out "-ind" "fragment" "-outd" optlist || return 1
+    # --log-level option
+    define_cmdline_nonmandatory_opt "$cmdline" "--log-level" "INFO" optlist || return 1
 
     # Define option for input FIFO
     define_opt_from_proc_out "-inf" "fragment" "-outf" optlist || return 1
@@ -268,10 +271,6 @@ worker()
 
     # Read the input file line by line (each line is a file path)
     while IFS= read -r filepath; do
-        if [ "${filepath}" = "${DEBASHER_SHUTDOWN_TOKEN}" ]; then
-            break
-        fi
-
         [ -z "$filepath" ] && continue
         [ -e "$filepath" ] || continue
 
