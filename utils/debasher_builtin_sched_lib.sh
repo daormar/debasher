@@ -26,8 +26,10 @@ DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK="NO_ARRAY_TASK"
 DEBASHER_BUILTIN_SCHED_SLEEP_TIME_LONG=5
 DEBASHER_BUILTIN_SCHED_SLEEP_TIME_SHORT=1
 DEBASHER_BUILTIN_SCHED_NPROCESSES_SLEEP_THRESHOLD=10
-DEBASHER_BUILTIN_SCHED_KNAPSACK_SPEC_FNAME=.knapsack_spec.txt
+DEBASHER_BUILTIN_SCHED_KNAPSACK_ITEM_WEIGHT_SPEC_FNAME=.knapsack_item_weight_spec.txt
+DEBASHER_BUILTIN_SCHED_KNAPSACK_PRED_SPEC_FNAME=.knapsack_pred_spec.txt
 DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME=.knapsack_sol.txt
+DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME=.knapsack_sol_stderr.txt
 DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS=0
 DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM=0
 DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT=1
@@ -791,7 +793,7 @@ debasher_builtin_sched::_get_knapsack_name()
 }
 
 ########
-debasher_builtin_sched::_print_knapsack_spec()
+debasher_builtin_sched::_print_knapsack_item_weight_spec()
 {
     # Iterate over each executable process generating its required
     # information for the knapsack solver
@@ -801,9 +803,11 @@ debasher_builtin_sched::_print_knapsack_spec()
         local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
         # Determine cpu requirements
+        local cpus
         cpus=`debasher_builtin_sched::_get_knapsack_cpus_for_process ${processname}`
 
         # Determine memory requirements
+        local mem
         mem=`debasher_builtin_sched::_get_knapsack_mem_for_process ${processname}`
 
         if [ ${array_size} -eq 1 ]; then
@@ -819,12 +823,49 @@ debasher_builtin_sched::_print_knapsack_spec()
 }
 
 ########
+debasher_builtin_sched::_print_knapsack_pred_spec()
+{
+    # Iterate over each executable process generating its required
+    # information for the knapsack solver
+    local processname
+    for fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        # Get fifo owner info
+        local owner_proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${fifoname}"]}"
+        local owner_proc="${owner_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        local owner_idx="${owner_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+        local owner_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${owner_proc}]}
+        if [ ${owner_array_size} -eq 1 ]; then
+            owner_knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${owner_proc}`
+        else
+            owner_knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${owner_proc} ${owner_idx}`
+        fi
+
+        # Get fifo user info
+        local user_proc_plus_idx="${DEBASHER_FIFO_USERS["${fifoname}"]}"
+        local user_proc="${user_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        local user_idx="${user_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+        local user_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${user_proc}]}
+        if [ ${user_array_size} -eq 1 ]; then
+            user_knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${user_proc}`
+        else
+            user_knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${user_proc} ${user_idx}`
+        fi
+
+        # Print knapsack predecessor specification entry
+        echo "${owner_knapsack_name} ${user_knapsack_name}"
+        echo "${user_knapsack_name} ${owner_knapsack_name}"
+    done
+}
+
+########
 debasher_builtin_sched::_print_knapsack_sol()
 {
-    local knapsack_spec=$1
+    local knapsack_item_weight_spec=$1
+    local knapsack_pred_spec=$2
     local available_cpus=`debasher_builtin_sched::_get_available_cpus`
     local available_mem=`debasher_builtin_sched::_get_available_mem`
-    "${debasher_libexecdir}"/debasher_solve_knapsack_ga -s "${knapsack_spec}" -c ${available_cpus},${available_mem} -t ${DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT}
+    "${debasher_libexecdir}"/debasher_solve_knapsack_greedy -s "${knapsack_item_weight_spec}" -d "${knapsack_pred_spec}" \
+                            -c ${available_cpus},${available_mem} -t ${DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT}
 }
 
 ########
@@ -833,13 +874,20 @@ debasher_builtin_sched::_solve_knapsack()
     local dirname=$1
 
     # Create file with item and weight specification
-    local knapsack_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SPEC_FNAME}"
-    "${RM}" -f "${knapsack_spec}"
-    debasher_builtin_sched::_print_knapsack_spec > "${knapsack_spec}"
+    local knapsack_item_weight_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_ITEM_WEIGHT_SPEC_FNAME}"
+    "${RM}" -f "${knapsack_item_weight_spec}"
+    debasher_builtin_sched::_print_knapsack_item_weight_spec > "${knapsack_item_weight_spec}"
+
+    # Create predecessor specification
+    local knapsack_pred_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_PRED_SPEC_FNAME}"
+    "${RM}" -f "${knapsack_pred_spec}"
+    debasher_builtin_sched::_print_knapsack_pred_spec > "${knapsack_pred_spec}"
+    echo "" > "${knapsack_pred_spec}"
 
     # Solve knapsack problem
     local knapsack_sol="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
-    debasher_builtin_sched::_print_knapsack_sol "${knapsack_spec}" > "${knapsack_sol}"
+    local knapsack_sol_stderr="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME}"
+    debasher_builtin_sched::_print_knapsack_sol "${knapsack_item_weight_spec}" "${knapsack_pred_spec}" > "${knapsack_sol}" 2> "${knapsack_sol_stderr}"
 
     # Store solution in output variable
     DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
