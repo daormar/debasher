@@ -16,6 +16,9 @@
 
 # *- bash -*
 
+# Load modules
+load_debasher_module "debasher_dynamic_fanout"
+
 #############
 # CONSTANTS #
 #############
@@ -35,218 +38,13 @@ debasher_dynamic_fanout_taskdone_shared_dirs()
 ######################################
 
 ########
-generate_document()
-{
-    process_description "Generates a text file of a given size and random content."
-}
-
-########
-generate_explain_cmdline_opts()
-{
-    # -l option
-    local description="Length of file in lines"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
-
-    # -c option
-    local description="Length of each line in characters"
-    explain_cmdline_req_opt "-c" "<int>" "$description"
-}
-
-########
-generate_define_opts()
-{
-    # Initialize variables
-    local cmdline=$1
-    local process_spec=$2
-    local process_name=$3
-    local process_outdir=$4
-    local optlist=""
-
-    # -l option
-    define_cmdline_opt "$cmdline" "-l" optlist || return 1
-
-    # -c option
-    define_cmdline_opt "$cmdline" "-c" optlist || return 1
-
-    # Define name of output file
-    local outf="${process_outdir}/file.txt"
-    define_opt "-outf" "${outf}" optlist || return 1
-
-    # Save option list
-    save_opt_list optlist
-}
-
-########
-generate()
-{
-    # Initialize variables
-    local numlines=$(read_opt_value_from_func_args "-l" "$@")
-    local numchars=$(read_opt_value_from_func_args "-c" "$@")
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-    # Clear/create the output file
-    > "$outf"
-
-    for ((i = 1; i <= numlines; i++)); do
-        # Generate a line of numchars random alphanumeric characters
-        tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$numchars" >> "$outf"
-        echo >> "$outf"
-    done
-}
-
-########
-fragment_document()
-{
-    process_description "Fragments an input file into a given number of equally sized blocks, inverting the file lines."
-}
-
-########
-fragment_explain_cmdline_opts()
-{
-    # -b option
-    local description="Number of blocks"
-    explain_cmdline_req_opt "-b" "<int>" "$description"
-}
-
-########
-fragment_define_opts()
-{
-    # Initialize variables
-    local cmdline=$1
-    local process_spec=$2
-    local process_name=$3
-    local process_outdir=$4
-    local optlist=""
-
-    # -b option
-    define_cmdline_opt "$cmdline" "-b" optlist || return 1
-
-    # -inf option
-    define_opt_from_proc_out "-inf" "generate" "-outf" optlist || return 1
-
-    # Define name of output directory
-    define_opt "-outd" "${process_outdir}" optlist || return 1
-
-    # Save option list
-    save_opt_list optlist
-}
-
-########
-fragment()
-{
-    # Initialize variables
-    local numblocks=$(read_opt_value_from_func_args "-b" "$@")
-    local inf=$(read_opt_value_from_func_args "-inf" "$@")
-    local outd=$(read_opt_value_from_func_args "-outd" "$@")
-
-    # Count the total number of lines in the input file
-    local total_lines
-    total_lines=$(wc -l < "$inf")
-
-    # Calculate how many lines correspond to each block (rounded up)
-    local lines_per_block=$(( (total_lines + numblocks - 1) / numblocks ))
-
-    # Split the file into temporary blocks
-    local tmpd
-    tmpd=$(mktemp -d)
-    split -l "$lines_per_block" -d -a 4 "$inf" "$tmpd/part_" || return 1
-
-    # Process each block: reverse the characters of each line
-    local i=0
-    for part in "$tmpd"/part_*; do
-        [ -e "$part" ] || continue
-        rev "$part" > "$outd/blk${i}.txt" || return 1
-        ((i++))
-    done
-
-    # Clean up the temporary directory
-    rm -rf "$tmpd"
-}
-
-########
-dispatch_document()
-{
-    process_description "Dispatches file blocks to workers."
-}
-
-########
-dispatch_explain_cmdline_opts()
-{
-    # -w option
-    local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
-}
-
-########
-dispatch_define_opts()
-{
-    # Initialize variables
-    local cmdline=$1
-    local process_spec=$2
-    local process_name=$3
-    local process_outdir=$4
-    local optlist=""
-
-    # -w option
-    define_cmdline_opt "$cmdline" "-w" optlist || return 1
-
-    # -ind option
-    define_opt_from_proc_out "-ind" "fragment" "-outd" optlist || return 1
-
-    # Add output option for w files
-    local w
-    w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
-    for ((i=0; i<w; i++)); do
-        define_opt "-outf$i" "${process_outdir}/block_list_${i}.txt" optlist || return 1
-    done
-
-    # Save option list
-    save_opt_list optlist
-}
-
-########
-dispatch()
-{
-    # Initialize variables
-    local ind=$(read_opt_value_from_func_args "-ind" "$@")
-    local w=$(read_opt_value_from_func_args "-w" "$@")
-    local files=()
-    for ((i=0; i<w; i++)); do
-        files+=($(read_opt_value_from_func_args "-outf$i" "$@"))
-    done
-
-    # Clear the destination files before starting
-    for f in "${files[@]}"; do
-        > "$f"
-    done
-
-    # Iterate over the blk*.txt files in the input directory
-    for blockfile in "$ind"/blk*.txt; do
-        [ -e "$blockfile" ] || continue
-
-        local base
-        base=$(basename "$blockfile")
-
-        # Extract the number i from "blk${i}.txt"
-        local i="${base#blk}"
-        i="${i%.txt}"
-
-        # Calculate i mod w
-        local idx=$(( i % w ))
-
-        # Write the block file name to the corresponding output file
-        echo "$blockfile" >> "${files[$idx]}" || return 1
-    done
-}
-
-########
-worker_document()
+worker_taskdone_document()
 {
     process_description "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one. When each subtask is completed, it is marked as done, so that they it is not reexecuted."
 }
 
 ########
-worker_reset_outdir()
+worker_taskdone_reset_outdir()
 {
     # Output directory for worker is not reset, so as to enable marking
     # tasks as done
@@ -254,7 +52,7 @@ worker_reset_outdir()
 }
 
 ########
-worker_explain_cmdline_opts()
+worker_taskdone_explain_cmdline_opts()
 {
     # -w option
     local description="Number of workers."
@@ -262,7 +60,7 @@ worker_explain_cmdline_opts()
 }
 
 ########
-worker_define_opts()
+worker_taskdone_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -298,11 +96,10 @@ worker_task()
     else
         return "${retcode}"
     fi
-
 }
 
 ########
-worker()
+worker_taskdone()
 {
     # Initialize variables
     local id=$(read_opt_value_from_func_args "-id" "$@")
@@ -348,20 +145,6 @@ worker()
 }
 
 ########
-aggregate_document()
-{
-    process_description "Aggregates worker results."
-}
-
-########
-aggregate_explain_cmdline_opts()
-{
-    # -w option
-    local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
-}
-
-########
 aggregate_define_opts()
 {
     # Initialize variables
@@ -378,7 +161,7 @@ aggregate_define_opts()
     local w
     w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
     for ((i=0; i<w; i++)); do
-        define_opt_from_proc_task_out "-ind$i" "worker" "${i}" "-outd" optlist || return 1
+        define_opt_from_proc_task_out "-ind$i" "worker_taskdone" "${i}" "-outd" optlist || return 1
     done
 
     # Define name of output file
@@ -389,54 +172,6 @@ aggregate_define_opts()
     save_opt_list optlist
 }
 
-########
-aggregate()
-{
-    # Initialize variables
-    local outf=$(read_opt_value_from_func_args "-outf" "$@")
-    local w=$(read_opt_value_from_func_args "-w" "$@")
-    local dirs=()
-    for ((i=0; i<w; i++)); do
-        dirs+=($(read_opt_value_from_func_args "-ind$i" "$@"))
-    done
-
-    # Clear/create the output file
-    > "$outf"
-
-    # Collect all available indices i from all directories
-    local indices=()
-    local d f base i
-    for d in "${dirs[@]}"; do
-        for f in "$d"/blk*.txt; do
-            [ -e "$f" ] || continue
-            base=$(basename "$f")
-            i="${base#blk}"
-            i="${i%.txt}"
-            indices+=("$i")
-        done
-    done
-
-    # Sort indices numerically
-    local sorted_indices
-    sorted_indices=$(printf '%s\n' "${indices[@]}" | sort -n -u)
-
-    # For each index, search through the directories to find the block
-    for i in $sorted_indices; do
-        local found=0
-        for d in "${dirs[@]}"; do
-            local blockfile="$d/blk${i}.txt"
-            if [ -e "$blockfile" ]; then
-                cat "$blockfile" >> "$outf" || return 1
-                found=1
-                break
-            fi
-        done
-        if [ "$found" -eq 0 ]; then
-            echo "Warning: block $i not found in any directory" >&2
-        fi
-    done
-}
-
 #################################
 # PROGRAM DEFINED BY THE MODULE #
 #################################
@@ -444,9 +179,9 @@ aggregate()
 ########
 debasher_dynamic_fanout_taskdone_program()
 {
-    add_debasher_process "generate"  "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "fragment"  "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "dispatch"  "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "worker"    "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "aggregate" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "generate"        "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "fragment"        "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "dispatch"        "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "worker_taskdone" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "aggregate"       "cpus=1 mem=32 time=00:01:00"
 }
