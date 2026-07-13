@@ -276,6 +276,15 @@ worker_define_opts()
 }
 
 ########
+worker_task()
+{
+    local filepath=$1
+    local outf=$2
+
+    rev "$filepath" > "$outf"
+}
+
+########
 worker()
 {
     # Initialize variables
@@ -297,7 +306,7 @@ worker()
         base=$(basename "$filepath")
 
         # Reverse the characters of each line in the file and save it to outd
-        rev "$filepath" > "$outd/$base" || return 1
+        worker_task "$filepath" "$outd/$base" || return 1
     done < "$inf"
 }
 
