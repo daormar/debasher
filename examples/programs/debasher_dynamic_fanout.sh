@@ -149,13 +149,13 @@ fragment()
     # Split the file into temporary blocks
     local tmpd
     tmpd=$(mktemp -d)
-    split -l "$lines_per_block" -d -a 4 "$inf" "$tmpd/part_"
+    split -l "$lines_per_block" -d -a 4 "$inf" "$tmpd/part_" || return 1
 
     # Process each block: reverse the characters of each line
     local i=0
     for part in "$tmpd"/part_*; do
         [ -e "$part" ] || continue
-        rev "$part" > "$outd/blk${i}.txt"
+        rev "$part" > "$outd/blk${i}.txt" || return 1
         ((i++))
     done
 
@@ -235,7 +235,7 @@ dispatch()
         local idx=$(( i % w ))
 
         # Write the block file name to the corresponding output file
-        echo "$blockfile" >> "${files[$idx]}"
+        echo "$blockfile" >> "${files[$idx]}" || return 1
     done
 }
 
@@ -297,7 +297,7 @@ worker()
         base=$(basename "$filepath")
 
         # Reverse the characters of each line in the file and save it to outd
-        rev "$filepath" > "$outd/$base"
+        rev "$filepath" > "$outd/$base" || return 1
     done < "$inf"
 }
 
@@ -380,7 +380,7 @@ aggregate()
         for d in "${dirs[@]}"; do
             local blockfile="$d/blk${i}.txt"
             if [ -e "$blockfile" ]; then
-                cat "$blockfile" >> "$outf"
+                cat "$blockfile" >> "$outf" || return 1
                 found=1
                 break
             fi
