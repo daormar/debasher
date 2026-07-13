@@ -860,6 +860,18 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
 }
 
 ########
+debasher::_get_first_column() {
+    local file="$1"
+    local result
+
+    result=$("${AWK}" '{print $1}' "$file" | "${TR}" '\n' ' ')
+    # Remove the trailing space left by tr
+    result="${result% }"
+
+    echo "$result"
+}
+
+########
 debasher_builtin_sched::_print_knapsack_sol()
 {
     local knapsack_item_weight_spec=$1
@@ -885,13 +897,20 @@ debasher_builtin_sched::_solve_knapsack()
     "${RM}" -f "${knapsack_pred_spec}"
     debasher_builtin_sched::_print_knapsack_pred_spec > "${knapsack_pred_spec}"
 
-    # Solve knapsack problem
-    local knapsack_sol="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
-    local knapsack_sol_stderr="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME}"
-    debasher_builtin_sched::_print_knapsack_sol "${knapsack_item_weight_spec}" "${knapsack_pred_spec}" > "${knapsack_sol}" 2> "${knapsack_sol_stderr}"
-
-    # Store solution in output variable
-    DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
+    # Solve knapsack depending on whether available cpus and memory are unlimited or not
+    if [ ${DEBASHER_BUILTIN_SCHED_CPUS} -eq ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} -a \
+         ${DEBASHER_BUILTIN_SCHED_MEM} -eq ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} ]; then
+        # If resources are unlimited, simply return all of the candidate
+        # processes extracted from the knapsack item weight
+        # specification
+        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`debasher::_get_first_column "${knapsack_item_weight_spec}"`
+    else
+        # Solve knapsack problem using the algorithm
+        local knapsack_sol="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
+        local knapsack_sol_stderr="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME}"
+        debasher_builtin_sched::_print_knapsack_sol "${knapsack_item_weight_spec}" "${knapsack_pred_spec}" > "${knapsack_sol}" 2> "${knapsack_sol_stderr}"
+        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
+    fi
 }
 
 ########
