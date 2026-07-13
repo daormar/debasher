@@ -852,7 +852,6 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
         fi
 
         # Print knapsack predecessor specification entry
-        echo "${owner_knapsack_name} ${user_knapsack_name}"
         echo "${user_knapsack_name} ${owner_knapsack_name}"
     done
 }
