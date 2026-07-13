@@ -851,8 +851,11 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
             user_knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${user_proc} ${user_idx}`
         fi
 
-        # Print knapsack predecessor specification entry
+        # Print knapsack predecessor specification entry (owner and user
+        # are provided in both senses to ensure that both processes
+        # should be executed together)
         echo "${user_knapsack_name} ${owner_knapsack_name}"
+        echo "${owner_knapsack_name} ${user_knapsack_name}"
     done
 }
 
@@ -980,7 +983,7 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 
         # Check if no processes could be selected
         if [ -z "${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES}" ]; then
-            echo "Error: no suitable processes could be selected for execution, aborting..." >&2
+            echo "Error: no suitable processes could be selected for execution. If the program uses FIFOs, consider increasing the available resources (cpus, memory) or removing resource restrictions for DeBasher. Aborting..." >&2
             exit 1
         fi
 
