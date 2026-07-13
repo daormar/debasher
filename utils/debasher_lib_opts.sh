@@ -558,8 +558,7 @@ debasher::_define_fifo_task_idx()
 # $3 - Name of variable that will store the information about the option to be added.
 #
 # This function should only be defined in one of the processes connected
-# by the FIFO. Moreover, it is recommended that the FIFO is defined by
-# the process that writes to it.
+# by the FIFO.
 #
 # Examples
 #
