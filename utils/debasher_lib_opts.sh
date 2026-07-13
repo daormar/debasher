@@ -551,6 +551,21 @@ debasher::_define_fifo_task_idx()
 }
 
 ########
+# Public: Defines fifo option for process.
+#
+# $1 - Option name.
+# $2 - Name of fifo.
+# $3 - Name of variable that will store the information about the option to be added.
+#
+# This function should only be defined in one of the processes connected
+# by the FIFO. Moreover, it is recommended that the FIFO is defined by
+# the process that writes to it.
+#
+# Examples
+#
+#   debasher::define_fifo_opt "-o" "${fifoname}" "optlist"
+#
+# The function does not return any value
 debasher::define_fifo_opt()
 {
     local opt=$1
