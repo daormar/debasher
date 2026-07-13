@@ -311,13 +311,17 @@ debasher::_map_deptype_if_necessary()
 ########
 debasher::_write_env_vars_and_funcs()
 {
-    write_debasher_env_vars_and_funcs()
+    debasher::_write_debasher_env_vars_and_funcs()
     {
         local dirname=$1
 
         # Write DeBasher start variables and functions
         local vars_and_funcs_fname=`debasher::_get_deblib_vars_and_funcs_fname "${dirname}"`
         "${CAT}" "${vars_and_funcs_fname}"
+
+        # Write environment functions
+        declare -f debasher::mark_task_done
+        declare -f debasher::is_task_done
 
         # Write initialized variables
         declare -p DEBASHER_DEBASHER_SCHEDULER
@@ -327,7 +331,7 @@ debasher::_write_env_vars_and_funcs()
         declare -p DEBASHER_OUT_VALUE_TO_PROCESSES
     }
 
-    write_mod_env_vars_and_funcs()
+    debasher::_write_mod_env_vars_and_funcs()
     {
         local dirname=$1
 
@@ -338,10 +342,10 @@ debasher::_write_env_vars_and_funcs()
     local dirname=$1
 
     # Write Debasher-related variables and functions
-    write_debasher_env_vars_and_funcs "${dirname}"
+    debasher::_write_debasher_env_vars_and_funcs "${dirname}"
 
     # Write module-related variables and functions
-    write_mod_env_vars_and_funcs "${dirname}"
+    debasher::_write_mod_env_vars_and_funcs "${dirname}"
 }
 
 ########
@@ -366,3 +370,25 @@ debasher::seq_execute()
 }
 
 seq_execute() { debasher::seq_execute "$@"; }
+
+########
+debasher::mark_task_done()
+{
+    local dir="$1"
+    local id="$2"
+
+    if ( set -o noclobber; : > "$dir/${DEBASHER_TASK_MARKER_PREFIX}${id}" ) 2>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
+debasher::is_task_done()
+{
+    local dir="$1"
+    local id="$2"
+
+    [ -e "$dir/${DEBASHER_TASK_MARKER_PREFIX}${id}" ]
+}
