@@ -82,6 +82,18 @@ worker_taskdone_define_opts()
 }
 
 ########
+bernoulli_trial() {
+    local prob=$1
+    local value=$((RANDOM % 100))
+
+    if (( value < prob )); then
+        echo 0
+    else
+        echo 1
+    fi
+}
+
+########
 worker_task()
 {
     local filepath=$1
@@ -89,7 +101,7 @@ worker_task()
     local retcode
 
     # Randomly generate return code so as to simulate failing tasks
-    retcode=$((RANDOM % 2))
+    retcode=$(bernoulli_trial 75)
 
     if [ "${retcode}" -eq 0 ]; then
         rev "$filepath" > "$outf"
