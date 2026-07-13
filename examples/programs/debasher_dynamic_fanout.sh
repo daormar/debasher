@@ -242,7 +242,7 @@ dispatch()
 ########
 worker_document()
 {
-    process_description "Executes an array of w tasks. Each task takes a list of text files and generates a file with a list of processed files."
+    process_description "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one."
 }
 
 ########
