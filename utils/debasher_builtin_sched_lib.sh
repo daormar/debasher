@@ -978,6 +978,12 @@ debasher_builtin_sched::_select_processes_to_be_exec()
     if [ ${num_exec_processes} -gt 0 ]; then
         debasher_builtin_sched::_solve_knapsack "${dirname}"
 
+        # Check if no processes could be selected
+        if [ -z "${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES}" ]; then
+            echo "Error: no suitable processes could be selected for execution, aborting..." >&2
+            exit 1
+        fi
+
         if [ ${builtin_sched_debug} -eq 1 ]; then
             local sel_processes=`debasher_builtin_sched::_get_debug_sel_processes_info`
             echo "[BUILTIN_SCHED] - DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES: ${sel_processes}" 2>&1
