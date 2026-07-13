@@ -60,8 +60,8 @@ declare -A DEBASHER_BUILTIN_SCHED_PROCESS_ALLOC_MEM
 declare -A DEBASHER_BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS
 declare -A DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS
 declare DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES
-declare DEBASHER_BUILTIN_SCHED_CPUS=1
-declare DEBASHER_BUILTIN_SCHED_MEM=256
+declare DEBASHER_BUILTIN_SCHED_CPUS
+declare DEBASHER_BUILTIN_SCHED_MEM
 declare DEBASHER_BUILTIN_SCHED_ALLOC_CPUS=0
 declare DEBASHER_BUILTIN_SCHED_ALLOC_MEM=0
 
@@ -983,7 +983,7 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 
         # Check if no processes could be selected
         if [ -z "${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES}" ]; then
-            echo "Error: no suitable processes could be selected for execution. If the program uses FIFOs, consider increasing the available resources (cpus, memory) or removing resource restrictions for DeBasher. Aborting..." >&2
+            echo "Error: no suitable processes could be selected for execution. If the program uses FIFOs, consider increasing the available resources (cpus, memory) or removing resource restrictions at all. Aborting..." >&2
             exit 1
         fi
 
@@ -1443,16 +1443,13 @@ debasher_builtin_sched::execute_program_processes()
     local cmdline=$1
     local dirname=$2
     local procspec_file=$3
+    local builtin_sched_cpus=$4
+    local builtin_sched_mem=$5
     local iterno=1
 
     echo "* Configuring scheduler..." >&2
-    if [ ${builtin_sched_cpus_given} -eq 1 ]; then
-        DEBASHER_BUILTIN_SCHED_CPUS=${builtin_sched_cpus}
-    fi
-
-    if [ ${builtin_sched_mem_given} -eq 1 ]; then
-        DEBASHER_BUILTIN_SCHED_MEM=${builtin_sched_mem}
-    fi
+    DEBASHER_BUILTIN_SCHED_CPUS=${builtin_sched_cpus}
+    DEBASHER_BUILTIN_SCHED_MEM=${builtin_sched_mem}
     echo "- Available CPUS: ${DEBASHER_BUILTIN_SCHED_CPUS}" >&2
     echo "- Available memory: ${DEBASHER_BUILTIN_SCHED_MEM}" >&2
     echo "" >&2

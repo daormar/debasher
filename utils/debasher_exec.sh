@@ -94,7 +94,9 @@ read_pars()
     outdir_given=0
     sched_given=0
     builtin_sched_cpus_given=0
+    builtin_sched_cpus=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
     builtin_sched_mem_given=0
+    builtin_sched_mem=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
     dflt_nodes_given=0
     dflt_throttle_given=0
     reexec_outdated_processes_given=0
@@ -1437,7 +1439,7 @@ else
         else
             sched=`debasher::_determine_scheduler`
             if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
-                debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || exit 1
                 print_post_exec_wait_help
             else
                 revise_reexec_proc_status "${command_line}" "${outd}" "${procspec_file}" || return 1
