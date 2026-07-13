@@ -882,7 +882,6 @@ debasher_builtin_sched::_solve_knapsack()
     local knapsack_pred_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_PRED_SPEC_FNAME}"
     "${RM}" -f "${knapsack_pred_spec}"
     debasher_builtin_sched::_print_knapsack_pred_spec > "${knapsack_pred_spec}"
-    echo "" > "${knapsack_pred_spec}"
 
     # Solve knapsack problem
     local knapsack_sol="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
