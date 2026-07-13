@@ -30,8 +30,8 @@ DEBASHER_BUILTIN_SCHED_KNAPSACK_ITEM_WEIGHT_SPEC_FNAME=.knapsack_item_weight_spe
 DEBASHER_BUILTIN_SCHED_KNAPSACK_PRED_SPEC_FNAME=.knapsack_pred_spec.txt
 DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME=.knapsack_sol.txt
 DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME=.knapsack_sol_stderr.txt
-DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS=0
-DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM=0
+DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS=-1
+DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM=-1
 DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT=1
 DEBASHER_BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER=1
 
@@ -73,7 +73,7 @@ declare DEBASHER_BUILTIN_SCHED_ALLOC_MEM=0
 debasher_builtin_sched::_cpus_within_limit()
 {
     local cpus=$1
-    if [ ${DEBASHER_BUILTIN_SCHED_CPUS} -eq 0 ]; then
+    if [ ${DEBASHER_BUILTIN_SCHED_CPUS} -eq ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} ]; then
         return 0
     else
         if [ ${DEBASHER_BUILTIN_SCHED_CPUS} -ge $cpus ]; then
@@ -88,7 +88,7 @@ debasher_builtin_sched::_cpus_within_limit()
 debasher_builtin_sched::_mem_within_limit()
 {
     local mem=$1
-    if [ ${DEBASHER_BUILTIN_SCHED_MEM} -eq 0 ]; then
+    if [ ${DEBASHER_BUILTIN_SCHED_MEM} -eq ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} ]; then
         return 0
     else
         if [ ${DEBASHER_BUILTIN_SCHED_MEM} -ge $mem ]; then
