@@ -322,7 +322,7 @@ def greedy_solve(weights, values, capacities, ancestors, rng=None, noise=0.0):
 
 ##################################################
 def greedy_solve_with_restarts(weights, values, capacities, ancestors,
-                                num_restarts, time_limit=-1, noise=0.25):
+                               num_restarts, time_limit=-1, noise=0.25):
     start = time.time()
     rng = random.Random()
 
