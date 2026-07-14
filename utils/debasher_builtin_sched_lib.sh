@@ -26,7 +26,7 @@ DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK="NO_ARRAY_TASK"
 DEBASHER_BUILTIN_SCHED_SLEEP_TIME_LONG=5
 DEBASHER_BUILTIN_SCHED_SLEEP_TIME_SHORT=1
 DEBASHER_BUILTIN_SCHED_NPROCESSES_SLEEP_THRESHOLD=10
-DEBASHER_BUILTIN_SCHED_KNAPSACK_ITEM_WEIGHT_SPEC_FNAME=.knapsack_item_weight_spec.txt
+DEBASHER_BUILTIN_SCHED_KNAPSACK_ITEM_VALUE_WEIGHT_SPEC_FNAME=.knapsack_item_value_weight_spec.txt
 DEBASHER_BUILTIN_SCHED_KNAPSACK_PRED_SPEC_FNAME=.knapsack_pred_spec.txt
 DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME=.knapsack_sol.txt
 DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME=.knapsack_sol_stderr.txt
@@ -794,7 +794,15 @@ debasher_builtin_sched::_get_knapsack_name()
 }
 
 ########
-debasher_builtin_sched::_print_knapsack_item_weight_spec()
+debasher_builtin_sched::_get_task_value_for_knapsack_solver()
+{
+    local array_size=$1
+
+    echo ${DEBASHER_BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER} | "${AWK}" -v array_size=${array_size} '{print $1/array_size}'
+}
+
+########
+debasher_builtin_sched::_print_knapsack_item_value_weight_spec()
 {
     # Iterate over each executable process generating its required
     # information for the knapsack solver
@@ -817,7 +825,9 @@ debasher_builtin_sched::_print_knapsack_item_weight_spec()
         else
             for id in ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}; do
                 local knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${processname} ${id}`
-                echo "${knapsack_name} ${DEBASHER_BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER} ${cpus} ${mem}"
+                local task_value
+                task_value=`debasher_builtin_sched::_get_task_value_for_knapsack_solver "${array_size}"`
+                echo "${knapsack_name} ${task_value} ${cpus} ${mem}"
             done
         fi
     done
@@ -875,11 +885,11 @@ debasher::_get_first_column() {
 ########
 debasher_builtin_sched::_generate_knapsack_sol()
 {
-    local knapsack_item_weight_spec=$1
+    local knapsack_item_value_weight_spec=$1
     local knapsack_pred_spec=$2
     local available_cpus=`debasher_builtin_sched::_get_available_cpus`
     local available_mem=`debasher_builtin_sched::_get_available_mem`
-    "${debasher_libexecdir}"/debasher_solve_knapsack_greedy -s "${knapsack_item_weight_spec}" -d "${knapsack_pred_spec}" \
+    "${debasher_libexecdir}"/debasher_solve_knapsack_greedy -s "${knapsack_item_value_weight_spec}" -d "${knapsack_pred_spec}" \
                             -c ${available_cpus},${available_mem} -r ${DEBASHER_BUILTIN_SCHED_GREEDY_SOLVE_RESTARTS} \
                             -t ${DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT}
 }
@@ -890,9 +900,9 @@ debasher_builtin_sched::_solve_knapsack()
     local dirname=$1
 
     # Create file with item and weight specification
-    local knapsack_item_weight_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_ITEM_WEIGHT_SPEC_FNAME}"
-    "${RM}" -f "${knapsack_item_weight_spec}"
-    debasher_builtin_sched::_print_knapsack_item_weight_spec > "${knapsack_item_weight_spec}"
+    local knapsack_item_value_weight_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_ITEM_VALUE_WEIGHT_SPEC_FNAME}"
+    "${RM}" -f "${knapsack_item_value_weight_spec}"
+    debasher_builtin_sched::_print_knapsack_item_value_weight_spec > "${knapsack_item_value_weight_spec}"
 
     # Create predecessor specification
     local knapsack_pred_spec="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_PRED_SPEC_FNAME}"
@@ -905,12 +915,12 @@ debasher_builtin_sched::_solve_knapsack()
         # If resources are unlimited, simply return all of the candidate
         # processes extracted from the knapsack item weight
         # specification
-        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`debasher::_get_first_column "${knapsack_item_weight_spec}"`
+        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`debasher::_get_first_column "${knapsack_item_value_weight_spec}"`
     else
         # Solve knapsack problem using the algorithm
         local knapsack_sol="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
         local knapsack_sol_stderr="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME}"
-        debasher_builtin_sched::_generate_knapsack_sol "${knapsack_item_weight_spec}" "${knapsack_pred_spec}" > "${knapsack_sol}" 2> "${knapsack_sol_stderr}"
+        debasher_builtin_sched::_generate_knapsack_sol "${knapsack_item_value_weight_spec}" "${knapsack_pred_spec}" > "${knapsack_sol}" 2> "${knapsack_sol_stderr}"
         DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
     fi
 }
