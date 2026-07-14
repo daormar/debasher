@@ -159,7 +159,7 @@ def get_capacities(capacities):
     clist = []
     fields = capacities.split(",")
     for f in fields:
-        clist.append(int(f))
+        clist.append(float(f))
     return clist
 
 ##################################################
@@ -176,10 +176,10 @@ def extract_spec_info(specfile, num_capacities):
         fields = entry.split()
 
         items.append(fields[0])
-        values.append(int(fields[1]))
+        values.append(float(fields[1]))
 
         for i in range(num_capacities):
-            weights[i].append(int(fields[2 + i]))
+            weights[i].append(float(fields[2 + i]))
     file.close()
 
     return items, weights, values
