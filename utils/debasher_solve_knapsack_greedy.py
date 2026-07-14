@@ -22,9 +22,13 @@ processes (a successor process can only be selected if all of its
 predecessor processes are selected too).
 
 Spec file format (one line per process, unchanged from the original
-GA-based script):
+GA-based script). The number of weight columns is arbitrary and is
+inferred from the number of capacities given via -c/--capacities:
 
-    process_id value cpus mem
+    process_id value weight1 weight2 ... weightN
+
+For example, weight1 could be CPUs and weight2 memory, but any
+number of resource dimensions is supported (1, 2, 3, or more).
 
 Predecessors are given in a separate file, one edge per line:
 
