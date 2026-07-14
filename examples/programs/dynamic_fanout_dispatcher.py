@@ -179,7 +179,7 @@ def main():
                 log.warning("Could not parse index from '%s', skipping", line)
                 lines_skipped += 1
                 continue
-            log.debug("Dispatching %s -> feeder %s", line, os.path.basename(feeders[idx % w].path))
+            log.debug("Dispatching %s -> feeder %d (%s)", line, idx % w, os.path.basename(feeders[idx % w].path))
             feeders[idx % w].queue_line(line)
 
         log.info("Input FIFO closed, no more blocks incoming "
