@@ -34,6 +34,7 @@ DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS=-1
 DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM=-1
 DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT=1
 DEBASHER_BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER=1
+DEBASHER_BUILTIN_SCHED_GREEDY_SOLVE_RESTARTS=0
 
 # ARRAY TASK STATUSES
 DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS="FINISHED"
@@ -879,7 +880,8 @@ debasher_builtin_sched::_generate_knapsack_sol()
     local available_cpus=`debasher_builtin_sched::_get_available_cpus`
     local available_mem=`debasher_builtin_sched::_get_available_mem`
     "${debasher_libexecdir}"/debasher_solve_knapsack_greedy -s "${knapsack_item_weight_spec}" -d "${knapsack_pred_spec}" \
-                            -c ${available_cpus},${available_mem} -t ${DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT}
+                            -c ${available_cpus},${available_mem} -r ${DEBASHER_BUILTIN_SCHED_GREEDY_SOLVE_RESTARTS} \
+                            -t ${DEBASHER_BUILTIN_SCHED_SOLVE_TIME_LIMIT}
 }
 
 ########
