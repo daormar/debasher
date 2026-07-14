@@ -872,7 +872,7 @@ debasher::_get_first_column() {
 }
 
 ########
-debasher_builtin_sched::_print_knapsack_sol()
+debasher_builtin_sched::_generate_knapsack_sol()
 {
     local knapsack_item_weight_spec=$1
     local knapsack_pred_spec=$2
@@ -908,7 +908,7 @@ debasher_builtin_sched::_solve_knapsack()
         # Solve knapsack problem using the algorithm
         local knapsack_sol="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_FNAME}"
         local knapsack_sol_stderr="${dirname}/${DEBASHER_BUILTIN_SCHED_KNAPSACK_SOL_STDERR_FNAME}"
-        debasher_builtin_sched::_print_knapsack_sol "${knapsack_item_weight_spec}" "${knapsack_pred_spec}" > "${knapsack_sol}" 2> "${knapsack_sol_stderr}"
+        debasher_builtin_sched::_generate_knapsack_sol "${knapsack_item_weight_spec}" "${knapsack_pred_spec}" > "${knapsack_sol}" 2> "${knapsack_sol_stderr}"
         DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=`"${AWK}" -F ": " '{if($1=="Packed items") print $2}' "${knapsack_sol}"`
     fi
 }
