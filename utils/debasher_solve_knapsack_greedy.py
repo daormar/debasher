@@ -255,10 +255,9 @@ def compute_ancestors(items, preds_by_name):
                 pair = frozenset((i, p))
                 if pair not in warned_pairs:
                     warned_pairs.add(pair)
-                    print(
-                        "Note: '%s' and '%s' form a dependency cycle, they "
-                        "will always be selected together" % (items[i], items[p]),
-                        file=sys.stderr)
+                    print("Note: '%s' and '%s' form a dependency cycle, they "
+                          "will always be selected together" % (items[i], items[p]),
+                          file=sys.stderr)
             if p not in visited:
                 visited.add(p)
                 dfs(p, visited, stack)
@@ -334,8 +333,7 @@ def greedy_solve_with_restarts(weights, values, capacities, ancestors,
         if time_limit is not None and time_limit > 0 and (time.time() - start) >= time_limit:
             break
 
-        value, sel_items = greedy_solve(
-            weights, values, capacities, ancestors, rng=rng, noise=noise)
+        value, sel_items = greedy_solve(weights, values, capacities, ancestors, rng=rng, noise=noise)
         if value > best_value:
             best_value, best_items = value, sel_items
 
