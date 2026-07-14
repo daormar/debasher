@@ -794,7 +794,7 @@ debasher_builtin_sched::_get_knapsack_name()
 }
 
 ########
-debasher_builtin_sched::_get_task_value_for_knapsack_solver()
+debasher_builtin_sched::_get_item_value_for_knapsack_solver()
 {
     local array_size=$1
 
@@ -811,6 +811,10 @@ debasher_builtin_sched::_print_knapsack_item_value_weight_spec()
         # Obtain array size
         local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
 
+        # Get item value
+        local item_value
+        item_value=`debasher_builtin_sched::_get_item_value_for_knapsack_solver "${array_size}"`
+
         # Determine cpu requirements
         local cpus
         cpus=`debasher_builtin_sched::_get_knapsack_cpus_for_process ${processname}`
@@ -821,13 +825,11 @@ debasher_builtin_sched::_print_knapsack_item_value_weight_spec()
 
         if [ ${array_size} -eq 1 ]; then
             local knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${processname}`
-            echo "${knapsack_name} ${DEBASHER_BUILTIN_SCHED_PROCESS_VALUE_FOR_KNAPSACK_SOLVER} ${cpus} ${mem}"
+            echo "${knapsack_name} ${item_value} ${cpus} ${mem}"
         else
             for id in ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}; do
                 local knapsack_name=`debasher_builtin_sched::_get_knapsack_name ${processname} ${id}`
-                local task_value
-                task_value=`debasher_builtin_sched::_get_task_value_for_knapsack_solver "${array_size}"`
-                echo "${knapsack_name} ${task_value} ${cpus} ${mem}"
+                echo "${knapsack_name} ${item_value} ${cpus} ${mem}"
             done
         fi
     done
