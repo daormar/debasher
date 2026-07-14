@@ -136,6 +136,15 @@ fragment_define_opts()
 }
 
 ########
+fragment_task()
+{
+    local inf=$1
+    local outf=$2
+
+    rev "${inf}" > "${outf}"
+}
+
+########
 fragment()
 {
     # Initialize variables
@@ -161,7 +170,7 @@ fragment()
     local i=0
     for part in "$tmpd"/part_*; do
         [ -e "$part" ] || continue
-        rev "$part" > "$outd/blk${i}.txt" || return 1
+        fragment_task "$part" "$outd/blk${i}.txt" || return 1
         echo "$outd/blk${i}.txt" > "${outf}" || return 1
         ((i++))
     done
@@ -259,10 +268,10 @@ worker_define_opts()
 ########
 worker_task()
 {
-    local filepath=$1
+    local inf=$1
     local outf=$2
 
-    rev "$filepath" > "$outf"
+    rev "${inf}" > "${outf}"
 }
 
 ########
