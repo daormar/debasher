@@ -211,17 +211,15 @@ def extract_deps_info(depsfile, items):
         successor, predecessor = fields[0], fields[1]
 
         if successor not in item_set:
-            print(
-                "Note: successor '%s' not found among current processes, "
-                "ignoring dependency on '%s'" % (successor, predecessor),
-                file=sys.stderr)
+            print("Note: successor '%s' not found among current processes, "
+                  "ignoring dependency on '%s'" % (successor, predecessor),
+                  file=sys.stderr)
             continue
 
         if predecessor not in item_set:
-            print(
-                "Note: predecessor '%s' of '%s' not found among current "
-                "processes, assuming it already ran" % (predecessor, successor),
-                file=sys.stderr)
+            print("Note: predecessor '%s' of '%s' not found among current "
+                  "processes, assuming it already ran" % (predecessor, successor),
+                  file=sys.stderr)
             continue
 
         preds_by_name[successor].append(predecessor)
