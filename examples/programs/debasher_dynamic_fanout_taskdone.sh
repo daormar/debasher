@@ -104,7 +104,7 @@ worker_task()
     retcode=$(bernoulli_trial 75)
 
     if [ "${retcode}" -eq 0 ]; then
-        rev "$filepath" > "$outf"
+        count_chars "$filepath" "$outf"
     else
         return "${retcode}"
     fi
@@ -136,8 +136,8 @@ worker_taskdone()
         local taskid
         taskid="${id}_${base}"
 
-        # Reverse the characters of each line in the file and save it to
-        # outd. The task is only carried out if it is not marked as done
+        # Execute worker task. The task is only carried out if it is not
+        # marked as done
         if debasher::is_task_done "${outd}" "${taskid}"; then
             echo "Task ${taskid} was already completed and marked as done" >&2
         else

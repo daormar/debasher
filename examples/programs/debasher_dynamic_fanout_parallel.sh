@@ -74,15 +74,6 @@ worker_parallel_define_opts()
 }
 
 ########
-worker_task()
-{
-    local filepath=$1
-    local outf=$2
-
-    rev "$filepath" > "$outf"
-}
-
-########
 worker_parallel()
 {
     # Initialize variables
@@ -105,7 +96,7 @@ worker_parallel()
         local base
         base=$(basename "$filepath")
 
-        # Reverse the characters of each line in the file and save it to outd
+        # Execute worker task
         worker_task "$filepath" "$outd/$base" &
         pids+=($!)
         echo "Worker ${id} launched task with PID $!" >&2
