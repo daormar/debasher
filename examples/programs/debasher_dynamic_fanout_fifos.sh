@@ -87,11 +87,10 @@ generate()
     # Clear/create the output file
     > "$outf"
 
-    for ((i = 1; i <= numlines; i++)); do
-        # Generate a line of numchars random alphanumeric characters
-        tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$numchars" >> "$outf"
-        echo >> "$outf"
-    done
+    local bytes_needed=$(( (numchars * numlines * 3 / 4) + numlines * 4 + 64 ))
+
+    head -c "$bytes_needed" /dev/urandom | base64 | tr -d '\n' | \
+        fold -w "$numchars" | head -n "$numlines" > "$outf"
 }
 
 ########
