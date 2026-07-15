@@ -867,7 +867,6 @@ debasher::_get_procdeps_for_process()
                     # Update associative array of dependencies
                     local highest_pri_deptype
                     debasher::_get_highest_priority_deptype "${depdict[$proc]}" "${deptype}" highest_pri_deptype
-                    # local highest_pri_deptype=`debasher::_get_highest_priority_deptype "${depdict[$proc]}" "${deptype}"`
                     depdict["${proc}"]=${highest_pri_deptype}
                 done <<< "${prdeps_idx}"
             fi
