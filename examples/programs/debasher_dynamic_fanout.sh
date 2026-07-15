@@ -77,6 +77,25 @@ generate_define_opts()
 }
 
 ########
+count_chars() {
+    local inf="$1"
+    local outf="$2"
+
+    awk '
+        {
+            n = length($0)
+            for (i = 1; i <= n; i++) {
+                c = substr($0, i, 1)
+                count[c]++
+            }
+        }
+        END {
+            for (c in count) print c","count[c]
+        }
+    ' "$inf" > "$outf"
+}
+
+########
 generate()
 {
     # Initialize variables
@@ -89,8 +108,12 @@ generate()
 
     local bytes_needed=$(( (numchars * numlines * 3 / 4) + numlines * 4 + 64 ))
 
+    # Generate file
     head -c "$bytes_needed" /dev/urandom | base64 | tr -d '\n' | \
         fold -w "$numchars" | head -n "$numlines" > "$outf"
+
+    # Extract counts for program testing
+    count_chars "${outf}" "${outf}.counts"
 }
 
 ########
@@ -131,15 +154,6 @@ fragment_define_opts()
 }
 
 ########
-fragment_task()
-{
-    local inf=$1
-    local outf=$2
-
-    rev "${inf}" > "${outf}"
-}
-
-########
 fragment()
 {
     # Initialize variables
@@ -154,21 +168,22 @@ fragment()
     # Calculate how many lines correspond to each block (rounded up)
     local lines_per_block=$(( (total_lines + numblocks - 1) / numblocks ))
 
-    # Split the file into temporary blocks
-    local tmpd
-    tmpd=$(mktemp -d)
-    split -l "$lines_per_block" -d -a 4 "$inf" "$tmpd/part_" || return 1
+    # Fragment file
+    local i start_line end_line count blockfile
+    for ((i = 0; i < numblocks; i++)); do
+        start_line=$(( i * lines_per_block + 1 ))
+        [ "$start_line" -gt "$total_lines" ] && break   # no more lines left
 
-    # Process each block: reverse the characters of each line
-    local i=0
-    for part in "$tmpd"/part_*; do
-        [ -e "$part" ] || continue
-        fragment_task "$part" "$outd/blk${i}.txt" || return 1
-        ((i++))
+        end_line=$(( start_line + lines_per_block - 1 ))
+        [ "$end_line" -gt "$total_lines" ] && end_line="$total_lines"
+        count=$(( end_line - start_line + 1 ))
+
+        blockfile="$outd/blk${i}.txt"
+
+        # Extract lines [start_line, end_line] using tail + head,
+        # instead of reading and writing line by line in bash.
+        tail -n "+$start_line" "$inf" | head -n "$count" > "$blockfile"
     done
-
-    # Clean up the temporary directory
-    rm -rf "$tmpd"
 }
 
 ########
@@ -289,7 +304,7 @@ worker_task()
     local inf=$1
     local outf=$2
 
-    rev "${inf}" > "${outf}"
+    count_chars "${inf}" "${outf}"
 }
 
 ########
@@ -313,7 +328,7 @@ worker()
         local base
         base=$(basename "$filepath")
 
-        # Reverse the characters of each line in the file and save it to outd
+        # Execute worker task
         worker_task "$filepath" "$outd/$base" || return 1
     done < "$inf"
 }
@@ -361,6 +376,22 @@ aggregate_define_opts()
 }
 
 ########
+merge_counts() {
+    local outf="$1"
+    shift
+    local count_files=("$@")
+
+    awk -F',' '
+        {
+            total[$1] += $2
+        }
+        END {
+            for (c in total) print c","total[c]
+        }
+    ' "${count_files[@]}" > "$outf"
+}
+
+########
 aggregate()
 {
     # Initialize variables
@@ -374,38 +405,24 @@ aggregate()
     # Clear/create the output file
     > "$outf"
 
-    # Collect all available indices i from all directories
-    local indices=()
-    local d f base i
+    # Collect all count files (blk${i}.txt.counts, or whatever naming
+    # convention the workers used) across all directories. Order doesn't
+    # matter here since aggregation is a sum, not a concatenation.
+    local count_files=()
+    local d f
     for d in "${dirs[@]}"; do
         for f in "$d"/blk*.txt; do
             [ -e "$f" ] || continue
-            base=$(basename "$f")
-            i="${base#blk}"
-            i="${i%.txt}"
-            indices+=("$i")
+            count_files+=("$f")
         done
     done
 
-    # Sort indices numerically
-    local sorted_indices
-    sorted_indices=$(printf '%s\n' "${indices[@]}" | sort -n -u)
+    if [ "${#count_files[@]}" -eq 0 ]; then
+        echo "Warning: no count files found in any directory" >&2
+        return 1
+    fi
 
-    # For each index, search through the directories to find the block
-    for i in $sorted_indices; do
-        local found=0
-        for d in "${dirs[@]}"; do
-            local blockfile="$d/blk${i}.txt"
-            if [ -e "$blockfile" ]; then
-                cat "$blockfile" >> "$outf" || return 1
-                found=1
-                break
-            fi
-        done
-        if [ "$found" -eq 0 ]; then
-            echo "Warning: block $i not found in any directory" >&2
-        fi
-    done
+    merge_counts "$outf" "${count_files[@]}"
 }
 
 #################################
