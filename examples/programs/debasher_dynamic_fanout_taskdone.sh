@@ -82,7 +82,8 @@ worker_taskdone_define_opts()
 }
 
 ########
-bernoulli_trial() {
+bernoulli_trial()
+{
     local prob=$1
     local value=$((RANDOM % 100))
 
