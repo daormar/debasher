@@ -35,7 +35,7 @@ debasher::_program_process_spec_is_ok()
 }
 
 ########
-debasher::extract_comp_specs()
+debasher::extract_process_comp_specs()
 {
     local process_spec=$1
 
@@ -50,7 +50,7 @@ debasher::extract_comp_specs()
 }
 
 ########
-debasher::extract_additional_specs()
+debasher::extract_process_additional_specs()
 {
     local process_spec=$1
 
@@ -66,7 +66,7 @@ debasher::_add_additional_spec()
     local process_spec=$1
     local procdeps=$2
 
-    local additional_specs=$(debasher::extract_additional_specs "${process_spec}")
+    local additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
     if [ -z "${additional_specs}" ]; then
         echo "${process_spec} ${procdeps}"
     else
@@ -131,7 +131,7 @@ debasher::_extract_processname_from_process_spec()
 debasher::_extract_cpus_from_process_spec()
 {
     local process_spec=$1
-    local process_comp_specs=$(debasher::extract_comp_specs "${process_spec}")
+    local process_comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     debasher::extract_attr_from_process_comp_specs "${process_comp_specs}" "cpus"
 }
 
@@ -139,7 +139,7 @@ debasher::_extract_cpus_from_process_spec()
 debasher::_extract_mem_from_process_spec()
 {
     local process_spec=$1
-    local process_comp_specs=$(debasher::extract_comp_specs "${process_spec}")
+    local process_comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     debasher::extract_attr_from_process_comp_specs "${process_comp_specs}" "mem"
 }
 
@@ -147,7 +147,7 @@ debasher::_extract_mem_from_process_spec()
 debasher::_extract_time_from_process_spec()
 {
     local process_spec=$1
-    local process_comp_specs=$(debasher::extract_comp_specs "${process_spec}")
+    local process_comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     debasher::extract_attr_from_process_comp_specs "${process_comp_specs}" "time"
 }
 
@@ -155,7 +155,7 @@ debasher::_extract_time_from_process_spec()
 debasher::_extract_nodes_from_process_spec()
 {
     local process_spec=$1
-    local process_comp_specs=$(debasher::extract_comp_specs "${process_spec}")
+    local process_comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     debasher::extract_attr_from_process_comp_specs "${process_comp_specs}" "nodes"
 }
 
@@ -163,7 +163,7 @@ debasher::_extract_nodes_from_process_spec()
 debasher::_extract_account_from_process_spec()
 {
     local process_spec=$1
-    local process_comp_specs=$(debasher::extract_comp_specs "${process_spec}")
+    local process_comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     debasher::extract_attr_from_process_comp_specs "${process_comp_specs}" "account"
 }
 
@@ -171,7 +171,7 @@ debasher::_extract_account_from_process_spec()
 debasher::_extract_partition_from_process_spec()
 {
     local process_spec=$1
-    local process_comp_specs=$(debasher::extract_comp_specs "${process_spec}")
+    local process_comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     debasher::extract_attr_from_process_comp_specs "${process_comp_specs}" "partition"
 }
 
@@ -179,7 +179,7 @@ debasher::_extract_partition_from_process_spec()
 debasher::_extract_throttle_from_process_spec()
 {
     local process_spec=$1
-    local process_comp_specs=$(debasher::extract_comp_specs "${process_spec}")
+    local process_comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     debasher::extract_attr_from_process_comp_specs "${process_comp_specs}" "throttle"
 }
 
@@ -187,7 +187,7 @@ debasher::_extract_throttle_from_process_spec()
 debasher::_extract_processdeps_from_process_spec()
 {
     local process_spec=$1
-    local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
+    local process_additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
     debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "${DEBASHER_PROCESSDEPS_SPEC}"
 }
 
@@ -195,7 +195,7 @@ debasher::_extract_processdeps_from_process_spec()
 debasher::_extract_force_from_process_spec()
 {
     local process_spec=$1
-    local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
+    local process_additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
     debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "force"
 }
 
@@ -203,7 +203,7 @@ debasher::_extract_force_from_process_spec()
 debasher::_extract_alias_from_process_spec()
 {
     local process_spec=$1
-    local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
+    local process_additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
     debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias"
 }
 
@@ -211,6 +211,6 @@ debasher::_extract_alias_from_process_spec()
 debasher::_extract_ext_alias_from_process_spec()
 {
     local process_spec=$1
-    local process_additional_specs=$(debasher::extract_additional_specs "${process_spec}")
+    local process_additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
     debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias"
 }
