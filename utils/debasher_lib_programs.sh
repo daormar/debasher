@@ -511,13 +511,13 @@ debasher::add_debasher_process()
         debasher::_add_debasher_heredoc_process "${processname}" || exit 1
     else
         # Treat process alias if provided
-        local process_alias=$(debasher::_extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
+        local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
         if [ "${process_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # A process alias was given
             debasher::_add_debasher_alias_process "${processname}" "${process_alias}" || exit 1
         else
             # Treat process external alias if provided
-            local process_ext_alias=$(debasher::_extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
+            local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
             if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
                 # A process external alias was given
                 debasher::_add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" || exit 1
