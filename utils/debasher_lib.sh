@@ -314,15 +314,15 @@ declare -A DEBASHER_EXIT_CODE
 # INCLUDE BASH FILES #
 ######################
 
-. "${debasher_libexecdir}"/debasher_lib_utils
-. "${debasher_libexecdir}"/debasher_lib_programs
-. "${debasher_libexecdir}"/debasher_lib_modules
-. "${debasher_libexecdir}"/debasher_lib_process_spec
-. "${debasher_libexecdir}"/debasher_lib_processes
-. "${debasher_libexecdir}"/debasher_lib_opts
-. "${debasher_libexecdir}"/debasher_lib_sched
-. "${debasher_libexecdir}"/debasher_lib_conda
-. "${debasher_libexecdir}"/debasher_lib_docker
+. "${debasher_pkglibdir}"/debasher_lib_utils
+. "${debasher_pkglibdir}"/debasher_lib_programs
+. "${debasher_pkglibdir}"/debasher_lib_modules
+. "${debasher_pkglibdir}"/debasher_lib_process_spec
+. "${debasher_pkglibdir}"/debasher_lib_processes
+. "${debasher_pkglibdir}"/debasher_lib_opts
+. "${debasher_pkglibdir}"/debasher_lib_sched
+. "${debasher_pkglibdir}"/debasher_lib_conda
+. "${debasher_pkglibdir}"/debasher_lib_docker
 
 #####################
 # UTILITY FUNCTIONS #

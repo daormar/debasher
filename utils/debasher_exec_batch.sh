@@ -17,7 +17,7 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. "${debasher_bindir}"/debasher_lib || exit 1
+. "${debasher_pkglibdir}"/debasher_lib || exit 1
 
 #############
 # CONSTANTS #
@@ -291,7 +291,7 @@ get_prg_status()
     if [ -d "${pipe_cmd_outd}" ]; then
         # Obtain program status
         local tmpfile=`"${MKTEMP}"`
-        "${debasher_bindir}"/debasher_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
+        "${debasher_pkglibdir}"/debasher_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
         # Obtain percentage of unfinished processes

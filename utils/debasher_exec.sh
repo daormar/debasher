@@ -17,8 +17,8 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARIES
-. "${debasher_bindir}"/debasher_lib || exit 1
-. "${debasher_libexecdir}"/debasher_builtin_sched_lib || exit 1
+. "${debasher_pkglibdir}"/debasher_lib || exit 1
+. "${debasher_pkglibdir}"/debasher_builtin_sched_lib || exit 1
 
 #############
 # CONSTANTS #

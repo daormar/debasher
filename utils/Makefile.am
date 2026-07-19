@@ -1,24 +1,28 @@
-bin_SCRIPTS= debasher_lib debasher_exec debasher_exec_batch		\
-debasher_get_stdout debasher_get_sched_out debasher_stop		\
-debasher_status debasher_stats debasher_exec_process debasher_doc_mod	\
-debasher_proc_dataset debasher_reformat_status				\
-debasher_fifo_writer_loop
+bin_SCRIPTS= debasher_exec debasher_exec_batch debasher_get_stdout	\
+debasher_get_sched_out debasher_stop debasher_status debasher_stats	\
+debasher_exec_process debasher_doc_mod debasher_proc_dataset		\
+debasher_reformat_status debasher_fifo_writer_loop
 
-libexec_SCRIPTS= debasher_builtin_sched_lib debasher_lib_utils		\
-debasher_lib_sched debasher_lib_sched_slurm debasher_lib_sched_builtin	\
-debasher_lib_sched_procs debasher_lib_process_spec			\
-debasher_lib_processes debasher_lib_programs debasher_lib_modules	\
-debasher_lib_opts debasher_lib_conda debasher_lib_docker		\
-debasher_get_vars_and_funcs debasher_get_deblib_vars_and_funcs		\
-debasher_check_prg_files db_get_reexec_procs_due_to_deps		\
-debasher_solve_knapsack_bb debasher_solve_knapsack_ga			\
-debasher_solve_knapsack_greedy debasher_gen_knapsack_problem		\
-debasher_gen_telegram_data debasher_list_deblib_pub_funcs
+libexec_SCRIPTS= debasher_get_vars_and_funcs			\
+debasher_get_deblib_vars_and_funcs debasher_check_prg_files	\
+db_get_reexec_procs_due_to_deps debasher_solve_knapsack_bb	\
+debasher_solve_knapsack_ga debasher_solve_knapsack_greedy	\
+debasher_gen_knapsack_problem debasher_gen_telegram_data	\
+debasher_list_deblib_pub_funcs
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS)
 
-python_PYTHON= debasher_runtime_lib.py debasher_prg_lib.py	\
-debasher_knapsack_ga.py
+python_PYTHON= debasher_runtime_lib.py debasher_prg_lib.py
+
+pkgpython_PYTHON= debasher_knapsack_ga.py
+
+mypkglibdir = $(libdir)/@PACKAGE@
+mypkglib_DATA = debasher_lib debasher_lib_utils debasher_lib_sched	\
+debasher_lib_sched_slurm debasher_lib_sched_builtin			\
+debasher_lib_sched_procs debasher_lib_process_spec			\
+debasher_lib_processes debasher_lib_programs debasher_lib_modules	\
+debasher_lib_opts debasher_lib_conda debasher_lib_docker		\
+debasher_builtin_sched_lib
 
 EXTRA_DIST = debasher_lib.sh debasher_lib_utils.sh			\
 debasher_lib_sched.sh debasher_lib_sched_procs.sh			\
@@ -50,6 +54,8 @@ SUFFIXES= .sh .py .r .R
 	echo "debasher_bindir=\"$(bindir)\"" >> $@
 	echo "debasher_libexecdir=\"$(libexecdir)\"" >> $@
 	echo "debasher_datadir=\"$(datadir)/$(PACKAGE_NAME)\"" >> $@
+	echo "debasher_pkglibdir=\"$(libdir)/$(PACKAGE_NAME)\"" >> $@
+	echo "debasher_pkgpythondir=\"$(pkgpythondir)\"" >> $@
 	echo "BASH=\"$(BASH)\"" >> $@
 	echo "ECHO=\"$(ECHO)\"" >> $@
 	echo "AWK=\"$(AWK)\"" >> $@
@@ -157,11 +163,6 @@ debasher_lib_sched_slurm: debasher_lib_sched_slurm.sh
 	cat $< > $@
 	chmod ugo+x $@
 
-debasher_lib_sched: debasher_lib_sched.sh
-	rm -f $@
-	cat $< > $@
-	chmod ugo+x $@
-
 debasher_lib_conda: debasher_lib_conda.sh
 	rm -f $@
 	cat $< > $@
@@ -177,6 +178,7 @@ debasher_lib_docker: debasher_lib_docker.sh
 	echo "#! " $(PYTHON) > $@
 	echo "import sys" >> $@
 	echo "sys.path.append(\"$(pythondir)\")" >> $@
+	echo "sys.path.append(\"$(pkgpythondir)\")" >> $@
 	cat $< >> $@
 	chmod ugo+x $@
 
