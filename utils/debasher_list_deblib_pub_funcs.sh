@@ -17,6 +17,6 @@
 # *- bash -*
 
 # INCLUDE BASH LIBRARY
-. "${debasher_bindir}"/debasher_lib || exit 1
+. "${debasher_pkglibdir}"/debasher_lib || exit 1
 
 debasher::list_public_functions

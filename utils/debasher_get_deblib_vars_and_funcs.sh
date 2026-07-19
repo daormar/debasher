@@ -30,7 +30,7 @@ extract_sched_funcs()
     funcs_to_keep["debasher::_get_task_finished_filename"]=1
 
     # Load scheduler functions
-    source "${debasher_libexecdir}/debasher_lib_sched"
+    source "${debasher_pkglibdir}/debasher_lib_sched"
 
     # Extract functions
     while IFS= read -r varfunc; do
@@ -44,7 +44,7 @@ unset_previous_vars_and_funcs()
 {
     # Unset variables
     while IFS= read -r varname; do
-        if [ "${varname}" != "debasher_libexecdir" ] && [ "${varname}" != "debasher_bindir" ] && [ "${varname}" != "funcs_to_unset" ]; then
+        if [ "${varname}" != "debasher_libexecdir" ] && [ "${varname}" != "debasher_pkglibdir" ] && [ "${varname}" != "debasher_bindir" ] && [ "${varname}" != "funcs_to_unset" ]; then
             unset "${varname}"
         fi
     done < <(compgen -v)
@@ -82,7 +82,7 @@ funcs_to_unset=`extract_sched_funcs`
 unset_previous_vars_and_funcs
 
 # Load variables and functions
-source "${debasher_bindir}/debasher_lib"
+source "${debasher_pkglibdir}/debasher_lib"
 
 # Unset unnecessary variables and functions
 unset_vars_and_funcs "${funcs_to_unset}"
