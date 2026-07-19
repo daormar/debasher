@@ -10,8 +10,6 @@ debasher_solve_knapsack_ga debasher_solve_knapsack_greedy	\
 debasher_gen_knapsack_problem debasher_gen_telegram_data	\
 debasher_list_deblib_pub_funcs
 
-CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS)
-
 python_PYTHON= debasher_runtime_lib.py debasher_prg_lib.py
 
 pkgpython_PYTHON= debasher_knapsack_ga.py
@@ -23,6 +21,8 @@ debasher_lib_sched_procs debasher_lib_process_spec			\
 debasher_lib_processes debasher_lib_programs debasher_lib_modules	\
 debasher_lib_opts debasher_lib_conda debasher_lib_docker		\
 debasher_builtin_sched_lib
+
+CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA)
 
 EXTRA_DIST = debasher_lib.sh debasher_lib_utils.sh			\
 debasher_lib_sched.sh debasher_lib_sched_procs.sh			\
