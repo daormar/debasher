@@ -427,6 +427,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_dynamic_fanout_fifos
+progname="debasher_dynamic_fanout_fifos"
+sched="BUILTIN"
+bs_cpus=7 # increased number of cpus to be able to allocate all processes
+bs_mem=1024
+check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Summary
 echo "# Summary"
 echo ""
