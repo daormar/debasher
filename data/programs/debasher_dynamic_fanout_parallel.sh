@@ -153,7 +153,8 @@ aggregate_define_opts()
 debasher_dynamic_fanout_parallel_program()
 {
     add_debasher_process "generate"        "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "fragment"        "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "count"           "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "fragment"        "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:count"
     add_debasher_process "dispatch"        "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "worker_parallel" "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "aggregate"       "cpus=1 mem=32 time=00:01:00"

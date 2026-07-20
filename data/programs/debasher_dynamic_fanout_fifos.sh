@@ -77,25 +77,6 @@ generate_define_opts()
 }
 
 ########
-count_chars() {
-    local inf="$1"
-    local outf="$2"
-
-    awk '
-        {
-            n = length($0)
-            for (i = 1; i <= n; i++) {
-                c = substr($0, i, 1)
-                count[c]++
-            }
-        }
-        END {
-            for (c in count) print c","count[c]
-        }
-    ' "$inf" > "$outf"
-}
-
-########
 generate()
 {
     # Initialize variables
@@ -110,9 +91,61 @@ generate()
 
     head -c "$bytes_needed" /dev/urandom | base64 | tr -d '\n' | \
         fold -w "$numchars" | head -n "$numlines" > "$outf"
+}
 
-    # Extract counts for program testing
-    count_chars "${outf}" "${outf}.counts"
+########
+count_document()
+{
+    process_description "Counts characters of an input file in a conventional way. This process is added for debugging purposes."
+}
+
+########
+count_define_opts()
+{
+    # Initialize variables
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local optlist=""
+
+    # -inf option
+    define_opt_from_proc_out "-inf" "generate" "-outf" optlist || return 1
+
+    # Define name of output directory
+    define_opt "-outf" "${process_outdir}/counts.txt" optlist || return 1
+
+    # Save option list
+    save_opt_list optlist
+}
+
+########
+count_chars() {
+    local inf="$1"
+
+    awk '
+        {
+            n = length($0)
+            for (i = 1; i <= n; i++) {
+                c = substr($0, i, 1)
+                count[c]++
+            }
+        }
+        END {
+            for (c in count) print c","count[c]
+        }
+    ' "$inf"
+}
+
+########
+count()
+{
+    # Initialize variables
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+
+    # Extract counts
+    count_chars "${inf}" | sort > "${outf}"
 }
 
 ########
@@ -297,7 +330,7 @@ worker_task()
     local inf=$1
     local outf=$2
 
-    count_chars "${inf}" "${outf}"
+    count_chars "${inf}" > "${outf}"
 }
 
 ########
@@ -370,8 +403,6 @@ aggregate_define_opts()
 
 ########
 merge_counts() {
-    local outf="$1"
-    shift
     local count_files=("$@")
 
     awk -F',' '
@@ -381,7 +412,7 @@ merge_counts() {
         END {
             for (c in total) print c","total[c]
         }
-    ' "${count_files[@]}" > "$outf"
+    ' "${count_files[@]}"
 }
 
 ########
@@ -415,7 +446,7 @@ aggregate()
         return 1
     fi
 
-    merge_counts "$outf" "${count_files[@]}"
+    merge_counts "${count_files[@]}" | sort > "$outf"
 }
 
 #################################
@@ -426,7 +457,8 @@ aggregate()
 debasher_dynamic_fanout_fifos_program()
 {
     add_debasher_process "generate"  "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "fragment"  "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "count"     "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "fragment"  "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:count"
     add_debasher_process "dispatch"  "cpus=1 mem=32 time=00:01:00" "ext_alias=./dynamic_fanout_dispatcher.py"
     add_debasher_process "worker"    "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "aggregate" "cpus=1 mem=32 time=00:01:00"

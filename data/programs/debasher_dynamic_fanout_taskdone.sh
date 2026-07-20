@@ -105,7 +105,7 @@ worker_task()
     retcode=$(bernoulli_trial 75)
 
     if [ "${retcode}" -eq 0 ]; then
-        count_chars "$filepath" "$outf"
+        count_chars "$filepath" > "$outf"
     else
         return "${retcode}"
     fi
@@ -193,7 +193,8 @@ aggregate_define_opts()
 debasher_dynamic_fanout_taskdone_program()
 {
     add_debasher_process "generate"        "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "fragment"        "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "count"           "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "fragment"        "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:count"
     add_debasher_process "dispatch"        "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "worker_taskdone" "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "aggregate"       "cpus=1 mem=32 time=00:01:00"
