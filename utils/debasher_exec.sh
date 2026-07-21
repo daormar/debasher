@@ -695,7 +695,7 @@ define_rerun_processes_due_to_input_changes()
 
     # Read input parameters
     local program_opts_file=$1
-    local prev_program_opts_file=$2
+    local old_program_opts_file=$2
 
     # Obtain processes with input change
     local changed_procs
@@ -1461,7 +1461,9 @@ else
             handle_docker_requirements "${procspec_file}" || exit 1
         fi
 
-        define_rerun_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
+        if [ -f "${old_program_opts_file}" ]; then
+            define_rerun_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
+        fi
 
         define_rerun_processes_due_to_fifos "${outd}" "${procspec_file}" || exit 1
 
