@@ -166,13 +166,13 @@ debasher_builtin_sched::_init_process_info()
 }
 
 ########
-debasher_builtin_sched::_revise_reexec_proc_status()
+debasher_builtin_sched::_revise_rerun_proc_status()
 {
     # Iterate over defined processes
     local processname
     for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
-        # If process is marked as reexec and it was finished, its process completion is reset
-        if debasher::_process_marked_as_reexec ${processname}; then
+        # If process is marked as rerun and it was finished, its process completion is reset
+        if debasher::_process_marked_as_rerun ${processname}; then
             if [ ${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
                 debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
                 DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${DEBASHER_UNFINISHED_PROCESS_STATUS}
@@ -1492,8 +1492,8 @@ debasher_builtin_sched::execute_program_processes()
     # Initialize process information
     debasher_builtin_sched::_init_process_info "${cmdline}" "${dirname}" "${procspec_file}" || return 1
 
-    # Revise process status for processes to be reexecuted
-    debasher_builtin_sched::_revise_reexec_proc_status || return 1
+    # Revise process status for processes to rerun
+    debasher_builtin_sched::_revise_rerun_proc_status || return 1
 
     # Initialize current computational resources
     debasher_builtin_sched::_init_curr_comp_resources || return 1

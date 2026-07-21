@@ -325,7 +325,7 @@ get_prg_status()
 }
 
 ########
-prg_has_processes_to_reexec()
+prg_has_processes_to_rerun()
 {
     local pipe_exec_cmd=$1
     local pipe_cmd_outd=$2
@@ -344,8 +344,8 @@ prg_has_processes_to_reexec()
     fi
 
     # Check if pipe_exec reports processes to be re-executed
-    local reexec_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_DEBASHER_REEXEC_PROCESSES_WARNING}")
-    if [ ! -z "${reexec_processes_warning}" ]; then
+    local rerun_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_DEBASHER_RERUN_PROCESSES_WARNING}")
+    if [ ! -z "${rerun_processes_warning}" ]; then
         return 0
     else
         return 1
@@ -361,7 +361,7 @@ get_initial_prg_status()
 
     # Check if program has processes to re-execute (this is only necessary
     # in the initial status check)
-    if prg_has_processes_to_reexec "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
+    if prg_has_processes_to_rerun "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
         return ${PRG_IS_NOT_COMPLETED}
     fi
 

@@ -218,7 +218,7 @@ debasher::_reset_process_completion_signal()
     local dirname=$1
     local processname=$2
 
-    # If process will be reexecuted, file signaling process completion should
+    # If process will be rerun, file signaling process completion should
     # be removed. Additionally, this action should be registered in a
     # specific associative array
     local finished_filename_pref=`debasher::_get_process_finished_filename_prefix "${dirname}" ${processname}`
@@ -299,24 +299,24 @@ debasher::_read_ids_from_files()
 }
 
 ########
-debasher::_mark_process_as_reexec()
+debasher::_mark_process_as_rerun()
 {
     local processname=$1
     local reason=$2
 
-    if [ "${DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
-        DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]=${reason}
+    if [ "${DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
+        DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]=${reason}
     else
-        local curr_val=DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]
-        DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]="${curr_val},${reason}"
+        local curr_val=DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]
+        DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]="${curr_val},${reason}"
     fi
 }
 
 ########
-debasher::_get_reexec_processes_as_string()
+debasher::_get_rerun_processes_as_string()
 {
     local result=""
-    for processname in "${!DEBASHER_DEBASHER_REEXEC_PROCESSES[@]}"; do
+    for processname in "${!DEBASHER_DEBASHER_RERUN_PROCESSES[@]}"; do
         if [ "${result}" = "" ]; then
             result=${processname}
         else
@@ -328,11 +328,11 @@ debasher::_get_reexec_processes_as_string()
 }
 
 ########
-debasher::_process_marked_as_reexec()
+debasher::_process_marked_as_rerun()
 {
     local processname=$1
 
-    if [ "${DEBASHER_DEBASHER_REEXEC_PROCESSES[${processname}]}" = "" ]; then
+    if [ "${DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
         return 1
     else
         return 0

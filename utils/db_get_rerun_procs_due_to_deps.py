@@ -30,7 +30,7 @@ def take_pars():
     flags["p_given"]=False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"r:p:",["reexec-procs=","prefix="])
+        opts, args = getopt.getopt(sys.argv[1:],"r:p:",["rerun-procs=","prefix="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -39,7 +39,7 @@ def take_pars():
         sys.exit()
     else:
         for opt, arg in opts:
-            if opt in ("-r", "--reexec-procs"):
+            if opt in ("-r", "--rerun-procs"):
                 values["rexec_procs"] = arg
                 flags["r_given"]=True
             elif opt in ("-p", "--prefix"):
@@ -59,9 +59,9 @@ def check_pars(flags, values):
 
 ##################################################
 def print_help():
-    print("db_get_reexec_procs_due_to_deps -r <string> -p <string>", file=sys.stderr)
+    print("db_get_rerun_procs_due_to_deps -r <string> -p <string>", file=sys.stderr)
     print("", file=sys.stderr)
-    print("-r <string>                     String with processes to be reexecuted", file=sys.stderr)
+    print("-r <string>                     String with processes to rerun", file=sys.stderr)
     print("-p <string>                     Prefix of program files", file=sys.stderr)
 
 ##################################################
@@ -74,44 +74,44 @@ def process_r_opt(rexec_processes_str):
     return result
 
 ##################################################
-def process_should_reexec(reexec_processes,process_deplist):
+def process_should_rerun(rerun_processes,process_deplist):
     for process in process_deplist:
-        if process in reexec_processes:
+        if process in rerun_processes:
             return True
     return False
 
 ##################################################
-def get_new_reexec_processes(reexec_processes, curr_reexec_processes, dep_info):
-    new_reexec_processes=set()
+def get_new_rerun_processes(rerun_processes, curr_rerun_processes, dep_info):
+    new_rerun_processes=set()
     for process in dep_info:
-        if process not in reexec_processes and process_should_reexec(curr_reexec_processes, dep_info[process]):
-            new_reexec_processes.add(process)
+        if process not in rerun_processes and process_should_rerun(curr_rerun_processes, dep_info[process]):
+            new_rerun_processes.add(process)
 
-    return new_reexec_processes
+    return new_rerun_processes
 
 ##################################################
-def get_reexec_processes_due_to_deps(initial_reexec_processes,dep_info):
-    curr_reexec_processes = initial_reexec_processes
-    reexec_processes = initial_reexec_processes
+def get_rerun_processes_due_to_deps(initial_rerun_processes,dep_info):
+    curr_rerun_processes = initial_rerun_processes
+    rerun_processes = initial_rerun_processes
     end = False
     while not end:
-        curr_reexec_processes = get_new_reexec_processes(reexec_processes, curr_reexec_processes, dep_info)
-        if (len(curr_reexec_processes) == 0):
+        curr_rerun_processes = get_new_rerun_processes(rerun_processes, curr_rerun_processes, dep_info)
+        if (len(curr_rerun_processes) == 0):
             end = True
         else:
-            reexec_processes = reexec_processes.union(curr_reexec_processes)
+            rerun_processes = rerun_processes.union(curr_rerun_processes)
 
-    return reexec_processes - initial_reexec_processes
+    return rerun_processes - initial_rerun_processes
 
 ##################################################
-def print_processes(reexec_processes):
-    for process in reexec_processes:
+def print_processes(rerun_processes):
+    for process in rerun_processes:
         print(process)
 
 ##################################################
 def process_pars(flags,values):
-    # Read processes to be reexecuted
-    initial_reexec_processes = process_r_opt(values["rexec_procs"])
+    # Read processes to rerun
+    initial_rerun_processes = process_r_opt(values["rexec_procs"])
 
     # Load process specification entries
     dep_graph = DependencyGraph(values["prefix"])
@@ -119,11 +119,11 @@ def process_pars(flags,values):
     # Get dependency information
     dep_info = dep_graph.get_dep_info()
 
-    # Get reexecuted processes
-    reexec_processes_due_to_deps = get_reexec_processes_due_to_deps(initial_reexec_processes, dep_info)
+    # Get rerun processes
+    rerun_processes_due_to_deps = get_rerun_processes_due_to_deps(initial_rerun_processes, dep_info)
 
-    # Print processes to be reexecuted due to dependencies
-    print_processes(reexec_processes_due_to_deps)
+    # Print processes to rerun due to dependencies
+    print_processes(rerun_processes_due_to_deps)
 
 ##################################################
 def main(argv):

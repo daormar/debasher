@@ -25,7 +25,7 @@
 #############
 
 MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
-REEXEC_PROCESSES_LIST_FNAME=".reexec_processes_due_to_deps.txt"
+RERUN_PROCESSES_LIST_FNAME=".rerun_processes_due_to_deps.txt"
 WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT=5
 WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 
@@ -53,7 +53,7 @@ usage()
     echo "debasher_exec             --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
-    echo "                          [--reexec-outdated-procs] [--conda-support]"
+    echo "                          [--rerun-outdated-procs] [--conda-support]"
     echo "                          [--docker-support] [--gen-proc-graph]"
     echo "                          [--show-cmdline-opts|--check-proc-opts|--debug]"
     echo "                          [--wait] [--builtinsched-debug] [--version] [--help]"
@@ -70,7 +70,7 @@ usage()
     echo "                          (${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} by default). A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} means unlimited memory"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the program"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
-    echo "--reexec-outdated-procs   Reexecute those processes with outdated code"
+    echo "--rerun-outdated-procs    Rerun those processes with outdated code"
     echo "--conda-support           Enable conda support"
     echo "--docker-support          Enable docker support"
     echo "--gen-proc-graph          Generate process graph"
@@ -97,7 +97,7 @@ read_pars()
     builtin_sched_mem=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
     dflt_nodes_given=0
     dflt_throttle_given=0
-    reexec_outdated_processes_given=0
+    rerun_outdated_processes_given=0
     conda_support_given=0
     docker_support_given=0
     gen_proc_graph_given=0
@@ -165,9 +165,9 @@ read_pars()
                       dflt_throttle_given=1
                   fi
                   ;;
-            "--reexec-outdated-procs")
+            "--rerun-outdated-procs")
                   if [ $# -ne 0 ]; then
-                      reexec_outdated_processes_given=1
+                      rerun_outdated_processes_given=1
                   fi
                   ;;
             "--conda-support")
@@ -689,9 +689,9 @@ handle_docker_requirements()
 }
 
 ########
-define_reexec_processes_due_to_input_changes()
+define_rerun_processes_due_to_input_changes()
 {
-    echo "# Defining processes to be reexecuted due to changes in input parameters..." >&2
+    echo "# Defining processes to rerun due to changes in input parameters..." >&2
 
     # Read input parameters
     local program_opts_file=$1
@@ -704,7 +704,7 @@ define_reexec_processes_due_to_input_changes()
     # Iterate processes with input change
     while IFS= read -r proc; do
         [ -z "$proc" ] && continue
-        debasher::_mark_process_as_reexec "${proc}" "${DEBASHER_INPUT_CHANGE_REEXEC_REASON}"
+        debasher::_mark_process_as_rerun "${proc}" "${DEBASHER_INPUT_CHANGE_RERUN_REASON}"
     done <<< "${changed_procs}"
 
     # Obtain new processes
@@ -714,7 +714,7 @@ define_reexec_processes_due_to_input_changes()
     # Iterate over new processes
     while IFS= read -r proc; do
         [ -z "$proc" ] && continue
-        debasher::_mark_process_as_reexec "${proc}" "${DEBASHER_NEW_PROC_REEXEC_REASON}"
+        debasher::_mark_process_as_rerun "${proc}" "${DEBASHER_NEW_PROC_RERUN_REASON}"
     done <<< "${new_procs}"
 
     echo "Definition complete" >&2
@@ -723,9 +723,9 @@ define_reexec_processes_due_to_input_changes()
 }
 
 ########
-define_reexec_processes_due_to_fifos()
+define_rerun_processes_due_to_fifos()
 {
-    echo "# Defining processes to be reexecuted due to usage of fifos (if any)..." >&2
+    echo "# Defining processes to rerun due to usage of fifos (if any)..." >&2
 
     # Read input parameters
     local dirname=$1
@@ -744,14 +744,14 @@ define_reexec_processes_due_to_fifos()
             # Get status for process
             local status=`debasher::_get_process_status "${dirname}" "${processname}"`
 
-            # Mark process and fifo owners for reexecution
+            # Mark process and fifo owners for rerun
             if [ -n "${fifo_owners}" ]; then
                 if [ "${status}" = "${DEBASHER_TODO_PROCESS_EXIT_CODE}" ] \
                        || [ "${status}" = "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ] \
                        || [ "${status}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ] ; then
-                    debasher::_mark_process_as_reexec "${processname}" "${DEBASHER_FIFO_REEXEC_REASON}"
+                    debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_FIFO_RERUN_REASON}"
                     while read -r fifo_owner; do
-                        debasher::_mark_process_as_reexec "${fifo_owner}" "${DEBASHER_FIFO_REEXEC_REASON}"
+                        debasher::_mark_process_as_rerun "${fifo_owner}" "${DEBASHER_FIFO_RERUN_REASON}"
                     done <<< "${fifo_owners}"
                 fi
             fi
@@ -767,9 +767,9 @@ define_reexec_processes_due_to_fifos()
 }
 
 ########
-define_forced_reexec_processes()
+define_forced_rerun_processes()
 {
-    echo "# Defining processes forced to be reexecuted (if any)..." >&2
+    echo "# Defining processes forced to rerun (if any)..." >&2
 
     # Read input parameters
     local procspec_file=$1
@@ -782,7 +782,7 @@ define_forced_reexec_processes()
             local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
             local process_forced=`debasher::_extract_force_from_process_spec "$process_spec" "force"`
             if [ ${process_forced} = "yes" ]; then
-                debasher::_mark_process_as_reexec $processname ${DEBASHER_FORCED_REEXEC_REASON}
+                debasher::_mark_process_as_rerun $processname ${DEBASHER_FORCED_RERUN_REASON}
             fi
         else
             echo "Error: process specification (${process_spec}) is not correct" >&2
@@ -826,9 +826,9 @@ check_script_is_older_than_modules()
 }
 
 ########
-define_reexec_processes_due_to_code_update()
+define_rerun_processes_due_to_code_update()
 {
-    echo "# Defining processes to be reexecuted due to code updates (if any)..." >&2
+    echo "# Defining processes to rerun due to code updates (if any)..." >&2
 
     # Read input parameters
     local dirname=$1
@@ -847,7 +847,7 @@ define_reexec_processes_due_to_code_update()
             if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
                 if check_script_is_older_than_modules "${script_filename}"; then
                     echo "Warning: last execution of process ${processname} used outdated modules">&2
-                    debasher::_mark_process_as_reexec "$processname" "${DEBASHER_OUTDATED_CODE_REEXEC_REASON}"
+                    debasher::_mark_process_as_rerun "$processname" "${DEBASHER_OUTDATED_CODE_RERUN_REASON}"
                 fi
             fi
 
@@ -868,25 +868,25 @@ define_reexec_processes_due_to_code_update()
 }
 
 ########
-define_reexec_processes_due_to_deps()
+define_rerun_processes_due_to_deps()
 {
-    echo "# Defining processes to be reexecuted due to dependencies (if any)..." >&2
+    echo "# Defining processes to rerun due to dependencies (if any)..." >&2
 
     local prg_file_pref=$1
 
-    # Obtain list of processes to be reexecuted due to dependencies
-    local reexec_processes_string=`debasher::_get_reexec_processes_as_string`
-    local reexec_processes_file="${outd}/${REEXEC_PROCESSES_LIST_FNAME}"
-    "${debasher_libexecdir}"/db_get_reexec_procs_due_to_deps -r "${reexec_processes_string}" -p "${prg_file_pref}" > "${reexec_processes_file}" || return 1
+    # Obtain list of processes to rerun due to dependencies
+    local rerun_processes_string=`debasher::_get_rerun_processes_as_string`
+    local rerun_processes_file="${outd}/${RERUN_PROCESSES_LIST_FNAME}"
+    "${debasher_libexecdir}"/db_get_rerun_procs_due_to_deps -r "${rerun_processes_string}" -p "${prg_file_pref}" > "${rerun_processes_file}" || return 1
 
-    # Read information about the processes to be re-executed due to
+    # Read information about the processes to rerun due to
     # dependencies
     local processname
     while read processname; do
         if [ "${processname}" != "" ]; then
-            debasher::_mark_process_as_reexec "$processname" "${DEBASHER_DEPS_REEXEC_REASON}"
+            debasher::_mark_process_as_rerun "$processname" "${DEBASHER_DEPS_RERUN_REASON}"
         fi
-    done < "${reexec_processes_file}"
+    done < "${rerun_processes_file}"
 
     echo "Definition complete" >&2
 
@@ -894,14 +894,14 @@ define_reexec_processes_due_to_deps()
 }
 
 ########
-print_reexec_processes()
+print_rerun_processes()
 {
-    local reexec_processes_string=`debasher::_get_reexec_processes_as_string`
+    local rerun_processes_string=`debasher::_get_rerun_processes_as_string`
 
-    if [ ! -z "${reexec_processes_string}" ]; then
-        echo "# Printing list of processes to be reexecuted..." >&2
-        echo "${reexec_processes_string}" >&2
-        echo "${DEBASHER_DEBASHER_REEXEC_PROCESSES_WARNING}" >&2
+    if [ ! -z "${rerun_processes_string}" ]; then
+        echo "# Printing list of processes to rerun..." >&2
+        echo "${rerun_processes_string}" >&2
+        echo "${DEBASHER_DEBASHER_RERUN_PROCESSES_WARNING}" >&2
         echo "" >&2
     fi
 }
@@ -1122,9 +1122,9 @@ prepare_files_and_dirs_for_process()
 }
 
 ########
-revise_reexec_proc_status()
+revise_rerun_proc_status()
 {
-    echo "# Revise process status for processes to be reexecuted..." >&2
+    echo "# Revise process status for processes to rerun..." >&2
 
     # Read input parameters
     local cmdline=$1
@@ -1140,8 +1140,8 @@ revise_reexec_proc_status()
             # Get process status
             local status=`debasher::_get_process_status ${dirname} "${processname}"`
 
-            # If process is marked as reexec and it was finished, its process completion is reset
-            if debasher::_process_marked_as_reexec ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+            # If process is marked as rerun and it was finished, its process completion is reset
+            if debasher::_process_marked_as_rerun ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
                 debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
             fi
         else
@@ -1461,19 +1461,19 @@ else
             handle_docker_requirements "${procspec_file}" || exit 1
         fi
 
-        define_reexec_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
+        define_rerun_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
 
-        define_reexec_processes_due_to_fifos "${outd}" "${procspec_file}" || exit 1
+        define_rerun_processes_due_to_fifos "${outd}" "${procspec_file}" || exit 1
 
-        define_forced_reexec_processes "${procspec_file}" || exit 1
+        define_forced_rerun_processes "${procspec_file}" || exit 1
 
-        if [ ${reexec_outdated_processes_given} -eq 1 ]; then
-            define_reexec_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
+        if [ ${rerun_outdated_processes_given} -eq 1 ]; then
+            define_rerun_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
         fi
 
-        define_reexec_processes_due_to_deps "${prg_file_pref}" || exit 1
+        define_rerun_processes_due_to_deps "${prg_file_pref}" || exit 1
 
-        print_reexec_processes || exit 1
+        print_rerun_processes || exit 1
 
         print_command_line || exit 1
 
@@ -1488,7 +1488,7 @@ else
                 debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || exit 1
                 print_post_exec_wait_help
             else
-                revise_reexec_proc_status "${command_line}" "${outd}" "${procspec_file}" || return 1
+                revise_rerun_proc_status "${command_line}" "${outd}" "${procspec_file}" || return 1
                 prepare_files_and_dirs_for_processes "${command_line}" "${outd}" "${procspec_file}"
                 launch_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
                 if [ "${wait}" -eq 1 ]; then
