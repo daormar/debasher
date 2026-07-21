@@ -584,8 +584,9 @@ check_process_opts()
     local dirname=$2
     local procspec_file=$3
     local out_opts_file=$4
-    local out_opts_exh_file=$5
-    local out_fifos_file=$6
+    local old_out_opts_file=$5
+    local out_opts_exh_file=$6
+    local out_fifos_file=$7
 
     # Clear scheduler options directory
     local sched_opts_dir=`debasher::get_sched_opts_dir_given_basedir "${dirname}"`
@@ -604,6 +605,11 @@ check_process_opts()
     # should be generated)
     if [ "${gen_proc_graph_given}" -eq 1 ]; then
         print_exh_opt_list_procs "${cmdline}" "${procspec_file}" > "${out_opts_exh_file}" || return 1
+    fi
+
+    # Store old process options if they exist
+    if [ -f "${out_opts_file}" ]; then
+        "${MV}" "${out_opts_file}" "${old_out_opts_file}"
     fi
 
     # Show process options
@@ -683,6 +689,40 @@ handle_docker_requirements()
 }
 
 ########
+define_reexec_processes_due_to_input_changes()
+{
+    echo "# Defining processes to be reexecuted due to changes in input parameters..." >&2
+
+    # Read input parameters
+    local program_opts_file=$1
+    local prev_program_opts_file=$2
+
+    # Obtain processes with input change
+    local changed_procs
+    changed_procs=`"${debasher_libexecdir}"/debasher_compare_opts --changed "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null`
+
+    # Iterate processes with input change
+    while IFS= read -r proc; do
+        [ -z "$proc" ] && continue
+        debasher::_mark_process_as_reexec "${proc}" "${DEBASHER_INPUT_CHANGE_REEXEC_REASON}"
+    done <<< "${changed_procs}"
+
+    # Obtain new processes
+    local new_procs
+    new_procs=`"${debasher_libexecdir}"/debasher_compare_opts --new "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null`
+
+    # Iterate over new processes
+    while IFS= read -r proc; do
+        [ -z "$proc" ] && continue
+        debasher::_mark_process_as_reexec "${proc}" "${DEBASHER_NEW_PROC_REEXEC_REASON}"
+    done <<< "${new_procs}"
+
+    echo "Definition complete" >&2
+
+    echo "" >&2
+}
+
+########
 define_reexec_processes_due_to_fifos()
 {
     echo "# Defining processes to be reexecuted due to usage of fifos (if any)..." >&2
@@ -727,7 +767,7 @@ define_reexec_processes_due_to_fifos()
 }
 
 ########
-define_forced_exec_processes()
+define_forced_reexec_processes()
 {
     echo "# Defining processes forced to be reexecuted (if any)..." >&2
 
@@ -1383,6 +1423,7 @@ if [ ${show_cmdline_opts_given} -eq 1 ]; then
 else
     prg_file_pref="${outd}/${DEBASHER_PPEXEC_PRG_PREF}"
     program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
+    old_program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_OLD_FEXT}"
     program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
     program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
     prg_graphs_dir=`debasher::_get_prg_graphs_dir`
@@ -1390,9 +1431,11 @@ else
     depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
     if [ ${check_proc_opts_given} -eq 1 ]; then
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${old_program_opts_file}" \
+                           "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
     else
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${old_program_opts_file}" \
+                           "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
         procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
         gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
@@ -1418,9 +1461,11 @@ else
             handle_docker_requirements "${procspec_file}" || exit 1
         fi
 
+        define_reexec_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
+
         define_reexec_processes_due_to_fifos "${outd}" "${procspec_file}" || exit 1
 
-        define_forced_exec_processes "${procspec_file}" || exit 1
+        define_forced_reexec_processes "${procspec_file}" || exit 1
 
         if [ ${reexec_outdated_processes_given} -eq 1 ]; then
             define_reexec_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
@@ -1434,6 +1479,9 @@ else
 
         if [ ${debug} -eq 1 ]; then
             launch_program_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
+
+            # Restore program options file
+            "${CP}" "${old_program_opts_file}" "${program_opts_file}"
         else
             sched=`debasher::_determine_scheduler`
             if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
