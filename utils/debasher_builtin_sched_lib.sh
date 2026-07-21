@@ -1101,7 +1101,7 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     if [ ${funct_exit_code} -ne 0 ]; then
         echo "Error: execution of ${processname} failed with exit code ${funct_exit_code}" >&2
     else
-        echo "Command or function ${processname} successfully executed" >&2
+        echo "Process ${processname} successfully executed" >&2
     fi
 
     # Execute process post-function
