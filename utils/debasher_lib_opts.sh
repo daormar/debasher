@@ -1423,7 +1423,7 @@ debasher::_load_curr_opt_list_loop()
             local connected_proc_outdir=`debasher::_get_process_outdir "${connected_proc}"`
             ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${task_idx}" || return 1
 
-            # Option value from options
+            # Get option value from function arguments
             value=`debasher::_get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}"`
 
             # Obtain value from list
@@ -1437,6 +1437,14 @@ debasher::_load_curr_opt_list_loop()
             value=${connected_proc_opt_list[$connected_proc_opt]}
             echo ${value}
         fi
+    }
+
+    debasher::extract_processname_from_proc_output_desc()
+    {
+        local proc_output_desc=$1
+
+        local connected_proc_info="${proc_output_desc#$DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
+        echo "${connected_proc_info}" | awk -F "${DEBASHER_ASSOC_ARRAY_ELEM_SEP}" '{print $1}'
     }
 
     local cmdline=$1
@@ -1456,11 +1464,20 @@ debasher::_load_curr_opt_list_loop()
         # Process options for task
         local opt
         for opt in "${!opt_list[@]}"; do
-            local value=${opt_list[$opt]}
+            local value
 
             # Resolve process output descriptor if necessary
-            if debasher::_str_is_proc_out_opt_descriptor "${value}"; then
-                value=`debasher::_resolve_proc_output_desc "${cmdline}" "${value}"`
+            if debasher::_str_is_proc_out_opt_descriptor "${opt_list[$opt]}"; then
+                local proc_out_desc
+                proc_out_desc=${opt_list[$opt]}
+                value=`debasher::_resolve_proc_output_desc "${cmdline}" "${proc_out_desc}"`
+                if [ -z "${value}" ]; then
+                    local conn_proc=`debasher::extract_processname_from_proc_output_desc "${proc_out_desc}"`
+                    echo "Error: value of option ${opt} for process ${processname} could not be determined. Check if connected process ${conn_proc} does exist" >&2
+                    exit 1
+                fi
+            else
+                value=${opt_list[$opt]}
             fi
 
             # Define option
