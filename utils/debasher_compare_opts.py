@@ -34,6 +34,8 @@ import argparse
 import sys
 from typing import Dict, List
 
+SPECIAL_ARRAY_TOKEN = "..."
+
 Instance = Dict[str, str]
 Opts = Dict[str, List[Instance]]
 
@@ -56,7 +58,10 @@ def parse_options(options_str: str) -> Instance:
     while i < len(tokens):
         tok = tokens[i]
         if not tok.startswith("-"):
-            raise OptsParseError(f"unexpected token '{tok}', expected a flag starting with '-'")
+            # For long process arrays, a special token may appear that
+            # is ignored
+            if tok != SPECIAL_ARRAY_TOKEN:
+                raise OptsParseError(f"unexpected token '{tok}', expected a flag starting with '-'")
         if i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
             result[tok] = tokens[i + 1]
             i += 2
