@@ -508,17 +508,27 @@ debasher::_process_is_unfinished_but_runnable()
 }
 
 ########
+debasher::_format_elapsed_time()
+{
+    local elapsed_ms=$1
+    printf "%d.%03d" \
+        $((elapsed_ms / 1000)) \
+        $((elapsed_ms % 1000))
+}
+
+########
 debasher::_get_elapsed_time_from_logfile()
 {
     local log_filename=$1
-    local start_date=`debasher::_get_process_start_date "${log_filename}"`
-    local finish_date=`debasher::_get_process_finish_date "${log_filename}"`
+    local start_date=$(debasher::_get_process_start_date "${log_filename}")
+    local finish_date=$(debasher::_get_process_finish_date "${log_filename}")
 
-    # Obtain difference
-    if [ ! -z "${start_date}" -a ! -z "${finish_date}" ]; then
-        local start_date_secs=`date -d "${finish_date}" +%s`
-        local finish_date_secs=`date -d "${start_date}" +%s`
-        echo $(( start_date_secs - finish_date_secs ))
+    if [ -n "${start_date}" ] && [ -n "${finish_date}" ]; then
+        local start_ms=$(date -d "${start_date}" +%s%3N)
+        local finish_ms=$(date -d "${finish_date}" +%s%3N)
+
+        local elapsed_ms=$((finish_ms - start_ms))
+        debasher::_format_elapsed_time "${elapsed_ms}"
     else
         echo "${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"
     fi
