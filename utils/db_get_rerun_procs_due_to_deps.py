@@ -90,7 +90,7 @@ def get_new_rerun_processes(rerun_processes, curr_rerun_processes, dep_info):
     return new_rerun_processes
 
 ##################################################
-def get_rerun_processes_due_to_deps(initial_rerun_processes,dep_info):
+def get_rerun_processes_due_to_deps(initial_rerun_processes, dep_info):
     curr_rerun_processes = initial_rerun_processes
     rerun_processes = initial_rerun_processes
     end = False
@@ -113,7 +113,7 @@ def process_pars(flags,values):
     # Read processes to rerun
     initial_rerun_processes = process_r_opt(values["rexec_procs"])
 
-    # Load process specification entries
+    # Instantiate dependency graph
     dep_graph = DependencyGraph(values["prefix"])
 
     # Get dependency information
