@@ -245,9 +245,9 @@ check_pars()
     fi
 }
 
-####################################
-# GENERAL PIPE EXECUTION FUNCTIONS #
-####################################
+#######################################
+# GENERAL PROGRAM EXECUTION FUNCTIONS #
+#######################################
 
 load_module()
 {
