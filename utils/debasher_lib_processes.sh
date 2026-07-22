@@ -1127,13 +1127,13 @@ debasher::_default_reset_outfiles_for_process_array()
 ########
 debasher::_display_begin_process_message()
 {
-    echo "Process started at `date +"%D %T"`" >&2
+    echo "Process started at `date '+%Y-%m-%d %H:%M:%S.%3N'`" >&2
 }
 
 ########
 debasher::_display_end_process_message()
 {
-    echo "Process finished at `date +"%D %T"`" >&2
+    echo "Process finished at `date '+%Y-%m-%d %H:%M:%S.%3N'`" >&2
 }
 
 ########
