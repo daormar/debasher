@@ -583,10 +583,9 @@ check_process_opts()
     local cmdline=$1
     local dirname=$2
     local procspec_file=$3
-    local out_opts_file=$4
-    local old_out_opts_file=$5
-    local out_opts_exh_file=$6
-    local out_fifos_file=$7
+    local program_opts_file=$4
+    local out_opts_exh_file=$5
+    local out_fifos_file=$6
 
     # Clear scheduler options directory
     local sched_opts_dir=`debasher::get_sched_opts_dir_given_basedir "${dirname}"`
@@ -607,13 +606,8 @@ check_process_opts()
         print_exh_opt_list_procs "${cmdline}" "${procspec_file}" > "${out_opts_exh_file}" || return 1
     fi
 
-    # Store old process options if they exist
-    if [ -f "${out_opts_file}" ]; then
-        "${MV}" "${out_opts_file}" "${old_out_opts_file}"
-    fi
-
     # Show process options
-    show_process_opts "${cmdline}" "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${out_opts_file}" || return 1
+    show_process_opts "${cmdline}" "${procspec_file}" "${MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${program_opts_file}" || return 1
 
     # Register fifo users
     register_fifo_users "${cmdline}" "${procspec_file}" || return 1
@@ -1431,10 +1425,15 @@ else
     depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
     if [ ${check_proc_opts_given} -eq 1 ]; then
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${old_program_opts_file}" \
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
                            "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+
+        # Restore old process options if they exist
+        if [ -f "${old_program_opts_file}" ]; then
+           "${CP}" "${old_program_opts_file}" "${program_opts_file}"
+        fi
     else
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" "${old_program_opts_file}" \
+        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
                            "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
         procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
@@ -1482,8 +1481,10 @@ else
         if [ ${debug} -eq 1 ]; then
             launch_program_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
 
-            # Restore program options file
-            "${CP}" "${old_program_opts_file}" "${program_opts_file}"
+            # Restore old process options if they exist
+            if [ -f "${old_program_opts_file}" ]; then
+                "${CP}" "${old_program_opts_file}" "${program_opts_file}"
+            fi
         else
             sched=`debasher::_determine_scheduler`
             if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
@@ -1500,6 +1501,8 @@ else
                     print_post_exec_nowait_help
                 fi
             fi
+            # Store old process options
+            "${CP}" "${program_opts_file}" "${old_program_opts_file}"
         fi
     fi
 fi
