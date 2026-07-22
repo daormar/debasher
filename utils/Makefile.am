@@ -5,10 +5,10 @@ debasher_reformat_status debasher_fifo_writer_loop
 
 libexec_SCRIPTS= debasher_get_vars_and_funcs			\
 debasher_get_deblib_vars_and_funcs debasher_check_prg_files	\
-debasher_compare_opts db_get_rerun_procs_due_to_deps		\
-debasher_solve_knapsack_bb debasher_solve_knapsack_ga		\
-debasher_solve_knapsack_greedy debasher_gen_knapsack_problem	\
-debasher_gen_telegram_data debasher_list_deblib_pub_funcs
+debasher_compare_opts debasher_solve_knapsack_bb		\
+debasher_solve_knapsack_ga debasher_solve_knapsack_greedy	\
+debasher_gen_knapsack_problem debasher_gen_telegram_data	\
+debasher_list_deblib_pub_funcs
 
 python_PYTHON= debasher_runtime_lib.py debasher_prg_lib.py
 
@@ -36,11 +36,11 @@ debasher_get_vars_and_funcs.sh debasher_get_deblib_vars_and_funcs.sh	\
 debasher_check_prg_files.py debasher_stop.sh debasher_status.sh		\
 debasher_stats.sh debasher_exec_process.sh debasher_doc_mod.sh		\
 debasher_proc_dataset.sh debasher_fifo_writer_loop.sh			\
-debasher_list_deblib_pub_funcs.sh db_get_rerun_procs_due_to_deps.py	\
-debasher_reformat_status.py debasher_solve_knapsack_bb.py		\
-debasher_solve_knapsack_ga.py debasher_knapsack_ga.py			\
-debasher_solve_knapsack_greedy.py debasher_gen_knapsack_problem.py	\
-debasher_compare_opts.py debasher_gen_telegram_data.py
+debasher_list_deblib_pub_funcs.sh debasher_reformat_status.py		\
+debasher_solve_knapsack_bb.py debasher_solve_knapsack_ga.py		\
+debasher_knapsack_ga.py debasher_solve_knapsack_greedy.py		\
+debasher_gen_knapsack_problem.py debasher_compare_opts.py		\
+debasher_gen_telegram_data.py
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
