@@ -1363,6 +1363,26 @@ print_post_exec_nowait_help()
     echo "" >&2
 }
 
+########
+restore_old_process_options()
+{
+    local old_program_opts_file=$1
+    local program_opts_file=$2
+
+    if [ -f "${old_program_opts_file}" ]; then
+        "${CP}" "${old_program_opts_file}" "${program_opts_file}"
+    fi
+}
+
+########
+store_old_process_options()
+{
+    local old_program_opts_file=$1
+    local program_opts_file=$2
+
+    "${CP}" "${program_opts_file}" "${old_program_opts_file}"
+}
+
 #################
 # MAIN FUNCTION #
 #################
@@ -1428,10 +1448,8 @@ else
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
                            "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
-        # Restore old process options if they exist
-        if [ -f "${old_program_opts_file}" ]; then
-           "${CP}" "${old_program_opts_file}" "${program_opts_file}"
-        fi
+        # Restore old process options (if they exist)
+        restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
     else
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
                            "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
@@ -1481,10 +1499,8 @@ else
         if [ ${debug} -eq 1 ]; then
             launch_program_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
 
-            # Restore old process options if they exist
-            if [ -f "${old_program_opts_file}" ]; then
-                "${CP}" "${old_program_opts_file}" "${program_opts_file}"
-            fi
+            # Restore old process options (if they exist)
+            restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
         else
             sched=`debasher::_determine_scheduler`
             if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
@@ -1502,7 +1518,7 @@ else
                 fi
             fi
             # Store old process options
-            "${CP}" "${program_opts_file}" "${old_program_opts_file}"
+            store_old_process_options "${old_program_opts_file}" "${program_opts_file}"
         fi
     fi
 fi
