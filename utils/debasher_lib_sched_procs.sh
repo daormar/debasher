@@ -308,8 +308,16 @@ debasher::_mark_process_as_rerun()
         DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]=${reason}
     else
         local curr_val=DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]
-        DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]="${curr_val},${reason}"
+        if [[ ",$curr_val," != *",$reason,"* ]]; then
+            DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]="${curr_val},${reason}"
+        fi
     fi
+}
+
+########
+debasher::_num_processes_marked_as_rerun()
+{
+    echo "${#DEBASHER_DEBASHER_RERUN_PROCESSES[@]}"
 }
 
 ########
