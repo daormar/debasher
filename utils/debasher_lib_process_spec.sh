@@ -214,3 +214,103 @@ debasher::_extract_ext_alias_from_process_spec()
     local process_additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
     debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias"
 }
+
+########
+debasher::_get_initial_process_spec_info()
+{
+    local procspec_file=$1
+
+    DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=1
+
+    while read process_spec; do
+        # Store process specification
+        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+        DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]=${process_spec}
+
+        # Extract dependencies from process specification
+        local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
+
+        # Check if dependencies were given
+        if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+            DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=0
+        fi
+    done < "${procspec_file}"
+}
+
+########
+debasher::_get_processdeps_from_detailed_spec()
+{
+    local processdeps_spec=$1
+    local pdeps=""
+    local result
+
+    # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
+    local separator=`debasher::_get_processdeps_separator ${processdeps_spec}`
+    if [ "${separator}" = "" ]; then
+        local processdeps_spec_blanks=${processdeps_spec}
+    else
+        local processdeps_spec_blanks=`debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec}`
+    fi
+    local dep_spec
+    for dep_spec in ${processdeps_spec_blanks}; do
+        local processname=`debasher::_get_processname_part_in_dep ${dep_spec}`
+        if [ -z "${result}" ]; then
+            result="$processname"
+        else
+            result=${result}${DEBASHER_PROCESSDEPS_SEP_COMMA}${processname}
+        fi
+    done
+
+    echo ${result}
+}
+
+########
+debasher::_gen_final_procspec_info()
+{
+    local cmdline=$1
+    local initial_procspec_file=$2
+
+    # Iterate over process specifications
+    while read process_spec; do
+        if ! debasher::_program_process_spec_is_ok "$process_spec"; then
+            echo "Error: process specification (${process_spec}) is not correct" >&2
+            exit 1
+        fi
+
+        # Extract process information
+        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+
+        # Extract dependencies from process specification
+        local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
+
+        # Check if dependencies were given
+        if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+            # Dependencies not given, so they should be obtained
+            procdeps=`debasher::_get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
+
+            # Register dependencies
+            DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=`debasher::_get_processdeps_from_detailed_spec "${procdeps}"`
+
+            # Print process specification plus process dependencies
+            local augmented_process_spec
+            augmented_process_spec=`debasher::_add_additional_spec "${process_spec}" "${procdeps}"`
+            echo "${augmented_process_spec}"
+
+            # Register process spec
+            DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${augmented_process_spec}"
+        else
+            # Dependencies were given
+
+            # Register dependencies
+            DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=`debasher::_get_processdeps_from_detailed_spec "${procdeps}"`
+
+            # Since the dependencies were given, just print process
+            # specification
+            echo "${process_spec}"
+
+            # Register process spec
+            DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${process_spec}"
+        fi
+
+    done < "${initial_procspec_file}"
+}

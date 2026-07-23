@@ -220,8 +220,8 @@ DEBASHER_R_FEXT="R"
 DEBASHER_GROOVY_FEXT="groovy"
 
 # FILE NAMES
-DEBASHER_PPEXEC_INITIAL_PROCSPEC_BASENAME=".initial_program.${DEBASHER_PROCSPEC_FEXT}"
-DEBASHER_PPEXEC_PRG_PREF="program"
+DEBASHER_INITIAL_PROCSPEC_BASENAME=".initial_program.${DEBASHER_PROCSPEC_FEXT}"
+DEBASHER_PRG_PREF="program"
 DEBASHER_PRG_COMMAND_LINE_BASENAME="command_line.sh"
 DEBASHER_DEBLIB_VARS_AND_FUNCS_BASENAME=".deblib_vars_and_funcs.sh"
 DEBASHER_MOD_VARS_AND_FUNCS_BASENAME=".mod_vars_and_funcs.sh"
@@ -275,11 +275,18 @@ declare -A DEBASHER_PROCESS_OPT_LIST_LEN
 # Declare associative array used to store initial process specification
 declare -A DEBASHER_INITIAL_PROCESS_SPEC
 
+# Declare associative array to store final process specification
+declare -A DEBASHER_FINAL_PROCESS_SPEC
+
 # Declare associative array used to map output values to processes
 declare -A DEBASHER_OUT_VALUE_TO_PROCESSES
 
 # Declare associative array used to store process dependencies
 declare -A DEBASHER_PROCESS_DEPENDENCIES
+
+# Declare associative array used to store simplified process
+# dependencies (no task info is included)
+declare -A DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED
 
 # Declare variable storing whether all process dependencies where
 # pre-specified in initial process specification
@@ -311,6 +318,7 @@ declare -A DEBASHER_FIFO_USERS
 # Declare general scheduler-related variables
 declare DEBASHER_SCHEDULER
 declare -A DEBASHER_RERUN_PROCESSES
+declare -a DEBASHER_FORCED_RERUN_PROCESSES
 declare DEBASHER_DEFAULT_NODES
 declare DEBASHER_ARRAY_TASK_NOTHROTTLE=0
 declare DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}

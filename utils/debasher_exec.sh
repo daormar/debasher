@@ -28,17 +28,19 @@ DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
 DB_EXEC_RERUN_PROCESSES_LIST_FNAME=".rerun_processes_due_to_deps.txt"
 DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT=5
 DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
-DB_EXEC_PROCESSDEP_SEP=","
 
 ####################
 # GLOBAL VARIABLES #
 ####################
 
-# Declare associative array to store process dependencies
-declare -A DB_EXEC_PROCESS_DEPS
-
 # Declare associative array to store process ids
 declare -A DB_EXEC_PROCESS_IDS
+
+# Declare string variable to store the process ids of all the program
+# processes. The variable is filled incrementally and, when launching a
+# particular process, it is necessary to provide the ids of its
+# dependencies
+DB_EXEC_PROCESS_ID_LIST=""
 
 #############################
 # OPTION HANDLING FUNCTIONS #
@@ -253,6 +255,8 @@ load_module()
 {
     echo "# Loading module ($pfile)..." >&2
 
+    local pfile=$1
+
     # Load debasher module containing the program to be executed
     debasher::load_debasher_module "${pfile}" || exit 1
 
@@ -263,6 +267,8 @@ load_module()
 get_deblib_vars_and_funcs()
 {
     echo "# Extracting DeBasher variables and functions..." >&2
+
+    local outd=$1
 
     local vars_and_funcs_fname=`debasher::_get_deblib_vars_and_funcs_fname "${outd}"`
     "${debasher_libexecdir}"/debasher_get_deblib_vars_and_funcs > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
@@ -276,6 +282,8 @@ get_deblib_vars_and_funcs()
 get_mod_vars_and_funcs()
 {
     echo "# Extracting module variables and functions..." >&2
+
+    local outd=$1
 
     local vars_and_funcs_fname=`debasher::_get_mod_vars_and_funcs_fname "${outd}"`
 
@@ -306,9 +314,26 @@ ensure_program_not_being_executed()
 ########
 gen_initial_procspec_file()
 {
-    echo "# Generating initial process specification from $pfile..." >&2
+    echo "# Generating initial process specification..." >&2
+
+    local pfile=$1
 
     debasher::_exec_program_func_for_module "${pfile}" || exit 1
+
+    echo "Generation complete" >&2
+
+    echo "" >&2
+}
+
+########
+gen_final_procspec_file()
+{
+    echo "# Generating final process specification..." >&2
+
+    local command_line=$1
+    local initial_procspec_file=$2
+
+    debasher::_gen_final_procspec_info "${command_line}" "${initial_procspec_file}"  || exit 1
 
     echo "Generation complete" >&2
 
@@ -369,77 +394,6 @@ gen_dependency_graph()
 
         "${DOT}" -T eps "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" > "${depgraph_file_prefix}.eps"
     fi
-
-    echo "Generation complete" >&2
-
-    echo "" >&2
-}
-
-########
-get_processdeps_from_detailed_spec()
-{
-    local processdeps_spec=$1
-    local pdeps=""
-    local result
-
-    # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
-    local separator=`debasher::_get_processdeps_separator ${processdeps_spec}`
-    if [ "${separator}" = "" ]; then
-        local processdeps_spec_blanks=${processdeps_spec}
-    else
-        local processdeps_spec_blanks=`debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec}`
-    fi
-    local dep_spec
-    for dep_spec in ${processdeps_spec_blanks}; do
-        local processname=`debasher::_get_processname_part_in_dep ${dep_spec}`
-        if [ -z "${result}" ]; then
-            result="$processname"
-        else
-            result=${result}${DB_EXEC_PROCESSDEP_SEP}${processname}
-        fi
-    done
-
-    echo ${result}
-}
-
-########
-gen_final_procspec_file()
-{
-    local cmdline=$1
-    local initial_procspec_file=$2
-
-    echo "# Generating final process specification file..." >&2
-
-    # Iterate over process specifications
-    while read process_spec; do
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
-        # Extract dependencies from process specification
-        local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
-
-        # Check if dependencies were given
-        if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-            # Dependencies not given, so they should be obtained
-            procdeps=`debasher::_get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
-
-            # Register dependencies
-            DB_EXEC_PROCESS_DEPS["${processname}"]=`get_processdeps_from_detailed_spec "${procdeps}"`
-
-            # Print process specification plus process dependencies
-            debasher::_add_additional_spec "${process_spec}" "${procdeps}"
-        else
-            # Dependencies were given
-
-            # Register dependencies
-            DB_EXEC_PROCESS_DEPS["${processname}"]=`get_processdeps_from_detailed_spec "${procdeps}"`
-
-            # Since the dependencies were given, just print process
-            # specification
-            echo "${process_spec}"
-        fi
-
-    done < "${initial_procspec_file}"
 
     echo "Generation complete" >&2
 
@@ -511,26 +465,6 @@ show_cmdline_opts()
 ########
 check_process_opts()
 {
-    get_initial_process_spec_info()
-    {
-        local procspec_file=$1
-
-        while read process_spec; do
-            # Store process specification
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-            DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]=${process_spec}
-
-            # Extract dependencies from process specification
-            local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
-
-            # Check if dependencies were given
-            DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=1
-            if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-                DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=0
-            fi
-        done < "${procspec_file}"
-    }
-
     init_option_info()
     {
         local cmdline=$1
@@ -631,7 +565,7 @@ check_process_opts()
     "${RM}" -f "${sched_opts_dir}"/*
 
     # Get initial process specification information
-    get_initial_process_spec_info "${procspec_file}" || return 1
+    debasher::_get_initial_process_spec_info "${procspec_file}" || return 1
 
     # Initialize option information
     init_option_info "${cmdline}" "${procspec_file}" || return 1
@@ -662,27 +596,16 @@ handle_conda_requirements()
 {
     echo "# Handling conda requirements (if any)..." >&2
 
-    # Read input parameters
-    local procspec_file=$1
-
     # Read information about the processes to be executed
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process information
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
-            # Process conda envs information
-            local conda_envs_funcname=`debasher::_get_conda_envs_funcname "${processname}"`
-            if debasher::_func_exists ${conda_envs_funcname}; then
-                echo "Handling conda requirements for process ${processname}..." >&2
-                ${conda_envs_funcname} || exit 1
-            fi
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        # Process conda envs information
+        local conda_envs_funcname=`debasher::_get_conda_envs_funcname "${processname}"`
+        if debasher::_func_exists ${conda_envs_funcname}; then
+            echo "Handling conda requirements for process ${processname}..." >&2
+            ${conda_envs_funcname} || exit 1
         fi
-    done < "${procspec_file}"
+    done
 
     echo "Handling complete" >&2
 
@@ -694,27 +617,16 @@ handle_docker_requirements()
 {
     echo "# Handling docker requirements (if any)..." >&2
 
-    # Read input parameters
-    local procspec_file=$1
-
     # Read information about the processes to be executed
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process information
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
-            # Process conda envs information
-            local docker_imgs_funcname=`debasher::_get_docker_imgs_funcname "${processname}"`
-            if debasher::_func_exists "${docker_imgs_funcname}"; then
-                echo "Handling docker requirements for process ${processname}..." >&2
-                "${docker_imgs_funcname}" || exit 1
-            fi
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        # Process conda envs information
+        local docker_imgs_funcname=`debasher::_get_docker_imgs_funcname "${processname}"`
+        if debasher::_func_exists "${docker_imgs_funcname}"; then
+            echo "Handling docker requirements for process ${processname}..." >&2
+            "${docker_imgs_funcname}" || exit 1
         fi
-    done < "${procspec_file}"
+    done
 
     echo "Handling complete" >&2
 
@@ -722,254 +634,32 @@ handle_docker_requirements()
 }
 
 ########
-define_rerun_processes_due_to_input_changes()
+register_all_rerun_processes()
 {
-    echo "# Defining processes to rerun due to changes in input parameters..." >&2
+    echo "# Registering all processes to rerun (if any)..." >&2
 
-    # Read input parameters
-    local program_opts_file=$1
+    local dirname=$1
     local old_program_opts_file=$2
+    local program_opts_file=$3
+    local rerun_outdated_processes=$4
 
-    # Obtain processes with input change
-    local changed_procs
-    changed_procs=`"${debasher_libexecdir}"/debasher_compare_opts --changed "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null`
-
-    # Iterate processes with input change
-    while IFS= read -r proc; do
-        [ -z "$proc" ] && continue
-        debasher::_mark_process_as_rerun "${proc}" "${DEBASHER_INPUT_CHANGE_RERUN_REASON}"
-    done <<< "${changed_procs}"
-
-    # Obtain new processes
-    local new_procs
-    new_procs=`"${debasher_libexecdir}"/debasher_compare_opts --new "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null`
-
-    # Iterate over new processes
-    while IFS= read -r proc; do
-        [ -z "$proc" ] && continue
-        debasher::_mark_process_as_rerun "${proc}" "${DEBASHER_NEW_PROC_RERUN_REASON}"
-    done <<< "${new_procs}"
-
-    echo "Definition complete" >&2
-
-    echo "" >&2
-}
-
-########
-define_forced_rerun_processes()
-{
-    echo "# Defining processes forced to rerun (if any)..." >&2
-
-    # Read input parameters
-    local procspec_file=$1
-
-    # Read information about the processes to be executed
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process information
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-            local process_forced=`debasher::_extract_force_from_process_spec "$process_spec" "force"`
-            if [ ${process_forced} = "yes" ]; then
-                debasher::_mark_process_as_rerun $processname ${DEBASHER_FORCED_RERUN_REASON}
-            fi
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
-        fi
-    done < "${procspec_file}"
-
-    echo "Definition complete" >&2
-
-    echo "" >&2
-}
-
-########
-check_script_is_older_than_modules()
-{
-    local script_filename=$1
-
-    # Check if script exists
-    if [ -f "${script_filename}" ]; then
-        # script exists
-        script_older=0
-        local mod
-        for mod in "${!DEBASHER_PROGRAM_MODULES[@]}"; do
-            fullmod="${DEBASHER_PROGRAM_MODULES[$mod]}"
-            if [ "${script_filename}" -ot "${fullmod}" ]; then
-                script_older=1
-                echo "Warning: ${script_filename} is older than module ${fullmod}" >&2
-            fi
-        done
-        # Return value
-        if [ "${script_older}" -eq 1 ]; then
-            return 0
-        else
-            return 1
-        fi
-    else
-        # script does not exist
-        echo "Warning: ${script_filename} does not exist" >&2
-        return 0
+    if [ -f "${old_program_opts_file}" ]; then
+        debasher::_define_rerun_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
     fi
-}
 
-########
-define_rerun_processes_due_to_code_update()
-{
-    echo "# Defining processes to rerun due to code updates (if any)..." >&2
+    debasher::_define_forced_rerun_processes || exit 1
 
-    # Read input parameters
-    local dirname=$1
-    local procspec_file=$2
+    if [ ${rerun_outdated_processes} -eq 1 ]; then
+        debasher::_define_rerun_processes_due_to_code_update "${dirname}" || exit 1
+    fi
 
-    # Read information about the processes to be executed
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process information
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-            local status=`debasher::_get_process_status "${dirname}" "${processname}"`
-            local script_filename=`debasher::_get_script_filename "${dirname}" "${processname}"`
-
-            # Handle checkings depending of process status
-            if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
-                if check_script_is_older_than_modules "${script_filename}"; then
-                    echo "Warning: last execution of process ${processname} used outdated modules">&2
-                    debasher::_mark_process_as_rerun "$processname" "${DEBASHER_OUTDATED_CODE_RERUN_REASON}"
-                fi
-            fi
-
-            if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
-                if check_script_is_older_than_modules "${script_filename}"; then
-                    echo "Warning: current execution of process ${processname} is using outdated modules">&2
-                fi
-            fi
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
-        fi
-    done < "${procspec_file}"
-
-    echo "Definition complete" >&2
-
-    echo "" >&2
-}
-
-########
-define_rerun_processes_due_to_proc_status_of_fifo_user_owner()
-{
-    echo "# Defining processes to rerun due to process status of fifo user/owner..." >&2
-
-    # Read input parameters
-    local dirname=$1
-
-    local augm_fifoname
-    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        # Obtain user process name
-        local fifo_user=${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
-        local user_procname="${fifo_user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-
-        # Obtain user process status
-        local user_status=`debasher::_get_process_status ${dirname} "${user_procname}"`
-
-        # Obtain owner process name
-        local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
-        local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-
-        # Obtain owner process status
-        local owner_status=`debasher::_get_process_status ${dirname} "${owner_procname}"`
-
-        # If fifo user process is finished but fifo owner is not, or viceversa, then
-        # mark both processes as rerun
-        if [[ "${user_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
-            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
-            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
-        fi
-
-        if [[ "${user_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
-            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
-            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
-        fi
-    done
-
-    echo "Definition complete" >&2
-
-    echo "" >&2
-}
-
-########
-propagate_rerun_mark_due_to_fifos_iter()
-{
-    # Read input parameters
-    local dirname=$1
-
-    local augm_fifoname
-    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        # Obtain user process name
-        local fifo_user=${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
-        local user_procname="${fifo_user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-
-        # Obtain owner process name
-        local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
-        local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-
-        # Mark fifo owner process as rerun if the user is already marked
-        if debasher::_process_marked_as_rerun "${user_procname}"; then
-            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
-        fi
-
-        # Mark fifo user process as rerun if the owner is already marked
-        if debasher::_process_marked_as_rerun "${owner_procname}"; then
-            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
-        fi
-    done
-}
-
-########
-propagate_rerun_mark_due_to_deps_iter()
-{
-    # Iterate over all processes
-    for processname in "${!DB_EXEC_PROCESS_DEPS[@]}"; do
-        local deps=${DB_EXEC_PROCESS_DEPS[${processname}]}
-
-        # Iterate over process dependencies
-        local -a deps_array
-        IFS="$separador" read -ra deps_array <<< "$deps"
-        for proc in "${deps_array[@]}"; do
-            # If dependency is marked to rerun, mark the dependent
-            # process and break loop
-            if debasher::_process_marked_as_rerun "${proc}"; then
-                debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_PROPAGATE_DEPS_RERUN_REASON}"
-                break
-            fi
-        done
-    done
-}
-
-########
-propagate_rerun_processes()
-{
     if debasher::_program_uses_fifos ; then
-        echo "# Propagating processes to rerun taking into account process dependencies and fifos..." >&2
-    else
-        echo "# Propagating processes to rerun taking into account process dependencies..." >&2
+        debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner "${dirname}" || exit 1
     fi
 
-    # Read input parameters
-    local dirname=$1
+    debasher::_propagate_rerun_processes "${dirname}" || exit 1
 
-    local prev_marked_procs=0
-    local num_marked_procs=`debasher::_num_processes_marked_as_rerun`
-
-    while (( prev_marked_procs < num_marked_procs )); do
-        propagate_rerun_mark_due_to_deps_iter
-        propagate_rerun_mark_due_to_fifos_iter "${dirname}"
-        prev_marked_procs=${num_marked_procs}
-        num_marked_procs=`debasher::_num_processes_marked_as_rerun`
-    done
-
-    echo "Propagation complete" >&2
+    echo "Registering complete" >&2
 
     echo "" >&2
 }
@@ -1027,6 +717,8 @@ ensure_exclusive_execution()
 set_debasher_output_dir()
 {
     echo "# Setting DeBasher output directory (the directory will be created if necessary)..." >&2
+
+    local outd=$1
 
     # Create directory
     if [ ! -d "${outd}" ]; then
@@ -1091,9 +783,87 @@ create_mod_shared_dirs()
 ########
 print_command_line()
 {
+    local outd=$1
+    local command_line=$2
+
     echo "cd $PWD" > "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
     debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${command_line}" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
     echo "" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+}
+
+########
+prepare_files_and_dirs_for_process()
+{
+    # Read input parameters
+    local dirname=$1
+    local processname=$2
+    local process_spec=$3
+
+    echo "Preparing files and directories for process ${processname}" >&2
+
+    # Obtain process status
+    local status=`debasher::_get_process_status ${dirname} "${processname}"`
+
+    # Decide whether the process should be executed (NOTE: for a
+    # process that should not be executed, files and directories are
+    # still prepared)
+    if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
+        # Obtain array size
+        local array_size=`debasher::_get_numtasks_for_process "${processname}"`
+
+        # Prepare files and directories for process
+        if [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
+            debasher::_create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
+            debasher::_create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
+            debasher::_create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
+        else
+            debasher::_clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
+        fi
+        debasher::_prepare_fifos_owned_by_process "${processname}"
+    fi
+}
+
+########
+prepare_files_and_dirs_for_processes()
+{
+    echo "# Preparing files and directories for processes..." >&2
+
+    # Read input parameters
+    local dirname=$1
+
+    local processname
+    for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
+        local process_spec="${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}"
+        prepare_files_and_dirs_for_process "${dirname}" "${processname}" "${process_spec}"
+    done
+
+    echo "Preparation complete" >&2
+
+    echo "" >&2
+}
+
+########
+revise_rerun_proc_status()
+{
+    echo "# Revise process status for processes to rerun..." >&2
+
+    # Read input parameters
+    local dirname=$1
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        # Get process status
+        local status=`debasher::_get_process_status ${dirname} "${processname}"`
+
+        # If process is marked as rerun and it was finished, its process completion is reset
+        if debasher::_process_marked_as_rerun ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+            debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
+        fi
+    done
+
+    echo "Revision complete" >&2
+
+    echo "" >&2
 }
 
 ########
@@ -1130,111 +900,16 @@ get_processdeps_with_id_info_from_detailed_spec()
 ########
 get_processdeps_with_id_info()
 {
-    local process_id_list=$1
+    local curr_process_id_list=$1
     local processdeps_spec=$2
     case ${processdeps_spec} in
-            "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}all") debasher::_apply_deptype_to_processids "${process_id_list}" "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}"
+            "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}all") debasher::_apply_deptype_to_processids "${curr_process_id_list}" "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}"
                     ;;
             "none") echo ""
                     ;;
             *) get_processdeps_with_id_info_from_detailed_spec "${processdeps_spec}"
                ;;
     esac
-}
-
-########
-prepare_files_and_dirs_for_processes()
-{
-    echo "# Preparing files and directories for processes..." >&2
-
-    # Read input parameters
-    local cmdline=$1
-    local dirname=$2
-    local procspec_file=$3
-
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
-            prepare_files_and_dirs_for_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}"
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
-        fi
-    done < "${procspec_file}"
-
-    echo "Preparation complete" >&2
-
-    echo "" >&2
-}
-
-########
-prepare_files_and_dirs_for_process()
-{
-    # Read input parameters
-    local cmdline=$1
-    local dirname=$2
-    local processname=$3
-    local process_spec=$4
-
-    echo "Preparing files and directories for process ${processname}" >&2
-
-    # Obtain process status
-    local status=`debasher::_get_process_status ${dirname} "${processname}"`
-
-    # Decide whether the process should be executed (NOTE: for a
-    # process that should not be executed, files and directories are
-    # still prepared)
-    if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
-        # Obtain array size
-        local array_size=`debasher::_get_numtasks_for_process "${processname}"`
-
-        # Prepare files and directories for process
-        if [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
-            debasher::_create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
-            debasher::_create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
-            debasher::_create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
-        else
-            debasher::_clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
-        fi
-        debasher::_prepare_fifos_owned_by_process "${processname}"
-    fi
-}
-
-########
-revise_rerun_proc_status()
-{
-    echo "# Revise process status for processes to rerun..." >&2
-
-    # Read input parameters
-    local cmdline=$1
-    local dirname=$2
-    local procspec_file=$3
-
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
-            # Get process status
-            local status=`debasher::_get_process_status ${dirname} "${processname}"`
-
-            # If process is marked as rerun and it was finished, its process completion is reset
-            if debasher::_process_marked_as_rerun ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
-                debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
-            fi
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
-        fi
-    done < "${procspec_file}"
-
-    echo "Revision complete" >&2
-
-    echo "" >&2
 }
 
 ########
@@ -1261,13 +936,13 @@ launch_process()
         # Launch process
         local task_array_list=`debasher::_get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
         local processdeps_spec=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
-        local processdeps=`get_processdeps_with_id_info "${process_id_list}" "${processdeps_spec}"`
+        local processdeps=`get_processdeps_with_id_info "${DB_EXEC_PROCESS_ID_LIST}" "${processdeps_spec}"`
         debasher::_launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
         local primary_id=`debasher::_get_primary_id "${launch_outvar}"`
         DB_EXEC_PROCESS_IDS[${processname}]=${primary_id}
-        process_id_list="${process_id_list}:${DB_EXEC_PROCESS_IDS[${processname}]}"
+        DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
 
         # Write id to file
         debasher::_write_process_id_info_to_file "${dirname}" "${processname}" "${launch_outvar}"
@@ -1278,31 +953,9 @@ launch_process()
             local sid_info=`debasher::_read_process_id_info_from_file "${dirname}" "${processname}"` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
             local global_id=`debasher::_get_global_id "${sid_info}"`
             DB_EXEC_PROCESS_IDS["${processname}"]=${global_id}
-            process_id_list="${process_id_list}:${DB_EXEC_PROCESS_IDS[${processname}]}"
+            DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
         fi
     fi
-}
-
-########
-launch_processes()
-{
-    # Read input parameters
-    local cmdline=$1
-    local dirname=$2
-    local procspec_file=$3
-
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
-            launch_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
-        fi
-    done < "${procspec_file}"
 }
 
 ########
@@ -1313,14 +966,16 @@ launch_program_processes()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local procspec_file=$3
+    local prg_file_pref=$3
 
-    # process_id_list will store the process ids of the program
-    # processes (it should be defined as a global variable)
-    process_id_list=""
-
-    # Launch processes
-    launch_processes "${cmdline}" "${dirname}" "${procspec_file}"
+    # WARNING: Before launching a particular process, its dependencies
+    # should have been launched first. That's why the
+    # debasher_check_prg_files tool with -r flag is used
+    while read process_spec; do
+        # Extract process information
+        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+        launch_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
+    done < <("${debasher_libexecdir}"/debasher_check_prg_files -p "${prg_file_pref}" -r 2>/dev/null)
 
     echo "" >&2
 }
@@ -1330,25 +985,16 @@ there_are_in_progress_processes()
 {
     # Read input parameters
     local dirname=$1
-    local initial_procspec_file=$2
 
-    local process_spec
-    while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        # Obtain process status
+        local status=`debasher::_get_process_status ${dirname} "${processname}"`
 
-            # Obtain process status
-            local status=`debasher::_get_process_status ${dirname} "${processname}"`
-
-            if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
-                return 0
-            fi
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
+        if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
+            return 0
         fi
-    done < "${initial_procspec_file}"
+    done
 
     return 1
 }
@@ -1360,12 +1006,11 @@ wait_for_program_processes()
 
     # Read input parameters
     local dirname=$1
-    local procspec_file=$2
 
     # Obtain number of processes
     local num_procs=$("${WC}" -l "${procspec_file}" | "${AWK}" '{print $1}')
 
-    while there_are_in_progress_processes "${dirname}" "${procspec_file}"; do
+    while there_are_in_progress_processes "${dirname}"; do
         if [ "${num_procs}" -le 10 ]; then
             "${SLEEP}" "${DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT}"
         else
@@ -1402,25 +1047,16 @@ launch_program_processes_debug()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local procspec_file=$3
+    local prg_file_pref=$3
 
-    # process_id_list will store the process ids of the program
-    # processes (it should be defined as a global variable)
-    process_id_list=""
-
-    # Read information about the processes to be executed
-    local process_spec
+    # WARNING: Before launching a particular process, its dependencies
+    # should have been launched first. That's why the
+    # debasher_check_prg_files tool with -r flag is used
     while read process_spec; do
-        if debasher::_program_process_spec_is_ok "$process_spec"; then
-            # Extract process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
-            debug_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
-        else
-            echo "Error: process specification (${process_spec}) is not correct" >&2
-            exit 1
-        fi
-    done < "${procspec_file}"
+        # Extract process information
+        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+        debug_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
+    done < <("${debasher_libexecdir}"/debasher_check_prg_files -p "${prg_file_pref}" -r  2>/dev/null)
 
     echo "" >&2
 }
@@ -1489,16 +1125,16 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-set_debasher_output_dir || exit 1
+set_debasher_output_dir "${outd}" || exit 1
 
 create_basic_dirs || exit 1
 
 configure_scheduler || exit 1
 
-load_module || exit 1
+load_module "${pfile}" || exit 1
 
 # Get name of initial process specification file
-initial_procspec_file="${outd}/${DEBASHER_PPEXEC_INITIAL_PROCSPEC_BASENAME}"
+initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
 
 # Remove initial process specification file if it exists
 if [ -f "${initial_procspec_file}" ]; then
@@ -1506,24 +1142,24 @@ if [ -f "${initial_procspec_file}" ]; then
 fi
 
 # Write initial process specification file
-gen_initial_procspec_file > "${initial_procspec_file}" || exit 1
+gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
 
 # Check if there are running processes and abort execution if true
 ensure_program_not_being_executed "${initial_procspec_file}"
 
 # Write debasher library variables and functions
-get_deblib_vars_and_funcs || exit 1
+get_deblib_vars_and_funcs "${outd}" || exit 1
 
 # Write module variables and functions (this function should be called
 # after calling gen_initial_procspec_file, since it executes the program
 # given in pfile input parameter, possibly defining new functions that
 # should be written as well)
-get_mod_vars_and_funcs || exit 1
+get_mod_vars_and_funcs "${outd}" || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts "${initial_procspec_file}" || exit 1
 else
-    prg_file_pref="${outd}/${DEBASHER_PPEXEC_PRG_PREF}"
+    prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
     program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
     old_program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_OLD_FEXT}"
     program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
@@ -1560,37 +1196,23 @@ else
         create_mod_shared_dirs || exit 1
 
         if [ ${conda_support_given} -eq 1 ]; then
-            handle_conda_requirements "${procspec_file}" || exit 1
+            handle_conda_requirements || exit 1
         fi
 
         if [ ${docker_support_given} -eq 1 ]; then
-            handle_docker_requirements "${procspec_file}" || exit 1
+            handle_docker_requirements || exit 1
         fi
 
-        # Handle process rerun
-        if [ -f "${old_program_opts_file}" ]; then
-            define_rerun_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
-        fi
-
-        define_forced_rerun_processes "${procspec_file}" || exit 1
-
-        if [ ${rerun_outdated_processes_given} -eq 1 ]; then
-            define_rerun_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
-        fi
-
-        if debasher::_program_uses_fifos ; then
-            define_rerun_processes_due_to_proc_status_of_fifo_user_owner "${outd}" || exit 1
-        fi
-
-        propagate_rerun_processes "${outd}" || exit 1
+        # Register all processes to rerun
+        register_all_rerun_processes "${outd}" "${program_opts_file}" "${old_program_opts_file}" "${rerun_outdated_processes_given}"
 
         print_rerun_processes || exit 1
 
-        print_command_line || exit 1
+        print_command_line "${outd}" "${command_line}" || exit 1
 
         # Launch processes
         if [ ${debug} -eq 1 ]; then
-            launch_program_processes_debug "${command_line}" "${outd}" "${procspec_file}" || exit 1
+            launch_program_processes_debug "${command_line}" "${outd}" "${prg_file_pref}" || exit 1
 
             # Restore old process options (if they exist)
             restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
@@ -1600,11 +1222,11 @@ else
                 debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || exit 1
                 print_post_exec_wait_help
             else
-                revise_rerun_proc_status "${command_line}" "${outd}" "${procspec_file}" || return 1
-                prepare_files_and_dirs_for_processes "${command_line}" "${outd}" "${procspec_file}"
-                launch_program_processes "${command_line}" "${outd}" "${procspec_file}" || exit 1
+                revise_rerun_proc_status "${outd}" || return 1
+                prepare_files_and_dirs_for_processes "${outd}"
+                launch_program_processes "${command_line}" "${outd}" "${prg_file_pref}" || exit 1
                 if [ "${wait}" -eq 1 ]; then
-                    wait_for_program_processes "${outd}" "${procspec_file}" || exit 1
+                    wait_for_program_processes "${outd}" || exit 1
                     print_post_exec_wait_help
                 else
                     print_post_exec_nowait_help
