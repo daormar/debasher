@@ -344,7 +344,7 @@ prg_has_processes_to_rerun()
     fi
 
     # Check if pipe_exec reports processes to be re-executed
-    local rerun_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_DEBASHER_RERUN_PROCESSES_WARNING}")
+    local rerun_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_RERUN_PROCESSES_WARNING}")
     if [ ! -z "${rerun_processes_warning}" ]; then
         return 0
     else

@@ -304,12 +304,12 @@ debasher::_mark_process_as_rerun()
     local processname=$1
     local reason=$2
 
-    if [ "${DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
-        DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]=${reason}
+    if [ "${DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
+        DEBASHER_RERUN_PROCESSES[${processname}]=${reason}
     else
-        local curr_val="${DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]}"
+        local curr_val="${DEBASHER_RERUN_PROCESSES[${processname}]}"
         if [[ ",$curr_val," != *",$reason,"* ]]; then
-            DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]="${curr_val},${reason}"
+            DEBASHER_RERUN_PROCESSES[${processname}]="${curr_val},${reason}"
         fi
     fi
 }
@@ -317,14 +317,14 @@ debasher::_mark_process_as_rerun()
 ########
 debasher::_num_processes_marked_as_rerun()
 {
-    echo "${#DEBASHER_DEBASHER_RERUN_PROCESSES[@]}"
+    echo "${#DEBASHER_RERUN_PROCESSES[@]}"
 }
 
 ########
 debasher::_get_rerun_processes_as_string()
 {
     local result=""
-    for processname in "${!DEBASHER_DEBASHER_RERUN_PROCESSES[@]}"; do
+    for processname in "${!DEBASHER_RERUN_PROCESSES[@]}"; do
         if [ "${result}" = "" ]; then
             result=${processname}
         else
@@ -340,7 +340,7 @@ debasher::_process_marked_as_rerun()
 {
     local processname=$1
 
-    if [ "${DEBASHER_DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
+    if [ "${DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
         return 1
     else
         return 0

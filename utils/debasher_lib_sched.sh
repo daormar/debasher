@@ -49,14 +49,14 @@ debasher::_set_debasher_scheduler()
                 echo "Error: SLURM scheduler is not installed in your system"
                 return 1
             fi
-            DEBASHER_DEBASHER_SCHEDULER=${DEBASHER_SLURM_SCHEDULER}
+            DEBASHER_SCHEDULER=${DEBASHER_SLURM_SCHEDULER}
             debasher::_init_slurm_scheduler
             ;;
         ${DEBASHER_BUILTIN_SCHEDULER})
-            DEBASHER_DEBASHER_SCHEDULER=${DEBASHER_BUILTIN_SCHEDULER}
+            DEBASHER_SCHEDULER=${DEBASHER_BUILTIN_SCHEDULER}
             ;;
         *)  echo "Error: ${sched} is not a valid scheduler"
-            DEBASHER_DEBASHER_SCHEDULER=""
+            DEBASHER_SCHEDULER=""
             return 1
             ;;
     esac
@@ -67,7 +67,7 @@ debasher::_set_debasher_default_nodes()
 {
     local value=$1
 
-    DEBASHER_DEBASHER_DEFAULT_NODES=$value
+    DEBASHER_DEFAULT_NODES=$value
 }
 
 ########
@@ -75,7 +75,7 @@ debasher::_set_debasher_default_array_task_throttle()
 {
     local value=$1
 
-    DEBASHER_DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=$value
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=$value
 }
 
 ########
@@ -86,7 +86,7 @@ debasher::_determine_scheduler()
         echo ${DEBASHER_BUILTIN_SCHEDULER}
     else
         # Check if scheduler was already specified
-        if [ -z "${DEBASHER_DEBASHER_SCHEDULER}" ]; then
+        if [ -z "${DEBASHER_SCHEDULER}" ]; then
             # Scheduler not specified, set it based on information
             # gathered during package configuration
             if [ -z "${SBATCH}" ]; then
@@ -95,7 +95,7 @@ debasher::_determine_scheduler()
                 echo ${DEBASHER_SLURM_SCHEDULER}
             fi
         else
-            echo ${DEBASHER_DEBASHER_SCHEDULER}
+            echo ${DEBASHER_SCHEDULER}
         fi
     fi
 }
@@ -103,7 +103,7 @@ debasher::_determine_scheduler()
 ########
 debasher::_get_scheduler()
 {
-    echo ${DEBASHER_DEBASHER_SCHEDULER}
+    echo ${DEBASHER_SCHEDULER}
 }
 
 ########
@@ -129,7 +129,7 @@ debasher::_get_scheduler_throttle()
     local process_spec_throttle=$1
 
     if [ "${process_spec_throttle}" = ${DEBASHER_ATTR_NOT_FOUND} ]; then
-        echo "${DEBASHER_DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE}"
+        echo "${DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE}"
     else
         echo "${process_spec_throttle}"
     fi
@@ -324,7 +324,7 @@ debasher::_write_env_vars_and_funcs()
         declare -f debasher::is_task_done
 
         # Write initialized variables
-        declare -p DEBASHER_DEBASHER_SCHEDULER
+        declare -p DEBASHER_SCHEDULER
         declare -p DEBASHER_INITIAL_PROCESS_SPEC
         declare -p DEBASHER_PROGRAM_OUTDIR
         declare -p DEBASHER_MEMOIZED_OPTS

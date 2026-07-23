@@ -130,7 +130,7 @@ debasher::get_prg_exec_dir_given_basedir()
 {
     local dirname=$1
 
-    echo "${dirname}/${DEBASHER_DEBASHER_EXEC_DIRNAME}"
+    echo "${dirname}/${DEBASHER_EXEC_DIRNAME}"
 }
 
 ########
@@ -144,7 +144,7 @@ debasher::get_prg_graphs_dir_given_basedir()
 {
     local dirname=$1
 
-    echo "${dirname}/${DEBASHER_DEBASHER_GRAPHS_DIRNAME}"
+    echo "${dirname}/${DEBASHER_GRAPHS_DIRNAME}"
 }
 
 ########

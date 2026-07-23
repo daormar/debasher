@@ -1166,7 +1166,7 @@ get_absolute_shdirname() { debasher::get_absolute_shdirname "$@"; }
 ########
 debasher::_get_absolute_fifodir()
 {
-    echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_DEBASHER_FIFOS_DIRNAME}"
+    echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_FIFOS_DIRNAME}"
 }
 
 ########
@@ -1200,7 +1200,7 @@ debasher::_get_augm_fifoname_from_absname()
 ########
 debasher::_get_absolute_condadir()
 {
-    echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_DEBASHER_CONDA_DIRNAME}"
+    echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_CONDA_DIRNAME}"
 }
 
 ########

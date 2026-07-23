@@ -66,7 +66,7 @@ debasher::_search_mod_in_dirs()
     local module=$1
 
     # Obtain array with directories
-    debasher::_deserialize_args_given_sep "${DEBASHER_MOD_DIR}" "${DEBASHER_DEBASHER_MOD_DIR_SEP}"
+    debasher::_deserialize_args_given_sep "${DEBASHER_MOD_DIR}" "${DEBASHER_MOD_DIR_SEP}"
 
     # Add current directory
     DEBASHER_DESERIALIZED_ARGS+=( "." )

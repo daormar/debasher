@@ -678,7 +678,7 @@ debasher_builtin_sched::_get_max_num_tasks()
 {
     local processname=$1
     local throttle=${DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE[${processname}]}
-    if [ "${throttle}" -eq "${DEBASHER_DEBASHER_ARRAY_TASK_NOTHROTTLE}" ]; then
+    if [ "${throttle}" -eq "${DEBASHER_ARRAY_TASK_NOTHROTTLE}" ]; then
         local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
         local result=$((array_size - num_inprogress_tasks))
         echo ${result}

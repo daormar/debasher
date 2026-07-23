@@ -296,7 +296,7 @@ debasher::_log_err_msg()
 debasher::_log_warning_msg()
 {
     local msg=$1
-    echo "${DEBASHER_DEBASHER_LOG_WARNING_MSG_START} $msg" >&2
+    echo "${DEBASHER_LOG_WARNING_MSG_START} $msg" >&2
 }
 
 ########
@@ -321,7 +321,7 @@ debasher::_filter_errors_in_script_log_file()
     local prefix=$1
     local filename=$2
 
-    "${GREP}" "${DEBASHER_DEBASHER_LOG_ERROR_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
+    "${GREP}" "${DEBASHER_LOG_ERROR_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
 }
 
 ########
@@ -330,7 +330,7 @@ debasher::_filter_warnings_in_script_log_file()
     local prefix=$1
     local filename=$2
 
-    "${GREP}" "${DEBASHER_DEBASHER_LOG_WARNING_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
+    "${GREP}" "${DEBASHER_LOG_WARNING_MSG_START}" "${filename}" | "${AWK}" -v prefix="${prefix}" '{printf"%s%s\n\n",prefix,$0}' ; debasher::pipe_fail || return 1
 }
 
 ########
