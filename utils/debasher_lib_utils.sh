@@ -300,6 +300,12 @@ debasher::_log_warning_msg()
 }
 
 ########
+debasher::_log_warning_rerun()
+{
+    echo "${DEBASHER_RERUN_PROCESSES_WARNING}" >&2
+}
+
+########
 debasher::_get_script_log_filenames()
 {
     local exec_dirname=`debasher::_get_prg_exec_dir`

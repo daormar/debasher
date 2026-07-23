@@ -982,6 +982,8 @@ print_rerun_processes()
     if [ ! -z "${rerun_processes_string}" ]; then
         echo "# Printing list of processes to rerun..." >&2
         echo "${rerun_processes_string}" >&2
+        debasher::_log_warning_rerun
+
         echo "" >&2
     fi
 }

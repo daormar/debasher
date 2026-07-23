@@ -321,6 +321,18 @@ debasher::_num_processes_marked_as_rerun()
 }
 
 ########
+debasher::_there_are_processes_to_rerun()
+{
+    local num_procs_rerun="${#DEBASHER_RERUN_PROCESSES[@]}"
+
+    if (( num_procs_rerun > 0 )); then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 debasher::_get_rerun_processes_as_string()
 {
     local result=""
