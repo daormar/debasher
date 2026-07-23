@@ -393,3 +393,49 @@ debasher::is_task_done()
 
     [ -e "$dir/${DEBASHER_TASK_MARKER_PREFIX}${id}" ]
 }
+
+########
+debasher::_format_elapsed_time()
+{
+    local elapsed_ms=$1
+    printf "%d.%03d" \
+        $((elapsed_ms / 1000)) \
+        $((elapsed_ms % 1000))
+}
+
+########
+debasher::_get_elapsed_time_from_logfile()
+{
+    local log_filename=$1
+    local start_date=$(debasher::_get_process_start_date "${log_filename}")
+    local finish_date=$(debasher::_get_process_finish_date "${log_filename}")
+
+    if [ -n "${start_date}" ] && [ -n "${finish_date}" ]; then
+        local start_ms=$(date -d "${start_date}" +%s%3N)
+        local finish_ms=$(date -d "${finish_date}" +%s%3N)
+
+        local elapsed_ms=$((finish_ms - start_ms))
+        debasher::_format_elapsed_time "${elapsed_ms}"
+    else
+        echo "${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"
+    fi
+}
+
+########
+debasher::_get_elapsed_time_for_process()
+{
+    local dirname=$1
+    local processname=$2
+
+    # Get name of log file
+    local sched=`debasher::_get_scheduler`
+    local log_filename
+    case $sched in
+        ${DEBASHER_SLURM_SCHEDULER})
+            debasher::_get_elapsed_time_for_process_slurm "${dirname}" "${processname}"
+            ;;
+        ${DEBASHER_BUILTIN_SCHEDULER})
+            debasher::_get_elapsed_time_for_process_builtin "${dirname}" "${processname}"
+            ;;
+    esac
+}
