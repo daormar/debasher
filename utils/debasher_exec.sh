@@ -857,7 +857,49 @@ define_rerun_processes_due_to_code_update()
 }
 
 ########
-define_rerun_processes_due_to_fifos_iter()
+define_rerun_processes_due_to_proc_status_of_fifo_user_owner()
+{
+    echo "# Defining processes to rerun due to process status of fifo user/owner..." >&2
+
+    # Read input parameters
+    local dirname=$1
+
+    local augm_fifoname
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        # Obtain user process name
+        local fifo_user=${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
+        local user_procname="${fifo_user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+
+        # Obtain user process status
+        local user_status=`debasher::_get_process_status ${dirname} "${user_procname}"`
+
+        # Obtain owner process name
+        local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
+        local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+
+        # Obtain owner process status
+        local owner_status=`debasher::_get_process_status ${dirname} "${owner_procname}"`
+
+        # If fifo user process is finished but fifo owner is not, or viceversa, then
+        # mark both processes as rerun
+        if [[ "${user_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
+            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+        fi
+
+        if [[ "${user_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
+            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+        fi
+    done
+
+    echo "Definition complete" >&2
+
+    echo "" >&2
+}
+
+########
+propagate_rerun_mark_due_to_fifos_iter()
 {
     # Read input parameters
     local dirname=$1
@@ -874,18 +916,18 @@ define_rerun_processes_due_to_fifos_iter()
 
         # Mark fifo owner process as rerun if the user is already marked
         if debasher::_process_marked_as_rerun "${user_procname}"; then
-            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_FIFO_RERUN_REASON}"
+            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
         fi
 
         # Mark fifo user process as rerun if the owner is already marked
         if debasher::_process_marked_as_rerun "${owner_procname}"; then
-            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_FIFO_RERUN_REASON}"
+            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
         fi
     done
 }
 
 ########
-define_rerun_processes_due_to_deps_iter()
+propagate_rerun_mark_due_to_deps_iter()
 {
     # Iterate over all processes
     for processname in "${!DB_EXEC_PROCESS_DEPS[@]}"; do
@@ -898,7 +940,7 @@ define_rerun_processes_due_to_deps_iter()
             # If dependency is marked to rerun, mark the dependent
             # process and break loop
             if debasher::_process_marked_as_rerun "${proc}"; then
-                debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_DEPS_RERUN_REASON}"
+                debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_PROPAGATE_DEPS_RERUN_REASON}"
                 break
             fi
         done
@@ -908,7 +950,11 @@ define_rerun_processes_due_to_deps_iter()
 ########
 propagate_rerun_processes()
 {
-    echo "# Propagating processes to rerun taking into account process dependencies and fifos..." >&2
+    if debasher::_program_uses_fifos ; then
+        echo "# Propagating processes to rerun taking into account process dependencies and fifos..." >&2
+    else
+        echo "# Propagating processes to rerun taking into account process dependencies..." >&2
+    fi
 
     # Read input parameters
     local dirname=$1
@@ -917,8 +963,8 @@ propagate_rerun_processes()
     local num_marked_procs=`debasher::_num_processes_marked_as_rerun`
 
     while (( prev_marked_procs < num_marked_procs )); do
-        define_rerun_processes_due_to_deps_iter
-        define_rerun_processes_due_to_fifos_iter "${dirname}"
+        propagate_rerun_mark_due_to_deps_iter
+        propagate_rerun_mark_due_to_fifos_iter "${dirname}"
         prev_marked_procs=${num_marked_procs}
         num_marked_procs=`debasher::_num_processes_marked_as_rerun`
     done
@@ -936,7 +982,6 @@ print_rerun_processes()
     if [ ! -z "${rerun_processes_string}" ]; then
         echo "# Printing list of processes to rerun..." >&2
         echo "${rerun_processes_string}" >&2
-        echo "${DEBASHER_DEBASHER_RERUN_PROCESSES_WARNING}" >&2
         echo "" >&2
     fi
 }
@@ -1529,6 +1574,10 @@ else
 
         if [ ${rerun_outdated_processes_given} -eq 1 ]; then
             define_rerun_processes_due_to_code_update "${outd}" "${procspec_file}" || exit 1
+        fi
+
+        if debasher::_program_uses_fifos ; then
+            define_rerun_processes_due_to_proc_status_of_fifo_user_owner "${outd}" || exit 1
         fi
 
         propagate_rerun_processes "${outd}" || exit 1
