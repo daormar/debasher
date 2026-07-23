@@ -592,3 +592,15 @@ debasher::_get_number_of_program_fifos()
 {
     echo "${#DEBASHER_PROGRAM_FIFOS[@]}"
 }
+
+########
+debasher::_program_uses_fifos()
+{
+    local num_fifos="${#DEBASHER_PROGRAM_FIFOS[@]}"
+
+    if (( num_fifos == 0 )); then
+        return 1
+    else
+        return 0
+    fi
+}
