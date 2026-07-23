@@ -218,9 +218,6 @@ debasher::_reset_process_completion_signal()
     local dirname=$1
     local processname=$2
 
-    # If process will be rerun, file signaling process completion should
-    # be removed. Additionally, this action should be registered in a
-    # specific associative array
     local finished_filename_pref=`debasher::_get_process_finished_filename_prefix "${dirname}" ${processname}`
     "${RM}" -f "${finished_filename_pref}"*.${DEBASHER_FINISHED_PROCESS_FEXT}
 }
@@ -296,67 +293,6 @@ debasher::_read_ids_from_files()
     done
 
     echo ${ids}
-}
-
-########
-debasher::_mark_process_as_rerun()
-{
-    local processname=$1
-    local reason=$2
-
-    if [ "${DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
-        DEBASHER_RERUN_PROCESSES[${processname}]=${reason}
-    else
-        local curr_val="${DEBASHER_RERUN_PROCESSES[${processname}]}"
-        if [[ ",$curr_val," != *",$reason,"* ]]; then
-            DEBASHER_RERUN_PROCESSES[${processname}]="${curr_val},${reason}"
-        fi
-    fi
-}
-
-########
-debasher::_num_processes_marked_as_rerun()
-{
-    echo "${#DEBASHER_RERUN_PROCESSES[@]}"
-}
-
-########
-debasher::_there_are_processes_to_rerun()
-{
-    local num_procs_rerun="${#DEBASHER_RERUN_PROCESSES[@]}"
-
-    if (( num_procs_rerun > 0 )); then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-debasher::_get_rerun_processes_as_string()
-{
-    local result=""
-    for processname in "${!DEBASHER_RERUN_PROCESSES[@]}"; do
-        if [ "${result}" = "" ]; then
-            result=${processname}
-        else
-            result="${result},${processname}"
-        fi
-    done
-
-    echo ${result}
-}
-
-########
-debasher::_process_marked_as_rerun()
-{
-    local processname=$1
-
-    if [ "${DEBASHER_RERUN_PROCESSES[${processname}]}" = "" ]; then
-        return 1
-    else
-        return 0
-    fi
 }
 
 ########
