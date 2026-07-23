@@ -273,14 +273,17 @@ class DependencyGraph:
 
         # Check existence of duplicated processes
         if(self.processnames_duplicated()):
+            print("Error: program contains duplicated processes", file=sys.stderr)
             return False
 
         # Check dependency names
         if(not self.depnames_correct()):
+            print("Error: names of process dependencies are not correct", file=sys.stderr)
             return False
 
         # Check "after" dependency type is not used over a multi-attempt process
         if(self.after_dep_has_multatt_process()):
+            print("Error: 'after' dependency type cannot used over a multi-attempt process", file=sys.stderr)
             return False
 
         # Reorder process entries
