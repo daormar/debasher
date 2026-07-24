@@ -312,5 +312,17 @@ debasher::_gen_final_procspec_info()
             DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${process_spec}"
         fi
 
+        # Check that dependencies are correct
+
+        # Iterate over dependencies, checking that the dependent process exists
+        local -a deps_array
+        IFS="${DEBASHER_PROCESSDEPS_SEP_COMMA}" read -ra deps_array <<< "${DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED[${processname}]}"
+        for proc in "${deps_array[@]}"; do
+            if [[ ! -v DEBASHER_PROGRAM_PROCESSES["${proc}"] ]]; then
+                echo "Error: process ${proc} is given as a dependency for ${processname}, but it does not exist" >&2
+                exit 1
+            fi
+        done
+
     done < "${initial_procspec_file}"
 }
