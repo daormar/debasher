@@ -257,6 +257,7 @@ debasher::_propagate_rerun_mark_due_to_deps_iter()
         # Iterate over process dependencies
         local -a deps_array
         IFS="${DEBASHER_PROCESSDEPS_SEP_COMMA}" read -ra deps_array <<< "$deps"
+        local proc
         for proc in "${deps_array[@]}"; do
             # If dependency is marked to rerun, mark the dependent
             # process and break loop
