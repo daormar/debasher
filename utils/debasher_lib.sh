@@ -238,6 +238,9 @@ DEBASHER_LOG_ERROR_MSG_START="Error:"
 DEBASHER_LOG_WARNING_MSG_START="Warning:"
 DEBASHER_RERUN_PROCESSES_WARNING="Warning: there are processes to rerun!"
 
+# DEBASHER LIMITS
+DEBASHER_MAX_NUM_PROCESSES=5000
+
 ####################
 # GLOBAL VARIABLES #
 ####################
