@@ -343,7 +343,7 @@ gen_final_procspec_file()
 ########
 topologically_sort_processes()
 {
-    echo "# Topologically ordering processes according to their dependencies..." >&2
+    echo "# Topologically sorting processes according to their dependencies..." >&2
 
     debasher::_topo_sort_processes
 
