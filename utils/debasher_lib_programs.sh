@@ -528,6 +528,13 @@ debasher::add_debasher_process()
         fi
     fi
 
+    # Check process limit
+    local num_processes=`debasher::_get_num_processes`
+    if [ "${num_processes}" -gt "${DEBASHER_MAX_NUM_PROCESSES}" ]; then
+        echo "Error: Maximum number of processes (${DEBASHER_MAX_NUM_PROCESSES}) exceeded" >&2
+        exit 1
+    fi
+
     # Print process program entry
     debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}"
 }
@@ -576,6 +583,12 @@ debasher::add_debasher_program()
 }
 
 add_debasher_program() { debasher::add_debasher_program "$@"; }
+
+########
+debasher::_get_num_processes()
+{
+    echo "${#DEBASHER_PROGRAM_PROCESSES[@]}"
+}
 
 ########
 debasher::_program_uses_fifos()
