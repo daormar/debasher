@@ -308,6 +308,10 @@ declare -a DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK
 # Declare associative array to store processes added to a program
 declare -A DEBASHER_PROGRAM_PROCESSES
 
+# Declare array to store processes in topological order according to
+# their dependencies
+declare -a DEBASHER_PROGRAM_PROCESSES_TOPO_SORT
+
 # Declare associative arrays to store name of shared directories
 declare -A DEBASHER_PROGRAM_SHDIRS
 
