@@ -23,6 +23,7 @@
 . "${debasher_pkglibdir}"/debasher_lib_sched_builtin || exit 1
 . "${debasher_pkglibdir}"/debasher_lib_sched_procs || exit 1
 . "${debasher_pkglibdir}"/debasher_lib_sched_rerun || exit 1
+. "${debasher_pkglibdir}"/debasher_lib_sched_topo_sort || exit 1
 
 ########
 debasher::_set_debasher_outdir()
