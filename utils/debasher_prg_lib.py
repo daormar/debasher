@@ -273,17 +273,10 @@ class DependencyGraph:
 
         # Check existence of duplicated processes
         if(self.processnames_duplicated()):
-            print("Error: program contains duplicated processes", file=sys.stderr)
             return False
 
         # Check dependency names
         if(not self.depnames_correct()):
-            print("Error: names of process dependencies are not correct", file=sys.stderr)
-            return False
-
-        # Check "after" dependency type is not used over a multi-attempt process
-        if(self.after_dep_has_multatt_process()):
-            print("Error: 'after' dependency type cannot used over a multi-attempt process", file=sys.stderr)
             return False
 
         # Reorder process entries
@@ -329,22 +322,6 @@ class DependencyGraph:
                 return False
 
         return True
-
-    def after_dep_has_multatt_process(self):
-        found = False
-        for prname in self.processdeps_map:
-            deplist = self.processdeps_map[prname]
-            i = 0
-            while i<len(deplist) and not found:
-                if(deplist[i].deptype=="after" and deplist[i].processname in self.multiattempt_processes):
-                    found = True
-                    print("Error:", prname, "process has an 'after' dependency with a multiple-attempt process (", deplist[i].processname,")", file=sys.stderr)
-                else:
-                    i = i+1
-        if(found):
-            return True
-        else:
-            return False
 
     def order_process_entries(self, ordered_process_entries):
         processed_processes=set()
