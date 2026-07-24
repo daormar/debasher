@@ -17,16 +17,17 @@ check_program()
 {
     local tmpdir=$1
     local progname=$2
-    local sched=$3
-    local bs_cpus=$4
-    local bs_mem=$5
-    local additional_opts=$6
+    local outdirname=$3
+    local sched=$4
+    local bs_cpus=$5
+    local bs_mem=$6
+    local additional_opts=$7
     local pfile="${debasher_datadir}/programs/${progname}.sh"
-    local outdir="${tmpdir}/${progname}"
+    local outdir="${tmpdir}/${outdirname}"
 
     echo -n "## Checking ${progname}.sh ... "
 
-    local debasher_exec_out="${tmpdir}/${progname}_exec.out"
+    local debasher_exec_out="${tmpdir}/${outdirname}_exec.out"
     "${debasher_bindir}/debasher_exec" --pfile "${pfile}" \
                                        --outdir "${outdir}" \
                                        --sched "${sched}" \
@@ -37,7 +38,7 @@ check_program()
                                        --wait > "${debasher_exec_out}" 2>&1
     local ret=$?
     if test $ret -eq 0 ; then
-        local debasher_status_out="${tmpdir}/${progname}_status.out"
+        local debasher_status_out="${tmpdir}/${outdirname}_status.out"
         timeout -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
         ret=$?
     fi
@@ -77,7 +78,7 @@ echo "Temporary files will be stored in ${tmpdir}"
 echo ""
 
 # Start checks
-echo "# Checks Execution"
+echo "# Checks using BUILTIN Scheduler"
 echo ""
 checks_passed=0
 checks_timedout=0
@@ -88,7 +89,7 @@ progname="debasher_hello_world"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
 ret=$?
 case $? in
     0)
@@ -107,7 +108,7 @@ progname="debasher_hello_world_py"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
 case $? in
     0)
         ((checks_passed++))
@@ -125,7 +126,7 @@ progname="debasher_hello_world_alias"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
 case $? in
     0)
         ((checks_passed++))
@@ -143,7 +144,7 @@ progname="debasher_hello_world_ext_alias"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
 case $? in
     0)
         ((checks_passed++))
@@ -161,7 +162,7 @@ progname="debasher_cycle"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10"
 case $? in
     0)
         ((checks_passed++))
@@ -179,7 +180,7 @@ progname="debasher_value_pass_example"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-if check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2"; then
+if check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2"; then
     ((checks_passed++))
 else
     ((checks_failed++))
@@ -190,7 +191,7 @@ progname="debasher_array_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
 case $? in
     0)
         ((checks_passed++))
@@ -208,7 +209,7 @@ progname="debasher_file_example"
 sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-s Hello\ World!"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-s Hello\ World!"
 case $? in
     0)
         ((checks_passed++))
@@ -226,7 +227,7 @@ progname="debasher_generator_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
 case $? in
     0)
         ((checks_passed++))
@@ -244,7 +245,7 @@ progname="debasher_host_workflow"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
 case $? in
     0)
         ((checks_passed++))
@@ -262,7 +263,7 @@ progname="debasher_host_workflow_expl_deps"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
 case $? in
     0)
         ((checks_passed++))
@@ -280,7 +281,7 @@ progname="debasher_host_workflow_force"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
 case $? in
     0)
         ((checks_passed++))
@@ -300,7 +301,7 @@ bs_cpus=4
 bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
 case $? in
     0)
         ((checks_passed++))
@@ -320,7 +321,7 @@ bs_cpus=4
 bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
 case $? in
     0)
         ((checks_passed++))
@@ -340,7 +341,7 @@ bs_cpus=4
 bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
 case $? in
     0)
         ((checks_passed++))
@@ -360,7 +361,7 @@ bs_cpus=4
 bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
 case $? in
     0)
         ((checks_passed++))
@@ -378,7 +379,7 @@ progname="debasher_conda_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
 case $? in
     0)
         ((checks_passed++))
@@ -396,7 +397,7 @@ progname="debasher_docker_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
 case $? in
     0)
         ((checks_passed++))
@@ -414,7 +415,7 @@ progname="debasher_dynamic_fanout"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
 case $? in
     0)
         ((checks_passed++))
@@ -432,7 +433,7 @@ progname="debasher_dynamic_fanout_fifos"
 sched="BUILTIN"
 bs_cpus=7 # increased number of cpus to be able to allocate all processes
 bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
 case $? in
     0)
         ((checks_passed++))
@@ -444,6 +445,30 @@ case $? in
         ((checks_timedout++))
         ;;
 esac
+
+# Check execution using SLURM if available
+if [ -n "SBATCH" ]; then
+    echo "# Checks using SLURM Scheduler"
+    echo ""
+
+    # Check debasher_dynamic_fanout
+    progname="debasher_dynamic_fanout"
+    sched="SLURM"
+    bs_cpus=1   # Not used with SLURM scheduler
+    bs_mem=1024 # Not used with SLURM scheduler
+    check_program "${tmpdir}" "${progname}" "${progname}_slurm" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+fi
 
 # Summary
 echo "# Summary"
