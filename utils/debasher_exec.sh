@@ -341,15 +341,13 @@ gen_final_procspec_file()
 }
 
 ########
-check_procspec()
+process_topo_sort()
 {
-    local prefix_of_prg_files=$1
+    echo "# Topologically ordering processes according to their dependencies..." >&2
 
-    echo "# Checking process specification..." >&2
+    debasher::_topo_sort_processes
 
-    "${debasher_libexecdir}"/debasher_check_prg_files -p "${prefix_of_prg_files}" || return 1
-
-    echo "Checking complete" >&2
+    echo "Sorting complete" >&2
 
     echo "" >&2
 }
@@ -966,16 +964,13 @@ launch_program_processes()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local prg_file_pref=$3
 
     # WARNING: Before launching a particular process, its dependencies
     # should have been launched first. That's why the
-    # debasher_check_prg_files tool with -r flag is used
-    while read process_spec; do
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-        launch_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
-    done < <("${debasher_libexecdir}"/debasher_check_prg_files -p "${prg_file_pref}" -r 2>/dev/null)
+    # processes are explored in topological order
+    for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
+        launch_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
+    done
 
     echo "" >&2
 }
@@ -1047,16 +1042,13 @@ launch_program_processes_debug()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local prg_file_pref=$3
 
     # WARNING: Before launching a particular process, its dependencies
     # should have been launched first. That's why the
-    # debasher_check_prg_files tool with -r flag is used
-    while read process_spec; do
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-        debug_process "${cmdline}" "${dirname}" "${processname}" "${process_spec}" || return 1
-    done < <("${debasher_libexecdir}"/debasher_check_prg_files -p "${prg_file_pref}" -r  2>/dev/null)
+    # processes are explored in topological order
+    for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
+        debug_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
+    done
 
     echo "" >&2
 }
@@ -1181,7 +1173,7 @@ else
         procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
         gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
 
-        check_procspec "${prg_file_pref}" || exit 1
+        process_topo_sort || exit 1
 
         # Generate graphs
         if [ "${gen_proc_graph_given}" -eq 1 ]; then
@@ -1212,7 +1204,7 @@ else
 
         # Launch processes
         if [ ${debug} -eq 1 ]; then
-            launch_program_processes_debug "${command_line}" "${outd}" "${prg_file_pref}" || exit 1
+            launch_program_processes_debug "${command_line}" "${outd}" || exit 1
 
             # Restore old process options (if they exist)
             restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
@@ -1224,7 +1216,7 @@ else
             else
                 revise_rerun_proc_status "${outd}" || return 1
                 prepare_files_and_dirs_for_processes "${outd}"
-                launch_program_processes "${command_line}" "${outd}" "${prg_file_pref}" || exit 1
+                launch_program_processes "${command_line}" "${outd}" || exit 1
                 if [ "${wait}" -eq 1 ]; then
                     wait_for_program_processes "${outd}" || exit 1
                     print_post_exec_wait_help
