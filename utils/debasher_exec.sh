@@ -341,7 +341,7 @@ gen_final_procspec_file()
 }
 
 ########
-process_topo_sort()
+topologically_sort_processes()
 {
     echo "# Topologically ordering processes according to their dependencies..." >&2
 
@@ -1173,7 +1173,7 @@ else
         procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
         gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
 
-        process_topo_sort || exit 1
+        topologically_sort_processes || exit 1
 
         # Generate graphs
         if [ "${gen_proc_graph_given}" -eq 1 ]; then
