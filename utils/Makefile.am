@@ -160,6 +160,11 @@ debasher_lib_sched_rerun: debasher_lib_sched_rerun.sh
 	cat $< > $@
 	chmod ugo+x $@
 
+debasher_lib_sched_topo_sort: debasher_lib_sched_topo_sort.sh
+	rm -f $@
+	cat $< > $@
+	chmod ugo+x $@
+
 debasher_lib_sched_builtin: debasher_lib_sched_builtin.sh
 	rm -f $@
 	cat $< > $@
