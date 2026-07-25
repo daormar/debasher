@@ -44,10 +44,10 @@ debasher::_topo_sort()
 
         _state[$node]=1
 
-        local depstr=${_deps[$node]}
-        if [[ -n $depstr && $depstr != "${DEBASHER_NONE_PROCESSDEP_TYPE}" ]]; then
+        local dep_str=${_deps[$node]}
+        if [[ -n $dep_str && $dep_str != "${DEBASHER_NONE_PROCESSDEP_TYPE}" ]]; then
             local -a deps_array
-            IFS="${dep_sep}" read -ra deps_array <<< "${depstr}"
+            IFS="${dep_sep}" read -ra deps_array <<< "${dep_str}"
             local dep
             for dep in "${deps_array[@]}"; do
                 if [[ ! -v _deps[$dep] ]]; then
