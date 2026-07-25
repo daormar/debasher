@@ -173,8 +173,8 @@ exec_hook()
     local outd=$1
 
     # export variables
-    export PIPE_EXEC_BATCH_PRG_OUTD="${outd}"
-    export PIPE_EXEC_BATCH_PRG_CMD=${PROGRAM_COMMANDS["${outd}"]}
+    export DEBASHER_EXEC_BATCH_PRG_OUTD="${outd}"
+    export DEBASHER_EXEC_BATCH_PRG_CMD=${PROGRAM_COMMANDS["${outd}"]}
 
     # Execute script
     "${k_val}"
@@ -291,7 +291,7 @@ get_prg_status()
     if [ -d "${pipe_cmd_outd}" ]; then
         # Obtain program status
         local tmpfile=`"${MKTEMP}"`
-        "${debasher_pkglibdir}"/debasher_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
+        "${debasher_bindir}"/debasher_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
         # Obtain percentage of unfinished processes
