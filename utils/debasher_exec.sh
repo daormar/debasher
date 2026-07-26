@@ -440,14 +440,8 @@ show_cmdline_opts()
 {
     echo "# Command line options for the program..." >&2
 
-    # Read input parameters
-    local procspec_file=$1
-
-    # Read information about the processes to be executed
-    local process_spec
-    while read process_spec; do
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "${process_spec}"`
+    # Iterate over the processes to be executed
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         local explain_cmdline_opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
         if [ "${explain_cmdline_opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
             echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
@@ -456,7 +450,7 @@ show_cmdline_opts()
             ${explain_cmdline_opts_funcname} || exit 1
             debasher::_update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
         fi
-    done < "${procspec_file}"
+    done
 
     # Print options
     debasher::_print_program_opts
@@ -1129,6 +1123,9 @@ configure_scheduler || exit 1
 
 load_module "${pfile}" || exit 1
 
+# Check if there are running processes and abort execution if true
+ensure_program_not_being_executed "${initial_procspec_file}"
+
 # Get name of initial process specification file
 initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
 
@@ -1141,7 +1138,7 @@ fi
 gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
-    show_cmdline_opts "${initial_procspec_file}" || exit 1
+    show_cmdline_opts || exit 1
 else
     prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
     program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
@@ -1152,18 +1149,6 @@ else
     procgraph_file_prefix="${prg_graphs_dir}/process_graph"
     depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
-    # Check if there are running processes and abort execution if true
-    ensure_program_not_being_executed "${initial_procspec_file}"
-
-    # Write debasher library variables and functions
-    get_deblib_vars_and_funcs "${outd}" || exit 1
-
-    # Write module variables and functions (this function should be called
-    # after calling gen_initial_procspec_file, since it executes the program
-    # given in pfile input parameter, possibly defining new functions that
-    # should be written as well)
-    get_mod_vars_and_funcs "${outd}" || exit 1
-
     if [ ${check_proc_opts_given} -eq 1 ]; then
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
                            "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
@@ -1173,6 +1158,15 @@ else
     else
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
                            "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+
+        # Write debasher library variables and functions
+        get_deblib_vars_and_funcs "${outd}" || exit 1
+
+        # Write module variables and functions (this function should be called
+        # after calling gen_initial_procspec_file, since it executes the program
+        # given in pfile input parameter, possibly defining new functions that
+        # should be written as well)
+        get_mod_vars_and_funcs "${outd}" || exit 1
 
         procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
         gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
