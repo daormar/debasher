@@ -1140,18 +1140,6 @@ fi
 # Write initial process specification file
 gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
 
-# Check if there are running processes and abort execution if true
-ensure_program_not_being_executed "${initial_procspec_file}"
-
-# Write debasher library variables and functions
-get_deblib_vars_and_funcs "${outd}" || exit 1
-
-# Write module variables and functions (this function should be called
-# after calling gen_initial_procspec_file, since it executes the program
-# given in pfile input parameter, possibly defining new functions that
-# should be written as well)
-get_mod_vars_and_funcs "${outd}" || exit 1
-
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts "${initial_procspec_file}" || exit 1
 else
@@ -1163,6 +1151,18 @@ else
     prg_graphs_dir=`debasher::_get_prg_graphs_dir`
     procgraph_file_prefix="${prg_graphs_dir}/process_graph"
     depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
+
+    # Check if there are running processes and abort execution if true
+    ensure_program_not_being_executed "${initial_procspec_file}"
+
+    # Write debasher library variables and functions
+    get_deblib_vars_and_funcs "${outd}" || exit 1
+
+    # Write module variables and functions (this function should be called
+    # after calling gen_initial_procspec_file, since it executes the program
+    # given in pfile input parameter, possibly defining new functions that
+    # should be written as well)
+    get_mod_vars_and_funcs "${outd}" || exit 1
 
     if [ ${check_proc_opts_given} -eq 1 ]; then
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
