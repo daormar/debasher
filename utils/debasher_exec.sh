@@ -447,11 +447,15 @@ show_cmdline_opts()
     local process_spec
     while read process_spec; do
         # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+        local processname=`debasher::_extract_processname_from_process_spec "${process_spec}"`
         local explain_cmdline_opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
-        DIFFERENTIAL_CMDLINE_OPT_STR=""
-        ${explain_cmdline_opts_funcname} || exit 1
-        debasher::_update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+        if [ "${explain_cmdline_opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            echo "Warning: function to explain command-line options was not found for process ${processname}" >&2
+        else
+            DIFFERENTIAL_CMDLINE_OPT_STR=""
+            ${explain_cmdline_opts_funcname} || exit 1
+            debasher::_update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+        fi
     done < "${procspec_file}"
 
     # Print options
