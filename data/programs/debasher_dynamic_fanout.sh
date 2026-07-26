@@ -101,6 +101,12 @@ count_document()
 }
 
 ########
+count_explain_cmdline_opts()
+{
+    :
+}
+
+########
 count_define_opts()
 {
     # Initialize variables
