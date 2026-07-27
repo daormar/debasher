@@ -36,7 +36,7 @@ DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 # Declare associative array to store process ids
 declare -A DB_EXEC_PROCESS_IDS
 
-# Declare string variable to store the process ids of all the program
+1# Declare string variable to store the process ids of all the program
 # processes. The variable is filled incrementally and, when launching a
 # particular process, it is necessary to provide the ids of its
 # dependencies
@@ -1123,21 +1123,9 @@ configure_scheduler || exit 1
 
 load_module "${pfile}" || exit 1
 
-# Check if there are running processes and abort execution if true
-ensure_program_not_being_executed "${initial_procspec_file}"
-
-# Get name of initial process specification file
-initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
-
-# Remove initial process specification file if it exists
-if [ -f "${initial_procspec_file}" ]; then
-    rm "${initial_procspec_file}"
-fi
-
-# Write initial process specification file
-gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
-
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
+    gen_initial_procspec_file "${pfile}" > /dev/null || exit 1
+
     show_cmdline_opts || exit 1
 else
     prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
@@ -1148,6 +1136,15 @@ else
     prg_graphs_dir=`debasher::_get_prg_graphs_dir`
     procgraph_file_prefix="${prg_graphs_dir}/process_graph"
     depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
+
+    # Check if there are running processes and abort execution if true
+    ensure_program_not_being_executed "${initial_procspec_file}"
+
+    # Get name of initial process specification file
+    initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
+
+    # Write initial process specification file
+    gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
 
     if [ ${check_proc_opts_given} -eq 1 ]; then
         check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
