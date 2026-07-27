@@ -331,6 +331,8 @@ gen_final_procspec()
 
     debasher::_gen_final_procspec "${command_line}" "${initial_procspec_file}"  || exit 1
 
+    debasher::_print_final_procspec "${command_line}" "${initial_procspec_file}"  || exit 1
+
     echo "Generation complete" >&2
 
     echo "" >&2

@@ -287,22 +287,15 @@ debasher::_gen_final_procspec()
             # Register dependencies
             DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=`debasher::_get_processdeps_from_detailed_spec "${procdeps}"`
 
-            # Print process specification plus process dependencies
+            # Register process spec
             local augmented_process_spec
             augmented_process_spec=`debasher::_add_additional_spec "${process_spec}" "${procdeps}"`
-            echo "${augmented_process_spec}"
-
-            # Register process spec
             DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${augmented_process_spec}"
         else
             # Dependencies were given
 
             # Register dependencies
             DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=`debasher::_get_processdeps_from_detailed_spec "${procdeps}"`
-
-            # Since the dependencies were given, just print process
-            # specification
-            echo "${process_spec}"
 
             # Register process spec
             DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${process_spec}"
@@ -321,5 +314,18 @@ debasher::_gen_final_procspec()
             fi
         done
 
+    done
+}
+
+########
+debasher::_print_final_procspec()
+{
+    local cmdline=$1
+
+    # Iterate over process specifications
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local process_spec="${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}"
+        echo "${process_spec}"
     done
 }
