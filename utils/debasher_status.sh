@@ -135,6 +135,9 @@ process_status_for_pfile()
     # Configure scheduler
     configure_scheduler $sched || return 1
 
+    # Execute program function for module
+    debasher::_exec_program_func_for_module "${pfile}"
+
     # Read information about the processes to be executed
     local num_processes=0
     local num_finished=0
@@ -142,12 +145,9 @@ process_status_for_pfile()
     local num_unfinished=0
     local num_unfinished_but_runnable=0
     local num_todo=0
-    while read process_spec; do
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Increase number of processes
         num_processes=$((num_processes + 1))
-
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
 
         # If s option was given, continue to next iteration if process
         # name does not match with the given one
@@ -184,7 +184,7 @@ process_status_for_pfile()
             ${DEBASHER_TODO_PROCESS_STATUS}) num_todo=$((num_todo + 1))
                                     ;;
         esac
-    done < <(debasher::_exec_program_func_for_module "${pfile}")
+    done
 
     # Print summary
     echo "* SUMMARY: num_processes= ${num_processes} ; finished= ${num_finished} ; inprogress= ${num_inprogress} ; unfinished= ${num_unfinished} ; unfinished_but_runnable= ${num_unfinished_but_runnable} ; todo= ${num_todo}" >&2

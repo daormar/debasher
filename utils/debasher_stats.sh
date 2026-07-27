@@ -98,7 +98,7 @@ configure_scheduler()
 }
 
 ########
-process_status_for_pfile()
+process_stats_for_pfile()
 {
     local dirname=$1
     local absdirname=`debasher::_get_absolute_path "${dirname}"`
@@ -129,15 +129,13 @@ process_status_for_pfile()
     # Configure scheduler
     configure_scheduler $sched || return 1
 
+    # Execute program function for module
+    debasher::_exec_program_func_for_module "${pfile}"
+
     # Read information about the processes to be executed
-    num_processes=0
-    while read process_spec; do
-        # Increase number of processes
-        num_processes=$((num_processes + 1))
 
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
+    # Iterate over the program processes
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # If s option was given, continue to next iteration if process
         # name does not match with the given one
         if [ ${p_given} -eq 1 -a "${given_processname}" != $processname ]; then
@@ -166,6 +164,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-process_status_for_pfile "${pdir}"
+process_stats_for_pfile "${pdir}"
 
 exit $?

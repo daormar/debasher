@@ -98,7 +98,7 @@ configure_scheduler()
 }
 
 ########
-process_status_for_pfile()
+process_stop_for_pfile()
 {
     local dirname=$1
     local absdirname=`debasher::_get_absolute_path "${dirname}"`
@@ -129,20 +129,11 @@ process_status_for_pfile()
     # Configure scheduler
     configure_scheduler $sched || return 1
 
-    # Read information about the processes to be executed
-    local num_processes=0
-    local num_finished=0
-    local num_inprogress=0
-    local num_unfinished=0
-    local num_unfinished_but_runnable=0
-    local num_todo=0
-    while read process_spec; do
-        # Increase number of processes
-        num_processes=$((num_processes + 1))
+    # Execute program function for module
+    debasher::_exec_program_func_for_module "${pfile}"
 
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
+    # Iterate over the program processes
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # If s option was given, continue to next iteration if process
         # name does not match with the given one
         if [ ${p_given} -eq 1 -a "${given_processname}" != $processname ]; then
@@ -163,9 +154,7 @@ process_status_for_pfile()
         else
             echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (The process is not running)"
         fi
-
-        # Increase lineno
-    done < <(debasher::_exec_program_func_for_module "${pfile}")
+    done
 }
 
 ########
@@ -179,6 +168,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-process_status_for_pfile "${pdir}"
+process_stop_for_pfile "${pdir}"
 
 exit $?
