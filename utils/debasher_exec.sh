@@ -36,7 +36,7 @@ DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 # Declare associative array to store process ids
 declare -A DB_EXEC_PROCESS_IDS
 
-1# Declare string variable to store the process ids of all the program
+# Declare string variable to store the process ids of all the program
 # processes. The variable is filled incrementally and, when launching a
 # particular process, it is necessary to provide the ids of its
 # dependencies
@@ -464,25 +464,24 @@ check_process_opts()
     init_option_info()
     {
         local cmdline=$1
-        local procspec_file=$2
 
-        while read process_spec; do
+        # Iterate over the processes to be executed
+        local processname
+        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             # Define options for process
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+            local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
             debasher::_define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
-        done < "${procspec_file}"
+        done
     }
 
     create_option_arrays()
     {
         local cmdline=$1
         local dirname=$2
-        local procspec_file=$3
 
-        while read process_spec; do
-            # Get process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
+        # Iterate over the processes to be executed
+        local processname
+        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             if ! debasher::_uses_option_generator "${processname}"; then
                 # Load current option list
                 debasher::_load_curr_opt_list_loop "${cmdline}" "${processname}"
@@ -495,54 +494,48 @@ check_process_opts()
                 # Clear variables
                 debasher::_clear_curr_opt_list_array
             fi
-        done < "${procspec_file}"
+        done
     }
 
     print_exh_opt_list_procs()
     {
         local cmdline=$1
-        local procspec_file=$2
 
-        while read process_spec; do
-            # Get process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
+        # Iterate over the processes to be executed
+        local processname
+        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             debasher::_show_curr_opt_list "${cmdline}" "${processname}"
-        done < "${procspec_file}"
+        done
     }
 
     show_process_opts()
     {
         local cmdline=$1
-        local procspec_file=$2
-        local max_num_proc_opts_to_display=$3
+        local max_num_proc_opts_to_display=$2
 
-        while read process_spec; do
-            # Get process name
-            local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
+        # Iterate over the processes to be executed
+        local processname
+        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             # Store process options in an array for visualization
             local serial_process_opts=`debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}"`
 
             # Print info about options
             echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
             echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}"
-        done < "${procspec_file}"
+        done
     }
 
     register_fifo_users()
     {
         local cmdline=$1
-        local procspec_file=$2
 
         if debasher::_program_uses_fifos; then
-            while read process_spec; do
-                # Extract process information
-                local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-
+            # Iterate over the processes to be executed
+            local processname
+            for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
                 # Register fifos
                 debasher::_register_fifos_used_by_process "${cmdline}" "${processname}"
-            done < "${procspec_file}"
+            done
         fi
     }
 
@@ -551,35 +544,31 @@ check_process_opts()
     # Read input parameters
     local cmdline=$1
     local dirname=$2
-    local procspec_file=$3
-    local program_opts_file=$4
-    local program_opts_exh_file=$5
-    local program_fifos_file=$6
+    local program_opts_file=$3
+    local program_opts_exh_file=$4
+    local program_fifos_file=$5
 
     # Clear scheduler options directory
     local sched_opts_dir=`debasher::get_sched_opts_dir_given_basedir "${dirname}"`
     "${RM}" -f "${sched_opts_dir}"/*
 
-    # Get initial process specification information
-    debasher::_get_initial_process_spec_info "${procspec_file}" || return 1
-
     # Initialize option information
-    init_option_info "${cmdline}" "${procspec_file}" || return 1
+    init_option_info "${cmdline}" || return 1
 
     # Create option arrays
-    create_option_arrays "${cmdline}" "${dirname}" "${procspec_file}" || return 1
+    create_option_arrays "${cmdline}" "${dirname}" || return 1
 
     # Print exhaustive option list for processes (only if process graph
     # should be generated)
     if [ "${gen_proc_graph_given}" -eq 1 ]; then
-        print_exh_opt_list_procs "${cmdline}" "${procspec_file}" > "${program_opts_exh_file}" || return 1
+        print_exh_opt_list_procs "${cmdline}" > "${program_opts_exh_file}" || return 1
     fi
 
     # Show process options
-    show_process_opts "${cmdline}" "${procspec_file}" "${DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${program_opts_file}" || return 1
+    show_process_opts "${cmdline}" "${DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${program_opts_file}" || return 1
 
     # Register fifo users
-    register_fifo_users "${cmdline}" "${procspec_file}" || return 1
+    register_fifo_users "${cmdline}" || return 1
 
     # Print info about fifos
     debasher::_show_program_fifos > "${program_fifos_file}" || return 1
@@ -966,6 +955,7 @@ launch_program_processes()
     # WARNING: Before launching a particular process, its dependencies
     # should have been launched first. That's why the
     # processes are explored in topological order
+    local processname
     for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
         launch_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
     done
@@ -1044,6 +1034,7 @@ launch_program_processes_debug()
     # WARNING: Before launching a particular process, its dependencies
     # should have been launched first. That's why the
     # processes are explored in topological order
+    local processname
     for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
         debug_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
     done
@@ -1131,6 +1122,7 @@ if [ ${show_cmdline_opts_given} -eq 1 ]; then
     exit 0
 fi
 
+# Define basic file variables
 prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
 program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
 old_program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_OLD_FEXT}"
@@ -1139,6 +1131,16 @@ program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
 prg_graphs_dir=`debasher::_get_prg_graphs_dir`
 procgraph_file_prefix="${prg_graphs_dir}/process_graph"
 depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
+
+if [ ${check_proc_opts_given} -eq 1 ]; then
+    gen_initial_procspec_file "${pfile}" > /dev/null || exit 1
+
+    null_program_opts_file="/dev/null"
+    check_process_opts "${command_line}" "${outd}" "${null_program_opts_file}" \
+                       "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+
+    exit 0
+fi
 
 # Check if there are running processes and abort execution if true
 ensure_program_not_being_executed "${initial_procspec_file}"
@@ -1149,17 +1151,7 @@ initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
 # Write initial process specification file
 gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
 
-if [ ${check_proc_opts_given} -eq 1 ]; then
-    check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
-                       "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
-
-    # Restore old process options (if they exist)
-    restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
-
-    exit 0
-fi
-
-check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
+check_process_opts "${command_line}" "${outd}" "${program_opts_file}" \
                    "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
 # Write debasher library variables and functions

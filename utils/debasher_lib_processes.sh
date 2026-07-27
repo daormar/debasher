@@ -392,7 +392,18 @@ debasher::_define_opts_for_process()
         local process_outdir=`debasher::_get_process_outdir "${processname}"`
 
         # Check if process dependencies were pre-specified for all processes
-        if [ "${DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED}" -eq 0 ]; then
+        if debasher::_all_process_deps_pre_specified; then
+            # There are no process dependencies to be determined, so it is
+            # only necessary to update option list length
+
+            # Obtain define_opts_array function name and call it
+            local define_opts_generator_gen_opts_size_fname
+            debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
+            local array_size=`${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
+
+            # Set option list length
+            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
+        else
             # There are process dependencies to be determined, so it is
             # necessary to update output options information
 
@@ -411,17 +422,6 @@ debasher::_define_opts_for_process()
                 # Update output options information
                 debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
             done
-
-            # Set option list length
-            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
-        else
-            # There are no process dependencies to be determined, so it is
-            # only necessary to update option list length
-
-            # Obtain define_opts_array function name and call it
-            local define_opts_generator_gen_opts_size_fname
-            debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
-            local array_size=`${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}"`
 
             # Set option list length
             DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}

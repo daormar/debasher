@@ -528,6 +528,10 @@ debasher::add_debasher_process()
         fi
     fi
 
+    # Store process entry
+    local process_entry=`debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}"`
+    DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]="${process_entry}"
+
     # Check process limit
     local num_processes=`debasher::_get_num_processes`
     if [ "${num_processes}" -gt "${DEBASHER_MAX_NUM_PROCESSES}" ]; then

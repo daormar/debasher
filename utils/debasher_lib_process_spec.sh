@@ -216,25 +216,23 @@ debasher::_extract_ext_alias_from_process_spec()
 }
 
 ########
-debasher::_get_initial_process_spec_info()
+debasher::_all_process_deps_pre_specified()
 {
-    local procspec_file=$1
-
-    DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=1
-
-    while read process_spec; do
-        # Store process specification
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
-        DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]=${process_spec}
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        # Retrieve process specification
+        local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
 
         # Extract dependencies from process specification
         local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
 
         # Check if dependencies were given
         if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-            DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED=0
+            return 1
         fi
-    done < "${procspec_file}"
+    done
+
+    return 0
 }
 
 ########
@@ -271,6 +269,7 @@ debasher::_gen_final_procspec_info()
     local initial_procspec_file=$2
 
     # Iterate over process specifications
+    local process_spec
     while read process_spec; do
         if ! debasher::_program_process_spec_is_ok "$process_spec"; then
             echo "Error: process specification (${process_spec}) is not correct" >&2
@@ -317,6 +316,7 @@ debasher::_gen_final_procspec_info()
         # Iterate over dependencies, checking that the dependent process exists
         local -a deps_array
         IFS="${DEBASHER_PROCESSDEPS_SEP_COMMA}" read -ra deps_array <<< "${DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED[${processname}]}"
+        local proc
         for proc in "${deps_array[@]}"; do
             if [[ "${proc}" != "${DEBASHER_NONE_PROCESSDEP_TYPE}" && ! -v DEBASHER_PROGRAM_PROCESSES["${proc}"] ]]; then
                 echo "Error: process ${proc} is given as a dependency for ${processname}, but it does not exist" >&2

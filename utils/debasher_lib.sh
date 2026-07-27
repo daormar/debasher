@@ -291,10 +291,6 @@ declare -A DEBASHER_PROCESS_DEPENDENCIES
 # dependencies (no task info is included)
 declare -A DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED
 
-# Declare variable storing whether all process dependencies where
-# pre-specified in initial process specification
-declare DEBASHER_ALL_PROCESS_DEPS_PRE_SPECIFIED
-
 # Declare variable to store name of output directory
 declare DEBASHER_PROGRAM_OUTDIR
 
