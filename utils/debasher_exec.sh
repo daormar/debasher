@@ -987,7 +987,7 @@ wait_for_program_processes()
     local dirname=$1
 
     # Obtain number of processes
-    local num_procs=$("${WC}" -l "${procspec_file}" | "${AWK}" '{print $1}')
+    local num_procs=`debasher::_get_num_processes`
 
     while there_are_in_progress_processes "${dirname}"; do
         if [ "${num_procs}" -le 10 ]; then
