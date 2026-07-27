@@ -301,39 +301,35 @@ get_mod_vars_and_funcs()
 ########
 ensure_program_not_being_executed()
 {
-    local initial_procspec_file=$1
-
-    if [ -f "${initial_procspec_file}" ]; then
-        if there_are_in_progress_processes "${outd}" "${initial_procspec_file}"; then
-            echo "Error: this program has processes being executed. Please use debasher_status or debasher_stop tools to interact with the program. The execution of debasher_exec will be aborted" >&2
-            exit 1
-        fi
+    if there_are_in_progress_processes "${outd}"; then
+        echo "Error: this program has processes being executed. Please use debasher_status or debasher_stop tools to interact with the program. The execution of debasher_exec will be aborted" >&2
+        exit 1
     fi
 }
 
 ########
-gen_initial_procspec_file()
+initialize_procspec()
 {
-    echo "# Generating initial process specification..." >&2
+    echo "# Initialize process specification..." >&2
 
     local pfile=$1
 
     debasher::_exec_program_func_for_module "${pfile}" || exit 1
 
-    echo "Generation complete" >&2
+    echo "Initialization complete" >&2
 
     echo "" >&2
 }
 
 ########
-gen_final_procspec_file()
+gen_final_procspec()
 {
-    echo "# Generating final process specification..." >&2
+    echo "# Generate final process specification..." >&2
 
     local command_line=$1
     local initial_procspec_file=$2
 
-    debasher::_gen_final_procspec_info "${command_line}" "${initial_procspec_file}"  || exit 1
+    debasher::_gen_final_procspec "${command_line}" "${initial_procspec_file}"  || exit 1
 
     echo "Generation complete" >&2
 
@@ -1114,9 +1110,10 @@ configure_scheduler || exit 1
 
 load_module "${pfile}" || exit 1
 
-if [ ${show_cmdline_opts_given} -eq 1 ]; then
-    gen_initial_procspec_file "${pfile}" > /dev/null || exit 1
+# Initialize process specification
+initialize_procspec "${pfile}" || exit 1
 
+if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts || exit 1
 
     exit 0
@@ -1133,8 +1130,6 @@ procgraph_file_prefix="${prg_graphs_dir}/process_graph"
 depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
 if [ ${check_proc_opts_given} -eq 1 ]; then
-    gen_initial_procspec_file "${pfile}" > /dev/null || exit 1
-
     null_program_opts_file="/dev/null"
     check_process_opts "${command_line}" "${outd}" "${null_program_opts_file}" \
                        "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
@@ -1143,13 +1138,7 @@ if [ ${check_proc_opts_given} -eq 1 ]; then
 fi
 
 # Check if there are running processes and abort execution if true
-ensure_program_not_being_executed "${initial_procspec_file}"
-
-# Get name of initial process specification file
-initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
-
-# Write initial process specification file
-gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
+ensure_program_not_being_executed
 
 check_process_opts "${command_line}" "${outd}" "${program_opts_file}" \
                    "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
@@ -1164,7 +1153,7 @@ get_deblib_vars_and_funcs "${outd}" || exit 1
 get_mod_vars_and_funcs "${outd}" || exit 1
 
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
-gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
+gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
 
 topologically_sort_processes || exit 1
 

@@ -263,21 +263,18 @@ debasher::_get_processdeps_from_detailed_spec()
 }
 
 ########
-debasher::_gen_final_procspec_info()
+debasher::_gen_final_procspec()
 {
     local cmdline=$1
-    local initial_procspec_file=$2
 
     # Iterate over process specifications
-    local process_spec
-    while read process_spec; do
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
         if ! debasher::_program_process_spec_is_ok "$process_spec"; then
             echo "Error: process specification (${process_spec}) is not correct" >&2
             exit 1
         fi
-
-        # Extract process information
-        local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
 
         # Extract dependencies from process specification
         local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
@@ -324,5 +321,5 @@ debasher::_gen_final_procspec_info()
             fi
         done
 
-    done < "${initial_procspec_file}"
+    done
 }
