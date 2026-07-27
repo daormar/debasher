@@ -1127,100 +1127,104 @@ if [ ${show_cmdline_opts_given} -eq 1 ]; then
     gen_initial_procspec_file "${pfile}" > /dev/null || exit 1
 
     show_cmdline_opts || exit 1
+
+    exit 0
+fi
+
+prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
+program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
+old_program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_OLD_FEXT}"
+program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
+program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
+prg_graphs_dir=`debasher::_get_prg_graphs_dir`
+procgraph_file_prefix="${prg_graphs_dir}/process_graph"
+depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
+
+# Check if there are running processes and abort execution if true
+ensure_program_not_being_executed "${initial_procspec_file}"
+
+# Get name of initial process specification file
+initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
+
+# Write initial process specification file
+gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
+
+if [ ${check_proc_opts_given} -eq 1 ]; then
+    check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
+                       "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+
+    # Restore old process options (if they exist)
+    restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
+
+    exit 0
+fi
+
+check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
+                   "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+
+# Write debasher library variables and functions
+get_deblib_vars_and_funcs "${outd}" || exit 1
+
+# Write module variables and functions (this function should be called
+# after calling gen_initial_procspec_file, since it executes the program
+# given in pfile input parameter, possibly defining new functions that
+# should be written as well)
+get_mod_vars_and_funcs "${outd}" || exit 1
+
+procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
+gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
+
+topologically_sort_processes || exit 1
+
+# Generate graphs
+if [ "${gen_proc_graph_given}" -eq 1 ]; then
+    gen_process_graph "${prg_file_pref}" "${procgraph_file_prefix}" || exit 1
+fi
+
+gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
+
+# NOTE: exclusive execution should be ensured after creating the output directory
+ensure_exclusive_execution "${outd}" || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
+
+create_mod_shared_dirs || exit 1
+
+if [ ${conda_support_given} -eq 1 ]; then
+    handle_conda_requirements || exit 1
+fi
+
+if [ ${docker_support_given} -eq 1 ]; then
+    handle_docker_requirements || exit 1
+fi
+
+# Register all processes to rerun
+register_all_rerun_processes "${outd}" "${program_opts_file}" "${old_program_opts_file}" "${rerun_outdated_processes_given}"
+
+print_rerun_processes || exit 1
+
+print_command_line "${outd}" "${command_line}" || exit 1
+
+# Launch processes
+if [ ${debug} -eq 1 ]; then
+    launch_program_processes_debug "${command_line}" "${outd}" || exit 1
+
+    # Restore old process options (if they exist)
+    restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
 else
-    prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
-    program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
-    old_program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_OLD_FEXT}"
-    program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
-    program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
-    prg_graphs_dir=`debasher::_get_prg_graphs_dir`
-    procgraph_file_prefix="${prg_graphs_dir}/process_graph"
-    depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
-
-    # Check if there are running processes and abort execution if true
-    ensure_program_not_being_executed "${initial_procspec_file}"
-
-    # Get name of initial process specification file
-    initial_procspec_file="${outd}/${DEBASHER_INITIAL_PROCSPEC_BASENAME}"
-
-    # Write initial process specification file
-    gen_initial_procspec_file "${pfile}" > "${initial_procspec_file}" || exit 1
-
-    if [ ${check_proc_opts_given} -eq 1 ]; then
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
-                           "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
-
-        # Restore old process options (if they exist)
-        restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
+    sched=`debasher::_determine_scheduler`
+    if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
+        debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || exit 1
+        print_post_exec_wait_help
     else
-        check_process_opts "${command_line}" "${outd}" "${initial_procspec_file}" "${program_opts_file}" \
-                           "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
-
-        # Write debasher library variables and functions
-        get_deblib_vars_and_funcs "${outd}" || exit 1
-
-        # Write module variables and functions (this function should be called
-        # after calling gen_initial_procspec_file, since it executes the program
-        # given in pfile input parameter, possibly defining new functions that
-        # should be written as well)
-        get_mod_vars_and_funcs "${outd}" || exit 1
-
-        procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
-        gen_final_procspec_file "${command_line}" "${initial_procspec_file}" > "${procspec_file}" || exit 1
-
-        topologically_sort_processes || exit 1
-
-        # Generate graphs
-        if [ "${gen_proc_graph_given}" -eq 1 ]; then
-            gen_process_graph "${prg_file_pref}" "${procgraph_file_prefix}" || exit 1
-        fi
-
-        gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
-
-        # NOTE: exclusive execution should be ensured after creating the output directory
-        ensure_exclusive_execution "${outd}" || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
-
-        create_mod_shared_dirs || exit 1
-
-        if [ ${conda_support_given} -eq 1 ]; then
-            handle_conda_requirements || exit 1
-        fi
-
-        if [ ${docker_support_given} -eq 1 ]; then
-            handle_docker_requirements || exit 1
-        fi
-
-        # Register all processes to rerun
-        register_all_rerun_processes "${outd}" "${program_opts_file}" "${old_program_opts_file}" "${rerun_outdated_processes_given}"
-
-        print_rerun_processes || exit 1
-
-        print_command_line "${outd}" "${command_line}" || exit 1
-
-        # Launch processes
-        if [ ${debug} -eq 1 ]; then
-            launch_program_processes_debug "${command_line}" "${outd}" || exit 1
-
-            # Restore old process options (if they exist)
-            restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
+        revise_rerun_proc_status "${outd}" || return 1
+        prepare_files_and_dirs_for_processes "${outd}"
+        launch_program_processes "${command_line}" "${outd}" || exit 1
+        if [ "${wait}" -eq 1 ]; then
+            wait_for_program_processes "${outd}" || exit 1
+            print_post_exec_wait_help
         else
-            sched=`debasher::_determine_scheduler`
-            if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
-                debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || exit 1
-                print_post_exec_wait_help
-            else
-                revise_rerun_proc_status "${outd}" || return 1
-                prepare_files_and_dirs_for_processes "${outd}"
-                launch_program_processes "${command_line}" "${outd}" || exit 1
-                if [ "${wait}" -eq 1 ]; then
-                    wait_for_program_processes "${outd}" || exit 1
-                    print_post_exec_wait_help
-                else
-                    print_post_exec_nowait_help
-                fi
-            fi
-            # Store old process options
-            store_old_process_options "${old_program_opts_file}" "${program_opts_file}"
+            print_post_exec_nowait_help
         fi
     fi
+    # Store old process options
+    store_old_process_options "${old_program_opts_file}" "${program_opts_file}"
 fi
