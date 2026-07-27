@@ -481,12 +481,10 @@ debasher::_print_process_entry()
 #
 #    debasher::add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
 #
-# The function prints the process definition to the standard output.
-# This process definition is later used debasher_exec to execute
-# the program.
-# Additionally, the function registers the process in a variable used
-# by the DeBasher library, and creates a wrapper function when an
-# alias or heredoc code is provided.
+# The function registers the process in a variable used by the DeBasher
+# library, and creates a wrapper function when an alias or heredoc code
+# is provided. Additionally, the function also registers the initial
+# specification for the process.
 debasher::add_debasher_process()
 {
     # Initialize variables
@@ -538,9 +536,6 @@ debasher::add_debasher_process()
         echo "Error: Maximum number of processes (${DEBASHER_MAX_NUM_PROCESSES}) exceeded" >&2
         exit 1
     fi
-
-    # Print process program entry
-    debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}"
 }
 
 ########
