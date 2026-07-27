@@ -1121,6 +1121,17 @@ if [ ${show_cmdline_opts_given} -eq 1 ]; then
     exit 0
 fi
 
+if [ ${check_proc_opts_given} -eq 1 ]; then
+    null_file="/dev/null"
+    check_process_opts "${command_line}" "${outd}" "${null_file}" \
+                       "${null_file}" "${null_file}" || exit 1
+
+    exit 0
+fi
+
+# Check if there are running processes and abort execution if true
+ensure_program_not_being_executed
+
 # Define basic file variables
 prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
 program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
@@ -1130,17 +1141,6 @@ program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
 prg_graphs_dir=`debasher::_get_prg_graphs_dir`
 procgraph_file_prefix="${prg_graphs_dir}/process_graph"
 depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
-
-if [ ${check_proc_opts_given} -eq 1 ]; then
-    null_program_opts_file="/dev/null"
-    check_process_opts "${command_line}" "${outd}" "${null_program_opts_file}" \
-                       "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
-
-    exit 0
-fi
-
-# Check if there are running processes and abort execution if true
-ensure_program_not_being_executed
 
 check_process_opts "${command_line}" "${outd}" "${program_opts_file}" \
                    "${program_opts_exh_file}" "${program_fifos_file}" || exit 1

@@ -132,8 +132,6 @@ process_stats_for_pfile()
     # Execute program function for module
     debasher::_exec_program_func_for_module "${pfile}"
 
-    # Read information about the processes to be executed
-
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # If s option was given, continue to next iteration if process
