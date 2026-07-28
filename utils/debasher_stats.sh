@@ -148,7 +148,7 @@ process_stats_for_pfile()
 
         # Print status
         echo "PROCESS: $processname ; STATUS: $status ; ELAPSED_TIME(s): ${elapsed_time}"
-    done < <(debasher::_exec_program_func_for_module "${pfile}")
+    done
 }
 
 ########
