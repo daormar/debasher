@@ -1013,7 +1013,7 @@ launch_process_debug()
     local processname=$3
     local process_spec=$4
 
-    # Debug process
+    # Launch process (it only shows its status and specification)
 
     # Obtain process status
     local status=`debasher::_get_process_status "${dirname}" "${processname}"`
