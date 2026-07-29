@@ -1005,7 +1005,7 @@ wait_for_program_processes()
 }
 
 ########
-debug_process()
+launch_process_debug()
 {
     # Initialize variables
     local cmdline=$1
@@ -1034,7 +1034,7 @@ launch_program_processes_debug()
     # processes are explored in topological order
     local processname
     for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
-        debug_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
+        launch_process_debug "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
     done
 
     echo "" >&2
