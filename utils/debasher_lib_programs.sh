@@ -159,7 +159,7 @@ debasher::_processname_contains_invalid_characters()
     local processname="$1"
 
     # Check characters
-    if [[ "$processname" =~ ^[a-zA-Z_][a-zA-Z_0-9]*$ ]]; then
+    if [[ "$processname" =~ ^[a-zA-Z_][a-zA-Z_0-9]*(::[a-zA-Z_][a-zA-Z_0-9]*)?$ ]]; then
         return 1
     else
         return 0
