@@ -27,30 +27,41 @@ debasher::_get_proc_document_funcname()
 }
 
 ########
-debasher::_process_description()
+debasher::process_description()
 {
     local desc=$1
     echo $desc
 }
 
+process_description() { debasher::process_description "$@"; }
+
 ########
 debasher::_document_process_opts()
 {
-    local opts=$1
-    for opt in ${opts}; do
-        if [ "${DEBASHER_PROGRAM_OPT_REQ[${opt}]}" != "" ]; then
-            reqflag=" (required) "
-        else
-            reqflag=" "
-        fi
+    local processname=$1
 
-        # Print option
-        if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ]; then
-            echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}"
-        else
-            echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}"
+    # Iterate over processname plut options
+    local key
+    for key in ${!DEBASHER_PROGRAM_OPT_TYPE[@]}; do
+        local processname
+        local opt
+        curr_proc_name="${key%%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"
+        opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
+        if [ "${processname}" = "${processname}" ]; then
+            if [ "${DEBASHER_PROGRAM_OPT_REQ[${key}]}" != "" ]; then
+                reqflag=" (required) "
+            else
+                reqflag=" "
+            fi
+
+            # Print option
+            if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ]; then
+                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}"
+            else
+                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}"
+            fi
+            echo ""
         fi
-        echo ""
     done
 }
 
@@ -72,10 +83,17 @@ debasher::_document_process()
 
     if [ ${doc_options} -eq 1 ]; then
         echo "### Command Line Options"
-        local DIFFERENTIAL_CMDLINE_OPT_STR=""
-        local explain_cmdline_opts_funcname=`debasher::_get_explain_cmdline_opts_funcname "${processname}"`
-        ${explain_cmdline_opts_funcname}
-        debasher::_document_process_opts "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+        local opts_funcname
+        opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
+        if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            opts_funcname=`debasher::_get_explain_opts_funcname ${processname}`
+            if [ "${opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+                echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
+            fi
+        else
+            ${opts_funcname}
+            debasher::_document_process_opts "${processname}"
+        fi
     fi
 }
 
@@ -149,6 +167,14 @@ debasher::_get_explain_cmdline_opts_funcname()
     local processname=$1
 
     debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"
+}
+
+########
+debasher::_get_explain_opts_funcname()
+{
+    local processname=$1
+
+    debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"
 }
 
 ########

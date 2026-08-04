@@ -369,21 +369,6 @@ debasher::_read_opt_value_from_line_memoiz()
 }
 
 ########
-debasher::_update_opt_to_process_map()
-{
-    local processname=$1
-    local opts=$2
-
-    for opt in ${opts}; do
-        if [ "${DEBASHER_PROGRAM_OPT_PROCESS[${opt}]}" = "" ]; then
-            DEBASHER_PROGRAM_OPT_PROCESS[${opt}]=${processname}
-        else
-            DEBASHER_PROGRAM_OPT_PROCESS[${opt}]="${DEBASHER_PROGRAM_OPT_PROCESS[${opt}]} ${processname}"
-        fi
-    done
-}
-
-########
 debasher::explain_cmdline_req_opt()
 {
     local opt=$1
@@ -391,24 +376,25 @@ debasher::explain_cmdline_req_opt()
     local desc=$3
     local categ=$4
 
+    # Obtain caller process name
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    if [ -z "${proc_name}" ]; then
+        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+    fi
+
     # Assign default category if not given
     if [ "$categ" = "" ]; then
         categ=${DEBASHER_GENERAL_OPT_CATEGORY}
     fi
 
     # Store option in associative arrays
-    DEBASHER_PROGRAM_OPT_TYPE[$opt]=$type
-    DEBASHER_PROGRAM_OPT_REQ[$opt]=1
-    DEBASHER_PROGRAM_OPT_DESC[$opt]=$desc
-    DEBASHER_PROGRAM_OPT_CATEG[$opt]=$categ
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE[${proc_opt}]=1
+    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
+    DEBASHER_PROGRAM_OPT_REQ[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
+    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
     DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
-
-    # Add option to differential command line option string
-    if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
-        DIFFERENTIAL_CMDLINE_OPT_STR=${opt}
-    else
-        DIFFERENTIAL_CMDLINE_OPT_STR="${DIFFERENTIAL_CMDLINE_OPT_STR} ${opt}"
-    fi
 }
 
 explain_cmdline_req_opt() { debasher::explain_cmdline_req_opt "$@"; }
@@ -433,23 +419,24 @@ debasher::explain_cmdline_opt()
     local desc=$3
     local categ=$4
 
+    # Obtain caller process name
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    if [ -z "${proc_name}" ]; then
+        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+    fi
+
     # Assign default category if not given
     if [ "$categ" = "" ]; then
         categ=${DEBASHER_GENERAL_OPT_CATEGORY}
     fi
 
     # Store option in associative arrays
-    DEBASHER_PROGRAM_OPT_TYPE[$opt]=$type
-    DEBASHER_PROGRAM_OPT_DESC[$opt]=$desc
-    DEBASHER_PROGRAM_OPT_CATEG[$opt]=$categ
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
+    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
+    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
     DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
-
-    # Add option to differential command line option string
-    if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
-        DIFFERENTIAL_CMDLINE_OPT_STR=${opt}
-    else
-        DIFFERENTIAL_CMDLINE_OPT_STR="${DIFFERENTIAL_CMDLINE_OPT_STR} ${opt}"
-    fi
 }
 
 ########
@@ -474,32 +461,117 @@ debasher::explain_cmdline_opt_wo_value()
     local desc=$2
     local categ=$3
 
+    # Obtain caller process name
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    if [ -z "${proc_name}" ]; then
+        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+    fi
+
     # Assign default category if not given
     if [ "$categ" = "" ]; then
         categ=${DEBASHER_GENERAL_OPT_CATEGORY}
     fi
 
     # Store option in associative arrays
-    DEBASHER_PROGRAM_OPT_TYPE[$opt]=""
-    DEBASHER_PROGRAM_OPT_DESC[$opt]=$desc
-    DEBASHER_PROGRAM_OPT_CATEG[$opt]=$categ
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=""
+    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
+    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
     DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
-
-    # Add option to differential command line option string
-    if [ "${DIFFERENTIAL_CMDLINE_OPT_STR}" = "" ]; then
-        DIFFERENTIAL_CMDLINE_OPT_STR=${opt}
-    else
-        DIFFERENTIAL_CMDLINE_OPT_STR="${DIFFERENTIAL_CMDLINE_OPT_STR} ${opt}"
-    fi
 }
 
 explain_cmdline_opt_wo_value() { debasher::explain_cmdline_opt_wo_value "$@"; }
 
 ########
+# Public: Explains non command-line option.
+#
+# $1 - Option name.
+# $2 - Data type of option value.
+# $3 - Option description.
+# $4 - Option category ("GENERAL" category by default).
+#
+# Examples
+#
+#   debasher::explain_non_cmdline_opt "-s" "<string>" "String to be displayed"
+#
+# The function does not return any value.
+debasher::explain_non_cmdline_opt()
+{
+    local opt=$1
+    local type=$2
+    local desc=$3
+    local categ=$4
+
+    # Obtain caller process name
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    if [ -z "${proc_name}" ]; then
+        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+    fi
+
+    # Assign default category if not given
+    if [ "$categ" = "" ]; then
+        categ=${DEBASHER_GENERAL_OPT_CATEGORY}
+    fi
+
+    # Store option in associative arrays
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=0
+    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
+    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
+    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
+    DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
+}
+
+########
+# Public: Explains non command-line option.
+#
+# $1 - Option name.
+# $2 - Data type of option value.
+# $3 - Option description.
+# $4 - Option category ("GENERAL" category by default).
+#
+# Examples
+#
+#   explain_non_cmdline_opt "-s" "<string>" "String to be displayed"
+#
+# The function does not return any value.
+explain_non_cmdline_opt() { debasher::explain_non_cmdline_opt "$@"; }
+
+########
+debasher::explain_non_cmdline_opt_wo_value()
+{
+    local opt=$1
+    local desc=$2
+    local categ=$3
+
+    # Obtain caller process name
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    if [ -z "${proc_name}" ]; then
+        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+    fi
+
+    # Assign default category if not given
+    if [ "$categ" = "" ]; then
+        categ=${DEBASHER_GENERAL_OPT_CATEGORY}
+    fi
+
+    # Store option in associative arrays
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=0
+    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=""
+    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
+    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
+    DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
+}
+
+explain_non_cmdline_opt_wo_value() { debasher::explain_non_cmdline_opt_wo_value "$@"; }
+
+########
 debasher::_print_program_opts()
 {
+    local only_cmdline_opts=$1
     local lineno=0
-
     # Iterate over option categories
     local categ
     for categ in ${!DEBASHER_PROGRAM_CATEG_MAP[@]}; do
@@ -507,13 +579,21 @@ debasher::_print_program_opts()
             echo ""
         fi
         echo "CATEGORY: ${categ}"
-        # Iterate over options
-        local opt
-        for opt in ${!DEBASHER_PROGRAM_OPT_TYPE[@]}; do
+        # Iterate over processname plut options
+        local key
+        for key in ${!DEBASHER_PROGRAM_OPT_TYPE[@]}; do
+            local processname
+            local opt
+            processname="${key%%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"
+            opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
+            if [ "${only_cmdline_opts}" -eq 1 ] && [ ${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${key}]} -eq 0 ]; then
+                continue
+            fi
+
             # Check if option belongs to current category
-            if [ ${DEBASHER_PROGRAM_OPT_CATEG[${opt}]} = $categ ]; then
+            if [ ${DEBASHER_PROGRAM_OPT_CATEG[${key}]} = $categ ]; then
                 # Set value of required option flag
-                if [ "${DEBASHER_PROGRAM_OPT_REQ[${opt}]}" != "" ]; then
+                if [ "${DEBASHER_PROGRAM_OPT_REQ[${key}]}" != "" ]; then
                     reqflag=" (required) "
                 else
                     reqflag=" "
@@ -521,15 +601,22 @@ debasher::_print_program_opts()
 
                 # Print option
                 if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ]; then
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}[${DEBASHER_PROGRAM_OPT_PROCESS[$opt]}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}[${processname}]"
                 else
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}[${DEBASHER_PROGRAM_OPT_PROCESS[$opt]}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}[${processname}]"
                 fi
             fi
         done
 
         lineno=$((lineno + 1))
     done
+}
+
+########
+debasher::_print_program_cmdline_opts()
+{
+    local only_cmdline_opts=1
+    debasher::_print_program_opts ${only_cmdline_opts}
 }
 
 ########
@@ -1014,13 +1101,13 @@ debasher::define_value_desc_opt()
     local varname=$2
 
     # Obtain caller process name
-    local caller_proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"`
-    if [ -z "${caller_proc_name}" ]; then
-        caller_proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    if [ -z "${proc_name}" ]; then
+        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"`
     fi
 
     # Get name of value descriptor
-    local val_desc=$(debasher::_get_value_descriptor_name "${caller_proc_name}" "${opt}")
+    local val_desc=$(debasher::_get_value_descriptor_name "${proc_name}" "${opt}")
 
     # Define option
     debasher::define_opt "${opt}" "${val_desc}" "${varname}"

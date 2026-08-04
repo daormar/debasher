@@ -440,18 +440,20 @@ show_cmdline_opts()
 
     # Iterate over the processes to be executed
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        local explain_cmdline_opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
-        if [ "${explain_cmdline_opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-            echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
-        else
-            DIFFERENTIAL_CMDLINE_OPT_STR=""
-            ${explain_cmdline_opts_funcname} || exit 1
-            debasher::_update_opt_to_process_map "${processname}" "${DIFFERENTIAL_CMDLINE_OPT_STR}"
+        local opts_funcname
+        opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
+        if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            opts_funcname=`debasher::_get_explain_opts_funcname ${processname}`
+            if [ "${opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+                echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
+                continue
+            fi
         fi
+        ${opts_funcname} || exit 1
     done
 
     # Print options
-    debasher::_print_program_opts
+    debasher::_print_program_cmdline_opts
 
     echo "" >&2
 }
