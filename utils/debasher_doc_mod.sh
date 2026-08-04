@@ -30,11 +30,11 @@ print_desc()
 usage()
 {
     echo "debasher_doc_mod          -m <string> [-s <string>]"
-    echo "                          [--show-cmdline-opts] [--help]"
+    echo "                          [--show-opts] [--help]"
     echo ""
     echo "-m <string>               Module file name"
     echo "-s <string>               Process name whose information should be obtained"
-    echo "--show-cmdline-opts       Show option information"
+    echo "--show-opts               Show option information"
     echo "--help                    Display this help and exit"
 }
 
@@ -61,7 +61,7 @@ read_pars()
                       s_given=1
                   fi
                   ;;
-            "--show-cmdline-opts") showopts_given=1
+            "--show-opts") showopts_given=1
                           ;;
         esac
         shift
