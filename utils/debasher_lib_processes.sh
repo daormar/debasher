@@ -339,7 +339,7 @@ debasher::_gen_opts_for_process_and_task()
     local proc_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}
     ${generate_opts_funcname} "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
 
-    # Resove descriptors for connected processes
+    # Resolve descriptors for connected processes
     debasher::_resolve_proc_out_descriptors "${cmdline}"
 
     # Obtain serialized args
