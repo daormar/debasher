@@ -99,7 +99,9 @@ obtain_info_for_module()
 
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        debasher::_document_process "${processname}" "${showopts_given}"
+        if [ "${s_given}" -eq 0 ] || [ "${processname}" = "${given_processname}" ]; then
+            debasher::_document_process "${processname}" "${showopts_given}"
+        fi
     done
 }
 
