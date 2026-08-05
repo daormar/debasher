@@ -23,12 +23,13 @@
 print_desc()
 {
     echo "debasher_exec_process executes a program process"
-    echo "Usage: debasher_exec_process <prgfile> <processname> <options>"
+    echo "Usage: debasher_exec_process <prgfile> <processname> [-- [<process_opts>] ]"
+    echo "Notes: if \`[-- [<process_opts>] ]\` is not given, the tool shows process information and exits"
 }
 
 ########
 
-if [ $# -lt 3 ]; then
+if [ $# -lt 2 ]; then
     print_desc
     exit 1
 fi
@@ -47,5 +48,17 @@ echo "Executing program function given in module..." >&2
 debasher::_exec_program_func_for_module "${pfile}" >&2
 echo "" >&2
 
-echo "Executing: $processname $opts" >&2
-"${processname}" "$@" || exit 1
+if [ $# -eq 0 ]; then
+    echo "Showing documentation for process ${processname}..." >&2
+    showopts=1
+    debasher::_document_process "${processname}" "${showopts}"
+else
+    if [ "$1" = "--" ]; then
+        shift
+        echo "Executing: $processname $opts" >&2
+        "${processname}" "$@" || exit 1
+    else
+        print_desc >&2
+        exit 1
+    fi
+fi
