@@ -444,7 +444,7 @@ show_cmdline_opts()
         opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
         if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
             opts_funcname=`debasher::_get_explain_opts_funcname ${processname}`
-            if [ "${opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
                 echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
                 continue
             fi
