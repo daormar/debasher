@@ -45,20 +45,28 @@ debasher::_document_process_opts()
     for key in ${!DEBASHER_PROGRAM_OPT_TYPE[@]}; do
         local processname
         local opt
+        local flags=""
+        local paren_flags
         curr_proc_name="${key%%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"
         opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
         if [ "${processname}" = "${curr_proc_name}" ]; then
             if [ "${DEBASHER_PROGRAM_OPT_REQ[${key}]}" != "" ]; then
-                reqflag=" (required) "
-            else
-                reqflag=" "
+                flags+="${flags:+,}required"
+            fi
+
+            if [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${key}]}" = 1 ]; then
+                flags+="${flags:+,}command-line"
+            fi
+
+            if [ -n "${flags}" ]; then
+                paren_flags="(${flags})"
             fi
 
             # Print option
             if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ]; then
-                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}"
+                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
             else
-                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}"
+                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
             fi
         fi
     done
