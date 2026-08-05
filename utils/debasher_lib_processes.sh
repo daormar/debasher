@@ -65,8 +65,10 @@ debasher::_document_process_opts()
             # Print option
             if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ]; then
                 echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
+                echo ""
             else
                 echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
+                echo ""
             fi
         fi
     done
