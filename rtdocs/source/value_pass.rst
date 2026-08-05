@@ -8,7 +8,7 @@ Value Pass Example
         process_description "Takes two numbers and produce their sum as output."
     }
 
-    value_writer_explain_cmdline_opts()
+    value_writer_explain_opts()
     {
         # -num-a option
         local description="First number to be summed"
@@ -17,6 +17,10 @@ Value Pass Example
         # -num-b option
         local description="Second number to be summed"
         explain_cmdline_req_opt "-num-b" "<int>" "$description"
+
+        # -outv option
+        local description="output value descriptor"
+        explain_non_cmdline_opt "-outv" "<string>" "$description"
     }
 
     value_writer_define_opts()
@@ -60,9 +64,15 @@ Value Pass Example
         process_description "Gets a value produced by another process, increases it in one unit and writes it in own directory."
     }
 
-    value_reader_explain_cmdline_opts()
+    value_reader_explain_opts()
     {
-        :
+        # -value option
+        local description="value descriptor"
+        explain_non_cmdline_opt "-value" "<string>" "$description"
+
+        # -outf option
+        local description="output file"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     value_reader_define_opts()

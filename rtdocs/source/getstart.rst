@@ -118,7 +118,7 @@ stored in a file with the same name and Bash extension,
 
 .. code-block:: bash
 
-    hello_world_explain_cmdline_opts()
+    hello_world_explain_opts()
     {
         # -s option
         local description="String to be displayed ('Hello World!' by default)"
@@ -179,21 +179,21 @@ In the "Hello World!" example shown above, we have a module named
 program that executes the process ``hello_world``.  Below we describe
 the functions involved:
 
-* ``hello_world_explain_cmdline_opts``: this function implements the
-  ``explain_cmdline_opts`` method for ``hello_world``. Such method
-  defines the command line options that can be provided to the
-  process. In particular, ``hello_world`` may receive the ``-s`` option,
-  which allows to specify the string to be shown. To document the
-  option, the ``explain_cmdline_opt`` API function is used.
+* ``hello_world_explain_opts``: this function implements the
+  ``explain_opts`` method for ``hello_world``. Such method defines the
+  options that are required by the process. In particular,
+  ``hello_world`` receives the ``-s`` option, which allows to specify
+  the string to be shown. To document the option, the
+  ``explain_cmdline_opt`` API function is used.
 
-* ``hello_world_explain_define_opts``: the ``define_opts`` method allows
-  to define the options that will be provided to the ``hello_world``
+* ``hello_world_define_opts``: the ``define_opts`` method allows to
+  define the options that will be provided to the ``hello_world``
   process, which will be implemented by the function of the same name
   (see next item below). Those options are not necessarily the same as
   the command-line options. Indeed, the function receives as input the
   command-line options, and will use the ``optlist`` variable to store
   the process options. In summary, the
-  ``hello_world_explain_define_opts`` will retrieve the value of the
+  ``hello_world_define_opts`` will retrieve the value of the
   ``-s`` command-line option (using the ``get_cmdline_opt`` API
   function) and store it into the ``str`` variable.  If ``-s`` was not
   provided, it will pass the option ``-s "Hello World!"`` to the

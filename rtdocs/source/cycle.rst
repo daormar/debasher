@@ -8,6 +8,14 @@ Program with Cycles
         # -n option
         local description="Number of cycles to execute"
         explain_cmdline_req_opt "-n" "<int>" "$description"
+
+        # -inf option
+        local description="input fifo"
+        explain_non_cmdline_opt "-inf" "<string>" "$description"
+
+        # -outf option
+        local description="output fifo"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     process_a_define_opts()
@@ -59,9 +67,15 @@ Program with Cycles
         process_description "Executes a process reading and writing from fifos."
     }
 
-    process_b_explain_cmdline_opts()
+    process_b_explain_opts()
     {
-        :
+        # -inf option
+        local description="input fifo"
+        explain_non_cmdline_opt "-inf" "<string>" "$description"
+
+        # -outf option
+        local description="output fifo"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     process_b_define_opts()

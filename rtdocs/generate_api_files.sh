@@ -15,7 +15,7 @@ for name in "${proc_impl_symbols[@]}"; do
 done
 
 # Generate program command line options API file
-cmdline_opts_symbols=("explain_cmdline_opt()")
+cmdline_opts_symbols=("explain_cmdline_opt()" "explain_non_cmdline_opt()")
 rm -f rtdocs/source/api_cmdline_opts_doc.md
 for name in "${cmdline_opts_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_opts.sh >> rtdocs/source/api_cmdline_opts_doc.md

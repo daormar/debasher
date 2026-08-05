@@ -8,9 +8,15 @@ File Writer and File Reader Example
         process_description "Prints a string to a file."
     }
 
-    file_writer_explain_cmdline_opts()
+    file_writer_explain_opts()
     {
-        :
+        # -s option
+        local description="String to be displayed"
+        explain_cmdline_opt "-s" "<string>" "$description"
+
+        # -outf option
+        local description="output file"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     file_writer_define_opts()
@@ -47,7 +53,9 @@ File Writer and File Reader Example
 
     file_reader_explain_cmdline_opts()
     {
-        :
+        # -inf option
+        local description="input file"
+        explain_non_cmdline_opt "-inf" "<string>" "$description"
     }
 
     file_reader_define_opts()

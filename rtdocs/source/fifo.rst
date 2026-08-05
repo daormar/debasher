@@ -8,9 +8,11 @@ FIFO Writer and FIFO Reader Example
         process_description "Prints a string to a FIFO."
     }
 
-    fifo_writer_explain_cmdline_opts()
+    fifo_writer_explain_opts()
     {
-        :
+        # -outf option
+        local description="output fifo"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     fifo_writer_define_opts()
@@ -44,9 +46,11 @@ FIFO Writer and FIFO Reader Example
         process_description "Reads a string from a FIFO."
     }
 
-    fifo_reader_explain_cmdline_opts()
+    fifo_reader_explain_opts()
     {
-        :
+        # -inf option
+        local description="input fifo"
+        explain_non_cmdline_opt "-inf" "<string>" "$description"
     }
 
     fifo_reader_define_opts()

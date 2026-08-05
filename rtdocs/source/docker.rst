@@ -5,7 +5,9 @@ Docker Example
 
     docker_example_explain_cmdline_opts()
     {
-        :
+        # -outf option
+        local description="output fifo"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     docker_example_define_opts()

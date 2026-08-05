@@ -3,9 +3,11 @@ Conda Example
 
 .. code-block:: bash
 
-    conda_example_explain_cmdline_opts()
+    conda_example_explain_opts()
     {
-        :
+        # -outf option
+        local description="output file"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     conda_example_define_opts()
