@@ -94,9 +94,6 @@ obtain_info_for_module()
     # Document module
     debasher::document_module "${module_fname}"
 
-    # Get module name from file name
-    local modname=`debasher::_get_modname_from_absmodname "${module_fname}"`
-
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         if [ "${s_given}" -eq 0 ] || [ "${processname}" = "${given_processname}" ]; then
