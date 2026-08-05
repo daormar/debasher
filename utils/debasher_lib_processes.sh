@@ -47,7 +47,7 @@ debasher::_document_process_opts()
         local opt
         curr_proc_name="${key%%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"
         opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
-        if [ "${processname}" = "${processname}" ]; then
+        if [ "${processname}" = "${curr_proc_name}" ]; then
             if [ "${DEBASHER_PROGRAM_OPT_REQ[${key}]}" != "" ]; then
                 reqflag=" (required) "
             else
@@ -60,7 +60,6 @@ debasher::_document_process_opts()
             else
                 echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}"
             fi
-            echo ""
         fi
     done
 }
@@ -78,8 +77,13 @@ debasher::_document_process()
     # Print body
     echo "### Description"
     local document_funcname=`debasher::_get_proc_document_funcname "${processname}"`
-    ${document_funcname}
-    echo ""
+    if [ "${document_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        echo "Warning: function to document process was not found" >&2
+        echo ""
+    else
+        ${document_funcname}
+        echo ""
+    fi
 
     if [ ${doc_options} -eq 1 ]; then
         echo "### Command Line Options"
@@ -87,13 +91,14 @@ debasher::_document_process()
         opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
         if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
             opts_funcname=`debasher::_get_explain_opts_funcname ${processname}`
-            if [ "${opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
                 echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
+                continue
             fi
-        else
-            ${opts_funcname}
-            debasher::_document_process_opts "${processname}"
         fi
+        ${opts_funcname}
+        debasher::_document_process_opts "${processname}"
+        echo ""
     fi
 }
 

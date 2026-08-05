@@ -83,30 +83,24 @@ check_pars()
 }
 
 ########
-get_process_doc_funcnames()
-{
-    declare -F | "$AWK" -v method_doc="${DEBASHER_PROCESS_METHOD_NAME_DOCUMENT}" '{start=index($3,method_doc); if(start!=0 && start-1+length(method_doc)==length($3)) printf"%s\n",$3}'
-}
-
-########
 obtain_info_for_module()
 {
-    # Load module
-    source "${module_fname}"
+    # Load debasher module
+    debasher::load_debasher_module "$module_fname" || return 1
+
+    # Execute program function for module
+    debasher::_exec_program_func_for_module "${module_fname}"
 
     # Document module
-    document_module "${module_fname}"
+    debasher::document_module "${module_fname}"
 
     # Get module name from file name
     local modname=`debasher::_get_modname_from_absmodname "${module_fname}"`
 
-    # Iterate over process documentation functions
-    while read process_doc_func; do
-        local processname=${process_doc_func%"${DEBASHER_PROCESS_METHOD_NAME_DOCUMENT}"}
-        if [  "${processname}" != "${modname}" ]; then
-            debasher::_document_process "${processname}" "${showopts_given}"
-        fi
-    done < <(get_process_doc_funcnames)
+    # Iterate over the program processes
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        debasher::_document_process "${processname}" "${showopts_given}"
+    done
 }
 
 ########
