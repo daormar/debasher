@@ -41,7 +41,7 @@ host1_document()
 }
 
 ########
-host1_explain_cmdline_opts()
+host1_explain_opts()
 {
     # -n option
     local description="Number of array tasks"

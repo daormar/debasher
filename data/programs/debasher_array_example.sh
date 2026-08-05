@@ -41,11 +41,19 @@ array_writer_document()
 }
 
 ########
-array_writer_explain_cmdline_opts()
+array_writer_explain_opts()
 {
     # -c option
     local description="Sleep time in seconds"
     explain_cmdline_req_opt "-c" "<int>" "$description"
+
+    # -id option
+    local description="id of writer"
+    explain_non_cmdline_opt "-id" "<string>" "$description"
+
+    # -outf option
+    local description="output file of writer"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -98,9 +106,15 @@ array_writer_reset_outfiles()
 }
 
 ########
-array_reader_explain_cmdline_opts()
+array_reader_explain_opts()
 {
-    :
+    # -id option
+    local description="id of reader"
+    explain_non_cmdline_opt "-id" "<int>" "$description"
+
+    # -outdir option
+    local description="output directory of reader"
+    explain_non_cmdline_opt "-outdir" "<string>" "$description"
 }
 
 ########

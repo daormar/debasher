@@ -47,11 +47,15 @@ file_writer_document()
 }
 
 ########
-file_writer_explain_cmdline_opts()
+file_writer_explain_opts()
 {
     # -s option
     local description="String to be displayed"
     explain_cmdline_opt "-s" "<string>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -93,9 +97,11 @@ file_reader_document()
 }
 
 ########
-file_reader_explain_cmdline_opts()
+file_reader_explain_opts()
 {
-    :
+    # -inf option
+    local description="input file"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
 }
 
 ########

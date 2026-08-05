@@ -41,11 +41,15 @@ decomposer_document()
 }
 
 ########
-decomposer_explain_cmdline_opts()
+decomposer_explain_opts()
 {
     # -f option
     local description="File to be processed"
     explain_cmdline_req_opt "-f" "<string>" "$description"
+
+    # -outf option
+    local description="output fifo"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -87,11 +91,19 @@ recomposer_document()
 }
 
 ########
-recomposer_explain_cmdline_opts()
+recomposer_explain_opts()
 {
     # -c option
     local description="Line length in characters"
     explain_cmdline_req_opt "-c" "<int>" "$description"
+
+    # -inf option
+    local description="input fifo"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########

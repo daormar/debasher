@@ -41,7 +41,7 @@ simple_process_document()
 }
 
 ########
-simple_process_explain_cmdline_opts()
+simple_process_explain_opts()
 {
     # -a option
     local description="Sleep time in seconds"

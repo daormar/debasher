@@ -41,7 +41,7 @@ generate_document()
 }
 
 ########
-generate_explain_cmdline_opts()
+generate_explain_opts()
 {
     # -l option
     local description="Length of file in lines"
@@ -50,6 +50,10 @@ generate_explain_cmdline_opts()
     # -c option
     local description="Length of each line in characters"
     explain_cmdline_req_opt "-c" "<int>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -100,9 +104,15 @@ count_document()
 }
 
 ########
-count_explain_cmdline_opts()
+count_explain_opts()
 {
-    :
+    # -inf option
+    local description="input file"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -118,7 +128,7 @@ count_define_opts()
     # -inf option
     define_opt_from_proc_out "-inf" "generate" "-outf" optlist || return 1
 
-    # Define name of output directory
+    # Define name of output file
     define_opt "-outf" "${process_outdir}/counts.txt" optlist || return 1
 
     # Save option list
@@ -161,11 +171,19 @@ fragment_document()
 }
 
 ########
-fragment_explain_cmdline_opts()
+fragment_explain_opts()
 {
     # -b option
     local description="Number of blocks"
     explain_cmdline_req_opt "-b" "<int>" "$description"
+
+    # -inf option
+    local description="input file"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
+
+    # -outf option
+    local description="output fifo"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -252,7 +270,7 @@ dispatch_document()
 }
 
 ########
-dispatch_explain_cmdline_opts()
+dispatch_explain_opts()
 {
     # -w option
     local description="Number of workers."
@@ -261,6 +279,14 @@ dispatch_explain_cmdline_opts()
     # --log-level option
     local description="Logging verbosity. Choices: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)."
     explain_cmdline_opt "--log-level" "<string>" "$description"
+
+    # -inf option
+    local description="input fifo"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
+
+    # -outfi option
+    local description="i'th output fifo"
+    explain_non_cmdline_opt "-outfi" "<string>" "$description"
 }
 
 ########
@@ -282,7 +308,7 @@ dispatch_define_opts()
     # Define option for input FIFO
     define_opt_from_proc_out "-inf" "fragment" "-outf" optlist || return 1
 
-    # Add output option for w files
+    # Add output option for w fifos
     local w
     w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
     for ((i=0; i<w; i++)); do
@@ -301,11 +327,23 @@ worker_document()
 }
 
 ########
-worker_explain_cmdline_opts()
+worker_explain_opts()
 {
     # -w option
     local description="Number of workers."
     explain_cmdline_req_opt "-w" "<int>" "$description"
+
+    # -id option
+    local description="id of writer"
+    explain_non_cmdline_opt "-id" "<string>" "$description"
+
+    # -inf option
+    local description="input fifo"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
+
+    # -outd option
+    local description="output directory"
+    explain_non_cmdline_opt "-outd" "<string>" "$description"
 }
 
 ########
@@ -372,11 +410,19 @@ aggregate_document()
 }
 
 ########
-aggregate_explain_cmdline_opts()
+aggregate_explain_opts()
 {
     # -w option
     local description="Number of workers."
     explain_cmdline_req_opt "-w" "<int>" "$description"
+
+    # -indi option
+    local description="i'th input directory"
+    explain_non_cmdline_opt "-indi" "<string>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########

@@ -44,7 +44,7 @@ telegram_document()
 }
 
 ########
-telegram_explain_cmdline_opts()
+telegram_explain_opts()
 {
     # -f option
     local description="File to be processed"
@@ -53,6 +53,10 @@ telegram_explain_cmdline_opts()
     # -c option
     local description="Line length in characters"
     explain_cmdline_req_opt "-c" "<int>" "$description"
+
+    # -out-processdir option
+    local description="output directory"
+    explain_non_cmdline_opt "-out-processdir" "<string>" "$description"
 }
 
 ########

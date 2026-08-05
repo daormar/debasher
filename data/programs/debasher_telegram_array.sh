@@ -38,11 +38,15 @@ debasher_telegram_array_shared_dirs()
 #####################
 
 ########
-decomposer_explain_cmdline_opts()
+decomposer_explain_opts()
 {
     # -f option
     local description="Prefix of files to be processed"
     explain_cmdline_req_opt "-f" "<string>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########

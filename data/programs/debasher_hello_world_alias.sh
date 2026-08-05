@@ -44,7 +44,7 @@ hello_world_alternative_document()
 }
 
 ########
-hello_world_alternative_explain_cmdline_opts()
+hello_world_alternative_explain_opts()
 {
     # -s option
     local description="String to be displayed ('Hello World!' by default)"

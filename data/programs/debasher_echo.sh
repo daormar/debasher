@@ -41,9 +41,11 @@ stream_echo_document()
 }
 
 ########
-stream_echo_explain_cmdline_opts()
+stream_echo_explain_opts()
 {
-    :
+    # -inf option
+    local description="input fifo"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
 }
 
 ########

@@ -41,11 +41,15 @@ shared_dir_writer_document()
 }
 
 ########
-shared_dir_writer_explain_cmdline_opts()
+shared_dir_writer_explain_opts()
 {
     # -h option
     local description="Value to write to file in data directory"
     explain_cmdline_req_opt "-h" "<int>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_non_cmdline_opt "-outf" "<string>" "$description"
 }
 
 ########

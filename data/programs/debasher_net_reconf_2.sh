@@ -24,9 +24,11 @@ load_debasher_module "debasher_net_reconf_1"
 #################################
 
 ########
-process_b_explain_cmdline_opts()
+process_b_explain_opts()
 {
-    :
+    # -inf option
+    local description="input file"
+    explain_non_cmdline_opt "-inf" "<string>" "$description"
 }
 
 ########
