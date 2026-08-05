@@ -86,7 +86,7 @@ debasher::_document_process()
     fi
 
     if [ ${doc_options} -eq 1 ]; then
-        echo "### Command Line Options"
+        echo "### Process Options"
         local opts_funcname
         opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
         if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
