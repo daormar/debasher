@@ -230,11 +230,11 @@ the process as follows:
 method is explaining (or documenting) the options of a particular
 process.
 
-**IMPORTANT NOTE: initially, only the command-line options of each
+**IMPORTANT NOTE**: initially, only the command-line options of each
 process were documented by means of the ``explain_cmdline_opts``
 method. However, such method is now deprecated and replaced by the
 ``explain_opts`` method described above. The ``explain_opts`` method
-documents both command-line and non command-line options.**
+documents both command-line and non command-line options.
 
 Option Definition/Generation
 ----------------------------
