@@ -108,7 +108,6 @@ debasher::_document_process()
         fi
         ${opts_funcname}
         debasher::_document_process_opts "${processname}"
-        echo ""
     fi
 }
 
