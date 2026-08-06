@@ -3,7 +3,7 @@ Docker Example
 
 .. code-block:: bash
 
-    docker_example_explain_cmdline_opts()
+    docker_example_explain_opts()
     {
         # -outf option
         local description="output fifo"

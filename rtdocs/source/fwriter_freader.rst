@@ -51,7 +51,7 @@ File Writer and File Reader Example
         process_description "Reads a string from a file."
     }
 
-    file_reader_explain_cmdline_opts()
+    file_reader_explain_opts()
     {
         # -inf option
         local description="input file"

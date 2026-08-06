@@ -3,7 +3,7 @@ Program with Cycles
 
 .. code-block:: bash
 
-    process_a_explain_cmdline_opts()
+    process_a_explain_opts()
     {
         # -n option
         local description="Number of cycles to execute"

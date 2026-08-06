@@ -202,7 +202,7 @@ method is defined as follows:
     file_writer_explain_opts()
     {
         # -s option
-        local description="String to be displayed"
+        local description="string to be displayed"
         explain_cmdline_opt "-s" "<string>" "$description"
 
         # -outf option
@@ -618,9 +618,16 @@ we would only need to put the following code in the
 
     load_debasher_module "debasher_file_example"
 
-    file_writer_explain_cmdline_opts()
+    file_writer_explain_opts()
     {
-        :
+        # -s option
+        local description="string to be displayed (IMPORTANT: this parameter is ignored)"
+        explain_cmdline_opt "-s" "<string>" "$description"
+
+
+        # -outf option
+        local description="output file"
+        explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
     file_writer_define_opts()
