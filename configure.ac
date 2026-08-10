@@ -490,5 +490,18 @@ else
 fi
 AC_SUBST(DISABLE_SCHEDULERS,$disable_schedulers)
 
-AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile doc/Makefile data/Makefile data/programs/Makefile data/conda_envs/Makefile])
+AC_ARG_ENABLE([frontend],
+  [AS_HELP_STRING([--disable-frontend], [do not build the React Flow web interface])],
+  [enable_frontend=$enableval], [enable_frontend=yes])
+
+AS_IF([test "x$enable_frontend" != xno], [
+  AC_PATH_PROG([NPM], [npm])
+  AS_IF([test -z "$NPM"], [
+    AC_MSG_WARN([npm not found; skipping frontend build])
+    enable_frontend=no
+  ])
+])
+AM_CONDITIONAL([BUILD_FRONTEND], [test "x$enable_frontend" = xyes])
+
+AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/conda_envs/Makefile])
 AC_OUTPUT
