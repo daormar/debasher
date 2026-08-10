@@ -27,7 +27,7 @@ distclean-local:
 endif
 
 EXTRA_DIST = src public index.html package.json package-lock.json \
-             vite.config.js tsconfig.json
+             vite.config.ts tsconfig.json
 
 dist-hook:
 	rm -rf $(distdir)/node_modules
