@@ -18,9 +18,6 @@ LTDL_INIT([recursive])
 CFLAGS_AUX=${CFLAGS}
 CXXFLAGS_AUX=${CXXFLAGS}
 
-# Checks for Python modules
-dnl AX_PYTHON_MODULE(mwparserfromhell,fatal,python)
-
 # Checks for programs.
 AC_PATH_PROGS(PYTHON, python)
 AC_PATH_PROGS(RSCRIPT, Rscript)
