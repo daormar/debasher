@@ -503,5 +503,5 @@ AS_IF([test "x$enable_frontend" != xno], [
 ])
 AM_CONDITIONAL([BUILD_FRONTEND], [test "x$enable_frontend" = xyes])
 
-AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/conda_envs/Makefile])
+AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile api/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/conda_envs/Makefile])
 AC_OUTPUT
