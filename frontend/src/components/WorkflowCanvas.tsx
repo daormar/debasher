@@ -25,7 +25,7 @@ import {
 import WorkflowNode from "./WorkflowNode";
 
 export default function WorkflowCanvas() {
-  const { workflow, selectNode, moveNode, connect, disconnect } = useWorkflow();
+  const { workflow, selectNode, moveNode, removeNode, connect, disconnect } = useWorkflow();
 
   // "Business" nodes: recalculated whenever workflow changes.
   const nodes = useMemo(
@@ -140,6 +140,13 @@ export default function WorkflowCanvas() {
     []
   );
 
+  const onNodesDelete = useCallback(
+    (deletedNodes: Node<WorkflowNodeData>[]) => {
+      deletedNodes.forEach(node => removeNode(node.id));
+    },
+    [removeNode]
+  );
+
   const onEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
       deletedEdges.forEach(edge => disconnect(edge.id));
@@ -170,6 +177,7 @@ export default function WorkflowCanvas() {
         onNodeClick={onNodeClick}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         deleteKeyCode={["Delete", "Backspace"]}
         fitView

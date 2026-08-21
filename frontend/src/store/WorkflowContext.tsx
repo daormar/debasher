@@ -24,6 +24,10 @@ interface WorkflowContextType {
 
   addNode: () => void;
 
+  removeNode: (
+    nodeId: string
+  ) => void;
+
   moveNode: (
     nodeId: string,
     position: Position
@@ -103,6 +107,33 @@ export function WorkflowProvider({
       ...current,
       nodes: [...current.nodes, node],
     }));
+
+  }
+
+  function removeNode(
+    nodeId: string
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      nodes: current.nodes.filter(
+        node => node.id !== nodeId
+      ),
+
+      // Drop any edges left dangling by the removed node.
+      edges: current.edges.filter(
+        edge =>
+          edge.sourceNodeId !== nodeId &&
+          edge.targetNodeId !== nodeId
+      ),
+
+    }));
+
+    setSelectedNodeId(current =>
+      current === nodeId ? null : current
+    );
 
   }
 
@@ -253,6 +284,8 @@ export function WorkflowProvider({
     save,
 
     addNode,
+
+    removeNode,
 
     moveNode,
 
