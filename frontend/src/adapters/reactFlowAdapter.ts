@@ -64,6 +64,46 @@ export function workflowToReactFlowEdges(
 }
 
 /**
+ * Whether a connection is allowed: it must go from an output
+ * handle to an input handle, and the two handles must belong to
+ * different nodes.
+ */
+export function isValidWorkflowConnection(
+  workflow: Workflow,
+  connection: Connection | Edge
+): boolean {
+
+  const { source, target, sourceHandle, targetHandle } = connection;
+
+  if (
+    !source ||
+    !target ||
+    !sourceHandle ||
+    !targetHandle ||
+    source === target
+  ) {
+    return false;
+  }
+
+  const sourceNode = workflow.nodes.find(node => node.id === source);
+  const targetNode = workflow.nodes.find(node => node.id === target);
+
+  const sourceHandleDef = sourceNode?.handles.find(
+    handle => handle.id === sourceHandle
+  );
+
+  const targetHandleDef = targetNode?.handles.find(
+    handle => handle.id === targetHandle
+  );
+
+  return (
+    sourceHandleDef?.direction === "output" &&
+    targetHandleDef?.direction === "input"
+  );
+
+}
+
+/**
  * Converts a React Flow connection into
  * our domain WorkflowEdge.
  */

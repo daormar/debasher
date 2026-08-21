@@ -7,6 +7,7 @@ import {
   applyNodeChanges,
   type NodeChange,
   type Connection,
+  type Edge,
   type Node,
 } from "@xyflow/react";
 
@@ -17,6 +18,7 @@ import {
   workflowToReactFlowNodes,
   workflowToReactFlowEdges,
   connectionToWorkflowEdge,
+  isValidWorkflowConnection,
 } from "../adapters/reactFlowAdapter";
 import WorkflowNode from "./WorkflowNode";
 
@@ -111,6 +113,12 @@ export default function WorkflowCanvas() {
     [connect]
   );
 
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) =>
+      isValidWorkflowConnection(workflow, connection),
+    [workflow]
+  );
+
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: { id: string }) => {
       selectNode(node.id);
@@ -130,6 +138,7 @@ export default function WorkflowCanvas() {
         edges={edges}
         nodeTypes={nodeTypes}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
         onNodesChange={onNodesChange}
         fitView
