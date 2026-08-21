@@ -5,7 +5,9 @@ import {
   Controls,
   MiniMap,
   applyNodeChanges,
+  applyEdgeChanges,
   type NodeChange,
+  type EdgeChange,
   type Connection,
   type Edge,
   type Node,
@@ -23,7 +25,7 @@ import {
 import WorkflowNode from "./WorkflowNode";
 
 export default function WorkflowCanvas() {
-  const { workflow, selectNode, moveNode, connect } = useWorkflow();
+  const { workflow, selectNode, moveNode, connect, disconnect } = useWorkflow();
 
   // "Business" nodes: recalculated whenever workflow changes.
   const nodes = useMemo(
@@ -88,6 +90,18 @@ export default function WorkflowCanvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structuralKey]);
 
+  // "React Flow" edges: kept in a local copy so that selection
+  // changes (needed for delete-key handling) round-trip through
+  // onEdgesChange instead of being silently dropped, since `edges`
+  // is otherwise a controlled prop with no change handler.
+  const [localEdges, setLocalEdges] = useState(edges);
+
+  // Resyncs localEdges whenever the workflow-derived edges change
+  // (edge added/removed), discarding any local-only selection state.
+  useEffect(() => {
+    setLocalEdges(edges);
+  }, [edges]);
+
   const onNodesChange = useCallback(
      (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
       // 1. Update the array React Flow needs, right away.
@@ -119,6 +133,20 @@ export default function WorkflowCanvas() {
     [workflow]
   );
 
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange<Edge>[]) => {
+      setLocalEdges(current => applyEdgeChanges(changes, current));
+    },
+    []
+  );
+
+  const onEdgesDelete = useCallback(
+    (deletedEdges: Edge[]) => {
+      deletedEdges.forEach(edge => disconnect(edge.id));
+    },
+    [disconnect]
+  );
+
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: { id: string }) => {
       selectNode(node.id);
@@ -135,12 +163,15 @@ export default function WorkflowCanvas() {
     >
       <ReactFlow
         nodes={localNodes}
-        edges={edges}
+        edges={localEdges}
         nodeTypes={nodeTypes}
         onConnect={onConnect}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onEdgesDelete={onEdgesDelete}
+        deleteKeyCode={["Delete", "Backspace"]}
         fitView
       >
         <Background />
