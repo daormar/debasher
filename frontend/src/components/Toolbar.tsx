@@ -1,4 +1,7 @@
+import { useState } from "react";
+
 import { useWorkflow } from "../store/WorkflowContext";
+import PreambleEditor from "./PreambleEditor";
 
 interface Props {
   onClose: () => void;
@@ -10,6 +13,9 @@ export default function Toolbar({ onClose }: Props) {
     addNode,
     save,
   } = useWorkflow();
+
+  const [isPreambleOpen, setPreambleOpen] =
+    useState(false);
 
 
   return (
@@ -25,10 +31,22 @@ export default function Toolbar({ onClose }: Props) {
     >
 
       <button
+        onClick={() => setPreambleOpen(true)}
+      >
+        Preamble
+      </button>
+
+      <button
         onClick={addNode}
       >
         New node
       </button>
+
+      {isPreambleOpen && (
+        <PreambleEditor
+          onClose={() => setPreambleOpen(false)}
+        />
+      )}
 
       <button
         onClick={() => save()}

@@ -24,6 +24,10 @@ interface WorkflowContextType {
 
   addNode: () => void;
 
+  setPreamble: (
+    preamble: string
+  ) => void;
+
   removeNode: (
     nodeId: string
   ) => void;
@@ -106,6 +110,17 @@ export function WorkflowProvider({
     setWorkflow(current => ({
       ...current,
       nodes: [...current.nodes, node],
+    }));
+
+  }
+
+  function setPreamble(
+    preamble: string
+  ) {
+
+    setWorkflow(current => ({
+      ...current,
+      preamble,
     }));
 
   }
@@ -284,6 +299,8 @@ export function WorkflowProvider({
     save,
 
     addNode,
+
+    setPreamble,
 
     removeNode,
 

@@ -50,6 +50,7 @@ export function createEmptyWorkflow(name: string): Workflow {
   return {
     id: crypto.randomUUID(),
     name,
+    preamble: "",
     nodes: [],
     edges: [],
   };

@@ -7,6 +7,8 @@ export interface Workflow {
 
   name: string;
 
+  preamble: string;
+
   nodes: WorkflowNode[];
 
   edges: WorkflowEdge[];
