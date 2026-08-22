@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import type { Workflow } from "../models/workflow";
-import type { WorkflowNode } from "../models/node";
+import type { WorkflowNode, NodeLanguage } from "../models/node";
 import type { WorkflowHandle } from "../models/handle";
 import type { WorkflowEdge } from "../models/edge";
 import type { Position } from "../models/position";
@@ -40,6 +40,16 @@ interface WorkflowContextType {
   renameNode: (
     nodeId: string,
     name: string
+  ) => void;
+
+  setNodeLanguage: (
+    nodeId: string,
+    language: NodeLanguage
+  ) => void;
+
+  setNodeCode: (
+    nodeId: string,
+    code: string
   ) => void;
 
   addHandle: (
@@ -105,6 +115,11 @@ export function WorkflowProvider({
       },
 
       handles: [],
+
+      language: "bash",
+
+      code: "",
+
     };
 
     setWorkflow(current => ({
@@ -183,6 +198,44 @@ export function WorkflowProvider({
       nodes: current.nodes.map(node =>
         node.id === nodeId
           ? { ...node, name }
+          : node
+      ),
+
+    }));
+
+  }
+
+  function setNodeLanguage(
+    nodeId: string,
+    language: NodeLanguage
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      nodes: current.nodes.map(node =>
+        node.id === nodeId
+          ? { ...node, language }
+          : node
+      ),
+
+    }));
+
+  }
+
+  function setNodeCode(
+    nodeId: string,
+    code: string
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      nodes: current.nodes.map(node =>
+        node.id === nodeId
+          ? { ...node, code }
           : node
       ),
 
@@ -307,6 +360,10 @@ export function WorkflowProvider({
     moveNode,
 
     renameNode,
+
+    setNodeLanguage,
+
+    setNodeCode,
 
     addHandle,
 

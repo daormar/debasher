@@ -1,6 +1,13 @@
 import type { Position } from "./position";
 import type { WorkflowHandle } from "./handle";
 
+export type NodeLanguage =
+  | "bash"
+  | "python"
+  | "perl"
+  | "r"
+  | "groovy";
+
 export interface WorkflowNode {
 
   id: string;
@@ -10,5 +17,9 @@ export interface WorkflowNode {
   position: Position;
 
   handles: WorkflowHandle[];
+
+  language: NodeLanguage;
+
+  code: string;
 
 }

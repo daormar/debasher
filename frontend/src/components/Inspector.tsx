@@ -1,6 +1,9 @@
 import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
+import { NODE_LANGUAGES } from "./codeLanguages";
+import CodeEditor from "./CodeEditor";
+import type { NodeLanguage } from "../models/node";
 
 
 export default function Inspector() {
@@ -10,11 +13,15 @@ export default function Inspector() {
     renameNode,
     addHandle,
     removeHandle,
+    setNodeLanguage,
   } = useWorkflow();
 
 
   const [handleLabel, setHandleLabel] =
     useState("");
+
+  const [isCodeEditorOpen, setCodeEditorOpen] =
+    useState(false);
 
 
   if (!selectedNode) {
@@ -197,6 +204,61 @@ export default function Inspector() {
       >
         Add output
       </button>
+
+
+      <hr />
+
+
+      <h4>
+        Code
+      </h4>
+
+
+      <label>
+        Language
+      </label>
+
+
+      <select
+
+        value={selectedNode.language}
+
+        onChange={(event) =>
+          setNodeLanguage(
+            selectedNode.id,
+            event.target.value as NodeLanguage
+          )
+        }
+
+        style={{
+          width: "100%",
+          marginBottom: 8,
+        }}
+
+      >
+
+        {NODE_LANGUAGES.map(({ value, label }) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+
+      </select>
+
+
+      <button
+        onClick={() => setCodeEditorOpen(true)}
+      >
+        Edit code
+      </button>
+
+
+      {isCodeEditorOpen && (
+        <CodeEditor
+          node={selectedNode}
+          onClose={() => setCodeEditorOpen(false)}
+        />
+      )}
 
 
     </aside>
