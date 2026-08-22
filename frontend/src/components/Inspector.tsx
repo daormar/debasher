@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useWorkflow } from "../store/WorkflowContext";
 import { NODE_LANGUAGES } from "./codeLanguages";
 import CodeEditor from "./CodeEditor";
+import HandleEditor from "./HandleEditor";
 import type { NodeLanguage } from "../models/node";
 
 
@@ -22,6 +23,9 @@ export default function Inspector() {
 
   const [isCodeEditorOpen, setCodeEditorOpen] =
     useState(false);
+
+  const [editingHandleId, setEditingHandleId] =
+    useState<string | null>(null);
 
 
   if (!selectedNode) {
@@ -112,18 +116,37 @@ export default function Inspector() {
             </span>
 
 
-            <button
+            <span>
 
-              onClick={() =>
-                removeHandle(
-                  selectedNode.id,
-                  handle.id
-                )
-              }
+              <button
 
-            >
-              Remove
-            </button>
+                onClick={() =>
+                  setEditingHandleId(handle.id)
+                }
+
+              >
+                Edit
+              </button>
+
+
+              <button
+
+                onClick={() =>
+                  removeHandle(
+                    selectedNode.id,
+                    handle.id
+                  )
+                }
+
+                style={{
+                  marginLeft: 4,
+                }}
+
+              >
+                Remove
+              </button>
+
+            </span>
 
 
           </div>
@@ -131,6 +154,28 @@ export default function Inspector() {
         ))}
 
       </div>
+
+
+      {editingHandleId && (() => {
+
+        const editingHandle =
+          selectedNode.handles.find(
+            h => h.id === editingHandleId
+          );
+
+        if (!editingHandle) {
+          return null;
+        }
+
+        return (
+          <HandleEditor
+            nodeId={selectedNode.id}
+            handle={editingHandle}
+            onClose={() => setEditingHandleId(null)}
+          />
+        );
+
+      })()}
 
 
       <hr />

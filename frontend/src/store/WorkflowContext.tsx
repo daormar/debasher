@@ -58,6 +58,12 @@ interface WorkflowContextType {
     label: string
   ) => void;
 
+  updateHandle: (
+    nodeId: string,
+    handleId: string,
+    changes: Partial<Omit<WorkflowHandle, "id">>
+  ) => void;
+
   removeHandle: (
     nodeId: string,
     handleId: string
@@ -279,6 +285,33 @@ export function WorkflowProvider({
 
   }
 
+  function updateHandle(
+    nodeId: string,
+    handleId: string,
+    changes: Partial<Omit<WorkflowHandle, "id">>
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      nodes: current.nodes.map(node =>
+        node.id === nodeId
+          ? {
+              ...node,
+              handles: node.handles.map(h =>
+                h.id === handleId
+                  ? { ...h, ...changes }
+                  : h
+              ),
+            }
+          : node
+      ),
+
+    }));
+
+  }
+
   function removeHandle(
     nodeId: string,
     handleId: string
@@ -366,6 +399,8 @@ export function WorkflowProvider({
     setNodeCode,
 
     addHandle,
+
+    updateHandle,
 
     removeHandle,
 
