@@ -24,6 +24,10 @@ export interface AdditionalSpecs {
 
   processdeps?: string;
 
+  alias?: string;
+
+  externalAlias?: string;
+
 }
 
 export interface WorkflowNode {

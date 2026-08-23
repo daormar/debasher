@@ -18,11 +18,19 @@ export default function AdditionalSpecsEditor({ node, onClose }: Props) {
   const [processdeps, setProcessdeps] =
     useState(node.additionalSpecs.processdeps ?? "");
 
+  const [alias, setAlias] =
+    useState(node.additionalSpecs.alias ?? "");
+
+  const [externalAlias, setExternalAlias] =
+    useState(node.additionalSpecs.externalAlias ?? "");
+
   function handleSave() {
 
     setAdditionalSpecs(node.id, {
       forced,
       processdeps: processdeps.trim() ? processdeps : undefined,
+      alias: alias.trim() ? alias : undefined,
+      externalAlias: externalAlias.trim() ? externalAlias : undefined,
     });
 
     onClose();
@@ -86,6 +94,42 @@ export default function AdditionalSpecsEditor({ node, onClose }: Props) {
 
           onChange={(event) =>
             setProcessdeps(event.target.value)
+          }
+
+          style={{
+            width: "100%",
+          }}
+
+        />
+
+        <label>
+          Alias
+        </label>
+
+        <input
+
+          value={alias}
+
+          onChange={(event) =>
+            setAlias(event.target.value)
+          }
+
+          style={{
+            width: "100%",
+          }}
+
+        />
+
+        <label>
+          External Alias
+        </label>
+
+        <input
+
+          value={externalAlias}
+
+          onChange={(event) =>
+            setExternalAlias(event.target.value)
           }
 
           style={{
