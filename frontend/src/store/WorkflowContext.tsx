@@ -12,6 +12,7 @@ import type {
   ProcessLanguage,
   ComputationalSpecs,
   AdditionalSpecs,
+  OptionsHandler,
 } from "../models/process";
 import type { WorkflowOption } from "../models/option";
 import type { WorkflowEdge } from "../models/edge";
@@ -65,6 +66,11 @@ interface WorkflowContextType {
   setAdditionalSpecs: (
     processId: string,
     specs: AdditionalSpecs
+  ) => void;
+
+  setOptionsHandler: (
+    processId: string,
+    optionsHandler: OptionsHandler
   ) => void;
 
   addOption: (
@@ -136,6 +142,10 @@ export function WorkflowProvider({
       },
 
       options: [],
+
+      optionsHandler: {
+        mode: "standard",
+      },
 
       language: "bash",
 
@@ -308,6 +318,25 @@ export function WorkflowProvider({
 
   }
 
+  function setOptionsHandler(
+    processId: string,
+    optionsHandler: OptionsHandler
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, optionsHandler }
+          : process
+      ),
+
+    }));
+
+  }
+
   function addOption(
     processId: string,
     direction: "input" | "output",
@@ -468,6 +497,8 @@ export function WorkflowProvider({
     setComputationalSpecs,
 
     setAdditionalSpecs,
+
+    setOptionsHandler,
 
     addOption,
 

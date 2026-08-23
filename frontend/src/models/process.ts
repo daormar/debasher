@@ -30,6 +30,21 @@ export interface AdditionalSpecs {
 
 }
 
+export type OptionsHandlerMode =
+  | "standard"
+  | "array"
+  | "generator";
+
+export interface OptionsHandler {
+
+  mode: OptionsHandlerMode;
+
+  generatorSize?: string;
+
+  arrayCode?: string;
+
+}
+
 export interface WorkflowProcess {
 
   id: string;
@@ -39,6 +54,8 @@ export interface WorkflowProcess {
   position: Position;
 
   options: WorkflowOption[];
+
+  optionsHandler: OptionsHandler;
 
   language: ProcessLanguage;
 

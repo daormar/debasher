@@ -6,7 +6,9 @@ import CodeEditor from "./CodeEditor";
 import OptionEditor from "./OptionEditor";
 import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
 import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
-import type { ProcessLanguage } from "../models/process";
+import GeneratorConfigEditor from "./GeneratorConfigEditor";
+import ArrayConfigEditor from "./ArrayConfigEditor";
+import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
 
 
 export default function Inspector() {
@@ -17,6 +19,7 @@ export default function Inspector() {
     addOption,
     removeOption,
     setProcessLanguage,
+    setOptionsHandler,
   } = useWorkflow();
 
 
@@ -33,6 +36,12 @@ export default function Inspector() {
     useState(false);
 
   const [isAdditionalSpecsOpen, setAdditionalSpecsOpen] =
+    useState(false);
+
+  const [isGeneratorConfigOpen, setGeneratorConfigOpen] =
+    useState(false);
+
+  const [isArrayConfigOpen, setArrayConfigOpen] =
     useState(false);
 
 
@@ -99,6 +108,90 @@ export default function Inspector() {
         }}
 
       />
+
+
+      <h4>
+        Options Handler
+      </h4>
+
+
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          marginBottom: 8,
+        }}
+      >
+
+        {(["standard", "array", "generator"] as OptionsHandlerMode[]).map(mode => (
+
+          <button
+
+            key={mode}
+
+            onClick={() =>
+              setOptionsHandler(selectedProcess.id, {
+                ...selectedProcess.optionsHandler,
+                mode,
+              })
+            }
+
+            style={{
+              flex: 1,
+              fontWeight:
+                selectedProcess.optionsHandler.mode === mode
+                  ? "bold"
+                  : "normal",
+              background:
+                selectedProcess.optionsHandler.mode === mode
+                  ? "#ddd"
+                  : "#fff",
+            }}
+
+          >
+            {mode}
+          </button>
+
+        ))}
+
+      </div>
+
+
+      {selectedProcess.optionsHandler.mode !== "standard" && (
+
+        <button
+
+          onClick={() =>
+            selectedProcess.optionsHandler.mode === "generator"
+              ? setGeneratorConfigOpen(true)
+              : setArrayConfigOpen(true)
+          }
+
+          style={{
+            marginBottom: 16,
+          }}
+
+        >
+          Configure
+        </button>
+
+      )}
+
+
+      {isGeneratorConfigOpen && (
+        <GeneratorConfigEditor
+          process={selectedProcess}
+          onClose={() => setGeneratorConfigOpen(false)}
+        />
+      )}
+
+
+      {isArrayConfigOpen && (
+        <ArrayConfigEditor
+          process={selectedProcess}
+          onClose={() => setArrayConfigOpen(false)}
+        />
+      )}
 
 
       <h4>
