@@ -4,6 +4,8 @@ import { useWorkflow } from "../store/WorkflowContext";
 import { NODE_LANGUAGES } from "./codeLanguages";
 import CodeEditor from "./CodeEditor";
 import HandleEditor from "./HandleEditor";
+import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
+import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import type { NodeLanguage } from "../models/node";
 
 
@@ -26,6 +28,12 @@ export default function Inspector() {
 
   const [editingHandleId, setEditingHandleId] =
     useState<string | null>(null);
+
+  const [isComputationalSpecsOpen, setComputationalSpecsOpen] =
+    useState(false);
+
+  const [isAdditionalSpecsOpen, setAdditionalSpecsOpen] =
+    useState(false);
 
 
   if (!selectedNode) {
@@ -302,6 +310,52 @@ export default function Inspector() {
         <CodeEditor
           node={selectedNode}
           onClose={() => setCodeEditorOpen(false)}
+        />
+      )}
+
+
+      <h4>
+        Specifications
+      </h4>
+
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          gap: 8,
+        }}
+      >
+
+        <button
+          onClick={() => setComputationalSpecsOpen(true)}
+        >
+          Computational Specifications
+        </button>
+
+
+        <button
+          onClick={() => setAdditionalSpecsOpen(true)}
+        >
+          Additional Specifications
+        </button>
+
+      </div>
+
+
+      {isComputationalSpecsOpen && (
+        <ComputationalSpecsEditor
+          node={selectedNode}
+          onClose={() => setComputationalSpecsOpen(false)}
+        />
+      )}
+
+
+      {isAdditionalSpecsOpen && (
+        <AdditionalSpecsEditor
+          node={selectedNode}
+          onClose={() => setAdditionalSpecsOpen(false)}
         />
       )}
 

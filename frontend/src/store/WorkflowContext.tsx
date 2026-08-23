@@ -7,7 +7,12 @@ import {
 } from "react";
 
 import type { Workflow } from "../models/workflow";
-import type { WorkflowNode, NodeLanguage } from "../models/node";
+import type {
+  WorkflowNode,
+  NodeLanguage,
+  ComputationalSpecs,
+  AdditionalSpecs,
+} from "../models/node";
 import type { WorkflowHandle } from "../models/handle";
 import type { WorkflowEdge } from "../models/edge";
 import type { Position } from "../models/position";
@@ -50,6 +55,16 @@ interface WorkflowContextType {
   setNodeCode: (
     nodeId: string,
     code: string
+  ) => void;
+
+  setComputationalSpecs: (
+    nodeId: string,
+    specs: ComputationalSpecs
+  ) => void;
+
+  setAdditionalSpecs: (
+    nodeId: string,
+    specs: AdditionalSpecs
   ) => void;
 
   addHandle: (
@@ -125,6 +140,12 @@ export function WorkflowProvider({
       language: "bash",
 
       code: "",
+
+      computationalSpecs: {},
+
+      additionalSpecs: {
+        forced: false,
+      },
 
     };
 
@@ -242,6 +263,44 @@ export function WorkflowProvider({
       nodes: current.nodes.map(node =>
         node.id === nodeId
           ? { ...node, code }
+          : node
+      ),
+
+    }));
+
+  }
+
+  function setComputationalSpecs(
+    nodeId: string,
+    computationalSpecs: ComputationalSpecs
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      nodes: current.nodes.map(node =>
+        node.id === nodeId
+          ? { ...node, computationalSpecs }
+          : node
+      ),
+
+    }));
+
+  }
+
+  function setAdditionalSpecs(
+    nodeId: string,
+    additionalSpecs: AdditionalSpecs
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      nodes: current.nodes.map(node =>
+        node.id === nodeId
+          ? { ...node, additionalSpecs }
           : node
       ),
 
@@ -397,6 +456,10 @@ export function WorkflowProvider({
     setNodeLanguage,
 
     setNodeCode,
+
+    setComputationalSpecs,
+
+    setAdditionalSpecs,
 
     addHandle,
 

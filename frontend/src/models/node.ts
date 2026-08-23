@@ -8,6 +8,24 @@ export type NodeLanguage =
   | "r"
   | "groovy";
 
+export interface ComputationalSpecs {
+
+  cpus?: number;
+
+  mem?: number;
+
+  time?: string;
+
+}
+
+export interface AdditionalSpecs {
+
+  forced: boolean;
+
+  processdeps?: string;
+
+}
+
 export interface WorkflowNode {
 
   id: string;
@@ -21,5 +39,9 @@ export interface WorkflowNode {
   language: NodeLanguage;
 
   code: string;
+
+  computationalSpecs: ComputationalSpecs;
+
+  additionalSpecs: AdditionalSpecs;
 
 }
