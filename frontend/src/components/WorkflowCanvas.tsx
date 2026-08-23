@@ -50,15 +50,15 @@ export default function WorkflowCanvas() {
   const [localNodes, setLocalNodes] = useState(nodes);
 
   // "Fingerprint" of everything except position: id, name and
-  // handles. Changes whenever a node is added/removed/renamed, or a
-  // handle is added/removed/edited, never when a node is moved.
+  // options. Changes whenever a node is added/removed/renamed, or an
+  // option is added/removed/edited, never when a node is moved.
   const structuralKey = useMemo(
     () =>
       workflow.nodes
         .map(
           node =>
-            `${node.id}:${node.name}:${node.handles
-              .map(h => `${h.id}:${h.label}:${h.direction}`)
+            `${node.id}:${node.name}:${node.options
+              .map(o => `${o.id}:${o.label}:${o.direction}`)
               .join(",")}`
         )
         .join("|"),

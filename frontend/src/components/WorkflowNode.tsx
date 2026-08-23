@@ -17,15 +17,15 @@ export default function WorkflowNode({
   const node = data.node;
 
 
-  const inputHandles =
-    node.handles.filter(
-      handle => handle.direction === "input"
+  const inputOptions =
+    node.options.filter(
+      option => option.direction === "input"
     );
 
 
-  const outputHandles =
-    node.handles.filter(
-      handle => handle.direction === "output"
+  const outputOptions =
+    node.options.filter(
+      option => option.direction === "output"
     );
 
 
@@ -54,11 +54,11 @@ export default function WorkflowNode({
         }}
       >
 
-        {inputHandles.map(
-          handle => (
+        {inputOptions.map(
+          option => (
 
             <div
-              key={handle.id}
+              key={option.id}
               style={{
                 position: "relative",
                 display: "flex",
@@ -70,7 +70,7 @@ export default function WorkflowNode({
 
               <Handle
 
-                id={handle.id}
+                id={option.id}
 
                 type="target"
 
@@ -84,7 +84,7 @@ export default function WorkflowNode({
                   whiteSpace: "nowrap",
                 }}
               >
-                {handle.label}
+                {option.label}
               </span>
 
             </div>
@@ -118,11 +118,11 @@ export default function WorkflowNode({
         }}
       >
 
-        {outputHandles.map(
-          handle => (
+        {outputOptions.map(
+          option => (
 
             <div
-              key={handle.id}
+              key={option.id}
               style={{
                 position: "relative",
                 display: "flex",
@@ -138,12 +138,12 @@ export default function WorkflowNode({
                   whiteSpace: "nowrap",
                 }}
               >
-                {handle.label}
+                {option.label}
               </span>
 
               <Handle
 
-                id={handle.id}
+                id={option.id}
 
                 type="source"
 

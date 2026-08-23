@@ -53,11 +53,11 @@ export function workflowToReactFlowEdges(
 
     source: edge.sourceNodeId,
 
-    sourceHandle: edge.sourceHandleId,
+    sourceHandle: edge.sourceOptionId,
 
     target: edge.targetNodeId,
 
-    targetHandle: edge.targetHandleId,
+    targetHandle: edge.targetOptionId,
 
   }));
 
@@ -65,7 +65,7 @@ export function workflowToReactFlowEdges(
 
 /**
  * Whether a connection is allowed: it must go from an output
- * handle to an input handle, and the two handles must belong to
+ * option to an input option, and the two options must belong to
  * different nodes.
  */
 export function isValidWorkflowConnection(
@@ -88,17 +88,17 @@ export function isValidWorkflowConnection(
   const sourceNode = workflow.nodes.find(node => node.id === source);
   const targetNode = workflow.nodes.find(node => node.id === target);
 
-  const sourceHandleDef = sourceNode?.handles.find(
-    handle => handle.id === sourceHandle
+  const sourceOptionDef = sourceNode?.options.find(
+    option => option.id === sourceHandle
   );
 
-  const targetHandleDef = targetNode?.handles.find(
-    handle => handle.id === targetHandle
+  const targetOptionDef = targetNode?.options.find(
+    option => option.id === targetHandle
   );
 
   return (
-    sourceHandleDef?.direction === "output" &&
-    targetHandleDef?.direction === "input"
+    sourceOptionDef?.direction === "output" &&
+    targetOptionDef?.direction === "input"
   );
 
 }
@@ -126,11 +126,11 @@ export function connectionToWorkflowEdge(
 
     sourceNodeId: connection.source,
 
-    sourceHandleId: connection.sourceHandle,
+    sourceOptionId: connection.sourceHandle,
 
     targetNodeId: connection.target,
 
-    targetHandleId: connection.targetHandle,
+    targetOptionId: connection.targetHandle,
 
   };
 

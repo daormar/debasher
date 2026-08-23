@@ -2,42 +2,42 @@ import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
 import type {
-  WorkflowHandle,
-  HandleDirection,
-  HandleDataType,
-} from "../models/handle";
+  WorkflowOption,
+  OptionDirection,
+  OptionDataType,
+} from "../models/option";
 
 interface Props {
   nodeId: string;
-  handle: WorkflowHandle;
+  option: WorkflowOption;
   onClose: () => void;
 }
 
-export default function HandleEditor({ nodeId, handle, onClose }: Props) {
+export default function OptionEditor({ nodeId, option, onClose }: Props) {
 
-  const { updateHandle } = useWorkflow();
+  const { updateOption } = useWorkflow();
 
   const [label, setLabel] =
-    useState(handle.label);
+    useState(option.label);
 
   const [direction, setDirection] =
-    useState<HandleDirection>(handle.direction);
+    useState<OptionDirection>(option.direction);
 
   const [dataType, setDataType] =
-    useState<HandleDataType>(handle.dataType);
+    useState<OptionDataType>(option.dataType);
 
   const [description, setDescription] =
-    useState(handle.description);
+    useState(option.description);
 
   const [value, setValue] =
-    useState(handle.value);
+    useState(option.value);
 
   const [fifo, setFifo] =
-    useState(handle.fifo);
+    useState(option.fifo);
 
   function handleSave() {
 
-    updateHandle(nodeId, handle.id, {
+    updateOption(nodeId, option.id, {
       label,
       direction,
       dataType,
@@ -77,7 +77,7 @@ export default function HandleEditor({ nodeId, handle, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Handle
+          Option
         </h3>
 
         <label>
@@ -108,7 +108,7 @@ export default function HandleEditor({ nodeId, handle, onClose }: Props) {
 
           onChange={(event) =>
             setDirection(
-              event.target.value as HandleDirection
+              event.target.value as OptionDirection
             )
           }
 
@@ -138,7 +138,7 @@ export default function HandleEditor({ nodeId, handle, onClose }: Props) {
 
           onChange={(event) =>
             setDataType(
-              event.target.value as HandleDataType
+              event.target.value as OptionDataType
             )
           }
 

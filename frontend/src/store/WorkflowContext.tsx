@@ -13,7 +13,7 @@ import type {
   ComputationalSpecs,
   AdditionalSpecs,
 } from "../models/node";
-import type { WorkflowHandle } from "../models/handle";
+import type { WorkflowOption } from "../models/option";
 import type { WorkflowEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import { saveWorkflow } from "../storage/workflowStorage";
@@ -67,21 +67,21 @@ interface WorkflowContextType {
     specs: AdditionalSpecs
   ) => void;
 
-  addHandle: (
+  addOption: (
     nodeId: string,
     direction: "input" | "output",
     label: string
   ) => void;
 
-  updateHandle: (
+  updateOption: (
     nodeId: string,
-    handleId: string,
-    changes: Partial<Omit<WorkflowHandle, "id">>
+    optionId: string,
+    changes: Partial<Omit<WorkflowOption, "id">>
   ) => void;
 
-  removeHandle: (
+  removeOption: (
     nodeId: string,
-    handleId: string
+    optionId: string
   ) => void;
 
   connect: (
@@ -135,7 +135,7 @@ export function WorkflowProvider({
         y: 100,
       },
 
-      handles: [],
+      options: [],
 
       language: "bash",
 
@@ -308,13 +308,13 @@ export function WorkflowProvider({
 
   }
 
-  function addHandle(
+  function addOption(
     nodeId: string,
     direction: "input" | "output",
     label: string
   ) {
 
-    const handle: WorkflowHandle = {
+    const option: WorkflowOption = {
 
       id: crypto.randomUUID(),
 
@@ -340,9 +340,9 @@ export function WorkflowProvider({
         node.id === nodeId
           ? {
               ...node,
-              handles: [
-                ...node.handles,
-                handle,
+              options: [
+                ...node.options,
+                option,
               ],
             }
           : node
@@ -352,10 +352,10 @@ export function WorkflowProvider({
 
   }
 
-  function updateHandle(
+  function updateOption(
     nodeId: string,
-    handleId: string,
-    changes: Partial<Omit<WorkflowHandle, "id">>
+    optionId: string,
+    changes: Partial<Omit<WorkflowOption, "id">>
   ) {
 
     setWorkflow(current => ({
@@ -366,10 +366,10 @@ export function WorkflowProvider({
         node.id === nodeId
           ? {
               ...node,
-              handles: node.handles.map(h =>
-                h.id === handleId
-                  ? { ...h, ...changes }
-                  : h
+              options: node.options.map(o =>
+                o.id === optionId
+                  ? { ...o, ...changes }
+                  : o
               ),
             }
           : node
@@ -379,9 +379,9 @@ export function WorkflowProvider({
 
   }
 
-  function removeHandle(
+  function removeOption(
     nodeId: string,
-    handleId: string
+    optionId: string
   ) {
 
     setWorkflow(current => ({
@@ -392,8 +392,8 @@ export function WorkflowProvider({
         node.id === nodeId
           ? {
               ...node,
-              handles: node.handles.filter(
-                h => h.id !== handleId
+              options: node.options.filter(
+                o => o.id !== optionId
               ),
             }
           : node
@@ -469,11 +469,11 @@ export function WorkflowProvider({
 
     setAdditionalSpecs,
 
-    addHandle,
+    addOption,
 
-    updateHandle,
+    updateOption,
 
-    removeHandle,
+    removeOption,
 
     connect,
 

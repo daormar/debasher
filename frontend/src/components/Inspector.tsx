@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useWorkflow } from "../store/WorkflowContext";
 import { NODE_LANGUAGES } from "./codeLanguages";
 import CodeEditor from "./CodeEditor";
-import HandleEditor from "./HandleEditor";
+import OptionEditor from "./OptionEditor";
 import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
 import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import type { NodeLanguage } from "../models/node";
@@ -14,19 +14,19 @@ export default function Inspector() {
   const {
     selectedNode,
     renameNode,
-    addHandle,
-    removeHandle,
+    addOption,
+    removeOption,
     setNodeLanguage,
   } = useWorkflow();
 
 
-  const [handleLabel, setHandleLabel] =
+  const [optionLabel, setOptionLabel] =
     useState("");
 
   const [isCodeEditorOpen, setCodeEditorOpen] =
     useState(false);
 
-  const [editingHandleId, setEditingHandleId] =
+  const [editingOptionId, setEditingOptionId] =
     useState<string | null>(null);
 
   const [isComputationalSpecsOpen, setComputationalSpecsOpen] =
@@ -102,16 +102,16 @@ export default function Inspector() {
 
 
       <h4>
-        Handles
+        Options
       </h4>
 
 
       <div>
 
-        {selectedNode.handles.map(handle => (
+        {selectedNode.options.map(option => (
 
           <div
-            key={handle.id}
+            key={option.id}
             style={{
               display: "flex",
               justifyContent: "space-between",
@@ -120,7 +120,7 @@ export default function Inspector() {
           >
 
             <span>
-              {handle.direction}: {handle.label}
+              {option.direction}: {option.label}
             </span>
 
 
@@ -129,7 +129,7 @@ export default function Inspector() {
               <button
 
                 onClick={() =>
-                  setEditingHandleId(handle.id)
+                  setEditingOptionId(option.id)
                 }
 
               >
@@ -140,9 +140,9 @@ export default function Inspector() {
               <button
 
                 onClick={() =>
-                  removeHandle(
+                  removeOption(
                     selectedNode.id,
-                    handle.id
+                    option.id
                   )
                 }
 
@@ -164,22 +164,22 @@ export default function Inspector() {
       </div>
 
 
-      {editingHandleId && (() => {
+      {editingOptionId && (() => {
 
-        const editingHandle =
-          selectedNode.handles.find(
-            h => h.id === editingHandleId
+        const editingOption =
+          selectedNode.options.find(
+            o => o.id === editingOptionId
           );
 
-        if (!editingHandle) {
+        if (!editingOption) {
           return null;
         }
 
         return (
-          <HandleEditor
+          <OptionEditor
             nodeId={selectedNode.id}
-            handle={editingHandle}
-            onClose={() => setEditingHandleId(null)}
+            option={editingOption}
+            onClose={() => setEditingOptionId(null)}
           />
         );
 
@@ -191,12 +191,12 @@ export default function Inspector() {
 
       <input
 
-        placeholder="Handle label"
+        placeholder="Option label"
 
-        value={handleLabel}
+        value={optionLabel}
 
         onChange={(event) =>
-          setHandleLabel(
+          setOptionLabel(
             event.target.value
           )
         }
@@ -213,17 +213,17 @@ export default function Inspector() {
 
         onClick={() => {
 
-          if (!handleLabel.trim()) {
+          if (!optionLabel.trim()) {
             return;
           }
 
-          addHandle(
+          addOption(
             selectedNode.id,
             "input",
-            handleLabel
+            optionLabel
           );
 
-          setHandleLabel("");
+          setOptionLabel("");
 
         }}
 
@@ -236,17 +236,17 @@ export default function Inspector() {
 
         onClick={() => {
 
-          if (!handleLabel.trim()) {
+          if (!optionLabel.trim()) {
             return;
           }
 
-          addHandle(
+          addOption(
             selectedNode.id,
             "output",
-            handleLabel
+            optionLabel
           );
 
-          setHandleLabel("");
+          setOptionLabel("");
 
         }}
 

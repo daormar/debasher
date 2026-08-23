@@ -1,5 +1,5 @@
 import type { Position } from "./position";
-import type { WorkflowHandle } from "./handle";
+import type { WorkflowOption } from "./option";
 
 export type NodeLanguage =
   | "bash"
@@ -38,7 +38,7 @@ export interface WorkflowNode {
 
   position: Position;
 
-  handles: WorkflowHandle[];
+  options: WorkflowOption[];
 
   language: NodeLanguage;
 
