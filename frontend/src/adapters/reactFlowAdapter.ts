@@ -5,35 +5,35 @@ import type {
 } from "@xyflow/react";
 
 import type { Workflow } from "../models/workflow";
-import type { WorkflowNode } from "../models/node";
+import type { WorkflowProcess } from "../models/process";
 import type { WorkflowEdge } from "../models/edge";
 import type { Position } from "../models/position";
 
 /**
  * Data stored inside every React Flow node.
  */
-export interface WorkflowNodeData {
-  node: WorkflowNode;
+export interface WorkflowProcessData {
+  process: WorkflowProcess;
   [key: string]: unknown;
 }
 
 /**
- * Converts the workflow nodes into React Flow nodes.
+ * Converts the workflow processes into React Flow nodes.
  */
 export function workflowToReactFlowNodes(
   workflow: Workflow
-): Node<WorkflowNodeData>[] {
+): Node<WorkflowProcessData>[] {
 
-  return workflow.nodes.map(node => ({
+  return workflow.processes.map(process => ({
 
-    id: node.id,
+    id: process.id,
 
     type: "workflow",
 
-    position: node.position,
+    position: process.position,
 
     data: {
-      node,
+      process,
     },
 
   }));
@@ -51,11 +51,11 @@ export function workflowToReactFlowEdges(
 
     id: edge.id,
 
-    source: edge.sourceNodeId,
+    source: edge.sourceProcessId,
 
     sourceHandle: edge.sourceOptionId,
 
-    target: edge.targetNodeId,
+    target: edge.targetProcessId,
 
     targetHandle: edge.targetOptionId,
 
@@ -66,7 +66,7 @@ export function workflowToReactFlowEdges(
 /**
  * Whether a connection is allowed: it must go from an output
  * option to an input option, and the two options must belong to
- * different nodes.
+ * different processes.
  */
 export function isValidWorkflowConnection(
   workflow: Workflow,
@@ -85,14 +85,14 @@ export function isValidWorkflowConnection(
     return false;
   }
 
-  const sourceNode = workflow.nodes.find(node => node.id === source);
-  const targetNode = workflow.nodes.find(node => node.id === target);
+  const sourceProcess = workflow.processes.find(process => process.id === source);
+  const targetProcess = workflow.processes.find(process => process.id === target);
 
-  const sourceOptionDef = sourceNode?.options.find(
+  const sourceOptionDef = sourceProcess?.options.find(
     option => option.id === sourceHandle
   );
 
-  const targetOptionDef = targetNode?.options.find(
+  const targetOptionDef = targetProcess?.options.find(
     option => option.id === targetHandle
   );
 
@@ -124,11 +124,11 @@ export function connectionToWorkflowEdge(
 
     id: crypto.randomUUID(),
 
-    sourceNodeId: connection.source,
+    sourceProcessId: connection.source,
 
     sourceOptionId: connection.sourceHandle,
 
-    targetNodeId: connection.target,
+    targetProcessId: connection.target,
 
     targetOptionId: connection.targetHandle,
 

@@ -10,7 +10,7 @@ interface Props {
 export default function Toolbar({ onClose }: Props) {
 
   const {
-    addNode,
+    addProcess,
     save,
   } = useWorkflow();
 
@@ -37,9 +37,9 @@ export default function Toolbar({ onClose }: Props) {
       </button>
 
       <button
-        onClick={addNode}
+        onClick={addProcess}
       >
-        New node
+        New process
       </button>
 
       {isPreambleOpen && (

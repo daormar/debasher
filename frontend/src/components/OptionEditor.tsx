@@ -8,12 +8,12 @@ import type {
 } from "../models/option";
 
 interface Props {
-  nodeId: string;
+  processId: string;
   option: WorkflowOption;
   onClose: () => void;
 }
 
-export default function OptionEditor({ nodeId, option, onClose }: Props) {
+export default function OptionEditor({ processId, option, onClose }: Props) {
 
   const { updateOption } = useWorkflow();
 
@@ -37,7 +37,7 @@ export default function OptionEditor({ nodeId, option, onClose }: Props) {
 
   function handleSave() {
 
-    updateOption(nodeId, option.id, {
+    updateOption(processId, option.id, {
       label,
       direction,
       dataType,

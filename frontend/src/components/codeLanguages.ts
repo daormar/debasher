@@ -6,9 +6,9 @@ import { perl } from "@codemirror/legacy-modes/mode/perl";
 import { r } from "@codemirror/legacy-modes/mode/r";
 import { groovy } from "@codemirror/legacy-modes/mode/groovy";
 
-import type { NodeLanguage } from "../models/node";
+import type { ProcessLanguage } from "../models/process";
 
-export const NODE_LANGUAGES: { value: NodeLanguage; label: string }[] = [
+export const PROCESS_LANGUAGES: { value: ProcessLanguage; label: string }[] = [
   { value: "bash", label: "Bash" },
   { value: "python", label: "Python" },
   { value: "perl", label: "Perl" },
@@ -16,7 +16,7 @@ export const NODE_LANGUAGES: { value: NodeLanguage; label: string }[] = [
   { value: "groovy", label: "Groovy" },
 ];
 
-export function languageExtension(language: NodeLanguage): Extension {
+export function languageExtension(language: ProcessLanguage): Extension {
 
   switch (language) {
 

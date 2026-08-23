@@ -1,7 +1,7 @@
 import type { Position } from "./position";
 import type { WorkflowOption } from "./option";
 
-export type NodeLanguage =
+export type ProcessLanguage =
   | "bash"
   | "python"
   | "perl"
@@ -30,7 +30,7 @@ export interface AdditionalSpecs {
 
 }
 
-export interface WorkflowNode {
+export interface WorkflowProcess {
 
   id: string;
 
@@ -40,7 +40,7 @@ export interface WorkflowNode {
 
   options: WorkflowOption[];
 
-  language: NodeLanguage;
+  language: ProcessLanguage;
 
   code: string;
 

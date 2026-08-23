@@ -13,7 +13,7 @@ import {
   type Node,
 } from "@xyflow/react";
 
-import type { WorkflowNodeData } from "../adapters/reactFlowAdapter";
+import type { WorkflowProcessData } from "../adapters/reactFlowAdapter";
 
 import { useWorkflow } from "../store/WorkflowContext";
 import {
@@ -22,10 +22,10 @@ import {
   connectionToWorkflowEdge,
   isValidWorkflowConnection,
 } from "../adapters/reactFlowAdapter";
-import WorkflowNode from "./WorkflowNode";
+import ProcessNode from "./ProcessNode";
 
 export default function WorkflowCanvas() {
-  const { workflow, selectNode, moveNode, removeNode, connect, disconnect } = useWorkflow();
+  const { workflow, selectProcess, moveProcess, removeProcess, connect, disconnect } = useWorkflow();
 
   // "Business" nodes: recalculated whenever workflow changes.
   const nodes = useMemo(
@@ -40,7 +40,7 @@ export default function WorkflowCanvas() {
 
   const nodeTypes = useMemo(
     () => ({
-      workflow: WorkflowNode,
+      workflow: ProcessNode,
     }),
     []
   );
@@ -50,19 +50,19 @@ export default function WorkflowCanvas() {
   const [localNodes, setLocalNodes] = useState(nodes);
 
   // "Fingerprint" of everything except position: id, name and
-  // options. Changes whenever a node is added/removed/renamed, or an
-  // option is added/removed/edited, never when a node is moved.
+  // options. Changes whenever a process is added/removed/renamed, or
+  // an option is added/removed/edited, never when a process is moved.
   const structuralKey = useMemo(
     () =>
-      workflow.nodes
+      workflow.processes
         .map(
-          node =>
-            `${node.id}:${node.name}:${node.options
+          process =>
+            `${process.id}:${process.name}:${process.options
               .map(o => `${o.id}:${o.label}:${o.direction}`)
               .join(",")}`
         )
         .join("|"),
-    [workflow.nodes]
+    [workflow.processes]
   );
 
   // Syncs localNodes with workflow ONLY on structural changes,
@@ -103,18 +103,18 @@ export default function WorkflowCanvas() {
   }, [edges]);
 
   const onNodesChange = useCallback(
-     (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
+     (changes: NodeChange<Node<WorkflowProcessData>>[]) => {
       // 1. Update the array React Flow needs, right away.
       setLocalNodes(current => applyNodeChanges(changes, current));
 
       // 2. Persist the final position in the business model.
       changes.forEach(change => {
         if (change.type === "position" && change.position) {
-          moveNode(change.id, change.position);
+          moveProcess(change.id, change.position);
         }
       });
     },
-    [moveNode]
+    [moveProcess]
   );
 
   const onConnect = useCallback(
@@ -141,10 +141,10 @@ export default function WorkflowCanvas() {
   );
 
   const onNodesDelete = useCallback(
-    (deletedNodes: Node<WorkflowNodeData>[]) => {
-      deletedNodes.forEach(node => removeNode(node.id));
+    (deletedNodes: Node<WorkflowProcessData>[]) => {
+      deletedNodes.forEach(node => removeProcess(node.id));
     },
-    [removeNode]
+    [removeProcess]
   );
 
   const onEdgesDelete = useCallback(
@@ -156,9 +156,9 @@ export default function WorkflowCanvas() {
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: { id: string }) => {
-      selectNode(node.id);
+      selectProcess(node.id);
     },
-    [selectNode]
+    [selectProcess]
   );
 
   return (

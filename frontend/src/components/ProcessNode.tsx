@@ -8,23 +8,23 @@ import type {
   Node,
 } from "@xyflow/react";
 
-import type { WorkflowNodeData } from "../adapters/reactFlowAdapter";
+import type { WorkflowProcessData } from "../adapters/reactFlowAdapter";
 
-export default function WorkflowNode({
+export default function ProcessNode({
   data,
-}: NodeProps<Node<WorkflowNodeData>>) {
+}: NodeProps<Node<WorkflowProcessData>>) {
 
-  const node = data.node;
+  const process = data.process;
 
 
   const inputOptions =
-    node.options.filter(
+    process.options.filter(
       option => option.direction === "input"
     );
 
 
   const outputOptions =
-    node.options.filter(
+    process.options.filter(
       option => option.direction === "output"
     );
 
@@ -102,7 +102,7 @@ export default function WorkflowNode({
           textAlign: "center",
         }}
       >
-        {node.name}
+        {process.name}
       </div>
 
 

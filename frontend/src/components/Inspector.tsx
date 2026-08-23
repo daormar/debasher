@@ -1,22 +1,22 @@
 import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
-import { NODE_LANGUAGES } from "./codeLanguages";
+import { PROCESS_LANGUAGES } from "./codeLanguages";
 import CodeEditor from "./CodeEditor";
 import OptionEditor from "./OptionEditor";
 import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
 import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
-import type { NodeLanguage } from "../models/node";
+import type { ProcessLanguage } from "../models/process";
 
 
 export default function Inspector() {
 
   const {
-    selectedNode,
-    renameNode,
+    selectedProcess,
+    renameProcess,
     addOption,
     removeOption,
-    setNodeLanguage,
+    setProcessLanguage,
   } = useWorkflow();
 
 
@@ -36,7 +36,7 @@ export default function Inspector() {
     useState(false);
 
 
-  if (!selectedNode) {
+  if (!selectedProcess) {
 
     return (
 
@@ -50,7 +50,7 @@ export default function Inspector() {
       >
 
         <p>
-          Select a node
+          Select a process
         </p>
 
       </aside>
@@ -73,7 +73,7 @@ export default function Inspector() {
     >
 
       <h3>
-        Node
+        Process
       </h3>
 
 
@@ -84,11 +84,11 @@ export default function Inspector() {
 
       <input
 
-        value={selectedNode.name}
+        value={selectedProcess.name}
 
         onChange={(event) =>
-          renameNode(
-            selectedNode.id,
+          renameProcess(
+            selectedProcess.id,
             event.target.value
           )
         }
@@ -108,7 +108,7 @@ export default function Inspector() {
 
       <div>
 
-        {selectedNode.options.map(option => (
+        {selectedProcess.options.map(option => (
 
           <div
             key={option.id}
@@ -141,7 +141,7 @@ export default function Inspector() {
 
                 onClick={() =>
                   removeOption(
-                    selectedNode.id,
+                    selectedProcess.id,
                     option.id
                   )
                 }
@@ -167,7 +167,7 @@ export default function Inspector() {
       {editingOptionId && (() => {
 
         const editingOption =
-          selectedNode.options.find(
+          selectedProcess.options.find(
             o => o.id === editingOptionId
           );
 
@@ -177,7 +177,7 @@ export default function Inspector() {
 
         return (
           <OptionEditor
-            nodeId={selectedNode.id}
+            processId={selectedProcess.id}
             option={editingOption}
             onClose={() => setEditingOptionId(null)}
           />
@@ -218,7 +218,7 @@ export default function Inspector() {
           }
 
           addOption(
-            selectedNode.id,
+            selectedProcess.id,
             "input",
             optionLabel
           );
@@ -241,7 +241,7 @@ export default function Inspector() {
           }
 
           addOption(
-            selectedNode.id,
+            selectedProcess.id,
             "output",
             optionLabel
           );
@@ -274,12 +274,12 @@ export default function Inspector() {
 
       <select
 
-        value={selectedNode.language}
+        value={selectedProcess.language}
 
         onChange={(event) =>
-          setNodeLanguage(
-            selectedNode.id,
-            event.target.value as NodeLanguage
+          setProcessLanguage(
+            selectedProcess.id,
+            event.target.value as ProcessLanguage
           )
         }
 
@@ -290,7 +290,7 @@ export default function Inspector() {
 
       >
 
-        {NODE_LANGUAGES.map(({ value, label }) => (
+        {PROCESS_LANGUAGES.map(({ value, label }) => (
           <option key={value} value={value}>
             {label}
           </option>
@@ -308,7 +308,7 @@ export default function Inspector() {
 
       {isCodeEditorOpen && (
         <CodeEditor
-          node={selectedNode}
+          process={selectedProcess}
           onClose={() => setCodeEditorOpen(false)}
         />
       )}
@@ -346,7 +346,7 @@ export default function Inspector() {
 
       {isComputationalSpecsOpen && (
         <ComputationalSpecsEditor
-          node={selectedNode}
+          process={selectedProcess}
           onClose={() => setComputationalSpecsOpen(false)}
         />
       )}
@@ -354,7 +354,7 @@ export default function Inspector() {
 
       {isAdditionalSpecsOpen && (
         <AdditionalSpecsEditor
-          node={selectedNode}
+          process={selectedProcess}
           onClose={() => setAdditionalSpecsOpen(false)}
         />
       )}

@@ -1,29 +1,29 @@
 import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
-import type { WorkflowNode } from "../models/node";
+import type { WorkflowProcess } from "../models/process";
 
 interface Props {
-  node: WorkflowNode;
+  process: WorkflowProcess;
   onClose: () => void;
 }
 
-export default function ComputationalSpecsEditor({ node, onClose }: Props) {
+export default function ComputationalSpecsEditor({ process, onClose }: Props) {
 
   const { setComputationalSpecs } = useWorkflow();
 
   const [cpus, setCpus] =
-    useState(node.computationalSpecs.cpus?.toString() ?? "");
+    useState(process.computationalSpecs.cpus?.toString() ?? "");
 
   const [mem, setMem] =
-    useState(node.computationalSpecs.mem?.toString() ?? "");
+    useState(process.computationalSpecs.mem?.toString() ?? "");
 
   const [time, setTime] =
-    useState(node.computationalSpecs.time ?? "");
+    useState(process.computationalSpecs.time ?? "");
 
   function handleSave() {
 
-    setComputationalSpecs(node.id, {
+    setComputationalSpecs(process.id, {
       cpus: cpus.trim() ? Number(cpus) : undefined,
       mem: mem.trim() ? Number(mem) : undefined,
       time: time.trim() ? time : undefined,

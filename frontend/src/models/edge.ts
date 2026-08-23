@@ -2,11 +2,11 @@ export interface WorkflowEdge {
 
   id: string;
 
-  sourceNodeId: string;
+  sourceProcessId: string;
 
   sourceOptionId: string;
 
-  targetNodeId: string;
+  targetProcessId: string;
 
   targetOptionId: string;
 

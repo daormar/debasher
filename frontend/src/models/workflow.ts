@@ -1,5 +1,5 @@
 import type { WorkflowEdge } from "./edge";
-import type { WorkflowNode } from "./node";
+import type { WorkflowProcess } from "./process";
 
 export interface Workflow {
 
@@ -9,7 +9,7 @@ export interface Workflow {
 
   preamble: string;
 
-  nodes: WorkflowNode[];
+  processes: WorkflowProcess[];
 
   edges: WorkflowEdge[];
 

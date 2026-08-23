@@ -3,22 +3,22 @@ import CodeMirror from "@uiw/react-codemirror";
 
 import { useWorkflow } from "../store/WorkflowContext";
 import { languageExtension } from "./codeLanguages";
-import type { WorkflowNode } from "../models/node";
+import type { WorkflowProcess } from "../models/process";
 
 interface Props {
-  node: WorkflowNode;
+  process: WorkflowProcess;
   onClose: () => void;
 }
 
-export default function CodeEditor({ node, onClose }: Props) {
+export default function CodeEditor({ process, onClose }: Props) {
 
-  const { setNodeCode } = useWorkflow();
+  const { setProcessCode } = useWorkflow();
 
   const [draft, setDraft] =
-    useState(node.code);
+    useState(process.code);
 
   function handleSave() {
-    setNodeCode(node.id, draft);
+    setProcessCode(process.id, draft);
     onClose();
   }
 
@@ -50,7 +50,7 @@ export default function CodeEditor({ node, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Code — {node.name} ({node.language})
+          Code — {process.name} ({process.language})
         </h3>
 
         <div
@@ -66,7 +66,7 @@ export default function CodeEditor({ node, onClose }: Props) {
             height="400px"
 
             extensions={[
-              languageExtension(node.language),
+              languageExtension(process.language),
             ]}
 
             onChange={value => setDraft(value)}

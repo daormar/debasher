@@ -8,11 +8,11 @@ import {
 
 import type { Workflow } from "../models/workflow";
 import type {
-  WorkflowNode,
-  NodeLanguage,
+  WorkflowProcess,
+  ProcessLanguage,
   ComputationalSpecs,
   AdditionalSpecs,
-} from "../models/node";
+} from "../models/process";
 import type { WorkflowOption } from "../models/option";
 import type { WorkflowEdge } from "../models/edge";
 import type { Position } from "../models/position";
@@ -21,66 +21,66 @@ import { saveWorkflow } from "../storage/workflowStorage";
 interface WorkflowContextType {
   workflow: Workflow;
 
-  selectedNode: WorkflowNode | null;
+  selectedProcess: WorkflowProcess | null;
 
-  selectNode: (nodeId: string | null) => void;
+  selectProcess: (processId: string | null) => void;
 
   save: () => Promise<void>;
 
-  addNode: () => void;
+  addProcess: () => void;
 
   setPreamble: (
     preamble: string
   ) => void;
 
-  removeNode: (
-    nodeId: string
+  removeProcess: (
+    processId: string
   ) => void;
 
-  moveNode: (
-    nodeId: string,
+  moveProcess: (
+    processId: string,
     position: Position
   ) => void;
 
-  renameNode: (
-    nodeId: string,
+  renameProcess: (
+    processId: string,
     name: string
   ) => void;
 
-  setNodeLanguage: (
-    nodeId: string,
-    language: NodeLanguage
+  setProcessLanguage: (
+    processId: string,
+    language: ProcessLanguage
   ) => void;
 
-  setNodeCode: (
-    nodeId: string,
+  setProcessCode: (
+    processId: string,
     code: string
   ) => void;
 
   setComputationalSpecs: (
-    nodeId: string,
+    processId: string,
     specs: ComputationalSpecs
   ) => void;
 
   setAdditionalSpecs: (
-    nodeId: string,
+    processId: string,
     specs: AdditionalSpecs
   ) => void;
 
   addOption: (
-    nodeId: string,
+    processId: string,
     direction: "input" | "output",
     label: string
   ) => void;
 
   updateOption: (
-    nodeId: string,
+    processId: string,
     optionId: string,
     changes: Partial<Omit<WorkflowOption, "id">>
   ) => void;
 
   removeOption: (
-    nodeId: string,
+    processId: string,
     optionId: string
   ) => void;
 
@@ -113,22 +113,22 @@ export function WorkflowProvider({
     await saveWorkflow(workflow);
   }
 
-  const [selectedNodeId, setSelectedNodeId] =
+  const [selectedProcessId, setSelectedProcessId] =
     useState<string | null>(null);
 
-  function selectNode(
-    nodeId: string | null
+  function selectProcess(
+    processId: string | null
   ) {
-    setSelectedNodeId(nodeId);
+    setSelectedProcessId(processId);
   }
 
-  function addNode() {
+  function addProcess() {
 
-    const node: WorkflowNode = {
+    const process: WorkflowProcess = {
 
       id: crypto.randomUUID(),
 
-      name: "New node",
+      name: "New process",
 
       position: {
         x: 100,
@@ -151,7 +151,7 @@ export function WorkflowProvider({
 
     setWorkflow(current => ({
       ...current,
-      nodes: [...current.nodes, node],
+      processes: [...current.processes, process],
     }));
 
   }
@@ -167,35 +167,35 @@ export function WorkflowProvider({
 
   }
 
-  function removeNode(
-    nodeId: string
+  function removeProcess(
+    processId: string
   ) {
 
     setWorkflow(current => ({
 
       ...current,
 
-      nodes: current.nodes.filter(
-        node => node.id !== nodeId
+      processes: current.processes.filter(
+        process => process.id !== processId
       ),
 
-      // Drop any edges left dangling by the removed node.
+      // Drop any edges left dangling by the removed process.
       edges: current.edges.filter(
         edge =>
-          edge.sourceNodeId !== nodeId &&
-          edge.targetNodeId !== nodeId
+          edge.sourceProcessId !== processId &&
+          edge.targetProcessId !== processId
       ),
 
     }));
 
-    setSelectedNodeId(current =>
-      current === nodeId ? null : current
+    setSelectedProcessId(current =>
+      current === processId ? null : current
     );
 
   }
 
-  function moveNode(
-    nodeId: string,
+  function moveProcess(
+    processId: string,
     position: Position
   ) {
 
@@ -203,18 +203,18 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
-          ? { ...node, position }
-          : node
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, position }
+          : process
       ),
 
     }));
 
   }
 
-  function renameNode(
-    nodeId: string,
+  function renameProcess(
+    processId: string,
     name: string
   ) {
 
@@ -222,37 +222,37 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
-          ? { ...node, name }
-          : node
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, name }
+          : process
       ),
 
     }));
 
   }
 
-  function setNodeLanguage(
-    nodeId: string,
-    language: NodeLanguage
+  function setProcessLanguage(
+    processId: string,
+    language: ProcessLanguage
   ) {
 
     setWorkflow(current => ({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
-          ? { ...node, language }
-          : node
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, language }
+          : process
       ),
 
     }));
 
   }
 
-  function setNodeCode(
-    nodeId: string,
+  function setProcessCode(
+    processId: string,
     code: string
   ) {
 
@@ -260,10 +260,10 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
-          ? { ...node, code }
-          : node
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, code }
+          : process
       ),
 
     }));
@@ -271,7 +271,7 @@ export function WorkflowProvider({
   }
 
   function setComputationalSpecs(
-    nodeId: string,
+    processId: string,
     computationalSpecs: ComputationalSpecs
   ) {
 
@@ -279,10 +279,10 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
-          ? { ...node, computationalSpecs }
-          : node
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, computationalSpecs }
+          : process
       ),
 
     }));
@@ -290,7 +290,7 @@ export function WorkflowProvider({
   }
 
   function setAdditionalSpecs(
-    nodeId: string,
+    processId: string,
     additionalSpecs: AdditionalSpecs
   ) {
 
@@ -298,10 +298,10 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
-          ? { ...node, additionalSpecs }
-          : node
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, additionalSpecs }
+          : process
       ),
 
     }));
@@ -309,7 +309,7 @@ export function WorkflowProvider({
   }
 
   function addOption(
-    nodeId: string,
+    processId: string,
     direction: "input" | "output",
     label: string
   ) {
@@ -336,16 +336,16 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
+      processes: current.processes.map(process =>
+        process.id === processId
           ? {
-              ...node,
+              ...process,
               options: [
-                ...node.options,
+                ...process.options,
                 option,
               ],
             }
-          : node
+          : process
       ),
 
     }));
@@ -353,7 +353,7 @@ export function WorkflowProvider({
   }
 
   function updateOption(
-    nodeId: string,
+    processId: string,
     optionId: string,
     changes: Partial<Omit<WorkflowOption, "id">>
   ) {
@@ -362,17 +362,17 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
+      processes: current.processes.map(process =>
+        process.id === processId
           ? {
-              ...node,
-              options: node.options.map(o =>
+              ...process,
+              options: process.options.map(o =>
                 o.id === optionId
                   ? { ...o, ...changes }
                   : o
               ),
             }
-          : node
+          : process
       ),
 
     }));
@@ -380,7 +380,7 @@ export function WorkflowProvider({
   }
 
   function removeOption(
-    nodeId: string,
+    processId: string,
     optionId: string
   ) {
 
@@ -388,15 +388,15 @@ export function WorkflowProvider({
 
       ...current,
 
-      nodes: current.nodes.map(node =>
-        node.id === nodeId
+      processes: current.processes.map(process =>
+        process.id === processId
           ? {
-              ...node,
-              options: node.options.filter(
+              ...process,
+              options: process.options.filter(
                 o => o.id !== optionId
               ),
             }
-          : node
+          : process
       ),
 
     }));
@@ -436,34 +436,34 @@ export function WorkflowProvider({
 
   }
 
-  const selectedNode =
-    workflow.nodes.find(
-      n => n.id === selectedNodeId
+  const selectedProcess =
+    workflow.processes.find(
+      p => p.id === selectedProcessId
     ) ?? null;
 
   const value = useMemo(() => ({
 
     workflow,
 
-    selectedNode,
+    selectedProcess,
 
-    selectNode,
+    selectProcess,
 
     save,
 
-    addNode,
+    addProcess,
 
     setPreamble,
 
-    removeNode,
+    removeProcess,
 
-    moveNode,
+    moveProcess,
 
-    renameNode,
+    renameProcess,
 
-    setNodeLanguage,
+    setProcessLanguage,
 
-    setNodeCode,
+    setProcessCode,
 
     setComputationalSpecs,
 
@@ -481,7 +481,7 @@ export function WorkflowProvider({
 
   }), [
     workflow,
-    selectedNode,
+    selectedProcess,
   ]);
 
   return (

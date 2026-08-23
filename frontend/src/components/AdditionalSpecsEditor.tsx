@@ -1,32 +1,32 @@
 import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
-import type { WorkflowNode } from "../models/node";
+import type { WorkflowProcess } from "../models/process";
 
 interface Props {
-  node: WorkflowNode;
+  process: WorkflowProcess;
   onClose: () => void;
 }
 
-export default function AdditionalSpecsEditor({ node, onClose }: Props) {
+export default function AdditionalSpecsEditor({ process, onClose }: Props) {
 
   const { setAdditionalSpecs } = useWorkflow();
 
   const [forced, setForced] =
-    useState(node.additionalSpecs.forced);
+    useState(process.additionalSpecs.forced);
 
   const [processdeps, setProcessdeps] =
-    useState(node.additionalSpecs.processdeps ?? "");
+    useState(process.additionalSpecs.processdeps ?? "");
 
   const [alias, setAlias] =
-    useState(node.additionalSpecs.alias ?? "");
+    useState(process.additionalSpecs.alias ?? "");
 
   const [externalAlias, setExternalAlias] =
-    useState(node.additionalSpecs.externalAlias ?? "");
+    useState(process.additionalSpecs.externalAlias ?? "");
 
   function handleSave() {
 
-    setAdditionalSpecs(node.id, {
+    setAdditionalSpecs(process.id, {
       forced,
       processdeps: processdeps.trim() ? processdeps : undefined,
       alias: alias.trim() ? alias : undefined,

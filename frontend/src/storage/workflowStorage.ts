@@ -2,7 +2,7 @@ import type { Workflow } from "../models/workflow";
 
 /**
  * Lightweight summary used to list workflows without loading
- * the full nodes/edges of each one.
+ * the full processes/edges of each one.
  */
 export interface WorkflowSummary {
   id: string;
@@ -51,7 +51,7 @@ export function createEmptyWorkflow(name: string): Workflow {
     id: crypto.randomUUID(),
     name,
     preamble: "",
-    nodes: [],
+    processes: [],
     edges: [],
   };
 }
