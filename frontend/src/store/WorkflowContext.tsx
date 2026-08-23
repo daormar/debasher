@@ -322,6 +322,14 @@ export function WorkflowProvider({
 
       label,
 
+      dataType: "string",
+
+      description: "",
+
+      value: "",
+
+      fifo: false,
+
     };
 
     setWorkflow(current => ({

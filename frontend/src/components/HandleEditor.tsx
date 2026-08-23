@@ -1,7 +1,11 @@
 import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
-import type { WorkflowHandle, HandleDirection } from "../models/handle";
+import type {
+  WorkflowHandle,
+  HandleDirection,
+  HandleDataType,
+} from "../models/handle";
 
 interface Props {
   nodeId: string;
@@ -19,11 +23,27 @@ export default function HandleEditor({ nodeId, handle, onClose }: Props) {
   const [direction, setDirection] =
     useState<HandleDirection>(handle.direction);
 
+  const [dataType, setDataType] =
+    useState<HandleDataType>(handle.dataType);
+
+  const [description, setDescription] =
+    useState(handle.description);
+
+  const [value, setValue] =
+    useState(handle.value);
+
+  const [fifo, setFifo] =
+    useState(handle.fifo);
+
   function handleSave() {
 
     updateHandle(nodeId, handle.id, {
       label,
       direction,
+      dataType,
+      description,
+      value,
+      fifo,
     });
 
     onClose();
@@ -107,6 +127,95 @@ export default function HandleEditor({ nodeId, handle, onClose }: Props) {
           </option>
 
         </select>
+
+        <label>
+          Data type
+        </label>
+
+        <select
+
+          value={dataType}
+
+          onChange={(event) =>
+            setDataType(
+              event.target.value as HandleDataType
+            )
+          }
+
+          style={{
+            width: "100%",
+          }}
+
+        >
+
+          <option value="int">
+            int
+          </option>
+
+          <option value="float">
+            float
+          </option>
+
+          <option value="string">
+            string
+          </option>
+
+        </select>
+
+        <label>
+          Description
+        </label>
+
+        <textarea
+
+          value={description}
+
+          onChange={(event) =>
+            setDescription(event.target.value)
+          }
+
+          rows={4}
+
+          style={{
+            width: "100%",
+          }}
+
+        />
+
+        <label>
+          Value
+        </label>
+
+        <input
+
+          value={value}
+
+          onChange={(event) =>
+            setValue(event.target.value)
+          }
+
+          style={{
+            width: "100%",
+          }}
+
+        />
+
+        <label>
+
+          <input
+
+            type="checkbox"
+
+            checked={fifo}
+
+            onChange={(event) =>
+              setFifo(event.target.checked)
+            }
+
+          />
+          {" "}FIFO
+
+        </label>
 
         <div
           style={{
