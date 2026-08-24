@@ -68,7 +68,7 @@ export default function PreambleEditor({ onClose }: Props) {
 
           style={{
             width: "100%",
-            fontFamily: "monospace",
+            fontFamily: "ui-monospace, Consolas, monospace",
             resize: "vertical",
           }}
 
