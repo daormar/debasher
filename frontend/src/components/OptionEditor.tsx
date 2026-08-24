@@ -15,7 +15,35 @@ interface Props {
 
 export default function OptionEditor({ processId, option, onClose }: Props) {
 
-  const { updateOption } = useWorkflow();
+  const { workflow, updateOption } = useWorkflow();
+
+  const connectingEdge = workflow.edges.find(
+    edge =>
+      edge.targetProcessId === processId &&
+      edge.targetOptionId === option.id
+  );
+
+  const connectedSourceLabel = (() => {
+
+    if (!connectingEdge) {
+      return null;
+    }
+
+    const sourceProcess = workflow.processes.find(
+      process => process.id === connectingEdge.sourceProcessId
+    );
+
+    const sourceOption = sourceProcess?.options.find(
+      o => o.id === connectingEdge.sourceOptionId
+    );
+
+    if (!sourceProcess || !sourceOption) {
+      return null;
+    }
+
+    return `[${sourceProcess.name};${sourceOption.label}]`;
+
+  })();
 
   const [label, setLabel] =
     useState(option.label);
@@ -159,19 +187,38 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
           Value
         </label>
 
-        <input
+        {connectedSourceLabel ? (
 
-          value={value}
+          <div
+            style={{
+              width: "100%",
+              padding: "6px 8px",
+              borderRadius: 4,
+              border: "1px solid #bbb",
+              color: "#888",
+              boxSizing: "border-box",
+            }}
+          >
+            {connectedSourceLabel}
+          </div>
 
-          onChange={(event) =>
-            setValue(event.target.value)
-          }
+        ) : (
 
-          style={{
-            width: "100%",
-          }}
+          <input
 
-        />
+            value={value}
+
+            onChange={(event) =>
+              setValue(event.target.value)
+            }
+
+            style={{
+              width: "100%",
+            }}
+
+          />
+
+        )}
 
         <label>
 
