@@ -34,6 +34,9 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
   const [fifo, setFifo] =
     useState(option.fifo);
 
+  const [commandLine, setCommandLine] =
+    useState(option.commandLine);
+
   function handleSave() {
 
     updateOption(processId, option.id, {
@@ -43,6 +46,7 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
       description,
       value,
       fifo,
+      commandLine,
     });
 
     onClose();
@@ -168,6 +172,23 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
           }}
 
         />
+
+        <label>
+
+          <input
+
+            type="checkbox"
+
+            checked={commandLine}
+
+            onChange={(event) =>
+              setCommandLine(event.target.checked)
+            }
+
+          />
+          {" "}Command line
+
+        </label>
 
         <label>
 

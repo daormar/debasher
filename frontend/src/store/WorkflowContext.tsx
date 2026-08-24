@@ -358,6 +358,8 @@ export function WorkflowProvider({
 
       fifo: false,
 
+      commandLine: false,
+
     };
 
     setWorkflow(current => ({

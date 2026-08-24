@@ -10,6 +10,7 @@ export interface WorkflowOption {
   description: string;
   value: string;
   fifo: boolean;
+  commandLine: boolean;
 }
 
 export function getOptionDirection(label: string): OptionDirection {
