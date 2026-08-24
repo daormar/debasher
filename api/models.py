@@ -1,3 +1,5 @@
+from typing import Literal, Optional
+
 from pydantic import BaseModel
 
 
@@ -6,28 +8,59 @@ class Position(BaseModel):
     y: float
 
 
-class WorkflowHandle(BaseModel):
+class WorkflowOption(BaseModel):
     id: str
     label: str
-    direction: str  # "input" | "output"
+    direction: Literal["input", "output"]
+    dataType: Literal["int", "float", "string"]
+    description: str
+    value: str
+    fifo: bool
+    commandLine: bool
 
 
-class WorkflowNode(BaseModel):
+class ComputationalSpecs(BaseModel):
+    cpus: Optional[float] = None
+    mem: Optional[float] = None
+    time: Optional[str] = None
+
+
+class AdditionalSpecs(BaseModel):
+    forced: bool
+    processdeps: Optional[str] = None
+    alias: Optional[str] = None
+    externalAlias: Optional[str] = None
+
+
+class OptionsHandler(BaseModel):
+    mode: Literal["standard", "array", "generator"]
+    generatorSize: Optional[str] = None
+    arrayCode: Optional[str] = None
+
+
+class WorkflowProcess(BaseModel):
     id: str
     name: str
     position: Position
-    handles: list[WorkflowHandle]
+    options: list[WorkflowOption]
+    optionsHandler: OptionsHandler
+    language: Literal["bash", "python", "perl", "r", "groovy"]
+    code: str
+    computationalSpecs: ComputationalSpecs
+    additionalSpecs: AdditionalSpecs
 
 
 class WorkflowEdge(BaseModel):
     id: str
-    sourceNodeId: str
-    sourceHandleId: str
-    targetNodeId: str
-    targetHandleId: str
+    sourceProcessId: str
+    sourceOptionId: str
+    targetProcessId: str
+    targetOptionId: str
 
 
 class Workflow(BaseModel):
     id: str
-    nodes: list[WorkflowNode]
+    name: str
+    preamble: str
+    processes: list[WorkflowProcess]
     edges: list[WorkflowEdge]

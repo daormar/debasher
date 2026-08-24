@@ -27,7 +27,7 @@ interface WorkflowContextType {
 
   selectProcess: (processId: string | null) => void;
 
-  save: () => Promise<void>;
+  save: (outputDir: string) => Promise<void>;
 
   addProcess: () => void;
 
@@ -115,8 +115,8 @@ export function WorkflowProvider({
   const [workflow, setWorkflow] =
     useState<Workflow>(initialWorkflow);
 
-  async function save() {
-    await saveWorkflow(workflow);
+  async function save(outputDir: string) {
+    await saveWorkflow(workflow, outputDir);
   }
 
   const [selectedProcessId, setSelectedProcessId] =

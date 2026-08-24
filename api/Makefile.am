@@ -1,5 +1,5 @@
 apidir = $(pkgdatadir)/api
-dist_api_DATA = main.py models.py requirements.txt
+dist_api_DATA = main.py models.py persistence.py requirements.txt
 
 routersdir = $(apidir)/routers
 dist_routers_DATA = routers/__init__.py routers/workflows.py

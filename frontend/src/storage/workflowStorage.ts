@@ -38,8 +38,22 @@ export async function loadWorkflow(id: string): Promise<Workflow> {
   return structuredClone(workflow);
 }
 
-export async function saveWorkflow(workflow: Workflow): Promise<void> {
-  fakeDb.set(workflow.id, structuredClone(workflow));
+export async function saveWorkflow(
+  workflow: Workflow,
+  outputDir: string
+): Promise<void> {
+  const response = await fetch("/api/workflows/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ outputDir, workflow }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `Failed to save workflow (${response.status}): ${body}`
+    );
+  }
 }
 
 /**

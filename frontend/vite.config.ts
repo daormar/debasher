@@ -8,4 +8,12 @@ export default defineConfig({
   // directly via file:// (Chromium blocks the external module/CSS fetches
   // that a normal multi-file Vite build otherwise requires).
   plugins: [react(), viteSingleFile()],
+  server: {
+    // Forward API calls to the FastAPI dev server so relative fetch("/api/...")
+    // calls work under `npm run dev` too, not just in the same-origin production
+    // build served by FastAPI's static mount.
+    proxy: {
+      "/api": "http://localhost:8000",
+    },
+  },
 })

@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
 import PreambleEditor from "./PreambleEditor";
+import SaveDialog from "./SaveDialog";
 
 interface Props {
   onClose: () => void;
@@ -11,10 +12,12 @@ export default function Toolbar({ onClose }: Props) {
 
   const {
     addProcess,
-    save,
   } = useWorkflow();
 
   const [isPreambleOpen, setPreambleOpen] =
+    useState(false);
+
+  const [isSaveOpen, setSaveOpen] =
     useState(false);
 
 
@@ -49,10 +52,16 @@ export default function Toolbar({ onClose }: Props) {
       )}
 
       <button
-        onClick={() => save()}
+        onClick={() => setSaveOpen(true)}
       >
         Save
       </button>
+
+      {isSaveOpen && (
+        <SaveDialog
+          onClose={() => setSaveOpen(false)}
+        />
+      )}
 
       <button
         onClick={onClose}
