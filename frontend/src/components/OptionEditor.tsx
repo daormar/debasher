@@ -3,9 +3,9 @@ import { useState } from "react";
 import { useWorkflow } from "../store/WorkflowContext";
 import type {
   WorkflowOption,
-  OptionDirection,
   OptionDataType,
 } from "../models/option";
+import { getOptionDirection, isValidOptionLabel } from "../models/option";
 
 interface Props {
   processId: string;
@@ -20,8 +20,7 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
   const [label, setLabel] =
     useState(option.label);
 
-  const [direction, setDirection] =
-    useState<OptionDirection>(option.direction);
+  const direction = getOptionDirection(label);
 
   const [dataType, setDataType] =
     useState<OptionDataType>(option.dataType);
@@ -39,7 +38,7 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
 
     updateOption(processId, option.id, {
       label,
-      direction,
+      direction: getOptionDirection(label),
       dataType,
       description,
       value,
@@ -77,7 +76,7 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Option
+          {direction === "output" ? "Output Option" : "Input Option"}
         </h3>
 
         <label>
@@ -97,36 +96,6 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
           }}
 
         />
-
-        <label>
-          Direction
-        </label>
-
-        <select
-
-          value={direction}
-
-          onChange={(event) =>
-            setDirection(
-              event.target.value as OptionDirection
-            )
-          }
-
-          style={{
-            width: "100%",
-          }}
-
-        >
-
-          <option value="input">
-            input
-          </option>
-
-          <option value="output">
-            output
-          </option>
-
-        </select>
 
         <label>
           Data type
@@ -232,7 +201,7 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
 
           <button
             onClick={handleSave}
-            disabled={!label.trim()}
+            disabled={!isValidOptionLabel(label)}
           >
             Save
           </button>

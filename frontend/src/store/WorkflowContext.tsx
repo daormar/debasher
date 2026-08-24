@@ -15,6 +15,7 @@ import type {
   OptionsHandler,
 } from "../models/process";
 import type { WorkflowOption } from "../models/option";
+import { getOptionDirection } from "../models/option";
 import type { WorkflowEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import { saveWorkflow } from "../storage/workflowStorage";
@@ -75,7 +76,6 @@ interface WorkflowContextType {
 
   addOption: (
     processId: string,
-    direction: "input" | "output",
     label: string
   ) => void;
 
@@ -339,7 +339,6 @@ export function WorkflowProvider({
 
   function addOption(
     processId: string,
-    direction: "input" | "output",
     label: string
   ) {
 
@@ -347,7 +346,7 @@ export function WorkflowProvider({
 
       id: crypto.randomUUID(),
 
-      direction,
+      direction: getOptionDirection(label),
 
       label,
 

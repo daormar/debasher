@@ -9,6 +9,7 @@ import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import GeneratorConfigEditor from "./GeneratorConfigEditor";
 import ArrayConfigEditor from "./ArrayConfigEditor";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
+import { isValidOptionLabel } from "../models/option";
 
 
 export default function Inspector() {
@@ -213,7 +214,7 @@ export default function Inspector() {
           >
 
             <span>
-              {option.direction}: {option.label}
+              {option.label}
             </span>
 
 
@@ -306,13 +307,12 @@ export default function Inspector() {
 
         onClick={() => {
 
-          if (!optionLabel.trim()) {
+          if (!isValidOptionLabel(optionLabel)) {
             return;
           }
 
           addOption(
             selectedProcess.id,
-            "input",
             optionLabel
           );
 
@@ -320,35 +320,10 @@ export default function Inspector() {
 
         }}
 
-      >
-        Add input
-      </button>
-
-
-      <button
-
-        onClick={() => {
-
-          if (!optionLabel.trim()) {
-            return;
-          }
-
-          addOption(
-            selectedProcess.id,
-            "output",
-            optionLabel
-          );
-
-          setOptionLabel("");
-
-        }}
-
-        style={{
-          marginLeft: 8,
-        }}
+        disabled={!isValidOptionLabel(optionLabel)}
 
       >
-        Add output
+        Add
       </button>
 
 

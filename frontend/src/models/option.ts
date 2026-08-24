@@ -11,3 +11,13 @@ export interface WorkflowOption {
   value: string;
   fifo: boolean;
 }
+
+export function getOptionDirection(label: string): OptionDirection {
+  return label.startsWith("-out") || label.startsWith("--out")
+    ? "output"
+    : "input";
+}
+
+export function isValidOptionLabel(label: string): boolean {
+  return label.trim().startsWith("-");
+}
