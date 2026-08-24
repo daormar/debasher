@@ -11,6 +11,7 @@ interface Props {
 export default function Toolbar({ onClose }: Props) {
 
   const {
+    workflow,
     addProcess,
   } = useWorkflow();
 
@@ -32,6 +33,15 @@ export default function Toolbar({ onClose }: Props) {
         gap: 8,
       }}
     >
+
+      <strong
+        style={{
+          alignSelf: "center",
+          marginRight: 8,
+        }}
+      >
+        {workflow.name}
+      </strong>
 
       <button
         onClick={() => setPreambleOpen(true)}

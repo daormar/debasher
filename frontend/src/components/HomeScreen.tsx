@@ -6,6 +6,7 @@ import {
   createEmptyWorkflow,
   type WorkflowSummary,
 } from "../storage/workflowStorage";
+import NewWorkflowDialog from "./NewWorkflowDialog";
 
 interface Props {
   // Called with the workflow that should be opened in the editor.
@@ -15,6 +16,7 @@ interface Props {
 export default function HomeScreen({ onOpen }: Props) {
   const [summaries, setSummaries] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isNewWorkflowOpen, setNewWorkflowOpen] = useState(false);
 
   useEffect(() => {
     listWorkflows().then(result => {
@@ -28,17 +30,24 @@ export default function HomeScreen({ onOpen }: Props) {
     onOpen(workflow);
   }
 
-  function handleCreate() {
-    onOpen(createEmptyWorkflow("Untitled workflow"));
+  function handleCreate(name: string) {
+    onOpen(createEmptyWorkflow(name));
   }
 
   return (
     <div style={{ padding: 32, maxWidth: 480, margin: "0 auto" }}>
       <h1>My workflows</h1>
 
-      <button onClick={handleCreate} style={{ marginBottom: 24 }}>
+      <button onClick={() => setNewWorkflowOpen(true)} style={{ marginBottom: 24 }}>
         + Create new workflow
       </button>
+
+      {isNewWorkflowOpen && (
+        <NewWorkflowDialog
+          onCreate={handleCreate}
+          onClose={() => setNewWorkflowOpen(false)}
+        />
+      )}
 
       {loading && <p>Loading...</p>}
 
