@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useWorkflow } from "../store/WorkflowContext";
 import PreambleEditor from "./PreambleEditor";
 import SaveDialog from "./SaveDialog";
+import ProcessNameDialog from "./ProcessNameDialog";
 
 interface Props {
   onClose: () => void;
@@ -19,6 +20,9 @@ export default function Toolbar({ onClose }: Props) {
     useState(false);
 
   const [isSaveOpen, setSaveOpen] =
+    useState(false);
+
+  const [isNewProcessOpen, setNewProcessOpen] =
     useState(false);
 
 
@@ -50,10 +54,19 @@ export default function Toolbar({ onClose }: Props) {
       </button>
 
       <button
-        onClick={addProcess}
+        onClick={() => setNewProcessOpen(true)}
       >
         New process
       </button>
+
+      {isNewProcessOpen && (
+        <ProcessNameDialog
+          title="New process"
+          confirmLabel="Create"
+          onConfirm={addProcess}
+          onClose={() => setNewProcessOpen(false)}
+        />
+      )}
 
       {isPreambleOpen && (
         <PreambleEditor

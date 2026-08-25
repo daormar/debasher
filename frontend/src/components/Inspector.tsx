@@ -9,7 +9,7 @@ import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import GeneratorConfigEditor from "./GeneratorConfigEditor";
 import ArrayConfigEditor from "./ArrayConfigEditor";
 import ManualConfigEditor from "./ManualConfigEditor";
-import ChangeProcessNameDialog from "./ChangeProcessNameDialog";
+import ProcessNameDialog from "./ProcessNameDialog";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
 import { isValidOptionLabel } from "../models/option";
 
@@ -116,9 +116,11 @@ export default function Inspector() {
 
 
       {isChangeNameOpen && (
-        <ChangeProcessNameDialog
-          currentName={selectedProcess.name}
-          onChange={(name) =>
+        <ProcessNameDialog
+          title="Change process name"
+          confirmLabel="Change"
+          initialName={selectedProcess.name}
+          onConfirm={(name) =>
             renameProcess(selectedProcess.id, name)
           }
           onClose={() => setChangeNameOpen(false)}

@@ -29,7 +29,7 @@ interface WorkflowContextType {
 
   save: (outputDir: string) => Promise<void>;
 
-  addProcess: () => void;
+  addProcess: (name: string) => void;
 
   setPreamble: (
     preamble: string
@@ -128,13 +128,13 @@ export function WorkflowProvider({
     setSelectedProcessId(processId);
   }
 
-  function addProcess() {
+  function addProcess(name: string) {
 
     const process: WorkflowProcess = {
 
       id: crypto.randomUUID(),
 
-      name: "New process",
+      name,
 
       position: {
         x: 100,
