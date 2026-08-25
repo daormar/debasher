@@ -124,6 +124,7 @@ export default function Inspector() {
           existingNames={workflow.processes
             .filter(process => process.id !== selectedProcess.id)
             .map(process => process.name)}
+          preamble={workflow.preamble}
           onConfirm={(name) =>
             renameProcess(selectedProcess.id, name)
           }

@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 
-import { validateProcessName } from "../api/processApi";
+import { suggestProcessNames, validateProcessName } from "../api/processApi";
 
 interface Props {
   title: string;
   confirmLabel: string;
   initialName?: string;
   existingNames: string[];
+  preamble: string;
   onConfirm: (name: string) => void;
   onClose: () => void;
 }
@@ -16,18 +17,44 @@ export default function ProcessNameDialog({
   confirmLabel,
   initialName = "",
   existingNames,
+  preamble,
   onConfirm,
   onClose,
 }: Props) {
 
+  const suggestionsListId = useId();
+
   const [name, setName] =
     useState(initialName);
+
+  const [suggestions, setSuggestions] =
+    useState<string[]>([]);
 
   const [isValidating, setValidating] =
     useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
+
+  useEffect(() => {
+
+    let cancelled = false;
+
+    suggestProcessNames(preamble)
+      .then(names => {
+        if (!cancelled) {
+          setSuggestions(names);
+        }
+      })
+      .catch(() => {
+        // Suggestions are a convenience — silently ignore failures.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+
+  }, [preamble]);
 
   async function handleConfirm() {
 
@@ -109,6 +136,8 @@ export default function ProcessNameDialog({
 
           type="text"
 
+          list={suggestionsListId}
+
           value={name}
 
           onChange={(event) =>
@@ -128,6 +157,12 @@ export default function ProcessNameDialog({
           }}
 
         />
+
+        <datalist id={suggestionsListId}>
+          {suggestions.map(suggestion => (
+            <option key={suggestion} value={suggestion} />
+          ))}
+        </datalist>
 
         {error && (
           <div style={{ color: "#b00020", fontSize: 14 }}>

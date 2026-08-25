@@ -64,6 +64,7 @@ export default function Toolbar({ onClose }: Props) {
           title="New process"
           confirmLabel="Create"
           existingNames={workflow.processes.map(process => process.name)}
+          preamble={workflow.preamble}
           onConfirm={addProcess}
           onClose={() => setNewProcessOpen(false)}
         />
