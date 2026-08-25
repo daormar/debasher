@@ -3,13 +3,14 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .routers import workflows
+from .routers import processes, workflows
 
 app = FastAPI(title="Workflow API")
 
 # API routes must be registered before mounting static files,
 # otherwise the static mount at "/" would shadow them.
 app.include_router(workflows.router)
+app.include_router(processes.router)
 
 # Serve the built frontend (frontend/dist) if it exists.
 # During development with `npm run dev`, this directory usually

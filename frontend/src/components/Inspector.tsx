@@ -9,6 +9,7 @@ import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import GeneratorConfigEditor from "./GeneratorConfigEditor";
 import ArrayConfigEditor from "./ArrayConfigEditor";
 import ManualConfigEditor from "./ManualConfigEditor";
+import ChangeProcessNameDialog from "./ChangeProcessNameDialog";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
 import { isValidOptionLabel } from "../models/option";
 
@@ -47,6 +48,9 @@ export default function Inspector() {
     useState(false);
 
   const [isManualConfigOpen, setManualConfigOpen] =
+    useState(false);
+
+  const [isChangeNameOpen, setChangeNameOpen] =
     useState(false);
 
 
@@ -91,28 +95,35 @@ export default function Inspector() {
       </h3>
 
 
-      <label>
-        Name
-      </label>
-
-
-      <input
-
-        value={selectedProcess.name}
-
-        onChange={(event) =>
-          renameProcess(
-            selectedProcess.id,
-            event.target.value
-          )
-        }
-
+      <div
         style={{
-          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
           marginBottom: 16,
         }}
+      >
 
-      />
+        <span style={{ flex: 1 }}>
+          {selectedProcess.name}
+        </span>
+
+        <button onClick={() => setChangeNameOpen(true)}>
+          Change name
+        </button>
+
+      </div>
+
+
+      {isChangeNameOpen && (
+        <ChangeProcessNameDialog
+          currentName={selectedProcess.name}
+          onChange={(name) =>
+            renameProcess(selectedProcess.id, name)
+          }
+          onClose={() => setChangeNameOpen(false)}
+        />
+      )}
 
 
       <h4>
