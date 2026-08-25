@@ -163,29 +163,27 @@ export default function Inspector() {
       </div>
 
 
-      {selectedProcess.optionsHandler.mode !== "standard" && (
+      <button
 
-        <button
+        disabled={selectedProcess.optionsHandler.mode === "standard"}
 
-          onClick={() => {
-            if (selectedProcess.optionsHandler.mode === "generator") {
-              setGeneratorConfigOpen(true);
-            } else if (selectedProcess.optionsHandler.mode === "manual") {
-              setManualConfigOpen(true);
-            } else {
-              setArrayConfigOpen(true);
-            }
-          }}
+        onClick={() => {
+          if (selectedProcess.optionsHandler.mode === "generator") {
+            setGeneratorConfigOpen(true);
+          } else if (selectedProcess.optionsHandler.mode === "manual") {
+            setManualConfigOpen(true);
+          } else {
+            setArrayConfigOpen(true);
+          }
+        }}
 
-          style={{
-            marginBottom: 16,
-          }}
+        style={{
+          marginBottom: 16,
+        }}
 
-        >
-          Configure
-        </button>
-
-      )}
+      >
+        Configure
+      </button>
 
 
       {isGeneratorConfigOpen && (
