@@ -54,6 +54,20 @@ export async function loadWorkflow(inputDir: string): Promise<Workflow> {
   return response.json();
 }
 
+export async function importWorkflow(scriptPath: string): Promise<Workflow> {
+  const response = await fetch("/api/workflows/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scriptPath, workflow: createEmptyWorkflow("") }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to import workflow: ${await errorMessage(response)}`);
+  }
+
+  return response.json();
+}
+
 /**
  * Not persisted yet — just builds a blank workflow in memory.
  * It only gets stored once the user actually saves it.

@@ -3,6 +3,7 @@ import type { Workflow } from "../models/workflow";
 import { createEmptyWorkflow } from "../storage/workflowStorage";
 import NewWorkflowDialog from "./NewWorkflowDialog";
 import LoadWorkflowDialog from "./LoadWorkflowDialog";
+import ImportWorkflowDialog from "./ImportWorkflowDialog";
 
 interface Props {
   // Called with the workflow that should be opened in the editor.
@@ -12,6 +13,7 @@ interface Props {
 export default function HomeScreen({ onOpen }: Props) {
   const [isNewWorkflowOpen, setNewWorkflowOpen] = useState(false);
   const [isLoadWorkflowOpen, setLoadWorkflowOpen] = useState(false);
+  const [isImportWorkflowOpen, setImportWorkflowOpen] = useState(false);
 
   function handleCreate(name: string) {
     onOpen(createEmptyWorkflow(name));
@@ -30,7 +32,7 @@ export default function HomeScreen({ onOpen }: Props) {
           Load workflow
         </button>
 
-        <button disabled title="Coming soon">
+        <button onClick={() => setImportWorkflowOpen(true)}>
           Import workflow
         </button>
       </div>
@@ -46,6 +48,13 @@ export default function HomeScreen({ onOpen }: Props) {
         <LoadWorkflowDialog
           onLoad={onOpen}
           onClose={() => setLoadWorkflowOpen(false)}
+        />
+      )}
+
+      {isImportWorkflowOpen && (
+        <ImportWorkflowDialog
+          onImport={onOpen}
+          onClose={() => setImportWorkflowOpen(false)}
         />
       )}
     </div>

@@ -44,3 +44,17 @@ def load_workflow(input_dir: str) -> Workflow:
         )
 
     return Workflow.model_validate_json(workflow_path.read_text())
+
+
+def resolve_script_path(script_path: str) -> Path:
+    """
+    Resolve `script_path` to an existing file.
+
+    Raises FileNotFoundError if it doesn't exist.
+    """
+    resolved_script_path = Path(script_path).expanduser()
+
+    if not resolved_script_path.is_file():
+        raise FileNotFoundError(f"No such file: {resolved_script_path}")
+
+    return resolved_script_path

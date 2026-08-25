@@ -21,6 +21,11 @@ class LoadWorkflowRequest(BaseModel):
     inputDir: str
 
 
+class ImportWorkflowRequest(BaseModel):
+    scriptPath: str
+    workflow: Workflow
+
+
 @router.post("/save", response_model=SaveWorkflowResponse)
 def save_workflow_to_dir(request: SaveWorkflowRequest) -> SaveWorkflowResponse:
     """
@@ -50,6 +55,29 @@ def load_workflow_from_dir(request: LoadWorkflowRequest) -> Workflow:
         raise HTTPException(
             status_code=400, detail=f"Invalid workflow data in {request.inputDir!r}: {err}"
         )
+
+
+@router.post("/import", response_model=Workflow)
+def import_workflow_from_script(request: ImportWorkflowRequest) -> Workflow:
+    """
+    Import a workflow from a Bash script.
+
+    Stub: just echoes back the (empty) workflow the frontend sent,
+    ignoring the script's contents.
+
+    TODO: replace this with a real call into core/ that parses
+    `request.scriptPath` into a Workflow, e.g.:
+        return core.import_workflow(request.scriptPath)
+    """
+    if not request.scriptPath.strip():
+        raise HTTPException(status_code=400, detail="scriptPath must not be empty")
+
+    try:
+        persistence.resolve_script_path(request.scriptPath)
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+
+    return request.workflow
 
 
 @router.get("/{workflow_id}", response_model=Workflow)
