@@ -17,6 +17,7 @@ import { isValidOptionLabel } from "../models/option";
 export default function Inspector() {
 
   const {
+    workflow,
     selectedProcess,
     renameProcess,
     addOption,
@@ -120,6 +121,9 @@ export default function Inspector() {
           title="Change process name"
           confirmLabel="Change"
           initialName={selectedProcess.name}
+          existingNames={workflow.processes
+            .filter(process => process.id !== selectedProcess.id)
+            .map(process => process.name)}
           onConfirm={(name) =>
             renameProcess(selectedProcess.id, name)
           }

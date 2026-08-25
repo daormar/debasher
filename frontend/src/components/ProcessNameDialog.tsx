@@ -6,6 +6,7 @@ interface Props {
   title: string;
   confirmLabel: string;
   initialName?: string;
+  existingNames: string[];
   onConfirm: (name: string) => void;
   onClose: () => void;
 }
@@ -14,6 +15,7 @@ export default function ProcessNameDialog({
   title,
   confirmLabel,
   initialName = "",
+  existingNames,
   onConfirm,
   onClose,
 }: Props) {
@@ -29,8 +31,19 @@ export default function ProcessNameDialog({
 
   async function handleConfirm() {
 
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
       setError("Please enter a process name.");
+      return;
+    }
+
+    const isDuplicate = existingNames.some(
+      existingName => existingName.toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      setError("A process with this name already exists.");
       return;
     }
 
@@ -38,14 +51,14 @@ export default function ProcessNameDialog({
     setError(null);
 
     try {
-      const valid = await validateProcessName(name.trim());
+      const valid = await validateProcessName(trimmedName);
 
       if (!valid) {
         setError("Invalid process name.");
         return;
       }
 
-      onConfirm(name.trim());
+      onConfirm(trimmedName);
       onClose();
     } catch (err) {
       setError(
