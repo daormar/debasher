@@ -27,3 +27,20 @@ def save_workflow(output_dir: str, workflow: Workflow) -> Path:
     workflow_path.write_text(workflow.model_dump_json(indent=2))
 
     return workflow_path
+
+
+def load_workflow(input_dir: str) -> Workflow:
+    """
+    Read and deserialize <input_dir>/.debasher/workflow.json.
+
+    Raises FileNotFoundError if that file doesn't exist.
+    """
+    workflow_path = Path(input_dir).expanduser() / METADATA_DIRNAME / WORKFLOW_FILENAME
+
+    if not workflow_path.is_file():
+        raise FileNotFoundError(
+            f"No workflow found at {workflow_path} "
+            f"(expected a {METADATA_DIRNAME}/{WORKFLOW_FILENAME} file in the given directory)"
+        )
+
+    return Workflow.model_validate_json(workflow_path.read_text())

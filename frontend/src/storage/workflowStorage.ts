@@ -8,6 +8,23 @@ import type { Workflow } from "../models/workflow";
 // the same, nothing outside this file needs to change.
 // ---------------------------------------------------------------
 
+// FastAPI's default error body is `{"detail": "..."}`. Prefer that
+// message when present, otherwise fall back to the raw response body.
+async function errorMessage(response: Response): Promise<string> {
+  const body = await response.text();
+
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed?.detail === "string") {
+      return parsed.detail;
+    }
+  } catch {
+    // Not JSON — fall through and use the raw body.
+  }
+
+  return body;
+}
+
 export async function saveWorkflow(
   workflow: Workflow,
   outputDir: string
@@ -19,11 +36,22 @@ export async function saveWorkflow(
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(
-      `Failed to save workflow (${response.status}): ${body}`
-    );
+    throw new Error(`Failed to save workflow: ${await errorMessage(response)}`);
   }
+}
+
+export async function loadWorkflow(inputDir: string): Promise<Workflow> {
+  const response = await fetch("/api/workflows/load", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ inputDir }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to load workflow: ${await errorMessage(response)}`);
+  }
+
+  return response.json();
 }
 
 /**

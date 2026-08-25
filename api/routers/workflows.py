@@ -1,3 +1,4 @@
+import pydantic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -16,6 +17,10 @@ class SaveWorkflowResponse(BaseModel):
     path: str
 
 
+class LoadWorkflowRequest(BaseModel):
+    inputDir: str
+
+
 @router.post("/save", response_model=SaveWorkflowResponse)
 def save_workflow_to_dir(request: SaveWorkflowRequest) -> SaveWorkflowResponse:
     """
@@ -27,6 +32,24 @@ def save_workflow_to_dir(request: SaveWorkflowRequest) -> SaveWorkflowResponse:
 
     workflow_path = persistence.save_workflow(request.outputDir, request.workflow)
     return SaveWorkflowResponse(path=str(workflow_path))
+
+
+@router.post("/load", response_model=Workflow)
+def load_workflow_from_dir(request: LoadWorkflowRequest) -> Workflow:
+    """
+    Read a workflow previously saved into `request.inputDir` via `/save`.
+    """
+    if not request.inputDir.strip():
+        raise HTTPException(status_code=400, detail="inputDir must not be empty")
+
+    try:
+        return persistence.load_workflow(request.inputDir)
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+    except pydantic.ValidationError as err:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid workflow data in {request.inputDir!r}: {err}"
+        )
 
 
 @router.get("/{workflow_id}", response_model=Workflow)
