@@ -10,10 +10,11 @@ import { getOptionDirection, isValidOptionLabel } from "../models/option";
 interface Props {
   processId: string;
   option: WorkflowOption;
+  manualMode: boolean;
   onClose: () => void;
 }
 
-export default function OptionEditor({ processId, option, onClose }: Props) {
+export default function OptionEditor({ processId, option, manualMode, onClose }: Props) {
 
   const { workflow, updateOption } = useWorkflow();
 
@@ -183,40 +184,48 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
 
         />
 
-        <label>
-          Value
-        </label>
+        {!manualMode && (
 
-        {connectedSourceLabel ? (
+          <>
 
-          <div
-            style={{
-              width: "100%",
-              padding: "6px 8px",
-              borderRadius: 4,
-              border: "1px solid #bbb",
-              color: "#888",
-              boxSizing: "border-box",
-            }}
-          >
-            {connectedSourceLabel}
-          </div>
+            <label>
+              Value
+            </label>
 
-        ) : (
+            {connectedSourceLabel ? (
 
-          <input
+              <div
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  borderRadius: 4,
+                  border: "1px solid #bbb",
+                  color: "#888",
+                  boxSizing: "border-box",
+                }}
+              >
+                {connectedSourceLabel}
+              </div>
 
-            value={value}
+            ) : (
 
-            onChange={(event) =>
-              setValue(event.target.value)
-            }
+              <input
 
-            style={{
-              width: "100%",
-            }}
+                value={value}
 
-          />
+                onChange={(event) =>
+                  setValue(event.target.value)
+                }
+
+                style={{
+                  width: "100%",
+                }}
+
+              />
+
+            )}
+
+          </>
 
         )}
 
@@ -237,22 +246,26 @@ export default function OptionEditor({ processId, option, onClose }: Props) {
 
         </label>
 
-        <label>
+        {!manualMode && (
 
-          <input
+          <label>
 
-            type="checkbox"
+            <input
 
-            checked={fifo}
+              type="checkbox"
 
-            onChange={(event) =>
-              setFifo(event.target.checked)
-            }
+              checked={fifo}
 
-          />
-          {" "}FIFO
+              onChange={(event) =>
+                setFifo(event.target.checked)
+              }
 
-        </label>
+            />
+            {" "}FIFO
+
+          </label>
+
+        )}
 
         <div
           style={{

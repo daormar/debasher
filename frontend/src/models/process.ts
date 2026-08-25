@@ -33,7 +33,8 @@ export interface AdditionalSpecs {
 export type OptionsHandlerMode =
   | "standard"
   | "array"
-  | "generator";
+  | "generator"
+  | "manual";
 
 export interface OptionsHandler {
 
@@ -42,6 +43,8 @@ export interface OptionsHandler {
   generatorSize?: string;
 
   arrayCode?: string;
+
+  manualCode?: string;
 
 }
 

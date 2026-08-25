@@ -8,6 +8,7 @@ import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
 import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import GeneratorConfigEditor from "./GeneratorConfigEditor";
 import ArrayConfigEditor from "./ArrayConfigEditor";
+import ManualConfigEditor from "./ManualConfigEditor";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
 import { isValidOptionLabel } from "../models/option";
 
@@ -43,6 +44,9 @@ export default function Inspector() {
     useState(false);
 
   const [isArrayConfigOpen, setArrayConfigOpen] =
+    useState(false);
+
+  const [isManualConfigOpen, setManualConfigOpen] =
     useState(false);
 
 
@@ -119,12 +123,13 @@ export default function Inspector() {
       <div
         style={{
           display: "flex",
+          flexWrap: "wrap",
           gap: 4,
           marginBottom: 8,
         }}
       >
 
-        {(["standard", "array", "generator"] as OptionsHandlerMode[]).map(mode => (
+        {(["standard", "array", "generator", "manual"] as OptionsHandlerMode[]).map(mode => (
 
           <button
 
@@ -138,7 +143,7 @@ export default function Inspector() {
             }
 
             style={{
-              flex: 1,
+              flex: "1 1 45%",
               fontWeight:
                 selectedProcess.optionsHandler.mode === mode
                   ? "bold"
@@ -162,11 +167,15 @@ export default function Inspector() {
 
         <button
 
-          onClick={() =>
-            selectedProcess.optionsHandler.mode === "generator"
-              ? setGeneratorConfigOpen(true)
-              : setArrayConfigOpen(true)
-          }
+          onClick={() => {
+            if (selectedProcess.optionsHandler.mode === "generator") {
+              setGeneratorConfigOpen(true);
+            } else if (selectedProcess.optionsHandler.mode === "manual") {
+              setManualConfigOpen(true);
+            } else {
+              setArrayConfigOpen(true);
+            }
+          }}
 
           style={{
             marginBottom: 16,
@@ -191,6 +200,14 @@ export default function Inspector() {
         <ArrayConfigEditor
           process={selectedProcess}
           onClose={() => setArrayConfigOpen(false)}
+        />
+      )}
+
+
+      {isManualConfigOpen && (
+        <ManualConfigEditor
+          process={selectedProcess}
+          onClose={() => setManualConfigOpen(false)}
         />
       )}
 
@@ -273,6 +290,7 @@ export default function Inspector() {
           <OptionEditor
             processId={selectedProcess.id}
             option={editingOption}
+            manualMode={selectedProcess.optionsHandler.mode === "manual"}
             onClose={() => setEditingOptionId(null)}
           />
         );
