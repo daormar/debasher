@@ -1,14 +1,5 @@
 import type { Workflow } from "../models/workflow";
 
-/**
- * Lightweight summary used to list workflows without loading
- * the full processes/edges of each one.
- */
-export interface WorkflowSummary {
-  id: string;
-  name: string;
-}
-
 // ---------------------------------------------------------------
 // FAKE IMPLEMENTATION — replace the body of each function below
 // with real `fetch` calls to your backend when it's ready. The
@@ -16,27 +7,6 @@ export interface WorkflowSummary {
 // contract the rest of the app depends on: as long as they stay
 // the same, nothing outside this file needs to change.
 // ---------------------------------------------------------------
-
-const fakeDb = new Map<string, Workflow>();
-
-export async function listWorkflows(): Promise<WorkflowSummary[]> {
-  return Array.from(fakeDb.values()).map(workflow => ({
-    id: workflow.id,
-    name: workflow.name,
-  }));
-}
-
-export async function loadWorkflow(id: string): Promise<Workflow> {
-  const workflow = fakeDb.get(id);
-
-  if (!workflow) {
-    throw new Error(`Workflow "${id}" not found`);
-  }
-
-  // Return a copy so nothing outside this module can accidentally
-  // mutate the "stored" version directly.
-  return structuredClone(workflow);
-}
 
 export async function saveWorkflow(
   workflow: Workflow,

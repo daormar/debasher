@@ -1,11 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Workflow } from "../models/workflow";
-import {
-  listWorkflows,
-  loadWorkflow,
-  createEmptyWorkflow,
-  type WorkflowSummary,
-} from "../storage/workflowStorage";
+import { createEmptyWorkflow } from "../storage/workflowStorage";
 import NewWorkflowDialog from "./NewWorkflowDialog";
 
 interface Props {
@@ -14,21 +9,7 @@ interface Props {
 }
 
 export default function HomeScreen({ onOpen }: Props) {
-  const [summaries, setSummaries] = useState<WorkflowSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isNewWorkflowOpen, setNewWorkflowOpen] = useState(false);
-
-  useEffect(() => {
-    listWorkflows().then(result => {
-      setSummaries(result);
-      setLoading(false);
-    });
-  }, []);
-
-  async function handleOpen(id: string) {
-    const workflow = await loadWorkflow(id);
-    onOpen(workflow);
-  }
 
   function handleCreate(name: string) {
     onOpen(createEmptyWorkflow(name));
@@ -36,11 +17,21 @@ export default function HomeScreen({ onOpen }: Props) {
 
   return (
     <div style={{ padding: 32, maxWidth: 480, margin: "0 auto" }}>
-      <h1>My workflows</h1>
+      <h1>Debasher</h1>
 
-      <button onClick={() => setNewWorkflowOpen(true)} style={{ marginBottom: 24 }}>
-        + Create new workflow
-      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <button onClick={() => setNewWorkflowOpen(true)}>
+          Create new workflow
+        </button>
+
+        <button disabled title="Coming soon">
+          Load workflow
+        </button>
+
+        <button disabled title="Coming soon">
+          Import workflow
+        </button>
+      </div>
 
       {isNewWorkflowOpen && (
         <NewWorkflowDialog
@@ -48,22 +39,6 @@ export default function HomeScreen({ onOpen }: Props) {
           onClose={() => setNewWorkflowOpen(false)}
         />
       )}
-
-      {loading && <p>Loading...</p>}
-
-      {!loading && summaries.length === 0 && (
-        <p>No saved workflows yet.</p>
-      )}
-
-      <ul style={{ listStyle: "none", padding: 0 }}>
-        {summaries.map(summary => (
-          <li key={summary.id} style={{ marginBottom: 8 }}>
-            <button onClick={() => handleOpen(summary.id)}>
-              {summary.name}
-            </button>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
