@@ -77,6 +77,7 @@ export function createEmptyWorkflow(name: string): Workflow {
     id: crypto.randomUUID(),
     name,
     preamble: "",
+    envVars: {},
     processes: [],
     edges: [],
   };

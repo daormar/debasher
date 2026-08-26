@@ -9,6 +9,8 @@ export interface Workflow {
 
   preamble: string;
 
+  envVars: Record<string, string>;
+
   processes: WorkflowProcess[];
 
   edges: WorkflowEdge[];

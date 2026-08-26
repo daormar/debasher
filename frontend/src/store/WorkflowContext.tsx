@@ -35,6 +35,11 @@ interface WorkflowContextType {
     preamble: string
   ) => void;
 
+  setEnvVar: (
+    name: string,
+    value: string
+  ) => void;
+
   removeProcess: (
     processId: string
   ) => void;
@@ -173,6 +178,18 @@ export function WorkflowProvider({
     setWorkflow(current => ({
       ...current,
       preamble,
+    }));
+
+  }
+
+  function setEnvVar(
+    name: string,
+    value: string
+  ) {
+
+    setWorkflow(current => ({
+      ...current,
+      envVars: { ...current.envVars, [name]: value },
     }));
 
   }
@@ -484,6 +501,8 @@ export function WorkflowProvider({
     addProcess,
 
     setPreamble,
+
+    setEnvVar,
 
     removeProcess,
 
