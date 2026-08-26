@@ -1,6 +1,12 @@
 import type { WorkflowEdge } from "./edge";
 import type { WorkflowProcess } from "./process";
 
+export interface ExecutionOptions {
+
+  scheduler: string;
+
+}
+
 export interface Workflow {
 
   id: string;
@@ -12,6 +18,8 @@ export interface Workflow {
   envVars: Record<string, string>;
 
   outputDir: string;
+
+  executionOptions: ExecutionOptions;
 
   processes: WorkflowProcess[];
 

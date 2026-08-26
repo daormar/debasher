@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import EnvVarsEditor from "./EnvVarsEditor";
+import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
 
 const MENU_ITEMS = [
@@ -23,6 +24,9 @@ export default function RunMenu() {
   const [isOutputDirOpen, setOutputDirOpen] =
     useState(false);
 
+  const [isExecutionOptionsOpen, setExecutionOptionsOpen] =
+    useState(false);
+
   const containerRef =
     useRef<HTMLDivElement>(null);
 
@@ -34,6 +38,8 @@ export default function RunMenu() {
       setEnvVarsOpen(true);
     } else if (item === "Set output directory") {
       setOutputDirOpen(true);
+    } else if (item === "Set execution options") {
+      setExecutionOptionsOpen(true);
     }
 
   }
@@ -129,6 +135,12 @@ export default function RunMenu() {
       {isOutputDirOpen && (
         <OutputDirEditor
           onClose={() => setOutputDirOpen(false)}
+        />
+      )}
+
+      {isExecutionOptionsOpen && (
+        <ExecutionOptionsEditor
+          onClose={() => setExecutionOptionsOpen(false)}
         />
       )}
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .routers import processes, workflows
+from .routers import execution, processes, workflows
 
 app = FastAPI(title="Workflow API")
 
@@ -12,6 +12,7 @@ app = FastAPI(title="Workflow API")
 # otherwise the static mount at "/" would shadow them.
 app.include_router(workflows.router)
 app.include_router(processes.router)
+app.include_router(execution.router)
 
 # Serve the built frontend if it exists. The installed `debasher_webui`
 # launcher sets DEBASHER_WEBUI_STATIC_DIR to the installed location

@@ -2,7 +2,7 @@ apidir = $(pkgdatadir)/api
 dist_api_DATA = main.py models.py persistence.py requirements.txt
 
 routersdir = $(apidir)/routers
-dist_routers_DATA = routers/__init__.py routers/processes.py routers/workflows.py
+dist_routers_DATA = routers/__init__.py routers/execution.py routers/processes.py routers/workflows.py
 
 bin_SCRIPTS = debasher_webui
 

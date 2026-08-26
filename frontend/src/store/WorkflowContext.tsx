@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 
-import type { Workflow } from "../models/workflow";
+import type { ExecutionOptions, Workflow } from "../models/workflow";
 import type {
   WorkflowProcess,
   ProcessLanguage,
@@ -42,6 +42,10 @@ interface WorkflowContextType {
 
   setOutputDir: (
     outputDir: string
+  ) => void;
+
+  setExecutionOptions: (
+    executionOptions: ExecutionOptions
   ) => void;
 
   removeProcess: (
@@ -205,6 +209,17 @@ export function WorkflowProvider({
     setWorkflow(current => ({
       ...current,
       outputDir,
+    }));
+
+  }
+
+  function setExecutionOptions(
+    executionOptions: ExecutionOptions
+  ) {
+
+    setWorkflow(current => ({
+      ...current,
+      executionOptions,
     }));
 
   }
@@ -520,6 +535,8 @@ export function WorkflowProvider({
     setEnvVar,
 
     setOutputDir,
+
+    setExecutionOptions,
 
     removeProcess,
 
