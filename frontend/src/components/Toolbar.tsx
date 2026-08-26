@@ -4,6 +4,7 @@ import { useWorkflow } from "../store/WorkflowContext";
 import PreambleEditor from "./PreambleEditor";
 import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
+import RunMenu from "./RunMenu";
 
 interface Props {
   onClose: () => void;
@@ -87,6 +88,8 @@ export default function Toolbar({ onClose }: Props) {
           onClose={() => setSaveOpen(false)}
         />
       )}
+
+      <RunMenu />
 
       <button
         onClick={onClose}
