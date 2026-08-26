@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import EnvVarsEditor from "./EnvVarsEditor";
+import OutputDirEditor from "./OutputDirEditor";
 
 const MENU_ITEMS = [
   "Set environment variables",
@@ -19,6 +20,9 @@ export default function RunMenu() {
   const [isEnvVarsOpen, setEnvVarsOpen] =
     useState(false);
 
+  const [isOutputDirOpen, setOutputDirOpen] =
+    useState(false);
+
   const containerRef =
     useRef<HTMLDivElement>(null);
 
@@ -28,6 +32,8 @@ export default function RunMenu() {
 
     if (item === "Set environment variables") {
       setEnvVarsOpen(true);
+    } else if (item === "Set output directory") {
+      setOutputDirOpen(true);
     }
 
   }
@@ -117,6 +123,12 @@ export default function RunMenu() {
       {isEnvVarsOpen && (
         <EnvVarsEditor
           onClose={() => setEnvVarsOpen(false)}
+        />
+      )}
+
+      {isOutputDirOpen && (
+        <OutputDirEditor
+          onClose={() => setOutputDirOpen(false)}
         />
       )}
 

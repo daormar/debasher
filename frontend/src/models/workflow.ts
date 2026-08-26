@@ -11,6 +11,8 @@ export interface Workflow {
 
   envVars: Record<string, string>;
 
+  outputDir: string;
+
   processes: WorkflowProcess[];
 
   edges: WorkflowEdge[];

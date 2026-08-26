@@ -64,5 +64,6 @@ class Workflow(BaseModel):
     name: str
     preamble: str
     envVars: dict[str, str]
+    outputDir: str
     processes: list[WorkflowProcess]
     edges: list[WorkflowEdge]

@@ -40,6 +40,10 @@ interface WorkflowContextType {
     value: string
   ) => void;
 
+  setOutputDir: (
+    outputDir: string
+  ) => void;
+
   removeProcess: (
     processId: string
   ) => void;
@@ -190,6 +194,17 @@ export function WorkflowProvider({
     setWorkflow(current => ({
       ...current,
       envVars: { ...current.envVars, [name]: value },
+    }));
+
+  }
+
+  function setOutputDir(
+    outputDir: string
+  ) {
+
+    setWorkflow(current => ({
+      ...current,
+      outputDir,
     }));
 
   }
@@ -503,6 +518,8 @@ export function WorkflowProvider({
     setPreamble,
 
     setEnvVar,
+
+    setOutputDir,
 
     removeProcess,
 
