@@ -38,3 +38,20 @@ def run_workflow(workflow: Workflow) -> RunWorkflowResponse:
         core.run_workflow(workflow)
     """
     return RunWorkflowResponse(status="started")
+
+
+class StopWorkflowResponse(BaseModel):
+    status: str
+
+
+@router.post("/stop", response_model=StopWorkflowResponse)
+def stop_workflow(workflow: Workflow) -> StopWorkflowResponse:
+    """
+    Stop a running workflow.
+
+    Stub: does not actually stop anything yet.
+
+    TODO: replace this stub with a real call into core/, e.g.:
+        core.stop_workflow(workflow)
+    """
+    return StopWorkflowResponse(status="stopped")

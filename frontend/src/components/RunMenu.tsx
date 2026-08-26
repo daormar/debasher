@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import { runWorkflow } from "../api/executionApi";
+import { runWorkflow, stopWorkflow } from "../api/executionApi";
+import type { Workflow } from "../models/workflow";
 import { useWorkflow } from "../store/WorkflowContext";
 import EnvVarsEditor from "./EnvVarsEditor";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
@@ -14,6 +15,20 @@ const MENU_ITEMS = [
   "Run workflow",
   "Stop workflow",
 ] as const;
+
+type MenuItem = (typeof MENU_ITEMS)[number];
+
+const WORKFLOW_ACTIONS: Partial<
+  Record<MenuItem, (workflow: Workflow) => Promise<void>>
+> = {
+  "Run workflow": runWorkflow,
+  "Stop workflow": stopWorkflow,
+};
+
+const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
+  "Run workflow": "Running...",
+  "Stop workflow": "Stopping...",
+};
 
 export default function RunMenu() {
 
@@ -31,34 +46,37 @@ export default function RunMenu() {
   const [isExecutionOptionsOpen, setExecutionOptionsOpen] =
     useState(false);
 
-  const [isRunning, setRunning] =
-    useState(false);
+  const [pendingAction, setPendingAction] =
+    useState<MenuItem | null>(null);
 
-  const [runError, setRunError] =
+  const [actionError, setActionError] =
     useState<string | null>(null);
 
   const containerRef =
     useRef<HTMLDivElement>(null);
 
-  async function handleRun() {
+  async function runWorkflowAction(
+    item: MenuItem,
+    action: (workflow: Workflow) => Promise<void>
+  ) {
 
-    setRunning(true);
-    setRunError(null);
+    setPendingAction(item);
+    setActionError(null);
 
     try {
-      await runWorkflow(workflow);
+      await action(workflow);
       setOpen(false);
     } catch (err) {
-      setRunError(
-        err instanceof Error ? err.message : "Failed to run workflow."
+      setActionError(
+        err instanceof Error ? err.message : `Failed to ${item.toLowerCase()}.`
       );
     } finally {
-      setRunning(false);
+      setPendingAction(null);
     }
 
   }
 
-  function handleItemClick(item: (typeof MENU_ITEMS)[number]) {
+  function handleItemClick(item: MenuItem) {
 
     if (item === "Set environment variables") {
       setOpen(false);
@@ -69,8 +87,8 @@ export default function RunMenu() {
     } else if (item === "Set execution options") {
       setOpen(false);
       setExecutionOptionsOpen(true);
-    } else if (item === "Run workflow") {
-      handleRun();
+    } else if (WORKFLOW_ACTIONS[item]) {
+      runWorkflowAction(item, WORKFLOW_ACTIONS[item]);
     } else {
       setOpen(false);
     }
@@ -110,7 +128,7 @@ export default function RunMenu() {
 
       <button
         onClick={() => {
-          setRunError(null);
+          setActionError(null);
           setOpen(open => !open);
         }}
       >
@@ -144,7 +162,7 @@ export default function RunMenu() {
 
               onClick={() => handleItemClick(item)}
 
-              disabled={item === "Run workflow" && isRunning}
+              disabled={pendingAction !== null}
 
               style={{
                 textAlign: "left",
@@ -155,12 +173,12 @@ export default function RunMenu() {
               }}
 
             >
-              {item === "Run workflow" && isRunning ? "Running..." : item}
+              {pendingAction === item ? PENDING_LABELS[item] : item}
             </button>
 
           ))}
 
-          {runError && (
+          {actionError && (
             <div
               style={{
                 padding: "0 12px 8px",
@@ -168,7 +186,7 @@ export default function RunMenu() {
                 fontSize: 13,
               }}
             >
-              {runError}
+              {actionError}
             </div>
           )}
 
