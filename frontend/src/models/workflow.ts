@@ -21,6 +21,8 @@ export interface Workflow {
 
   executionOptions: ExecutionOptions;
 
+  workflowOptions: Record<string, string>;
+
   processes: WorkflowProcess[];
 
   edges: WorkflowEdge[];

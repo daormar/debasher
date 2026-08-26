@@ -6,6 +6,7 @@ import { useWorkflow } from "../store/WorkflowContext";
 import EnvVarsEditor from "./EnvVarsEditor";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
+import WorkflowOptionsEditor from "./WorkflowOptionsEditor";
 
 const MENU_ITEMS = [
   "Set environment variables",
@@ -44,6 +45,9 @@ export default function RunMenu() {
     useState(false);
 
   const [isExecutionOptionsOpen, setExecutionOptionsOpen] =
+    useState(false);
+
+  const [isWorkflowOptionsOpen, setWorkflowOptionsOpen] =
     useState(false);
 
   const [pendingAction, setPendingAction] =
@@ -87,6 +91,9 @@ export default function RunMenu() {
     } else if (item === "Set execution options") {
       setOpen(false);
       setExecutionOptionsOpen(true);
+    } else if (item === "Set workflow options") {
+      setOpen(false);
+      setWorkflowOptionsOpen(true);
     } else if (WORKFLOW_ACTIONS[item]) {
       runWorkflowAction(item, WORKFLOW_ACTIONS[item]);
     } else {
@@ -209,6 +216,12 @@ export default function RunMenu() {
       {isExecutionOptionsOpen && (
         <ExecutionOptionsEditor
           onClose={() => setExecutionOptionsOpen(false)}
+        />
+      )}
+
+      {isWorkflowOptionsOpen && (
+        <WorkflowOptionsEditor
+          onClose={() => setWorkflowOptionsOpen(false)}
         />
       )}
 

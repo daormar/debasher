@@ -48,6 +48,10 @@ interface WorkflowContextType {
     executionOptions: ExecutionOptions
   ) => void;
 
+  setWorkflowOptions: (
+    workflowOptions: Record<string, string>
+  ) => void;
+
   removeProcess: (
     processId: string
   ) => void;
@@ -220,6 +224,17 @@ export function WorkflowProvider({
     setWorkflow(current => ({
       ...current,
       executionOptions,
+    }));
+
+  }
+
+  function setWorkflowOptions(
+    workflowOptions: Record<string, string>
+  ) {
+
+    setWorkflow(current => ({
+      ...current,
+      workflowOptions,
     }));
 
   }
@@ -537,6 +552,8 @@ export function WorkflowProvider({
     setOutputDir,
 
     setExecutionOptions,
+
+    setWorkflowOptions,
 
     removeProcess,
 

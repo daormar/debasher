@@ -70,5 +70,6 @@ class Workflow(BaseModel):
     envVars: dict[str, str]
     outputDir: str
     executionOptions: ExecutionOptions
+    workflowOptions: dict[str, str]
     processes: list[WorkflowProcess]
     edges: list[WorkflowEdge]

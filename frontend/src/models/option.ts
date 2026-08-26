@@ -22,3 +22,26 @@ export function getOptionDirection(label: string): OptionDirection {
 export function isValidOptionLabel(label: string): boolean {
   return label.trim().startsWith("-");
 }
+
+/**
+ * Command line options declared across all of a workflow's processes,
+ * deduplicated by label (the same option can be declared on more than
+ * one process).
+ */
+export function getCommandLineOptions(
+  processes: { options: WorkflowOption[] }[]
+): WorkflowOption[] {
+
+  const byLabel = new Map<string, WorkflowOption>();
+
+  for (const process of processes) {
+    for (const option of process.options) {
+      if (option.commandLine && !byLabel.has(option.label)) {
+        byLabel.set(option.label, option);
+      }
+    }
+  }
+
+  return [...byLabel.values()];
+
+}

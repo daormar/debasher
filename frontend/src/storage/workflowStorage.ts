@@ -80,6 +80,7 @@ export function createEmptyWorkflow(name: string): Workflow {
     envVars: {},
     outputDir: "",
     executionOptions: { scheduler: "" },
+    workflowOptions: {},
     processes: [],
     edges: [],
   };
