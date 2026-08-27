@@ -14,11 +14,11 @@ for name in "${proc_impl_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_opts.sh >> rtdocs/source/api_proc_impl_doc.md
 done
 
-# Generate program command line options API file
+# Generate option characterization API file
 cmdline_opts_symbols=("explain_cmdline_opt()" "explain_opt() opt_is_cmdline()")
-rm -f rtdocs/source/api_cmdline_opts_doc.md
+rm -f rtdocs/source/api_characterize_opts_doc.md
 for name in "${cmdline_opts_symbols[@]}"; do
-    sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_opts.sh >> rtdocs/source/api_cmdline_opts_doc.md
+    sh rtdocs/tomdoc.sh -m -s "${name}" utils/debasher_lib_opts.sh >> rtdocs/source/api_characterize_opts_doc.md
 done
 
 # Generate module configuration API file
