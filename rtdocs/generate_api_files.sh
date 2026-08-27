@@ -15,9 +15,10 @@ for name in "${proc_impl_symbols[@]}"; do
 done
 
 # Generate option characterization API file
-cmdline_opts_symbols=("explain_cmdline_opt()" "explain_opt() opt_is_cmdline()")
+char_opts_symbols=("explain_cmdline_opt()" "explain_opt()" "opt_is_cmdline()")
 rm -f rtdocs/source/api_characterize_opts_doc.md
-for name in "${cmdline_opts_symbols[@]}"; do
+for name in "${char_opts_symbols[@]}"; do
+    echo "*** $name" >&2
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_characterize_opts_doc.md
 done
 
