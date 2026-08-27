@@ -551,10 +551,7 @@ debasher::opt_is_cmdline()
     local opt=$1
 
     # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
-    if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
-    fi
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}"`
 
     # Define option as a command-line options
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
