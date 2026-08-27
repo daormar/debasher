@@ -253,7 +253,7 @@ never changes. However, the ``identify_cmdline_opts`` method for a
 process may be different from one program to another**.
 
 **IMPORTANT NOTE**: initially, only the command-line options of each
-process were documented by means of the ``explain_cmdline_opts``
+process were documented by means of the ``explain_opts``
 method. However, such method is now deprecated and replaced by the
 ``explain_opts`` method described above. The ``explain_opts`` method
 documents all process options, no matter if they should be provided

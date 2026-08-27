@@ -12,15 +12,15 @@ Value Pass Example
     {
         # -num-a option
         local description="First number to be summed"
-        explain_cmdline_req_opt "-num-a" "<int>" "$description"
+        explain_opt "-num-a" "<int>" "$description"
 
         # -num-b option
         local description="Second number to be summed"
-        explain_cmdline_req_opt "-num-b" "<int>" "$description"
+        explain_opt "-num-b" "<int>" "$description"
 
         # -outv option
         local description="output value descriptor"
-        explain_non_cmdline_opt "-outv" "<string>" "$description"
+        explain_opt "-outv" "<string>" "$description"
     }
 
     value_writer_identify_cmdline_opts()
@@ -74,11 +74,11 @@ Value Pass Example
     {
         # -value option
         local description="value descriptor"
-        explain_non_cmdline_opt "-value" "<string>" "$description"
+        explain_opt "-value" "<string>" "$description"
 
         # -outf option
         local description="output file"
-        explain_non_cmdline_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<string>" "$description"
     }
 
     value_reader_identify_cmdline_opts()

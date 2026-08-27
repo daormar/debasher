@@ -122,7 +122,7 @@ stored in a file with the same name and Bash extension,
     {
         # -s option
         local description="String to be displayed ('Hello World!' by default)"
-        explain_cmdline_opt "-s" "<string>" "$description"
+        explain_opt "-s" "<string>" "$description"
     }
 
     hello_world_identify_cmdline_opts()
@@ -187,7 +187,7 @@ the functions involved:
   options that the process receives. In particular,
   ``hello_world`` receives the ``-s`` option, which allows to specify
   the string to be shown. To document the option, the
-  ``explain_cmdline_opt`` API function is used.
+  ``explain_opt`` API function is used.
 
 * ``hello_world_identify_cmdline_opts``: this function implements the
   ``identify_cmdline_opts`` method for ``hello_world``. This method
