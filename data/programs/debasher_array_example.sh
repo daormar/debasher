@@ -57,6 +57,12 @@ array_writer_explain_opts()
 }
 
 ########
+array_writer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-c"
+}
+
+########
 array_writer_define_opts()
 {
     # Initialize variables
@@ -115,6 +121,12 @@ array_reader_explain_opts()
     # -outdir option
     local description="output directory of reader"
     explain_non_cmdline_opt "-outdir" "<string>" "$description"
+}
+
+########
+array_reader_identify_cmdline_opts()
+{
+    :
 }
 
 ########

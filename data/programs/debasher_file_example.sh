@@ -59,6 +59,12 @@ file_writer_explain_opts()
 }
 
 ########
+file_writer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-s"
+}
+
+########
 file_writer_define_opts()
 {
     # Initialize variables
@@ -102,6 +108,12 @@ file_reader_explain_opts()
     # -inf option
     local description="input file"
     explain_non_cmdline_opt "-inf" "<string>" "$description"
+}
+
+########
+file_reader_identify_cmdline_opts()
+{
+    :
 }
 
 ########

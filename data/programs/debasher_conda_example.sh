@@ -49,6 +49,12 @@ conda_example_explain_opts()
 }
 
 ########
+conda_example_identify_cmdline_opts()
+{
+    :
+}
+
+########
 conda_example_define_opts()
 {
     # Initialize variables

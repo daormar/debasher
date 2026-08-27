@@ -49,6 +49,12 @@ fifo_writer_explain_opts()
 }
 
 ########
+fifo_writer_identify_cmdline_opts()
+{
+    :
+}
+
+########
 fifo_writer_define_opts()
 {
     # Initialize variables
@@ -88,6 +94,12 @@ fifo_reader_explain_opts()
     # -inf option
     local description="input fifo"
     explain_non_cmdline_opt "-inf" "<string>" "$description"
+}
+
+########
+fifo_reader_identify_cmdline_opts()
+{
+    :
 }
 
 ########

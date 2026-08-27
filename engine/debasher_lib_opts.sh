@@ -787,7 +787,7 @@ debasher::define_cmdline_opt_wo_value()
     local opt=$2
     local varname=$3
 
-    # Get value for option
+    # Get option
     debasher::_check_opt_given "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
 
     # Add option
@@ -814,6 +814,22 @@ debasher::define_cmdline_opt_if_given()
 }
 
 define_cmdline_opt_if_given() { debasher::define_cmdline_opt_if_given "$@"; }
+
+########
+debasher::define_cmdline_opt_wo_value_if_given()
+{
+    local cmdline=$1
+    local opt=$2
+    local varname=$3
+
+    # Get value for option
+    if debasher::_check_opt_given "$cmdline" "$opt"; then
+        # Add option
+        debasher::define_opt_wo_value "$opt" "$varname"
+    fi
+}
+
+define_cmdline_opt_wo_value_if_given() { debasher::define_cmdline_opt_wo_value_if_given "$@"; }
 
 ########
 # Public: Defines process option from the output of another process.

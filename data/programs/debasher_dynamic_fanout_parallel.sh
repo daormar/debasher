@@ -64,6 +64,12 @@ worker_parallel_explain_opts()
 }
 
 ########
+worker_parallel_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
+}
+
+########
 worker_parallel_define_opts()
 {
     # Initialize variables

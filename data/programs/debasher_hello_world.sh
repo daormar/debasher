@@ -49,6 +49,12 @@ hello_world_explain_opts()
 }
 
 ########
+hello_world_identify_cmdline_opts()
+{
+    opt_is_cmdline "-s"
+}
+
+########
 hello_world_define_opts()
 {
     # Initialize variables
@@ -58,15 +64,8 @@ hello_world_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Obtain value of -s option
-    local str=$(get_cmdline_opt "${cmdline}" "-s")
-
     # -s option
-    if [ "${str}" = "${OPT_NOT_FOUND}" ]; then
-        define_opt "-s" "Hello World!" optlist || return 1
-    else
-        define_opt "-s" "$str" optlist || return 1
-    fi
+    define_cmdline_opt "${cmdline}" "-s"
 
     # Save option list
     save_opt_list optlist
@@ -77,6 +76,10 @@ hello_world()
 {
     # Initialize variables
     local str=$(read_opt_value_from_func_args "-s" "$@")
+
+    if [ "${str}" != "${OPT_NOT_FOUND}" ]; then
+        define_cmdline_opt "-s" optlist || return 1
+    fi
 
     # Show message
     echo "${str}"

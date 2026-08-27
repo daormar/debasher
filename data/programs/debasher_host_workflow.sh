@@ -57,6 +57,12 @@ host1_explain_opts()
 }
 
 ########
+host1_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
+}
+
+########
 host1_generate_opts_size()
 {
     # Initialize variables
@@ -113,6 +119,12 @@ host2_explain_opts()
     # -n option
     local description="Number of array tasks"
     explain_cmdline_req_opt "-n" "<int>" "$description"
+}
+
+########
+host2_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
 }
 
 ########

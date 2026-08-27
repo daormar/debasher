@@ -32,6 +32,12 @@ process_b_explain_opts()
 }
 
 ########
+process_b_identify_cmdline_opts()
+{
+    :
+}
+
+########
 process_b_define_opts()
 {
     # Initialize variables

@@ -45,15 +45,22 @@ generate_explain_opts()
 {
     # -l option
     local description="Length of file in lines"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
+    explain_opt "-n" "<int>" "$description"
 
     # -c option
     local description="Length of each line in characters"
-    explain_cmdline_req_opt "-c" "<int>" "$description"
+    explain_opt "-c" "<int>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
+}
+
+########
+generate_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
+    opt_is_cmdline "-c"
 }
 
 ########
@@ -109,11 +116,17 @@ count_explain_opts()
 {
     # -inf option
     local description="input file"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
+}
+
+########
+count_identify_cmdline_opts()
+{
+    :
 }
 
 ########
@@ -176,15 +189,21 @@ fragment_explain_opts()
 {
     # -b option
     local description="Number of blocks"
-    explain_cmdline_req_opt "-b" "<int>" "$description"
+    explain_opt "-b" "<int>" "$description"
 
     # -inf option
     local description="input file"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_non_cmdline_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<string>" "$description"
+}
+
+########
+fragment_identify_cmdline_opts()
+{
+    opt_is_cmdline "-b"
 }
 
 ########
@@ -254,15 +273,21 @@ dispatch_explain_opts()
 {
     # -w option
     local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
+    explain_opt "-w" "<int>" "$description"
 
     # -ind option
     local description="input directory"
-    explain_non_cmdline_opt "-ind" "<string>" "$description"
+    explain_opt "-ind" "<string>" "$description"
 
     # -outfi option
     local description="i'th output file"
-    explain_non_cmdline_opt "-outfi" "<string>" "$description"
+    explain_opt "-outfi" "<string>" "$description"
+}
+
+########
+dispatch_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
 }
 
 ########
@@ -338,19 +363,25 @@ worker_explain_opts()
 {
     # -w option
     local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
+    explain_opt "-w" "<int>" "$description"
 
     # -id option
     local description="id of writer"
-    explain_non_cmdline_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<string>" "$description"
 
     # -inf option
     local description="input file"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_non_cmdline_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<string>" "$description"
+}
+
+########
+worker_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
 }
 
 ########
@@ -421,15 +452,21 @@ aggregate_explain_opts()
 {
     # -w option
     local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
+    explain_opt "-w" "<int>" "$description"
 
     # -indi option
     local description="i'th input directory"
-    explain_non_cmdline_opt "-indi" "<string>" "$description"
+    explain_opt "-indi" "<string>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
+}
+
+########
+aggregate_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
 }
 
 ########

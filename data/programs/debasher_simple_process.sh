@@ -49,6 +49,12 @@ simple_process_explain_opts()
 }
 
 ########
+simple_process_identify_cmdline_opts()
+{
+    opt_is_cmdline "-a"
+}
+
+########
 simple_process_define_opts()
 {
     # Initialize variables

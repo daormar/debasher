@@ -53,6 +53,12 @@ decomposer_explain_opts()
 }
 
 ########
+decomposer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-f"
+}
+
+########
 decomposer_define_opts()
 {
     # Initialize variables
@@ -104,6 +110,12 @@ recomposer_explain_opts()
     # -outf option
     local description="output file"
     explain_non_cmdline_opt "-outf" "<string>" "$description"
+}
+
+########
+recomposer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-c"
 }
 
 ########

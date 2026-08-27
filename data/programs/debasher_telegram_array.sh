@@ -50,6 +50,12 @@ decomposer_explain_opts()
 }
 
 ########
+decomposer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-f"
+}
+
+########
 decomposer_define_opts()
 {
     # Initialize variables

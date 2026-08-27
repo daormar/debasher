@@ -53,6 +53,12 @@ rseq_explain_opts()
 }
 
 ########
+rseq_identify_cmdline_opts()
+{
+    opt_is_cmdline "-f"
+}
+
+########
 rseq_define_opts()
 {
     # Initialize variables
@@ -100,6 +106,12 @@ decomposer_explain_opts()
     # -outf option
     local description="output fifo"
     explain_non_cmdline_opt "-outf" "<string>" "$description"
+}
+
+########
+decomposer_identify_cmdline_opts()
+{
+    :
 }
 
 ########
@@ -154,6 +166,12 @@ recomposer_explain_opts()
     # -outf option
     local description="output fifo"
     explain_non_cmdline_opt "-outf" "<string>" "$description"
+}
+
+########
+recomposer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-c"
 }
 
 ########
@@ -232,6 +250,12 @@ wseq_explain_opts()
     # -outf option
     local description="output fifo"
     explain_non_cmdline_opt "-outf" "<string>" "$description"
+}
+
+########
+wseq_identify_cmdline_opts()
+{
+    :
 }
 
 ########

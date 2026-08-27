@@ -72,6 +72,12 @@ worker_taskdone_explain_opts()
 }
 
 ########
+worker_taskdone_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
+}
+
+########
 worker_taskdone_define_opts()
 {
     # Initialize variables

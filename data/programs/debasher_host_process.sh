@@ -57,6 +57,12 @@ host1_explain_opts()
 }
 
 ########
+host1_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
+}
+
+########
 host1_generate_opts_size()
 {
     # Initialize variables

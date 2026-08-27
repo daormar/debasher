@@ -60,6 +60,13 @@ telegram_explain_opts()
 }
 
 ########
+telegram_identify_cmdline_opts()
+{
+    opt_is_cmdline "-f"
+    opt_is_cmdline "-c"
+}
+
+########
 telegram_define_opts()
 {
     # Initialize variables

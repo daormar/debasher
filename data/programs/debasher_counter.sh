@@ -53,6 +53,12 @@ counter_explain_opts()
 }
 
 ########
+counter_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
+}
+
+########
 counter_define_opts()
 {
     # Initialize variables

@@ -49,6 +49,12 @@ hello_world_explain_opts()
 }
 
 ########
+hello_world_identify_cmdline_opts()
+{
+    opt_is_cmdline "-s"
+}
+
+########
 hello_world_define_opts()
 {
     # Initialize variables
@@ -62,10 +68,8 @@ hello_world_define_opts()
     local str=$(get_cmdline_opt "${cmdline}" "-s")
 
     # -s option
-    if [ "${str}" = "${OPT_NOT_FOUND}" ]; then
-        define_opt "-s" "Hello World!" optlist || return 1
-    else
-        define_opt "-s" "$str" optlist || return 1
+    if [ "${str}" != "${OPT_NOT_FOUND}" ]; then
+        define_cmdline_opt "-s" optlist || return 1
     fi
 
     # Save option list
@@ -80,7 +84,12 @@ import argparse
 parser = argparse.ArgumentParser()
 
 # Add the "-s" option with a string argument
-parser.add_argument('-s', type=str, required=True, help='String to be displayed')
+parser.add_argument(
+    '-s',
+    type=str,
+    default='Hello World!',
+    help='String to be displayed'
+)
 
 # Parse the arguments
 args = parser.parse_args()

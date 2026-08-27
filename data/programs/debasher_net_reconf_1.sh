@@ -53,6 +53,12 @@ process_a_explain_opts()
 }
 
 ########
+process_a_identify_cmdline_opts()
+{
+    opt_is_cmdline "-s"
+}
+
+########
 process_a_define_opts()
 {
     # Initialize variables
@@ -89,6 +95,12 @@ process_b_explain_opts()
     # -inf option
     local description="Input file"
     explain_cmdline_req_opt "-inf" "<str>" "$description"
+}
+
+########
+process_b_identify_cmdline_opts()
+{
+    opt_is_cmdline "-inf"
 }
 
 ########

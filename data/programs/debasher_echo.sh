@@ -49,6 +49,12 @@ stream_echo_explain_opts()
 }
 
 ########
+stream_echo_identify_cmdline_opts()
+{
+    :
+}
+
+########
 stream_echo_define_opts()
 {
     # Initialize variables

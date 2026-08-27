@@ -57,6 +57,13 @@ value_writer_explain_opts()
 }
 
 ########
+value_writer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-num-a"
+    opt_is_cmdline "-num-b"
+}
+
+########
 value_writer_define_opts()
 {
     # Initialize variables
@@ -110,6 +117,12 @@ value_reader_explain_opts()
     # -outf option
     local description="output file"
     explain_non_cmdline_opt "-outf" "<string>" "$description"
+}
+
+########
+value_reader_identify_cmdline_opts()
+{
+    :
 }
 
 ########

@@ -61,6 +61,13 @@ master_explain_opts()
 }
 
 ########
+master_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
+    opt_is_cmdline "-value"
+}
+
+########
 master_define_opts()
 {
     # Initialize variables
@@ -144,6 +151,12 @@ worker_explain_opts()
     # -outd option
     local description="output directory"
     explain_non_cmdline_opt "-outd" "<string>" "$description"
+}
+
+########
+worker_identify_cmdline_opts()
+{
+    opt_is_cmdline "-threshold"
 }
 
 ########

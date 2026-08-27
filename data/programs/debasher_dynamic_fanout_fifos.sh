@@ -57,6 +57,13 @@ generate_explain_opts()
 }
 
 ########
+generate_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
+    opt_is_cmdline "-c"
+}
+
+########
 generate_define_opts()
 {
     # Initialize variables
@@ -113,6 +120,12 @@ count_explain_opts()
     # -outf option
     local description="output file"
     explain_non_cmdline_opt "-outf" "<string>" "$description"
+}
+
+########
+count_identify_cmdline_opts()
+{
+    :
 }
 
 ########
@@ -184,6 +197,12 @@ fragment_explain_opts()
     # -outf option
     local description="output fifo"
     explain_non_cmdline_opt "-outf" "<string>" "$description"
+}
+
+########
+fragment_identify_cmdline_opts()
+{
+    opt_is_cmdline "-b"
 }
 
 ########
@@ -290,6 +309,13 @@ dispatch_explain_opts()
 }
 
 ########
+dispatch_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
+    opt_is_cmdline "--log-level"
+}
+
+########
 dispatch_define_opts()
 {
     # Initialize variables
@@ -303,7 +329,8 @@ dispatch_define_opts()
     define_cmdline_opt "$cmdline" "-w" optlist || return 1
 
     # --log-level option
-    define_cmdline_nonmandatory_opt "$cmdline" "--log-level" "INFO" optlist || return 1
+    define_cmdline_opt_if_given "$cmdline" "--log-level" optlist || return 1
+#    define_cmdline_nonmandatory_opt "$cmdline" "--log-level" "INFO" optlist || return 1
 
     # Define option for input FIFO
     define_opt_from_proc_out "-inf" "fragment" "-outf" optlist || return 1
@@ -344,6 +371,12 @@ worker_explain_opts()
     # -outd option
     local description="output directory"
     explain_non_cmdline_opt "-outd" "<string>" "$description"
+}
+
+########
+worker_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
 }
 
 ########

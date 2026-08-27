@@ -53,6 +53,12 @@ shared_dir_writer_explain_opts()
 }
 
 ########
+shared_dir_writer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-h"
+}
+
+########
 shared_dir_writer_define_opts()
 {
     # Initialize variables
