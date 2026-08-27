@@ -369,37 +369,6 @@ debasher::_read_opt_value_from_line_memoiz()
 }
 
 ########
-debasher::explain_cmdline_req_opt()
-{
-    local opt=$1
-    local type=$2
-    local desc=$3
-    local categ=$4
-
-    # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
-    if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
-    fi
-
-    # Assign default category if not given
-    if [ "$categ" = "" ]; then
-        categ=${DEBASHER_GENERAL_OPT_CATEGORY}
-    fi
-
-    # Store option in associative arrays
-    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
-    DEBASHER_PROGRAM_OPT_IS_CMDLINE[${proc_opt}]=1
-    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
-    DEBASHER_PROGRAM_OPT_REQ[$proc_opt]=1
-    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
-    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
-    DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
-}
-
-explain_cmdline_req_opt() { debasher::explain_cmdline_req_opt "$@"; }
-
-########
 # Public: Explains command-line option.
 #
 # $1 - Option name.
@@ -568,37 +537,6 @@ debasher::explain_opt_wo_value()
 explain_opt_wo_value() { debasher::explain_opt_wo_value "$@"; }
 
 ########
-debasher::explain_req_opt()
-{
-    local opt=$1
-    local type=$2
-    local desc=$3
-    local categ=$4
-
-    # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
-    if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
-    fi
-
-    # Assign default category if not given
-    if [ "$categ" = "" ]; then
-        categ=${DEBASHER_GENERAL_OPT_CATEGORY}
-    fi
-
-    # Store option in associative arrays
-    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
-    DEBASHER_PROGRAM_OPT_IS_CMDLINE[${proc_opt}]=0
-    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
-    DEBASHER_PROGRAM_OPT_REQ[$proc_opt]=1
-    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
-    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
-    DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
-}
-
-explain_req_opt() { debasher::explain_cmdline_req_opt "$@"; }
-
-########
 # Public: Identify option as a command-line option.
 #
 # $1 - Option name.
@@ -637,7 +575,7 @@ debasher::_print_program_opts()
             echo ""
         fi
         echo "CATEGORY: ${categ}"
-        # Iterate over processname plut options
+        # Iterate over processname plus options
         local key
         for key in ${!DEBASHER_PROGRAM_OPT_TYPE[@]}; do
             local processname
@@ -650,18 +588,11 @@ debasher::_print_program_opts()
 
             # Check if option belongs to current category
             if [ ${DEBASHER_PROGRAM_OPT_CATEG[${key}]} = $categ ]; then
-                # Set value of required option flag
-                if [ "${DEBASHER_PROGRAM_OPT_REQ[${key}]}" != "" ]; then
-                    reqflag=" (required) "
-                else
-                    reqflag=" "
-                fi
-
                 # Print option
                 if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ]; then
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}[${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
                 else
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}[${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]} [${processname}]"
                 fi
             fi
         done
