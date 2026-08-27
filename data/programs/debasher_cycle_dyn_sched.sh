@@ -45,19 +45,26 @@ master_explain_opts()
 {
     # -n option
     local description="Value limit used to stop cycling"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
+    explain_opt "-n" "<int>" "$description"
 
     # -value option
     local description="Initial value"
-    explain_cmdline_req_opt "-value" "<int>" "$description"
+    explain_opt "-value" "<int>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
+}
+
+########
+master_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
+    opt_is_cmdline "-value"
 }
 
 ########
@@ -120,19 +127,25 @@ worker_explain_opts()
 {
     # -threshold option
     local description="Threshold value used to influence number transformation"
-    explain_cmdline_req_opt "-threshold" "<int>" "$description"
+    explain_opt "-threshold" "<int>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_non_cmdline_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<string>" "$description"
+}
+
+########
+worker_identify_cmdline_opts()
+{
+    opt_is_cmdline "-threshold"
 }
 
 ########

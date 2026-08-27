@@ -45,11 +45,17 @@ host1_explain_opts()
 {
     # -n option
     local description="Number of array tasks"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
+    explain_opt "-n" "<int>" "$description"
 
     # -id option
     local description="process id"
-    explain_non_cmdline_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<string>" "$description"
+}
+
+########
+host1_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
 }
 
 ########
@@ -101,7 +107,13 @@ host2_explain_opts()
 {
     # -n option
     local description="Number of array tasks"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
+    explain_opt "-n" "<int>" "$description"
+}
+
+########
+host2_identify_cmdline_opts()
+{
+    opt_is_cmdline "-n"
 }
 
 ########

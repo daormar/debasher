@@ -12,15 +12,20 @@ Process Array Example
     {
         # -c option
         local description="Sleep time in seconds"
-        explain_cmdline_req_opt "-c" "<int>" "$description"
+        explain_opt "-c" "<int>" "$description"
 
         # -id option
         local description="id of writer"
-        explain_non_cmdline_opt "-id" "<string>" "$description"
+        explain_opt "-id" "<string>" "$description"
 
         # -outf option
         local description="output file of writer"
-        explain_non_cmdline_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<string>" "$description"
+    }
+
+    array_writer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-c"
     }
 
     array_writer_define_opts()
@@ -73,11 +78,16 @@ Process Array Example
     {
         # -id option
         local description="id of reader"
-        explain_non_cmdline_opt "-id" "<int>" "$description"
+        explain_opt "-id" "<int>" "$description"
 
         # -outdir option
         local description="output directory of reader"
-        explain_non_cmdline_opt "-outdir" "<string>" "$description"
+        explain_opt "-outdir" "<string>" "$description"
+    }
+
+    array_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     array_reader_define_opts()

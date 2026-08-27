@@ -45,7 +45,13 @@ hello_world_explain_opts()
 {
     # -s option
     local description="String to be displayed ('Hello World!' by default)"
-    explain_cmdline_opt "-s" "<string>" "$description"
+    explain_opt "-s" "<string>" "$description"
+}
+
+########
+hello_world_identify_cmdline_opts()
+{
+    opt_is_cmdline "-s"
 }
 
 ########
@@ -62,10 +68,8 @@ hello_world_define_opts()
     local str=$(get_cmdline_opt "${cmdline}" "-s")
 
     # -s option
-    if [ "${str}" = "${OPT_NOT_FOUND}" ]; then
-        define_opt "-s" "Hello World!" optlist || return 1
-    else
-        define_opt "-s" "$str" optlist || return 1
+    if [ "${str}" != "${DEBASHER_OPT_NOT_FOUND}" ]; then
+        define_cmdline_opt "${cmdline}" "-s" optlist || return 1
     fi
 
     # Save option list
@@ -99,7 +103,7 @@ options <- parse_args(args)
 
 # Ensure the string was provided
 if (is.null(options$string)) {
-  stop("You must provide a string with the -s option.")
+  string <- "Hello World!"
 }
 
 # Print the string

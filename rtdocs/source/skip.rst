@@ -7,15 +7,21 @@ Process Skip Example
     {
         # -num-a option
         local description="First number to be summed"
-        explain_cmdline_req_opt "-num-a" "<int>" "$description"
+        explain_opt "-num-a" "<int>" "$description"
 
         # -num-b option
         local description="Second number to be summed"
-        explain_cmdline_req_opt "-num-b" "<int>" "$description"
+        explain_opt "-num-b" "<int>" "$description"
 
         # -outv option
         local description="output value descriptor"
-        explain_non_cmdline_opt "-outv" "<string>" "$description"
+        explain_opt "-outv" "<string>" "$description"
+    }
+
+    value_writer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-num-a"
+        opt_is_cmdline "-num-b"
     }
 
     value_writer_define_opts()
@@ -58,11 +64,16 @@ Process Skip Example
     {
         # -val-desc option
         local description="value descriptor"
-        explain_non_cmdline_opt "-val-desc" "<string>" "$description"
+        explain_opt "-val-desc" "<string>" "$description"
 
         # -outf option
         local description="output file"
-        explain_non_cmdline_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<string>" "$description"
+    }
+
+    value_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     value_reader_define_opts()

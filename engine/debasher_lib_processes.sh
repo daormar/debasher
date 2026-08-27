@@ -192,6 +192,14 @@ debasher::_get_explain_opts_funcname()
 }
 
 ########
+debasher::_get_identify_cmdline_opts_funcname()
+{
+    local processname=$1
+
+    debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}"
+}
+
+########
 debasher::_get_define_opts_funcname()
 {
     local processname=$1

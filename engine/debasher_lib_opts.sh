@@ -369,38 +369,9 @@ debasher::_read_opt_value_from_line_memoiz()
 }
 
 ########
-debasher::explain_cmdline_req_opt()
-{
-    local opt=$1
-    local type=$2
-    local desc=$3
-    local categ=$4
-
-    # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
-    if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
-    fi
-
-    # Assign default category if not given
-    if [ "$categ" = "" ]; then
-        categ=${DEBASHER_GENERAL_OPT_CATEGORY}
-    fi
-
-    # Store option in associative arrays
-    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
-    DEBASHER_PROGRAM_OPT_IS_CMDLINE[${proc_opt}]=1
-    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
-    DEBASHER_PROGRAM_OPT_REQ[$proc_opt]=1
-    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
-    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
-    DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
-}
-
-explain_cmdline_req_opt() { debasher::explain_cmdline_req_opt "$@"; }
-
-########
 # Public: Explains command-line option.
+#
+# WARNING: This function is deprecated.
 #
 # $1 - Option name.
 # $2 - Data type of option value.
@@ -441,6 +412,8 @@ debasher::explain_cmdline_opt()
 
 ########
 # Public: Explains command-line option.
+#
+# WARNING: This function is deprecated.
 #
 # $1 - Option name.
 # $2 - Data type of option value.
@@ -484,7 +457,7 @@ debasher::explain_cmdline_opt_wo_value()
 explain_cmdline_opt_wo_value() { debasher::explain_cmdline_opt_wo_value "$@"; }
 
 ########
-# Public: Explains non command-line option.
+# Public: Explains option.
 #
 # $1 - Option name.
 # $2 - Data type of option value.
@@ -493,10 +466,10 @@ explain_cmdline_opt_wo_value() { debasher::explain_cmdline_opt_wo_value "$@"; }
 #
 # Examples
 #
-#   debasher::explain_non_cmdline_opt "-s" "<string>" "String to be displayed"
+#   debasher::explain_opt "-s" "<string>" "String to be displayed"
 #
 # The function does not return any value.
-debasher::explain_non_cmdline_opt()
+debasher::explain_opt()
 {
     local opt=$1
     local type=$2
@@ -524,7 +497,7 @@ debasher::explain_non_cmdline_opt()
 }
 
 ########
-# Public: Explains non command-line option.
+# Public: Explains option.
 #
 # $1 - Option name.
 # $2 - Data type of option value.
@@ -533,13 +506,13 @@ debasher::explain_non_cmdline_opt()
 #
 # Examples
 #
-#   explain_non_cmdline_opt "-s" "<string>" "String to be displayed"
+#   explain_opt "-s" "<string>" "String to be displayed"
 #
 # The function does not return any value.
-explain_non_cmdline_opt() { debasher::explain_non_cmdline_opt "$@"; }
+explain_opt() { debasher::explain_opt "$@"; }
 
 ########
-debasher::explain_non_cmdline_opt_wo_value()
+debasher::explain_opt_wo_value()
 {
     local opt=$1
     local desc=$2
@@ -565,7 +538,41 @@ debasher::explain_non_cmdline_opt_wo_value()
     DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
 }
 
-explain_non_cmdline_opt_wo_value() { debasher::explain_non_cmdline_opt_wo_value "$@"; }
+explain_opt_wo_value() { debasher::explain_opt_wo_value "$@"; }
+
+########
+# Public: Identify option as a command-line option.
+#
+# $1 - Option name.
+#
+# Examples
+#
+#   debasher::opt_is_cmdline "-s"
+#
+# The function does not return any value.
+debasher::opt_is_cmdline()
+{
+    local opt=$1
+
+    # Obtain caller process name
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}"`
+
+    # Define option as a command-line options
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
+}
+
+########
+# Public: Identify option as a command-line option.
+#
+# $1 - Option name.
+#
+# Examples
+#
+#   debasher::opt_is_cmdline "-s"
+#
+# The function does not return any value.
+opt_is_cmdline() { debasher::opt_is_cmdline "$@"; }
 
 ########
 debasher::_print_program_opts()
@@ -579,7 +586,7 @@ debasher::_print_program_opts()
             echo ""
         fi
         echo "CATEGORY: ${categ}"
-        # Iterate over processname plut options
+        # Iterate over processname plus options
         local key
         for key in ${!DEBASHER_PROGRAM_OPT_TYPE[@]}; do
             local processname
@@ -592,18 +599,11 @@ debasher::_print_program_opts()
 
             # Check if option belongs to current category
             if [ ${DEBASHER_PROGRAM_OPT_CATEG[${key}]} = $categ ]; then
-                # Set value of required option flag
-                if [ "${DEBASHER_PROGRAM_OPT_REQ[${key}]}" != "" ]; then
-                    reqflag=" (required) "
-                else
-                    reqflag=" "
-                fi
-
                 # Print option
                 if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ]; then
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]}${reqflag}[${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
                 else
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]}${reqflag}[${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]} [${processname}]"
                 fi
             fi
         done
@@ -801,7 +801,7 @@ debasher::define_cmdline_opt_wo_value()
     local opt=$2
     local varname=$3
 
-    # Get value for option
+    # Get option
     debasher::_check_opt_given "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
 
     # Add option
@@ -809,28 +809,6 @@ debasher::define_cmdline_opt_wo_value()
 }
 
 define_cmdline_opt_wo_value() { debasher::define_cmdline_opt_wo_value "$@"; }
-
-########
-debasher::define_cmdline_nonmandatory_opt()
-{
-    local cmdline=$1
-    local opt=$2
-    local default_value=$3
-    local varname=$4
-
-    # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
-    local value="${_OPT_VALUE_}"
-
-    if [ "$value" = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        value=${default_value}
-    fi
-
-    # Add option
-    debasher::define_opt "$opt" "$value" "$varname"
-}
-
-define_cmdline_nonmandatory_opt() { debasher::define_cmdline_nonmandatory_opt "$@"; }
 
 ########
 debasher::define_cmdline_opt_if_given()
@@ -852,59 +830,20 @@ debasher::define_cmdline_opt_if_given()
 define_cmdline_opt_if_given() { debasher::define_cmdline_opt_if_given "$@"; }
 
 ########
-debasher::define_cmdline_infile_opt()
+debasher::define_cmdline_opt_wo_value_if_given()
 {
     local cmdline=$1
     local opt=$2
     local varname=$3
 
     # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" $opt || { debasher::errmsg "$opt option not found" ; return 1; }
-    local value="${_OPT_VALUE_}"
-
-    if [ "$value" != ${DEBASHER_NOFILE} ]; then
-        # Check if file exists
-        debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
-
-        # Absolutize path
-        value=`debasher::_get_absolute_path "${value}"`
+    if debasher::_check_opt_given "$cmdline" "$opt"; then
+        # Add option
+        debasher::define_opt_wo_value "$opt" "$varname"
     fi
-
-    # Add option
-    debasher::define_opt "$opt" "$value" "$varname"
 }
 
-define_cmdline_infile_opt() { debasher::define_cmdline_infile_opt "$@"; }
-
-########
-debasher::define_cmdline_infile_nonmand_opt()
-{
-    local cmdline=$1
-    local opt=$2
-    local default_value=$3
-    local varname=$4
-
-    # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
-    local value="${_OPT_VALUE_}"
-
-    if [ "$value" = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        value=${default_value}
-    fi
-
-    if [ "$value" != ${DEBASHER_NOFILE} ]; then
-        # Check if file exists
-        debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
-
-        # Absolutize path
-        value=`debasher::_get_absolute_path "${value}"`
-    fi
-
-    # Add option
-    debasher::define_opt $opt "$value" "$varname"
-}
-
-define_cmdline_infile_nonmand_opt() { debasher::define_cmdline_infile_nonmand_opt "$@"; }
+define_cmdline_opt_wo_value_if_given() { debasher::define_cmdline_opt_wo_value_if_given "$@"; }
 
 ########
 # Public: Defines process option from the output of another process.
@@ -1114,38 +1053,6 @@ debasher::define_value_desc_opt()
 }
 
 define_value_desc_opt() { debasher::define_value_desc_opt "$@"; }
-
-########
-debasher::_define_infile_opt()
-{
-    local opt=$1
-    local value=$2
-    local varname=$3
-
-    # Check if file exists
-    debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
-
-    # Absolutize path
-    value=`debasher::_get_absolute_path "${value}"`
-
-    debasher::define_opt "${opt}" "${value}" "${varname}"
-}
-
-########
-debasher::_define_indir_opt()
-{
-    local opt=$1
-    local value=$2
-    local varname=$3
-
-    # Check if file exists
-    debasher::_dir_exists "$value" || { debasher::errmsg "directory $value does not exist ($opt option)" ; return 1; }
-
-    # Absolutize path
-    value=`debasher::_get_absolute_path "${value}"`
-
-    debasher::define_opt "${opt}" "${value}" "${varname}"
-}
 
 ########
 debasher::_show_program_shdirs()

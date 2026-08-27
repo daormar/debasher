@@ -45,7 +45,13 @@ conda_example_explain_opts()
 {
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
+}
+
+########
+conda_example_identify_cmdline_opts()
+{
+    :
 }
 
 ########

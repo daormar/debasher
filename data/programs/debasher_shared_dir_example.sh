@@ -45,11 +45,17 @@ shared_dir_writer_explain_opts()
 {
     # -h option
     local description="Value to write to file in data directory"
-    explain_cmdline_req_opt "-h" "<int>" "$description"
+    explain_opt "-h" "<int>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
+}
+
+########
+shared_dir_writer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-h"
 }
 
 ########

@@ -4,7 +4,13 @@ import argparse
 parser = argparse.ArgumentParser()
 
 # Add the "-s" option with a string argument
-parser.add_argument('-s', type=str, required=True, help='String to be displayed')
+# Add the "-s" option with a string argument
+parser.add_argument(
+    '-s',
+    type=str,
+    default='Hello World!',
+    help='String to be displayed'
+)
 
 # Parse the arguments
 args = parser.parse_args()

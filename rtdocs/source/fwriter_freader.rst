@@ -12,11 +12,16 @@ File Writer and File Reader Example
     {
         # -s option
         local description="String to be displayed"
-        explain_cmdline_opt "-s" "<string>" "$description"
+        explain_opt "-s" "<string>" "$description"
 
         # -outf option
         local description="output file"
-        explain_non_cmdline_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<string>" "$description"
+    }
+
+    file_writer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-s"
     }
 
     file_writer_define_opts()
@@ -55,7 +60,12 @@ File Writer and File Reader Example
     {
         # -inf option
         local description="input file"
-        explain_non_cmdline_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<string>" "$description"
+    }
+
+    file_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     file_reader_define_opts()

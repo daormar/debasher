@@ -56,19 +56,25 @@ worker_taskdone_explain_opts()
 {
     # -w option
     local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
+    explain_opt "-w" "<int>" "$description"
 
     # -id option
     local description="id of writer"
-    explain_non_cmdline_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<string>" "$description"
 
     # -inf option
     local description="input file"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_non_cmdline_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<string>" "$description"
+}
+
+########
+worker_taskdone_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
 }
 
 ########

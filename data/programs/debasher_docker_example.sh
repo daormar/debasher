@@ -38,8 +38,14 @@ debasher_docker_example_shared_dirs()
 docker_example_explain_opts()
 {
     # -outf option
-    local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    local description="output file"
+    explain_opt "-outf" "<string>" "$description"
+}
+
+########
+docker_identify_cmdline_opts()
+{
+    :
 }
 
 ########
