@@ -9,7 +9,7 @@ DeBasher API
 
    api_proc_impl
 
-   api_opts
+   api_characterize_opts
 
    api_proc_opts
 
