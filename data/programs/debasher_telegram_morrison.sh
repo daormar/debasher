@@ -45,11 +45,11 @@ rseq_explain_opts()
 {
     # -f option
     local description="File to be processed"
-    explain_cmdline_req_opt "-f" "<string>" "$description"
+    explain_opt "-f" "<string>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -101,11 +101,11 @@ decomposer_explain_opts()
 {
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -157,15 +157,15 @@ recomposer_explain_opts()
 {
     # -c option
     local description="Line length in characters"
-    explain_cmdline_req_opt "-c" "<int>" "$description"
+    explain_opt "-c" "<int>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -245,11 +245,11 @@ wseq_explain_opts()
 {
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########

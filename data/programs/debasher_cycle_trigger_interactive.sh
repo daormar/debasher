@@ -45,19 +45,19 @@ master_explain_opts()
 {
     # -n option
     local description="Value limit used to stop cycling"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
+    explain_opt "-n" "<int>" "$description"
 
     # -trigger option
     local description="external trigger fifo"
-    explain_non_cmdline_opt "-trigger" "<string>" "$description"
+    explain_opt "-trigger" "<string>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -138,19 +138,19 @@ worker_explain_opts()
 {
     # -threshold option
     local description="Threshold value used to influence number transformation"
-    explain_cmdline_req_opt "-threshold" "<int>" "$description"
+    explain_opt "-threshold" "<int>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_non_cmdline_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<string>" "$description"
 }
 
 ########

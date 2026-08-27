@@ -45,7 +45,7 @@ stream_echo_explain_opts()
 {
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 }
 
 ########

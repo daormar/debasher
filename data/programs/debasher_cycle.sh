@@ -45,15 +45,15 @@ process_a_explain_opts()
 {
     # -n option
     local description="Number of cycles to execute"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
+    explain_opt "-n" "<int>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -119,11 +119,11 @@ process_b_explain_opts()
 {
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########

@@ -45,11 +45,11 @@ process_a_explain_opts()
 {
     # -s option
     local description="Input string"
-    explain_cmdline_req_opt "-s" "<string>" "$description"
+    explain_opt "-s" "<string>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -94,7 +94,7 @@ process_b_explain_opts()
 {
     # -inf option
     local description="Input file"
-    explain_cmdline_req_opt "-inf" "<str>" "$description"
+    explain_opt "-inf" "<str>" "$description"
 }
 
 ########

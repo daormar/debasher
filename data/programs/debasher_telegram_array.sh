@@ -42,11 +42,11 @@ decomposer_explain_opts()
 {
     # -f option
     local description="Prefix of files to be processed"
-    explain_cmdline_req_opt "-f" "<string>" "$description"
+    explain_opt "-f" "<string>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########

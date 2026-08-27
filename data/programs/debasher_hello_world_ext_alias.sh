@@ -45,7 +45,7 @@ hello_world_explain_opts()
 {
     # -s option
     local description="String to be displayed ('Hello World!' by default)"
-    explain_cmdline_opt "-s" "<string>" "$description"
+    explain_opt "-s" "<string>" "$description"
 }
 
 ########
@@ -68,8 +68,8 @@ hello_world_define_opts()
     local str=$(get_cmdline_opt "${cmdline}" "-s")
 
     # -s option
-    if [ "${str}" != "${OPT_NOT_FOUND}" ]; then
-        define_opt "-s" "${str}" optlist || return 1
+    if [ "${str}" != "${DEBASHER_OPT_NOT_FOUND}" ]; then
+        define_cmdline_opt "${cmdline}" "-s" optlist || return 1
     fi
 
     # Save option list

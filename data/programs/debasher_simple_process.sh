@@ -45,7 +45,7 @@ simple_process_explain_opts()
 {
     # -a option
     local description="Sleep time in seconds"
-    explain_cmdline_req_opt "-a" "<int>" "$description"
+    explain_opt "-a" "<int>" "$description"
 }
 
 ########

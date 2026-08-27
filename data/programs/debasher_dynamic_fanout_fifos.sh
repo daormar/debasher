@@ -45,15 +45,15 @@ generate_explain_opts()
 {
     # -l option
     local description="Length of file in lines"
-    explain_cmdline_req_opt "-n" "<int>" "$description"
+    explain_opt "-n" "<int>" "$description"
 
     # -c option
     local description="Length of each line in characters"
-    explain_cmdline_req_opt "-c" "<int>" "$description"
+    explain_opt "-c" "<int>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -115,11 +115,11 @@ count_explain_opts()
 {
     # -inf option
     local description="input file"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -188,15 +188,15 @@ fragment_explain_opts()
 {
     # -b option
     local description="Number of blocks"
-    explain_cmdline_req_opt "-b" "<int>" "$description"
+    explain_opt "-b" "<int>" "$description"
 
     # -inf option
     local description="input file"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -293,19 +293,19 @@ dispatch_explain_opts()
 {
     # -w option
     local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
+    explain_opt "-w" "<int>" "$description"
 
     # --log-level option
     local description="Logging verbosity. Choices: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)."
-    explain_cmdline_opt "--log-level" "<string>" "$description"
+    explain_opt "--log-level" "<string>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outfi option
     local description="i'th output fifo"
-    explain_non_cmdline_opt "-outfi" "<string>" "$description"
+    explain_opt "-outfi" "<string>" "$description"
 }
 
 ########
@@ -330,7 +330,6 @@ dispatch_define_opts()
 
     # --log-level option
     define_cmdline_opt_if_given "$cmdline" "--log-level" optlist || return 1
-#    define_cmdline_nonmandatory_opt "$cmdline" "--log-level" "INFO" optlist || return 1
 
     # Define option for input FIFO
     define_opt_from_proc_out "-inf" "fragment" "-outf" optlist || return 1
@@ -358,19 +357,19 @@ worker_explain_opts()
 {
     # -w option
     local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
+    explain_opt "-w" "<int>" "$description"
 
     # -id option
     local description="id of writer"
-    explain_non_cmdline_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<string>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_non_cmdline_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<string>" "$description"
 }
 
 ########
@@ -447,15 +446,15 @@ aggregate_explain_opts()
 {
     # -w option
     local description="Number of workers."
-    explain_cmdline_req_opt "-w" "<int>" "$description"
+    explain_opt "-w" "<int>" "$description"
 
     # -indi option
     local description="i'th input directory"
-    explain_non_cmdline_opt "-indi" "<string>" "$description"
+    explain_opt "-indi" "<string>" "$description"
 
     # -outf option
     local description="output file"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########

@@ -45,7 +45,7 @@ fifo_writer_explain_opts()
 {
     # -outf option
     local description="output fifo"
-    explain_non_cmdline_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<string>" "$description"
 }
 
 ########
@@ -93,7 +93,7 @@ fifo_reader_explain_opts()
 {
     # -inf option
     local description="input fifo"
-    explain_non_cmdline_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 }
 
 ########
