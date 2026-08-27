@@ -797,28 +797,6 @@ debasher::define_cmdline_opt_wo_value()
 define_cmdline_opt_wo_value() { debasher::define_cmdline_opt_wo_value "$@"; }
 
 ########
-debasher::define_cmdline_nonmandatory_opt()
-{
-    local cmdline=$1
-    local opt=$2
-    local default_value=$3
-    local varname=$4
-
-    # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
-    local value="${_OPT_VALUE_}"
-
-    if [ "$value" = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        value=${default_value}
-    fi
-
-    # Add option
-    debasher::define_opt "$opt" "$value" "$varname"
-}
-
-define_cmdline_nonmandatory_opt() { debasher::define_cmdline_nonmandatory_opt "$@"; }
-
-########
 debasher::define_cmdline_opt_if_given()
 {
     local cmdline=$1
