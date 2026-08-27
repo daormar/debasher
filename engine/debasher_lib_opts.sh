@@ -497,7 +497,7 @@ debasher::explain_opt()
 }
 
 ########
-# Public: Explains non command-line option.
+# Public: Explains option.
 #
 # $1 - Option name.
 # $2 - Data type of option value.
@@ -562,6 +562,16 @@ debasher::opt_is_cmdline()
     DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
 }
 
+########
+# Public: Identify option as a command-line option.
+#
+# $1 - Option name.
+#
+# Examples
+#
+#   debasher::opt_is_cmdline "-s"
+#
+# The function does not return any value.
 opt_is_cmdline() { debasher::opt_is_cmdline "$@"; }
 
 ########
