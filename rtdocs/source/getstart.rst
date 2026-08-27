@@ -125,6 +125,11 @@ stored in a file with the same name and Bash extension,
         explain_cmdline_opt "-s" "<string>" "$description"
     }
 
+    hello_world_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-s"
+    }
+
     hello_world_define_opts()
     {
         # Initialize variables
@@ -135,10 +140,8 @@ stored in a file with the same name and Bash extension,
         local str=$(get_cmdline_opt "${cmdline}" "-s")
 
         # -s option
-        if [ "${str}" = "${OPT_NOT_FOUND}" ]; then
-            define_opt "-s" "Hello World!" optlist || return 1
-        else
-            define_opt "-s" "$str" optlist || return 1
+        if [ "${str}" != "${DEBASHER_OPT_NOT_FOUND}" ]; then
+           define_cmdline_opt "${cmdline}" "-s" optlist || return 1
         fi
 
         # Save option list
@@ -181,10 +184,16 @@ the functions involved:
 
 * ``hello_world_explain_opts``: this function implements the
   ``explain_opts`` method for ``hello_world``. Such method defines the
-  options that are required by the process. In particular,
+  options that the process receives. In particular,
   ``hello_world`` receives the ``-s`` option, which allows to specify
   the string to be shown. To document the option, the
   ``explain_cmdline_opt`` API function is used.
+
+* ``hello_world_identify_cmdline_opts``: this function implements the
+  ``identify_cmdline_opts`` method for ``hello_world``. This method
+  indicates, from the set of process options, which ones should be
+  provided by the user when executing the workflow. In this case, the
+  user should provide the ``-s`` option via command-line.
 
 * ``hello_world_define_opts``: the ``define_opts`` method allows to
   define the options that will be provided to the ``hello_world``

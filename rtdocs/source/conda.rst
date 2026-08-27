@@ -10,6 +10,11 @@ Conda Example
         explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
+    conda_example_identify_cmdline_opts()
+    {
+        :
+    }
+
     conda_example_define_opts()
     {
         # Initialize variables

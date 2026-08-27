@@ -18,6 +18,12 @@ Process Skip Example
         explain_non_cmdline_opt "-outv" "<string>" "$description"
     }
 
+    value_writer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-num-a"
+        opt_is_cmdline "-num-b"
+    }
+
     value_writer_define_opts()
     {
         # Initialize variables
@@ -63,6 +69,11 @@ Process Skip Example
         # -outf option
         local description="output file"
         explain_non_cmdline_opt "-outf" "<string>" "$description"
+    }
+
+    value_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     value_reader_define_opts()

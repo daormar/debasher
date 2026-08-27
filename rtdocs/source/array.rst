@@ -23,6 +23,11 @@ Process Array Example
         explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
+    array_writer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-c"
+    }
+
     array_writer_define_opts()
     {
         # Initialize variables
@@ -78,6 +83,11 @@ Process Array Example
         # -outdir option
         local description="output directory of reader"
         explain_non_cmdline_opt "-outdir" "<string>" "$description"
+    }
+
+    array_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     array_reader_define_opts()

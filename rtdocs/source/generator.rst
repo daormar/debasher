@@ -18,6 +18,11 @@ Process Array Example using Generators
         explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
+    array_writer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-c"
+    }
+
     array_writer_generate_opts_size()
     {
         # Initialize variables
@@ -90,6 +95,11 @@ Process Array Example using Generators
         # -outdir option
         local description="output directory"
         explain_non_cmdline_opt "-outdir" "<string>" "$description"
+    }
+
+    array_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     array_reader_generate_opts_size()

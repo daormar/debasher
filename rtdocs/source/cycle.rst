@@ -18,6 +18,11 @@ Program with Cycles
         explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
+    process_a_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-n"
+    }
+
     process_a_define_opts()
     {
         # Initialize variables
@@ -76,6 +81,11 @@ Program with Cycles
         # -outf option
         local description="output fifo"
         explain_non_cmdline_opt "-outf" "<string>" "$description"
+    }
+
+    process_b_identify_cmdline_opts()
+    {
+        :
     }
 
     process_b_define_opts()

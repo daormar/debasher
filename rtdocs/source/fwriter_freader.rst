@@ -19,6 +19,11 @@ File Writer and File Reader Example
         explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
+    file_writer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-s"
+    }
+
     file_writer_define_opts()
     {
         # Initialize variables
@@ -56,6 +61,11 @@ File Writer and File Reader Example
         # -inf option
         local description="input file"
         explain_non_cmdline_opt "-inf" "<string>" "$description"
+    }
+
+    file_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     file_reader_define_opts()

@@ -15,6 +15,11 @@ FIFO Writer and FIFO Reader Example
         explain_non_cmdline_opt "-outf" "<string>" "$description"
     }
 
+    fifo_writer_identify_cmdline_opts()
+    {
+        :
+    }
+
     fifo_writer_define_opts()
     {
         # Initialize variables
@@ -51,6 +56,11 @@ FIFO Writer and FIFO Reader Example
         # -inf option
         local description="input fifo"
         explain_non_cmdline_opt "-inf" "<string>" "$description"
+    }
+
+    fifo_reader_identify_cmdline_opts()
+    {
+        :
     }
 
     fifo_reader_define_opts()
