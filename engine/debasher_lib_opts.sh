@@ -371,6 +371,8 @@ debasher::_read_opt_value_from_line_memoiz()
 ########
 # Public: Explains command-line option.
 #
+# WARNING: This function is deprecated.
+#
 # $1 - Option name.
 # $2 - Data type of option value.
 # $3 - Option description.
@@ -410,6 +412,8 @@ debasher::explain_cmdline_opt()
 
 ########
 # Public: Explains command-line option.
+#
+# WARNING: This function is deprecated.
 #
 # $1 - Option name.
 # $2 - Data type of option value.
@@ -743,8 +747,6 @@ get_cmdline_opt() { debasher::get_cmdline_opt "$@"; }
 ########
 # Public: Defines process option from command-line option.
 #
-# WARNING: This function is deprecated.
-#
 # $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
 # $2 - Name of option given in the command line.
 # $3 - Name of the variable that will store the newly added option.
@@ -770,8 +772,6 @@ debasher::define_cmdline_opt()
 
 ########
 # Public: Defines process option from command-line option.
-#
-# WARNING: This function is deprecated.
 #
 # $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
 # $2 - Name of option given in the command line.
