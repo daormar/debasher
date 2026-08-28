@@ -19,7 +19,7 @@
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
 
-if [ "$#" -eq 0 ]; then
+if [ "$#" -ne 1 ]; then
     echo "Usage: debasher_list_proc_names <file>"
     exit 1
 fi
