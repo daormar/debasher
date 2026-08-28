@@ -13,6 +13,8 @@ import type {
   ComputationalSpecs,
   AdditionalSpecs,
   OptionsHandler,
+  ProcessInfo,
+  ProcessInfoOption,
 } from "../models/process";
 import type { WorkflowOption } from "../models/option";
 import { getOptionDirection } from "../models/option";
@@ -29,7 +31,12 @@ interface WorkflowContextType {
 
   save: (outputDir: string) => Promise<void>;
 
-  addProcess: (name: string) => void;
+  addProcess: (name: string, info: ProcessInfo | null) => void;
+
+  applyProcessInfo: (
+    processId: string,
+    info: ProcessInfo
+  ) => void;
 
   setPreamble: (
     preamble: string
@@ -121,6 +128,19 @@ interface WorkflowContextType {
   ) => void;
 }
 
+function toWorkflowOption(info: ProcessInfoOption): WorkflowOption {
+  return {
+    id: crypto.randomUUID(),
+    direction: getOptionDirection(info.label),
+    label: info.label,
+    dataType: info.dataType,
+    description: info.description,
+    value: "",
+    fifo: false,
+    commandLine: info.commandLine,
+  };
+}
+
 const WorkflowContext =
   createContext<WorkflowContextType | null>(null);
 
@@ -150,7 +170,7 @@ export function WorkflowProvider({
     setSelectedProcessId(processId);
   }
 
-  function addProcess(name: string) {
+  function addProcess(name: string, info: ProcessInfo | null) {
 
     const process: WorkflowProcess = {
 
@@ -158,22 +178,22 @@ export function WorkflowProvider({
 
       name,
 
-      description: "",
+      description: info?.description ?? "",
 
       position: {
         x: 100,
         y: 100,
       },
 
-      options: [],
+      options: info ? info.options.map(toWorkflowOption) : [],
 
       optionsHandler: {
         mode: "standard",
       },
 
-      language: "bash",
+      language: info?.language ?? "bash",
 
-      code: "",
+      code: info?.code ?? "",
 
       computationalSpecs: {},
 
@@ -186,6 +206,31 @@ export function WorkflowProvider({
     setWorkflow(current => ({
       ...current,
       processes: [...current.processes, process],
+    }));
+
+  }
+
+  function applyProcessInfo(
+    processId: string,
+    info: ProcessInfo
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? {
+              ...process,
+              description: info.description,
+              options: info.options.map(toWorkflowOption),
+              language: info.language,
+              code: info.code,
+            }
+          : process
+      ),
+
     }));
 
   }
@@ -570,6 +615,8 @@ export function WorkflowProvider({
     save,
 
     addProcess,
+
+    applyProcessInfo,
 
     setPreamble,
 

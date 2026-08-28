@@ -20,6 +20,7 @@ export default function Inspector() {
     workflow,
     selectedProcess,
     renameProcess,
+    applyProcessInfo,
     setProcessDescription,
     addOption,
     removeOption,
@@ -153,9 +154,12 @@ export default function Inspector() {
             .map(process => process.name)}
           preamble={workflow.preamble}
           envVars={workflow.envVars}
-          onConfirm={(name) =>
-            renameProcess(selectedProcess.id, name)
-          }
+          onConfirm={(name, info) => {
+            renameProcess(selectedProcess.id, name);
+            if (info) {
+              applyProcessInfo(selectedProcess.id, info);
+            }
+          }}
           onClose={() => setChangeNameOpen(false)}
         />
       )}

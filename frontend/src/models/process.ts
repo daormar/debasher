@@ -1,5 +1,5 @@
 import type { Position } from "./position";
-import type { WorkflowOption } from "./option";
+import type { OptionDataType, WorkflowOption } from "./option";
 
 export type ProcessLanguage =
   | "bash"
@@ -69,5 +69,34 @@ export interface WorkflowProcess {
   computationalSpecs: ComputationalSpecs;
 
   additionalSpecs: AdditionalSpecs;
+
+}
+
+/**
+ * A previously-defined process's description, options, and code, as
+ * fetched from the workflow's preamble (via debasher_get_proc_info) when
+ * a suggested (already-existing) process name is selected.
+ */
+export interface ProcessInfoOption {
+
+  label: string;
+
+  dataType: OptionDataType;
+
+  description: string;
+
+  commandLine: boolean;
+
+}
+
+export interface ProcessInfo {
+
+  description: string;
+
+  options: ProcessInfoOption[];
+
+  language: ProcessLanguage;
+
+  code: string;
 
 }

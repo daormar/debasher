@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 
-import { suggestProcessNames, validateProcessName } from "../api/processApi";
+import { getProcessInfo, suggestProcessNames, validateProcessName } from "../api/processApi";
+import type { ProcessInfo } from "../models/process";
 
 interface Props {
   title: string;
@@ -9,7 +10,7 @@ interface Props {
   existingNames: string[];
   preamble: string;
   envVars: Record<string, string>;
-  onConfirm: (name: string) => void;
+  onConfirm: (name: string, info: ProcessInfo | null) => void;
   onClose: () => void;
 }
 
@@ -87,7 +88,18 @@ export default function ProcessNameDialog({
         return;
       }
 
-      onConfirm(trimmedName);
+      let info: ProcessInfo | null = null;
+
+      if (suggestions.includes(trimmedName)) {
+        try {
+          info = await getProcessInfo(preamble, envVars, trimmedName);
+        } catch {
+          // Injecting an existing process's info is a convenience —
+          // proceed with a blank process rather than blocking on it.
+        }
+      }
+
+      onConfirm(trimmedName, info);
       onClose();
     } catch (err) {
       setError(
