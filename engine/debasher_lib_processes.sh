@@ -82,7 +82,7 @@ debasher::_show_proc_methods()
     for i in "${!DEBASHER_PROCESS_METHODS[@]}"; do
         if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}" >/dev/null; then
             local proc_func=`debasher::_get_process_funcname "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}"`
-            echo "${proc_func}"
+            echo "- ${proc_func}"
         fi
     done
 }
@@ -95,7 +95,7 @@ debasher::_show_proc_vars()
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
         local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
         if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-            echo "${proc_varname}"
+            echo "- ${proc_varname}"
         fi
     done
 }
@@ -172,16 +172,14 @@ debasher::_document_process()
 
     if [ ${show_methods} -eq 1 ]; then
         echo "### Process Methods"
-        echo '```'
         debasher::_show_proc_methods "${processname}"
-        echo '```'
+        echo ""
     fi
 
     if [ ${show_varnames} -eq 1 ]; then
         echo "### Process Variables"
-        echo '```'
         debasher::_show_proc_vars "${processname}"
-        echo '```'
+        echo ""
     fi
 
     if [ ${show_implem} -eq 1 ]; then
