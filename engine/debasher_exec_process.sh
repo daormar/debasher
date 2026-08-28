@@ -51,7 +51,10 @@ echo "" >&2
 if [ $# -eq 0 ]; then
     echo "Showing documentation for process ${processname}..." >&2
     showopts=1
-    debasher::_document_process "${processname}" "${showopts}"
+    showmeths=0
+    showvars=0
+    showimpl=0
+    debasher::_document_process "${processname}" "${showopts}" "${showmeths}" "${showvars}" "${showimpl}"
 else
     if [ "$1" = "--" ]; then
         shift
