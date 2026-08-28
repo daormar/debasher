@@ -36,7 +36,7 @@ debasher::process_description()
 process_description() { debasher::process_description "$@"; }
 
 ########
-debasher::_document_process_opts()
+debasher::_show_proc_opts()
 {
     local processname=$1
 
@@ -75,10 +75,68 @@ debasher::_document_process_opts()
 }
 
 ########
+debasher::_show_proc_methods()
+{
+    local processname=$1
+
+    for i in "${!DEBASHER_PROCESS_METHODS[@]}"; do
+        if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}" >/dev/null; then
+            local proc_func=`debasher::_get_process_funcname "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}"`
+            echo "${proc_func}"
+        fi
+    done
+}
+
+########
+debasher::_show_proc_vars()
+{
+    local processname=$1
+
+    for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
+        local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
+        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
+            echo "${proc_varname}"
+        fi
+    done
+}
+
+########
+debasher::_show_proc_implem()
+{
+    local processname=$1
+
+    # Search for process implementations
+    if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}" >/dev/null; then
+        # Try with bash
+        local funcname=`debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"`
+        echo '```'bash
+        declare -f "${funcname}"
+        echo '```'
+        return 0
+    else
+        # Try with rest of languages
+        for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
+            local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
+            if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
+                echo '```'${DEBASHER_HEREDOC_LANGUAGES[$i]}
+                echo "${!proc_varname}"
+                echo '```'
+                return 0
+            fi
+        done
+    fi
+
+    return 1
+}
+
+########
 debasher::_document_process()
 {
     local processname=$1
-    local doc_options=$2
+    local show_options=$2
+    local show_methods=$3
+    local show_varnames=$3
+    local show_implem=$4
 
     # Print header
     echo "## ${processname}"
@@ -95,19 +153,44 @@ debasher::_document_process()
         echo ""
     fi
 
-    if [ ${doc_options} -eq 1 ]; then
+    if [ ${show_options} -eq 1 ]; then
         echo "### Process Options"
         local opts_funcname
         opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
         if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
             opts_funcname=`debasher::_get_explain_opts_funcname ${processname}`
             if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-                echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
-                continue
+                echo "Warning: function to explain options for process ${processname} was not found" >&2
             fi
         fi
-        ${opts_funcname}
-        debasher::_document_process_opts "${processname}"
+
+        if [ "${opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            ${opts_funcname}
+            debasher::_show_proc_opts "${processname}"
+        fi
+    fi
+
+    if [ ${show_methods} -eq 1 ]; then
+        echo "### Process Methods"
+        debasher::_show_proc_methods "${processname}"
+        echo ""
+    fi
+
+    if [ ${show_varnames} -eq 1 ]; then
+        echo "### Process Variables"
+        debasher::_show_proc_vars "${processname}"
+        echo ""
+    fi
+
+    if [ ${show_implem} -eq 1 ]; then
+        echo "### Process Implementation"
+        local implementation
+        implementation=`debasher::_show_proc_implem "${processname}"`
+        if [ $? -eq 0 ]; then
+            echo "${implementation}"
+        else
+            echo "Warning: implementation for process ${processname} was not found" >&2
+        fi
     fi
 }
 
