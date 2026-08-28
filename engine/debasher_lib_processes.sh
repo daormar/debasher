@@ -64,11 +64,9 @@ debasher::_show_proc_opts()
 
             # Print option
             if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ]; then
-                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
-                echo ""
+                echo "- \`${opt}\` ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
             else
-                echo "\`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
-                echo ""
+                echo "- \`${opt}\` ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${paren_flags}"
             fi
         fi
     done
@@ -82,7 +80,7 @@ debasher::_show_proc_methods()
     for i in "${!DEBASHER_PROCESS_METHODS[@]}"; do
         if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}" >/dev/null; then
             local proc_func=`debasher::_get_process_funcname "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}"`
-            echo "- ${proc_func}"
+            echo "- \`${proc_func}\`"
         fi
     done
 }
@@ -95,7 +93,7 @@ debasher::_show_proc_vars()
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
         local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
         if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-            echo "- ${proc_varname}"
+            echo "- \`${proc_varname}\`"
         fi
     done
 }
@@ -168,6 +166,7 @@ debasher::_document_process()
             ${opts_funcname}
             debasher::_show_proc_opts "${processname}"
         fi
+        echo ""
     fi
 
     if [ ${show_methods} -eq 1 ]; then
