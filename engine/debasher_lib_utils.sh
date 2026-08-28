@@ -632,10 +632,10 @@ debasher::_search_process_func()
 debasher::_search_process_var()
 {
     local processname=$1
-    local method_name=$2
+    local var_name=$2
 
     # Check if function exists
-    local process_var=`debasher::_get_process_varname "${processname}" "${method_name}"`
+    local process_var=`debasher::_get_process_varname "${processname}" "${var_name}"`
     if debasher::_var_exists "${process_var}"; then
         echo "${process_var}"
         return 0
