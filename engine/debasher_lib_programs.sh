@@ -236,7 +236,7 @@ debasher::_create_heredoc_func_body()
         local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
         if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
             printf -v escaped_interpreter '%q' "${DEBASHER_HEREDOC_INTERPRETERS[$i]}"
-            echo "${escaped_interpreter} -c \"\${${proc_varname}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+            echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\${${proc_varname}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
             return 0
         fi
     done
