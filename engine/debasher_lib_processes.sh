@@ -172,14 +172,16 @@ debasher::_document_process()
 
     if [ ${show_methods} -eq 1 ]; then
         echo "### Process Methods"
+        echo '```'
         debasher::_show_proc_methods "${processname}"
-        echo ""
+        echo '```'
     fi
 
     if [ ${show_varnames} -eq 1 ]; then
         echo "### Process Variables"
+        echo '```'
         debasher::_show_proc_vars "${processname}"
-        echo ""
+        echo '```'
     fi
 
     if [ ${show_implem} -eq 1 ]; then
