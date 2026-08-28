@@ -1201,3 +1201,18 @@ debasher::_get_process_finish_date()
         "${GREP}" "^Process finished at " "${log_filename}" | "${AWK}" '{for(i=4;i<=NF;++i) {printf"%s",$i; if(i<NF) printf" "}}'
     fi
 }
+
+########
+debasher::list_proc_names()
+{
+    while IFS= read -r func; do
+        case "$func" in
+            *"$DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS")
+                echo "${func%"$DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS"}"
+                ;;
+            *"$DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS")
+                echo "${func%"$DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS"}"
+                ;;
+        esac
+    done < <(declare -F | "${AWK}" '{print $3}')
+}
