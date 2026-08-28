@@ -54,6 +54,8 @@ export interface WorkflowProcess {
 
   name: string;
 
+  description: string;
+
   position: Position;
 
   options: WorkflowOption[];

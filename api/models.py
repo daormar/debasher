@@ -42,6 +42,7 @@ class OptionsHandler(BaseModel):
 class WorkflowProcess(BaseModel):
     id: str
     name: str
+    description: str
     position: Position
     options: list[WorkflowOption]
     optionsHandler: OptionsHandler

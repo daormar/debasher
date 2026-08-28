@@ -66,6 +66,11 @@ interface WorkflowContextType {
     name: string
   ) => void;
 
+  setProcessDescription: (
+    processId: string,
+    description: string
+  ) => void;
+
   setProcessLanguage: (
     processId: string,
     language: ProcessLanguage
@@ -152,6 +157,8 @@ export function WorkflowProvider({
       id: crypto.randomUUID(),
 
       name,
+
+      description: "",
 
       position: {
         x: 100,
@@ -297,6 +304,25 @@ export function WorkflowProvider({
       processes: current.processes.map(process =>
         process.id === processId
           ? { ...process, name }
+          : process
+      ),
+
+    }));
+
+  }
+
+  function setProcessDescription(
+    processId: string,
+    description: string
+  ) {
+
+    setWorkflow(current => ({
+
+      ...current,
+
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, description }
           : process
       ),
 
@@ -560,6 +586,8 @@ export function WorkflowProvider({
     moveProcess,
 
     renameProcess,
+
+    setProcessDescription,
 
     setProcessLanguage,
 

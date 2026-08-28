@@ -20,6 +20,7 @@ export default function Inspector() {
     workflow,
     selectedProcess,
     renameProcess,
+    setProcessDescription,
     addOption,
     removeOption,
     setProcessLanguage,
@@ -114,6 +115,32 @@ export default function Inspector() {
         </button>
 
       </div>
+
+
+      <textarea
+
+        value={selectedProcess.description}
+
+        onChange={(event) =>
+          setProcessDescription(
+            selectedProcess.id,
+            event.target.value
+          )
+        }
+
+        placeholder="Description"
+
+        rows={3}
+
+        style={{
+          width: "100%",
+          marginBottom: 16,
+          fontFamily: "inherit",
+          resize: "none",
+          overflowY: "auto",
+        }}
+
+      />
 
 
       {isChangeNameOpen && (
