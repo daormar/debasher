@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
+import EnvVarsEditor from "./EnvVarsEditor";
 import PreambleEditor from "./PreambleEditor";
 import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
@@ -18,6 +19,9 @@ export default function Toolbar({ onClose }: Props) {
   } = useWorkflow();
 
   const [isPreambleOpen, setPreambleOpen] =
+    useState(false);
+
+  const [isEnvVarsOpen, setEnvVarsOpen] =
     useState(false);
 
   const [isSaveOpen, setSaveOpen] =
@@ -49,6 +53,12 @@ export default function Toolbar({ onClose }: Props) {
       </strong>
 
       <button
+        onClick={() => setEnvVarsOpen(true)}
+      >
+        Env vars
+      </button>
+
+      <button
         onClick={() => setPreambleOpen(true)}
       >
         Preamble
@@ -75,6 +85,12 @@ export default function Toolbar({ onClose }: Props) {
       {isPreambleOpen && (
         <PreambleEditor
           onClose={() => setPreambleOpen(false)}
+        />
+      )}
+
+      {isEnvVarsOpen && (
+        <EnvVarsEditor
+          onClose={() => setEnvVarsOpen(false)}
         />
       )}
 

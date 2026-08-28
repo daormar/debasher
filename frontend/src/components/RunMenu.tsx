@@ -3,13 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { runWorkflow, stopWorkflow } from "../api/executionApi";
 import type { Workflow } from "../models/workflow";
 import { useWorkflow } from "../store/WorkflowContext";
-import EnvVarsEditor from "./EnvVarsEditor";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
 import WorkflowOptionsEditor from "./WorkflowOptionsEditor";
 
 const MENU_ITEMS = [
-  "Set environment variables",
   "Set output directory",
   "Set execution options",
   "Set workflow options",
@@ -36,9 +34,6 @@ export default function RunMenu() {
   const { workflow } = useWorkflow();
 
   const [isOpen, setOpen] =
-    useState(false);
-
-  const [isEnvVarsOpen, setEnvVarsOpen] =
     useState(false);
 
   const [isOutputDirOpen, setOutputDirOpen] =
@@ -82,10 +77,7 @@ export default function RunMenu() {
 
   function handleItemClick(item: MenuItem) {
 
-    if (item === "Set environment variables") {
-      setOpen(false);
-      setEnvVarsOpen(true);
-    } else if (item === "Set output directory") {
+    if (item === "Set output directory") {
       setOpen(false);
       setOutputDirOpen(true);
     } else if (item === "Set execution options") {
@@ -199,12 +191,6 @@ export default function RunMenu() {
 
         </div>
 
-      )}
-
-      {isEnvVarsOpen && (
-        <EnvVarsEditor
-          onClose={() => setEnvVarsOpen(false)}
-        />
       )}
 
       {isOutputDirOpen && (
