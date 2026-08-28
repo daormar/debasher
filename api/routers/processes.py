@@ -1,7 +1,12 @@
+import os
 import re
+import subprocess
+import tempfile
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from .. import paths
 
 router = APIRouter(prefix="/api/processes", tags=["processes"])
 
@@ -79,8 +84,68 @@ def validate_process_name(request: ValidateProcessNameRequest) -> ValidateProces
     return ValidateProcessNameResponse(valid=is_valid_process_name(request.name))
 
 
+_LIST_PROC_NAMES_SCRIPT = "debasher_list_proc_names"
+
+# Time budget for sourcing a (possibly still-being-edited) preamble.
+# Suggestions are a convenience, so a slow/hanging preamble should just
+# yield no suggestions rather than block the request.
+_LIST_PROC_NAMES_TIMEOUT_SECS = 10
+
+
+def _list_proc_names(preamble: str, workflow_env_vars: dict[str, str]) -> list[str]:
+    """
+    Run debasher_list_proc_names on `preamble` and return the process
+    names it prints (one per line).
+
+    The script sources the preamble in a DeBasher-aware Bash process and
+    lists the process-defining functions it declares, so DEBASHER_MOD_DIR
+    (used to resolve any `load_debasher_module` calls the preamble makes)
+    must be forwarded to it — taken from the workflow's own envVars
+    (what the workflow will actually run with), not the webui server's
+    environment.
+    """
+    script = paths.find_libexec_tool(_LIST_PROC_NAMES_SCRIPT)
+    if script is None:
+        return []
+
+    env = os.environ.copy()
+    env["DEBASHER_MOD_DIR"] = workflow_env_vars.get("DEBASHER_MOD_DIR", "")
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".sh") as preamble_file:
+        preamble_file.write(preamble)
+        preamble_file.flush()
+
+        try:
+            result = subprocess.run(
+                [str(script), preamble_file.name],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=_LIST_PROC_NAMES_TIMEOUT_SECS,
+            )
+        except subprocess.TimeoutExpired:
+            return []
+
+    if result.returncode != 0:
+        return []
+
+    # debasher::list_proc_names (engine/debasher_lib_processes.sh) echoes
+    # each process name once per required method it detects (e.g. both
+    # "..._explain_cmdline_opts" and "..._explain_opts"), so dedupe here.
+    names: list[str] = []
+    seen: set[str] = set()
+    for name in result.stdout.splitlines():
+        name = name.strip()
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+
+    return names
+
+
 class SuggestProcessNamesRequest(BaseModel):
     preamble: str
+    envVars: dict[str, str]
 
 
 class SuggestProcessNamesResponse(BaseModel):
@@ -90,11 +155,10 @@ class SuggestProcessNamesResponse(BaseModel):
 @router.post("/suggest-names", response_model=SuggestProcessNamesResponse)
 def suggest_process_names(request: SuggestProcessNamesRequest) -> SuggestProcessNamesResponse:
     """
-    Suggest process names based on the workflow's preamble.
-
-    Stub: always returns an empty list.
-
-    TODO: replace with real logic that inspects `request.preamble`
-    (e.g. functions/commands it defines) to suggest names.
+    Suggest process names based on the workflow's preamble, by sourcing
+    it (via libexec/debasher_list_proc_names) and listing the
+    process-defining functions it declares.
     """
-    return SuggestProcessNamesResponse(names=[])
+    return SuggestProcessNamesResponse(
+        names=_list_proc_names(request.preamble, request.envVars)
+    )

@@ -112,6 +112,13 @@ check_deps
 # was installed, since it no longer sits next to main.py once installed.
 export DEBASHER_WEBUI_STATIC_DIR="${debasher_pkgdatadir}/web"
 
+# DEBASHER_WEBUI_BIN_DIR / DEBASHER_WEBUI_LIBEXEC_DIR tell api/paths.py
+# where DeBasher's bin/ and libexec/ scripts (e.g. debasher_exec,
+# debasher_list_proc_names) were installed, since they no longer sit
+# next to the repo's api/ directory once installed.
+export DEBASHER_WEBUI_BIN_DIR="${debasher_bindir}"
+export DEBASHER_WEBUI_LIBEXEC_DIR="${debasher_libexecdir}"
+
 echo "Once started, open http://${host}:${port}/ in your browser to use the web interface." >&2
 
 exec "${PYTHON}" -m uvicorn api.main:app \

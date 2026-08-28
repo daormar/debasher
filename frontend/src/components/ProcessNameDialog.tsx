@@ -8,6 +8,7 @@ interface Props {
   initialName?: string;
   existingNames: string[];
   preamble: string;
+  envVars: Record<string, string>;
   onConfirm: (name: string) => void;
   onClose: () => void;
 }
@@ -18,6 +19,7 @@ export default function ProcessNameDialog({
   initialName = "",
   existingNames,
   preamble,
+  envVars,
   onConfirm,
   onClose,
 }: Props) {
@@ -40,7 +42,7 @@ export default function ProcessNameDialog({
 
     let cancelled = false;
 
-    suggestProcessNames(preamble)
+    suggestProcessNames(preamble, envVars)
       .then(names => {
         if (!cancelled) {
           setSuggestions(names);
@@ -54,7 +56,7 @@ export default function ProcessNameDialog({
       cancelled = true;
     };
 
-  }, [preamble]);
+  }, [preamble, envVars]);
 
   async function handleConfirm() {
 

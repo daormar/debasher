@@ -1,5 +1,5 @@
 apidir = $(pkgdatadir)/api
-dist_api_DATA = main.py models.py persistence.py requirements.txt
+dist_api_DATA = main.py models.py paths.py persistence.py requirements.txt
 
 routersdir = $(apidir)/routers
 dist_routers_DATA = routers/__init__.py routers/execution.py routers/processes.py routers/workflows.py
@@ -14,6 +14,8 @@ debasher_webui: debasher_webui.sh
 	rm -f $@
 	echo "#! " $(BASH) > $@
 	echo "debasher_pkgdatadir=\"$(pkgdatadir)\"" >> $@
+	echo "debasher_bindir=\"$(bindir)\"" >> $@
+	echo "debasher_libexecdir=\"$(libexecdir)\"" >> $@
 	echo "debasher_default_python=\"$(PYTHON)\"" >> $@
 	cat $< >> $@
 	chmod ugo+x $@
