@@ -605,10 +605,10 @@ debasher::_get_process_funcname()
 debasher::_get_process_varname()
 {
     local processname=$1
-    local method_name=$2
+    local var_name=$2
 
-    local process_function="${processname}${method_name}"
-    echo ${process_function}
+    local process_varname="${processname}${var_name}"
+    echo ${process_varname}
 }
 
 ########
