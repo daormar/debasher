@@ -265,7 +265,16 @@ export default function Inspector() {
       </h4>
 
 
-      <div>
+      <div
+        style={{
+          maxHeight: 160,
+          overflowY: "auto",
+          border: "1px solid #ddd",
+          borderRadius: 4,
+          padding: 8,
+          marginBottom: 8,
+        }}
+      >
 
         {selectedProcess.options.map(option => (
 
