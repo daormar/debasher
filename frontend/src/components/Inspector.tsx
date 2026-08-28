@@ -170,47 +170,31 @@ export default function Inspector() {
       </h4>
 
 
-      <div
+      <select
+
+        value={selectedProcess.optionsHandler.mode}
+
+        onChange={(event) =>
+          setOptionsHandler(selectedProcess.id, {
+            ...selectedProcess.optionsHandler,
+            mode: event.target.value as OptionsHandlerMode,
+          })
+        }
+
         style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 4,
+          width: "100%",
           marginBottom: 8,
         }}
+
       >
 
         {(["standard", "array", "generator", "manual"] as OptionsHandlerMode[]).map(mode => (
-
-          <button
-
-            key={mode}
-
-            onClick={() =>
-              setOptionsHandler(selectedProcess.id, {
-                ...selectedProcess.optionsHandler,
-                mode,
-              })
-            }
-
-            style={{
-              flex: "1 1 45%",
-              fontWeight:
-                selectedProcess.optionsHandler.mode === mode
-                  ? "bold"
-                  : "normal",
-              background:
-                selectedProcess.optionsHandler.mode === mode
-                  ? "#ddd"
-                  : "#fff",
-            }}
-
-          >
+          <option key={mode} value={mode}>
             {mode}
-          </button>
-
+          </option>
         ))}
 
-      </div>
+      </select>
 
 
       <button
