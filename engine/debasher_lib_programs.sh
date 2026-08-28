@@ -213,35 +213,14 @@ debasher::_is_heredoc_process()
 {
     local processname=$1
 
-    # Search for a suitable function or command to execute the process
-
-    # Try with Python
-    local pyexec_varname=`debasher::_get_pyexec_varname "${processname}"`
-    if [ "${pyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        echo "${pyexec_varname}"
-        return 0
-    fi
-
-    # Try with R
-    local rexec_varname=`debasher::_get_rexec_varname "${processname}"`
-    if [ "${rexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        echo "${rexec_varname}"
-        return 0
-    fi
-
-    # Try with Perl
-    local perlexec_varname=`debasher::_get_perlexec_varname "${processname}"`
-    if [ "${perlexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        echo "${perlexec_varname}"
-        return 0
-    fi
-
-    # Try with Groovy
-    local groovyexec_varname=`debasher::_get_groovyexec_varname "${processname}"`
-    if [ "${groovyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        echo "${groovyexec_varname}"
-        return 0
-    fi
+    # Search for a suitable function to execute the process
+    for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
+        local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
+        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
+            echo "${proc_varname}"
+            return 0
+        fi
+    done
 
     return 1
 }
@@ -252,39 +231,15 @@ debasher::_create_heredoc_func_body()
     local processname=$1
     local escaped_interpreter
 
-    # Search for a suitable function or command to execute the process
-
-    # Try with Python
-    local pyexec_varname=`debasher::_get_pyexec_varname "${processname}"`
-    if [ "${pyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        printf -v escaped_interpreter '%q' "${PYTHON}"
-        echo "${escaped_interpreter} -c \"\${${pyexec_varname}}\" ${DEBASHER_PY_END_OF_OPTIONS_MARKER} \"\$@\""
-        return 0
-    fi
-
-    # Try with R
-    local rexec_varname=`debasher::_get_rexec_varname "${processname}"`
-    if [ "${rexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        printf -v escaped_interpreter '%q' "${RSCRIPT}"
-        echo "${escaped_interpreter} -e \"\${${rexec_varname}}\" ${DEBASHER_R_END_OF_OPTIONS_MARKER} \"\$@\""
-        return 0
-    fi
-
-    # Try with Perl
-    local perlexec_varname=`debasher::_get_perlexec_varname "${processname}"`
-    if [ "${perlexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        printf -v escaped_interpreter '%q' "${PERL}"
-        echo "${escaped_interpreter} -e \"\${${perlexec_varname}}\" ${DEBASHER_PL_END_OF_OPTIONS_MARKER} \"\$@\""
-        return 0
-    fi
-
-    # Try with Groovy
-    local groovyexec_varname=`debasher::_get_groovyexec_varname "${processname}"`
-    if [ "${groovyexec_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-        printf -v escaped_interpreter '%q' "${GROOVY}"
-        echo "${escaped_interpreter} -e \"\${${groovyexec_varname}}\" ${DEBASHER_GROOVY_END_OF_OPTIONS_MARKER} \"\$@\""
-        return 0
-    fi
+    # Search for a suitable function to execute the process
+    for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
+        local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
+        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
+            printf -v escaped_interpreter '%q' "${DEBASHER_HEREDOC_INTERPRETERS[$i]}"
+            echo "${escaped_interpreter} -c \"\${${proc_varname}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+            return 0
+        fi
+    done
 
     return 1
 }
