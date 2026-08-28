@@ -67,13 +67,13 @@ export default function Toolbar({ onClose }: Props) {
       <button
         onClick={() => setNewProcessOpen(true)}
       >
-        New process
+        Add process
       </button>
 
       {isNewProcessOpen && (
         <ProcessNameDialog
-          title="New process"
-          confirmLabel="Create"
+          title="Add process"
+          confirmLabel="Add"
           existingNames={workflow.processes.map(process => process.name)}
           preamble={workflow.preamble}
           envVars={workflow.envVars}
