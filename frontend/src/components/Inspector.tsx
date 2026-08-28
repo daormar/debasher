@@ -135,7 +135,7 @@ export default function Inspector() {
 
         style={{
           width: "100%",
-          marginBottom: 16,
+          marginBottom: 8,
           fontFamily: "inherit",
           resize: "none",
           overflowY: "auto",
@@ -165,7 +165,7 @@ export default function Inspector() {
       )}
 
 
-      <h4>
+      <h4 style={{ marginTop: 0, marginBottom: 8 }}>
         Options Handler
       </h4>
 
@@ -228,7 +228,7 @@ export default function Inspector() {
         }}
 
         style={{
-          marginBottom: 16,
+          marginBottom: 8,
         }}
 
       >
@@ -260,7 +260,7 @@ export default function Inspector() {
       )}
 
 
-      <h4>
+      <h4 style={{ marginTop: 8, marginBottom: 8 }}>
         Options
       </h4>
 
@@ -405,7 +405,7 @@ export default function Inspector() {
       <hr />
 
 
-      <h4>
+      <h4 style={{ marginTop: 16, marginBottom: 8 }}>
         Code
       </h4>
 
@@ -457,7 +457,7 @@ export default function Inspector() {
       )}
 
 
-      <h4>
+      <h4 style={{ marginTop: 16, marginBottom: 8 }}>
         Specifications
       </h4>
 
