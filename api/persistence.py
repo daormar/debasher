@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from . import script_generation
 from .models import Workflow
 
 # Directory (inside the user-chosen output directory) where the workflow
@@ -27,6 +28,24 @@ def save_workflow(output_dir: str, workflow: Workflow) -> Path:
     workflow_path.write_text(workflow.model_dump_json(indent=2))
 
     return workflow_path
+
+
+def save_script(output_dir: str, workflow: Workflow) -> Path:
+    """
+    Generate `workflow`'s Bash script via `script_generation.generate_script`
+    and write it to <output_dir>/<workflow.name>.sh, creating `output_dir`
+    if needed.
+
+    Returns the path to the written file.
+    """
+    resolved_output_dir = Path(output_dir).expanduser()
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+
+    script_path = resolved_output_dir / f"{workflow.name}.sh"
+    script_path.write_text(script_generation.generate_script(workflow))
+    script_path.chmod(script_path.stat().st_mode | 0o111)
+
+    return script_path
 
 
 def load_workflow(input_dir: str) -> Workflow:

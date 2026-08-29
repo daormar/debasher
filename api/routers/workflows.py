@@ -15,6 +15,7 @@ class SaveWorkflowRequest(BaseModel):
 
 class SaveWorkflowResponse(BaseModel):
     path: str
+    scriptPath: str
 
 
 class LoadWorkflowRequest(BaseModel):
@@ -36,7 +37,8 @@ def save_workflow_to_dir(request: SaveWorkflowRequest) -> SaveWorkflowResponse:
         raise HTTPException(status_code=400, detail="outputDir must not be empty")
 
     workflow_path = persistence.save_workflow(request.outputDir, request.workflow)
-    return SaveWorkflowResponse(path=str(workflow_path))
+    script_path = persistence.save_script(request.outputDir, request.workflow)
+    return SaveWorkflowResponse(path=str(workflow_path), scriptPath=str(script_path))
 
 
 @router.post("/load", response_model=Workflow)
