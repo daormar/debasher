@@ -37,7 +37,12 @@ def save_workflow_to_dir(request: SaveWorkflowRequest) -> SaveWorkflowResponse:
         raise HTTPException(status_code=400, detail="outputDir must not be empty")
 
     workflow_path = persistence.save_workflow(request.outputDir, request.workflow)
-    script_path = persistence.save_script(request.outputDir, request.workflow)
+
+    try:
+        script_path = persistence.save_script(request.outputDir, request.workflow)
+    except NotImplementedError as err:
+        raise HTTPException(status_code=501, detail=str(err))
+
     return SaveWorkflowResponse(path=str(workflow_path), scriptPath=str(script_path))
 
 
