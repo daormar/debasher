@@ -198,16 +198,16 @@ debasher::_get_mod_vars_and_funcs_fname()
 #
 # Examples
 #
-#   debasher::module_description "This module implements the \"Hello World!\" program."
+#   debasher::document_module "This module implements the \"Hello World!\" program."
 #
 # The function prints the given module description to the standard output.
-debasher::module_description()
+debasher::document_module()
 {
     local desc=$1
     echo $desc
 }
 
-module_description() { debasher::module_description "$@"; }
+document_module() { debasher::document_module "$@"; }
 
 ########
 debasher::document_module()
