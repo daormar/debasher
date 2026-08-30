@@ -43,7 +43,7 @@ def _add_preamble(preamble):
 def _add_document_func(process):
     lines = [f"{process.name}{PROCESS_METHOD_DOCUMENT_SUFFIX}()", "{"]
     if process.description:
-        lines.append(f'{INDENT}debasher::process_description "{process.description}"')
+        lines.append(f'{INDENT}debasher::document_process "{process.description}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
