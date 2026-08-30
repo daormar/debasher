@@ -37,7 +37,7 @@ debasher_host_workflow_light_shared_dirs()
 ########
 host1_document()
 {
-    process_description "Executes an array of n tasks. Each task executes the hostname command."
+    document_process "Executes an array of n tasks. Each task executes the hostname command."
 }
 
 ########

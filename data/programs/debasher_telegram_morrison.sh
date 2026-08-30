@@ -37,7 +37,7 @@ debasher_telegram_morrison_shared_dirs()
 ########
 rseq_document()
 {
-    debasher::process_description "Telegram problem RSEQ module."
+    debasher::document_process "Telegram problem RSEQ module."
 }
 
 ########
@@ -93,7 +93,7 @@ rseq()
 ########
 decomposer_document()
 {
-    debasher::process_description "Telegram Problem Decomposer module."
+    debasher::document_process "Telegram Problem Decomposer module."
 }
 
 ########
@@ -149,7 +149,7 @@ decomposer()
 ########
 recomposer_document()
 {
-    debasher::process_description "Telegram Problem Recomposer module."
+    debasher::document_process "Telegram Problem Recomposer module."
 }
 
 ########
@@ -237,7 +237,7 @@ recomposer()
 ########
 wseq_document()
 {
-    debasher::process_description "Telegram Problem WSEQ module."
+    debasher::document_process "Telegram Problem WSEQ module."
 }
 
 ########

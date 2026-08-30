@@ -40,7 +40,7 @@ debasher_dynamic_fanout_taskdone_shared_dirs()
 ########
 worker_taskdone_document()
 {
-    process_description "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one. When each subtask is completed, it is marked as done, so that they it is not reexecuted."
+    document_process "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one. When each subtask is completed, it is marked as done, so that they it is not reexecuted."
 }
 
 ########

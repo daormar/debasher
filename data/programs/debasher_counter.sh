@@ -37,7 +37,7 @@ debasher_counter_shared_dirs()
 ########
 counter_document()
 {
-    process_description "Executes a process reading and writing from fifos."
+    document_process "Executes a process reading and writing from fifos."
 }
 
 ########

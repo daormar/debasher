@@ -40,7 +40,7 @@ debasher_hello_world_alias_shared_dirs()
 ########
 hello_world_alternative_document()
 {
-    process_description "Prints a hello world message."
+    document_process "Prints a hello world message."
 }
 
 ########

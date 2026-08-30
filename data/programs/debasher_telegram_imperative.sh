@@ -40,7 +40,7 @@ debasher_telegram_imperative_shared_dirs()
 ########
 telegram_document()
 {
-    debasher::process_description "Telegram Problem."
+    debasher::document_process "Telegram Problem."
 }
 
 ########

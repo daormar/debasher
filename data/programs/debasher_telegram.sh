@@ -37,7 +37,7 @@ debasher_telegram_shared_dirs()
 ########
 decomposer_document()
 {
-    debasher::process_description "Telegram Problem Decomposer module."
+    debasher::document_process "Telegram Problem Decomposer module."
 }
 
 ########
@@ -93,7 +93,7 @@ decomposer()
 ########
 recomposer_document()
 {
-    debasher::process_description "Telegram Problem Recomposer module."
+    debasher::document_process "Telegram Problem Recomposer module."
 }
 
 ########

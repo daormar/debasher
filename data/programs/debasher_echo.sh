@@ -37,7 +37,7 @@ debasher_echo_shared_dirs()
 ########
 stream_echo_document()
 {
-    process_description "Executes an echo process."
+    document_process "Executes an echo process."
 }
 
 ########

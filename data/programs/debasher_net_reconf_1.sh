@@ -37,7 +37,7 @@ debasher_host_workflow_shared_dirs()
 ########
 process_a_document()
 {
-    process_description "Takes a string as input and prints it to a file"
+    document_process "Takes a string as input and prints it to a file"
 }
 
 ########

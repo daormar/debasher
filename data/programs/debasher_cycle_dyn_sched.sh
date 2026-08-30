@@ -37,7 +37,7 @@ debasher_cycle_dyn_sched_shared_dirs()
 ########
 master_document()
 {
-    process_description "Executes a process reading and writing from fifos."
+    document_process "Executes a process reading and writing from fifos."
 }
 
 ########
@@ -119,7 +119,7 @@ master()
 ########
 worker_document()
 {
-    process_description "Executes a process reading and writing from fifos."
+    document_process "Executes a process reading and writing from fifos."
 }
 
 ########

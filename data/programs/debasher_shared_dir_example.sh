@@ -37,7 +37,7 @@ debasher_shared_dir_example_shared_dirs()
 ########
 shared_dir_writer_document()
 {
-    process_description "Writes a given value to a file in data directory."
+    document_process "Writes a given value to a file in data directory."
 }
 
 ########

@@ -37,7 +37,7 @@ debasher_dynamic_fanout_fifos_shared_dirs()
 ########
 generate_document()
 {
-    process_description "Generates a text file of a given size and random content."
+    document_process "Generates a text file of a given size and random content."
 }
 
 ########
@@ -107,7 +107,7 @@ generate()
 ########
 count_document()
 {
-    process_description "Counts characters of an input file in a conventional way. This process is added for debugging purposes."
+    document_process "Counts characters of an input file in a conventional way. This process is added for debugging purposes."
 }
 
 ########
@@ -180,7 +180,7 @@ count()
 ########
 fragment_document()
 {
-    process_description "Fragments an input file into a given number of equally sized blocks, inverting the file lines."
+    document_process "Fragments an input file into a given number of equally sized blocks, inverting the file lines."
 }
 
 ########
@@ -285,7 +285,7 @@ fragment()
 ########
 dispatch_document()
 {
-    process_description "Dispatches file blocks to workers."
+    document_process "Dispatches file blocks to workers."
 }
 
 ########
@@ -349,7 +349,7 @@ dispatch_define_opts()
 ########
 worker_document()
 {
-    process_description "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one."
+    document_process "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one."
 }
 
 ########
@@ -438,7 +438,7 @@ worker()
 ########
 aggregate_document()
 {
-    process_description "Aggregates worker results."
+    document_process "Aggregates worker results."
 }
 
 ########

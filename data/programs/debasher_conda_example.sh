@@ -37,7 +37,7 @@ debasher_conda_example_shared_dirs()
 ########
 conda_example_document()
 {
-    process_description "Prints Python version to file \`python_ver.txt\`."
+    document_process "Prints Python version to file \`python_ver.txt\`."
 }
 
 ########

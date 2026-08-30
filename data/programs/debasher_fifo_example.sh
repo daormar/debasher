@@ -37,7 +37,7 @@ debasher_fifo_example_shared_dirs()
 ########
 fifo_writer_document()
 {
-    process_description "Prints a string to a FIFO."
+    document_process "Prints a string to a FIFO."
 }
 
 ########
@@ -85,7 +85,7 @@ fifo_writer()
 ########
 fifo_reader_document()
 {
-    process_description "Reads a string from a FIFO."
+    document_process "Reads a string from a FIFO."
 }
 
 ########

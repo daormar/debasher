@@ -27,13 +27,13 @@ debasher::_get_proc_document_funcname()
 }
 
 ########
-debasher::process_description()
+debasher::document_process()
 {
     local desc=$1
     echo $desc
 }
 
-process_description() { debasher::process_description "$@"; }
+document_process() { debasher::document_process "$@"; }
 
 ########
 debasher::_show_proc_opts()

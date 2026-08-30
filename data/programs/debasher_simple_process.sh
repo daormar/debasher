@@ -37,7 +37,7 @@ debasher_simple_process_shared_dirs()
 ########
 simple_process_document()
 {
-    process_description "Sleeps a given number of seconds and exits."
+    document_process "Sleeps a given number of seconds and exits."
 }
 
 ########

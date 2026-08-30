@@ -40,7 +40,7 @@ debasher_dynamic_fanout_parallel_shared_dirs()
 ########
 worker_parallel_document()
 {
-    process_description "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one. All the files are generated in parallel."
+    document_process "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one. All the files are generated in parallel."
 }
 
 ########

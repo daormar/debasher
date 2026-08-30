@@ -37,7 +37,7 @@ debasher_cycle_shared_dirs()
 ########
 process_a_document()
 {
-    process_description "Executes a process reading and writing from fifos."
+    document_process "Executes a process reading and writing from fifos."
 }
 
 ########
@@ -111,7 +111,7 @@ process_a()
 ########
 process_b_document()
 {
-    process_description "Executes a process reading and writing from fifos."
+    document_process "Executes a process reading and writing from fifos."
 }
 
 ########

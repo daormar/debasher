@@ -43,7 +43,7 @@ debasher_file_example_shared_dirs()
 ########
 file_writer_document()
 {
-    process_description "Prints a string to a file."
+    document_process "Prints a string to a file."
 }
 
 ########
@@ -99,7 +99,7 @@ file_writer()
 ########
 file_reader_document()
 {
-    process_description "Reads a string from a file."
+    document_process "Reads a string from a file."
 }
 
 ########

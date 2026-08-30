@@ -37,7 +37,7 @@ debasher_hello_world_perl_shared_dirs()
 ########
 hello_world_document()
 {
-    process_description "Prints a hello world message."
+    document_process "Prints a hello world message."
 }
 
 ########
