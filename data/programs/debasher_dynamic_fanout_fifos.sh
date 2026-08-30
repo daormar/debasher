@@ -312,7 +312,7 @@ dispatch_explain_opts()
 dispatch_identify_cmdline_opts()
 {
     opt_is_cmdline "-w"
-    opt_is_cmdline "--log-level"
+    opt_is_non_mandatory_cmdline "--log-level"
 }
 
 ########
