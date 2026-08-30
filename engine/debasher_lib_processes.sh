@@ -50,12 +50,12 @@ debasher::_show_proc_opts()
         curr_proc_name="${key%%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"
         opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
         if [ "${processname}" = "${curr_proc_name}" ]; then
-            if [ "${DEBASHER_PROGRAM_OPT_REQ[${key}]}" != "" ]; then
-                flags+="${flags:+,}required"
-            fi
-
             if [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${key}]}" = 1 ]; then
                 flags+="${flags:+,}command-line"
+            fi
+
+            if [ "${DEBASHER_PROGRAM_OPT_IS_MANDATORY[${key}]}" = 1 ]; then
+                flags+="${flags:+,}mandatory"
             fi
 
             if [ -n "${flags}" ]; then
@@ -154,16 +154,25 @@ debasher::_document_process()
     if [ ${show_options} -eq 1 ]; then
         echo "### Process Options"
         local opts_funcname
+        local identify_cmdline_opt_funcname
         opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
         if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
             opts_funcname=`debasher::_get_explain_opts_funcname ${processname}`
             if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
                 echo "Warning: function to explain options for process ${processname} was not found" >&2
+            else
+                identify_cmdline_opt_funcname=`debasher::_get_identify_cmdline_opts_funcname ${processname}`
+                if [ "${identify_cmdline_opt_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+                    identify_cmdline_opt_funcname=""
+                fi
             fi
         fi
 
         if [ "${opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
             ${opts_funcname}
+            if [ "${identify_cmdline_opt_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+                ${identify_cmdline_opt_funcname}
+            fi
             debasher::_show_proc_opts "${processname}"
         fi
         echo ""

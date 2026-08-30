@@ -404,6 +404,7 @@ debasher::explain_cmdline_opt()
     # Store option in associative arrays
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
     DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_IS_MANDATORY[$proc_opt]=1
     DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
     DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
     DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
@@ -448,6 +449,7 @@ debasher::explain_cmdline_opt_wo_value()
     # Store option in associative arrays
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
     DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_IS_MANDATORY[$proc_opt]=0
     DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=""
     DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
     DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
@@ -547,7 +549,7 @@ explain_opt_wo_value() { debasher::explain_opt_wo_value "$@"; }
 #
 # Examples
 #
-#   debasher::opt_is_cmdline "-s"
+#   opt_is_cmdline "-s"
 #
 # The function does not return any value.
 debasher::opt_is_cmdline()
@@ -560,6 +562,7 @@ debasher::opt_is_cmdline()
     # Define option as a command-line options
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
     DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_IS_MANDATORY[$proc_opt]=1
 }
 
 ########
@@ -569,10 +572,45 @@ debasher::opt_is_cmdline()
 #
 # Examples
 #
-#   debasher::opt_is_cmdline "-s"
+#   debasher::opt_is_non_mandatory_cmdline "-s"
 #
 # The function does not return any value.
 opt_is_cmdline() { debasher::opt_is_cmdline "$@"; }
+
+########
+# Public: Identify option as a non-mandatory command-line option.
+#
+# $1 - Option name.
+#
+# Examples
+#
+#   debasher::opt_is_non_mandatory_cmdline "-s"
+#
+# The function does not return any value.
+debasher::opt_is_non_mandatory_cmdline()
+{
+    local opt=$1
+
+    # Obtain caller process name
+    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}"`
+
+    # Define option as a command-line options
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_IS_MANDATORY[$proc_opt]=0
+}
+
+########
+# Public: Identify option as a command-line option.
+#
+# $1 - Option name.
+#
+# Examples
+#
+#   opt_is_non_mandatory_cmdline "-s"
+#
+# The function does not return any value.
+opt_is_non_mandatory_cmdline() { debasher::opt_is_non_mandatory_cmdline "$@"; }
 
 ########
 debasher::_print_program_opts()
