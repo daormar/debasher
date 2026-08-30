@@ -87,6 +87,12 @@ export default function SaveDialog({ onClose }: Props) {
             setOutputDir(event.target.value)
           }
 
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              handleSave();
+            }
+          }}
+
           placeholder="/path/to/output/directory"
 
           autoFocus
