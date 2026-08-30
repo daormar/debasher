@@ -142,6 +142,7 @@ def _add_exec_func(process):
     else:
         return []
 
+
 def _add_program_function(workflow):
     lines = [f"{workflow.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
     for process in workflow.processes:
