@@ -96,6 +96,7 @@ def _define_opts_func_foot():
     lines.append(INDENT + "save_opt_list optlist")
     return lines
 
+
 def _opt_is_connected_to_proc(option):
     return option.value.startswith("[") and option.value.endswith("]")
 
