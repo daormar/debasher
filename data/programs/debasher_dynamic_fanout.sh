@@ -45,7 +45,7 @@ generate_explain_opts()
 {
     # -l option
     local description="Length of file in lines"
-    explain_opt "-n" "<int>" "$description"
+    explain_opt "-l" "<int>" "$description"
 
     # -c option
     local description="Length of each line in characters"
@@ -59,7 +59,7 @@ generate_explain_opts()
 ########
 generate_identify_cmdline_opts()
 {
-    opt_is_cmdline "-n"
+    opt_is_cmdline "-l"
     opt_is_cmdline "-c"
 }
 
