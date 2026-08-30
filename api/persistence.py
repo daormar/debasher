@@ -43,7 +43,6 @@ def save_script(output_dir: str, workflow: Workflow) -> Path:
 
     script_path = resolved_output_dir / f"{workflow.name}.sh"
     script_path.write_text(script_generation.generate_script(workflow))
-    script_path.chmod(script_path.stat().st_mode | 0o111)
 
     return script_path
 
