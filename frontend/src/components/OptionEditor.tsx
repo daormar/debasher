@@ -66,6 +66,9 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
   const [commandLine, setCommandLine] =
     useState(option.commandLine);
 
+  const [mandatory, setMandatory] =
+    useState(option.mandatory);
+
   function handleSave() {
 
     updateOption(processId, option.id, {
@@ -76,6 +79,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       value,
       fifo,
       commandLine,
+      mandatory: commandLine && mandatory,
     });
 
     onClose();
@@ -243,6 +247,25 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
           />
           {" "}Command line
+
+        </label>
+
+        <label style={{ color: commandLine ? undefined : "#999" }}>
+
+          <input
+
+            type="checkbox"
+
+            checked={mandatory}
+
+            disabled={!commandLine}
+
+            onChange={(event) =>
+              setMandatory(event.target.checked)
+            }
+
+          />
+          {" "}Mandatory
 
         </label>
 

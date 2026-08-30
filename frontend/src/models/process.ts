@@ -87,6 +87,8 @@ export interface ProcessInfoOption {
 
   commandLine: boolean;
 
+  mandatory: boolean;
+
 }
 
 export interface ProcessInfo {

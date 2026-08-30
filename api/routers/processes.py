@@ -203,6 +203,7 @@ class ProcessInfoOption(BaseModel):
     dataType: OptionDataType
     description: str
     commandLine: bool
+    mandatory: bool
 
 
 class ProcessInfo(BaseModel):
@@ -262,6 +263,7 @@ def _parse_options(lines: list[str]) -> list[ProcessInfoOption]:
                 dataType=data_type,
                 description=description,
                 commandLine="command-line" in flags,
+                mandatory="mandatory" in flags,
             )
         )
 

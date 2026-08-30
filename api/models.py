@@ -17,6 +17,7 @@ class WorkflowOption(BaseModel):
     value: str
     fifo: bool
     commandLine: bool
+    mandatory: bool = False
 
 
 class ComputationalSpecs(BaseModel):
