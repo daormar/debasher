@@ -138,11 +138,72 @@ function toWorkflowOption(info: ProcessInfoOption): WorkflowOption {
     value: "",
     fifo: false,
     commandLine: info.commandLine,
+    mandatory: info.mandatory,
   };
 }
 
 const WorkflowContext =
   createContext<WorkflowContextType | null>(null);
+
+/**
+ * Makes each option's `value` reflect its incoming edge (if any): connected
+ * options get the "[process;option]" reference, others are cleared of any
+ * stale one. Self-heals workflows whose edges/values fell out of sync, e.g.
+ * a file saved before this syncing existed, or a hand-edited JSON file.
+ */
+function normalizeConnectedOptionValues(source: Workflow): Workflow {
+
+  const connectedValueByOptionKey = new Map<string, string>();
+
+  for (const edge of source.edges) {
+
+    const sourceProcess = source.processes.find(
+      process => process.id === edge.sourceProcessId
+    );
+
+    const sourceOption = sourceProcess?.options.find(
+      o => o.id === edge.sourceOptionId
+    );
+
+    if (sourceProcess && sourceOption) {
+      connectedValueByOptionKey.set(
+        `${edge.targetProcessId}:${edge.targetOptionId}`,
+        `[${sourceProcess.name};${sourceOption.label}]`
+      );
+    }
+
+  }
+
+  return {
+
+    ...source,
+
+    processes: source.processes.map(process => ({
+
+      ...process,
+
+      options: process.options.map(option => {
+
+        const connectedValue =
+          connectedValueByOptionKey.get(`${process.id}:${option.id}`);
+
+        if (connectedValue !== undefined) {
+          return option.value === connectedValue
+            ? option
+            : { ...option, value: connectedValue };
+        }
+
+        return option.value.startsWith("[") && option.value.endsWith("]")
+          ? { ...option, value: "" }
+          : option;
+
+      }),
+
+    })),
+
+  };
+
+}
 
 interface Props {
   children: ReactNode;
@@ -155,7 +216,7 @@ export function WorkflowProvider({
 }: Props) {
 
   const [workflow, setWorkflow] =
-    useState<Workflow>(initialWorkflow);
+    useState<Workflow>(() => normalizeConnectedOptionValues(initialWorkflow));
 
   async function save(outputDir: string) {
     await saveWorkflow(workflow, outputDir);
@@ -493,6 +554,8 @@ export function WorkflowProvider({
 
       commandLine: false,
 
+      mandatory: false,
+
     };
 
     setWorkflow(current => ({
@@ -566,20 +629,61 @@ export function WorkflowProvider({
 
   }
 
+  function setOptionValue(
+    processes: WorkflowProcess[],
+    processId: string,
+    optionId: string,
+    value: string
+  ): WorkflowProcess[] {
+
+    return processes.map(process =>
+      process.id === processId
+        ? {
+            ...process,
+            options: process.options.map(o =>
+              o.id === optionId
+                ? { ...o, value }
+                : o
+            ),
+          }
+        : process
+    );
+
+  }
+
   function connect(
     edge: WorkflowEdge
   ) {
 
-    setWorkflow(current => ({
+    setWorkflow(current => {
 
-      ...current,
+      const sourceProcess = current.processes.find(
+        process => process.id === edge.sourceProcessId
+      );
 
-      edges: [
-        ...current.edges,
-        edge,
-      ],
+      const sourceOption = sourceProcess?.options.find(
+        o => o.id === edge.sourceOptionId
+      );
 
-    }));
+      const processes = sourceProcess && sourceOption
+        ? setOptionValue(
+            current.processes,
+            edge.targetProcessId,
+            edge.targetOptionId,
+            `[${sourceProcess.name};${sourceOption.label}]`
+          )
+        : current.processes;
+
+      return {
+        ...current,
+        processes,
+        edges: [
+          ...current.edges,
+          edge,
+        ],
+      };
+
+    });
 
   }
 
@@ -587,15 +691,30 @@ export function WorkflowProvider({
     edgeId: string
   ) {
 
-    setWorkflow(current => ({
+    setWorkflow(current => {
 
-      ...current,
+      const removedEdge = current.edges.find(
+        e => e.id === edgeId
+      );
 
-      edges: current.edges.filter(
-        e => e.id !== edgeId
-      ),
+      const processes = removedEdge
+        ? setOptionValue(
+            current.processes,
+            removedEdge.targetProcessId,
+            removedEdge.targetOptionId,
+            ""
+          )
+        : current.processes;
 
-    }));
+      return {
+        ...current,
+        processes,
+        edges: current.edges.filter(
+          e => e.id !== edgeId
+        ),
+      };
+
+    });
 
   }
 
