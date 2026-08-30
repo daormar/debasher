@@ -5,7 +5,7 @@ File Writer and File Reader Example
 
     file_writer_document()
     {
-        process_description "Prints a string to a file."
+        document_process "Prints a string to a file."
     }
 
     file_writer_explain_opts()
@@ -53,7 +53,7 @@ File Writer and File Reader Example
 
     file_reader_document()
     {
-        process_description "Reads a string from a file."
+        document_process "Reads a string from a file."
     }
 
     file_reader_explain_opts()

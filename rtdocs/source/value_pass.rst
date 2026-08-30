@@ -5,7 +5,7 @@ Value Pass Example
 
     value_writer_document()
     {
-        process_description "Takes two numbers and produce their sum as output."
+        document_process "Takes two numbers and produce their sum as output."
     }
 
     value_writer_explain_opts()
@@ -67,7 +67,7 @@ Value Pass Example
 
     value_reader_document()
     {
-        process_description "Gets a value produced by another process, increases it in one unit and writes it in own directory."
+        document_process "Gets a value produced by another process, increases it in one unit and writes it in own directory."
     }
 
     value_reader_explain_opts()

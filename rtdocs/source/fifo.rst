@@ -5,7 +5,7 @@ FIFO Writer and FIFO Reader Example
 
     fifo_writer_document()
     {
-        process_description "Prints a string to a FIFO."
+        document_process "Prints a string to a FIFO."
     }
 
     fifo_writer_explain_opts()
@@ -48,7 +48,7 @@ FIFO Writer and FIFO Reader Example
 
     fifo_reader_document()
     {
-        process_description "Reads a string from a FIFO."
+        document_process "Reads a string from a FIFO."
     }
 
     fifo_reader_explain_opts()

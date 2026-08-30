@@ -23,7 +23,7 @@ for name in "${char_opts_symbols[@]}"; do
 done
 
 # Generate module configuration API file
-mod_conf_symbols=("load_debasher_module()" "module_description()")
+mod_conf_symbols=("load_debasher_module()" "document_module()")
 rm -f rtdocs/source/api_mod_conf_doc.md
 for name in "${mod_conf_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_modules.sh >> rtdocs/source/api_mod_conf_doc.md

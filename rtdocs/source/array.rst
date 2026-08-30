@@ -5,7 +5,7 @@ Process Array Example
 
     array_writer_document()
     {
-        process_description "Executes an array of 4 tasks. Each task creates a file containing the task index."
+        document_process "Executes an array of 4 tasks. Each task creates a file containing the task index."
     }
 
     array_writer_explain_opts()
