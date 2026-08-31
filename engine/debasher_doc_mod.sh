@@ -34,7 +34,10 @@ usage()
     echo ""
     echo "-m <string>               Module file name"
     echo "-s <string>               Process name whose information should be obtained"
-    echo "--show-opts               Show option information"
+    echo "--show-opts               Show process options information"
+    echo "--show-meths              Show process methods information"
+    echo "--show-vars               Show process variables information"
+    echo "--show-impl               Show process implementation information"
     echo "--help                    Display this help and exit"
 }
 
@@ -44,6 +47,9 @@ read_pars()
     m_given=0
     s_given=0
     showopts_given=0
+    showmeths_given=0
+    showvars_given=0
+    showimpl_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -62,6 +68,12 @@ read_pars()
                   fi
                   ;;
             "--show-opts") showopts_given=1
+                          ;;
+            "--show-meths") showmeths_given=1
+                          ;;
+            "--show-vars") showvars_given=1
+                          ;;
+            "--show-impl") showimpl_given=1
                           ;;
         esac
         shift
@@ -97,7 +109,7 @@ obtain_info_for_module()
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         if [ "${s_given}" -eq 0 ] || [ "${processname}" = "${given_processname}" ]; then
-            debasher::_document_process "${processname}" "${showopts_given}"
+            debasher::_document_process "${processname}" "${showopts_given}" "${showmeths_given}" "${showvars_given}" "${showimpl_given}"
         fi
     done
 }
