@@ -34,6 +34,14 @@ const WORKFLOW_ACTIONS: Partial<
   "Stop workflow": stopWorkflow,
 };
 
+const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
+  "Check workflow options",
+  "Run workflow (debug)",
+  "Run workflow",
+  "Get workflow status",
+  "Stop workflow",
+]);
+
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
   "Check workflow options": "Checking...",
   "Run workflow (debug)": "Running...",
@@ -120,6 +128,11 @@ export default function RunMenu() {
   }
 
   function handleItemClick(item: MenuItem) {
+
+    if (REQUIRES_OUTPUT_DIR.has(item) && !workflow.outputDir.trim()) {
+      setActionError("Set the output directory before running this action.");
+      return;
+    }
 
     if (item === "Set output directory") {
       setOpen(false);
