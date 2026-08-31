@@ -40,6 +40,23 @@ def run_workflow(workflow: Workflow) -> RunWorkflowResponse:
     return RunWorkflowResponse(status="started")
 
 
+class RunWorkflowDebugResponse(BaseModel):
+    output: str
+
+
+@router.post("/run-debug", response_model=RunWorkflowDebugResponse)
+def run_workflow_debug(workflow: Workflow) -> RunWorkflowDebugResponse:
+    """
+    Run a workflow in debug mode by running a command.
+
+    Stub: does not actually run anything yet.
+
+    TODO: replace this stub with a real call into core/, e.g.:
+        output = core.run_workflow_debug(workflow)
+    """
+    return RunWorkflowDebugResponse(output="")
+
+
 class WorkflowStatusResponse(BaseModel):
     output: str
 

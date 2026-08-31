@@ -4,6 +4,7 @@ import {
   checkWorkflowOptions,
   getWorkflowStatus,
   runWorkflow,
+  runWorkflowDebug,
   stopWorkflow,
 } from "../api/executionApi";
 import type { Workflow } from "../models/workflow";
@@ -18,6 +19,7 @@ const MENU_ITEMS = [
   "Set execution options",
   "Set workflow options",
   "Check workflow options",
+  "Run workflow (debug)",
   "Run workflow",
   "Get workflow status",
   "Stop workflow",
@@ -34,6 +36,7 @@ const WORKFLOW_ACTIONS: Partial<
 
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
   "Check workflow options": "Checking...",
+  "Run workflow (debug)": "Running...",
   "Run workflow": "Running...",
   "Get workflow status": "Getting status...",
   "Stop workflow": "Stopping...",
@@ -129,6 +132,8 @@ export default function RunMenu() {
       setWorkflowOptionsOpen(true);
     } else if (item === "Check workflow options") {
       runOutputAction(item, "Check workflow options", checkWorkflowOptions);
+    } else if (item === "Run workflow (debug)") {
+      runOutputAction(item, "Run workflow (debug)", runWorkflowDebug);
     } else if (item === "Get workflow status") {
       runOutputAction(item, "Workflow status", getWorkflowStatus);
     } else if (WORKFLOW_ACTIONS[item]) {
