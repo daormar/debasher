@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { getCommandLineOptions } from "../models/option";
+import type { WorkflowOption } from "../models/option";
 import { useWorkflow } from "../store/WorkflowContext";
 
 interface Props {
@@ -17,6 +18,16 @@ export default function WorkflowOptionsEditor({ onClose }: Props) {
   const options = useMemo(
     () => getCommandLineOptions(workflow.processes),
     [workflow.processes]
+  );
+
+  const mandatoryOptions = useMemo(
+    () => options.filter(option => option.mandatory),
+    [options]
+  );
+
+  const optionalOptions = useMemo(
+    () => options.filter(option => !option.mandatory),
+    [options]
   );
 
   const [draft, setDraft] =
@@ -36,6 +47,49 @@ export default function WorkflowOptionsEditor({ onClose }: Props) {
   function handleSave() {
     setWorkflowOptions(draft);
     onClose();
+  }
+
+  function renderOption(option: WorkflowOption) {
+
+    return (
+
+      <div key={option.label}>
+
+        <label style={{ fontSize: 14 }}>
+          {option.label}
+        </label>
+
+        <input
+
+          type={option.dataType === "string" ? "text" : "number"}
+
+          step={option.dataType === "float" ? "any" : undefined}
+
+          value={draft[option.label] ?? ""}
+
+          onChange={(event) =>
+            setDraft(current => ({
+              ...current,
+              [option.label]: event.target.value,
+            }))
+          }
+
+          style={{
+            width: "100%",
+          }}
+
+        />
+
+        {option.description && (
+          <div style={{ fontSize: 12, color: "#888" }}>
+            {option.description}
+          </div>
+        )}
+
+      </div>
+
+    );
+
   }
 
   return (
@@ -78,44 +132,37 @@ export default function WorkflowOptionsEditor({ onClose }: Props) {
 
         ) : (
 
-          options.map(option => (
+          <>
 
-            <div key={option.label}>
+            {mandatoryOptions.length > 0 && (
 
-              <label style={{ fontSize: 14 }}>
-                {option.label}
-              </label>
+              <>
 
-              <input
+                <h4 style={{ margin: "8px 0 0" }}>
+                  Mandatory
+                </h4>
 
-                type={option.dataType === "string" ? "text" : "number"}
+                {mandatoryOptions.map(renderOption)}
 
-                step={option.dataType === "float" ? "any" : undefined}
+              </>
 
-                value={draft[option.label] ?? ""}
+            )}
 
-                onChange={(event) =>
-                  setDraft(current => ({
-                    ...current,
-                    [option.label]: event.target.value,
-                  }))
-                }
+            {optionalOptions.length > 0 && (
 
-                style={{
-                  width: "100%",
-                }}
+              <>
 
-              />
+                <h4 style={{ margin: "8px 0 0" }}>
+                  Optional
+                </h4>
 
-              {option.description && (
-                <div style={{ fontSize: 12, color: "#888" }}>
-                  {option.description}
-                </div>
-              )}
+                {optionalOptions.map(renderOption)}
 
-            </div>
+              </>
 
-          ))
+            )}
+
+          </>
 
         )}
 
