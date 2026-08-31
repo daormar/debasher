@@ -15,7 +15,7 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   } = useWorkflow();
 
   const [scheduler, setScheduler] =
-    useState(workflow.executionOptions.scheduler);
+    useState(workflow.executionOptions.scheduler || "BUILTIN");
 
   const [schedulers, setSchedulers] =
     useState<string[]>([]);
@@ -111,9 +111,11 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
 
         >
 
-          <option value="">
-            {isLoading ? "Loading..." : "Select a scheduler"}
-          </option>
+          {isLoading && (
+            <option value="">
+              Loading...
+            </option>
+          )}
 
           {schedulers.map(name => (
             <option key={name} value={name}>

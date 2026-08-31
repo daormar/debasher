@@ -24,7 +24,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       edge.targetOptionId === option.id
   );
 
-  const connectedSourceLabel = (() => {
+  const connectedSourceOption = (() => {
 
     if (!connectingEdge) {
       return null;
@@ -42,9 +42,12 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       return null;
     }
 
-    return `[${sourceProcess.name};${sourceOption.label}]`;
+    return { sourceProcess, sourceOption };
 
   })();
+
+  const connectedSourceLabel = connectedSourceOption &&
+    `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label}]`;
 
   const [label, setLabel] =
     useState(option.label);
@@ -68,6 +71,8 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
   const [mandatory, setMandatory] =
     useState(option.mandatory);
+
+  const fifoEditable = direction === "output" && !commandLine;
 
   function handleSave() {
 
@@ -226,15 +231,15 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         {!manualMode && (
 
-          <label style={{ color: commandLine ? "#999" : undefined }}>
+          <label style={{ color: fifoEditable ? undefined : "#999" }}>
 
             <input
 
               type="checkbox"
 
-              checked={fifo}
+              checked={fifoEditable ? fifo : (connectedSourceOption?.sourceOption.fifo ?? false)}
 
-              disabled={commandLine}
+              disabled={!fifoEditable}
 
               onChange={(event) =>
                 setFifo(event.target.checked)
