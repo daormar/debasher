@@ -13,6 +13,8 @@ export interface Workflow {
 
   name: string;
 
+  description: string;
+
   preamble: string;
 
   envVars: Record<string, string>;

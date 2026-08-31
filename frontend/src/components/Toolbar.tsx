@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
 import EnvVarsEditor from "./EnvVarsEditor";
+import WorkflowDescriptionEditor from "./WorkflowDescriptionEditor";
 import PreambleEditor from "./PreambleEditor";
 import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
@@ -17,6 +18,9 @@ export default function Toolbar({ onClose }: Props) {
     workflow,
     addProcess,
   } = useWorkflow();
+
+  const [isDescriptionOpen, setDescriptionOpen] =
+    useState(false);
 
   const [isPreambleOpen, setPreambleOpen] =
     useState(false);
@@ -59,6 +63,12 @@ export default function Toolbar({ onClose }: Props) {
       </button>
 
       <button
+        onClick={() => setDescriptionOpen(true)}
+      >
+        Description
+      </button>
+
+      <button
         onClick={() => setPreambleOpen(true)}
       >
         Preamble
@@ -79,6 +89,12 @@ export default function Toolbar({ onClose }: Props) {
           envVars={workflow.envVars}
           onConfirm={addProcess}
           onClose={() => setNewProcessOpen(false)}
+        />
+      )}
+
+      {isDescriptionOpen && (
+        <WorkflowDescriptionEditor
+          onClose={() => setDescriptionOpen(false)}
         />
       )}
 

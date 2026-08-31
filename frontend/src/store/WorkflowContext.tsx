@@ -38,6 +38,10 @@ interface WorkflowContextType {
     info: ProcessInfo
   ) => void;
 
+  setDescription: (
+    description: string
+  ) => void;
+
   setPreamble: (
     preamble: string
   ) => void;
@@ -292,6 +296,17 @@ export function WorkflowProvider({
           : process
       ),
 
+    }));
+
+  }
+
+  function setDescription(
+    description: string
+  ) {
+
+    setWorkflow(current => ({
+      ...current,
+      description,
     }));
 
   }
@@ -736,6 +751,8 @@ export function WorkflowProvider({
     addProcess,
 
     applyProcessInfo,
+
+    setDescription,
 
     setPreamble,
 
