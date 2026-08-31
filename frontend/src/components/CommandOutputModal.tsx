@@ -24,6 +24,7 @@ export default function CommandOutputModal({ title, output, onClose }: Props) {
         style={{
           width: "60%",
           maxWidth: 720,
+          maxHeight: "80vh",
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -40,7 +41,7 @@ export default function CommandOutputModal({ title, output, onClose }: Props) {
         <pre
           style={{
             width: "100%",
-            maxHeight: 400,
+            maxHeight: "60vh",
             margin: 0,
             padding: 8,
             background: "#f5f5f5",

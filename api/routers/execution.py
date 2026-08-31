@@ -1,6 +1,10 @@
+import os
+import subprocess
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from .. import paths, persistence
 from ..models import Workflow
 
 router = APIRouter(prefix="/api/execution", tags=["execution"])
@@ -81,14 +85,36 @@ class CheckWorkflowOptionsResponse(BaseModel):
 @router.post("/check-workflow-options", response_model=CheckWorkflowOptionsResponse)
 def check_workflow_options(workflow: Workflow) -> CheckWorkflowOptionsResponse:
     """
-    Check a workflow's command line options by running a command.
+    Check a workflow's command line options.
 
-    Stub: does not actually run anything yet.
-
-    TODO: replace this stub with a real call into core/, e.g.:
-        output = core.check_workflow_options(workflow)
+    Saves the workflow (generating its .sh file) and runs debasher_exec
+    against it, passing the scheduler and the command line options set
+    via "Set workflow options".
     """
-    return CheckWorkflowOptionsResponse(output="")
+    persistence.save_workflow(workflow.outputDir, workflow)
+    script_path = persistence.save_script(workflow.outputDir, workflow)
+
+    tool = paths.find_bin_tool("debasher_exec")
+    if tool is None:
+        return CheckWorkflowOptionsResponse(output="Error: debasher_exec tool not found.")
+
+    command = [
+        str(tool),
+        "--pfile", str(script_path),
+        "--outdir", workflow.outputDir,
+        "--sched", workflow.executionOptions.scheduler,
+        "--check-proc-opts",
+    ]
+
+    for label, value in workflow.workflowOptions.items():
+        command += [label, value]
+
+    env = os.environ.copy()
+    env["DEBASHER_MOD_DIR"] = workflow.envVars.get("DEBASHER_MOD_DIR", "")
+
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+
+    return CheckWorkflowOptionsResponse(output=result.stdout + result.stderr)
 
 
 class StopWorkflowResponse(BaseModel):
