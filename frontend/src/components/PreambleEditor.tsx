@@ -64,7 +64,7 @@ export default function PreambleEditor({ onClose }: Props) {
 
           spellCheck={false}
 
-          placeholder="#!/usr/bin/env bash&#10;&#10;# Bash code to run before the workflow..."
+          placeholder="# Bash code to run before the workflow..."
 
           style={{
             width: "100%",
