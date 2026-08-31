@@ -31,6 +31,28 @@ debasher::_program_process_spec_is_ok()
         return 1
     fi
 
+    # Extract process information
+    local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+
+    # Check if basic computational specifications were provided
+    local cpus=`debasher::_extract_cpus_from_process_spec "$process_spec"`
+    if [ "$cpus" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        echo "Error: cpus computational specification not given for process ${processname}" >&2
+        return 1
+    fi
+
+    local mem=`debasher::_extract_mem_from_process_spec "$process_spec"`
+    if [ "$mem" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        echo "Error: mem computational specification not given for process ${processname}" >&2
+        return 1
+    fi
+
+    local time=`debasher::_extract_time_from_process_spec "$process_spec"`
+    if [ "$time" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        echo "Error: time computational specification not given for process ${processname}" >&2
+        return 1
+    fi
+
     return 0
 }
 
@@ -272,7 +294,7 @@ debasher::_gen_final_procspec()
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
         if ! debasher::_program_process_spec_is_ok "$process_spec"; then
-            echo "Error: process specification (${process_spec}) is not correct" >&2
+            echo "Error: process specification (\"${process_spec}\") is not correct" >&2
             exit 1
         fi
 
