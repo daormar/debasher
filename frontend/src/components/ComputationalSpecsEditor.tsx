@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { useWorkflow } from "../store/WorkflowContext";
 import type { WorkflowProcess } from "../models/process";
+import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
 
 interface Props {
   process: WorkflowProcess;
@@ -13,13 +14,17 @@ export default function ComputationalSpecsEditor({ process, onClose }: Props) {
   const { setComputationalSpecs } = useWorkflow();
 
   const [cpus, setCpus] =
-    useState(process.computationalSpecs.cpus?.toString() ?? "");
+    useState(
+      (process.computationalSpecs.cpus ?? DEFAULT_COMPUTATIONAL_SPECS.cpus).toString()
+    );
 
   const [mem, setMem] =
-    useState(process.computationalSpecs.mem?.toString() ?? "");
+    useState(
+      (process.computationalSpecs.mem ?? DEFAULT_COMPUTATIONAL_SPECS.mem).toString()
+    );
 
   const [time, setTime] =
-    useState(process.computationalSpecs.time ?? "");
+    useState(process.computationalSpecs.time ?? DEFAULT_COMPUTATIONAL_SPECS.time);
 
   function handleSave() {
 
@@ -84,7 +89,7 @@ export default function ComputationalSpecsEditor({ process, onClose }: Props) {
         />
 
         <label>
-          Memory
+          Memory (MB)
         </label>
 
         <input
@@ -104,7 +109,7 @@ export default function ComputationalSpecsEditor({ process, onClose }: Props) {
         />
 
         <label>
-          Time
+          Time (hh:mm:ss)
         </label>
 
         <input

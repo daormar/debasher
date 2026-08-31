@@ -18,6 +18,12 @@ export interface ComputationalSpecs {
 
 }
 
+export const DEFAULT_COMPUTATIONAL_SPECS: Required<ComputationalSpecs> = {
+  cpus: 1,
+  mem: 256,
+  time: "01:00:00",
+};
+
 export interface AdditionalSpecs {
 
   forced: boolean;

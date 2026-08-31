@@ -16,6 +16,7 @@ import type {
   ProcessInfo,
   ProcessInfoOption,
 } from "../models/process";
+import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
 import type { WorkflowOption } from "../models/option";
 import { getOptionDirection } from "../models/option";
 import type { WorkflowEdge } from "../models/edge";
@@ -270,7 +271,7 @@ export function WorkflowProvider({
 
       code: info?.code ?? "",
 
-      computationalSpecs: {},
+      computationalSpecs: { ...DEFAULT_COMPUTATIONAL_SPECS },
 
       additionalSpecs: {
         forced: false,
