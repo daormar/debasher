@@ -128,7 +128,7 @@ debasher::_show_proc_implem()
 }
 
 ########
-debasher::_document_process()
+debasher::_show_process_documentation()
 {
     local processname=$1
     local show_options=$2

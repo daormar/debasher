@@ -210,7 +210,7 @@ debasher::document_module()
 document_module() { debasher::document_module "$@"; }
 
 ########
-debasher::document_module()
+debasher::_show_module_documentation()
 {
     local modulename=$1
 
@@ -229,5 +229,3 @@ debasher::document_module()
         echo "" >&2
     fi
 }
-
-document_module() { debasher::document_module "$@"; }

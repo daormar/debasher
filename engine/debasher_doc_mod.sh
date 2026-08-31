@@ -104,12 +104,12 @@ obtain_info_for_module()
     debasher::_exec_program_func_for_module "${module_fname}"
 
     # Document module
-    debasher::document_module "${module_fname}"
+    debasher::_show_module_documentation "${module_fname}"
 
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         if [ "${s_given}" -eq 0 ] || [ "${processname}" = "${given_processname}" ]; then
-            debasher::_document_process "${processname}" "${showopts_given}" "${showmeths_given}" "${showvars_given}" "${showimpl_given}"
+            debasher::_show_process_documentation "${processname}" "${showopts_given}" "${showmeths_given}" "${showvars_given}" "${showimpl_given}"
         fi
     done
 }

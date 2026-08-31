@@ -32,4 +32,4 @@ showopts=1
 showmeths=1
 showvars=1
 showimpl=1
-debasher::_document_process "${processname}" "${showopts}" "${showmeths}" "${showvars}" "${showimpl}"
+debasher::_show_process_documentation "${processname}" "${showopts}" "${showmeths}" "${showvars}" "${showimpl}"
