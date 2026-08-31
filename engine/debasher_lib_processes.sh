@@ -133,8 +133,8 @@ debasher::_document_process()
     local processname=$1
     local show_options=$2
     local show_methods=$3
-    local show_varnames=$3
-    local show_implem=$4
+    local show_varnames=$4
+    local show_implem=$5
 
     # Print header
     echo "## ${processname}"
