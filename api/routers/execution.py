@@ -97,14 +97,20 @@ class WorkflowStatusResponse(BaseModel):
 @router.post("/status", response_model=WorkflowStatusResponse)
 def get_workflow_status(workflow: Workflow) -> WorkflowStatusResponse:
     """
-    Get a workflow's status by running a command.
-
-    Stub: does not actually run anything yet.
-
-    TODO: replace this stub with a real call into core/, e.g.:
-        output = core.get_workflow_status(workflow)
+    Get a workflow's status (debasher_status -d <outputDir>).
     """
-    return WorkflowStatusResponse(output="")
+    tool = paths.find_bin_tool("debasher_status")
+    if tool is None:
+        return WorkflowStatusResponse(output="Error: debasher_status tool not found.")
+
+    command = [str(tool), "-d", workflow.outputDir]
+
+    env = os.environ.copy()
+    env["DEBASHER_MOD_DIR"] = workflow.envVars.get("DEBASHER_MOD_DIR", "")
+
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+
+    return WorkflowStatusResponse(output=result.stdout + result.stderr)
 
 
 class CheckWorkflowOptionsResponse(BaseModel):
