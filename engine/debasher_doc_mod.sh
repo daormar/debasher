@@ -103,7 +103,7 @@ obtain_info_for_module()
     # Execute program function for module
     debasher::_exec_program_func_for_module "${module_fname}"
 
-    # Document module
+    # Show module documentation
     debasher::_show_module_documentation "${module_fname}"
 
     # Iterate over the program processes
