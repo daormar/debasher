@@ -21,7 +21,7 @@ export default function HomeScreen({ onOpen }: Props) {
 
   return (
     <div style={{ padding: 32, maxWidth: 480, margin: "0 auto" }}>
-      <h1>Debasher</h1>
+      <h1>DeBasher</h1>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <button onClick={() => setNewWorkflowOpen(true)}>
