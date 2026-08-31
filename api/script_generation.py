@@ -1,4 +1,5 @@
 from .debasher_constants import (
+    MODULE_DOCUMENT_SUFFIX,
     MODULE_PROGRAM_SUFFIX,
     PROCESS_METHOD_DOCUMENT_SUFFIX,
     PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX,
@@ -40,7 +41,17 @@ def _add_preamble(preamble):
     return lines
 
 
-def _add_document_func(process):
+def _add_document_module_func(name, description):
+    lines = [f"{name}{MODULE_DOCUMENT_SUFFIX}()", "{"]
+    if description:
+        lines.append(f'{INDENT}debasher::document_module "{description}"')
+    else:
+        lines.append(INDENT + ":")
+    lines.append("}")
+    return lines
+
+
+def _add_document_proc_func(process):
     lines = [f"{process.name}{PROCESS_METHOD_DOCUMENT_SUFFIX}()", "{"]
     if process.description:
         lines.append(f'{INDENT}debasher::document_process "{process.description}"')
@@ -172,9 +183,13 @@ def generate_script(workflow: Workflow) -> str:
     lines.extend(_add_preamble(workflow.preamble))
     lines.extend(["", ""])
 
+    # Add workflow description
+    lines.extend(_add_document_module_func(workflow.name, workflow.description))
+    lines.extend(["", ""])
+
     # Add process functions
     for process in workflow.processes:
-        lines.extend(_add_document_func(process))
+        lines.extend(_add_document_proc_func(process))
         lines.extend(["", ""])
 
         lines.extend(_add_explain_opts_func(process))
