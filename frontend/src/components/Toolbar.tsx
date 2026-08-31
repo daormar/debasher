@@ -63,15 +63,15 @@ export default function Toolbar({ onClose }: Props) {
       </button>
 
       <button
-        onClick={() => setDescriptionOpen(true)}
-      >
-        Description
-      </button>
-
-      <button
         onClick={() => setPreambleOpen(true)}
       >
         Preamble
+      </button>
+
+      <button
+        onClick={() => setDescriptionOpen(true)}
+      >
+        Description
       </button>
 
       <button
