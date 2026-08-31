@@ -44,6 +44,7 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
 
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
   "Check workflow options",
+  "Run workflow (debug)",
 ]);
 
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {

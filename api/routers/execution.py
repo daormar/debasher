@@ -10,6 +10,40 @@ from ..models import Workflow
 router = APIRouter(prefix="/api/execution", tags=["execution"])
 
 
+def _run_debasher_exec(workflow: Workflow, mode_flag: str) -> str:
+    """
+    Save `workflow` to its home directory (the same as pressing "Save"
+    in the toolbar, generating its .sh file there) and run debasher_exec
+    against that script with `mode_flag`, passing the scheduler, the run
+    output directory, and the command line options set via "Set
+    workflow options".
+    """
+    persistence.save_workflow(workflow.homeDir, workflow)
+    script_path = persistence.save_script(workflow.homeDir, workflow)
+
+    tool = paths.find_bin_tool("debasher_exec")
+    if tool is None:
+        return "Error: debasher_exec tool not found."
+
+    command = [
+        str(tool),
+        "--pfile", str(script_path),
+        "--outdir", workflow.outputDir,
+        "--sched", workflow.executionOptions.scheduler,
+        mode_flag,
+    ]
+
+    for label, value in workflow.workflowOptions.items():
+        command += [label, value]
+
+    env = os.environ.copy()
+    env["DEBASHER_MOD_DIR"] = workflow.envVars.get("DEBASHER_MOD_DIR", "")
+
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+
+    return result.stdout + result.stderr
+
+
 class ListSchedulersResponse(BaseModel):
     schedulers: list[str]
 
@@ -51,14 +85,9 @@ class RunWorkflowDebugResponse(BaseModel):
 @router.post("/run-debug", response_model=RunWorkflowDebugResponse)
 def run_workflow_debug(workflow: Workflow) -> RunWorkflowDebugResponse:
     """
-    Run a workflow in debug mode by running a command.
-
-    Stub: does not actually run anything yet.
-
-    TODO: replace this stub with a real call into core/, e.g.:
-        output = core.run_workflow_debug(workflow)
+    Run a workflow in debug mode (debasher_exec --debug).
     """
-    return RunWorkflowDebugResponse(output="")
+    return RunWorkflowDebugResponse(output=_run_debasher_exec(workflow, "--debug"))
 
 
 class WorkflowStatusResponse(BaseModel):
@@ -85,38 +114,11 @@ class CheckWorkflowOptionsResponse(BaseModel):
 @router.post("/check-workflow-options", response_model=CheckWorkflowOptionsResponse)
 def check_workflow_options(workflow: Workflow) -> CheckWorkflowOptionsResponse:
     """
-    Check a workflow's command line options.
-
-    Saves the workflow to its home directory (the same as pressing
-    "Save" in the toolbar, generating its .sh file there) and runs
-    debasher_exec against that script, passing the scheduler, the run
-    output directory, and the command line options set via "Set
-    workflow options".
+    Check a workflow's command line options (debasher_exec --check-proc-opts).
     """
-    persistence.save_workflow(workflow.homeDir, workflow)
-    script_path = persistence.save_script(workflow.homeDir, workflow)
-
-    tool = paths.find_bin_tool("debasher_exec")
-    if tool is None:
-        return CheckWorkflowOptionsResponse(output="Error: debasher_exec tool not found.")
-
-    command = [
-        str(tool),
-        "--pfile", str(script_path),
-        "--outdir", workflow.outputDir,
-        "--sched", workflow.executionOptions.scheduler,
-        "--check-proc-opts",
-    ]
-
-    for label, value in workflow.workflowOptions.items():
-        command += [label, value]
-
-    env = os.environ.copy()
-    env["DEBASHER_MOD_DIR"] = workflow.envVars.get("DEBASHER_MOD_DIR", "")
-
-    result = subprocess.run(command, env=env, capture_output=True, text=True)
-
-    return CheckWorkflowOptionsResponse(output=result.stdout + result.stderr)
+    return CheckWorkflowOptionsResponse(
+        output=_run_debasher_exec(workflow, "--check-proc-opts")
+    )
 
 
 class StopWorkflowResponse(BaseModel):
