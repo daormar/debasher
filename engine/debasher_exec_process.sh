@@ -54,7 +54,7 @@ if [ $# -eq 0 ]; then
     showmeths=0
     showvars=0
     showimpl=0
-    debasher::_document_process "${processname}" "${showopts}" "${showmeths}" "${showvars}" "${showimpl}"
+    debasher::_show_process_documentation "${processname}" "${showopts}" "${showmeths}" "${showvars}" "${showimpl}"
 else
     if [ "$1" = "--" ]; then
         shift
