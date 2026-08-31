@@ -40,6 +40,40 @@ def run_workflow(workflow: Workflow) -> RunWorkflowResponse:
     return RunWorkflowResponse(status="started")
 
 
+class WorkflowStatusResponse(BaseModel):
+    output: str
+
+
+@router.post("/status", response_model=WorkflowStatusResponse)
+def get_workflow_status(workflow: Workflow) -> WorkflowStatusResponse:
+    """
+    Get a workflow's status by running a command.
+
+    Stub: does not actually run anything yet.
+
+    TODO: replace this stub with a real call into core/, e.g.:
+        output = core.get_workflow_status(workflow)
+    """
+    return WorkflowStatusResponse(output="")
+
+
+class CheckWorkflowOptionsResponse(BaseModel):
+    output: str
+
+
+@router.post("/check-workflow-options", response_model=CheckWorkflowOptionsResponse)
+def check_workflow_options(workflow: Workflow) -> CheckWorkflowOptionsResponse:
+    """
+    Check a workflow's command line options by running a command.
+
+    Stub: does not actually run anything yet.
+
+    TODO: replace this stub with a real call into core/, e.g.:
+        output = core.check_workflow_options(workflow)
+    """
+    return CheckWorkflowOptionsResponse(output="")
+
+
 class StopWorkflowResponse(BaseModel):
     status: str
 

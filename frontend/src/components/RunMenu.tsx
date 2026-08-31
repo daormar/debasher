@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
-import { runWorkflow, stopWorkflow } from "../api/executionApi";
+import {
+  checkWorkflowOptions,
+  getWorkflowStatus,
+  runWorkflow,
+  stopWorkflow,
+} from "../api/executionApi";
 import type { Workflow } from "../models/workflow";
 import { useWorkflow } from "../store/WorkflowContext";
+import CommandOutputModal from "./CommandOutputModal";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
 import WorkflowOptionsEditor from "./WorkflowOptionsEditor";
@@ -11,7 +17,9 @@ const MENU_ITEMS = [
   "Set output directory",
   "Set execution options",
   "Set workflow options",
+  "Check workflow options",
   "Run workflow",
+  "Get workflow status",
   "Stop workflow",
 ] as const;
 
@@ -25,9 +33,16 @@ const WORKFLOW_ACTIONS: Partial<
 };
 
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
+  "Check workflow options": "Checking...",
   "Run workflow": "Running...",
+  "Get workflow status": "Getting status...",
   "Stop workflow": "Stopping...",
 };
+
+interface CommandOutput {
+  title: string;
+  output: string;
+}
 
 export default function RunMenu() {
 
@@ -44,6 +59,9 @@ export default function RunMenu() {
 
   const [isWorkflowOptionsOpen, setWorkflowOptionsOpen] =
     useState(false);
+
+  const [commandOutput, setCommandOutput] =
+    useState<CommandOutput | null>(null);
 
   const [pendingAction, setPendingAction] =
     useState<MenuItem | null>(null);
@@ -75,6 +93,29 @@ export default function RunMenu() {
 
   }
 
+  async function runOutputAction(
+    item: MenuItem,
+    title: string,
+    action: (workflow: Workflow) => Promise<string>
+  ) {
+
+    setPendingAction(item);
+    setActionError(null);
+
+    try {
+      const output = await action(workflow);
+      setCommandOutput({ title, output });
+      setOpen(false);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : `Failed to ${item.toLowerCase()}.`
+      );
+    } finally {
+      setPendingAction(null);
+    }
+
+  }
+
   function handleItemClick(item: MenuItem) {
 
     if (item === "Set output directory") {
@@ -86,6 +127,10 @@ export default function RunMenu() {
     } else if (item === "Set workflow options") {
       setOpen(false);
       setWorkflowOptionsOpen(true);
+    } else if (item === "Check workflow options") {
+      runOutputAction(item, "Check workflow options", checkWorkflowOptions);
+    } else if (item === "Get workflow status") {
+      runOutputAction(item, "Workflow status", getWorkflowStatus);
     } else if (WORKFLOW_ACTIONS[item]) {
       runWorkflowAction(item, WORKFLOW_ACTIONS[item]);
     } else {
@@ -208,6 +253,14 @@ export default function RunMenu() {
       {isWorkflowOptionsOpen && (
         <WorkflowOptionsEditor
           onClose={() => setWorkflowOptionsOpen(false)}
+        />
+      )}
+
+      {commandOutput !== null && (
+        <CommandOutputModal
+          title={commandOutput.title}
+          output={commandOutput.output}
+          onClose={() => setCommandOutput(null)}
         />
       )}
 
