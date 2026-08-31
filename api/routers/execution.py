@@ -81,20 +81,15 @@ def list_schedulers() -> ListSchedulersResponse:
 
 
 class RunWorkflowResponse(BaseModel):
-    status: str
+    output: str
 
 
 @router.post("/run", response_model=RunWorkflowResponse)
 def run_workflow(workflow: Workflow) -> RunWorkflowResponse:
     """
-    Run a workflow.
-
-    Stub: does not actually execute anything yet.
-
-    TODO: replace this stub with a real call into core/, e.g.:
-        core.run_workflow(workflow)
+    Run a workflow (debasher_exec --wait).
     """
-    return RunWorkflowResponse(status="started")
+    return RunWorkflowResponse(output=_run_debasher_exec(workflow, "--wait"))
 
 
 class RunWorkflowDebugResponse(BaseModel):

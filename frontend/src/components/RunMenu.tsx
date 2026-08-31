@@ -27,12 +27,6 @@ const MENU_ITEMS = [
 
 type MenuItem = (typeof MENU_ITEMS)[number];
 
-const WORKFLOW_ACTIONS: Partial<
-  Record<MenuItem, (workflow: Workflow) => Promise<void>>
-> = {
-  "Run workflow": runWorkflow,
-};
-
 const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Check workflow options",
   "Run workflow (debug)",
@@ -44,6 +38,7 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
   "Check workflow options",
   "Run workflow (debug)",
+  "Run workflow",
 ]);
 
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
@@ -86,27 +81,6 @@ export default function RunMenu() {
 
   const containerRef =
     useRef<HTMLDivElement>(null);
-
-  async function runWorkflowAction(
-    item: MenuItem,
-    action: (workflow: Workflow) => Promise<void>
-  ) {
-
-    setPendingAction(item);
-    setActionError(null);
-
-    try {
-      await action(workflow);
-      setOpen(false);
-    } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : `Failed to ${item.toLowerCase()}.`
-      );
-    } finally {
-      setPendingAction(null);
-    }
-
-  }
 
   async function runOutputAction(
     item: MenuItem,
@@ -156,12 +130,12 @@ export default function RunMenu() {
       runOutputAction(item, "Check workflow options", checkWorkflowOptions);
     } else if (item === "Run workflow (debug)") {
       runOutputAction(item, "Run workflow (debug)", runWorkflowDebug);
+    } else if (item === "Run workflow") {
+      runOutputAction(item, "Run workflow", runWorkflow);
     } else if (item === "Get workflow status") {
       runOutputAction(item, "Workflow status", getWorkflowStatus);
     } else if (item === "Stop workflow") {
       runOutputAction(item, "Stop workflow", stopWorkflow);
-    } else if (WORKFLOW_ACTIONS[item]) {
-      runWorkflowAction(item, WORKFLOW_ACTIONS[item]);
     } else {
       setOpen(false);
     }

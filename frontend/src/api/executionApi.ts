@@ -11,7 +11,7 @@ export async function listSchedulers(): Promise<string[]> {
   return schedulers;
 }
 
-export async function runWorkflow(workflow: Workflow): Promise<void> {
+export async function runWorkflow(workflow: Workflow): Promise<string> {
   const response = await fetch("/api/execution/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -21,6 +21,9 @@ export async function runWorkflow(workflow: Workflow): Promise<void> {
   if (!response.ok) {
     throw new Error(`Failed to run workflow (${response.status})`);
   }
+
+  const { output } = await response.json();
+  return output;
 }
 
 export async function runWorkflowDebug(workflow: Workflow): Promise<string> {
