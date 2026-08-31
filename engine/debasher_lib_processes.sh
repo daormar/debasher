@@ -151,7 +151,7 @@ debasher::_document_process()
         echo ""
     fi
 
-    if [ ${show_options} -eq 1 ]; then
+    if [ "${show_options}" = 1 ]; then
         echo "### Process Options"
         local opts_funcname
         local identify_cmdline_opt_funcname
@@ -178,19 +178,19 @@ debasher::_document_process()
         echo ""
     fi
 
-    if [ ${show_methods} -eq 1 ]; then
+    if [ "${show_methods}" = 1 ]; then
         echo "### Process Methods"
         debasher::_show_proc_methods "${processname}"
         echo ""
     fi
 
-    if [ ${show_varnames} -eq 1 ]; then
+    if [ "${show_varnames}" = 1 ]; then
         echo "### Process Variables"
         debasher::_show_proc_vars "${processname}"
         echo ""
     fi
 
-    if [ ${show_implem} -eq 1 ]; then
+    if [ "${show_implem}" = 1 ]; then
         echo "### Process Implementation"
         local implementation
         implementation=`debasher::_show_proc_implem "${processname}"`
