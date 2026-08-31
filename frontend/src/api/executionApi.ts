@@ -68,7 +68,7 @@ export async function checkWorkflowOptions(workflow: Workflow): Promise<string> 
   return output;
 }
 
-export async function stopWorkflow(workflow: Workflow): Promise<void> {
+export async function stopWorkflow(workflow: Workflow): Promise<string> {
   const response = await fetch("/api/execution/stop", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -78,4 +78,7 @@ export async function stopWorkflow(workflow: Workflow): Promise<void> {
   if (!response.ok) {
     throw new Error(`Failed to stop workflow (${response.status})`);
   }
+
+  const { output } = await response.json();
+  return output;
 }

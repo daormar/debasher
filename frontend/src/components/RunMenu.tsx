@@ -31,7 +31,6 @@ const WORKFLOW_ACTIONS: Partial<
   Record<MenuItem, (workflow: Workflow) => Promise<void>>
 > = {
   "Run workflow": runWorkflow,
-  "Stop workflow": stopWorkflow,
 };
 
 const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
@@ -159,6 +158,8 @@ export default function RunMenu() {
       runOutputAction(item, "Run workflow (debug)", runWorkflowDebug);
     } else if (item === "Get workflow status") {
       runOutputAction(item, "Workflow status", getWorkflowStatus);
+    } else if (item === "Stop workflow") {
+      runOutputAction(item, "Stop workflow", stopWorkflow);
     } else if (WORKFLOW_ACTIONS[item]) {
       runWorkflowAction(item, WORKFLOW_ACTIONS[item]);
     } else {

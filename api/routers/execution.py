@@ -44,6 +44,25 @@ def _run_debasher_exec(workflow: Workflow, mode_flag: str) -> str:
     return result.stdout + result.stderr
 
 
+def _run_debasher_dir_tool(workflow: Workflow, tool_name: str) -> str:
+    """
+    Run a DeBasher bin tool that just takes "-d <outputDir>" (e.g.
+    debasher_status, debasher_stop).
+    """
+    tool = paths.find_bin_tool(tool_name)
+    if tool is None:
+        return f"Error: {tool_name} tool not found."
+
+    command = [str(tool), "-d", workflow.outputDir]
+
+    env = os.environ.copy()
+    env["DEBASHER_MOD_DIR"] = workflow.envVars.get("DEBASHER_MOD_DIR", "")
+
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+
+    return result.stdout + result.stderr
+
+
 class ListSchedulersResponse(BaseModel):
     schedulers: list[str]
 
@@ -99,18 +118,7 @@ def get_workflow_status(workflow: Workflow) -> WorkflowStatusResponse:
     """
     Get a workflow's status (debasher_status -d <outputDir>).
     """
-    tool = paths.find_bin_tool("debasher_status")
-    if tool is None:
-        return WorkflowStatusResponse(output="Error: debasher_status tool not found.")
-
-    command = [str(tool), "-d", workflow.outputDir]
-
-    env = os.environ.copy()
-    env["DEBASHER_MOD_DIR"] = workflow.envVars.get("DEBASHER_MOD_DIR", "")
-
-    result = subprocess.run(command, env=env, capture_output=True, text=True)
-
-    return WorkflowStatusResponse(output=result.stdout + result.stderr)
+    return WorkflowStatusResponse(output=_run_debasher_dir_tool(workflow, "debasher_status"))
 
 
 class CheckWorkflowOptionsResponse(BaseModel):
@@ -128,17 +136,12 @@ def check_workflow_options(workflow: Workflow) -> CheckWorkflowOptionsResponse:
 
 
 class StopWorkflowResponse(BaseModel):
-    status: str
+    output: str
 
 
 @router.post("/stop", response_model=StopWorkflowResponse)
 def stop_workflow(workflow: Workflow) -> StopWorkflowResponse:
     """
-    Stop a running workflow.
-
-    Stub: does not actually stop anything yet.
-
-    TODO: replace this stub with a real call into core/, e.g.:
-        core.stop_workflow(workflow)
+    Stop a running workflow (debasher_stop -d <outputDir>).
     """
-    return StopWorkflowResponse(status="stopped")
+    return StopWorkflowResponse(output=_run_debasher_dir_tool(workflow, "debasher_stop"))
