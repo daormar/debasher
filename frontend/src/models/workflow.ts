@@ -19,6 +19,11 @@ export interface Workflow {
 
   envVars: Record<string, string>;
 
+  // Directory the workflow's own definition (workflow.json) and .sh
+  // script are saved to (via the toolbar's "Save" button) — distinct
+  // from outputDir, which is where a run's results are written.
+  homeDir: string;
+
   outputDir: string;
 
   executionOptions: ExecutionOptions;

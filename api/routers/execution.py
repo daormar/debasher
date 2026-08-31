@@ -87,12 +87,14 @@ def check_workflow_options(workflow: Workflow) -> CheckWorkflowOptionsResponse:
     """
     Check a workflow's command line options.
 
-    Saves the workflow (generating its .sh file) and runs debasher_exec
-    against it, passing the scheduler and the command line options set
-    via "Set workflow options".
+    Saves the workflow to its home directory (the same as pressing
+    "Save" in the toolbar, generating its .sh file there) and runs
+    debasher_exec against that script, passing the scheduler, the run
+    output directory, and the command line options set via "Set
+    workflow options".
     """
-    persistence.save_workflow(workflow.outputDir, workflow)
-    script_path = persistence.save_script(workflow.outputDir, workflow)
+    persistence.save_workflow(workflow.homeDir, workflow)
+    script_path = persistence.save_script(workflow.homeDir, workflow)
 
     tool = paths.find_bin_tool("debasher_exec")
     if tool is None:

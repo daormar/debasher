@@ -8,10 +8,10 @@ interface Props {
 
 export default function SaveDialog({ onClose }: Props) {
 
-  const { save } = useWorkflow();
+  const { workflow, save } = useWorkflow();
 
   const [outputDir, setOutputDir] =
-    useState("");
+    useState(workflow.homeDir);
 
   const [isSaving, setSaving] =
     useState(false);

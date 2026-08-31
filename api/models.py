@@ -71,6 +71,7 @@ class Workflow(BaseModel):
     description: str = ""
     preamble: str
     envVars: dict[str, str]
+    homeDir: str = ""
     outputDir: str
     executionOptions: ExecutionOptions
     workflowOptions: dict[str, str]

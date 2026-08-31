@@ -219,11 +219,21 @@ export function WorkflowProvider({
   initialWorkflow,
 }: Props) {
 
-  const [workflow, setWorkflow] =
+  const [workflow, setWorkflowRaw] =
     useState<Workflow>(() => normalizeConnectedOptionValues(initialWorkflow));
 
+  // Re-derives every connected option's "[process;option]" value from the
+  // current edges/names on every update, so renaming a process or a
+  // connected option's label can't leave a stale reference behind in what
+  // gets saved/generated (see normalizeConnectedOptionValues above).
+  function setWorkflow(updater: (current: Workflow) => Workflow) {
+    setWorkflowRaw(current => normalizeConnectedOptionValues(updater(current)));
+  }
+
   async function save(outputDir: string) {
-    await saveWorkflow(workflow, outputDir);
+    const updated = { ...workflow, homeDir: outputDir };
+    await saveWorkflow(updated, outputDir);
+    setWorkflow(() => updated);
   }
 
   const [selectedProcessId, setSelectedProcessId] =

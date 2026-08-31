@@ -42,6 +42,10 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Stop workflow",
 ]);
 
+const REQUIRES_HOME_DIR = new Set<MenuItem>([
+  "Check workflow options",
+]);
+
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
   "Check workflow options": "Checking...",
   "Run workflow (debug)": "Running...",
@@ -131,6 +135,11 @@ export default function RunMenu() {
 
     if (REQUIRES_OUTPUT_DIR.has(item) && !workflow.outputDir.trim()) {
       setActionError("Set the output directory before running this action.");
+      return;
+    }
+
+    if (REQUIRES_HOME_DIR.has(item) && !workflow.homeDir.trim()) {
+      setActionError("Save the workflow before running this action.");
       return;
     }
 
