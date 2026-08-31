@@ -188,51 +188,6 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         />
 
-        {!manualMode && (
-
-          <>
-
-            <label>
-              Value
-            </label>
-
-            {connectedSourceLabel ? (
-
-              <div
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  borderRadius: 4,
-                  border: "1px solid #bbb",
-                  color: "#888",
-                  boxSizing: "border-box",
-                }}
-              >
-                {connectedSourceLabel}
-              </div>
-
-            ) : (
-
-              <input
-
-                value={value}
-
-                onChange={(event) =>
-                  setValue(event.target.value)
-                }
-
-                style={{
-                  width: "100%",
-                }}
-
-              />
-
-            )}
-
-          </>
-
-        )}
-
         <label>
 
           <input
@@ -271,13 +226,15 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         {!manualMode && (
 
-          <label>
+          <label style={{ color: commandLine ? "#999" : undefined }}>
 
             <input
 
               type="checkbox"
 
               checked={fifo}
+
+              disabled={commandLine}
 
               onChange={(event) =>
                 setFifo(event.target.checked)
@@ -287,6 +244,54 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
             {" "}FIFO
 
           </label>
+
+        )}
+
+        {!manualMode && (
+
+          <>
+
+            <label style={{ color: commandLine ? "#999" : undefined }}>
+              Value
+            </label>
+
+            {connectedSourceLabel ? (
+
+              <div
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  borderRadius: 4,
+                  border: "1px solid #bbb",
+                  color: "#888",
+                  boxSizing: "border-box",
+                  opacity: commandLine ? 0.5 : 1,
+                }}
+              >
+                {connectedSourceLabel}
+              </div>
+
+            ) : (
+
+              <input
+
+                value={value}
+
+                disabled={commandLine}
+
+                onChange={(event) =>
+                  setValue(event.target.value)
+                }
+
+                style={{
+                  width: "100%",
+                }}
+
+              />
+
+            )}
+
+          </>
 
         )}
 
