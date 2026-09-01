@@ -1,6 +1,6 @@
 export type OptionDirection = "input" | "output";
 
-export type OptionDataType = "int" | "float" | "string";
+export type OptionDataType = "int" | "float" | "string" | "None";
 
 export interface ProgramOption {
   id: string;

@@ -12,7 +12,7 @@ class ProgramOption(BaseModel):
     id: str
     label: str
     direction: Literal["input", "output"]
-    dataType: Literal["int", "float", "string"]
+    dataType: Literal["int", "float", "string", "None"]
     description: str
     value: str
     fifo: bool

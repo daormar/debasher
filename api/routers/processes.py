@@ -194,7 +194,7 @@ _CODE_FENCE_START_RE = re.compile(r"^```(?P<lang>\S*)\s*$")
 _OPTION_DATA_TYPES: set[str] = {"int", "float", "string"}
 _PROCESS_LANGUAGES: set[str] = {"bash", "python", "perl", "r", "groovy"}
 
-OptionDataType = Literal["int", "float", "string"]
+OptionDataType = Literal["int", "float", "string", "None"]
 ProcessLanguage = Literal["bash", "python", "perl", "r", "groovy"]
 
 
@@ -241,12 +241,11 @@ def _parse_options(lines: list[str]) -> list[ProcessInfoOption]:
         label = line_match.group("label").strip()
         rest = line_match.group("rest")
 
-        data_type: OptionDataType = "string"
+        data_type: OptionDataType = "None"
         type_match = _OPTION_TYPE_RE.match(rest)
         if type_match:
             candidate = type_match.group("type")
-            if candidate in _OPTION_DATA_TYPES:
-                data_type = candidate  # type: ignore[assignment]
+            data_type = candidate if candidate in _OPTION_DATA_TYPES else "string"  # type: ignore[assignment]
             rest = type_match.group("rest")
 
         flags_match = _OPTION_FLAGS_RE.match(rest)

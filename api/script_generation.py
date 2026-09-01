@@ -65,7 +65,10 @@ def _add_explain_opts_func(process):
     lines = [f"{process.name}{PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX}()", "{"]
     if process.options:
         for option in process.options:
-            lines.append(f'{INDENT}debasher::explain_opt "{option.label}" "{option.dataType}" "{option.description}"')
+            if option.dataType == "None":
+                lines.append(f'{INDENT}debasher::explain_flag "{option.label}" "{option.description}"')
+            else:
+                lines.append(f'{INDENT}debasher::explain_opt "{option.label}" "{option.dataType}" "{option.description}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
@@ -123,12 +126,16 @@ def _add_define_opts_func(process):
     if process.options:
         for option in process.options:
             if option.commandLine:
-                if option.mandatory:
+                if option.dataType == "None":
+                    lines.append(f'{INDENT}debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1')
+                elif option.mandatory:
                     lines.append(f'{INDENT}debasher::define_cmdline_opt "${{cmdline}}" "{option.label}" optlist || return 1')
                 else:
                     lines.append(f'{INDENT}debasher::define_cmdline_opt_if_given "${{cmdline}}" "{option.label}" optlist || return 1')
             else:
-                if _opt_is_connected_to_proc(option):
+                if option.dataType == "None":
+                    lines.append(f'{INDENT}debasher::define_flag "{option.label}" optlist || return 1')
+                elif _opt_is_connected_to_proc(option):
                     conn_proc, conn_opt = _get_process_plus_opt(option)
                     lines.append(f'{INDENT}debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1')
                 else:

@@ -59,26 +59,47 @@ export default function ProgramOptionsEditor({ onClose }: Props) {
           {option.label}
         </label>
 
-        <input
+        {option.dataType === "None" ? (
 
-          type={option.dataType === "string" ? "text" : "number"}
+          <input
 
-          step={option.dataType === "float" ? "any" : undefined}
+            type="checkbox"
 
-          value={draft[option.label] ?? ""}
+            checked={Boolean(draft[option.label])}
 
-          onChange={(event) =>
-            setDraft(current => ({
-              ...current,
-              [option.label]: event.target.value,
-            }))
-          }
+            onChange={(event) =>
+              setDraft(current => ({
+                ...current,
+                [option.label]: event.target.checked ? "true" : "",
+              }))
+            }
 
-          style={{
-            width: "100%",
-          }}
+          />
 
-        />
+        ) : (
+
+          <input
+
+            type={option.dataType === "string" ? "text" : "number"}
+
+            step={option.dataType === "float" ? "any" : undefined}
+
+            value={draft[option.label] ?? ""}
+
+            onChange={(event) =>
+              setDraft(current => ({
+                ...current,
+                [option.label]: event.target.value,
+              }))
+            }
+
+            style={{
+              width: "100%",
+            }}
+
+          />
+
+        )}
 
         {option.description && (
           <div style={{ fontSize: 12, color: "#888" }}>

@@ -29,6 +29,15 @@ def _debasher_env(program: Program) -> dict[str, str]:
     return env
 
 
+def _command_line_option_types(program: Program) -> dict[str, str]:
+    types: dict[str, str] = {}
+    for process in program.processes:
+        for option in process.options:
+            if option.commandLine and option.label not in types:
+                types[option.label] = option.dataType
+    return types
+
+
 def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str] | None:
     """
     Save `program` to its home directory (the same as pressing "Save"
@@ -54,8 +63,13 @@ def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str
         mode_flag,
     ]
 
+    option_types = _command_line_option_types(program)
     for label, value in program.programOptions.items():
-        command += [label, value]
+        if option_types.get(label) == "None":
+            if value:
+                command.append(label)
+        else:
+            command += [label, value]
 
     return command
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useProgram } from "../store/ProgramContext";
 import type {
@@ -57,6 +57,14 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
   const [dataType, setDataType] =
     useState<OptionDataType>(option.dataType);
 
+  const isFlag = dataType === "None";
+
+  useEffect(() => {
+    if (direction === "output" && dataType === "None") {
+      setDataType("string");
+    }
+  }, [direction, dataType]);
+
   const [description, setDescription] =
     useState(option.description);
 
@@ -81,10 +89,10 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       direction: getOptionDirection(label),
       dataType,
       description,
-      value,
+      value: isFlag ? "" : value,
       fifo,
       commandLine,
-      mandatory: commandLine && mandatory,
+      mandatory: commandLine && mandatory && !isFlag,
     });
 
     onClose();
@@ -171,6 +179,12 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
             string
           </option>
 
+          {direction === "input" && (
+            <option value="None">
+              None (flag)
+            </option>
+          )}
+
         </select>
 
         <label>
@@ -210,15 +224,15 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         </label>
 
-        <label style={{ color: commandLine ? undefined : "#999" }}>
+        <label style={{ color: commandLine && !isFlag ? undefined : "#999" }}>
 
           <input
 
             type="checkbox"
 
-            checked={mandatory}
+            checked={isFlag ? false : mandatory}
 
-            disabled={!commandLine}
+            disabled={!commandLine || isFlag}
 
             onChange={(event) =>
               setMandatory(event.target.checked)
@@ -252,7 +266,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         )}
 
-        {!manualMode && (
+        {!manualMode && !isFlag && (
 
           <>
 
