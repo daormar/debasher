@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Generate process options API file
-proc_opts_symbols=("define_opt()" "define_cmdline_opt()" "define_opt_from_proc_out()" "save_opt_list()")
+proc_opts_symbols=("define_opt()" "define_flag()" "define_cmdline_opt()" "define_cmdline_opt_if_given()" "define_cmdline_flag_if_given()" "define_fifo_opt()" "define_fifo_opt_generator()" "define_opt_from_proc_out()" "save_opt_list()")
 rm -f rtdocs/source/api_proc_opts_doc.md
 for name in "${proc_opts_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_proc_opts_doc.md
@@ -15,7 +15,7 @@ for name in "${proc_impl_symbols[@]}"; do
 done
 
 # Generate option characterization API file
-char_opts_symbols=("explain_cmdline_opt()" "explain_opt()" "opt_is_cmdline()")
+char_opts_symbols=("explain_cmdline_opt()" "explain_opt()" "opt_is_cmdline()" "opt_is_mandatory_cmdline()")
 rm -f rtdocs/source/api_characterize_opts_doc.md
 for name in "${char_opts_symbols[@]}"; do
     echo "*** $name" >&2
