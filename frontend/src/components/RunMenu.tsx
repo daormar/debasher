@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   checkWorkflowOptions,
   getWorkflowStatus,
-  runWorkflow,
   runWorkflowDebug,
   stopWorkflow,
 } from "../api/executionApi";
@@ -56,7 +55,7 @@ interface CommandOutput {
 
 export default function RunMenu() {
 
-  const { workflow } = useWorkflow();
+  const { workflow, runPhase, startWorkflowRun } = useWorkflow();
 
   const [isOpen, setOpen] =
     useState(false);
@@ -81,6 +80,24 @@ export default function RunMenu() {
 
   const containerRef =
     useRef<HTMLDivElement>(null);
+
+  async function handleRunWorkflow() {
+
+    setActionError(null);
+    setPendingAction("Run workflow");
+
+    try {
+      await startWorkflowRun();
+    } catch (err) {
+      setPendingAction(null);
+      setActionError(err instanceof Error ? err.message : "Failed to run workflow.");
+      return;
+    }
+
+    setPendingAction(null);
+    setOpen(false);
+
+  }
 
   async function runOutputAction(
     item: MenuItem,
@@ -131,7 +148,7 @@ export default function RunMenu() {
     } else if (item === "Run workflow (debug)") {
       runOutputAction(item, "Run workflow (debug)", runWorkflowDebug);
     } else if (item === "Run workflow") {
-      runOutputAction(item, "Run workflow", runWorkflow);
+      handleRunWorkflow();
     } else if (item === "Get workflow status") {
       runOutputAction(item, "Workflow status", getWorkflowStatus);
     } else if (item === "Stop workflow") {
@@ -209,7 +226,10 @@ export default function RunMenu() {
 
               onClick={() => handleItemClick(item)}
 
-              disabled={pendingAction !== null}
+              disabled={
+                pendingAction !== null ||
+                (item === "Run workflow" && runPhase === "running")
+              }
 
               style={{
                 textAlign: "left",
@@ -220,7 +240,11 @@ export default function RunMenu() {
               }}
 
             >
-              {pendingAction === item ? PENDING_LABELS[item] : item}
+              {item === "Run workflow" && runPhase === "running"
+                ? "Running..."
+                : pendingAction === item
+                ? PENDING_LABELS[item]
+                : item}
             </button>
 
           ))}

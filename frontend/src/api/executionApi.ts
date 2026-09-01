@@ -1,5 +1,20 @@
 import type { Workflow } from "../models/workflow";
 
+// FastAPI's default error body is `{"detail": "..."}`. Prefer that
+// message when present, otherwise fall back to a generic one.
+async function errorDetail(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json();
+    if (typeof body?.detail === "string") {
+      return body.detail;
+    }
+  } catch {
+    // Not JSON — fall through to the fallback message.
+  }
+
+  return fallback;
+}
+
 export async function listSchedulers(): Promise<string[]> {
   const response = await fetch("/api/execution/schedulers");
 
@@ -11,7 +26,10 @@ export async function listSchedulers(): Promise<string[]> {
   return schedulers;
 }
 
-export async function runWorkflow(workflow: Workflow): Promise<string> {
+// Launches the run in the background and returns as soon as it's
+// started — it does not wait for the workflow to finish. Poll
+// getWorkflowState() to find out when it's done.
+export async function runWorkflow(workflow: Workflow): Promise<void> {
   const response = await fetch("/api/execution/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -19,11 +37,10 @@ export async function runWorkflow(workflow: Workflow): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to run workflow (${response.status})`);
+    throw new Error(
+      await errorDetail(response, `Failed to run workflow (${response.status})`)
+    );
   }
-
-  const { output } = await response.json();
-  return output;
 }
 
 export async function runWorkflowDebug(workflow: Workflow): Promise<string> {
@@ -41,7 +58,14 @@ export async function runWorkflowDebug(workflow: Workflow): Promise<string> {
   return output;
 }
 
-export async function getWorkflowStatus(workflow: Workflow): Promise<string> {
+export type WorkflowState = "finished" | "in-progress" | "unfinished";
+
+interface WorkflowStatusResult {
+  output: string;
+  state: WorkflowState;
+}
+
+async function fetchWorkflowStatus(workflow: Workflow): Promise<WorkflowStatusResult> {
   const response = await fetch("/api/execution/status", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,8 +76,20 @@ export async function getWorkflowStatus(workflow: Workflow): Promise<string> {
     throw new Error(`Failed to get workflow status (${response.status})`);
   }
 
-  const { output } = await response.json();
+  return response.json();
+}
+
+export async function getWorkflowStatus(workflow: Workflow): Promise<string> {
+  const { output } = await fetchWorkflowStatus(workflow);
   return output;
+}
+
+// Cheap check of whether a run is still going, backed by the same
+// debasher_status call as getWorkflowStatus() — used to poll a
+// background run and to guard against launching a second one.
+export async function getWorkflowState(workflow: Workflow): Promise<WorkflowState> {
+  const { state } = await fetchWorkflowStatus(workflow);
+  return state;
 }
 
 export async function checkWorkflowOptions(workflow: Workflow): Promise<string> {

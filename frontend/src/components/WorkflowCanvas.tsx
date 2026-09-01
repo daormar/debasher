@@ -4,6 +4,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   applyNodeChanges,
   applyEdgeChanges,
   type NodeChange,
@@ -23,9 +24,19 @@ import {
   isValidWorkflowConnection,
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
+import RunStatusIndicator from "./RunStatusIndicator";
 
 export default function WorkflowCanvas() {
-  const { workflow, selectProcess, moveProcess, removeProcess, connect, disconnect } = useWorkflow();
+  const {
+    workflow,
+    selectProcess,
+    moveProcess,
+    removeProcess,
+    connect,
+    disconnect,
+    runPhase,
+    dismissWorkflowRun,
+  } = useWorkflow();
 
   // "Business" nodes: recalculated whenever workflow changes.
   const nodes = useMemo(
@@ -185,6 +196,15 @@ export default function WorkflowCanvas() {
         <Background />
         <Controls />
         <MiniMap />
+
+        {runPhase !== "idle" && (
+          <Panel position="bottom-right" style={{ marginBottom: 170 }}>
+            <RunStatusIndicator
+              phase={runPhase}
+              onClose={dismissWorkflowRun}
+            />
+          </Panel>
+        )}
       </ReactFlow>
     </div>
   );

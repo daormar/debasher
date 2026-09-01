@@ -1,7 +1,9 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -22,6 +24,17 @@ import { getOptionDirection } from "../models/option";
 import type { WorkflowEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import { saveWorkflow } from "../storage/workflowStorage";
+import type { WorkflowState } from "../api/executionApi";
+import {
+  getWorkflowState,
+  runWorkflow,
+  stopWorkflow,
+} from "../api/executionApi";
+
+// How often to poll for a background run's completion, in milliseconds.
+const RUN_POLL_INTERVAL_MS = 5000;
+
+export type WorkflowRunPhase = "idle" | "running" | "finished" | "unfinished";
 
 interface WorkflowContextType {
   workflow: Workflow;
@@ -31,6 +44,19 @@ interface WorkflowContextType {
   selectProcess: (processId: string | null) => void;
 
   save: (outputDir: string) => Promise<void>;
+
+  runPhase: WorkflowRunPhase;
+
+  // Launches "Run workflow" in the background; throws (e.g. if a run
+  // is already in progress) rather than resolving with an error, so
+  // callers can show it inline. Resolves once the run has launched —
+  // not once it's finished, see runPhase for that.
+  startWorkflowRun: () => Promise<void>;
+
+  // The running-progress indicator's Close button: stops the run if
+  // it's still going, otherwise just dismisses the finished/unfinished
+  // notice.
+  dismissWorkflowRun: () => void;
 
   addProcess: (name: string, info: ProcessInfo | null) => void;
 
@@ -235,6 +261,122 @@ export function WorkflowProvider({
     const updated = { ...workflow, homeDir: outputDir };
     await saveWorkflow(updated, outputDir);
     setWorkflow(() => updated);
+  }
+
+  const [runPhase, setRunPhase] =
+    useState<WorkflowRunPhase>("idle");
+
+  const pollTimerRef =
+    useRef<number | null>(null);
+
+  const beforeUnloadHandlerRef =
+    useRef<(() => void) | null>(null);
+
+  const runningWorkflowRef =
+    useRef<Workflow | null>(null);
+
+  // Mirrors runPhase for the unmount cleanup below, which — since its
+  // effect has an empty dependency array and only runs once, on
+  // unmount — would otherwise only ever see the phase from initial
+  // mount rather than the current one.
+  const runPhaseRef =
+    useRef<WorkflowRunPhase>(runPhase);
+
+  useEffect(() => {
+    runPhaseRef.current = runPhase;
+  }, [runPhase]);
+
+  function stopRunPolling() {
+
+    if (pollTimerRef.current !== null) {
+      window.clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+
+    if (beforeUnloadHandlerRef.current !== null) {
+      window.removeEventListener("beforeunload", beforeUnloadHandlerRef.current);
+      beforeUnloadHandlerRef.current = null;
+    }
+
+  }
+
+  // Leaving the editor (the toolbar's "Close" button) unmounts this
+  // provider without ever unloading the page, so beforeunload above
+  // doesn't fire — stop a still-running workflow here too, or it's
+  // left running with nothing left to track or stop it.
+  useEffect(() => {
+    return () => {
+      stopRunPolling();
+      if (runPhaseRef.current === "running") {
+        const runningWorkflow = runningWorkflowRef.current ?? workflow;
+        stopWorkflow(runningWorkflow).catch(() => {
+          // Best-effort — the UI tracking this run is already gone.
+        });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function startRunPolling(runningWorkflow: Workflow) {
+
+    runningWorkflowRef.current = runningWorkflow;
+    setRunPhase("running");
+
+    const beforeUnloadHandler = () => {
+      const blob = new Blob([JSON.stringify(runningWorkflow)], {
+        type: "application/json",
+      });
+      navigator.sendBeacon("/api/execution/stop", blob);
+    };
+
+    beforeUnloadHandlerRef.current = beforeUnloadHandler;
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+
+    pollTimerRef.current = window.setInterval(async () => {
+
+      let state: WorkflowState;
+
+      try {
+        state = await getWorkflowState(runningWorkflow);
+      } catch {
+        return; // transient failure — try again next tick
+      }
+
+      if (state !== "in-progress") {
+        stopRunPolling();
+        setRunPhase(state === "finished" ? "finished" : "unfinished");
+      }
+
+    }, RUN_POLL_INTERVAL_MS);
+
+  }
+
+  async function startWorkflowRun() {
+
+    const state = await getWorkflowState(workflow);
+
+    if (state === "in-progress") {
+      throw new Error("A run is already in progress for this output directory.");
+    }
+
+    await runWorkflow(workflow);
+    startRunPolling(workflow);
+
+  }
+
+  function dismissWorkflowRun() {
+
+    if (runPhase === "running") {
+      stopRunPolling();
+      const runningWorkflow = runningWorkflowRef.current ?? workflow;
+      stopWorkflow(runningWorkflow).catch(() => {
+        // Best-effort — nothing meaningful left to show once the
+        // running indicator has already been dismissed.
+      });
+    }
+
+    setRunPhase("idle");
+
   }
 
   const [selectedProcessId, setSelectedProcessId] =
@@ -759,6 +901,12 @@ export function WorkflowProvider({
 
     save,
 
+    runPhase,
+
+    startWorkflowRun,
+
+    dismissWorkflowRun,
+
     addProcess,
 
     applyProcessInfo,
@@ -806,6 +954,7 @@ export function WorkflowProvider({
   }), [
     workflow,
     selectedProcess,
+    runPhase,
   ]);
 
   return (
