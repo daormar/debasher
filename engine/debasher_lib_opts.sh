@@ -429,63 +429,6 @@ debasher::explain_cmdline_opt()
 explain_cmdline_opt() { debasher::explain_cmdline_opt "$@"; }
 
 ########
-# Public: Explains command-line option that does not require value (flag).
-#
-# WARNING: This function is deprecated.
-#
-# $1 - Option name.
-# $2 - Option description.
-# $3 - Option category ("GENERAL" category by default).
-#
-# Examples
-#
-#   explain_cmdline_opt_wo_value "-s" "<string>" "String to be displayed"
-#
-# The function does not return any value.
-debasher::explain_cmdline_opt_wo_value()
-{
-    local opt=$1
-    local desc=$2
-    local categ=$3
-
-    # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
-    if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
-    fi
-
-    # Assign default category if not given
-    if [ "$categ" = "" ]; then
-        categ=${DEBASHER_GENERAL_OPT_CATEGORY}
-    fi
-
-    # Store option in associative arrays
-    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
-    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
-    DEBASHER_PROGRAM_OPT_IS_MANDATORY[$proc_opt]=0
-    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=""
-    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
-    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
-    DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
-}
-
-########
-# Public: Explains command-line option that does not require value (flag).
-#
-# WARNING: This function is deprecated.
-#
-# $1 - Option name.
-# $2 - Option description.
-# $3 - Option category ("GENERAL" category by default).
-#
-# Examples
-#
-#   explain_cmdline_opt_wo_value "-s" "<string>" "String to be displayed"
-#
-# The function does not return any value.
-explain_cmdline_opt_wo_value() { debasher::explain_cmdline_opt_wo_value "$@"; }
-
-########
 # Public: Explains option.
 #
 # $1 - Option name.
@@ -541,7 +484,7 @@ debasher::explain_opt()
 explain_opt() { debasher::explain_opt "$@"; }
 
 ########
-debasher::explain_opt_wo_value()
+debasher::explain_flag()
 {
     local opt=$1
     local desc=$2
@@ -567,7 +510,7 @@ debasher::explain_opt_wo_value()
     DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
 }
 
-explain_opt_wo_value() { debasher::explain_opt_wo_value "$@"; }
+explain_flag() { debasher::explain_flag "$@"; }
 
 ########
 # Public: Identify option as a command-line option.
@@ -968,7 +911,7 @@ debasher::define_cmdline_flag_if_given()
     # Get value for option
     if debasher::_check_opt_given "$cmdline" "$opt"; then
         # Add option
-        debasher::define_opt_wo_value "$opt" "$varname"
+        debasher::define_flag "$opt" "$varname"
     fi
 }
 
@@ -1098,20 +1041,19 @@ debasher::_optlist_varname_is_correct()
 ########
 # Public: Defines process flag.
 #
-# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
-# $2 - Name of option given in the command line.
-# $3 - Name of the variable that will store the newly added option.
+# $1 - Name of flag given in the command line.
+# $2 - Name of the variable that will store the newly added option.
 #
 # Examples
 #
-#   debasher::define_flag "${cmdline}" "-o" "optlist"
+#   debasher::define_flag "-o" "optlist"
 #
 # The function does not return any value
 debasher::define_flag()
 {
-    local opt=$1
+    local flag=$1
     local varname=$2
-    local -n var_ref=$3
+    local -n var_ref=$2
 
     # Check parameters
     debasher::_optname_is_correct "${FUNCNAME}" "$flag" || return 1
@@ -1127,9 +1069,8 @@ debasher::define_flag()
 ########
 # Public: Defines process flag.
 #
-# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
-# $2 - Name of option given in the command line.
-# $3 - Name of the variable that will store the newly added option.
+# $1 - Name of flag given in the command line.
+# $2 - Name of the variable that will store the newly added option.
 #
 # Examples
 #
@@ -1640,7 +1581,7 @@ debasher::_load_curr_opt_list_loop()
 
             # Define option
             if [ -z "${value}" ]; then
-                debasher::define_opt_wo_value "${opt}" "_load_curr_opt_list_loop_optlist"
+                debasher::define_flag "${opt}" "_load_curr_opt_list_loop_optlist"
             else
                 debasher::define_opt "${opt}" "${value}" "_load_curr_opt_list_loop_optlist"
             fi
