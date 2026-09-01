@@ -429,6 +429,19 @@ debasher::explain_cmdline_opt()
 explain_cmdline_opt() { debasher::explain_cmdline_opt "$@"; }
 
 ########
+# Public: Explains command-line option that does not require value (flag).
+#
+# WARNING: This function is deprecated.
+#
+# $1 - Option name.
+# $2 - Option description.
+# $3 - Option category ("GENERAL" category by default).
+#
+# Examples
+#
+#   explain_cmdline_opt_wo_value "-s" "<string>" "String to be displayed"
+#
+# The function does not return any value.
 debasher::explain_cmdline_opt_wo_value()
 {
     local opt=$1
@@ -456,6 +469,20 @@ debasher::explain_cmdline_opt_wo_value()
     DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
 }
 
+########
+# Public: Explains command-line option that does not require value (flag).
+#
+# WARNING: This function is deprecated.
+#
+# $1 - Option name.
+# $2 - Option description.
+# $3 - Option category ("GENERAL" category by default).
+#
+# Examples
+#
+#   explain_cmdline_opt_wo_value "-s" "<string>" "String to be displayed"
+#
+# The function does not return any value.
 explain_cmdline_opt_wo_value() { debasher::explain_cmdline_opt_wo_value "$@"; }
 
 ########
@@ -572,7 +599,7 @@ debasher::opt_is_cmdline()
 #
 # Examples
 #
-#   debasher::opt_is_non_mandatory_cmdline "-s"
+#   debasher::opt_is_cmdline "-s"
 #
 # The function does not return any value.
 opt_is_cmdline() { debasher::opt_is_cmdline "$@"; }
@@ -601,7 +628,7 @@ debasher::opt_is_non_mandatory_cmdline()
 }
 
 ########
-# Public: Identify option as a command-line option.
+# Public: Identify option as a non-mandatory command-line option.
 #
 # $1 - Option name.
 #
@@ -683,7 +710,7 @@ debasher::_define_fifo_task_idx()
 # $3 - Name of variable that will store the information about the option to be added.
 #
 # This function should only be defined in one of the processes connected
-# by the FIFO.
+# by the FIFO. More specifically, in the process defining an output option.
 #
 # Examples
 #
@@ -719,9 +746,39 @@ debasher::define_fifo_opt()
     debasher::define_opt "${opt}" "${abs_fifoname}" "${varname}" || return 1
 }
 
+########
+# Public: Defines fifo option for process.
+#
+# $1 - Option name.
+# $2 - Name of fifo.
+# $3 - Name of variable that will store the information about the option to be added.
+#
+# This function should only be defined in one of the processes connected
+# by the FIFO. More specifically, in the process defining an output option.
+#
+# Examples
+#
+#   define_fifo_opt "-o" "${fifoname}" "optlist"
+#
+# The function does not return any value
 define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 
 ########
+# Public: Defines a fifo option generator.
+#
+# $1 - Option name.
+# $2 - Name of fifo.
+# $3 - Name of variable that will store the information about the option to be added.
+#
+# This function should only be defined in one of the processes connected
+# by the FIFO. More specifically, in the process defining an output option.
+# Additionally, the function should only be called from an option generator.
+#
+# Examples
+#
+#   debasher::define_fifo_opt_generator "-o" "${fifoname}" "optlist"
+#
+# The function does not return any value
 debasher::define_fifo_opt_generator()
 {
     local opt=$1
@@ -749,6 +806,22 @@ debasher::define_fifo_opt_generator()
     debasher::define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
 }
 
+########
+# Public: Defines a fifo option generator.
+#
+# $1 - Option name.
+# $2 - Name of fifo.
+# $3 - Name of variable that will store the information about the option to be added.
+#
+# This function should only be defined in one of the processes connected
+# by the FIFO. More specifically, in the process defining an output option.
+# Additionally, the function should only be called from an option generator.
+#
+# Examples
+#
+#   define_fifo_opt_generator "-o" "${fifoname}" "optlist"
+#
+# The function does not return any value
 define_fifo_opt_generator() { debasher::define_fifo_opt_generator "$@"; }
 
 ########
@@ -833,22 +906,17 @@ debasher::define_cmdline_opt()
 define_cmdline_opt() { debasher::define_cmdline_opt "$@"; }
 
 ########
-debasher::define_cmdline_opt_wo_value()
-{
-    local cmdline=$1
-    local opt=$2
-    local varname=$3
-
-    # Get option
-    debasher::_check_opt_given "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
-
-    # Add option
-    debasher::define_opt_wo_value "$opt" "$varname"
-}
-
-define_cmdline_opt_wo_value() { debasher::define_cmdline_opt_wo_value "$@"; }
-
-########
+# Public: Defines process option only if it was given through the command-line.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_cmdline_opt_if_given "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
 debasher::define_cmdline_opt_if_given()
 {
     local cmdline=$1
@@ -865,10 +933,33 @@ debasher::define_cmdline_opt_if_given()
     fi
 }
 
+########
+# Public: Defines process option only if it was given through the command-line.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_opt_if_given "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
 define_cmdline_opt_if_given() { debasher::define_cmdline_opt_if_given "$@"; }
 
 ########
-debasher::define_cmdline_opt_wo_value_if_given()
+# Public: Defines flag only if it was given through the command-line.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_cmdline_flag_if_given "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
+debasher::define_cmdline_flag_if_given()
 {
     local cmdline=$1
     local opt=$2
@@ -881,6 +972,18 @@ debasher::define_cmdline_opt_wo_value_if_given()
     fi
 }
 
+########
+# Public: Defines process flag only if it was given through the command-line.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_flag_if_given "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
 define_cmdline_opt_wo_value_if_given() { debasher::define_cmdline_opt_wo_value_if_given "$@"; }
 
 ########
@@ -993,24 +1096,24 @@ debasher::_optlist_varname_is_correct()
 }
 
 ########
-debasher::define_opt_wo_value()
+debasher::define_flag()
 {
     local opt=$1
     local varname=$2
     local -n var_ref=$3
 
     # Check parameters
-    debasher::_optname_is_correct "${FUNCNAME}" "$opt" || return 1
+    debasher::_optname_is_correct "${FUNCNAME}" "$flag" || return 1
     debasher::_optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
 
     if [ -z "${var_ref}" ]; then
-        var_ref="${opt}"
+        var_ref="${flag}"
     else
-        var_ref="${var_ref}${DEBASHER_ARG_SEP}${opt}"
+        var_ref="${var_ref}${DEBASHER_ARG_SEP}${flag}"
     fi
 }
 
-define_opt_wo_value() { debasher::define_opt_wo_value "$@"; }
+define_flag() { debasher::define_flag "$@"; }
 
 ########
 # Public: Defines process option.
