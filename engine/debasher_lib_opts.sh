@@ -984,7 +984,7 @@ debasher::define_cmdline_flag_if_given()
 #   define_cmdline_flag_if_given "${cmdline}" "-o" "optlist"
 #
 # The function does not return any value
-define_cmdline_opt_wo_value_if_given() { debasher::define_cmdline_opt_wo_value_if_given "$@"; }
+define_cmdline_flag_if_given() { debasher::define_cmdline_flag_if_given "$@"; }
 
 ########
 # Public: Defines process option from the output of another process.
@@ -1096,6 +1096,17 @@ debasher::_optlist_varname_is_correct()
 }
 
 ########
+# Public: Defines process flag.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_flag "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
 debasher::define_flag()
 {
     local opt=$1
@@ -1113,6 +1124,18 @@ debasher::define_flag()
     fi
 }
 
+########
+# Public: Defines process flag.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_flag "${cmdline}" "-o" "optlist"
+#
+# The function does not return any value
 define_flag() { debasher::define_flag "$@"; }
 
 ########
