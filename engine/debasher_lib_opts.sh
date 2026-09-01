@@ -536,7 +536,7 @@ debasher::explain_flag()
 explain_flag() { debasher::explain_flag "$@"; }
 
 ########
-# Public: Identify option as a command-line option.
+# Public: Identify option/flag as a command-line option.
 #
 # $1 - Option name.
 #
@@ -559,7 +559,7 @@ debasher::opt_is_cmdline()
 }
 
 ########
-# Public: Identify option as a command-line option.
+# Public: Identify option/flag as a command-line option.
 #
 # $1 - Option name.
 #
@@ -571,7 +571,7 @@ debasher::opt_is_cmdline()
 opt_is_cmdline() { debasher::opt_is_cmdline "$@"; }
 
 ########
-# Public: Identify option as a non-mandatory command-line option.
+# Public: Identify option/flag as a non-mandatory command-line option.
 #
 # $1 - Option name.
 #
@@ -594,7 +594,7 @@ debasher::opt_is_non_mandatory_cmdline()
 }
 
 ########
-# Public: Identify option as a non-mandatory command-line option.
+# Public: Identify option/flag as a non-mandatory command-line option.
 #
 # $1 - Option name.
 #
