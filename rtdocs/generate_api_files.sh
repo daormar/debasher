@@ -18,7 +18,6 @@ done
 char_opts_symbols=("explain_cmdline_opt()" "explain_opt()" "opt_is_cmdline()" "opt_is_non_mandatory_cmdline()")
 rm -f rtdocs/source/api_characterize_opts_doc.md
 for name in "${char_opts_symbols[@]}"; do
-    echo "*** $name" >&2
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_characterize_opts_doc.md
 done
 
