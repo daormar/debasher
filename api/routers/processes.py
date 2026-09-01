@@ -75,7 +75,7 @@ _LIBEXEC_TOOL_TIMEOUT_SECS = 10
 def _run_preamble_tool(
     script_name: str,
     preamble: str,
-    workflow_env_vars: dict[str, str],
+    program_env_vars: dict[str, str],
     *extra_args: str,
 ) -> str | None:
     """
@@ -86,7 +86,7 @@ def _run_preamble_tool(
     These tools source the preamble in a DeBasher-aware Bash process, so
     DEBASHER_MOD_DIR (used to resolve any `load_debasher_module` calls
     the preamble makes) must be forwarded to them — taken from the
-    workflow's own envVars (what the workflow will actually run with),
+    program's own envVars (what the program will actually run with),
     not the webui server's environment.
     """
     script = paths.find_libexec_tool(script_name)
@@ -94,7 +94,7 @@ def _run_preamble_tool(
         return None
 
     env = os.environ.copy()
-    env["DEBASHER_MOD_DIR"] = workflow_env_vars.get("DEBASHER_MOD_DIR", "")
+    env["DEBASHER_MOD_DIR"] = program_env_vars.get("DEBASHER_MOD_DIR", "")
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".sh") as preamble_file:
         preamble_file.write(preamble)
@@ -117,12 +117,12 @@ def _run_preamble_tool(
     return result.stdout
 
 
-def _list_proc_names(preamble: str, workflow_env_vars: dict[str, str]) -> list[str]:
+def _list_proc_names(preamble: str, program_env_vars: dict[str, str]) -> list[str]:
     """
     Run debasher_list_proc_names on `preamble` and return the process
     names it prints (one per line).
     """
-    stdout = _run_preamble_tool(_LIST_PROC_NAMES_SCRIPT, preamble, workflow_env_vars)
+    stdout = _run_preamble_tool(_LIST_PROC_NAMES_SCRIPT, preamble, program_env_vars)
     if stdout is None:
         return []
 
@@ -152,7 +152,7 @@ class SuggestProcessNamesResponse(BaseModel):
 @router.post("/suggest-names", response_model=SuggestProcessNamesResponse)
 def suggest_process_names(request: SuggestProcessNamesRequest) -> SuggestProcessNamesResponse:
     """
-    Suggest process names based on the workflow's preamble, by sourcing
+    Suggest process names based on the program's preamble, by sourcing
     it (via libexec/debasher_list_proc_names) and listing the
     process-defining functions it declares.
     """
@@ -307,14 +307,14 @@ def _parse_proc_info_markdown(markdown: str) -> ProcessInfo:
 
 
 def _get_proc_info(
-    preamble: str, name: str, workflow_env_vars: dict[str, str]
+    preamble: str, name: str, program_env_vars: dict[str, str]
 ) -> ProcessInfo | None:
     """
-    Fetch `name`'s description, options, and code from the workflow's
+    Fetch `name`'s description, options, and code from the program's
     preamble via libexec/debasher_get_proc_info.
     """
     stdout = _run_preamble_tool(
-        _GET_PROC_INFO_SCRIPT, preamble, workflow_env_vars, name
+        _GET_PROC_INFO_SCRIPT, preamble, program_env_vars, name
     )
     if stdout is None:
         return None
@@ -344,7 +344,7 @@ class GetProcessInfoResponse(BaseModel):
 def get_process_info(request: GetProcessInfoRequest) -> GetProcessInfoResponse:
     """
     Fetch a previously-defined process's description, options, and code
-    from the workflow's preamble (via libexec/debasher_get_proc_info),
+    from the program's preamble (via libexec/debasher_get_proc_info),
     so the editor can pre-fill a new process created from a suggested
     (already-existing) name.
     """

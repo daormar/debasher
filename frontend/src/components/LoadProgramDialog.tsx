@@ -1,42 +1,42 @@
 import { useState } from "react";
-import type { Workflow } from "../models/workflow";
-import { importWorkflow } from "../storage/workflowStorage";
+import type { Program } from "../models/program";
+import { loadProgram } from "../storage/programStorage";
 
 interface Props {
-  onImport: (workflow: Workflow) => void;
+  onLoad: (program: Program) => void;
   onClose: () => void;
 }
 
-export default function ImportWorkflowDialog({ onImport, onClose }: Props) {
+export default function LoadProgramDialog({ onLoad, onClose }: Props) {
 
-  const [scriptPath, setScriptPath] =
+  const [inputDir, setInputDir] =
     useState("");
 
-  const [isImporting, setImporting] =
+  const [isLoading, setLoading] =
     useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
 
-  async function handleImport() {
+  async function handleLoad() {
 
-    if (!scriptPath.trim()) {
-      setError("Please enter a script path.");
+    if (!inputDir.trim()) {
+      setError("Please enter a program directory.");
       return;
     }
 
-    setImporting(true);
+    setLoading(true);
     setError(null);
 
     try {
-      const workflow = await importWorkflow(scriptPath.trim());
-      onImport(workflow);
+      const program = await loadProgram(inputDir.trim());
+      onLoad(program);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to import workflow."
+        err instanceof Error ? err.message : "Failed to load program."
       );
     } finally {
-      setImporting(false);
+      setLoading(false);
     }
 
   }
@@ -69,30 +69,30 @@ export default function ImportWorkflowDialog({ onImport, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Import workflow
+          Load program
         </h3>
 
         <label style={{ fontSize: 14 }}>
-          Script path (.sh)
+          Program directory
         </label>
 
         <input
 
           type="text"
 
-          value={scriptPath}
+          value={inputDir}
 
           onChange={(event) =>
-            setScriptPath(event.target.value)
+            setInputDir(event.target.value)
           }
 
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              handleImport();
+              handleLoad();
             }
           }}
 
-          placeholder="/path/to/workflow.sh"
+          placeholder="/path/to/program/directory"
 
           autoFocus
 
@@ -116,12 +116,12 @@ export default function ImportWorkflowDialog({ onImport, onClose }: Props) {
           }}
         >
 
-          <button onClick={onClose} disabled={isImporting}>
+          <button onClick={onClose} disabled={isLoading}>
             Cancel
           </button>
 
-          <button onClick={handleImport} disabled={isImporting}>
-            {isImporting ? "Importing..." : "Import"}
+          <button onClick={handleLoad} disabled={isLoading}>
+            {isLoading ? "Loading..." : "Load"}
           </button>
 
         </div>

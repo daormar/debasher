@@ -2,7 +2,7 @@ export type OptionDirection = "input" | "output";
 
 export type OptionDataType = "int" | "float" | "string";
 
-export interface WorkflowOption {
+export interface ProgramOption {
   id: string;
   label: string;
   direction: OptionDirection;
@@ -25,15 +25,15 @@ export function isValidOptionLabel(label: string): boolean {
 }
 
 /**
- * Command line options declared across all of a workflow's processes,
+ * Command line options declared across all of a program's processes,
  * deduplicated by label (the same option can be declared on more than
  * one process).
  */
 export function getCommandLineOptions(
-  processes: { options: WorkflowOption[] }[]
-): WorkflowOption[] {
+  processes: { options: ProgramOption[] }[]
+): ProgramOption[] {
 
-  const byLabel = new Map<string, WorkflowOption>();
+  const byLabel = new Map<string, ProgramOption>();
 
   for (const process of processes) {
     for (const option of process.options) {

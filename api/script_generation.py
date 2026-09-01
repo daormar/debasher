@@ -7,7 +7,7 @@ from .debasher_constants import (
     PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
     PROCESS_METHOD_EXEC_SUFFIX,
 )
-from .models import ComputationalSpecs, AdditionalSpecs, Workflow
+from .models import ComputationalSpecs, AdditionalSpecs, Program
 
 INDENT_WIDTH = 4
 INDENT = " " * INDENT_WIDTH
@@ -155,9 +155,9 @@ def _add_exec_func(process):
         return []
 
 
-def _add_program_function(workflow):
-    lines = [f"{workflow.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
-    for process in workflow.processes:
+def _add_program_function(program):
+    lines = [f"{program.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
+    for process in program.processes:
         comp_specs = _computational_specs_str(process.computationalSpecs)
         add_specs = _additional_specs_str(process.additionalSpecs)
         lines.append(
@@ -167,28 +167,28 @@ def _add_program_function(workflow):
     return lines
 
 
-def generate_script(workflow: Workflow) -> str:
+def generate_script(program: Program) -> str:
     """
-    Generate the contents of the <workflow.name>.sh file for `workflow`.
+    Generate the contents of the <program.name>.sh file for `program`.
 
-    Implement the actual translation from the Workflow model
-    (workflow.preamble, workflow.envVars, workflow.processes, workflow.edges,
-    workflow.executionOptions, workflow.workflowOptions, ...) into a debasher
+    Implement the actual translation from the Program model
+    (program.preamble, program.envVars, program.processes, program.edges,
+    program.executionOptions, program.programOptions, ...) into a debasher
     pipeline script.
     """
 
     lines = []
 
     # Add preamble
-    lines.extend(_add_preamble(workflow.preamble))
+    lines.extend(_add_preamble(program.preamble))
     lines.extend(["", ""])
 
-    # Add workflow description
-    lines.extend(_add_document_module_func(workflow.name, workflow.description))
+    # Add program description
+    lines.extend(_add_document_module_func(program.name, program.description))
     lines.extend(["", ""])
 
     # Add process functions
-    for process in workflow.processes:
+    for process in program.processes:
         lines.extend(_add_document_proc_func(process))
         lines.extend(["", ""])
 
@@ -205,6 +205,6 @@ def generate_script(workflow: Workflow) -> str:
         lines.extend(["", ""])
 
     # Add program function
-    lines.extend(_add_program_function(workflow))
+    lines.extend(_add_program_function(program))
 
     return "\n".join(lines) + "\n"

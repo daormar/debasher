@@ -1,23 +1,23 @@
 import { useMemo, useState } from "react";
 
 import { getCommandLineOptions } from "../models/option";
-import type { WorkflowOption } from "../models/option";
-import { useWorkflow } from "../store/WorkflowContext";
+import type { ProgramOption } from "../models/option";
+import { useProgram } from "../store/ProgramContext";
 
 interface Props {
   onClose: () => void;
 }
 
-export default function WorkflowOptionsEditor({ onClose }: Props) {
+export default function ProgramOptionsEditor({ onClose }: Props) {
 
   const {
-    workflow,
-    setWorkflowOptions,
-  } = useWorkflow();
+    program,
+    setProgramOptions,
+  } = useProgram();
 
   const options = useMemo(
-    () => getCommandLineOptions(workflow.processes),
-    [workflow.processes]
+    () => getCommandLineOptions(program.processes),
+    [program.processes]
   );
 
   const mandatoryOptions = useMemo(
@@ -37,7 +37,7 @@ export default function WorkflowOptionsEditor({ onClose }: Props) {
 
       for (const option of options) {
         initial[option.label] =
-          workflow.workflowOptions[option.label] ?? option.value;
+          program.programOptions[option.label] ?? option.value;
       }
 
       return initial;
@@ -45,11 +45,11 @@ export default function WorkflowOptionsEditor({ onClose }: Props) {
     });
 
   function handleSave() {
-    setWorkflowOptions(draft);
+    setProgramOptions(draft);
     onClose();
   }
 
-  function renderOption(option: WorkflowOption) {
+  function renderOption(option: ProgramOption) {
 
     return (
 
@@ -120,7 +120,7 @@ export default function WorkflowOptionsEditor({ onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Workflow options
+          Program options
         </h3>
 
         {options.length === 0 ? (

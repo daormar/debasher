@@ -4,9 +4,9 @@ interface Props {
 }
 
 const MESSAGE: Record<Props["phase"], string> = {
-  running: "Running workflow…",
-  finished: "Workflow finished.",
-  unfinished: "Workflow finished with errors.",
+  running: "Running program…",
+  finished: "Program finished.",
+  unfinished: "Program finished with errors.",
 };
 
 export default function RunStatusIndicator({ phase, onClose }: Props) {

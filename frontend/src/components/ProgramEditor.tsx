@@ -1,12 +1,12 @@
 import Toolbar from "./Toolbar";
-import WorkflowCanvas from "./WorkflowCanvas";
+import ProgramCanvas from "./ProgramCanvas";
 import Inspector from "./Inspector";
 
 interface Props {
   onClose: () => void;
 }
 
-export default function WorkflowEditor({ onClose }: Props) {
+export default function ProgramEditor({ onClose }: Props) {
 
   return (
 
@@ -36,7 +36,7 @@ export default function WorkflowEditor({ onClose }: Props) {
           }}
         >
 
-          <WorkflowCanvas />
+          <ProgramCanvas />
 
         </div>
 

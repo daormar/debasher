@@ -4,31 +4,31 @@ import type {
   Node,
 } from "@xyflow/react";
 
-import type { Workflow } from "../models/workflow";
-import type { WorkflowProcess } from "../models/process";
-import type { WorkflowEdge } from "../models/edge";
+import type { Program } from "../models/program";
+import type { ProgramProcess } from "../models/process";
+import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
 
 /**
  * Data stored inside every React Flow node.
  */
-export interface WorkflowProcessData {
-  process: WorkflowProcess;
+export interface ProgramProcessData {
+  process: ProgramProcess;
   [key: string]: unknown;
 }
 
 /**
- * Converts the workflow processes into React Flow nodes.
+ * Converts the program processes into React Flow nodes.
  */
-export function workflowToReactFlowNodes(
-  workflow: Workflow
-): Node<WorkflowProcessData>[] {
+export function programToReactFlowNodes(
+  program: Program
+): Node<ProgramProcessData>[] {
 
-  return workflow.processes.map(process => ({
+  return program.processes.map(process => ({
 
     id: process.id,
 
-    type: "workflow",
+    type: "program",
 
     position: process.position,
 
@@ -41,13 +41,13 @@ export function workflowToReactFlowNodes(
 }
 
 /**
- * Converts workflow edges into React Flow edges.
+ * Converts program edges into React Flow edges.
  */
-export function workflowToReactFlowEdges(
-  workflow: Workflow
+export function programToReactFlowEdges(
+  program: Program
 ): Edge[] {
 
-  return workflow.edges.map(edge => ({
+  return program.edges.map(edge => ({
 
     id: edge.id,
 
@@ -68,8 +68,8 @@ export function workflowToReactFlowEdges(
  * option to an input option, and the two options must belong to
  * different processes.
  */
-export function isValidWorkflowConnection(
-  workflow: Workflow,
+export function isValidProgramConnection(
+  program: Program,
   connection: Connection | Edge
 ): boolean {
 
@@ -85,8 +85,8 @@ export function isValidWorkflowConnection(
     return false;
   }
 
-  const sourceProcess = workflow.processes.find(process => process.id === source);
-  const targetProcess = workflow.processes.find(process => process.id === target);
+  const sourceProcess = program.processes.find(process => process.id === source);
+  const targetProcess = program.processes.find(process => process.id === target);
 
   const sourceOptionDef = sourceProcess?.options.find(
     option => option.id === sourceHandle
@@ -105,11 +105,11 @@ export function isValidWorkflowConnection(
 
 /**
  * Converts a React Flow connection into
- * our domain WorkflowEdge.
+ * our domain ProgramEdge.
  */
-export function connectionToWorkflowEdge(
+export function connectionToProgramEdge(
   connection: Connection
-): WorkflowEdge | null {
+): ProgramEdge | null {
 
   if (
     !connection.source ||

@@ -4,13 +4,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .routers import execution, processes, workflows
+from .routers import execution, processes, programs
 
-app = FastAPI(title="Workflow API")
+app = FastAPI(title="Program API")
 
 # API routes must be registered before mounting static files,
 # otherwise the static mount at "/" would shadow them.
-app.include_router(workflows.router)
+app.include_router(programs.router)
 app.include_router(processes.router)
 app.include_router(execution.router)
 

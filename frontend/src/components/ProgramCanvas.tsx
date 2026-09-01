@@ -14,44 +14,44 @@ import {
   type Node,
 } from "@xyflow/react";
 
-import type { WorkflowProcessData } from "../adapters/reactFlowAdapter";
+import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 import {
-  workflowToReactFlowNodes,
-  workflowToReactFlowEdges,
-  connectionToWorkflowEdge,
-  isValidWorkflowConnection,
+  programToReactFlowNodes,
+  programToReactFlowEdges,
+  connectionToProgramEdge,
+  isValidProgramConnection,
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
 import RunStatusIndicator from "./RunStatusIndicator";
 
-export default function WorkflowCanvas() {
+export default function ProgramCanvas() {
   const {
-    workflow,
+    program,
     selectProcess,
     moveProcess,
     removeProcess,
     connect,
     disconnect,
     runPhase,
-    dismissWorkflowRun,
-  } = useWorkflow();
+    dismissProgramRun,
+  } = useProgram();
 
-  // "Business" nodes: recalculated whenever workflow changes.
+  // "Business" nodes: recalculated whenever program changes.
   const nodes = useMemo(
-    () => workflowToReactFlowNodes(workflow),
-    [workflow]
+    () => programToReactFlowNodes(program),
+    [program]
   );
 
   const edges = useMemo(
-    () => workflowToReactFlowEdges(workflow),
-    [workflow]
+    () => programToReactFlowEdges(program),
+    [program]
   );
 
   const nodeTypes = useMemo(
     () => ({
-      workflow: ProcessNode,
+      program: ProcessNode,
     }),
     []
   );
@@ -65,7 +65,7 @@ export default function WorkflowCanvas() {
   // an option is added/removed/edited, never when a process is moved.
   const structuralKey = useMemo(
     () =>
-      workflow.processes
+      program.processes
         .map(
           process =>
             `${process.id}:${process.name}:${process.options
@@ -73,10 +73,10 @@ export default function WorkflowCanvas() {
               .join(",")}`
         )
         .join("|"),
-    [workflow.processes]
+    [program.processes]
   );
 
-  // Syncs localNodes with workflow ONLY on structural changes,
+  // Syncs localNodes with program ONLY on structural changes,
   // always preserving the position React Flow already has (so we
   // don't overwrite it mid-drag).
   useEffect(() => {
@@ -107,14 +107,14 @@ export default function WorkflowCanvas() {
   // is otherwise a controlled prop with no change handler.
   const [localEdges, setLocalEdges] = useState(edges);
 
-  // Resyncs localEdges whenever the workflow-derived edges change
+  // Resyncs localEdges whenever the program-derived edges change
   // (edge added/removed), discarding any local-only selection state.
   useEffect(() => {
     setLocalEdges(edges);
   }, [edges]);
 
   const onNodesChange = useCallback(
-     (changes: NodeChange<Node<WorkflowProcessData>>[]) => {
+     (changes: NodeChange<Node<ProgramProcessData>>[]) => {
       // 1. Update the array React Flow needs, right away.
       setLocalNodes(current => applyNodeChanges(changes, current));
 
@@ -130,7 +130,7 @@ export default function WorkflowCanvas() {
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      const edge = connectionToWorkflowEdge(connection);
+      const edge = connectionToProgramEdge(connection);
       if (edge) {
         connect(edge);
       }
@@ -140,8 +140,8 @@ export default function WorkflowCanvas() {
 
   const isValidConnection = useCallback(
     (connection: Connection | Edge) =>
-      isValidWorkflowConnection(workflow, connection),
-    [workflow]
+      isValidProgramConnection(program, connection),
+    [program]
   );
 
   const onEdgesChange = useCallback(
@@ -152,7 +152,7 @@ export default function WorkflowCanvas() {
   );
 
   const onNodesDelete = useCallback(
-    (deletedNodes: Node<WorkflowProcessData>[]) => {
+    (deletedNodes: Node<ProgramProcessData>[]) => {
       deletedNodes.forEach(node => removeProcess(node.id));
     },
     [removeProcess]
@@ -201,7 +201,7 @@ export default function WorkflowCanvas() {
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
             <RunStatusIndicator
               phase={runPhase}
-              onClose={dismissWorkflowRun}
+              onClose={dismissProgramRun}
             />
           </Panel>
         )}

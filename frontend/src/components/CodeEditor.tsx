@@ -1,18 +1,18 @@
 import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 import { languageExtension } from "./codeLanguages";
-import type { WorkflowProcess } from "../models/process";
+import type { ProgramProcess } from "../models/process";
 
 interface Props {
-  process: WorkflowProcess;
+  process: ProgramProcess;
   onClose: () => void;
 }
 
 export default function CodeEditor({ process, onClose }: Props) {
 
-  const { setProcessCode } = useWorkflow();
+  const { setProcessCode } = useProgram();
 
   const [draft, setDraft] =
     useState(process.code);

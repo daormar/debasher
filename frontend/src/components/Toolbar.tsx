@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 import EnvVarsEditor from "./EnvVarsEditor";
 import PreambleEditor from "./PreambleEditor";
-import WorkflowDescriptionEditor from "./WorkflowDescriptionEditor";
+import ProgramDescriptionEditor from "./ProgramDescriptionEditor";
 import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
 import RunMenu from "./RunMenu";
@@ -15,9 +15,9 @@ interface Props {
 export default function Toolbar({ onClose }: Props) {
 
   const {
-    workflow,
+    program,
     addProcess,
-  } = useWorkflow();
+  } = useProgram();
 
   const [isPreambleOpen, setPreambleOpen] =
     useState(false);
@@ -53,7 +53,7 @@ export default function Toolbar({ onClose }: Props) {
           marginRight: 8,
         }}
       >
-        {workflow.name}
+        {program.name}
       </strong>
 
       <button
@@ -84,9 +84,9 @@ export default function Toolbar({ onClose }: Props) {
         <ProcessNameDialog
           title="Add process"
           confirmLabel="Add"
-          existingNames={workflow.processes.map(process => process.name)}
-          preamble={workflow.preamble}
-          envVars={workflow.envVars}
+          existingNames={program.processes.map(process => process.name)}
+          preamble={program.preamble}
+          envVars={program.envVars}
           onConfirm={addProcess}
           onClose={() => setNewProcessOpen(false)}
         />
@@ -99,7 +99,7 @@ export default function Toolbar({ onClose }: Props) {
       )}
 
       {isDescriptionOpen && (
-        <WorkflowDescriptionEditor
+        <ProgramDescriptionEditor
           onClose={() => setDescriptionOpen(false)}
         />
       )}

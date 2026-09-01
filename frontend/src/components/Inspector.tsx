@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 import { PROCESS_LANGUAGES } from "./codeLanguages";
 import CodeEditor from "./CodeEditor";
 import OptionEditor from "./OptionEditor";
@@ -17,7 +17,7 @@ import { isValidOptionLabel } from "../models/option";
 export default function Inspector() {
 
   const {
-    workflow,
+    program,
     selectedProcess,
     renameProcess,
     applyProcessInfo,
@@ -26,7 +26,7 @@ export default function Inspector() {
     removeOption,
     setProcessLanguage,
     setOptionsHandler,
-  } = useWorkflow();
+  } = useProgram();
 
 
   const [optionLabel, setOptionLabel] =
@@ -149,11 +149,11 @@ export default function Inspector() {
           title="Change process name"
           confirmLabel="Change"
           initialName={selectedProcess.name}
-          existingNames={workflow.processes
+          existingNames={program.processes
             .filter(process => process.id !== selectedProcess.id)
             .map(process => process.name)}
-          preamble={workflow.preamble}
-          envVars={workflow.envVars}
+          preamble={program.preamble}
+          envVars={program.envVars}
           onConfirm={(name, info) => {
             renameProcess(selectedProcess.id, name);
             if (info) {

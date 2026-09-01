@@ -1,24 +1,24 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 import type {
-  WorkflowOption,
+  ProgramOption,
   OptionDataType,
 } from "../models/option";
 import { getOptionDirection, isValidOptionLabel } from "../models/option";
 
 interface Props {
   processId: string;
-  option: WorkflowOption;
+  option: ProgramOption;
   manualMode: boolean;
   onClose: () => void;
 }
 
 export default function OptionEditor({ processId, option, manualMode, onClose }: Props) {
 
-  const { workflow, updateOption } = useWorkflow();
+  const { program, updateOption } = useProgram();
 
-  const connectingEdge = workflow.edges.find(
+  const connectingEdge = program.edges.find(
     edge =>
       edge.targetProcessId === processId &&
       edge.targetOptionId === option.id
@@ -30,7 +30,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       return null;
     }
 
-    const sourceProcess = workflow.processes.find(
+    const sourceProcess = program.processes.find(
       process => process.id === connectingEdge.sourceProcessId
     );
 

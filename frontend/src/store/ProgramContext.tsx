@@ -8,9 +8,9 @@ import {
   type ReactNode,
 } from "react";
 
-import type { ExecutionOptions, Workflow } from "../models/workflow";
+import type { ExecutionOptions, Program } from "../models/program";
 import type {
-  WorkflowProcess,
+  ProgramProcess,
   ProcessLanguage,
   ComputationalSpecs,
   AdditionalSpecs,
@@ -19,44 +19,44 @@ import type {
   ProcessInfoOption,
 } from "../models/process";
 import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
-import type { WorkflowOption } from "../models/option";
+import type { ProgramOption } from "../models/option";
 import { getOptionDirection } from "../models/option";
-import type { WorkflowEdge } from "../models/edge";
+import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
-import { saveWorkflow } from "../storage/workflowStorage";
-import type { WorkflowState } from "../api/executionApi";
+import { saveProgram } from "../storage/programStorage";
+import type { ProgramState } from "../api/executionApi";
 import {
-  getWorkflowState,
-  runWorkflow,
-  stopWorkflow,
+  getProgramState,
+  runProgram,
+  stopProgram,
 } from "../api/executionApi";
 
 // How often to poll for a background run's completion, in milliseconds.
 const RUN_POLL_INTERVAL_MS = 5000;
 
-export type WorkflowRunPhase = "idle" | "running" | "finished" | "unfinished";
+export type ProgramRunPhase = "idle" | "running" | "finished" | "unfinished";
 
-interface WorkflowContextType {
-  workflow: Workflow;
+interface ProgramContextType {
+  program: Program;
 
-  selectedProcess: WorkflowProcess | null;
+  selectedProcess: ProgramProcess | null;
 
   selectProcess: (processId: string | null) => void;
 
   save: (outputDir: string) => Promise<void>;
 
-  runPhase: WorkflowRunPhase;
+  runPhase: ProgramRunPhase;
 
-  // Launches "Run workflow" in the background; throws (e.g. if a run
+  // Launches "Run program" in the background; throws (e.g. if a run
   // is already in progress) rather than resolving with an error, so
   // callers can show it inline. Resolves once the run has launched —
   // not once it's finished, see runPhase for that.
-  startWorkflowRun: () => Promise<void>;
+  startProgramRun: () => Promise<void>;
 
   // The running-progress indicator's Close button: stops the run if
   // it's still going, otherwise just dismisses the finished/unfinished
   // notice.
-  dismissWorkflowRun: () => void;
+  dismissProgramRun: () => void;
 
   addProcess: (name: string, info: ProcessInfo | null) => void;
 
@@ -86,8 +86,8 @@ interface WorkflowContextType {
     executionOptions: ExecutionOptions
   ) => void;
 
-  setWorkflowOptions: (
-    workflowOptions: Record<string, string>
+  setProgramOptions: (
+    programOptions: Record<string, string>
   ) => void;
 
   removeProcess: (
@@ -142,7 +142,7 @@ interface WorkflowContextType {
   updateOption: (
     processId: string,
     optionId: string,
-    changes: Partial<Omit<WorkflowOption, "id">>
+    changes: Partial<Omit<ProgramOption, "id">>
   ) => void;
 
   removeOption: (
@@ -151,7 +151,7 @@ interface WorkflowContextType {
   ) => void;
 
   connect: (
-    edge: WorkflowEdge
+    edge: ProgramEdge
   ) => void;
 
   disconnect: (
@@ -159,7 +159,7 @@ interface WorkflowContextType {
   ) => void;
 }
 
-function toWorkflowOption(info: ProcessInfoOption): WorkflowOption {
+function toProgramOption(info: ProcessInfoOption): ProgramOption {
   return {
     id: crypto.randomUUID(),
     direction: getOptionDirection(info.label),
@@ -173,16 +173,16 @@ function toWorkflowOption(info: ProcessInfoOption): WorkflowOption {
   };
 }
 
-const WorkflowContext =
-  createContext<WorkflowContextType | null>(null);
+const ProgramContext =
+  createContext<ProgramContextType | null>(null);
 
 /**
  * Makes each option's `value` reflect its incoming edge (if any): connected
  * options get the "[process;option]" reference, others are cleared of any
- * stale one. Self-heals workflows whose edges/values fell out of sync, e.g.
+ * stale one. Self-heals programs whose edges/values fell out of sync, e.g.
  * a file saved before this syncing existed, or a hand-edited JSON file.
  */
-function normalizeConnectedOptionValues(source: Workflow): Workflow {
+function normalizeConnectedOptionValues(source: Program): Program {
 
   const connectedValueByOptionKey = new Map<string, string>();
 
@@ -238,33 +238,33 @@ function normalizeConnectedOptionValues(source: Workflow): Workflow {
 
 interface Props {
   children: ReactNode;
-  initialWorkflow: Workflow;
+  initialProgram: Program;
 }
 
-export function WorkflowProvider({
+export function ProgramProvider({
   children,
-  initialWorkflow,
+  initialProgram,
 }: Props) {
 
-  const [workflow, setWorkflowRaw] =
-    useState<Workflow>(() => normalizeConnectedOptionValues(initialWorkflow));
+  const [program, setProgramRaw] =
+    useState<Program>(() => normalizeConnectedOptionValues(initialProgram));
 
   // Re-derives every connected option's "[process;option]" value from the
   // current edges/names on every update, so renaming a process or a
   // connected option's label can't leave a stale reference behind in what
   // gets saved/generated (see normalizeConnectedOptionValues above).
-  function setWorkflow(updater: (current: Workflow) => Workflow) {
-    setWorkflowRaw(current => normalizeConnectedOptionValues(updater(current)));
+  function setProgram(updater: (current: Program) => Program) {
+    setProgramRaw(current => normalizeConnectedOptionValues(updater(current)));
   }
 
   async function save(outputDir: string) {
-    const updated = { ...workflow, homeDir: outputDir };
-    await saveWorkflow(updated, outputDir);
-    setWorkflow(() => updated);
+    const updated = { ...program, homeDir: outputDir };
+    await saveProgram(updated, outputDir);
+    setProgram(() => updated);
   }
 
   const [runPhase, setRunPhase] =
-    useState<WorkflowRunPhase>("idle");
+    useState<ProgramRunPhase>("idle");
 
   const pollTimerRef =
     useRef<number | null>(null);
@@ -272,15 +272,15 @@ export function WorkflowProvider({
   const beforeUnloadHandlerRef =
     useRef<(() => void) | null>(null);
 
-  const runningWorkflowRef =
-    useRef<Workflow | null>(null);
+  const runningProgramRef =
+    useRef<Program | null>(null);
 
   // Mirrors runPhase for the unmount cleanup below, which — since its
   // effect has an empty dependency array and only runs once, on
   // unmount — would otherwise only ever see the phase from initial
   // mount rather than the current one.
   const runPhaseRef =
-    useRef<WorkflowRunPhase>(runPhase);
+    useRef<ProgramRunPhase>(runPhase);
 
   useEffect(() => {
     runPhaseRef.current = runPhase;
@@ -302,14 +302,14 @@ export function WorkflowProvider({
 
   // Leaving the editor (the toolbar's "Close" button) unmounts this
   // provider without ever unloading the page, so beforeunload above
-  // doesn't fire — stop a still-running workflow here too, or it's
+  // doesn't fire — stop a still-running program here too, or it's
   // left running with nothing left to track or stop it.
   useEffect(() => {
     return () => {
       stopRunPolling();
       if (runPhaseRef.current === "running") {
-        const runningWorkflow = runningWorkflowRef.current ?? workflow;
-        stopWorkflow(runningWorkflow).catch(() => {
+        const runningProgram = runningProgramRef.current ?? program;
+        stopProgram(runningProgram).catch(() => {
           // Best-effort — the UI tracking this run is already gone.
         });
       }
@@ -317,13 +317,13 @@ export function WorkflowProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function startRunPolling(runningWorkflow: Workflow) {
+  function startRunPolling(runningProgram: Program) {
 
-    runningWorkflowRef.current = runningWorkflow;
+    runningProgramRef.current = runningProgram;
     setRunPhase("running");
 
     const beforeUnloadHandler = () => {
-      const blob = new Blob([JSON.stringify(runningWorkflow)], {
+      const blob = new Blob([JSON.stringify(runningProgram)], {
         type: "application/json",
       });
       navigator.sendBeacon("/api/execution/stop", blob);
@@ -334,10 +334,10 @@ export function WorkflowProvider({
 
     pollTimerRef.current = window.setInterval(async () => {
 
-      let state: WorkflowState;
+      let state: ProgramState;
 
       try {
-        state = await getWorkflowState(runningWorkflow);
+        state = await getProgramState(runningProgram);
       } catch {
         return; // transient failure — try again next tick
       }
@@ -351,25 +351,25 @@ export function WorkflowProvider({
 
   }
 
-  async function startWorkflowRun() {
+  async function startProgramRun() {
 
-    const state = await getWorkflowState(workflow);
+    const state = await getProgramState(program);
 
     if (state === "in-progress") {
       throw new Error("A run is already in progress for this output directory.");
     }
 
-    await runWorkflow(workflow);
-    startRunPolling(workflow);
+    await runProgram(program);
+    startRunPolling(program);
 
   }
 
-  function dismissWorkflowRun() {
+  function dismissProgramRun() {
 
     if (runPhase === "running") {
       stopRunPolling();
-      const runningWorkflow = runningWorkflowRef.current ?? workflow;
-      stopWorkflow(runningWorkflow).catch(() => {
+      const runningProgram = runningProgramRef.current ?? program;
+      stopProgram(runningProgram).catch(() => {
         // Best-effort — nothing meaningful left to show once the
         // running indicator has already been dismissed.
       });
@@ -390,7 +390,7 @@ export function WorkflowProvider({
 
   function addProcess(name: string, info: ProcessInfo | null) {
 
-    const process: WorkflowProcess = {
+    const process: ProgramProcess = {
 
       id: crypto.randomUUID(),
 
@@ -403,7 +403,7 @@ export function WorkflowProvider({
         y: 100,
       },
 
-      options: info ? info.options.map(toWorkflowOption) : [],
+      options: info ? info.options.map(toProgramOption) : [],
 
       optionsHandler: {
         mode: "standard",
@@ -421,7 +421,7 @@ export function WorkflowProvider({
 
     };
 
-    setWorkflow(current => ({
+    setProgram(current => ({
       ...current,
       processes: [...current.processes, process],
     }));
@@ -433,7 +433,7 @@ export function WorkflowProvider({
     info: ProcessInfo
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -442,7 +442,7 @@ export function WorkflowProvider({
           ? {
               ...process,
               description: info.description,
-              options: info.options.map(toWorkflowOption),
+              options: info.options.map(toProgramOption),
               language: info.language,
               code: info.code,
             }
@@ -457,7 +457,7 @@ export function WorkflowProvider({
     description: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
       ...current,
       description,
     }));
@@ -468,7 +468,7 @@ export function WorkflowProvider({
     preamble: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
       ...current,
       preamble,
     }));
@@ -480,7 +480,7 @@ export function WorkflowProvider({
     value: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
       ...current,
       envVars: { ...current.envVars, [name]: value },
     }));
@@ -491,7 +491,7 @@ export function WorkflowProvider({
     outputDir: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
       ...current,
       outputDir,
     }));
@@ -502,20 +502,20 @@ export function WorkflowProvider({
     executionOptions: ExecutionOptions
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
       ...current,
       executionOptions,
     }));
 
   }
 
-  function setWorkflowOptions(
-    workflowOptions: Record<string, string>
+  function setProgramOptions(
+    programOptions: Record<string, string>
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
       ...current,
-      workflowOptions,
+      programOptions,
     }));
 
   }
@@ -524,7 +524,7 @@ export function WorkflowProvider({
     processId: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -552,7 +552,7 @@ export function WorkflowProvider({
     position: Position
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -571,7 +571,7 @@ export function WorkflowProvider({
     name: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -590,7 +590,7 @@ export function WorkflowProvider({
     description: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -609,7 +609,7 @@ export function WorkflowProvider({
     language: ProcessLanguage
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -628,7 +628,7 @@ export function WorkflowProvider({
     code: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -647,7 +647,7 @@ export function WorkflowProvider({
     computationalSpecs: ComputationalSpecs
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -666,7 +666,7 @@ export function WorkflowProvider({
     additionalSpecs: AdditionalSpecs
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -685,7 +685,7 @@ export function WorkflowProvider({
     optionsHandler: OptionsHandler
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -704,7 +704,7 @@ export function WorkflowProvider({
     label: string
   ) {
 
-    const option: WorkflowOption = {
+    const option: ProgramOption = {
 
       id: crypto.randomUUID(),
 
@@ -726,7 +726,7 @@ export function WorkflowProvider({
 
     };
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -749,10 +749,10 @@ export function WorkflowProvider({
   function updateOption(
     processId: string,
     optionId: string,
-    changes: Partial<Omit<WorkflowOption, "id">>
+    changes: Partial<Omit<ProgramOption, "id">>
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -778,7 +778,7 @@ export function WorkflowProvider({
     optionId: string
   ) {
 
-    setWorkflow(current => ({
+    setProgram(current => ({
 
       ...current,
 
@@ -798,11 +798,11 @@ export function WorkflowProvider({
   }
 
   function setOptionValue(
-    processes: WorkflowProcess[],
+    processes: ProgramProcess[],
     processId: string,
     optionId: string,
     value: string
-  ): WorkflowProcess[] {
+  ): ProgramProcess[] {
 
     return processes.map(process =>
       process.id === processId
@@ -820,10 +820,10 @@ export function WorkflowProvider({
   }
 
   function connect(
-    edge: WorkflowEdge
+    edge: ProgramEdge
   ) {
 
-    setWorkflow(current => {
+    setProgram(current => {
 
       const sourceProcess = current.processes.find(
         process => process.id === edge.sourceProcessId
@@ -859,7 +859,7 @@ export function WorkflowProvider({
     edgeId: string
   ) {
 
-    setWorkflow(current => {
+    setProgram(current => {
 
       const removedEdge = current.edges.find(
         e => e.id === edgeId
@@ -887,13 +887,13 @@ export function WorkflowProvider({
   }
 
   const selectedProcess =
-    workflow.processes.find(
+    program.processes.find(
       p => p.id === selectedProcessId
     ) ?? null;
 
   const value = useMemo(() => ({
 
-    workflow,
+    program,
 
     selectedProcess,
 
@@ -903,9 +903,9 @@ export function WorkflowProvider({
 
     runPhase,
 
-    startWorkflowRun,
+    startProgramRun,
 
-    dismissWorkflowRun,
+    dismissProgramRun,
 
     addProcess,
 
@@ -921,7 +921,7 @@ export function WorkflowProvider({
 
     setExecutionOptions,
 
-    setWorkflowOptions,
+    setProgramOptions,
 
     removeProcess,
 
@@ -952,30 +952,30 @@ export function WorkflowProvider({
     disconnect,
 
   }), [
-    workflow,
+    program,
     selectedProcess,
     runPhase,
   ]);
 
   return (
-    <WorkflowContext.Provider
+    <ProgramContext.Provider
       value={value}
     >
       {children}
-    </WorkflowContext.Provider>
+    </ProgramContext.Provider>
   );
 
 }
 
-export function useWorkflow() {
+export function useProgram() {
 
   const context =
-    useContext(WorkflowContext);
+    useContext(ProgramContext);
 
   if (!context) {
 
     throw new Error(
-      "useWorkflow must be used inside WorkflowProvider."
+      "useProgram must be used inside ProgramProvider."
     );
 
   }

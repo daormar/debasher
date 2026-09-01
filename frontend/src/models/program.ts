@@ -1,5 +1,5 @@
-import type { WorkflowEdge } from "./edge";
-import type { WorkflowProcess } from "./process";
+import type { ProgramEdge } from "./edge";
+import type { ProgramProcess } from "./process";
 
 export interface ExecutionOptions {
 
@@ -7,7 +7,7 @@ export interface ExecutionOptions {
 
 }
 
-export interface Workflow {
+export interface Program {
 
   id: string;
 
@@ -19,7 +19,7 @@ export interface Workflow {
 
   envVars: Record<string, string>;
 
-  // Directory the workflow's own definition (workflow.json) and .sh
+  // Directory the program's own definition (program.json) and .sh
   // script are saved to (via the toolbar's "Save" button) — distinct
   // from outputDir, which is where a run's results are written.
   homeDir: string;
@@ -28,10 +28,10 @@ export interface Workflow {
 
   executionOptions: ExecutionOptions;
 
-  workflowOptions: Record<string, string>;
+  programOptions: Record<string, string>;
 
-  processes: WorkflowProcess[];
+  processes: ProgramProcess[];
 
-  edges: WorkflowEdge[];
+  edges: ProgramEdge[];
 
 }

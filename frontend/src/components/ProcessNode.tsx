@@ -8,11 +8,11 @@ import type {
   Node,
 } from "@xyflow/react";
 
-import type { WorkflowProcessData } from "../adapters/reactFlowAdapter";
+import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
 
 export default function ProcessNode({
   data,
-}: NodeProps<Node<WorkflowProcessData>>) {
+}: NodeProps<Node<ProgramProcessData>>) {
 
   const process = data.process;
 

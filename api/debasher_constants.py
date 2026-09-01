@@ -53,7 +53,7 @@ MODULE_SHARED_DIRS_SUFFIX = "_shared_dirs"
 MODULE_PROGRAM_SUFFIX = "_program"
 
 # Mirrors DEBASHER_MODULE_METHODS: suffixes DeBasher appends to a
-# module (workflow) name to build its module-level function names.
+# module (program) name to build its module-level function names.
 RESERVED_MODULE_METHOD_SUFFIXES = [
     MODULE_DOCUMENT_SUFFIX,
     MODULE_SHARED_DIRS_SUFFIX,

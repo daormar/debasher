@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { listSchedulers } from "../api/executionApi";
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 
 interface Props {
   onClose: () => void;
@@ -10,12 +10,12 @@ interface Props {
 export default function ExecutionOptionsEditor({ onClose }: Props) {
 
   const {
-    workflow,
+    program,
     setExecutionOptions,
-  } = useWorkflow();
+  } = useProgram();
 
   const [scheduler, setScheduler] =
-    useState(workflow.executionOptions.scheduler || "BUILTIN");
+    useState(program.executionOptions.scheduler || "BUILTIN");
 
   const [schedulers, setSchedulers] =
     useState<string[]>([]);

@@ -1,0 +1,109 @@
+import pydantic
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from .. import persistence
+from ..models import Program
+
+router = APIRouter(prefix="/api/programs", tags=["programs"])
+
+
+class SaveProgramRequest(BaseModel):
+    outputDir: str
+    program: Program
+
+
+class SaveProgramResponse(BaseModel):
+    path: str
+    scriptPath: str
+
+
+class LoadProgramRequest(BaseModel):
+    inputDir: str
+
+
+class ImportProgramRequest(BaseModel):
+    scriptPath: str
+    program: Program
+
+
+@router.post("/save", response_model=SaveProgramResponse)
+def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
+    """
+    Serialize the whole program into a hidden directory inside
+    `request.outputDir`, creating the output directory if needed.
+    """
+    if not request.outputDir.strip():
+        raise HTTPException(status_code=400, detail="outputDir must not be empty")
+
+    program_path = persistence.save_program(request.outputDir, request.program)
+
+    try:
+        script_path = persistence.save_script(request.outputDir, request.program)
+    except NotImplementedError as err:
+        raise HTTPException(status_code=501, detail=str(err))
+
+    return SaveProgramResponse(path=str(program_path), scriptPath=str(script_path))
+
+
+@router.post("/load", response_model=Program)
+def load_program_from_dir(request: LoadProgramRequest) -> Program:
+    """
+    Read a program previously saved into `request.inputDir` via `/save`.
+    """
+    if not request.inputDir.strip():
+        raise HTTPException(status_code=400, detail="inputDir must not be empty")
+
+    try:
+        return persistence.load_program(request.inputDir)
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+    except pydantic.ValidationError as err:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid program data in {request.inputDir!r}: {err}"
+        )
+
+
+@router.post("/import", response_model=Program)
+def import_program_from_script(request: ImportProgramRequest) -> Program:
+    """
+    Import a program from a Bash script.
+
+    Stub: just echoes back the (empty) program the frontend sent,
+    ignoring the script's contents.
+
+    TODO: replace this with a real call into core/ that parses
+    `request.scriptPath` into a Program, e.g.:
+        return core.import_program(request.scriptPath)
+    """
+    if not request.scriptPath.strip():
+        raise HTTPException(status_code=400, detail="scriptPath must not be empty")
+
+    try:
+        persistence.resolve_script_path(request.scriptPath)
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+
+    return request.program
+
+
+@router.get("/{program_id}", response_model=Program)
+def get_program(program_id: str) -> Program:
+    """
+    Load a program by id.
+
+    TODO: replace this stub with a real call into core/, e.g.:
+        return core.load_program(program_id)
+    """
+    raise HTTPException(status_code=501, detail="Not implemented yet")
+
+
+@router.put("/{program_id}")
+def save_program(program_id: str, program: Program) -> dict[str, str]:
+    """
+    Persist a program.
+
+    TODO: replace this stub with a real call into core/, e.g.:
+        core.save_program(program_id, program)
+    """
+    raise HTTPException(status_code=501, detail="Not implemented yet")

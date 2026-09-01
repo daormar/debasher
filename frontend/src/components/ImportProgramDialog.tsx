@@ -1,26 +1,43 @@
 import { useState } from "react";
+import type { Program } from "../models/program";
+import { importProgram } from "../storage/programStorage";
 
 interface Props {
-  onCreate: (name: string) => void;
+  onImport: (program: Program) => void;
   onClose: () => void;
 }
 
-export default function NewWorkflowDialog({ onCreate, onClose }: Props) {
+export default function ImportProgramDialog({ onImport, onClose }: Props) {
 
-  const [name, setName] =
+  const [scriptPath, setScriptPath] =
     useState("");
+
+  const [isImporting, setImporting] =
+    useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
 
-  function handleCreate() {
+  async function handleImport() {
 
-    if (!name.trim()) {
-      setError("Please enter a workflow name.");
+    if (!scriptPath.trim()) {
+      setError("Please enter a script path.");
       return;
     }
 
-    onCreate(name.trim());
+    setImporting(true);
+    setError(null);
+
+    try {
+      const program = await importProgram(scriptPath.trim());
+      onImport(program);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to import program."
+      );
+    } finally {
+      setImporting(false);
+    }
 
   }
 
@@ -52,30 +69,30 @@ export default function NewWorkflowDialog({ onCreate, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          New workflow
+          Import program
         </h3>
 
         <label style={{ fontSize: 14 }}>
-          Workflow name
+          Script path (.sh)
         </label>
 
         <input
 
           type="text"
 
-          value={name}
+          value={scriptPath}
 
           onChange={(event) =>
-            setName(event.target.value)
+            setScriptPath(event.target.value)
           }
 
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              handleCreate();
+              handleImport();
             }
           }}
 
-          placeholder="My workflow"
+          placeholder="/path/to/program.sh"
 
           autoFocus
 
@@ -99,12 +116,12 @@ export default function NewWorkflowDialog({ onCreate, onClose }: Props) {
           }}
         >
 
-          <button onClick={onClose}>
+          <button onClick={onClose} disabled={isImporting}>
             Cancel
           </button>
 
-          <button onClick={handleCreate}>
-            Create
+          <button onClick={handleImport} disabled={isImporting}>
+            {isImporting ? "Importing..." : "Import"}
           </button>
 
         </div>

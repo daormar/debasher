@@ -1,4 +1,4 @@
-import type { Workflow } from "../models/workflow";
+import type { Program } from "../models/program";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
@@ -27,95 +27,95 @@ export async function listSchedulers(): Promise<string[]> {
 }
 
 // Launches the run in the background and returns as soon as it's
-// started — it does not wait for the workflow to finish. Poll
-// getWorkflowState() to find out when it's done.
-export async function runWorkflow(workflow: Workflow): Promise<void> {
+// started — it does not wait for the program to finish. Poll
+// getProgramState() to find out when it's done.
+export async function runProgram(program: Program): Promise<void> {
   const response = await fetch("/api/execution/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(workflow),
+    body: JSON.stringify(program),
   });
 
   if (!response.ok) {
     throw new Error(
-      await errorDetail(response, `Failed to run workflow (${response.status})`)
+      await errorDetail(response, `Failed to run program (${response.status})`)
     );
   }
 }
 
-export async function runWorkflowDebug(workflow: Workflow): Promise<string> {
+export async function runProgramDebug(program: Program): Promise<string> {
   const response = await fetch("/api/execution/run-debug", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(workflow),
+    body: JSON.stringify(program),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to run workflow (debug) (${response.status})`);
+    throw new Error(`Failed to run program (debug) (${response.status})`);
   }
 
   const { output } = await response.json();
   return output;
 }
 
-export type WorkflowState = "finished" | "in-progress" | "unfinished";
+export type ProgramState = "finished" | "in-progress" | "unfinished";
 
-interface WorkflowStatusResult {
+interface ProgramStatusResult {
   output: string;
-  state: WorkflowState;
+  state: ProgramState;
 }
 
-async function fetchWorkflowStatus(workflow: Workflow): Promise<WorkflowStatusResult> {
+async function fetchProgramStatus(program: Program): Promise<ProgramStatusResult> {
   const response = await fetch("/api/execution/status", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(workflow),
+    body: JSON.stringify(program),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to get workflow status (${response.status})`);
+    throw new Error(`Failed to get program status (${response.status})`);
   }
 
   return response.json();
 }
 
-export async function getWorkflowStatus(workflow: Workflow): Promise<string> {
-  const { output } = await fetchWorkflowStatus(workflow);
+export async function getProgramStatus(program: Program): Promise<string> {
+  const { output } = await fetchProgramStatus(program);
   return output;
 }
 
 // Cheap check of whether a run is still going, backed by the same
-// debasher_status call as getWorkflowStatus() — used to poll a
+// debasher_status call as getProgramStatus() — used to poll a
 // background run and to guard against launching a second one.
-export async function getWorkflowState(workflow: Workflow): Promise<WorkflowState> {
-  const { state } = await fetchWorkflowStatus(workflow);
+export async function getProgramState(program: Program): Promise<ProgramState> {
+  const { state } = await fetchProgramStatus(program);
   return state;
 }
 
-export async function checkWorkflowOptions(workflow: Workflow): Promise<string> {
-  const response = await fetch("/api/execution/check-workflow-options", {
+export async function checkProgramOptions(program: Program): Promise<string> {
+  const response = await fetch("/api/execution/check-program-options", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(workflow),
+    body: JSON.stringify(program),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to check workflow options (${response.status})`);
+    throw new Error(`Failed to check program options (${response.status})`);
   }
 
   const { output } = await response.json();
   return output;
 }
 
-export async function stopWorkflow(workflow: Workflow): Promise<string> {
+export async function stopProgram(program: Program): Promise<string> {
   const response = await fetch("/api/execution/stop", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(workflow),
+    body: JSON.stringify(program),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to stop workflow (${response.status})`);
+    throw new Error(`Failed to stop program (${response.status})`);
   }
 
   const { output } = await response.json();

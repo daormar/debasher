@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 
 interface Props {
   onClose: () => void;
@@ -9,12 +9,12 @@ interface Props {
 export default function OutputDirEditor({ onClose }: Props) {
 
   const {
-    workflow,
+    program,
     setOutputDir,
-  } = useWorkflow();
+  } = useProgram();
 
   const [draft, setDraft] =
-    useState(workflow.outputDir);
+    useState(program.outputDir);
 
   function handleSave() {
     setOutputDir(draft);

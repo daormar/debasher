@@ -1,16 +1,16 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
-import type { WorkflowProcess } from "../models/process";
+import { useProgram } from "../store/ProgramContext";
+import type { ProgramProcess } from "../models/process";
 
 interface Props {
-  process: WorkflowProcess;
+  process: ProgramProcess;
   onClose: () => void;
 }
 
 export default function AdditionalSpecsEditor({ process, onClose }: Props) {
 
-  const { setAdditionalSpecs } = useWorkflow();
+  const { setAdditionalSpecs } = useProgram();
 
   const [forced, setForced] =
     useState(process.additionalSpecs.forced);

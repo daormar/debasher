@@ -1,4 +1,4 @@
-import type { Workflow } from "../models/workflow";
+import type { Program } from "../models/program";
 
 // ---------------------------------------------------------------
 // FAKE IMPLEMENTATION — replace the body of each function below
@@ -25,54 +25,54 @@ async function errorMessage(response: Response): Promise<string> {
   return body;
 }
 
-export async function saveWorkflow(
-  workflow: Workflow,
+export async function saveProgram(
+  program: Program,
   outputDir: string
 ): Promise<void> {
-  const response = await fetch("/api/workflows/save", {
+  const response = await fetch("/api/programs/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ outputDir, workflow }),
+    body: JSON.stringify({ outputDir, program }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to save workflow: ${await errorMessage(response)}`);
+    throw new Error(`Failed to save program: ${await errorMessage(response)}`);
   }
 }
 
-export async function loadWorkflow(inputDir: string): Promise<Workflow> {
-  const response = await fetch("/api/workflows/load", {
+export async function loadProgram(inputDir: string): Promise<Program> {
+  const response = await fetch("/api/programs/load", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ inputDir }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load workflow: ${await errorMessage(response)}`);
+    throw new Error(`Failed to load program: ${await errorMessage(response)}`);
   }
 
   return response.json();
 }
 
-export async function importWorkflow(scriptPath: string): Promise<Workflow> {
-  const response = await fetch("/api/workflows/import", {
+export async function importProgram(scriptPath: string): Promise<Program> {
+  const response = await fetch("/api/programs/import", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scriptPath, workflow: createEmptyWorkflow("") }),
+    body: JSON.stringify({ scriptPath, program: createEmptyProgram("") }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to import workflow: ${await errorMessage(response)}`);
+    throw new Error(`Failed to import program: ${await errorMessage(response)}`);
   }
 
   return response.json();
 }
 
 /**
- * Not persisted yet — just builds a blank workflow in memory.
+ * Not persisted yet — just builds a blank program in memory.
  * It only gets stored once the user actually saves it.
  */
-export function createEmptyWorkflow(name: string): Workflow {
+export function createEmptyProgram(name: string): Program {
   return {
     id: crypto.randomUUID(),
     name,
@@ -82,7 +82,7 @@ export function createEmptyWorkflow(name: string): Workflow {
     homeDir: "",
     outputDir: "",
     executionOptions: { scheduler: "" },
-    workflowOptions: {},
+    programOptions: {},
     processes: [],
     edges: [],
   };

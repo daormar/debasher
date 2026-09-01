@@ -1,51 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
-  checkWorkflowOptions,
-  getWorkflowStatus,
-  runWorkflowDebug,
-  stopWorkflow,
+  checkProgramOptions,
+  getProgramStatus,
+  runProgramDebug,
+  stopProgram,
 } from "../api/executionApi";
-import type { Workflow } from "../models/workflow";
-import { useWorkflow } from "../store/WorkflowContext";
+import type { Program } from "../models/program";
+import { useProgram } from "../store/ProgramContext";
 import CommandOutputModal from "./CommandOutputModal";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
-import WorkflowOptionsEditor from "./WorkflowOptionsEditor";
+import ProgramOptionsEditor from "./ProgramOptionsEditor";
 
 const MENU_ITEMS = [
   "Set output directory",
   "Set execution options",
-  "Set workflow options",
-  "Check workflow options",
-  "Run workflow (debug)",
-  "Run workflow",
-  "Get workflow status",
-  "Stop workflow",
+  "Set program options",
+  "Check program options",
+  "Run program (debug)",
+  "Run program",
+  "Get program status",
+  "Stop program",
 ] as const;
 
 type MenuItem = (typeof MENU_ITEMS)[number];
 
 const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
-  "Check workflow options",
-  "Run workflow (debug)",
-  "Run workflow",
-  "Get workflow status",
-  "Stop workflow",
+  "Check program options",
+  "Run program (debug)",
+  "Run program",
+  "Get program status",
+  "Stop program",
 ]);
 
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
-  "Check workflow options",
-  "Run workflow (debug)",
-  "Run workflow",
+  "Check program options",
+  "Run program (debug)",
+  "Run program",
 ]);
 
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
-  "Check workflow options": "Checking...",
-  "Run workflow (debug)": "Running...",
-  "Run workflow": "Running...",
-  "Get workflow status": "Getting status...",
-  "Stop workflow": "Stopping...",
+  "Check program options": "Checking...",
+  "Run program (debug)": "Running...",
+  "Run program": "Running...",
+  "Get program status": "Getting status...",
+  "Stop program": "Stopping...",
 };
 
 interface CommandOutput {
@@ -55,7 +55,7 @@ interface CommandOutput {
 
 export default function RunMenu() {
 
-  const { workflow, runPhase, startWorkflowRun } = useWorkflow();
+  const { program, runPhase, startProgramRun } = useProgram();
 
   const [isOpen, setOpen] =
     useState(false);
@@ -66,7 +66,7 @@ export default function RunMenu() {
   const [isExecutionOptionsOpen, setExecutionOptionsOpen] =
     useState(false);
 
-  const [isWorkflowOptionsOpen, setWorkflowOptionsOpen] =
+  const [isProgramOptionsOpen, setProgramOptionsOpen] =
     useState(false);
 
   const [commandOutput, setCommandOutput] =
@@ -81,16 +81,16 @@ export default function RunMenu() {
   const containerRef =
     useRef<HTMLDivElement>(null);
 
-  async function handleRunWorkflow() {
+  async function handleRunProgram() {
 
     setActionError(null);
-    setPendingAction("Run workflow");
+    setPendingAction("Run program");
 
     try {
-      await startWorkflowRun();
+      await startProgramRun();
     } catch (err) {
       setPendingAction(null);
-      setActionError(err instanceof Error ? err.message : "Failed to run workflow.");
+      setActionError(err instanceof Error ? err.message : "Failed to run program.");
       return;
     }
 
@@ -102,14 +102,14 @@ export default function RunMenu() {
   async function runOutputAction(
     item: MenuItem,
     title: string,
-    action: (workflow: Workflow) => Promise<string>
+    action: (program: Program) => Promise<string>
   ) {
 
     setPendingAction(item);
     setActionError(null);
 
     try {
-      const output = await action(workflow);
+      const output = await action(program);
       setCommandOutput({ title, output });
       setOpen(false);
     } catch (err) {
@@ -124,13 +124,13 @@ export default function RunMenu() {
 
   function handleItemClick(item: MenuItem) {
 
-    if (REQUIRES_OUTPUT_DIR.has(item) && !workflow.outputDir.trim()) {
+    if (REQUIRES_OUTPUT_DIR.has(item) && !program.outputDir.trim()) {
       setActionError("Set the output directory before running this action.");
       return;
     }
 
-    if (REQUIRES_HOME_DIR.has(item) && !workflow.homeDir.trim()) {
-      setActionError("Save the workflow before running this action.");
+    if (REQUIRES_HOME_DIR.has(item) && !program.homeDir.trim()) {
+      setActionError("Save the program before running this action.");
       return;
     }
 
@@ -140,19 +140,19 @@ export default function RunMenu() {
     } else if (item === "Set execution options") {
       setOpen(false);
       setExecutionOptionsOpen(true);
-    } else if (item === "Set workflow options") {
+    } else if (item === "Set program options") {
       setOpen(false);
-      setWorkflowOptionsOpen(true);
-    } else if (item === "Check workflow options") {
-      runOutputAction(item, "Check workflow options", checkWorkflowOptions);
-    } else if (item === "Run workflow (debug)") {
-      runOutputAction(item, "Run workflow (debug)", runWorkflowDebug);
-    } else if (item === "Run workflow") {
-      handleRunWorkflow();
-    } else if (item === "Get workflow status") {
-      runOutputAction(item, "Workflow status", getWorkflowStatus);
-    } else if (item === "Stop workflow") {
-      runOutputAction(item, "Stop workflow", stopWorkflow);
+      setProgramOptionsOpen(true);
+    } else if (item === "Check program options") {
+      runOutputAction(item, "Check program options", checkProgramOptions);
+    } else if (item === "Run program (debug)") {
+      runOutputAction(item, "Run program (debug)", runProgramDebug);
+    } else if (item === "Run program") {
+      handleRunProgram();
+    } else if (item === "Get program status") {
+      runOutputAction(item, "Program status", getProgramStatus);
+    } else if (item === "Stop program") {
+      runOutputAction(item, "Stop program", stopProgram);
     } else {
       setOpen(false);
     }
@@ -228,7 +228,7 @@ export default function RunMenu() {
 
               disabled={
                 pendingAction !== null ||
-                (item === "Run workflow" && runPhase === "running")
+                (item === "Run program" && runPhase === "running")
               }
 
               style={{
@@ -240,7 +240,7 @@ export default function RunMenu() {
               }}
 
             >
-              {item === "Run workflow" && runPhase === "running"
+              {item === "Run program" && runPhase === "running"
                 ? "Running..."
                 : pendingAction === item
                 ? PENDING_LABELS[item]
@@ -277,9 +277,9 @@ export default function RunMenu() {
         />
       )}
 
-      {isWorkflowOptionsOpen && (
-        <WorkflowOptionsEditor
-          onClose={() => setWorkflowOptionsOpen(false)}
+      {isProgramOptionsOpen && (
+        <ProgramOptionsEditor
+          onClose={() => setProgramOptionsOpen(false)}
         />
       )}
 

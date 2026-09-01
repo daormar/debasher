@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .. import paths, persistence
-from ..models import Workflow
+from ..models import Program
 
 router = APIRouter(prefix="/api/execution", tags=["execution"])
 
@@ -15,32 +15,32 @@ router = APIRouter(prefix="/api/execution", tags=["execution"])
 # engine/debasher_status.sh): 0 once every process has finished, 2 while
 # at least one is still running, 3 otherwise (not all processes finished
 # correctly).
-WorkflowState = Literal["finished", "in-progress", "unfinished"]
+ProgramState = Literal["finished", "in-progress", "unfinished"]
 
-_STATE_BY_EXIT_CODE: dict[int, WorkflowState] = {
+_STATE_BY_EXIT_CODE: dict[int, ProgramState] = {
     0: "finished",
     2: "in-progress",
 }
 
 
-def _debasher_env(workflow: Workflow) -> dict[str, str]:
+def _debasher_env(program: Program) -> dict[str, str]:
     env = os.environ.copy()
-    env["DEBASHER_MOD_DIR"] = workflow.envVars.get("DEBASHER_MOD_DIR", "")
+    env["DEBASHER_MOD_DIR"] = program.envVars.get("DEBASHER_MOD_DIR", "")
     return env
 
 
-def _prepare_debasher_exec_command(workflow: Workflow, mode_flag: str) -> list[str] | None:
+def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str] | None:
     """
-    Save `workflow` to its home directory (the same as pressing "Save"
+    Save `program` to its home directory (the same as pressing "Save"
     in the toolbar, generating its .sh file there) and build the
     debasher_exec command line for it, passing the scheduler, the run
     output directory, and the command line options set via "Set
-    workflow options".
+    program options".
 
     Returns None if debasher_exec isn't found.
     """
-    persistence.save_workflow(workflow.homeDir, workflow)
-    script_path = persistence.save_script(workflow.homeDir, workflow)
+    persistence.save_program(program.homeDir, program)
+    script_path = persistence.save_script(program.homeDir, program)
 
     tool = paths.find_bin_tool("debasher_exec")
     if tool is None:
@@ -49,28 +49,28 @@ def _prepare_debasher_exec_command(workflow: Workflow, mode_flag: str) -> list[s
     command = [
         str(tool),
         "--pfile", str(script_path),
-        "--outdir", workflow.outputDir,
-        "--sched", workflow.executionOptions.scheduler,
+        "--outdir", program.outputDir,
+        "--sched", program.executionOptions.scheduler,
         mode_flag,
     ]
 
-    for label, value in workflow.workflowOptions.items():
+    for label, value in program.programOptions.items():
         command += [label, value]
 
     return command
 
 
-def _run_debasher_exec(workflow: Workflow, mode_flag: str) -> str:
-    command = _prepare_debasher_exec_command(workflow, mode_flag)
+def _run_debasher_exec(program: Program, mode_flag: str) -> str:
+    command = _prepare_debasher_exec_command(program, mode_flag)
     if command is None:
         return "Error: debasher_exec tool not found."
 
-    result = subprocess.run(command, env=_debasher_env(workflow), capture_output=True, text=True)
+    result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
     return result.stdout + result.stderr
 
 
-def _run_debasher_dir_tool(workflow: Workflow, tool_name: str) -> tuple[str, int]:
+def _run_debasher_dir_tool(program: Program, tool_name: str) -> tuple[str, int]:
     """
     Run a DeBasher bin tool that just takes "-d <outputDir>" (e.g.
     debasher_status, debasher_stop). Returns (combined output, exit code).
@@ -79,15 +79,15 @@ def _run_debasher_dir_tool(workflow: Workflow, tool_name: str) -> tuple[str, int
     if tool is None:
         return f"Error: {tool_name} tool not found.", 1
 
-    command = [str(tool), "-d", workflow.outputDir]
+    command = [str(tool), "-d", program.outputDir]
 
-    result = subprocess.run(command, env=_debasher_env(workflow), capture_output=True, text=True)
+    result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
     return result.stdout + result.stderr, result.returncode
 
 
-def _get_workflow_state(workflow: Workflow) -> tuple[WorkflowState, str]:
-    output, returncode = _run_debasher_dir_tool(workflow, "debasher_status")
+def _get_program_state(program: Program) -> tuple[ProgramState, str]:
+    output, returncode = _run_debasher_dir_tool(program, "debasher_status")
     return _STATE_BY_EXIT_CODE.get(returncode, "unfinished"), output
 
 
@@ -98,7 +98,7 @@ class ListSchedulersResponse(BaseModel):
 @router.get("/schedulers", response_model=ListSchedulersResponse)
 def list_schedulers() -> ListSchedulersResponse:
     """
-    List the schedulers a workflow can be executed with.
+    List the schedulers a program can be executed with.
 
     Stub: always returns the two schedulers DeBasher supports.
 
@@ -108,89 +108,89 @@ def list_schedulers() -> ListSchedulersResponse:
     return ListSchedulersResponse(schedulers=["SLURM", "BUILTIN"])
 
 
-class RunWorkflowResponse(BaseModel):
+class RunProgramResponse(BaseModel):
     started: bool
 
 
-@router.post("/run", response_model=RunWorkflowResponse)
-def run_workflow(workflow: Workflow) -> RunWorkflowResponse:
+@router.post("/run", response_model=RunProgramResponse)
+def run_program(program: Program) -> RunProgramResponse:
     """
-    Launch a workflow run (debasher_exec --wait) in the background and
+    Launch a program run (debasher_exec --wait) in the background and
     return immediately. Poll /status to find out when it's done.
     """
-    state, _ = _get_workflow_state(workflow)
+    state, _ = _get_program_state(program)
     if state == "in-progress":
         raise HTTPException(
             status_code=409,
             detail="A run is already in progress for this output directory.",
         )
 
-    command = _prepare_debasher_exec_command(workflow, "--wait")
+    command = _prepare_debasher_exec_command(program, "--wait")
     if command is None:
         raise HTTPException(status_code=500, detail="debasher_exec tool not found.")
 
-    log_path = Path(workflow.outputDir).expanduser() / ".debasher_webui_run.log"
+    log_path = Path(program.outputDir).expanduser() / ".debasher_webui_run.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(log_path, "w") as log_file:
         subprocess.Popen(
             command,
-            env=_debasher_env(workflow),
+            env=_debasher_env(program),
             stdout=log_file,
             stderr=subprocess.STDOUT,
         )
 
-    return RunWorkflowResponse(started=True)
+    return RunProgramResponse(started=True)
 
 
-class RunWorkflowDebugResponse(BaseModel):
+class RunProgramDebugResponse(BaseModel):
     output: str
 
 
-@router.post("/run-debug", response_model=RunWorkflowDebugResponse)
-def run_workflow_debug(workflow: Workflow) -> RunWorkflowDebugResponse:
+@router.post("/run-debug", response_model=RunProgramDebugResponse)
+def run_program_debug(program: Program) -> RunProgramDebugResponse:
     """
-    Run a workflow in debug mode (debasher_exec --debug).
+    Run a program in debug mode (debasher_exec --debug).
     """
-    return RunWorkflowDebugResponse(output=_run_debasher_exec(workflow, "--debug"))
+    return RunProgramDebugResponse(output=_run_debasher_exec(program, "--debug"))
 
 
-class WorkflowStatusResponse(BaseModel):
+class ProgramStatusResponse(BaseModel):
     output: str
-    state: WorkflowState
+    state: ProgramState
 
 
-@router.post("/status", response_model=WorkflowStatusResponse)
-def get_workflow_status(workflow: Workflow) -> WorkflowStatusResponse:
+@router.post("/status", response_model=ProgramStatusResponse)
+def get_program_status(program: Program) -> ProgramStatusResponse:
     """
-    Get a workflow's status (debasher_status -d <outputDir>).
+    Get a program's status (debasher_status -d <outputDir>).
     """
-    state, output = _get_workflow_state(workflow)
-    return WorkflowStatusResponse(output=output, state=state)
+    state, output = _get_program_state(program)
+    return ProgramStatusResponse(output=output, state=state)
 
 
-class CheckWorkflowOptionsResponse(BaseModel):
+class CheckProgramOptionsResponse(BaseModel):
     output: str
 
 
-@router.post("/check-workflow-options", response_model=CheckWorkflowOptionsResponse)
-def check_workflow_options(workflow: Workflow) -> CheckWorkflowOptionsResponse:
+@router.post("/check-program-options", response_model=CheckProgramOptionsResponse)
+def check_program_options(program: Program) -> CheckProgramOptionsResponse:
     """
-    Check a workflow's command line options (debasher_exec --check-proc-opts).
+    Check a program's command line options (debasher_exec --check-proc-opts).
     """
-    return CheckWorkflowOptionsResponse(
-        output=_run_debasher_exec(workflow, "--check-proc-opts")
+    return CheckProgramOptionsResponse(
+        output=_run_debasher_exec(program, "--check-proc-opts")
     )
 
 
-class StopWorkflowResponse(BaseModel):
+class StopProgramResponse(BaseModel):
     output: str
 
 
-@router.post("/stop", response_model=StopWorkflowResponse)
-def stop_workflow(workflow: Workflow) -> StopWorkflowResponse:
+@router.post("/stop", response_model=StopProgramResponse)
+def stop_program(program: Program) -> StopProgramResponse:
     """
-    Stop a running workflow (debasher_stop -d <outputDir>).
+    Stop a running program (debasher_stop -d <outputDir>).
     """
-    output, _ = _run_debasher_dir_tool(workflow, "debasher_stop")
-    return StopWorkflowResponse(output=output)
+    output, _ = _run_debasher_dir_tool(program, "debasher_stop")
+    return StopProgramResponse(output=output)

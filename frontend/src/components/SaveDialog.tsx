@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 
 interface Props {
   onClose: () => void;
@@ -8,10 +8,10 @@ interface Props {
 
 export default function SaveDialog({ onClose }: Props) {
 
-  const { workflow, save } = useWorkflow();
+  const { program, save } = useProgram();
 
   const [outputDir, setOutputDir] =
-    useState(workflow.homeDir);
+    useState(program.homeDir);
 
   const [isSaving, setSaving] =
     useState(false);
@@ -34,7 +34,7 @@ export default function SaveDialog({ onClose }: Props) {
       onClose();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to save workflow."
+        err instanceof Error ? err.message : "Failed to save program."
       );
     } finally {
       setSaving(false);
@@ -70,7 +70,7 @@ export default function SaveDialog({ onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Save workflow
+          Save program
         </h3>
 
         <label style={{ fontSize: 14 }}>

@@ -1,12 +1,12 @@
 import { useState } from "react";
-import type { Workflow } from "./models/workflow";
-import { WorkflowProvider } from "./store/WorkflowContext";
+import type { Program } from "./models/program";
+import { ProgramProvider } from "./store/ProgramContext";
 import HomeScreen from "./components/HomeScreen";
-import WorkflowEditor from "./components/WorkflowEditor";
+import ProgramEditor from "./components/ProgramEditor";
 
 type Screen =
   | { name: "home" }
-  | { name: "editor"; workflow: Workflow };
+  | { name: "editor"; program: Program };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home" });
@@ -14,16 +14,16 @@ export default function App() {
   if (screen.name === "home") {
     return (
       <HomeScreen
-        onOpen={workflow => setScreen({ name: "editor", workflow })}
+        onOpen={program => setScreen({ name: "editor", program })}
       />
     );
   }
 
   return (
-    <WorkflowProvider initialWorkflow={screen.workflow}>
-      <WorkflowEditor
+    <ProgramProvider initialProgram={screen.program}>
+      <ProgramEditor
         onClose={() => setScreen({ name: "home" })}
       />
-    </WorkflowProvider>
+    </ProgramProvider>
   );
 }

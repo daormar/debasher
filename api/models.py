@@ -8,7 +8,7 @@ class Position(BaseModel):
     y: float
 
 
-class WorkflowOption(BaseModel):
+class ProgramOption(BaseModel):
     id: str
     label: str
     direction: Literal["input", "output"]
@@ -40,12 +40,12 @@ class OptionsHandler(BaseModel):
     manualCode: Optional[str] = None
 
 
-class WorkflowProcess(BaseModel):
+class ProgramProcess(BaseModel):
     id: str
     name: str
     description: str
     position: Position
-    options: list[WorkflowOption]
+    options: list[ProgramOption]
     optionsHandler: OptionsHandler
     language: Literal["bash", "python", "perl", "r", "groovy"]
     code: str
@@ -53,7 +53,7 @@ class WorkflowProcess(BaseModel):
     additionalSpecs: AdditionalSpecs
 
 
-class WorkflowEdge(BaseModel):
+class ProgramEdge(BaseModel):
     id: str
     sourceProcessId: str
     sourceOptionId: str
@@ -65,7 +65,7 @@ class ExecutionOptions(BaseModel):
     scheduler: str
 
 
-class Workflow(BaseModel):
+class Program(BaseModel):
     id: str
     name: str
     description: str = ""
@@ -74,6 +74,6 @@ class Workflow(BaseModel):
     homeDir: str = ""
     outputDir: str
     executionOptions: ExecutionOptions
-    workflowOptions: dict[str, str]
-    processes: list[WorkflowProcess]
-    edges: list[WorkflowEdge]
+    programOptions: dict[str, str]
+    processes: list[ProgramProcess]
+    edges: list[ProgramEdge]

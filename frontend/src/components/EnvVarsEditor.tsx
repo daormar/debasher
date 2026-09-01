@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 
 interface Props {
   onClose: () => void;
@@ -9,12 +9,12 @@ interface Props {
 export default function EnvVarsEditor({ onClose }: Props) {
 
   const {
-    workflow,
+    program,
     setEnvVar,
-  } = useWorkflow();
+  } = useProgram();
 
   const [draft, setDraft] =
-    useState(workflow.envVars.DEBASHER_MOD_DIR ?? "");
+    useState(program.envVars.DEBASHER_MOD_DIR ?? "");
 
   function handleSave() {
     setEnvVar("DEBASHER_MOD_DIR", draft);

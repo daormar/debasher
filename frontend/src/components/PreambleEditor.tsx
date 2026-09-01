@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 
 interface Props {
   onClose: () => void;
@@ -9,12 +9,12 @@ interface Props {
 export default function PreambleEditor({ onClose }: Props) {
 
   const {
-    workflow,
+    program,
     setPreamble,
-  } = useWorkflow();
+  } = useProgram();
 
   const [draft, setDraft] =
-    useState(workflow.preamble);
+    useState(program.preamble);
 
   function handleSave() {
     setPreamble(draft);
@@ -64,7 +64,7 @@ export default function PreambleEditor({ onClose }: Props) {
 
           spellCheck={false}
 
-          placeholder="# Bash code to run before the workflow..."
+          placeholder="# Bash code to run before the program..."
 
           style={{
             width: "100%",

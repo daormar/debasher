@@ -1,22 +1,22 @@
 import { useState } from "react";
-import type { Workflow } from "../models/workflow";
-import { createEmptyWorkflow } from "../storage/workflowStorage";
-import NewWorkflowDialog from "./NewWorkflowDialog";
-import LoadWorkflowDialog from "./LoadWorkflowDialog";
-import ImportWorkflowDialog from "./ImportWorkflowDialog";
+import type { Program } from "../models/program";
+import { createEmptyProgram } from "../storage/programStorage";
+import NewProgramDialog from "./NewProgramDialog";
+import LoadProgramDialog from "./LoadProgramDialog";
+import ImportProgramDialog from "./ImportProgramDialog";
 
 interface Props {
-  // Called with the workflow that should be opened in the editor.
-  onOpen: (workflow: Workflow) => void;
+  // Called with the program that should be opened in the editor.
+  onOpen: (program: Program) => void;
 }
 
 export default function HomeScreen({ onOpen }: Props) {
-  const [isNewWorkflowOpen, setNewWorkflowOpen] = useState(false);
-  const [isLoadWorkflowOpen, setLoadWorkflowOpen] = useState(false);
-  const [isImportWorkflowOpen, setImportWorkflowOpen] = useState(false);
+  const [isNewProgramOpen, setNewProgramOpen] = useState(false);
+  const [isLoadProgramOpen, setLoadProgramOpen] = useState(false);
+  const [isImportProgramOpen, setImportProgramOpen] = useState(false);
 
   function handleCreate(name: string) {
-    onOpen(createEmptyWorkflow(name));
+    onOpen(createEmptyProgram(name));
   }
 
   return (
@@ -24,37 +24,37 @@ export default function HomeScreen({ onOpen }: Props) {
       <h1>DeBasher</h1>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <button onClick={() => setNewWorkflowOpen(true)}>
-          Create new workflow
+        <button onClick={() => setNewProgramOpen(true)}>
+          Create new program
         </button>
 
-        <button onClick={() => setLoadWorkflowOpen(true)}>
-          Load workflow
+        <button onClick={() => setLoadProgramOpen(true)}>
+          Load program
         </button>
 
-        <button onClick={() => setImportWorkflowOpen(true)}>
-          Import workflow
+        <button onClick={() => setImportProgramOpen(true)}>
+          Import program
         </button>
       </div>
 
-      {isNewWorkflowOpen && (
-        <NewWorkflowDialog
+      {isNewProgramOpen && (
+        <NewProgramDialog
           onCreate={handleCreate}
-          onClose={() => setNewWorkflowOpen(false)}
+          onClose={() => setNewProgramOpen(false)}
         />
       )}
 
-      {isLoadWorkflowOpen && (
-        <LoadWorkflowDialog
+      {isLoadProgramOpen && (
+        <LoadProgramDialog
           onLoad={onOpen}
-          onClose={() => setLoadWorkflowOpen(false)}
+          onClose={() => setLoadProgramOpen(false)}
         />
       )}
 
-      {isImportWorkflowOpen && (
-        <ImportWorkflowDialog
+      {isImportProgramOpen && (
+        <ImportProgramDialog
           onImport={onOpen}
-          onClose={() => setImportWorkflowOpen(false)}
+          onClose={() => setImportProgramOpen(false)}
         />
       )}
     </div>

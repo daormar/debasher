@@ -1,43 +1,26 @@
 import { useState } from "react";
-import type { Workflow } from "../models/workflow";
-import { loadWorkflow } from "../storage/workflowStorage";
 
 interface Props {
-  onLoad: (workflow: Workflow) => void;
+  onCreate: (name: string) => void;
   onClose: () => void;
 }
 
-export default function LoadWorkflowDialog({ onLoad, onClose }: Props) {
+export default function NewProgramDialog({ onCreate, onClose }: Props) {
 
-  const [inputDir, setInputDir] =
+  const [name, setName] =
     useState("");
-
-  const [isLoading, setLoading] =
-    useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
 
-  async function handleLoad() {
+  function handleCreate() {
 
-    if (!inputDir.trim()) {
-      setError("Please enter a workflow directory.");
+    if (!name.trim()) {
+      setError("Please enter a program name.");
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const workflow = await loadWorkflow(inputDir.trim());
-      onLoad(workflow);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load workflow."
-      );
-    } finally {
-      setLoading(false);
-    }
+    onCreate(name.trim());
 
   }
 
@@ -69,30 +52,30 @@ export default function LoadWorkflowDialog({ onLoad, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Load workflow
+          New program
         </h3>
 
         <label style={{ fontSize: 14 }}>
-          Workflow directory
+          Program name
         </label>
 
         <input
 
           type="text"
 
-          value={inputDir}
+          value={name}
 
           onChange={(event) =>
-            setInputDir(event.target.value)
+            setName(event.target.value)
           }
 
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              handleLoad();
+              handleCreate();
             }
           }}
 
-          placeholder="/path/to/workflow/directory"
+          placeholder="My program"
 
           autoFocus
 
@@ -116,12 +99,12 @@ export default function LoadWorkflowDialog({ onLoad, onClose }: Props) {
           }}
         >
 
-          <button onClick={onClose} disabled={isLoading}>
+          <button onClick={onClose}>
             Cancel
           </button>
 
-          <button onClick={handleLoad} disabled={isLoading}>
-            {isLoading ? "Loading..." : "Load"}
+          <button onClick={handleCreate}>
+            Create
           </button>
 
         </div>

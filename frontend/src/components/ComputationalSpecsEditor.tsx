@@ -1,17 +1,17 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
-import type { WorkflowProcess } from "../models/process";
+import { useProgram } from "../store/ProgramContext";
+import type { ProgramProcess } from "../models/process";
 import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
 
 interface Props {
-  process: WorkflowProcess;
+  process: ProgramProcess;
   onClose: () => void;
 }
 
 export default function ComputationalSpecsEditor({ process, onClose }: Props) {
 
-  const { setComputationalSpecs } = useWorkflow();
+  const { setComputationalSpecs } = useProgram();
 
   const [cpus, setCpus] =
     useState(

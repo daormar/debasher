@@ -1,20 +1,20 @@
 import { useState } from "react";
 
-import { useWorkflow } from "../store/WorkflowContext";
+import { useProgram } from "../store/ProgramContext";
 
 interface Props {
   onClose: () => void;
 }
 
-export default function WorkflowDescriptionEditor({ onClose }: Props) {
+export default function ProgramDescriptionEditor({ onClose }: Props) {
 
   const {
-    workflow,
+    program,
     setDescription,
-  } = useWorkflow();
+  } = useProgram();
 
   const [draft, setDraft] =
-    useState(workflow.description);
+    useState(program.description);
 
   function handleSave() {
     setDescription(draft);
@@ -62,7 +62,7 @@ export default function WorkflowDescriptionEditor({ onClose }: Props) {
 
           rows={16}
 
-          placeholder="Describe what this workflow does..."
+          placeholder="Describe what this program does..."
 
           style={{
             width: "100%",
