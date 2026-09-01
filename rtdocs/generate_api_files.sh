@@ -15,7 +15,7 @@ for name in "${proc_impl_symbols[@]}"; do
 done
 
 # Generate option characterization API file
-char_opts_symbols=("explain_cmdline_opt()" "explain_opt()" "opt_is_cmdline()" "opt_is_non_mandatory_cmdline()")
+char_opts_symbols=("explain_cmdline_opt()" "explain_opt()" "explain_flag()" "opt_is_cmdline()" "opt_is_non_mandatory_cmdline()")
 rm -f rtdocs/source/api_characterize_opts_doc.md
 for name in "${char_opts_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_characterize_opts_doc.md
