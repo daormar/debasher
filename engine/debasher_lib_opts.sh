@@ -484,6 +484,17 @@ debasher::explain_opt()
 explain_opt() { debasher::explain_opt "$@"; }
 
 ########
+# Public: Explains flag.
+#
+# $1 - Flag name.
+# $2 - Flag description.
+# $3 - Flag category ("GENERAL" category by default).
+#
+# Examples
+#
+#   debasher::explain_flag "-m" "Show output in markdown format"
+#
+# The function does not return any value.
 debasher::explain_flag()
 {
     local opt=$1
@@ -510,6 +521,18 @@ debasher::explain_flag()
     DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
 }
 
+########
+# Public: Explains flag.
+#
+# $1 - Flag name.
+# $2 - Flag description.
+# $3 - Flag category ("GENERAL" category by default).
+#
+# Examples
+#
+#   explain_flag "-m" "Show output in markdown format"
+#
+# The function does not return any value.
 explain_flag() { debasher::explain_flag "$@"; }
 
 ########
@@ -519,7 +542,7 @@ explain_flag() { debasher::explain_flag "$@"; }
 #
 # Examples
 #
-#   opt_is_cmdline "-s"
+#   debasher::opt_is_cmdline "-s"
 #
 # The function does not return any value.
 debasher::opt_is_cmdline()
@@ -542,7 +565,7 @@ debasher::opt_is_cmdline()
 #
 # Examples
 #
-#   debasher::opt_is_cmdline "-s"
+#   opt_is_cmdline "-s"
 #
 # The function does not return any value.
 opt_is_cmdline() { debasher::opt_is_cmdline "$@"; }
