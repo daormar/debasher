@@ -135,6 +135,8 @@ def _add_define_opts_func(process):
             else:
                 if option.dataType == "None":
                     lines.append(f'{INDENT}debasher::define_flag "{option.label}" optlist || return 1')
+                elif option.dataType == "ValueDescriptor":
+                    lines.append(f'{INDENT}debasher::define_value_desc_opt "{option.label}" optlist || return 1')
                 elif _opt_is_connected_to_proc(option):
                     conn_proc, conn_opt = _get_process_plus_opt(option)
                     lines.append(f'{INDENT}debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1')
