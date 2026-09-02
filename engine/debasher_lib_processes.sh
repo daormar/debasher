@@ -99,6 +99,31 @@ debasher::_show_proc_vars()
 }
 
 ########
+debasher::_show_proc_opt_handler()
+{
+    local processname=$1
+
+    # Search for process option handler functions
+    local func_found=0
+    for method in $DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS $DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPT_DEPS \
+                  $DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE $DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS; do
+        if debasher::_search_process_func "${processname}" "${method}" >/dev/null; then
+            local funcname=`debasher::_search_process_func "${processname}" "${method}"`
+            echo '```'bash
+            declare -f "${funcname}"
+            echo '```'
+            func_found=1
+        fi
+    done
+
+    if [ "${func_found}" -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+########
 debasher::_show_proc_implem()
 {
     local processname=$1
@@ -131,10 +156,11 @@ debasher::_show_proc_implem()
 debasher::_show_process_documentation()
 {
     local processname=$1
-    local show_options=$2
-    local show_methods=$3
-    local show_varnames=$4
-    local show_implem=$5
+    local show_methods=$2
+    local show_varnames=$3
+    local show_options=$4
+    local show_opt_handler=$5
+    local show_implem=$6
 
     # Print header
     echo "## ${processname}"
@@ -148,6 +174,18 @@ debasher::_show_process_documentation()
         echo ""
     else
         ${document_funcname}
+        echo ""
+    fi
+
+    if [ "${show_methods}" = 1 ]; then
+        echo "### Process Methods"
+        debasher::_show_proc_methods "${processname}"
+        echo ""
+    fi
+
+    if [ "${show_varnames}" = 1 ]; then
+        echo "### Process Variables"
+        debasher::_show_proc_vars "${processname}"
         echo ""
     fi
 
@@ -178,15 +216,15 @@ debasher::_show_process_documentation()
         echo ""
     fi
 
-    if [ "${show_methods}" = 1 ]; then
-        echo "### Process Methods"
-        debasher::_show_proc_methods "${processname}"
-        echo ""
-    fi
-
-    if [ "${show_varnames}" = 1 ]; then
-        echo "### Process Variables"
-        debasher::_show_proc_vars "${processname}"
+    if [ "${show_opt_handler}" = 1 ]; then
+        echo "### Process Option Handler"
+        local opt_handler
+        opt_handler=`debasher::_show_proc_opt_handler "${processname}"`
+        if [ $? -eq 0 ]; then
+            echo "${opt_handler}"
+        else
+            echo "Warning: option handler for process ${processname} was not found" >&2
+        fi
         echo ""
     fi
 
@@ -199,6 +237,7 @@ debasher::_show_process_documentation()
         else
             echo "Warning: implementation for process ${processname} was not found" >&2
         fi
+        echo ""
     fi
 }
 
