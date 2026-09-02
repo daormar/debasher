@@ -22,12 +22,12 @@ import):
 - _define_opts is matched against the grammar of option-definition
   primitives (define_opt[_from_proc_out[_task_out]],
   define_cmdline_opt[_if_given], define_cmdline_flag_if_given,
-  define_flag, define_value_desc_opt — the last one being just another
-  way to pass a value to another process, not something exotic). A body
-  that's exactly the standard boilerplate header/footer plus a flat
-  sequence of those calls with literal label/proc/opt arguments
-  round-trips structurally, so it's parsed into "standard" mode option
-  values plus real connections.
+  define_flag, define_value_desc_opt, define_fifo_opt[_generator] — all
+  of them just other ways to define an option's value, not something
+  exotic). A body that's exactly the standard boilerplate header/footer
+  plus a flat sequence of those calls with literal label/proc/opt
+  arguments round-trips structurally, so it's parsed into "standard"
+  mode option values plus real connections.
 - A loop, or any other statement outside that grammar, falls back to
   "manual" mode with _define_opts kept verbatim — this includes what
   would otherwise be "array" mode: the frontend's array-mode contract is
@@ -72,11 +72,16 @@ class OptionHandlerResult:
     # it as-is).
     option_values: dict[str, str] = field(default_factory=dict)
     connections: list[ConnectionRef] = field(default_factory=list)
-    # Labels defined via define_value_desc_opt — these get dataType
-    # "ValueDescriptor" instead of whatever debasher_doc_mod's
-    # "Process Options" section declared (typically just "string",
-    # since explain_opt has no way to say "this is a value descriptor").
+    # Labels defined via define_value_desc_opt/define_fifo_opt[_generator]
+    # — program_import.py sets their option's channel ("value_desc"/
+    # "fifo") from these, independent of dataType. There's no
+    # explain_opt-level signal for this (an option's declared type and
+    # its actual delivery channel can legitimately diverge, e.g. a
+    # mandatory cmdline int that's really sourced from a fifo), so this
+    # is the sole source, recovered the same way as connections are —
+    # best-effort in "manual" mode, exact otherwise.
     value_descriptor_labels: set[str] = field(default_factory=set)
+    fifo_labels: set[str] = field(default_factory=set)
 
 
 _HEADER_BOILERPLATE_RES = [
@@ -115,8 +120,8 @@ def _strip_one_quote_layer(text: str) -> str:
 
 _DEFINE_OPTS_CALL_RE = re.compile(
     r"^(?:debasher::)?(?P<func>define_cmdline_flag_if_given|define_cmdline_opt_if_given|"
-    r"define_cmdline_opt|define_value_desc_opt|define_flag|define_opt_from_proc_task_out|"
-    r"define_opt_from_proc_out|define_opt)"
+    r"define_cmdline_opt|define_value_desc_opt|define_fifo_opt_generator|define_fifo_opt|"
+    r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|define_opt)"
     r"(?:\s+(?P<args>.*?))?\s*(?:\|\|.*)?$"
 )
 _TOKEN_RE = re.compile(r'"(?P<q>[^"]*)"|(?P<bare>\S+)')
@@ -129,6 +134,8 @@ _CALL_TOKEN_COUNTS = {
     "define_cmdline_opt": 3,
     "define_flag": 2,  # <label> <optlist>
     "define_value_desc_opt": 2,  # <label> <optlist>
+    "define_fifo_opt": 3,  # <label> <fifoname> <optlist>
+    "define_fifo_opt_generator": 4,  # <label> <fifoname> <task_idx> <optlist>
     "define_opt_from_proc_out": 4,  # <label> <proc> <opt> <optlist>
     "define_opt_from_proc_task_out": 5,  # <label> <proc> <task_idx> <opt> <optlist>
     "define_opt": 3,  # <label> <value> <optlist>
@@ -147,6 +154,7 @@ _TASK_CONNECTION_SCAN_RE = re.compile(
     r'"(?P<proc>[^"]*)"\s+[^\s]+\s+"(?P<opt>[^"]*)"'
 )
 _VALUE_DESC_SCAN_RE = re.compile(r'(?:debasher::)?define_value_desc_opt\s+"(?P<label>[^"]*)"')
+_FIFO_SCAN_RE = re.compile(r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"')
 
 _ECHO_LINE_RE = re.compile(r"^echo\s+(?P<expr>.*)$")
 
@@ -201,7 +209,7 @@ def _tokenize(args: str) -> list[tuple[str, bool]]:
 
 def _parse_primitive_calls(
     body: list[str],
-) -> tuple[dict[str, str], list[ConnectionRef], set[str]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str]] | None:
     """
     Parses a function body against the closed grammar of option-
     definition primitives — used for both _define_opts and (per-task)
@@ -212,6 +220,7 @@ def _parse_primitive_calls(
     values: dict[str, str] = {}
     connections: list[ConnectionRef] = []
     value_descriptor_labels: set[str] = set()
+    fifo_labels: set[str] = set()
     locals_table: dict[str, str] = {}
 
     for line in body:
@@ -258,12 +267,26 @@ def _parse_primitive_calls(
             # Its value is an engine-synthesized descriptor for the
             # process's own output, consumed elsewhere via
             # define_opt_from_proc_out — nothing to capture but the
-            # label, so its option gets dataType "ValueDescriptor"
-            # instead (see program_import.py).
+            # label, so its option gets channel "value_desc" instead
+            # (see program_import.py).
             label = tokens[0]
             if not label[1]:
                 return None
             value_descriptor_labels.add(label[0])
+        elif func in ("define_fifo_opt", "define_fifo_opt_generator"):
+            # Unlike define_value_desc_opt, the fifo name IS a real,
+            # user-chosen value (not engine-synthesized) — kept the same
+            # way as a plain define_opt's value — alongside marking the
+            # option's channel as "fifo".
+            label, value = tokens[0], tokens[1]
+            if not label[1]:
+                return None
+            value_text = value[0]
+            var_ref_match = _VAR_REF_RE.match(value_text)
+            if var_ref_match and var_ref_match.group("name") in locals_table:
+                value_text = locals_table[var_ref_match.group("name")]
+            values[label[0]] = value_text
+            fifo_labels.add(label[0])
         elif func == "define_flag":
             label = tokens[0]
             if not label[1]:
@@ -273,12 +296,12 @@ def _parse_primitive_calls(
             if not label[1]:
                 return None
 
-    return values, connections, value_descriptor_labels
+    return values, connections, value_descriptor_labels, fifo_labels
 
 
 def _parse_function_source(
     source: str,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str]] | None:
     body = _function_body_lines(source)
     if body is None:
         return None
@@ -306,6 +329,11 @@ def scan_value_descriptor_labels(source: str) -> set[str]:
     whatever unparseable statement caused the fallback.
     """
     return {match.group("label") for match in _VALUE_DESC_SCAN_RE.finditer(source)}
+
+
+def scan_fifo_labels(source: str) -> set[str]:
+    """Best-effort companion to scan_connections/scan_value_descriptor_labels, same reasoning."""
+    return {match.group("label") for match in _FIFO_SCAN_RE.finditer(source)}
 
 
 def _extract_generator_size(source: str) -> str:
@@ -348,18 +376,20 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         if generate_opts:
             parsed = _parse_function_source(generate_opts)
             if parsed is not None:
-                values, connections, value_descriptor_labels = parsed
+                values, connections, value_descriptor_labels, fifo_labels = parsed
                 return OptionHandlerResult(
                     handler=OptionsHandler(mode="generator", generatorSize=generator_size),
                     option_values=values,
                     connections=connections,
                     value_descriptor_labels=value_descriptor_labels,
+                    fifo_labels=fifo_labels,
                 )
             combined = f"{generate_opts_size}\n\n{generate_opts}"
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="manual", manualCode=combined),
                 connections=scan_connections(combined),
                 value_descriptor_labels=scan_value_descriptor_labels(combined),
+                fifo_labels=scan_fifo_labels(combined),
             )
 
         # _generate_opts_size with no _generate_opts alongside it can't
@@ -379,17 +409,19 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         # and, like any other unparseable statement, lands on "manual".
         parsed = _parse_function_source(define_opts)
         if parsed is not None:
-            values, connections, value_descriptor_labels = parsed
+            values, connections, value_descriptor_labels, fifo_labels = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="standard"),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
+                fifo_labels=fifo_labels,
             )
         return OptionHandlerResult(
             handler=OptionsHandler(mode="manual", manualCode=define_opts),
             connections=scan_connections(define_opts),
             value_descriptor_labels=scan_value_descriptor_labels(define_opts),
+            fifo_labels=scan_fifo_labels(define_opts),
         )
 
     return OptionHandlerResult(handler=OptionsHandler(mode="standard"))
