@@ -17,7 +17,7 @@
 # *- bash -*
 
 # Load modules
-load_debasher_module "debasher_value_pass"
+load_debasher_module "debasher_value_pass_example"
 
 #############
 # CONSTANTS #
