@@ -1,15 +1,20 @@
 export type OptionDirection = "input" | "output";
 
-export type OptionDataType = "int" | "float" | "string" | "None" | "ValueDescriptor";
+export type OptionDataType = "int" | "float" | "string" | "file" | "None";
+
+// How the value is delivered, independent of its type — see
+// api/models.py's ProgramOption.channel for the full rationale
+// (value_desc is output-only, fifo isn't direction-restricted).
+export type OptionChannel = "none" | "value_desc" | "fifo";
 
 export interface ProgramOption {
   id: string;
   label: string;
   direction: OptionDirection;
   dataType: OptionDataType;
+  channel: OptionChannel;
   description: string;
   value: string;
-  fifo: boolean;
   commandLine: boolean;
   mandatory: boolean;
 }
