@@ -12,10 +12,18 @@ class ProgramOption(BaseModel):
     id: str
     label: str
     direction: Literal["input", "output"]
-    dataType: Literal["int", "float", "string", "None", "ValueDescriptor"]
+    dataType: Literal["int", "float", "string", "file", "None"]
+    # How the value is delivered, independent of its type: "none" is a
+    # literal/computed value (or a connection, via the value's own
+    # "[proc;opt]" sentinel), "value_desc" is an engine-synthesized
+    # descriptor for this process's own output (always output-direction —
+    # the consuming side never marks itself, it just connects normally),
+    # "fifo" is a named pipe, which — unlike value_desc — isn't
+    # direction-restricted: a process can legitimately open an input via
+    # a fifo it rendezvous on rather than a plain connection.
+    channel: Literal["none", "value_desc", "fifo"] = "none"
     description: str
     value: str
-    fifo: bool
     commandLine: bool
     mandatory: bool = False
 
