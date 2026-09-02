@@ -1,3 +1,5 @@
+import json
+
 from pathlib import Path
 
 from . import script_generation
@@ -9,6 +11,37 @@ from .models import Program
 METADATA_DIRNAME = ".debasher"
 
 PROGRAM_FILENAME = "program.json"
+
+
+def delete_stale_script(output_dir: str, new_name: str) -> None:
+    """
+    If a program was already saved to `output_dir` under a different
+    name (the program can be renamed in the editor after being saved),
+    remove that now-orphaned <old_name>.sh before writing the new one —
+    otherwise renaming a program leaves a stale script sitting alongside
+    the current one on every subsequent save.
+
+    Must be called before save_program overwrites the metadata file,
+    since that's the only record of what the program used to be named.
+    A missing or unreadable metadata file just means there's no prior
+    save to clean up after, not an error.
+    """
+    metadata_path = Path(output_dir).expanduser() / METADATA_DIRNAME / PROGRAM_FILENAME
+
+    if not metadata_path.is_file():
+        return
+
+    try:
+        old_name = json.loads(metadata_path.read_text()).get("name")
+    except (OSError, ValueError):
+        return
+
+    if not old_name or old_name == new_name:
+        return
+
+    stale_script_path = Path(output_dir).expanduser() / f"{old_name}.sh"
+    if stale_script_path.is_file():
+        stale_script_path.unlink()
 
 
 def save_program(output_dir: str, program: Program) -> Path:
