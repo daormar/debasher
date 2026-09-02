@@ -49,7 +49,7 @@ process_a_explain_opts()
 
     # -outf option
     local description="output file"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########
@@ -94,7 +94,7 @@ process_b_explain_opts()
 {
     # -inf option
     local description="Input file"
-    explain_opt "-inf" "<str>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 }
 
 ########

@@ -45,7 +45,7 @@ rseq_explain_opts()
 {
     # -f option
     local description="File to be processed"
-    explain_opt "-f" "<string>" "$description"
+    explain_opt "-f" "<file>" "$description"
 
     # -outf option
     local description="output file"

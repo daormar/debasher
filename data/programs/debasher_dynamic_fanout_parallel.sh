@@ -52,15 +52,15 @@ worker_parallel_explain_opts()
 
     # -id option
     local description="id of writer"
-    explain_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<int>" "$description"
 
     # -inf option
     local description="input file"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<file>" "$description"
 }
 
 ########

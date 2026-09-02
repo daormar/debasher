@@ -53,7 +53,7 @@ generate_explain_opts()
 
     # -outf option
     local description="output file"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########
@@ -116,11 +116,11 @@ count_explain_opts()
 {
     # -inf option
     local description="input file"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 
     # -outf option
     local description="output file"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########
@@ -193,11 +193,11 @@ fragment_explain_opts()
 
     # -inf option
     local description="input file"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<file>" "$description"
 }
 
 ########
@@ -277,11 +277,11 @@ dispatch_explain_opts()
 
     # -ind option
     local description="input directory"
-    explain_opt "-ind" "<string>" "$description"
+    explain_opt "-ind" "<file>" "$description"
 
     # -outfi option
     local description="i'th output file"
-    explain_opt "-outfith" "<string>" "$description"
+    explain_opt "-outfith" "<file>" "$description"
 }
 
 ########
@@ -367,15 +367,15 @@ worker_explain_opts()
 
     # -id option
     local description="id of writer"
-    explain_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<int>" "$description"
 
     # -inf option
     local description="input file"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<file>" "$description"
 }
 
 ########
@@ -456,11 +456,11 @@ aggregate_explain_opts()
 
     # -indi option
     local description="i'th input directory"
-    explain_opt "-indith" "<string>" "$description"
+    explain_opt "-indith" "<file>" "$description"
 
     # -outf option
     local description="output file"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########

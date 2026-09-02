@@ -53,7 +53,7 @@ value_writer_explain_opts()
 
     # -outv option
     local description="output value descriptor"
-    explain_opt "-outv" "<string>" "$description"
+    explain_opt "-outv" "<int>" "$description"
 }
 
 ########
@@ -112,11 +112,11 @@ value_reader_explain_opts()
 {
     # -val-desc option
     local description="value descriptor"
-    explain_opt "-val-desc" "<string>" "$description"
+    explain_opt "-val-desc" "<int>" "$description"
 
     # -outf option
     local description="output file"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########

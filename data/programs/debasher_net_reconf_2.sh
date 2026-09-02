@@ -28,7 +28,7 @@ process_b_explain_opts()
 {
     # -inf option
     local description="input file"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 }
 
 ########
