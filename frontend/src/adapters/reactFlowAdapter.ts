@@ -47,19 +47,35 @@ export function programToReactFlowEdges(
   program: Program
 ): Edge[] {
 
-  return program.edges.map(edge => ({
+  return program.edges.map(edge => {
 
-    id: edge.id,
+    const sourceProcess = program.processes.find(
+      process => process.id === edge.sourceProcessId
+    );
 
-    source: edge.sourceProcessId,
+    const sourceOption = sourceProcess?.options.find(
+      option => option.id === edge.sourceOptionId
+    );
 
-    sourceHandle: edge.sourceOptionId,
+    return {
 
-    target: edge.targetProcessId,
+      id: edge.id,
 
-    targetHandle: edge.targetOptionId,
+      source: edge.sourceProcessId,
 
-  }));
+      sourceHandle: edge.sourceOptionId,
+
+      target: edge.targetProcessId,
+
+      targetHandle: edge.targetOptionId,
+
+      style: sourceOption?.channel === "fifo"
+        ? { strokeDasharray: "6 4" }
+        : undefined,
+
+    };
+
+  });
 
 }
 
