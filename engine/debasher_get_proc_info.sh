@@ -33,4 +33,5 @@ showvars=1
 showopts=1
 showopthnd=1
 showimpl=1
-debasher::_show_process_documentation "${processname}" "${showmeths}" "${showvars}" "${showopts}" "${showopthnd}" "${showimpl}"
+showspecs=0
+debasher::_show_process_documentation "${processname}" "${showmeths}" "${showvars}" "${showopts}" "${showopthnd}" "${showimpl}" "${showspecs}"
