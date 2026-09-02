@@ -86,6 +86,46 @@ def _synthesized_option(label: str) -> ProgramOption:
     )
 
 
+def _to_float(raw: str) -> float | None:
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _to_computational_specs(raw: dict[str, str]) -> ComputationalSpecs:
+    """
+    Maps debasher::_show_proc_specs's raw "### Computational
+    Specifications" attribute dict (engine attribute names: cpus, mem,
+    time, plus nodes/account/partition/throttle which ComputationalSpecs
+    doesn't model and are ignored here) onto the app's typed
+    ComputationalSpecs.
+    """
+    cpus = raw.get("cpus")
+    mem = raw.get("mem")
+    return ComputationalSpecs(
+        cpus=_to_float(cpus) if cpus is not None else None,
+        mem=_to_float(mem) if mem is not None else None,
+        time=raw.get("time"),
+    )
+
+
+def _to_additional_specs(raw: dict[str, str]) -> AdditionalSpecs:
+    """
+    Maps debasher::_show_proc_specs's raw "### Additional
+    Specifications" attribute dict onto the app's typed AdditionalSpecs.
+    "force" (engine value "yes" — see script_generation.py's
+    _additional_specs_str) is treated as a boolean by presence alone, so
+    unlike the other fields it isn't passed through by value.
+    """
+    return AdditionalSpecs(
+        force="force" in raw,
+        processdeps=raw.get("processdeps"),
+        alias=raw.get("alias"),
+        externalAlias=raw.get("ext_alias"),
+    )
+
+
 def _parse_module_markdown(markdown: str) -> tuple[str, str, list[tuple[str, str]]]:
     """
     Split debasher_doc_mod's output into the module name, its
@@ -179,7 +219,15 @@ def run_doc_mod(script_path: Path, debasher_mod_dir: str = "") -> str:
 
     try:
         result = subprocess.run(
-            [str(tool), "-m", str(script_path), "--show-opts", "--show-opthnd", "--show-impl"],
+            [
+                str(tool),
+                "-m",
+                str(script_path),
+                "--show-opts",
+                "--show-opthnd",
+                "--show-impl",
+                "--show-specs",
+            ],
             env=env,
             capture_output=True,
             text=True,
@@ -312,10 +360,12 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     executing exactly as it originally did but without necessarily
     recovering every connection for the canvas). The preamble is
     recovered too, heuristically, by reading `script_path` itself rather
-    than debasher_doc_mod's Markdown (see _extract_preamble). Everything
-    else debasher_doc_mod doesn't document — execution/program options
-    and per-process computational/additional specs — is left at its
-    blank/default value for the user to fill in.
+    than debasher_doc_mod's Markdown (see _extract_preamble). Each
+    process's computational/additional specs are recovered from
+    debasher_doc_mod's --show-specs output (see _to_computational_specs/
+    _to_additional_specs). Everything else debasher_doc_mod doesn't
+    document — execution/program options — is left at its blank/default
+    value for the user to fill in.
 
     `debasher_mod_dir`, if given, is both forwarded to debasher_doc_mod
     (see run_doc_mod) and carried over into the imported program's own
@@ -363,8 +413,8 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 optionsHandler=result.handler,
                 language=info.language,
                 code=info.code,
-                computationalSpecs=ComputationalSpecs(),
-                additionalSpecs=AdditionalSpecs(forced=False),
+                computationalSpecs=_to_computational_specs(info.computationalSpecs),
+                additionalSpecs=_to_additional_specs(info.additionalSpecs),
             )
         )
 
@@ -379,6 +429,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         envVars={"DEBASHER_MOD_DIR": debasher_mod_dir} if debasher_mod_dir else {},
         homeDir="",
         outputDir="",
+        sourceDir=str(script_path.resolve().parent),
         executionOptions=ExecutionOptions(scheduler=""),
         programOptions={},
         processes=processes,
