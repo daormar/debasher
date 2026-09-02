@@ -46,7 +46,7 @@ debasher::_show_proc_opts()
         local processname
         local opt
         local flags=""
-        local paren_flags
+        local paren_flags=""
         curr_proc_name="${key%%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"
         opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
         if [ "${processname}" = "${curr_proc_name}" ]; then
