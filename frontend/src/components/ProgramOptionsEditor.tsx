@@ -80,7 +80,7 @@ export default function ProgramOptionsEditor({ onClose }: Props) {
 
           <input
 
-            type={option.dataType === "string" ? "text" : "number"}
+            type={option.dataType === "string" || option.dataType === "file" ? "text" : "number"}
 
             step={option.dataType === "float" ? "any" : undefined}
 
