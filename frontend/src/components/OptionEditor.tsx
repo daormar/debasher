@@ -58,9 +58,13 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
     useState<OptionDataType>(option.dataType);
 
   const isFlag = dataType === "None";
+  const isValueDescriptor = dataType === "ValueDescriptor";
 
   useEffect(() => {
     if (direction === "output" && dataType === "None") {
+      setDataType("string");
+    }
+    if (direction === "input" && dataType === "ValueDescriptor") {
       setDataType("string");
     }
   }, [direction, dataType]);
@@ -89,7 +93,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       direction: getOptionDirection(label),
       dataType,
       description,
-      value: isFlag ? "" : value,
+      value: isFlag || isValueDescriptor ? "" : value,
       fifo,
       commandLine,
       mandatory: commandLine && mandatory && !isFlag,
@@ -185,6 +189,12 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
             </option>
           )}
 
+          {direction === "output" && (
+            <option value="ValueDescriptor">
+              Value descriptor
+            </option>
+          )}
+
         </select>
 
         <label>
@@ -243,34 +253,30 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         </label>
 
-        {!manualMode && (
+        <label style={{ color: fifoEditable && !manualMode ? undefined : "#999" }}>
 
-          <label style={{ color: fifoEditable ? undefined : "#999" }}>
+          <input
 
-            <input
+            type="checkbox"
 
-              type="checkbox"
+            checked={fifoEditable ? fifo : (connectedSourceOption?.sourceOption.fifo ?? false)}
 
-              checked={fifoEditable ? fifo : (connectedSourceOption?.sourceOption.fifo ?? false)}
+            disabled={!fifoEditable || manualMode}
 
-              disabled={!fifoEditable}
+            onChange={(event) =>
+              setFifo(event.target.checked)
+            }
 
-              onChange={(event) =>
-                setFifo(event.target.checked)
-              }
+          />
+          {" "}FIFO
 
-            />
-            {" "}FIFO
+        </label>
 
-          </label>
-
-        )}
-
-        {!manualMode && !isFlag && (
+        {!isFlag && (
 
           <>
 
-            <label style={{ color: commandLine ? "#999" : undefined }}>
+            <label style={{ color: commandLine || isValueDescriptor || manualMode ? "#999" : undefined }}>
               Value
             </label>
 
@@ -294,9 +300,9 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
               <input
 
-                value={value}
+                value={isValueDescriptor ? "" : value}
 
-                disabled={commandLine}
+                disabled={commandLine || isValueDescriptor || manualMode}
 
                 onChange={(event) =>
                   setValue(event.target.value)
