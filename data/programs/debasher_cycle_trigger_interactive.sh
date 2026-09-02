@@ -49,15 +49,15 @@ master_explain_opts()
 
     # -trigger option
     local description="external trigger fifo"
-    explain_opt "-trigger" "<string>" "$description"
+    explain_opt "-trigger" "<int>" "$description"
 
     # -inf option
     local description="input fifo"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<int>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<int>" "$description"
 }
 
 ########
@@ -142,15 +142,15 @@ worker_explain_opts()
 
     # -inf option
     local description="input fifo"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<int>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<int>" "$description"
 
     # -outd option
     local description="output directory"
-    explain_opt "-outd" "<string>" "$description"
+    explain_opt "-outd" "<file>" "$description"
 }
 
 ########

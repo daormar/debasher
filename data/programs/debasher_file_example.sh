@@ -55,7 +55,7 @@ file_writer_explain_opts()
 
     # -outf option
     local description="output file"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########
@@ -107,7 +107,7 @@ file_reader_explain_opts()
 {
     # -inf option
     local description="input file"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 }
 
 ########

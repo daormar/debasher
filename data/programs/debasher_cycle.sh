@@ -49,11 +49,11 @@ process_a_explain_opts()
 
     # -inf option
     local description="input fifo"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<int>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<int>" "$description"
 }
 
 ########
@@ -119,11 +119,11 @@ process_b_explain_opts()
 {
     # -inf option
     local description="input fifo"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<int>" "$description"
 
     # -outf option
     local description="output fifo"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<int>" "$description"
 }
 
 ########

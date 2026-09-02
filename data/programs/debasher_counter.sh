@@ -49,7 +49,7 @@ counter_explain_opts()
 
     # -outf option
     local description="output fifo"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<int>" "$description"
 }
 
 ########

@@ -361,7 +361,7 @@ worker_explain_opts()
 
     # -id option
     local description="id of writer"
-    explain_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<int>" "$description"
 
     # -inf option
     local description="input fifo"

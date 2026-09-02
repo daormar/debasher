@@ -49,11 +49,11 @@ host1_explain_opts()
 
     # -id option
     local description="process id"
-    explain_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<int>" "$description"
 
     # -outf option
     local description="output file"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########

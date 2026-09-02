@@ -49,11 +49,11 @@ array_writer_explain_opts()
 
     # -id option
     local description="id of writer"
-    explain_opt "-id" "<string>" "$description"
+    explain_opt "-id" "<int>" "$description"
 
     # -outf option
     local description="output file of writer"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########
@@ -120,7 +120,7 @@ array_reader_explain_opts()
 
     # -outdir option
     local description="output directory of reader"
-    explain_opt "-outdir" "<string>" "$description"
+    explain_opt "-outdir" "<file>" "$description"
 }
 
 ########

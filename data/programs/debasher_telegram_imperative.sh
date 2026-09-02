@@ -48,7 +48,7 @@ telegram_explain_opts()
 {
     # -f option
     local description="File to be processed"
-    explain_opt "-f" "<string>" "$description"
+    explain_opt "-f" "<file>" "$description"
 
     # -c option
     local description="Line length in characters"
@@ -56,7 +56,7 @@ telegram_explain_opts()
 
     # -out-processdir option
     local description="output directory"
-    explain_opt "-out-processdir" "<string>" "$description"
+    explain_opt "-out-processdir" "<file>" "$description"
 }
 
 ########
