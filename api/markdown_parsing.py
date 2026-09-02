@@ -1,7 +1,14 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from .debasher_constants import (
+    PROCESS_METHOD_DEFINE_OPT_DEPS_SUFFIX,
+    PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
+    PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
+    PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
+)
 
 # Parses the Markdown produced by debasher::_show_process_documentation
 # (engine/debasher_lib_processes.sh) for a single process, e.g.:
@@ -12,7 +19,7 @@ from pydantic import BaseModel
 #   Generates a text file of a given size and random content.
 #
 #   ### Process Options
-#   - `-outf` string output file
+#   - `-outf` <string> output file
 #   - `-v` verbose flag (command-line)
 #
 #   ### Process Methods
@@ -34,14 +41,32 @@ from pydantic import BaseModel
 
 _OPTION_LINE_RE = re.compile(r"^-\s*`(?P<label>[^`]+)`\s*(?P<rest>.*)$")
 # debasher::_show_proc_opts (engine/debasher_lib_processes) prints the
-# option's type as a bare word right after the label, with no markup
-# around it — only present at all when the option was declared with
-# debasher::explain_opt (typed) rather than debasher::explain_flag.
-_OPTION_TYPE_RE = re.compile(r"^(?P<type>int|float|string)\s+(?P<rest>.*)$")
+# option's type right after the label, verbatim from whatever was passed
+# as debasher::explain_opt's own $2 — angle-bracket-wrapped by
+# convention throughout every script in data/programs ("<int>",
+# "<string>", ...) — and only present at all when the option was
+# declared with debasher::explain_opt (typed) rather than
+# debasher::explain_flag.
+_OPTION_TYPE_RE = re.compile(r"^<(?P<type>int|float|string)>\s+(?P<rest>.*)$")
 _OPTION_FLAGS_RE = re.compile(r"^(?P<desc>.*?)\s*\((?P<flags>[^)]*)\)\s*$")
 _CODE_FENCE_START_RE = re.compile(r"^```(?P<lang>\S*)\s*$")
 
 _PROCESS_LANGUAGES: set[str] = {"bash", "python", "perl", "r", "groovy"}
+
+# debasher::_show_proc_opt_handler (engine/debasher_lib_processes) dumps
+# one ```bash ... ``` block per option-handler function it finds for the
+# process — any of _define_opts, _define_opt_deps, _generate_opts_size,
+# _generate_opts — each as its own `declare -f` fence, back to back
+# under a single "### Process Option Handler" heading. Longer suffixes
+# are checked first only for readability; none of these four suffixes is
+# actually a suffix of another, so match order doesn't affect the result.
+_OPT_HANDLER_FUNC_SUFFIXES = [
+    PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
+    PROCESS_METHOD_DEFINE_OPT_DEPS_SUFFIX,
+    PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
+    PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
+]
+_FUNC_HEADER_RE = re.compile(r"^(?P<name>\S+)\s*\(\)")
 
 OptionDataType = Literal["int", "float", "string", "None"]
 ProcessLanguage = Literal["bash", "python", "perl", "r", "groovy"]
@@ -60,6 +85,12 @@ class ProcessInfo(BaseModel):
     options: list[ProcessInfoOption]
     language: ProcessLanguage
     code: str
+    # Reserved method suffix (e.g. PROCESS_METHOD_DEFINE_OPTS_SUFFIX) ->
+    # raw `declare -f` source (header + body) for that option-handler
+    # function, for whichever of them the process actually defines. Only
+    # populated when the Markdown was produced with --show-opthnd; empty
+    # otherwise (see option_handler_import.py for what recovers from it).
+    optionHandler: dict[str, str] = Field(default_factory=dict)
 
 
 def split_markdown_sections(markdown: str) -> dict[str, list[str]]:
@@ -138,16 +169,60 @@ def parse_code(lines: list[str]) -> tuple[ProcessLanguage, str]:
     return language, "\n".join(code_lines)
 
 
+def parse_code_blocks(lines: list[str]) -> list[str]:
+    """
+    Like parse_code, but returns every ```<lang> ... ``` fenced block in
+    `lines` (fence lines excluded) rather than just the first — for
+    sections that may concatenate several of them back to back, such as
+    "Process Option Handler".
+    """
+    blocks: list[str] = []
+    current: list[str] | None = None
+
+    for line in lines:
+        if current is None:
+            if _CODE_FENCE_START_RE.match(line):
+                current = []
+        elif line.strip() == "```":
+            blocks.append("\n".join(current))
+            current = None
+        else:
+            current.append(line)
+
+    return blocks
+
+
+def parse_option_handler(lines: list[str]) -> dict[str, str]:
+    """Classifies each block from parse_code_blocks by the reserved
+    method suffix its function name (first line, "<funcname> ()") ends
+    with. A block whose name matches none of them is ignored."""
+    handlers: dict[str, str] = {}
+
+    for block in parse_code_blocks(lines):
+        header_match = _FUNC_HEADER_RE.match(block.strip())
+        if not header_match:
+            continue
+        funcname = header_match.group("name")
+        for suffix in _OPT_HANDLER_FUNC_SUFFIXES:
+            if funcname.endswith(suffix):
+                handlers[suffix] = block
+                break
+
+    return handlers
+
+
 def parse_proc_info_markdown(markdown: str) -> ProcessInfo:
     sections = split_markdown_sections(markdown)
 
     description = "\n".join(sections.get("Description", [])).strip()
     options = parse_options(sections.get("Process Options", []))
     language, code = parse_code(sections.get("Process Implementation", []))
+    option_handler = parse_option_handler(sections.get("Process Option Handler", []))
 
     return ProcessInfo(
         description=description,
         options=options,
         language=language,
         code=code,
+        optionHandler=option_handler,
     )
