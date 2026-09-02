@@ -65,6 +65,10 @@ interface ProgramContextType {
     info: ProcessInfo
   ) => void;
 
+  setName: (
+    name: string
+  ) => void;
+
   setDescription: (
     description: string
   ) => void;
@@ -449,6 +453,17 @@ export function ProgramProvider({
           : process
       ),
 
+    }));
+
+  }
+
+  function setName(
+    name: string
+  ) {
+
+    setProgram(current => ({
+      ...current,
+      name,
     }));
 
   }
@@ -910,6 +925,8 @@ export function ProgramProvider({
     addProcess,
 
     applyProcessInfo,
+
+    setName,
 
     setDescription,
 
