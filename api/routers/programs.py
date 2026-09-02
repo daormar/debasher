@@ -36,6 +36,10 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     if not request.outputDir.strip():
         raise HTTPException(status_code=400, detail="outputDir must not be empty")
 
+    # Must run before save_program, which is what overwrites the
+    # metadata file this reads the previous name from.
+    persistence.delete_stale_script(request.outputDir, request.program.name)
+
     program_path = persistence.save_program(request.outputDir, request.program)
 
     try:
