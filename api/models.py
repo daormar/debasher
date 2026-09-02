@@ -35,7 +35,7 @@ class ComputationalSpecs(BaseModel):
 
 
 class AdditionalSpecs(BaseModel):
-    forced: bool
+    force: bool
     processdeps: Optional[str] = None
     alias: Optional[str] = None
     externalAlias: Optional[str] = None
@@ -81,6 +81,12 @@ class Program(BaseModel):
     envVars: dict[str, str]
     homeDir: str = ""
     outputDir: str
+    # Absolute directory of the .sh this program was imported from (see
+    # program_import.py), empty for a program that wasn't imported. Used
+    # only to resolve a process's AdditionalSpecs.externalAlias — a path
+    # relative to that directory — when copying the aliased file
+    # alongside a later save (see persistence.copy_ext_alias_files).
+    sourceDir: str = ""
     executionOptions: ExecutionOptions
     programOptions: dict[str, str]
     processes: list[ProgramProcess]
