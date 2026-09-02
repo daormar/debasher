@@ -112,11 +112,19 @@ export default function Toolbar({ onClose }: Props) {
         style={{
           alignSelf: "center",
           marginRight: 8,
+          width: 220,
           fontSize: 18,
           fontWeight: "bold",
           border: "1px solid transparent",
           background: "transparent",
           padding: "2px 4px",
+          // A name longer than the fixed width above is truncated with
+          // an ellipsis rather than just cut off — while editing, the
+          // browser's own caret handling still scrolls the field to
+          // follow the cursor, so the full name stays reachable.
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
 
       />
