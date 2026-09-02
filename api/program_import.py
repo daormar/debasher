@@ -37,6 +37,13 @@ _PROCESS_Y_SPACING = 160.0
 _MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
 _PROCESS_HEADING_RE = re.compile(r"^## (?P<name>.+)$")
 
+# A top-level bash function definition header — "name()", "name ()",
+# "name() {", or the same with a leading "function " keyword — anchored
+# to column 0 since that's how every function is written throughout
+# data/programs (including the occasional brace-on-the-same-line style,
+# e.g. debasher_dynamic_fanout.sh's count_chars() {).
+_FUNCTION_DEF_RE = re.compile(r"^(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{?\s*$")
+
 
 def _option_direction(label: str) -> Literal["input", "output"]:
     """Mirrors frontend/src/models/option.ts's getOptionDirection."""
@@ -124,6 +131,31 @@ def _parse_module_markdown(markdown: str) -> tuple[str, str, list[tuple[str, str
     description = "\n".join(description_lines).strip()
 
     return name, description, processes
+
+
+def _extract_preamble(script_path: Path) -> str:
+    """
+    Heuristic recovery of the program's preamble: debasher_doc_mod's
+    Markdown carries no such notion at all (it only ever *runs* the
+    script's _program function to register processes, so whatever
+    precedes the first function definition — a shebang, comments,
+    `source`/`load_debasher_module` calls, constants — is just skipped
+    over rather than documented anywhere). Since the frontend's own
+    preamble is exactly "raw bash inserted verbatim before every
+    function definition" (see script_generation.py's _add_preamble),
+    everything in the script itself up to (not including) its first
+    top-level function definition is that same thing, read back out.
+    """
+    try:
+        lines = script_path.read_text().splitlines()
+    except OSError:
+        return ""
+
+    for index, line in enumerate(lines):
+        if _FUNCTION_DEF_RE.match(line):
+            return "\n".join(lines[:index]).rstrip()
+
+    return "\n".join(lines).rstrip()
 
 
 def run_doc_mod(script_path: Path, debasher_mod_dir: str = "") -> str:
@@ -280,10 +312,12 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     option definition uses control flow or a real per-task generator
     falls back to "manual"/"array" mode with its source kept verbatim,
     executing exactly as it originally did but without necessarily
-    recovering every connection for the canvas). Everything else
-    debasher_doc_mod doesn't document — preamble, execution/program
-    options, and per-process computational/additional specs — is left
-    at its blank/default value for the user to fill in.
+    recovering every connection for the canvas). The preamble is
+    recovered too, heuristically, by reading `script_path` itself rather
+    than debasher_doc_mod's Markdown (see _extract_preamble). Everything
+    else debasher_doc_mod doesn't document — execution/program options
+    and per-process computational/additional specs — is left at its
+    blank/default value for the user to fill in.
 
     `debasher_mod_dir`, if given, is both forwarded to debasher_doc_mod
     (see run_doc_mod) and carried over into the imported program's own
@@ -332,7 +366,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         id=str(uuid.uuid4()),
         name=name,
         description=description,
-        preamble="",
+        preamble=_extract_preamble(script_path),
         envVars={"DEBASHER_MOD_DIR": debasher_mod_dir} if debasher_mod_dir else {},
         homeDir="",
         outputDir="",
