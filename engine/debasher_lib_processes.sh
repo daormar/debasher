@@ -128,11 +128,65 @@ debasher::_show_proc_implem()
 {
     local processname=$1
 
+    # Recursively collects, into the "seen" associative array (passed by
+    # name in $3), every function reachable from $1's body that is itself
+    # defined in the same script file ($2) as $1 -- i.e. a helper the
+    # process author wrote, as opposed to a function belonging to the
+    # DeBasher framework itself (defined in a different file) or an
+    # external command. Relies on "shopt -s extdebug" already being
+    # active in the caller, since that is what makes "declare -F" report
+    # a function's defining file instead of just its name.
+    debasher::_collect_func_deps()
+    {
+        local funcname=$1
+        local scriptfile=$2
+        # Kept as a plain string, and passed through unchanged on the
+        # recursive call below, rather than re-using the nameref alias
+        # itself -- a nameref that recursively aliases a variable of its
+        # own name triggers bash's "circular name reference" and silently
+        # stops propagating writes to the caller's array.
+        local collected_name=$3
+        local -n _collected=$3
+
+        [ -n "${_collected[$funcname]+x}" ] && return 0
+        _collected[$funcname]=1
+
+        local word
+        for word in $(declare -f "${funcname}" | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | sort -u); do
+            [ -n "${_collected[$word]+x}" ] && continue
+            local defsite
+            defsite=`declare -F "${word}" 2>/dev/null`
+            [ -z "${defsite}" ] && continue
+            [ "${defsite##* }" = "${scriptfile}" ] && debasher::_collect_func_deps "${word}" "${scriptfile}" "${collected_name}"
+        done
+    }
+
     # Search for process implementations
     if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}" >/dev/null; then
         # Try with bash
         local funcname=`debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"`
+
+        # Pull in any helper functions the process author defined
+        # alongside it in the same script file -- otherwise the
+        # implementation captured here would call functions that don't
+        # exist anywhere else in what gets shown/imported.
+        shopt -s extdebug
+        local scriptfile
+        scriptfile=`declare -F "${funcname}"`
+        scriptfile=${scriptfile##* }
+
+        local -A seen=()
+        debasher::_collect_func_deps "${funcname}" "${scriptfile}" seen
+        shopt -u extdebug
+
         echo '```'bash
+        local dep
+        for dep in "${!seen[@]}"; do
+            if [ "${dep}" != "${funcname}" ]; then
+                declare -f "${dep}"
+                echo ""
+            fi
+        done
         declare -f "${funcname}"
         echo '```'
         return 0
