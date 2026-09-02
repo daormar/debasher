@@ -58,7 +58,6 @@ def _to_program_option(info: ProcessInfoOption) -> ProgramOption:
         dataType=info.dataType,
         description=info.description,
         value="",
-        fifo=False,
         commandLine=info.commandLine,
         mandatory=info.mandatory,
     )
@@ -82,7 +81,6 @@ def _synthesized_option(label: str) -> ProgramOption:
         dataType="string",
         description="",
         value="",
-        fifo=False,
         commandLine=False,
         mandatory=False,
     )
@@ -339,8 +337,19 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
             value = result.option_values.get(option.label)
             if value is not None:
                 option.value = value
-            if option.label in result.value_descriptor_labels:
-                option.dataType = "ValueDescriptor"
+            # channel is independent of dataType (see models.py): a
+            # value_desc option is always output-direction (that call
+            # defines an output's own value — the consuming side just
+            # connects normally, it never marks itself value_desc), but
+            # fifo isn't direction-restricted — a process can legitimately
+            # open an *input* on a fifo it rendezvous on by name rather
+            # than a plain connection (see debasher_cycle_trigger_
+            # interactive.sh's worker, whose "-threshold" is a genuine
+            # mandatory cmdline int internally sourced from a fifo).
+            if option.direction == "output" and option.label in result.value_descriptor_labels:
+                option.channel = "value_desc"
+            if option.label in result.fifo_labels:
+                option.channel = "fifo"
 
         pending_connections.extend((process_name, connection) for connection in result.connections)
 
