@@ -12,8 +12,8 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
 
   const { setAdditionalSpecs } = useProgram();
 
-  const [forced, setForced] =
-    useState(process.additionalSpecs.forced);
+  const [force, setForce] =
+    useState(process.additionalSpecs.force);
 
   const [processdeps, setProcessdeps] =
     useState(process.additionalSpecs.processdeps ?? "");
@@ -27,7 +27,7 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
   function handleSave() {
 
     setAdditionalSpecs(process.id, {
-      forced,
+      force,
       processdeps: processdeps.trim() ? processdeps : undefined,
       alias: alias.trim() ? alias : undefined,
       externalAlias: externalAlias.trim() ? externalAlias : undefined,
@@ -73,14 +73,14 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
 
             type="checkbox"
 
-            checked={forced}
+            checked={force}
 
             onChange={(event) =>
-              setForced(event.target.checked)
+              setForce(event.target.checked)
             }
 
           />
-          {" "}forced
+          {" "}force
 
         </label>
 
