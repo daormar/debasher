@@ -12,6 +12,9 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
   const [scriptPath, setScriptPath] =
     useState("");
 
+  const [debasherModDir, setDebasherModDir] =
+    useState("");
+
   const [isImporting, setImporting] =
     useState(false);
 
@@ -29,7 +32,7 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
     setError(null);
 
     try {
-      const program = await importProgram(scriptPath.trim());
+      const program = await importProgram(scriptPath.trim(), debasherModDir.trim());
       onImport(program);
     } catch (err) {
       setError(
@@ -73,6 +76,36 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
         </h3>
 
         <label style={{ fontSize: 14 }}>
+          DEBASHER_MOD_DIR (optional)
+        </label>
+
+        <input
+
+          type="text"
+
+          value={debasherModDir}
+
+          onChange={(event) =>
+            setDebasherModDir(event.target.value)
+          }
+
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              handleImport();
+            }
+          }}
+
+          placeholder="/path/to/modules"
+
+          autoFocus
+
+          style={{
+            width: "100%",
+          }}
+
+        />
+
+        <label style={{ fontSize: 14 }}>
           Script path (.sh)
         </label>
 
@@ -93,8 +126,6 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
           }}
 
           placeholder="/path/to/program.sh"
-
-          autoFocus
 
           style={{
             width: "100%",

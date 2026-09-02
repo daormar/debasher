@@ -2,7 +2,7 @@ import pydantic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import persistence
+from .. import persistence, program_import
 from ..models import Program
 
 router = APIRouter(prefix="/api/programs", tags=["programs"])
@@ -24,7 +24,7 @@ class LoadProgramRequest(BaseModel):
 
 class ImportProgramRequest(BaseModel):
     scriptPath: str
-    program: Program
+    debasherModDir: str = ""
 
 
 @router.post("/save", response_model=SaveProgramResponse)
@@ -65,26 +65,26 @@ def load_program_from_dir(request: LoadProgramRequest) -> Program:
 
 
 @router.post("/import", response_model=Program)
-def import_program_from_script(request: ImportProgramRequest) -> Program:
+def import_program(request: ImportProgramRequest) -> Program:
     """
-    Import a program from a Bash script.
-
-    Stub: just echoes back the (empty) program the frontend sent,
-    ignoring the script's contents.
-
-    TODO: replace this with a real call into core/ that parses
-    `request.scriptPath` into a Program, e.g.:
-        return core.import_program(request.scriptPath)
+    Import a program from an existing Bash script, by running
+    debasher_doc_mod over it and parsing the Markdown it generates (see
+    program_import.py for what can and can't be recovered this way).
     """
     if not request.scriptPath.strip():
         raise HTTPException(status_code=400, detail="scriptPath must not be empty")
 
     try:
-        persistence.resolve_script_path(request.scriptPath)
+        resolved_script_path = persistence.resolve_script_path(request.scriptPath)
     except FileNotFoundError as err:
         raise HTTPException(status_code=404, detail=str(err))
 
-    return request.program
+    try:
+        return program_import.import_program_from_script(
+            resolved_script_path, request.debasherModDir
+        )
+    except RuntimeError as err:
+        raise HTTPException(status_code=400, detail=str(err))
 
 
 @router.get("/{program_id}", response_model=Program)

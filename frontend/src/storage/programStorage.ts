@@ -54,11 +54,14 @@ export async function loadProgram(inputDir: string): Promise<Program> {
   return response.json();
 }
 
-export async function importProgram(scriptPath: string): Promise<Program> {
+export async function importProgram(
+  scriptPath: string,
+  debasherModDir: string
+): Promise<Program> {
   const response = await fetch("/api/programs/import", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scriptPath, program: createEmptyProgram("") }),
+    body: JSON.stringify({ scriptPath, debasherModDir }),
   });
 
   if (!response.ok) {

@@ -2,7 +2,6 @@ import os
 import re
 import subprocess
 import tempfile
-from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -12,6 +11,7 @@ from ..debasher_constants import (
     RESERVED_HEREDOC_SUFFIXES,
     RESERVED_PROCESS_METHOD_SUFFIXES,
 )
+from ..markdown_parsing import ProcessInfo, ProcessInfoOption, parse_proc_info_markdown
 
 router = APIRouter(prefix="/api/processes", tags=["processes"])
 
@@ -163,146 +163,9 @@ def suggest_process_names(request: SuggestProcessNamesRequest) -> SuggestProcess
 
 # --- debasher_get_proc_info ------------------------------------------
 #
-# Parses the Markdown produced by debasher::_document_process (engine/
-# debasher_lib_processes.sh), e.g.:
-#
-#   ## generate
-#
-#   ### Description
-#   Generates a text file of a given size and random content.
-#
-#   ### Process Options
-#   - `-outf` <string> output file
-#   - `-v` verbose flag (command-line)
-#
-#   ### Process Methods
-#   - `generate_document`
-#
-#   ### Process Variables
-#
-#   ### Process Implementation
-#   ```bash
-#   generate ()
-#   { ... }
-#   ```
-
-_OPTION_LINE_RE = re.compile(r"^-\s*`(?P<label>[^`]+)`\s*(?P<rest>.*)$")
-_OPTION_TYPE_RE = re.compile(r"^<(?P<type>\w+)>\s*(?P<rest>.*)$")
-_OPTION_FLAGS_RE = re.compile(r"^(?P<desc>.*?)\s*\((?P<flags>[^)]*)\)\s*$")
-_CODE_FENCE_START_RE = re.compile(r"^```(?P<lang>\S*)\s*$")
-
-_OPTION_DATA_TYPES: set[str] = {"int", "float", "string"}
-_PROCESS_LANGUAGES: set[str] = {"bash", "python", "perl", "r", "groovy"}
-
-OptionDataType = Literal["int", "float", "string", "None"]
-ProcessLanguage = Literal["bash", "python", "perl", "r", "groovy"]
-
-
-class ProcessInfoOption(BaseModel):
-    label: str
-    dataType: OptionDataType
-    description: str
-    commandLine: bool
-    mandatory: bool
-
-
-class ProcessInfo(BaseModel):
-    description: str
-    options: list[ProcessInfoOption]
-    language: ProcessLanguage
-    code: str
-
-
-def _split_markdown_sections(markdown: str) -> dict[str, list[str]]:
-    """Group lines under their nearest "### <title>" heading."""
-    sections: dict[str, list[str]] = {}
-    current: str | None = None
-
-    for line in markdown.splitlines():
-        if line.startswith("### "):
-            current = line[len("### "):].strip()
-            sections[current] = []
-        elif line.startswith("## "):
-            current = None
-        elif current is not None:
-            sections[current].append(line)
-
-    return sections
-
-
-def _parse_options(lines: list[str]) -> list[ProcessInfoOption]:
-    options = []
-
-    for line in lines:
-        line_match = _OPTION_LINE_RE.match(line)
-        if not line_match:
-            continue
-
-        label = line_match.group("label").strip()
-        rest = line_match.group("rest")
-
-        data_type: OptionDataType = "None"
-        type_match = _OPTION_TYPE_RE.match(rest)
-        if type_match:
-            candidate = type_match.group("type")
-            data_type = candidate if candidate in _OPTION_DATA_TYPES else "string"  # type: ignore[assignment]
-            rest = type_match.group("rest")
-
-        flags_match = _OPTION_FLAGS_RE.match(rest)
-        if flags_match:
-            description = flags_match.group("desc").strip()
-            flags = [flag.strip() for flag in flags_match.group("flags").split(",")]
-        else:
-            description = rest.strip()
-            flags = []
-
-        options.append(
-            ProcessInfoOption(
-                label=label,
-                dataType=data_type,
-                description=description,
-                commandLine="command-line" in flags,
-                mandatory="mandatory" in flags,
-            )
-        )
-
-    return options
-
-
-def _parse_code(lines: list[str]) -> tuple[ProcessLanguage, str]:
-    language: ProcessLanguage = "bash"
-    code_lines: list[str] = []
-    in_fence = False
-
-    for line in lines:
-        if not in_fence:
-            fence_match = _CODE_FENCE_START_RE.match(line)
-            if fence_match:
-                in_fence = True
-                candidate = fence_match.group("lang")
-                if candidate in _PROCESS_LANGUAGES:
-                    language = candidate  # type: ignore[assignment]
-        elif line.strip() == "```":
-            break
-        else:
-            code_lines.append(line)
-
-    return language, "\n".join(code_lines)
-
-
-def _parse_proc_info_markdown(markdown: str) -> ProcessInfo:
-    sections = _split_markdown_sections(markdown)
-
-    description = "\n".join(sections.get("Description", [])).strip()
-    options = _parse_options(sections.get("Process Options", []))
-    language, code = _parse_code(sections.get("Process Implementation", []))
-
-    return ProcessInfo(
-        description=description,
-        options=options,
-        language=language,
-        code=code,
-    )
+# Fetches a single process's Markdown documentation from a program's
+# preamble; the actual parsing lives in markdown_parsing.py, shared with
+# program_import.py.
 
 
 def _get_proc_info(
@@ -318,7 +181,7 @@ def _get_proc_info(
     if stdout is None:
         return None
 
-    info = _parse_proc_info_markdown(stdout)
+    info = parse_proc_info_markdown(stdout)
 
     # debasher_get_proc_info exits 0 even for an unknown process name,
     # printing only warnings (to stderr) and otherwise-empty sections —
