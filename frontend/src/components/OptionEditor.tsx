@@ -277,37 +277,54 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
               Channel
             </label>
 
-            <select
+            {connectedSourceLabel ? (
 
-              value={channel}
+              <div
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  borderRadius: 4,
+                  border: "1px solid #bbb",
+                  color: "#888",
+                  boxSizing: "border-box",
+                }}
+              >
+                From connection
+              </div>
 
-              disabled={!!connectedSourceLabel}
+            ) : (
 
-              onChange={(event) =>
-                setChannel(event.target.value as OptionChannel)
-              }
+              <select
 
-              style={{
-                width: "100%",
-              }}
+                value={channel}
 
-            >
+                onChange={(event) =>
+                  setChannel(event.target.value as OptionChannel)
+                }
 
-              <option value="none">
-                Direct value
-              </option>
+                style={{
+                  width: "100%",
+                }}
 
-              {direction === "output" && (
-                <option value="value_desc">
-                  Value descriptor
+              >
+
+                <option value="none">
+                  Direct value
                 </option>
-              )}
 
-              <option value="fifo">
-                FIFO
-              </option>
+                {direction === "output" && (
+                  <option value="value_desc">
+                    Value descriptor
+                  </option>
+                )}
 
-            </select>
+                <option value="fifo">
+                  FIFO
+                </option>
+
+              </select>
+
+            )}
 
           </>
 
