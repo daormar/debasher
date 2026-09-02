@@ -26,7 +26,7 @@ export const DEFAULT_COMPUTATIONAL_SPECS: Required<ComputationalSpecs> = {
 
 export interface AdditionalSpecs {
 
-  forced: boolean;
+  force: boolean;
 
   processdeps?: string;
 
