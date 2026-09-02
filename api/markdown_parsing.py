@@ -46,8 +46,19 @@ _OPTION_LINE_RE = re.compile(r"^-\s*`(?P<label>[^`]+)`\s*(?P<rest>.*)$")
 # convention throughout every script in data/programs ("<int>",
 # "<string>", ...) — and only present at all when the option was
 # declared with debasher::explain_opt (typed) rather than
-# debasher::explain_flag.
-_OPTION_TYPE_RE = re.compile(r"^<(?P<type>int|float|string)>\s+(?P<rest>.*)$")
+# debasher::explain_flag. This is purely the value's type: how it's
+# *delivered* (a plain value, a value descriptor, a fifo — see
+# ProgramOption.channel in models.py) is a separate, independent axis,
+# recovered instead from _define_opts/_generate_opts source by
+# option_handler_import.py — an option's declared type and its actual
+# channel can legitimately diverge (e.g. a mandatory cmdline int that's
+# actually sourced from a fifo internally), so this section shouldn't
+# try to encode both into one type keyword. "file" is included here
+# (unlike value_desc/fifo) because there's no dedicated primitive call
+# to recover it from _define_opts — a file-path option is defined with
+# the exact same debasher::define_opt as any other string, so a
+# declaration is the only place it can come from at all.
+_OPTION_TYPE_RE = re.compile(r"^<(?P<type>int|float|string|file)>\s+(?P<rest>.*)$")
 _OPTION_FLAGS_RE = re.compile(r"^(?P<desc>.*?)\s*\((?P<flags>[^)]*)\)\s*$")
 _CODE_FENCE_START_RE = re.compile(r"^```(?P<lang>\S*)\s*$")
 
@@ -68,7 +79,7 @@ _OPT_HANDLER_FUNC_SUFFIXES = [
 ]
 _FUNC_HEADER_RE = re.compile(r"^(?P<name>\S+)\s*\(\)")
 
-OptionDataType = Literal["int", "float", "string", "None"]
+OptionDataType = Literal["int", "float", "string", "file", "None"]
 ProcessLanguage = Literal["bash", "python", "perl", "r", "groovy"]
 
 
