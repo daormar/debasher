@@ -8,7 +8,7 @@ for name in "${proc_opts_symbols[@]}"; do
 done
 
 # Generate process implementation API file
-proc_impl_symbols=("read_opt_value_from_func_args()")
+proc_impl_symbols=("read_opt_value_from_func_args()" "write_value_to_desc()")
 rm -f rtdocs/source/api_proc_impl_doc.md
 for name in "${proc_impl_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_proc_impl_doc.md

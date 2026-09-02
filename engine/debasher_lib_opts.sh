@@ -1707,6 +1707,16 @@ debasher::_get_proc_out_opt_from_desc()
 }
 
 ########
+# Public: Writes value to value descriptor.
+#
+# $1 - Value to be written in the descriptor.
+# $2 - Name of value descriptor.
+#
+# Examples
+#
+#   debasher::write_value_to_desc 42 ${value_desc_name}
+#
+# The function does not return any value
 debasher::write_value_to_desc()
 {
     local value=$1
@@ -1715,6 +1725,17 @@ debasher::write_value_to_desc()
     echo "${value}" > "${value_descriptor}"
 }
 
+########
+# Public: Writes value to value descriptor.
+#
+# $1 - Value to be written in the descriptor.
+# $2 - Name of value descriptor.
+#
+# Examples
+#
+#   write_value_to_desc 42 ${value_desc_name}
+#
+# The function does not return any value
 write_value_to_desc() { debasher::write_value_to_desc "$@"; }
 
 ########
