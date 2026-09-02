@@ -124,6 +124,41 @@ debasher::_show_proc_opt_handler()
 }
 
 ########
+debasher::_show_proc_specs()
+{
+    local processname=$1
+
+    local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
+
+    echo "### Computational Specifications"
+    local cpus=`debasher::_extract_cpus_from_process_spec "${process_spec}"`
+    [ "${cpus}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`cpus\`: ${cpus}"
+    local mem=`debasher::_extract_mem_from_process_spec "${process_spec}"`
+    [ "${mem}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`mem\`: ${mem}"
+    local time=`debasher::_extract_time_from_process_spec "${process_spec}"`
+    [ "${time}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`time\`: ${time}"
+    local nodes=`debasher::_extract_nodes_from_process_spec "${process_spec}"`
+    [ "${nodes}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`nodes\`: ${nodes}"
+    local account=`debasher::_extract_account_from_process_spec "${process_spec}"`
+    [ "${account}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`account\`: ${account}"
+    local partition=`debasher::_extract_partition_from_process_spec "${process_spec}"`
+    [ "${partition}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`partition\`: ${partition}"
+    local throttle=`debasher::_extract_throttle_from_process_spec "${process_spec}"`
+    [ "${throttle}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`throttle\`: ${throttle}"
+    echo ""
+
+    echo "### Additional Specifications"
+    local force=`debasher::_extract_force_from_process_spec "${process_spec}"`
+    [ "${force}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`force\`: ${force}"
+    local processdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
+    [ "${processdeps}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`processdeps\`: ${processdeps}"
+    local alias=`debasher::_extract_alias_from_process_spec "${process_spec}"`
+    [ "${alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`alias\`: ${alias}"
+    local ext_alias=`debasher::_extract_ext_alias_from_process_spec "${process_spec}"`
+    [ "${ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`ext_alias\`: ${ext_alias}"
+}
+
+########
 debasher::_show_proc_implem()
 {
     local processname=$1
@@ -215,6 +250,7 @@ debasher::_show_process_documentation()
     local show_options=$4
     local show_opt_handler=$5
     local show_implem=$6
+    local show_specs=$7
 
     # Print header
     echo "## ${processname}"
@@ -279,6 +315,11 @@ debasher::_show_process_documentation()
         else
             echo "Warning: option handler for process ${processname} was not found" >&2
         fi
+        echo ""
+    fi
+
+    if [ "${show_specs}" = 1 ]; then
+        debasher::_show_proc_specs "${processname}"
         echo ""
     fi
 
