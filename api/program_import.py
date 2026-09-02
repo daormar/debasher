@@ -25,10 +25,13 @@ _DOC_MOD_TOOL_NAME = "debasher_doc_mod"
 # preamble) should just fail the import rather than block the request.
 _DOC_MOD_TIMEOUT_SECS = 20
 
-# Default layout for imported processes, stacked top-to-bottom since
-# debasher_doc_mod's output carries no position information.
+# Default layout for imported processes: debasher_doc_mod's output
+# carries no position information, so processes are laid out in layers
+# by data-flow depth (see _layout_processes) instead of just stacking
+# them in script-declaration order.
 _PROCESS_START_X = 100.0
 _PROCESS_START_Y = 100.0
+_PROCESS_X_SPACING = 220.0
 _PROCESS_Y_SPACING = 160.0
 
 _MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
@@ -218,6 +221,50 @@ def _build_edges(
     return edges
 
 
+def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> None:
+    """
+    Positions processes in layers by data-flow depth, so a process
+    feeding another's input via a recovered connection is placed above
+    it (smaller y) rather than in raw script-declaration order — mutates
+    each process's `position` in place.
+
+    Layer assignment is longest-path relaxation (Bellman-Ford-style): a
+    target's layer is pushed below its source's on every pass, repeated
+    until nothing changes. DeBasher explicitly allows cyclic process
+    dependencies (e.g. debasher_cycle_state.sh), which would make that
+    relaxation loop forever chasing an ever-growing layer around the
+    cycle — so passes are capped at len(processes): every node can gain
+    at most one extra layer per full pass over all edges, so that many
+    passes is always enough to reach the fixpoint for the acyclic part
+    of the graph, and for a cyclic part it just guarantees termination
+    with a bounded (not necessarily "correct", since no single layering
+    is correct for a cycle) result rather than hanging.
+
+    Processes sharing a layer are placed side by side, left to right in
+    their original script order, for a deterministic layout.
+    """
+    layer = {process.id: 0 for process in processes}
+
+    for _ in range(len(processes)):
+        changed = False
+        for edge in edges:
+            if edge.sourceProcessId not in layer or edge.targetProcessId not in layer:
+                continue
+            candidate = layer[edge.sourceProcessId] + 1
+            if candidate > layer[edge.targetProcessId]:
+                layer[edge.targetProcessId] = candidate
+                changed = True
+        if not changed:
+            break
+
+    next_x_by_layer: dict[int, float] = {}
+    for process in processes:
+        process_layer = layer[process.id]
+        x = next_x_by_layer.get(process_layer, _PROCESS_START_X)
+        process.position = Position(x=x, y=_PROCESS_START_Y + process_layer * _PROCESS_Y_SPACING)
+        next_x_by_layer[process_layer] = x + _PROCESS_X_SPACING
+
+
 def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") -> Program:
     """
     Import a Program from an existing DeBasher script by running
@@ -249,7 +296,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
 
-    for index, (process_name, chunk) in enumerate(process_chunks):
+    for process_name, chunk in process_chunks:
         info = parse_proc_info_markdown(chunk)
         options = [_to_program_option(option) for option in info.options]
 
@@ -268,10 +315,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 id=str(uuid.uuid4()),
                 name=process_name,
                 description=info.description,
-                position=Position(
-                    x=_PROCESS_START_X,
-                    y=_PROCESS_START_Y + index * _PROCESS_Y_SPACING,
-                ),
+                position=Position(x=_PROCESS_START_X, y=_PROCESS_START_Y),
                 options=options,
                 optionsHandler=result.handler,
                 language=info.language,
@@ -280,6 +324,9 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 additionalSpecs=AdditionalSpecs(forced=False),
             )
         )
+
+    edges = _build_edges(processes, pending_connections)
+    _layout_processes(processes, edges)
 
     return Program(
         id=str(uuid.uuid4()),
@@ -292,5 +339,5 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         executionOptions=ExecutionOptions(scheduler=""),
         programOptions={},
         processes=processes,
-        edges=_build_edges(processes, pending_connections),
+        edges=edges,
     )
