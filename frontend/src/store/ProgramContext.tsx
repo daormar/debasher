@@ -165,9 +165,9 @@ function toProgramOption(info: ProcessInfoOption): ProgramOption {
     direction: getOptionDirection(info.label),
     label: info.label,
     dataType: info.dataType,
+    channel: "none",
     description: info.description,
     value: "",
-    fifo: false,
     commandLine: info.commandLine,
     mandatory: info.mandatory,
   };
@@ -714,11 +714,11 @@ export function ProgramProvider({
 
       dataType: "string",
 
+      channel: "none",
+
       description: "",
 
       value: "",
-
-      fifo: false,
 
       commandLine: false,
 
