@@ -420,7 +420,7 @@ export function ProgramProvider({
       computationalSpecs: { ...DEFAULT_COMPUTATIONAL_SPECS },
 
       additionalSpecs: {
-        forced: false,
+        force: false,
       },
 
     };
