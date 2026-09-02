@@ -25,14 +25,24 @@ def _computational_specs_str(specs: ComputationalSpecs) -> str:
 
 def _additional_specs_str(specs: AdditionalSpecs) -> str:
     parts = []
-    if specs.forced:
-        parts.append("forced")
+    if specs.force:
+        # The engine only recognizes "force=yes" (see
+        # debasher::_extract_force_from_process_spec /
+        # _define_forced_rerun_processes in
+        # engine/debasher_lib_sched_rerun.sh, which checks
+        # `[ ${process_forced} = "yes" ]`) — a bare "forced" token would
+        # never match.
+        parts.append("force=yes")
     if specs.processdeps:
         parts.append(f"processdeps={specs.processdeps}")
     if specs.alias:
         parts.append(f"alias={specs.alias}")
     if specs.externalAlias:
-        parts.append(f"externalAlias={specs.externalAlias}")
+        # The engine's own attribute key is "ext_alias" (see
+        # debasher::_extract_ext_alias_from_process_spec /
+        # add_debasher_process in engine/debasher_lib_programs.sh) —
+        # "externalAlias" is only this app's field name for it.
+        parts.append(f"ext_alias={specs.externalAlias}")
     return " ".join(parts)
 
 
