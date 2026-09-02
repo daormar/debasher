@@ -79,6 +79,13 @@ _OPT_HANDLER_FUNC_SUFFIXES = [
 ]
 _FUNC_HEADER_RE = re.compile(r"^(?P<name>\S+)\s*\(\)")
 
+# debasher::_show_proc_specs (engine/debasher_lib_processes) prints one
+# "- `<attr>`: <value>" bullet per attribute actually set on the
+# process's add_debasher_process call, under "### Computational
+# Specifications"/"### Additional Specifications" — only present when
+# the Markdown was produced with --show-specs.
+_SPEC_LINE_RE = re.compile(r"^-\s*`(?P<key>[^`]+)`:\s*(?P<value>.*)$")
+
 OptionDataType = Literal["int", "float", "string", "file", "None"]
 ProcessLanguage = Literal["bash", "python", "perl", "r", "groovy"]
 
@@ -102,6 +109,13 @@ class ProcessInfo(BaseModel):
     # populated when the Markdown was produced with --show-opthnd; empty
     # otherwise (see option_handler_import.py for what recovers from it).
     optionHandler: dict[str, str] = Field(default_factory=dict)
+    # Raw attribute -> value maps from "### Computational/Additional
+    # Specifications" (e.g. {"cpus": "1", "mem": "32", "time":
+    # "00:01:00"} / {"processdeps": "afterok:count"}) — engine attribute
+    # names, not yet mapped onto ComputationalSpecs/AdditionalSpecs (see
+    # program_import.py for that). Only populated with --show-specs.
+    computationalSpecs: dict[str, str] = Field(default_factory=dict)
+    additionalSpecs: dict[str, str] = Field(default_factory=dict)
 
 
 def split_markdown_sections(markdown: str) -> dict[str, list[str]]:
@@ -222,6 +236,17 @@ def parse_option_handler(lines: list[str]) -> dict[str, str]:
     return handlers
 
 
+def parse_specs(lines: list[str]) -> dict[str, str]:
+    specs = {}
+
+    for line in lines:
+        match = _SPEC_LINE_RE.match(line)
+        if match:
+            specs[match.group("key")] = match.group("value").strip()
+
+    return specs
+
+
 def parse_proc_info_markdown(markdown: str) -> ProcessInfo:
     sections = split_markdown_sections(markdown)
 
@@ -229,6 +254,8 @@ def parse_proc_info_markdown(markdown: str) -> ProcessInfo:
     options = parse_options(sections.get("Process Options", []))
     language, code = parse_code(sections.get("Process Implementation", []))
     option_handler = parse_option_handler(sections.get("Process Option Handler", []))
+    computational_specs = parse_specs(sections.get("Computational Specifications", []))
+    additional_specs = parse_specs(sections.get("Additional Specifications", []))
 
     return ProcessInfo(
         description=description,
@@ -236,4 +263,6 @@ def parse_proc_info_markdown(markdown: str) -> ProcessInfo:
         language=language,
         code=code,
         optionHandler=option_handler,
+        computationalSpecs=computational_specs,
+        additionalSpecs=additional_specs,
     )
