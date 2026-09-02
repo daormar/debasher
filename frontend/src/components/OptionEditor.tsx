@@ -4,6 +4,7 @@ import { useProgram } from "../store/ProgramContext";
 import type {
   ProgramOption,
   OptionDataType,
+  OptionChannel,
 } from "../models/option";
 import { getOptionDirection, isValidOptionLabel } from "../models/option";
 
@@ -58,16 +59,38 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
     useState<OptionDataType>(option.dataType);
 
   const isFlag = dataType === "None";
-  const isValueDescriptor = dataType === "ValueDescriptor";
+
+  const [channel, setChannel] =
+    useState<OptionChannel>(option.channel);
+
+  const isValueDescriptor = channel === "value_desc";
+  const isFifo = channel === "fifo";
 
   useEffect(() => {
     if (direction === "output" && dataType === "None") {
       setDataType("string");
     }
-    if (direction === "input" && dataType === "ValueDescriptor") {
-      setDataType("string");
-    }
   }, [direction, dataType]);
+
+  useEffect(() => {
+    // value_desc is always output-direction (see models.py); fifo isn't
+    // restricted, a process can legitimately open an input on a fifo it
+    // rendezvous on by name.
+    if (direction === "input" && channel === "value_desc") {
+      setChannel("none");
+    }
+  }, [direction, channel]);
+
+  useEffect(() => {
+    // A connected option's value always comes from define_opt_from_proc_out,
+    // never from its own define_value_desc_opt/define_fifo_opt call — the
+    // channel describes how the *source* option got its value, not how
+    // this one receives it, so a connected option's own channel is always
+    // "none".
+    if (connectedSourceLabel && channel !== "none") {
+      setChannel("none");
+    }
+  }, [connectedSourceLabel, channel]);
 
   const [description, setDescription] =
     useState(option.description);
@@ -75,16 +98,11 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
   const [value, setValue] =
     useState(option.value);
 
-  const [fifo, setFifo] =
-    useState(option.fifo);
-
   const [commandLine, setCommandLine] =
     useState(option.commandLine);
 
   const [mandatory, setMandatory] =
     useState(option.mandatory);
-
-  const fifoEditable = direction === "output" && !commandLine;
 
   function handleSave() {
 
@@ -92,9 +110,9 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       label,
       direction: getOptionDirection(label),
       dataType,
+      channel: isFlag || connectedSourceLabel ? "none" : channel,
       description,
       value: isFlag || isValueDescriptor ? "" : value,
-      fifo,
       commandLine,
       mandatory: commandLine && mandatory && !isFlag,
     });
@@ -183,15 +201,13 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
             string
           </option>
 
+          <option value="file">
+            file
+          </option>
+
           {direction === "input" && (
             <option value="None">
               None (flag)
-            </option>
-          )}
-
-          {direction === "output" && (
-            <option value="ValueDescriptor">
-              Value descriptor
             </option>
           )}
 
@@ -253,31 +269,56 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         </label>
 
-        <label style={{ color: fifoEditable && !manualMode ? undefined : "#999" }}>
+        {!isFlag && (
 
-          <input
+          <>
 
-            type="checkbox"
+            <label>
+              Channel
+            </label>
 
-            checked={fifoEditable ? fifo : (connectedSourceOption?.sourceOption.fifo ?? false)}
+            <select
 
-            disabled={!fifoEditable || manualMode}
+              value={channel}
 
-            onChange={(event) =>
-              setFifo(event.target.checked)
-            }
+              disabled={!!connectedSourceLabel}
 
-          />
-          {" "}FIFO
+              onChange={(event) =>
+                setChannel(event.target.value as OptionChannel)
+              }
 
-        </label>
+              style={{
+                width: "100%",
+              }}
+
+            >
+
+              <option value="none">
+                Direct value
+              </option>
+
+              {direction === "output" && (
+                <option value="value_desc">
+                  Value descriptor
+                </option>
+              )}
+
+              <option value="fifo">
+                FIFO
+              </option>
+
+            </select>
+
+          </>
+
+        )}
 
         {!isFlag && (
 
           <>
 
             <label style={{ color: commandLine || isValueDescriptor || manualMode ? "#999" : undefined }}>
-              Value
+              {isFifo ? "FIFO name" : "Value"}
             </label>
 
             {connectedSourceLabel ? (
