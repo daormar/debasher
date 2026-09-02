@@ -26,6 +26,12 @@ export interface Program {
 
   outputDir: string;
 
+  // Absolute directory of the .sh this program was imported from (empty
+  // for a program that wasn't imported). A process's AdditionalSpecs.
+  // externalAlias, when relative, is resolved against this directory so
+  // the backend can copy that file alongside a later save.
+  sourceDir: string;
+
   executionOptions: ExecutionOptions;
 
   programOptions: Record<string, string>;
