@@ -47,6 +47,8 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     except NotImplementedError as err:
         raise HTTPException(status_code=501, detail=str(err))
 
+    persistence.copy_ext_alias_files(request.program, request.outputDir)
+
     return SaveProgramResponse(path=str(program_path), scriptPath=str(script_path))
 
 
