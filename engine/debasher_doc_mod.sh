@@ -32,7 +32,7 @@ usage()
     echo "debasher_doc_mod          -m <string> [-s <string>]"
     echo "                          [--show-meths] [--show-vars]"
     echo "                          [--show-opts] [--show-opthnd]"
-    echo "                          [--show-impl] [--help]"
+    echo "                          [--show-impl] [--show-specs] [--help]"
     echo ""
     echo "-m <string>               Module file name"
     echo "-s <string>               Process name whose information should be obtained"
@@ -41,6 +41,7 @@ usage()
     echo "--show-opts               Show process options information"
     echo "--show-opthnd             Show process option handler information"
     echo "--show-impl               Show process implementation information"
+    echo "--show-specs              Show process computational and additional specifications"
     echo "--help                    Display this help and exit"
 }
 
@@ -54,6 +55,7 @@ read_pars()
     showopts_given=0
     showopthnd_given=0
     showimpl_given=0
+    showspecs_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -80,6 +82,8 @@ read_pars()
             "--show-opthnd") showopthnd_given=1
                           ;;
             "--show-impl") showimpl_given=1
+                          ;;
+            "--show-specs") showspecs_given=1
                           ;;
         esac
         shift
@@ -115,7 +119,7 @@ obtain_info_for_module()
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         if [ "${s_given}" -eq 0 ] || [ "${processname}" = "${given_processname}" ]; then
-            debasher::_show_process_documentation "${processname}" "${showmeths_given}" "${showvars_given}" "${showopts_given}" "${showopthnd_given}" "${showimpl_given}"
+            debasher::_show_process_documentation "${processname}" "${showmeths_given}" "${showvars_given}" "${showopts_given}" "${showopthnd_given}" "${showimpl_given}" "${showspecs_given}"
         fi
     done
 }
