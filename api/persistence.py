@@ -1,4 +1,5 @@
 import json
+import shutil
 
 from pathlib import Path
 
@@ -42,6 +43,54 @@ def delete_stale_script(output_dir: str, new_name: str) -> None:
     stale_script_path = Path(output_dir).expanduser() / f"{old_name}.sh"
     if stale_script_path.is_file():
         stale_script_path.unlink()
+
+
+def copy_ext_alias_files(program: Program, output_dir: str) -> None:
+    """
+    Copies each process's external-alias script (AdditionalSpecs.
+    externalAlias — see AdditionalSpecsEditor.tsx and
+    script_generation.py's _additional_specs_str, which writes it into
+    the generated .sh as "ext_alias=<path>") from where `program` was
+    originally imported from (program.sourceDir) into `output_dir`,
+    preserving the same relative path.
+
+    This matters because the engine resolves a relative ext_alias
+    against the directory of the .sh that declares it (see
+    debasher::_add_debasher_ext_alias_process in
+    engine/debasher_lib_programs.sh), not against where it was
+    originally imported from — so without this, saving an imported
+    program anywhere other than its original directory would produce a
+    script whose ext_alias process can't find its file.
+
+    A missing source file, an absolute externalAlias (already a fixed,
+    non-portable path per the engine's own warning when it's used), a
+    program with no recorded sourceDir (not imported), or source and
+    destination resolving to the same file (saving back into the
+    program's own original directory) are all silently skipped rather
+    than treated as an error — Save should never fail just because an
+    ext-alias file can't be located or copied.
+    """
+    if not program.sourceDir:
+        return
+
+    source_root = Path(program.sourceDir).expanduser()
+    resolved_output_dir = Path(output_dir).expanduser()
+
+    for process in program.processes:
+        external_alias = process.additionalSpecs.externalAlias
+        if not external_alias or Path(external_alias).is_absolute():
+            continue
+
+        source_file = source_root / external_alias
+        dest_file = resolved_output_dir / external_alias
+
+        try:
+            if not source_file.is_file() or source_file.resolve() == dest_file.resolve():
+                continue
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_file, dest_file)
+        except OSError:
+            continue
 
 
 def save_program(output_dir: str, program: Program) -> Path:
