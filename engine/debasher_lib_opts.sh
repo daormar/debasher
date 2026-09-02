@@ -1162,6 +1162,16 @@ debasher::_get_value_descriptor_name()
 }
 
 ########
+# Public: Defines process option storing a value descriptor.
+#
+# $1 - Option name.
+# $2 - Name of variable that will store the information about the option to be added.
+#
+# Examples
+#
+#   debasher::define_value_desc_opt "-o" "optlist"
+#
+# The function does not return any value
 debasher::define_value_desc_opt()
 {
     local opt=$1
@@ -1180,6 +1190,17 @@ debasher::define_value_desc_opt()
     debasher::define_opt "${opt}" "${val_desc}" "${varname}"
 }
 
+########
+# Public: Defines process option storing a value descriptor.
+#
+# $1 - Option name.
+# $2 - Name of variable that will store the information about the option to be added.
+#
+# Examples
+#
+#   define_value_desc_opt "-o" "optlist"
+#
+# The function does not return any value
 define_value_desc_opt() { debasher::define_value_desc_opt "$@"; }
 
 ########
