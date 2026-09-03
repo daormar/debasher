@@ -6,8 +6,8 @@ Docker Example
     docker_example_explain_opts()
     {
         # -outf option
-        local description="output fifo"
-        explain_opt "-outf" "<string>" "$description"
+        local description="output file"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     docker_example_identify_cmdline_opts()
@@ -37,7 +37,7 @@ Docker Example
         local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
         # Write python version to file
-        docker run hello-world > "${outf}" 2>&1 || return 1
+        docker run hello-world > "${outf}" || return 1
     }
 
     docker_example_docker_imgs()

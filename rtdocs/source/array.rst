@@ -16,11 +16,11 @@ Process Array Example
 
         # -id option
         local description="id of writer"
-        explain_opt "-id" "<string>" "$description"
+        explain_opt "-id" "<int>" "$description"
 
         # -outf option
         local description="output file of writer"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     array_writer_identify_cmdline_opts()
@@ -82,7 +82,7 @@ Process Array Example
 
         # -outdir option
         local description="output directory of reader"
-        explain_opt "-outdir" "<string>" "$description"
+        explain_opt "-outdir" "<file>" "$description"
     }
 
     array_reader_identify_cmdline_opts()

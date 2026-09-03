@@ -11,11 +11,11 @@ Program with Cycles
 
         # -inf option
         local description="input fifo"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<int>" "$description"
 
         # -outf option
         local description="output fifo"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<int>" "$description"
     }
 
     process_a_identify_cmdline_opts()
@@ -53,7 +53,7 @@ Program with Cycles
         local inf=$(read_opt_value_from_func_args "-inf" "$@")
         local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-        # Increase value iteratively until it reaches n
+        # Increase value iteratively until is greater than n
         local value=1
         while [ "${value}" -le "${n}" ]; do
             echo "${value}" > "${outf}"
@@ -63,8 +63,8 @@ Program with Cycles
             echo ""
         done
 
-        # Send END message
-        echo "END" > "${outf}"
+        # Send shutdown token
+        echo "${DEBASHER_SHUTDOWN_TOKEN}" > "${outf}"
     }
 
     process_b_document()
@@ -76,11 +76,11 @@ Program with Cycles
     {
         # -inf option
         local description="input fifo"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<int>" "$description"
 
         # -outf option
         local description="output fifo"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<int>" "$description"
     }
 
     process_b_identify_cmdline_opts()
@@ -113,11 +113,11 @@ Program with Cycles
         local inf=$(read_opt_value_from_func_args "-inf" "$@")
         local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-        # Execute loop until the END message is received
+        # Execute loop until the shutdown token is received
         while true; do
             value=$(cat "${inf}")
             echo "Received value ${value}"
-            if [ "${value}" = "END" ]; then
+            if [ "${value}" = "${DEBASHER_SHUTDOWN_TOKEN}" ]; then
                 break
             fi
             value=$((value + 1))

@@ -4,7 +4,7 @@ Explicit Process Dependencies Example
 .. code-block:: bash
 
     # Load modules
-    load_debasher_module "debasher_value_pass"
+    load_debasher_module "debasher_value_pass_example"
 
     debasher_explicit_deps_example_program()
     {

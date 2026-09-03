@@ -15,7 +15,7 @@ Process Skip Example
 
         # -outv option
         local description="output value descriptor"
-        explain_opt "-outv" "<string>" "$description"
+        explain_opt "-outv" "<int>" "$description"
     }
 
     value_writer_identify_cmdline_opts()
@@ -64,11 +64,11 @@ Process Skip Example
     {
         # -val-desc option
         local description="value descriptor"
-        explain_opt "-val-desc" "<string>" "$description"
+        explain_opt "-val-desc" "<int>" "$description"
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     value_reader_identify_cmdline_opts()

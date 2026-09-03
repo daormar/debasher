@@ -15,7 +15,7 @@ Process Array Example using Generators
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     array_writer_identify_cmdline_opts()
@@ -86,15 +86,15 @@ Process Array Example using Generators
     {
         # -id option
         local description="process id"
-        explain_opt "-id" "<string>" "$description"
+        explain_opt "-id" "<int>" "$description"
 
         # -infile option
         local description="input file"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<file>" "$description"
 
         # -outdir option
         local description="output directory"
-        explain_opt "-outdir" "<string>" "$description"
+        explain_opt "-outdir" "<file>" "$description"
     }
 
     array_reader_identify_cmdline_opts()

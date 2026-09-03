@@ -16,7 +16,7 @@ File Writer and File Reader Example
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     file_writer_identify_cmdline_opts()
@@ -32,6 +32,9 @@ File Writer and File Reader Example
         local process_name=$3
         local process_outdir=$4
         local optlist=""
+
+        # -s option
+        define_cmdline_opt "$cmdline" "-s" optlist || return 1
 
         # Define option for output file
         local filename="${process_outdir}/out.txt"
@@ -60,7 +63,7 @@ File Writer and File Reader Example
     {
         # -inf option
         local description="input file"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<file>" "$description"
     }
 
     file_reader_identify_cmdline_opts()

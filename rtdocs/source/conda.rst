@@ -7,7 +7,7 @@ Conda Example
     {
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     conda_example_identify_cmdline_opts()
