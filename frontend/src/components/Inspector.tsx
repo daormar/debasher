@@ -403,6 +403,8 @@ export default function Inspector() {
 
         value={selectedProcess.language}
 
+        disabled={Boolean(selectedProcess.additionalSpecs.alias || selectedProcess.additionalSpecs.externalAlias)}
+
         onChange={(event) =>
           setProcessLanguage(
             selectedProcess.id,
@@ -439,7 +441,7 @@ export default function Inspector() {
             marginBottom: 8,
           }}
         >
-          Implementation comes from {selectedProcess.additionalSpecs.alias ? "the alias" : "the external alias"} — code is ignored
+          Implementation comes from {selectedProcess.additionalSpecs.alias ? "the alias" : "the external alias"}
         </div>
 
       ) : (
