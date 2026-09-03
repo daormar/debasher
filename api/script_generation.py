@@ -181,6 +181,9 @@ def _add_define_opts_func(process):
 def _add_opts_handler(process):
     if process.optionsHandler.mode == "standard":
         return _add_define_opts_func(process)
+    if process.optionsHandler.mode == "manual":
+        manual_code = process.optionsHandler.manualCode
+        return [manual_code] if manual_code else []
     raise NotImplementedError(
         f'Options handler mode "{process.optionsHandler.mode}" is not implemented yet'
     )
