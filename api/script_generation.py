@@ -1,3 +1,6 @@
+import tempfile
+from pathlib import Path
+
 from .debasher_constants import (
     MODULE_DOCUMENT_SUFFIX,
     MODULE_PROGRAM_SUFFIX,
@@ -7,6 +10,8 @@ from .debasher_constants import (
     PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
     PROCESS_METHOD_EXEC_SUFFIX,
 )
+from .doc_mod import run_get_proc_info
+from .markdown_parsing import parse_proc_info_markdown
 from .models import ComputationalSpecs, AdditionalSpecs, Program
 
 INDENT_WIDTH = 4
@@ -198,16 +203,13 @@ def _add_program_function(program):
     return lines
 
 
-def generate_script(program: Program) -> str:
+def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset()) -> str:
     """
-    Generate the contents of the <program.name>.sh file for `program`.
-
-    Implement the actual translation from the Program model
-    (program.preamble, program.envVars, program.processes, program.edges,
-    program.executionOptions, program.programOptions, ...) into a debasher
-    pipeline script.
+    Build the <program.name>.sh contents, omitting the exec function
+    (_add_exec_func) for any process whose name is in `skip_exec_for` —
+    used by generate_script to leave out processes _find_redundant_exec_funcs
+    determined are already provided by a loaded module.
     """
-
     lines = []
 
     # Add preamble
@@ -232,10 +234,100 @@ def generate_script(program: Program) -> str:
         lines.extend(_add_opts_handler(process))
         lines.extend(["", ""])
 
-        lines.extend(_add_exec_func(process))
-        lines.extend(["", ""])
+        if process.name not in skip_exec_for:
+            lines.extend(_add_exec_func(process))
+            lines.extend(["", ""])
 
     # Add program function
     lines.extend(_add_program_function(program))
 
     return "\n".join(lines) + "\n"
+
+
+def _proc_info_code(script_path: Path, process_name: str, debasher_mod_dir: str) -> str:
+    markdown = run_get_proc_info(script_path, process_name, debasher_mod_dir)
+    return parse_proc_info_markdown(markdown).code
+
+
+def _module_provided_code(process_name: str, preamble: str, debasher_mod_dir: str) -> str:
+    """
+    What debasher_get_proc_info reports for `process_name` when only
+    `preamble` (and whatever it load_debasher_module's in) is sourced —
+    i.e. the implementation this process would get "for free" without
+    embedding process.code in the generated script at all. Empty if
+    nothing sourced from the preamble defines it.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        preamble_path = Path(tmp_dir) / "preamble.sh"
+        preamble_path.write_text(preamble)
+        return _proc_info_code(preamble_path, process_name, debasher_mod_dir)
+
+
+def _own_code_canonicalized(process_name: str, code: str, debasher_mod_dir: str) -> str:
+    """
+    debasher_get_proc_info's own `declare -f` canonicalization of `code`
+    alone (a standalone file containing just this one process's own
+    implementation, nothing else) — so it's directly comparable to
+    _module_provided_code's output despite process.code being free-typed
+    rather than already in debasher_doc_mod/debasher_get_proc_info's own
+    printed format.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        code_path = Path(tmp_dir) / "code.sh"
+        code_path.write_text(code)
+        return _proc_info_code(code_path, process_name, debasher_mod_dir)
+
+
+def _find_redundant_exec_funcs(program: Program) -> frozenset[str]:
+    """
+    Returns the names of processes whose exec function shouldn't be
+    embedded in the generated script because it's already provided,
+    identically, by a module the preamble loads (via
+    load_debasher_module) — so embedding process.code again would just
+    be a duplicate definition of the exact same bash function.
+
+    Checked per process via debasher_get_proc_info, which — unlike
+    debasher_doc_mod — never runs the script's "_program" function or
+    registers anything through add_debasher_process, so it can't fail
+    just because some unrelated process has no implementation of its
+    own; it only ever looks at the one process name it's asked about
+    (see run_get_proc_info). A process is redundant when
+    debasher_get_proc_info reports the exact same non-empty
+    implementation both for the bare preamble and for process.code in
+    isolation. Each check is independent, and one failing (tool missing,
+    timeout, code that doesn't source cleanly) just leaves that process
+    embedded as it always was rather than affecting any other process.
+    """
+    debasher_mod_dir = program.envVars.get("DEBASHER_MOD_DIR", "")
+    redundant: set[str] = set()
+
+    for process in program.processes:
+        if not process.code:
+            continue
+        try:
+            module_code = _module_provided_code(process.name, program.preamble, debasher_mod_dir)
+            if not module_code:
+                continue
+            own_code = _own_code_canonicalized(process.name, process.code, debasher_mod_dir)
+        except RuntimeError:
+            continue
+        if module_code == own_code:
+            redundant.add(process.name)
+
+    return frozenset(redundant)
+
+
+def generate_script(program: Program) -> str:
+    """
+    Generate the contents of the <program.name>.sh file for `program`.
+
+    Implement the actual translation from the Program model
+    (program.preamble, program.envVars, program.processes, program.edges,
+    program.executionOptions, program.programOptions, ...) into a debasher
+    pipeline script.
+
+    A process's exec function is left out when it's redundant with one
+    already provided by a module the preamble loads — see
+    _find_redundant_exec_funcs.
+    """
+    return _build_script(program, skip_exec_for=_find_redundant_exec_funcs(program))

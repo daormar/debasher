@@ -1,11 +1,9 @@
-import os
 import re
-import subprocess
 import uuid
 from pathlib import Path
 from typing import Literal
 
-from . import paths
+from .doc_mod import parse_module_markdown, run_doc_mod
 from .markdown_parsing import ProcessInfoOption, parse_proc_info_markdown
 from .models import (
     AdditionalSpecs,
@@ -19,12 +17,6 @@ from .models import (
 )
 from .option_handler_import import ConnectionRef, resolve_options_handler
 
-_DOC_MOD_TOOL_NAME = "debasher_doc_mod"
-
-# Editor convenience: a script that hangs while loading (a broken/looping
-# preamble) should just fail the import rather than block the request.
-_DOC_MOD_TIMEOUT_SECS = 20
-
 # Default layout for imported processes: debasher_doc_mod's output
 # carries no position information, so processes are laid out in layers
 # by data-flow depth (see _layout_processes) instead of just stacking
@@ -33,9 +25,6 @@ _PROCESS_START_X = 100.0
 _PROCESS_START_Y = 100.0
 _PROCESS_X_SPACING = 220.0
 _PROCESS_Y_SPACING = 160.0
-
-_MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
-_PROCESS_HEADING_RE = re.compile(r"^## (?P<name>.+)$")
 
 # A top-level bash function definition header — "name()", "name ()",
 # "name() {", or the same with a leading "function " keyword — anchored
@@ -126,51 +115,6 @@ def _to_additional_specs(raw: dict[str, str]) -> AdditionalSpecs:
     )
 
 
-def _parse_module_markdown(markdown: str) -> tuple[str, str, list[tuple[str, str]]]:
-    """
-    Split debasher_doc_mod's output into the module name, its
-    description, and a (process name, per-process Markdown) pair for
-    each "## <process>" section — each of which
-    markdown_parsing.parse_proc_info_markdown can parse on its own,
-    exactly as it does for a single-process debasher_get_proc_info
-    block.
-    """
-    name = ""
-    description_lines: list[str] = []
-    processes: list[tuple[str, str]] = []
-
-    current_process_name: str | None = None
-    current_process_lines: list[str] = []
-
-    def flush_process() -> None:
-        if current_process_name is not None:
-            processes.append((current_process_name, "\n".join(current_process_lines)))
-
-    lines = markdown.splitlines()
-    start = 0
-    if lines:
-        title_match = _MODULE_TITLE_RE.match(lines[0])
-        if title_match:
-            name = title_match.group("name").strip()
-            start = 1
-
-    for line in lines[start:]:
-        heading_match = _PROCESS_HEADING_RE.match(line)
-        if heading_match:
-            flush_process()
-            current_process_name = heading_match.group("name").strip()
-            current_process_lines = []
-        elif current_process_name is not None:
-            current_process_lines.append(line)
-        else:
-            description_lines.append(line)
-    flush_process()
-
-    description = "\n".join(description_lines).strip()
-
-    return name, description, processes
-
-
 def _extract_preamble(script_path: Path) -> str:
     """
     Heuristic recovery of the program's preamble: debasher_doc_mod's
@@ -194,54 +138,6 @@ def _extract_preamble(script_path: Path) -> str:
             return "\n".join(lines[:index]).rstrip()
 
     return "\n".join(lines).rstrip()
-
-
-def run_doc_mod(script_path: Path, debasher_mod_dir: str = "") -> str:
-    """
-    Run debasher_doc_mod over `script_path` and return its Markdown
-    documentation (program name/description, and per-process
-    description/options/implementation).
-
-    `debasher_mod_dir`, if given, is forwarded as DEBASHER_MOD_DIR so
-    the script's own `load_debasher_module` calls (for shared modules
-    outside its own directory) can resolve — mirroring how
-    routers/execution.py's _debasher_env and routers/processes.py's
-    _run_preamble_tool forward it from a program's own envVars. Here
-    there's no program yet, so it comes straight from the import
-    request instead.
-    """
-    tool = paths.find_bin_tool(_DOC_MOD_TOOL_NAME)
-    if tool is None:
-        raise RuntimeError(f"{_DOC_MOD_TOOL_NAME} tool not found")
-
-    env = os.environ.copy()
-    env["DEBASHER_MOD_DIR"] = debasher_mod_dir
-
-    try:
-        result = subprocess.run(
-            [
-                str(tool),
-                "-m",
-                str(script_path),
-                "--show-opts",
-                "--show-opthnd",
-                "--show-impl",
-                "--show-specs",
-            ],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=_DOC_MOD_TIMEOUT_SECS,
-        )
-    except subprocess.TimeoutExpired as err:
-        raise RuntimeError(f"Timed out running {_DOC_MOD_TOOL_NAME} on {script_path}") from err
-
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"{_DOC_MOD_TOOL_NAME} failed on {script_path}: {result.stderr.strip()}"
-        )
-
-    return result.stdout
 
 
 def _build_edges(
@@ -373,7 +269,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     running it, or re-fetching a process's info from its preamble).
     """
     markdown = run_doc_mod(script_path, debasher_mod_dir)
-    name, description, process_chunks = _parse_module_markdown(markdown)
+    name, description, process_chunks = parse_module_markdown(markdown)
 
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
