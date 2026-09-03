@@ -127,22 +127,20 @@ stored in a file with the same name and Bash extension,
 
     hello_world_identify_cmdline_opts()
     {
-        opt_is_cmdline "-s"
+        opt_is_non_mandatory_cmdline "-s"
     }
 
     hello_world_define_opts()
     {
         # Initialize variables
         local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
         local optlist=""
 
-        # Obtain value of -s option
-        local str=$(get_cmdline_opt "${cmdline}" "-s")
-
         # -s option
-        if [ "${str}" != "${DEBASHER_OPT_NOT_FOUND}" ]; then
-           define_cmdline_opt "${cmdline}" "-s" optlist || return 1
-        fi
+        define_cmdline_opt_if_given "${cmdline}" "-s" optlist || return 1
 
         # Save option list
         save_opt_list optlist
@@ -152,6 +150,10 @@ stored in a file with the same name and Bash extension,
     {
         # Initialize variables
         local str=$(read_opt_value_from_func_args "-s" "$@")
+
+        if [ "${str}" = "${DEBASHER_OPT_NOT_FOUND}" ]; then
+            str="Hello World!"
+        fi
 
         # Show message
         echo "${str}"
@@ -201,22 +203,20 @@ the functions involved:
   (see next item below). Those options are not necessarily the same as
   the command-line options. Indeed, the function receives as input the
   command-line options, and will use the ``optlist`` variable to store
-  the process options. In summary, the
-  ``hello_world_define_opts`` will retrieve the value of the
-  ``-s`` command-line option (using the ``get_cmdline_opt`` API
-  function) and store it into the ``str`` variable.  If ``-s`` was not
-  provided, it will pass the option ``-s "Hello World!"`` to the
-  ``hello_world`` function. Otherwise, it will pass the option ``-s
-  "$str"``. The code uses the ``define_opt`` API function to register
-  options and the ``save_opt_list`` function to save the set of options
-  when all of them are defined.
+  the process options. In summary, the ``hello_world_define_opts``
+  function forwards the ``-s`` command-line option, if given, using the
+  ``define_cmdline_opt_if_given`` API function; if ``-s`` was not
+  provided, the process option is simply left undefined. The
+  ``save_opt_list`` function saves the set of options once all of them
+  are defined.
 
 * ``hello_world``: this function implements the process itself (in this
   case the function name does not incorporate any
   suffix). ``hello_world`` reads its options using the
   ``read_opt_value_from_func_args`` API function. Here, only the ``-s``
-  option should be read and stored into the ``str`` variable. Finally,
-  the content of the ``str`` variable is printed to the standard output.
+  option should be read and stored into the ``str`` variable; if it was
+  not defined, ``str`` defaults to ``"Hello World!"``. Finally, the
+  content of the ``str`` variable is printed to the standard output.
 
 * ``debasher_hello_world_program``: the ``program`` method allows to
   define the processes involved in the execution of the program defined

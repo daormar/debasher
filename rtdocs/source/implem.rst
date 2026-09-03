@@ -215,12 +215,12 @@ defined as follows:
     file_writer_explain_opts()
     {
         # -s option
-        local description="string to be displayed"
+        local description="String to be displayed"
         explain_opt "-s" "<string>" "$description"
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     file_writer_identify_cmdline_opts()
@@ -241,7 +241,7 @@ result, we define the corresponding ``explain_opts`` and
     {
         # -inf option
         local description="input file"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<file>" "$description"
     }
 
     file_reader_identify_cmdline_opts()
@@ -256,9 +256,9 @@ never changes. However, the ``identify_cmdline_opts`` method for a
 process may be different from one program to another**.
 
 **IMPORTANT NOTE**: initially, only the command-line options of each
-process were documented by means of the ``explain_opts``
+process were documented by means of the ``explain_cmdline_opt``
 method. However, such method is now deprecated and replaced by the
-``explain_opts`` method described above. The ``explain_opts`` method
+``explain_opt`` method described above. The ``explain_opt`` method
 documents all process options, no matter if they should be provided
 through the command-line or not.
 
@@ -534,6 +534,9 @@ function:
     {
         # Initialize variables
         local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
         local optlist=""
 
         # Define option for input file
