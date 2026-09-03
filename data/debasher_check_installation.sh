@@ -204,6 +204,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_array_example_ui program
+progname="debasher_array_example_ui"
+sched="BUILTIN"
+bs_cpus=4
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_file_example program
 progname="debasher_file_example"
 sched="BUILTIN"
