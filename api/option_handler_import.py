@@ -62,6 +62,12 @@ class ConnectionRef:
     option_label: str
     source_process: str
     source_option: str
+    # True for a define_opt_from_proc_task_out "${task_idx}" connection —
+    # program_import.py checks the source process actually resolved to
+    # "generator" mode before trusting it, since script_generation.py
+    # only ever regenerates ${task_idx} for that combination (see
+    # _add_opts_definition_func).
+    task_indexed: bool = False
 
 
 @dataclass
@@ -140,6 +146,8 @@ _CALL_TOKEN_COUNTS = {
     "define_opt_from_proc_task_out": 5,  # <label> <proc> <task_idx> <opt> <optlist>
     "define_opt": 3,  # <label> <value> <optlist>
 }
+
+_TASK_IDX_RE = re.compile(r"^\$\{?task_idx\}?$")
 
 _CONNECTION_SCAN_RE = re.compile(
     r'(?:debasher::)?define_opt_from_proc_out\s+"(?P<label>[^"]*)"\s+'
@@ -251,8 +259,22 @@ def _parse_primitive_calls(
             label, proc, opt = tokens[0], tokens[1], tokens[-2]
             if not (label[1] and proc[1] and opt[1]):
                 return None
+            # define_opt_from_proc_task_out's args are <label> <proc>
+            # <task_idx> <opt> <optlist> — one more than the plain
+            # define_opt_from_proc_out, with task_idx in between. Only
+            # "connect to my own task" (${task_idx}/$task_idx) round-trips
+            # through the app — script_generation.py always regenerates
+            # exactly that for a generator process, never an arbitrary
+            # expression — so anything else isn't this grammar at all.
+            if func == "define_opt_from_proc_task_out" and not _TASK_IDX_RE.match(tokens[2][0]):
+                return None
             connections.append(
-                ConnectionRef(option_label=label[0], source_process=proc[0], source_option=opt[0])
+                ConnectionRef(
+                    option_label=label[0],
+                    source_process=proc[0],
+                    source_option=opt[0],
+                    task_indexed=func == "define_opt_from_proc_task_out",
+                )
             )
         elif func == "define_opt":
             label, value = tokens[0], tokens[1]
@@ -336,10 +358,18 @@ def scan_fifo_labels(source: str) -> set[str]:
     return {match.group("label") for match in _FIFO_SCAN_RE.finditer(source)}
 
 
-def _extract_generator_size(source: str) -> str:
+def _extract_generator_size(source: str) -> str | None:
+    """
+    Returns _generate_opts_size's size expression, if it's the one shape
+    script_generation.py's _add_generate_opts_size_func can reproduce: a
+    single `echo <expr>` statement (any `local` assignments ahead of it
+    inlined by bare-reference substitution). None for anything more
+    elaborate (multiple statements, no echo) — that case falls back to
+    "manual" instead, since regenerating it would lose that logic.
+    """
     body = _function_body_lines(source)
     if body is None:
-        return source
+        return None
 
     locals_table: dict[str, str] = {}
     statements: list[str] = []
@@ -352,17 +382,19 @@ def _extract_generator_size(source: str) -> str:
             continue
         statements.append(line)
 
-    if len(statements) == 1:
-        echo_match = _ECHO_LINE_RE.match(statements[0])
-        if echo_match:
-            expr = echo_match.group("expr").strip()
-            expr = _strip_one_quote_layer(expr)
-            var_ref_match = _VAR_REF_RE.match(expr)
-            if var_ref_match and var_ref_match.group("name") in locals_table:
-                expr = locals_table[var_ref_match.group("name")]
-            return expr
+    if len(statements) != 1:
+        return None
 
-    return "\n".join(statements) if statements else source
+    echo_match = _ECHO_LINE_RE.match(statements[0])
+    if not echo_match:
+        return None
+
+    expr = echo_match.group("expr").strip()
+    expr = _strip_one_quote_layer(expr)
+    var_ref_match = _VAR_REF_RE.match(expr)
+    if var_ref_match and var_ref_match.group("name") in locals_table:
+        expr = locals_table[var_ref_match.group("name")]
+    return expr
 
 
 def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandlerResult:
@@ -372,32 +404,37 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
 
     if generate_opts_size:
         generator_size = _extract_generator_size(generate_opts_size)
+        parsed = _parse_function_source(generate_opts) if generate_opts else None
 
-        if generate_opts:
-            parsed = _parse_function_source(generate_opts)
-            if parsed is not None:
-                values, connections, value_descriptor_labels, fifo_labels = parsed
-                return OptionHandlerResult(
-                    handler=OptionsHandler(mode="generator", generatorSize=generator_size),
-                    option_values=values,
-                    connections=connections,
-                    value_descriptor_labels=value_descriptor_labels,
-                    fifo_labels=fifo_labels,
-                )
-            combined = f"{generate_opts_size}\n\n{generate_opts}"
+        if generator_size is not None and parsed is not None:
+            values, connections, value_descriptor_labels, fifo_labels = parsed
             return OptionHandlerResult(
-                handler=OptionsHandler(mode="manual", manualCode=combined),
-                connections=scan_connections(combined),
-                value_descriptor_labels=scan_value_descriptor_labels(combined),
-                fifo_labels=scan_fifo_labels(combined),
+                handler=OptionsHandler(mode="generator", generatorSize=generator_size),
+                option_values=values,
+                connections=connections,
+                value_descriptor_labels=value_descriptor_labels,
+                fifo_labels=fifo_labels,
             )
 
-        # _generate_opts_size with no _generate_opts alongside it can't
-        # actually retrieve a task's options at run time (the engine
-        # always needs the latter once the former exists) — treat it as
-        # an incomplete generator rather than guessing further.
+        if generator_size is not None and not generate_opts:
+            # _generate_opts_size with no _generate_opts alongside it can't
+            # actually retrieve a task's options at run time (the engine
+            # always needs the latter once the former exists) — treat it as
+            # an incomplete generator rather than guessing further.
+            return OptionHandlerResult(
+                handler=OptionsHandler(mode="generator", generatorSize=generator_size),
+            )
+
+        # Either generate_opts_size isn't a single codegen-able
+        # expression, or generate_opts doesn't fit the primitive-call
+        # grammar — script_generation.py can't reproduce either, so this
+        # falls back to manual with everything kept verbatim.
+        combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
         return OptionHandlerResult(
-            handler=OptionsHandler(mode="generator", generatorSize=generator_size),
+            handler=OptionsHandler(mode="manual", manualCode=combined),
+            connections=scan_connections(combined),
+            value_descriptor_labels=scan_value_descriptor_labels(combined),
+            fifo_labels=scan_fifo_labels(combined),
         )
 
     if define_opts:

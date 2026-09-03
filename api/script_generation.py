@@ -8,6 +8,8 @@ from .debasher_constants import (
     PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX,
     PROCESS_METHOD_IDENTIFY_CMDLINE_OPTS_SUFFIX,
     PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
+    PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
+    PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
     PROCESS_METHOD_EXEC_SUFFIX,
 )
 from .doc_mod import run_get_proc_info
@@ -127,6 +129,14 @@ def _define_opts_func_header():
     return lines
 
 
+def _generate_opts_func_header():
+    # Same as _define_opts_func_header, plus the per-task index the
+    # engine calls _generate_opts with (see debasher_lib_processes.sh).
+    lines = _define_opts_func_header()
+    lines.insert(-1, INDENT + "local task_idx=$5")
+    return lines
+
+
 def _define_opts_func_foot():
     lines = []
     lines.append(INDENT + "save_opt_list optlist")
@@ -141,9 +151,9 @@ def _get_process_plus_opt(option):
     return tuple(option.value[1:-1].split(";"))
 
 
-def _add_define_opts_func(process):
-    lines = [f"{process.name}{PROCESS_METHOD_DEFINE_OPTS_SUFFIX}()", "{"]
-    lines.extend(_define_opts_func_header())
+def _add_opts_definition_func(process, suffix, header_lines, process_modes):
+    lines = [f"{process.name}{suffix}()", "{"]
+    lines.extend(header_lines)
     lines.append("")
     if process.options:
         for option in process.options:
@@ -169,7 +179,16 @@ def _add_define_opts_func(process):
                     lines.append(f'{INDENT}debasher::define_cmdline_opt_if_given "${{cmdline}}" "{option.label}" optlist || return 1')
             elif _opt_is_connected_to_proc(option):
                 conn_proc, conn_opt = _get_process_plus_opt(option)
-                lines.append(f'{INDENT}debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1')
+                # ${task_idx} on the connected process's own task_idx only
+                # ever means something if the source process actually has
+                # one per task to offer — i.e. it's generator too. A
+                # standard source has only task 0, and a manual source's
+                # task shape is unknown, so both default to task 0 rather
+                # than assume a task N that may not exist.
+                if process.optionsHandler.mode == "generator" and process_modes.get(conn_proc) == "generator":
+                    lines.append(f'{INDENT}debasher::define_opt_from_proc_task_out "{option.label}" "{conn_proc}" "${{task_idx}}" "{conn_opt}" optlist || return 1')
+                else:
+                    lines.append(f'{INDENT}debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1')
             else:
                 lines.append(f'{INDENT}debasher::define_opt "{option.label}" "{option.value}" optlist || return 1')
     lines.append("")
@@ -178,14 +197,33 @@ def _add_define_opts_func(process):
     return lines
 
 
-def _add_opts_handler(process):
-    if process.optionsHandler.mode == "standard":
-        return _add_define_opts_func(process)
-    if process.optionsHandler.mode == "manual":
-        manual_code = process.optionsHandler.manualCode
+def _add_generate_opts_size_func(process):
+    lines = [f"{process.name}{PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX}()", "{"]
+    lines.append(f'{INDENT}echo "{process.optionsHandler.generatorSize or ""}"')
+    lines.append("}")
+    return lines
+
+
+def _add_opts_handler(process, process_modes):
+    handler = process.optionsHandler
+    if handler.mode == "standard":
+        return _add_opts_definition_func(
+            process, PROCESS_METHOD_DEFINE_OPTS_SUFFIX, _define_opts_func_header(), process_modes
+        )
+    if handler.mode == "generator":
+        lines = _add_generate_opts_size_func(process)
+        lines.extend(["", ""])
+        lines.extend(
+            _add_opts_definition_func(
+                process, PROCESS_METHOD_GENERATE_OPTS_SUFFIX, _generate_opts_func_header(), process_modes
+            )
+        )
+        return lines
+    if handler.mode == "manual":
+        manual_code = handler.manualCode
         return [manual_code] if manual_code else []
     raise NotImplementedError(
-        f'Options handler mode "{process.optionsHandler.mode}" is not implemented yet'
+        f'Options handler mode "{handler.mode}" is not implemented yet'
     )
 
 
@@ -246,6 +284,8 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
     """
     lines = [SCRIPT_HEADER, "", ""]
 
+    process_modes = {p.name: p.optionsHandler.mode for p in program.processes}
+
     # Add preamble
     preamble_lines = _add_preamble(program.preamble)
     if preamble_lines:
@@ -267,7 +307,7 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
         lines.extend(_add_identify_cmdline_opts_func(process))
         lines.extend(["", ""])
 
-        lines.extend(_add_opts_handler(process))
+        lines.extend(_add_opts_handler(process, process_modes))
         lines.extend(["", ""])
 
         if process.name not in skip_exec_for:

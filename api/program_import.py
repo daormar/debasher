@@ -3,12 +3,17 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
+from .debasher_constants import (
+    PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
+    PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
+)
 from .doc_mod import parse_module_markdown, run_doc_mod
 from .markdown_parsing import ProcessInfoOption, parse_proc_info_markdown
 from .models import (
     AdditionalSpecs,
     ComputationalSpecs,
     ExecutionOptions,
+    OptionsHandler,
     Position,
     Program,
     ProgramEdge,
@@ -138,6 +143,45 @@ def _extract_preamble(script_path: Path) -> str:
             return "\n".join(lines[:index]).rstrip()
 
     return "\n".join(lines).rstrip()
+
+
+def _downgrade_unverifiable_generator_connections(
+    processes: list[ProgramProcess],
+    pending_connections: list[tuple[str, ConnectionRef]],
+    option_handler_code_by_process: dict[str, dict[str, str]],
+) -> None:
+    """
+    A define_opt_from_proc_task_out "${task_idx}" connection only means
+    "my task N pairs with the source's task N" if the source process is
+    itself generator-shaped, i.e. guaranteed to have a task N at all --
+    script_generation.py only ever regenerates ${task_idx} for a
+    generator-to-generator pair (see _add_opts_definition_func in
+    script_generation.py). A process that resolved to "generator" mode
+    via such a connection into a non-generator (or unrecognized, e.g. a
+    different module's) source can't be faithfully regenerated that way,
+    so it's downgraded to "manual" here, with its _generate_opts_size/
+    _generate_opts kept verbatim — mirroring resolve_options_handler's
+    own fallback for an unparseable body.
+    """
+    processes_by_name = {process.name: process for process in processes}
+
+    for target_name, connection in pending_connections:
+        if not connection.task_indexed:
+            continue
+
+        target = processes_by_name.get(target_name)
+        if target is None or target.optionsHandler.mode != "generator":
+            continue
+
+        source = processes_by_name.get(connection.source_process)
+        if source is not None and source.optionsHandler.mode == "generator":
+            continue
+
+        raw = option_handler_code_by_process.get(target_name, {})
+        generate_opts_size = raw.get(PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX, "")
+        generate_opts = raw.get(PROCESS_METHOD_GENERATE_OPTS_SUFFIX)
+        combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
+        target.optionsHandler = OptionsHandler(mode="manual", manualCode=combined)
 
 
 def _build_edges(
@@ -273,10 +317,12 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
 
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
+    option_handler_code_by_process: dict[str, dict[str, str]] = {}
 
     for process_name, chunk in process_chunks:
         info = parse_proc_info_markdown(chunk)
         options = [_to_program_option(option) for option in info.options]
+        option_handler_code_by_process[process_name] = info.optionHandler
 
         result = resolve_options_handler(info.optionHandler)
         for option in options:
@@ -313,6 +359,8 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 additionalSpecs=_to_additional_specs(info.additionalSpecs),
             )
         )
+
+    _downgrade_unverifiable_generator_connections(processes, pending_connections, option_handler_code_by_process)
 
     edges = _build_edges(processes, pending_connections)
     _layout_processes(processes, edges)

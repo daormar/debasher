@@ -47,8 +47,23 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
   })();
 
+  // Informational only — matches script_generation.py's own rule
+  // (_add_opts_definition_func): ${task_idx} is only ever regenerated
+  // when both this option's own process and the connected source are
+  // generator mode, since that's the only combination where the source
+  // is guaranteed to actually have a task N to pull from.
+  const ownerProcess = program.processes.find(
+    process => process.id === processId
+  );
+
+  const isTaskIndexed =
+    ownerProcess?.optionsHandler.mode === "generator" &&
+    connectedSourceOption?.sourceProcess.optionsHandler.mode === "generator";
+
   const connectedSourceLabel = connectedSourceOption &&
-    `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label}]`;
+    (isTaskIndexed
+      ? `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label};\${task_idx}]`
+      : `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label}]`);
 
   const [label, setLabel] =
     useState(option.label);

@@ -22,6 +22,7 @@ import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
 import type { ProgramOption } from "../models/option";
 import { getOptionDirection } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
+import { buildConnectionSentinel } from "../models/edge";
 import type { Position } from "../models/position";
 import { saveProgram } from "../storage/programStorage";
 import type { ProgramState } from "../api/executionApi";
@@ -203,7 +204,7 @@ function normalizeConnectedOptionValues(source: Program): Program {
     if (sourceProcess && sourceOption) {
       connectedValueByOptionKey.set(
         `${edge.targetProcessId}:${edge.targetOptionId}`,
-        `[${sourceProcess.name};${sourceOption.label}]`
+        buildConnectionSentinel(sourceProcess.name, sourceOption.label)
       );
     }
 
@@ -853,7 +854,7 @@ export function ProgramProvider({
             current.processes,
             edge.targetProcessId,
             edge.targetOptionId,
-            `[${sourceProcess.name};${sourceOption.label}]`
+            buildConnectionSentinel(sourceProcess.name, sourceOption.label)
           )
         : current.processes;
 
