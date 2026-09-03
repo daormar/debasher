@@ -273,7 +273,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
           <>
 
-            <label>
+            <label style={{ color: manualMode ? "#999" : undefined }}>
               Channel
             </label>
 
@@ -297,6 +297,8 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
               <select
 
                 value={channel}
+
+                disabled={manualMode}
 
                 onChange={(event) =>
                   setChannel(event.target.value as OptionChannel)
