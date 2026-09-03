@@ -91,25 +91,3 @@ def import_program(request: ImportProgramRequest) -> Program:
         )
     except RuntimeError as err:
         raise HTTPException(status_code=400, detail=str(err))
-
-
-@router.get("/{program_id}", response_model=Program)
-def get_program(program_id: str) -> Program:
-    """
-    Load a program by id.
-
-    TODO: replace this stub with a real call into core/, e.g.:
-        return core.load_program(program_id)
-    """
-    raise HTTPException(status_code=501, detail="Not implemented yet")
-
-
-@router.put("/{program_id}")
-def save_program(program_id: str, program: Program) -> dict[str, str]:
-    """
-    Persist a program.
-
-    TODO: replace this stub with a real call into core/, e.g.:
-        core.save_program(program_id, program)
-    """
-    raise HTTPException(status_code=501, detail="Not implemented yet")
