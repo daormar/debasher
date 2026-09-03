@@ -268,8 +268,10 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
         lines.extend(["", ""])
 
         if process.name not in skip_exec_for:
-            lines.extend(_add_exec_func(process))
-            lines.extend(["", ""])
+            exec_func_lines = _add_exec_func(process)
+            if exec_func_lines:
+                lines.extend(exec_func_lines)
+                lines.extend(["", ""])
 
     # Add program function
     lines.extend(_add_program_function(program))
