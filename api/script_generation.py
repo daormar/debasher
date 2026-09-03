@@ -16,6 +16,7 @@ from .models import ComputationalSpecs, AdditionalSpecs, Program
 
 INDENT_WIDTH = 4
 INDENT = " " * INDENT_WIDTH
+SCRIPT_HEADER = "# AUTOMATICALLY GENERATED DEBASHER SCRIPT"
 
 def _computational_specs_str(specs: ComputationalSpecs) -> str:
     parts = []
@@ -52,8 +53,10 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
 
 
 def _add_preamble(preamble):
-    lines = [preamble]
-    return lines
+    if preamble:
+        return [preamble]
+    else:
+        return []
 
 
 def _add_document_module_func(name, description):
@@ -183,12 +186,40 @@ def _add_opts_handler(process):
     )
 
 
+# A process implemented in anything but bash isn't a bash function at
+# all: the engine recognizes it via a variable named
+# "<processname>_<suffix>" (debasher_lib.sh's DEBASHER_PROCESS_VARNAMES/
+# DEBASHER_HEREDOC_LANGUAGES) holding the raw interpreter source, and
+# auto-generates the actual "<processname>()" wrapper around it
+# (debasher::_create_process_func_heredoc) — see
+# debasher::_is_heredoc_process in engine/debasher_lib_programs.sh.
+_HEREDOC_LANGUAGE_SUFFIXES = {
+    "python": "py",
+    "r": "r",
+    "perl": "perl",
+    "groovy": "groovy",
+}
+
+
+def _code_definition_lines(process_name: str, language: str, code: str) -> list[str]:
+    if language == "bash":
+        return [code]
+    suffix = _HEREDOC_LANGUAGE_SUFFIXES[language]
+    return [f"{process_name}_{suffix}=$(cat <<'EOF'", code, "EOF", ")"]
+
+
 def _add_exec_func(process):
-    if process.code:
-        lines = [process.code]
-        return lines
-    else:
+    # An alias/external alias supplies the implementation itself (the
+    # engine builds the "<processname>()" wrapper from the "alias"/
+    # "ext_alias" additional-spec attribute — see
+    # debasher::_add_debasher_alias_process/_add_debasher_ext_alias_process
+    # in engine/debasher_lib_programs.sh), so process.code, if any, is
+    # never actually used and embedding it would just be dead code.
+    if process.additionalSpecs.alias or process.additionalSpecs.externalAlias:
         return []
+    if not process.code:
+        return []
+    return _code_definition_lines(process.name, process.language, process.code)
 
 
 def _add_program_function(program):
@@ -210,11 +241,13 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
     used by generate_script to leave out processes _find_redundant_exec_funcs
     determined are already provided by a loaded module.
     """
-    lines = []
+    lines = [SCRIPT_HEADER, "", ""]
 
     # Add preamble
-    lines.extend(_add_preamble(program.preamble))
-    lines.extend(["", ""])
+    preamble_lines = _add_preamble(program.preamble)
+    if preamble_lines:
+        lines.extend(preamble_lines)
+        lines.extend(["", ""])
 
     # Add program description
     lines.extend(_add_document_module_func(program.name, program.description))
@@ -263,18 +296,21 @@ def _module_provided_code(process_name: str, preamble: str, debasher_mod_dir: st
         return _proc_info_code(preamble_path, process_name, debasher_mod_dir)
 
 
-def _own_code_canonicalized(process_name: str, code: str, debasher_mod_dir: str) -> str:
+def _own_code_canonicalized(process_name: str, language: str, code: str, debasher_mod_dir: str) -> str:
     """
     debasher_get_proc_info's own `declare -f` canonicalization of `code`
     alone (a standalone file containing just this one process's own
     implementation, nothing else) — so it's directly comparable to
     _module_provided_code's output despite process.code being free-typed
     rather than already in debasher_doc_mod/debasher_get_proc_info's own
-    printed format.
+    printed format. Wrapped the same way _add_exec_func embeds it (a
+    heredoc variable assignment for a non-bash language), so
+    debasher_get_proc_info recognizes it the same way it would in the
+    generated script.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         code_path = Path(tmp_dir) / "code.sh"
-        code_path.write_text(code)
+        code_path.write_text("\n".join(_code_definition_lines(process_name, language, code)) + "\n")
         return _proc_info_code(code_path, process_name, debasher_mod_dir)
 
 
@@ -302,13 +338,17 @@ def _find_redundant_exec_funcs(program: Program) -> frozenset[str]:
     redundant: set[str] = set()
 
     for process in program.processes:
+        # An alias/external alias process embeds no code of its own (see
+        # _add_exec_func), so there's nothing here to compare.
+        if process.additionalSpecs.alias or process.additionalSpecs.externalAlias:
+            continue
         if not process.code:
             continue
         try:
             module_code = _module_provided_code(process.name, program.preamble, debasher_mod_dir)
             if not module_code:
                 continue
-            own_code = _own_code_canonicalized(process.name, process.code, debasher_mod_dir)
+            own_code = _own_code_canonicalized(process.name, process.language, process.code, debasher_mod_dir)
         except RuntimeError:
             continue
         if module_code == own_code:
