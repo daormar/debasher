@@ -250,6 +250,18 @@ DEBASHER_PERL_FEXT="pl"
 DEBASHER_R_FEXT="R"
 DEBASHER_GROOVY_FEXT="groovy"
 
+# File extensions for DEBASHER_HEREDOC_LANGUAGES/_INTERPRETERS, aligned
+# with them by index (python/r/perl/groovy) -- lets an external file's
+# language/interpreter (debasher::_get_doc_language_for_file/
+# _get_interpreter_for_file in engine/debasher_lib_programs.sh) be
+# looked up the same way, instead of its own separate case statement.
+DEBASHER_HEREDOC_FEXTS=(
+    "${DEBASHER_PYTHON_FEXT}"
+    "${DEBASHER_R_FEXT}"
+    "${DEBASHER_PERL_FEXT}"
+    "${DEBASHER_GROOVY_FEXT}"
+)
+
 # FILE NAMES
 DEBASHER_INITIAL_PROCSPEC_BASENAME=".initial_program.${DEBASHER_PROCSPEC_FEXT}"
 DEBASHER_PRG_PREF="program"
@@ -334,6 +346,17 @@ declare -a DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK
 
 # Declare associative array to store processes added to a program
 declare -A DEBASHER_PROGRAM_PROCESSES
+
+# Declare associative arrays to recover, for an alias/ext_alias process,
+# what it actually delegates to -- the alias's target process name, or
+# the ext_alias's resolved external file -- so debasher::_show_proc_implem
+# (engine/debasher_lib_processes.sh) can document the real implementation
+# instead of the synthesized wrapper function
+# debasher::_create_process_func_alias/_ext_alias creates for it (see
+# debasher::_add_debasher_alias_process/_add_debasher_ext_alias_process in
+# engine/debasher_lib_programs.sh, which populate these).
+declare -A DEBASHER_PROCESS_ALIAS_TARGETS
+declare -A DEBASHER_PROCESS_EXT_ALIAS_FILES
 
 # Declare array to store processes in topological order according to
 # their dependencies

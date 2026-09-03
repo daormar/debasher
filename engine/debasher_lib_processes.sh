@@ -159,84 +159,151 @@ debasher::_show_proc_specs()
 }
 
 ########
+# Recursively collects, into the "seen" associative array (passed by
+# name in $3), every function reachable from $1's body that is itself
+# defined in the same script file ($2) as $1 -- i.e. a helper the
+# process author wrote, as opposed to a function belonging to the
+# DeBasher framework itself (defined in a different file) or an
+# external command. Relies on "shopt -s extdebug" already being active
+# in the caller, since that is what makes "declare -F" report a
+# function's defining file instead of just its name.
+debasher::_collect_func_deps()
+{
+    local funcname=$1
+    local scriptfile=$2
+    # Kept as a plain string, and passed through unchanged on the
+    # recursive call below, rather than re-using the nameref alias
+    # itself -- a nameref that recursively aliases a variable of its
+    # own name triggers bash's "circular name reference" and silently
+    # stops propagating writes to the caller's array.
+    local collected_name=$3
+    local -n _collected=$3
+
+    [ -n "${_collected[$funcname]+x}" ] && return 0
+    _collected[$funcname]=1
+
+    local word
+    for word in $(declare -f "${funcname}" | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | sort -u); do
+        [ -n "${_collected[$word]+x}" ] && continue
+        local defsite
+        defsite=`declare -F "${word}" 2>/dev/null`
+        [ -z "${defsite}" ] && continue
+        [ "${defsite##* }" = "${scriptfile}" ] && debasher::_collect_func_deps "${word}" "${scriptfile}" "${collected_name}"
+    done
+}
+
+########
+# debasher::_show_proc_implem helper: prints the real implementation
+# behind an alias/ext_alias process instead of the synthesized
+# dispatcher function debasher::_create_process_func_alias/_ext_alias
+# creates for it (see engine/debasher_lib_programs.sh) -- recursing into
+# the alias target's own implementation (chaining through further
+# aliases, if any), or reading the ext_alias's external file directly.
+# Only known once add_debasher_process has actually run for this
+# process (i.e. only from debasher_doc_mod, not debasher_get_proc_info,
+# which never runs the program's "_program" function). Returns 1 for
+# anything else (regular/heredoc process, or a process
+# add_debasher_process hasn't registered at all), leaving
+# debasher::_show_proc_implem to try its other sources.
+debasher::_show_proc_implem_delegate()
+{
+    local processname=$1
+
+    case "${DEBASHER_PROGRAM_PROCESSES[${processname}]-}" in
+        "${DEBASHER_ALIAS_PROCESS_TYPE}")
+            debasher::_show_proc_implem "${DEBASHER_PROCESS_ALIAS_TARGETS[${processname}]}"
+            return $?
+            ;;
+        "${DEBASHER_EXT_ALIAS_PROCESS_TYPE}")
+            local ext_alias_file="${DEBASHER_PROCESS_EXT_ALIAS_FILES[${processname}]}"
+            local doc_language
+            doc_language=$(debasher::_get_doc_language_for_file "${ext_alias_file}") || doc_language="bash"
+            echo '```'"${doc_language}"
+            cat "${ext_alias_file}"
+            echo '```'
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+########
+# debasher::_show_proc_implem helper: prints processname's heredoc
+# variable ("<processname>_<py|r|perl|groovy>") as a fenced code block
+# tagged with its language. Returns 1 if no such variable exists.
+debasher::_show_proc_implem_heredoc()
+{
+    local processname=$1
+
+    local i
+    for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
+        local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
+        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
+            echo '```'${DEBASHER_HEREDOC_LANGUAGES[$i]}
+            echo "${!proc_varname}"
+            echo '```'
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+########
+# debasher::_show_proc_implem helper: prints processname's bash-function
+# implementation (its exec function, plus any same-file helper functions
+# it calls -- see debasher::_collect_func_deps) as a fenced ```bash
+# block. Returns 1 if no such function exists.
+debasher::_show_proc_implem_bash_func()
+{
+    local processname=$1
+
+    if ! debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}" >/dev/null; then
+        return 1
+    fi
+
+    local funcname=`debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"`
+
+    # Pull in any helper functions the process author defined alongside
+    # it in the same script file -- otherwise the implementation
+    # captured here would call functions that don't exist anywhere else
+    # in what gets shown/imported.
+    shopt -s extdebug
+    local scriptfile
+    scriptfile=`declare -F "${funcname}"`
+    scriptfile=${scriptfile##* }
+
+    local -A seen=()
+    debasher::_collect_func_deps "${funcname}" "${scriptfile}" seen
+    shopt -u extdebug
+
+    echo '```'bash
+    local dep
+    for dep in "${!seen[@]}"; do
+        if [ "${dep}" != "${funcname}" ]; then
+            declare -f "${dep}"
+            echo ""
+        fi
+    done
+    declare -f "${funcname}"
+    echo '```'
+}
+
+########
+# Prints processname's implementation as a fenced Markdown code block.
+# Tries, in order, debasher::_show_proc_implem_delegate (an alias/
+# ext_alias process), _heredoc (a heredoc-variable process), then
+# _bash_func (a plain bash function) -- the same precedence
+# debasher::add_debasher_process itself gives them when registering a
+# process. Returns 1 if none of them find anything.
 debasher::_show_proc_implem()
 {
     local processname=$1
 
-    # Recursively collects, into the "seen" associative array (passed by
-    # name in $3), every function reachable from $1's body that is itself
-    # defined in the same script file ($2) as $1 -- i.e. a helper the
-    # process author wrote, as opposed to a function belonging to the
-    # DeBasher framework itself (defined in a different file) or an
-    # external command. Relies on "shopt -s extdebug" already being
-    # active in the caller, since that is what makes "declare -F" report
-    # a function's defining file instead of just its name.
-    debasher::_collect_func_deps()
-    {
-        local funcname=$1
-        local scriptfile=$2
-        # Kept as a plain string, and passed through unchanged on the
-        # recursive call below, rather than re-using the nameref alias
-        # itself -- a nameref that recursively aliases a variable of its
-        # own name triggers bash's "circular name reference" and silently
-        # stops propagating writes to the caller's array.
-        local collected_name=$3
-        local -n _collected=$3
-
-        [ -n "${_collected[$funcname]+x}" ] && return 0
-        _collected[$funcname]=1
-
-        local word
-        for word in $(declare -f "${funcname}" | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | sort -u); do
-            [ -n "${_collected[$word]+x}" ] && continue
-            local defsite
-            defsite=`declare -F "${word}" 2>/dev/null`
-            [ -z "${defsite}" ] && continue
-            [ "${defsite##* }" = "${scriptfile}" ] && debasher::_collect_func_deps "${word}" "${scriptfile}" "${collected_name}"
-        done
-    }
-
-    # Search for process implementations
-    if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}" >/dev/null; then
-        # Try with bash
-        local funcname=`debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"`
-
-        # Pull in any helper functions the process author defined
-        # alongside it in the same script file -- otherwise the
-        # implementation captured here would call functions that don't
-        # exist anywhere else in what gets shown/imported.
-        shopt -s extdebug
-        local scriptfile
-        scriptfile=`declare -F "${funcname}"`
-        scriptfile=${scriptfile##* }
-
-        local -A seen=()
-        debasher::_collect_func_deps "${funcname}" "${scriptfile}" seen
-        shopt -u extdebug
-
-        echo '```'bash
-        local dep
-        for dep in "${!seen[@]}"; do
-            if [ "${dep}" != "${funcname}" ]; then
-                declare -f "${dep}"
-                echo ""
-            fi
-        done
-        declare -f "${funcname}"
-        echo '```'
-        return 0
-    else
-        # Try with rest of languages
-        for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-            local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
-            if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-                echo '```'${DEBASHER_HEREDOC_LANGUAGES[$i]}
-                echo "${!proc_varname}"
-                echo '```'
-                return 0
-            fi
-        done
-    fi
+    debasher::_show_proc_implem_delegate "${processname}" && return 0
+    debasher::_show_proc_implem_heredoc "${processname}" && return 0
+    debasher::_show_proc_implem_bash_func "${processname}" && return 0
 
     return 1
 }

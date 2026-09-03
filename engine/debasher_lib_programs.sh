@@ -317,6 +317,28 @@ debasher::_add_debasher_alias_process()
     # Store process name in associative array (alias information is also
     # stored)
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_ALIAS_PROCESS_TYPE}"
+    DEBASHER_PROCESS_ALIAS_TARGETS["${processname}"]="${process_alias}"
+}
+
+########
+# Index into DEBASHER_HEREDOC_FEXTS matching `extension` -- also an
+# index into DEBASHER_HEREDOC_LANGUAGES/_INTERPRETERS, since all three
+# are synchronized by position. Returns 1 if `extension` isn't one of
+# python/r/perl/groovy (bash is handled separately by this function's
+# two callers, since it isn't a heredoc language at all).
+debasher::_get_heredoc_index_for_extension()
+{
+    local extension=$1
+
+    local i
+    for i in "${!DEBASHER_HEREDOC_FEXTS[@]}"; do
+        if [ "${extension}" = "${DEBASHER_HEREDOC_FEXTS[$i]}" ]; then
+            echo "${i}"
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 ########
@@ -328,31 +350,37 @@ debasher::_get_interpreter_for_file()
     # Extract the part after the last dot
     local extension="${bfname##*.}"
 
-    case "$extension" in
-        "${DEBASHER_BASH_FEXT}")
-            echo "${BASH}"
-            return 0
-            ;;
-        "${DEBASHER_PYTHON_FEXT}")
-            echo "${PYTHON}"
-            return 0
-            ;;
-        "${DEBASHER_R_FEXT}")
-            echo "${RSCRIPT}"
-            return 0
-            ;;
-        "${DEBASHER_PERL_FEXT}")
-            echo "${PERL}"
-            return 0
-            ;;
-        "${DEBASHER_GROOVY_FEXT}")
-            echo "${GROOVY}"
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    if [ "${extension}" = "${DEBASHER_BASH_FEXT}" ]; then
+        echo "${BASH}"
+        return 0
+    fi
+
+    local idx
+    idx=$(debasher::_get_heredoc_index_for_extension "${extension}") || return 1
+    echo "${DEBASHER_HEREDOC_INTERPRETERS[$idx]}"
+}
+
+########
+# Like debasher::_get_interpreter_for_file, but returns the Markdown
+# fence language for documenting the file's contents (see
+# debasher::_show_proc_implem_delegate in engine/debasher_lib_processes.sh)
+# rather than the interpreter to run it with.
+debasher::_get_doc_language_for_file()
+{
+    local file=$1
+    local bfname=$("${BASENAME}" "${file}")
+
+    # Extract the part after the last dot
+    local extension="${bfname##*.}"
+
+    if [ "${extension}" = "${DEBASHER_BASH_FEXT}" ]; then
+        echo "bash"
+        return 0
+    fi
+
+    local idx
+    idx=$(debasher::_get_heredoc_index_for_extension "${extension}") || return 1
+    echo "${DEBASHER_HEREDOC_LANGUAGES[$idx]}"
 }
 
 ########
@@ -413,6 +441,7 @@ debasher::_add_debasher_ext_alias_process()
     # Store process name in associative array (alias information is also
     # stored)
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_EXT_ALIAS_PROCESS_TYPE}"
+    DEBASHER_PROCESS_EXT_ALIAS_FILES["${processname}"]="${external_file}"
 }
 
 ########
