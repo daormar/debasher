@@ -54,7 +54,7 @@ hello_world_alternative_explain_opts()
 ########
 hello_world_alternative_identify_cmdline_opts()
 {
-    opt_is_cmdline "-s"
+    opt_is_non_mandatory_cmdline "-s"
 }
 
 ########
