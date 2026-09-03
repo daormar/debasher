@@ -996,9 +996,9 @@ define_opt_from_proc_out() { debasher::define_opt_from_proc_out "$@"; }
 #
 # $1 - Option name.
 # $2 - Name of process that will be connected with current one.
-# $2 - Task index of the process to be connected.
-# $3 - Name of output option belonging to the the process to be connected.
-# $4 - Name of the variable to store the new option.
+# $3 - Task index of the process to be connected.
+# $4 - Name of output option belonging to the the process to be connected.
+# $5 - Name of the variable to store the new option.
 #
 # Examples
 #
@@ -1039,9 +1039,9 @@ debasher::define_opt_from_proc_task_out()
 #
 # $1 - Option name.
 # $2 - Name of process that will be connected with current one.
-# $2 - Task index of the process to be connected.
-# $3 - Name of output option belonging to the the process to be connected.
-# $4 - Name of the variable to store the new option.
+# $3 - Task index of the process to be connected.
+# $4 - Name of output option belonging to the the process to be connected.
+# $5 - Name of the variable to store the new option.
 #
 # Examples
 #
