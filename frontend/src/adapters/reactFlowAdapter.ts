@@ -81,8 +81,10 @@ export function programToReactFlowEdges(
 
 /**
  * Whether a connection is allowed: it must go from an output
- * option to an input option, and the two options must belong to
- * different processes.
+ * option to an input option, the two options must belong to
+ * different processes, and the target input must not already have
+ * an incoming connection (an input accepts at most one connected
+ * output, while an output may feed multiple inputs).
  */
 export function isValidProgramConnection(
   program: Program,
@@ -112,9 +114,16 @@ export function isValidProgramConnection(
     option => option.id === targetHandle
   );
 
+  const targetAlreadyConnected = program.edges.some(
+    edge =>
+      edge.targetProcessId === target &&
+      edge.targetOptionId === targetHandle
+  );
+
   return (
     sourceOptionDef?.direction === "output" &&
-    targetOptionDef?.direction === "input"
+    targetOptionDef?.direction === "input" &&
+    !targetAlreadyConnected
   );
 
 }
