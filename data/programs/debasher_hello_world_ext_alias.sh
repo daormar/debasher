@@ -64,13 +64,8 @@ hello_world_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    # Obtain value of -s option
-    local str=$(get_cmdline_opt "${cmdline}" "-s")
-
     # -s option
-    if [ "${str}" != "${DEBASHER_OPT_NOT_FOUND}" ]; then
-        define_cmdline_opt "${cmdline}" "-s" optlist || return 1
-    fi
+    define_cmdline_opt_if_given "${cmdline}" "-s" optlist || return 1
 
     # Save option list
     save_opt_list optlist
