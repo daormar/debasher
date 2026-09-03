@@ -43,7 +43,7 @@ docker_example_explain_opts()
 }
 
 ########
-docker_identify_cmdline_opts()
+docker_example_identify_cmdline_opts()
 {
     :
 }
