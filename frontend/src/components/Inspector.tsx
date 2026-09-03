@@ -426,11 +426,31 @@ export default function Inspector() {
       </select>
 
 
-      <button
-        onClick={() => setCodeEditorOpen(true)}
-      >
-        Edit code
-      </button>
+      {(selectedProcess.additionalSpecs.alias || selectedProcess.additionalSpecs.externalAlias) ? (
+
+        <div
+          style={{
+            width: "100%",
+            padding: "6px 8px",
+            borderRadius: 4,
+            border: "1px solid #bbb",
+            color: "#888",
+            boxSizing: "border-box",
+            marginBottom: 8,
+          }}
+        >
+          Implementation comes from {selectedProcess.additionalSpecs.alias ? "the alias" : "the external alias"} — code is ignored
+        </div>
+
+      ) : (
+
+        <button
+          onClick={() => setCodeEditorOpen(true)}
+        >
+          Edit code
+        </button>
+
+      )}
 
 
       {isCodeEditorOpen && (
