@@ -992,6 +992,19 @@ debasher::define_opt_from_proc_out()
 define_opt_from_proc_out() { debasher::define_opt_from_proc_out "$@"; }
 
 ########
+# Public: Defines process option from the output of another process.
+#
+# $1 - Option name.
+# $2 - Name of process that will be connected with current one.
+# $2 - Task index of the process to be connected.
+# $3 - Name of output option belonging to the the process to be connected.
+# $4 - Name of the variable to store the new option.
+#
+# Examples
+#
+#   debasher::define_opt_from_proc_task_out "-in" "process_to_be_connected" "process_task_index_to_be_connected" "-out" optlist
+#
+# The function does not return any value
 debasher::define_opt_from_proc_task_out()
 {
     local opt=$1
@@ -1021,6 +1034,20 @@ debasher::define_opt_from_proc_task_out()
     debasher::define_opt "$opt" "$value" "$varname"
 }
 
+########
+# Public: Defines process option from the output of another process.
+#
+# $1 - Option name.
+# $2 - Name of process that will be connected with current one.
+# $2 - Task index of the process to be connected.
+# $3 - Name of output option belonging to the the process to be connected.
+# $4 - Name of the variable to store the new option.
+#
+# Examples
+#
+#   define_opt_from_proc_task_out "-in" "process_to_be_connected" "process_task_index_to_be_connected" "-out" optlist
+#
+# The function does not return any value
 define_opt_from_proc_task_out() { debasher::define_opt_from_proc_task_out "$@"; }
 
 ########
