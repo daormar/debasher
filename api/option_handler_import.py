@@ -106,6 +106,14 @@ class OptionHandlerResult:
     # best-effort in "manual" mode, exact otherwise.
     value_descriptor_labels: set[str] = field(default_factory=set)
     fifo_labels: set[str] = field(default_factory=set)
+    # Fanout family option label (e.g. "-outfith") -> the label of the
+    # command-line option on the SAME process that supplies its runtime
+    # count (e.g. "-w") — see script_generation.py's
+    # _fanout_definition_lines/_FANOUT_SUFFIX. Only ever populated for
+    # "standard" mode (see _parse_primitive_calls's allow_fanout_blocks);
+    # program_import.py resolves the label into an actual
+    # ProgramOption.countSourceOptionId once both options have real ids.
+    fanout_count_source_labels: dict[str, str] = field(default_factory=dict)
 
 
 _HEADER_BOILERPLATE_RES = [
@@ -232,10 +240,119 @@ def _tokenize(args: str) -> list[tuple[str, bool]]:
     return tokens
 
 
+# Fanout block (see script_generation.py's _fanout_definition_lines).
+# Written by script_generation.py as:
+#     local <var>=$(debasher::read_opt_value_from_line "${cmdline}" "<count_label>")
+#     for ((i=0; i<<var>; i++)); do
+#         <one define_opt or define_opt_from_proc_task_out call, label "<base>${i}">
+#     done
+# but `declare -f` always reprints a for loop's "do" on its own line
+# (verified against real bash — same as _ARRAY_FOR_RE/_ARRAY_DO_LINE's
+# "for idx in ...; do" below), so the shape actually recovered here is
+# five lines: the count-read, the bare "for ((...))" header, "do", the
+# one inner call, "done". Recognized as a unit (see
+# _try_parse_fanout_block) only when allow_fanout_blocks is set — i.e.
+# only inside a "standard"-mode _define_opts body, never inside
+# array/generator ones, which have no notion of a fanout family option.
+_FANOUT_COUNT_RE = re.compile(
+    r'^local\s+(?P<var>[A-Za-z_][A-Za-z0-9_]*)=\$\(debasher::read_opt_value_from_line'
+    r'\s+"\$\{cmdline\}"\s+"(?P<count_label>[^"]*)"\)$'
+)
+_FANOUT_BLOCK_LABEL_RE = re.compile(r'^(?P<base>-[^"$]+)\$\{i\}$')
+_FANOUT_DO_LINE = "do"
+_FANOUT_DONE_LINE = "done"
+
+
+def _fanout_for_re(var: str) -> re.Pattern:
+    return re.compile(rf'^for\s+\(\(i=0;\s*i<{re.escape(var)};\s*i\+\+\)\)$')
+
+
+def _fanout_consumer_opt_re(idx_var: str) -> re.Pattern:
+    # The consumer side of a scatter connection (see
+    # script_generation.py's "Case B" branch in _option_definition_line):
+    # an ARRAY-mode process's own option, connected to a "standard"
+    # process's fanout family, referencing the member picked by the
+    # array's own per-task loop variable — e.g. "-outf${idx}" for
+    # idx_var="idx". Only meaningful when allow_fanout_consumer is set.
+    return re.compile(rf'^(?P<base>-[^"$]+)\$\{{{re.escape(idx_var)}\}}$')
+
+
+def _try_parse_fanout_block(
+    body: list[str], start: int
+) -> tuple[int, str, str, str | None, ConnectionRef | None, bool] | None:
+    """
+    Recognizes one fanout-family block (see the comment above
+    _FANOUT_COUNT_RE) starting at body[start]. Returns (lines consumed,
+    fanout option label — e.g. "-outfith", count-source option label —
+    e.g. "-w", literal value text or None, ConnectionRef or None, is a
+    fifo name rather than a plain value); the value/connection pair is
+    mutually exclusive, matching define_opt/define_fifo_opt (scatter,
+    unconnected) vs define_opt_from_proc_task_out (gather, connected to
+    an array-mode process's per-task output) respectively — the last
+    element is only ever True for a define_fifo_opt scatter (see
+    data/programs/debasher_dynamic_fanout_fifos.sh's dispatch). None if
+    body[start:] doesn't match this exact shape, leaving the caller to
+    fall back to normal single-line parsing of body[start] itself.
+    """
+    if start + 4 >= len(body):
+        return None
+
+    count_match = _FANOUT_COUNT_RE.match(body[start])
+    if not count_match:
+        return None
+    count_var = count_match.group("var")
+
+    if not _fanout_for_re(count_var).match(body[start + 1]):
+        return None
+    if body[start + 2] != _FANOUT_DO_LINE:
+        return None
+    if body[start + 4] != _FANOUT_DONE_LINE:
+        return None
+
+    call_match = _DEFINE_OPTS_CALL_RE.match(body[start + 3])
+    if not call_match:
+        return None
+    func = call_match.group("func")
+    tokens = _tokenize(call_match.group("args") or "")
+    if len(tokens) != _CALL_TOKEN_COUNTS.get(func, -1):
+        return None
+
+    count_label = count_match.group("count_label")
+
+    if func in ("define_opt", "define_fifo_opt"):
+        label_match = _FANOUT_BLOCK_LABEL_RE.match(tokens[0][0])
+        if label_match is None or tokens[-1][0] != "optlist":
+            return None
+        fanout_label = f"{label_match.group('base')}ith"
+        return (5, fanout_label, count_label, tokens[1][0], None, func == "define_fifo_opt")
+
+    if func == "define_opt_from_proc_task_out":
+        label_match = _FANOUT_BLOCK_LABEL_RE.match(tokens[0][0])
+        if (
+            label_match is None
+            or not tokens[1][1]
+            or tokens[2][0] not in ("${i}", "$i")
+            or not tokens[3][1]
+            or tokens[-1][0] != "optlist"
+        ):
+            return None
+        fanout_label = f"{label_match.group('base')}ith"
+        connection = ConnectionRef(
+            option_label=fanout_label,
+            source_process=tokens[1][0],
+            source_option=tokens[3][0],
+        )
+        return (5, fanout_label, count_label, None, connection, False)
+
+    return None
+
+
 def _parse_primitive_calls(
     body: list[str],
     idx_var: str = "task_idx",
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str]] | None:
+    allow_fanout_blocks: bool = False,
+    allow_fanout_consumer: bool = False,
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str]] | None:
     """
     Parses a function body against the closed grammar of option-
     definition primitives — used for _define_opts (standard and, inside
@@ -248,25 +365,58 @@ def _parse_primitive_calls(
     define_opt_from_proc_task_out call round-trips through the app for
     — "task_idx" for a generator body (the default), "idx" for an array
     loop body (see _parse_array_define_opts).
+
+    `allow_fanout_blocks` (only ever set for a "standard" _define_opts
+    body — see resolve_options_handler) additionally recognizes the
+    fanout-family block shape (see _try_parse_fanout_block).
+
+    `allow_fanout_consumer` (only ever set for an array-mode loop
+    body's `idx_var="idx"` — see _parse_array_define_opts) additionally
+    accepts a define_opt_from_proc_out whose connected option name is
+    "<base>${idx_var}" instead of a plain literal, reconstructing it as
+    a connection to that "standard" process's "<base>ith" fanout family.
     """
     idx_re = _idx_var_re(idx_var)
+    fanout_consumer_re = _fanout_consumer_opt_re(idx_var) if allow_fanout_consumer else None
     values: dict[str, str] = {}
     connections: list[ConnectionRef] = []
     value_descriptor_labels: set[str] = set()
     fifo_labels: set[str] = set()
+    fanout_count_source_labels: dict[str, str] = {}
     locals_table: dict[str, str] = {}
 
-    for line in body:
+    i = 0
+    while i < len(body):
+        line = body[i]
+
         if not line or _COMMENT_RE.match(line):
+            i += 1
             continue
         if any(regex.match(line) for regex in _HEADER_BOILERPLATE_RES):
+            i += 1
             continue
         if any(regex.match(line) for regex in _FOOTER_BOILERPLATE_RES):
+            i += 1
             continue
+
+        if allow_fanout_blocks:
+            fanout_match = _try_parse_fanout_block(body, i)
+            if fanout_match is not None:
+                consumed, fanout_label, count_label, value_text, connection, is_fifo = fanout_match
+                fanout_count_source_labels[fanout_label] = count_label
+                if connection is not None:
+                    connections.append(connection)
+                else:
+                    values[fanout_label] = value_text
+                    if is_fifo:
+                        fifo_labels.add(fanout_label)
+                i += consumed
+                continue
 
         local_match = _LOCAL_ASSIGN_RE.match(line)
         if local_match:
             locals_table[local_match.group("name")] = _strip_one_quote_layer(local_match.group("expr"))
+            i += 1
             continue
 
         call_match = _DEFINE_OPTS_CALL_RE.match(line)
@@ -282,7 +432,14 @@ def _parse_primitive_calls(
 
         if func in ("define_opt_from_proc_out", "define_opt_from_proc_task_out"):
             label, proc, opt = tokens[0], tokens[1], tokens[-2]
-            if not (label[1] and proc[1] and opt[1]):
+            opt_ok = opt[1]
+            fanout_consumer_base = None
+            if not opt_ok and func == "define_opt_from_proc_out" and fanout_consumer_re is not None:
+                consumer_match = fanout_consumer_re.match(opt[0])
+                if consumer_match is not None:
+                    fanout_consumer_base = consumer_match.group("base")
+                    opt_ok = True
+            if not (label[1] and proc[1] and opt_ok):
                 return None
             # define_opt_from_proc_task_out's args are <label> <proc>
             # <task_idx> <opt> <optlist> — one more than the plain
@@ -297,7 +454,7 @@ def _parse_primitive_calls(
                 ConnectionRef(
                     option_label=label[0],
                     source_process=proc[0],
-                    source_option=opt[0],
+                    source_option=f"{fanout_consumer_base}ith" if fanout_consumer_base is not None else opt[0],
                     task_indexed=func == "define_opt_from_proc_task_out",
                 )
             )
@@ -343,16 +500,24 @@ def _parse_primitive_calls(
             if not label[1]:
                 return None
 
-    return values, connections, value_descriptor_labels, fifo_labels
+        i += 1
+
+    return values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels
 
 
 def _parse_function_source(
     source: str,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str]] | None:
+    allow_fanout_blocks: bool = False,
+    allow_fanout_consumer: bool = False,
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str]] | None:
     body = _function_body_lines(source)
     if body is None:
         return None
-    return _parse_primitive_calls(body)
+    return _parse_primitive_calls(
+        body,
+        allow_fanout_blocks=allow_fanout_blocks,
+        allow_fanout_consumer=allow_fanout_consumer,
+    )
 
 
 # _define_opts_func_header() without the "local optlist=..." line — array
@@ -411,10 +576,14 @@ def _parse_array_define_opts(
     array_code = "\n".join(rest[:for_index]).strip()
     loop_body = rest[for_index + 2:-1]
 
-    parsed = _parse_primitive_calls(loop_body, idx_var="idx")
+    # allow_fanout_consumer: the loop body may connect to a "standard"
+    # process's fanout family via "<base>${idx}" (see
+    # _fanout_consumer_opt_re) — array mode has no fanout family
+    # options of its own, so allow_fanout_blocks stays off.
+    parsed = _parse_primitive_calls(loop_body, idx_var="idx", allow_fanout_consumer=True)
     if parsed is None:
         return None
-    values, connections, value_descriptor_labels, fifo_labels = parsed
+    values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels = parsed
     return array_code, values, connections, value_descriptor_labels, fifo_labels
 
 
@@ -479,7 +648,7 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         parsed = _parse_function_source(generate_opts) if generate_opts else None
 
         if generator_size_code is not None and parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels = parsed
+            values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="generator", generatorSizeCode=generator_size_code),
                 option_values=values,
@@ -509,15 +678,19 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         )
 
     if define_opts:
-        parsed = _parse_function_source(define_opts)
+        # allow_fanout_blocks: a "standard" body may contain one or more
+        # fanout-family blocks (see _try_parse_fanout_block) interleaved
+        # among the flat primitive calls.
+        parsed = _parse_function_source(define_opts, allow_fanout_blocks=True)
         if parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels = parsed
+            values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="standard"),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                fanout_count_source_labels=fanout_count_source_labels,
             )
 
         # Not the flat "standard" grammar — try script_generation.py's
