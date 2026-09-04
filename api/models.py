@@ -43,7 +43,7 @@ class AdditionalSpecs(BaseModel):
 
 class OptionsHandler(BaseModel):
     mode: Literal["standard", "array", "generator", "manual"]
-    generatorSize: Optional[str] = None
+    generatorSizeCode: Optional[str] = None
     arrayCode: Optional[str] = None
     manualCode: Optional[str] = None
 

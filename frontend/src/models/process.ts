@@ -46,7 +46,7 @@ export interface OptionsHandler {
 
   mode: OptionsHandlerMode;
 
-  generatorSize?: string;
+  generatorSizeCode?: string;
 
   arrayCode?: string;
 

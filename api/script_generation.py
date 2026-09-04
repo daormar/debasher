@@ -248,8 +248,18 @@ def _add_array_opts_func(process, process_modes):
 
 
 def _add_generate_opts_size_func(process):
+    # The user's own code, embedded verbatim (like arrayCode) rather than
+    # wrapped as a single echo'd expression, so it can be arbitrarily
+    # complex — the only contract is that it must echo the task count.
+    # The engine calls this with the same 4 positional args as
+    # _define_opts (see debasher::_define_opts_generator), so the same
+    # header is emitted ahead of it — minus "local optlist=", which this
+    # function has no use for (it only echoes a task count).
     lines = [f"{process.name}{PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX}()", "{"]
-    lines.append(f'{INDENT}echo "{process.optionsHandler.generatorSize or ""}"')
+    lines.extend(_define_opts_func_header()[:-1])
+    lines.append("")
+    if process.optionsHandler.generatorSizeCode:
+        lines.append(_indent_block(process.optionsHandler.generatorSizeCode, INDENT))
     lines.append("}")
     return lines
 
