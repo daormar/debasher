@@ -30,7 +30,6 @@ Process Array Example using Generators
         local process_spec=$2
         local process_name=$3
         local process_outdir=$4
-        local optlist=""
 
         echo 4
     }
@@ -109,7 +108,6 @@ Process Array Example using Generators
         local process_spec=$2
         local process_name=$3
         local process_outdir=$4
-        local optlist=""
 
         echo 4
     }
