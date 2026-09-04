@@ -355,6 +355,17 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
             if option.label in result.fifo_labels:
                 option.channel = "fifo"
 
+        # Resolve each recovered fanout family's count-source label (see
+        # OptionHandlerResult.fanout_count_source_labels) into the
+        # actual sibling ProgramOption's id, now that both have real
+        # ones — mirrors OptionEditor.tsx's own dropdown, which stores
+        # the same kind of same-process option reference.
+        for fanout_label, count_source_label in result.fanout_count_source_labels.items():
+            fanout_option = next((option for option in options if option.label == fanout_label), None)
+            count_source_option = next((option for option in options if option.label == count_source_label), None)
+            if fanout_option is not None and count_source_option is not None:
+                fanout_option.countSourceOptionId = count_source_option.id
+
         pending_connections.extend((process_name, connection) for connection in result.connections)
 
         processes.append(

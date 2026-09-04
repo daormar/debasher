@@ -1,5 +1,6 @@
 import type { ProgramProcess } from "../models/process";
 import type { OptionDataType, ProgramOption } from "../models/option";
+import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 
 // Comment text used to mark the point where the user is expected to
 // write the process's actual logic. Also used, via isCodeStillTemplate,
@@ -20,12 +21,59 @@ function withIdentifiers(options: ProgramOption[]): [ProgramOption, string][] {
   return options.map(option => [option, toIdentifier(option.label)]);
 }
 
+// This process's fanout family options (see isFanoutOption) — only
+// meaningful on a "standard"-mode process.
+function fanoutOptionsOf(process: ProgramProcess): ProgramOption[] {
+  return process.optionsHandler.mode === "standard"
+    ? process.options.filter(o => isFanoutOption(o.label))
+    : [];
+}
+
+// Only generateBashTemplate (see fanoutReadLines) knows how to read a
+// fanout option's dynamic-count family — the other languages' templates
+// just flag it with a TODO comment instead of registering a bogus
+// single flag (e.g. python's argparse would otherwise register
+// "-outfith" itself, which is never a real command-line flag; the real
+// ones are "-outf0", "-outf1", ...).
+function fanoutTodoLines(fanoutOptions: ProgramOption[], commentPrefix: string): string[] {
+  return fanoutOptions.map(option => {
+    const base = fanoutBaseLabel(option.label);
+    return `${commentPrefix} TODO: fanout option "${option.label}" isn't auto-handled for this language yet — read "${base}0".."${base}<N-1>" manually.`;
+  });
+}
+
+// Bash template lines for one fanout family option (see isFanoutOption):
+// a runtime loop, driven by its count-source option's own identifier
+// (already declared earlier in the template — fanout blocks are always
+// emitted after all plain option reads, see generateBashTemplate),
+// reading "<base-label>$i" for each i into an array.
+function fanoutReadLines(process: ProgramProcess, option: ProgramOption): string[] {
+  const baseLabel = fanoutBaseLabel(option.label);
+  const arrId = toIdentifier(baseLabel);
+
+  const countSource = process.options.find(o => o.id === option.countSourceOptionId);
+  if (!countSource) {
+    return [`    # TODO: fanout option "${option.label}" has no count source configured yet`];
+  }
+
+  const countId = toIdentifier(countSource.label);
+
+  return [
+    `    local ${arrId}=()`,
+    `    for ((i=0; i<${countId}; i++)); do`,
+    `        ${arrId}+=($(read_opt_value_from_func_args "${baseLabel}\${i}" "$@"))`,
+    `    done`,
+  ];
+}
+
 function generateBashTemplate(process: ProgramProcess): string {
   const lines: string[] = [`${process.name}()`, "{"];
 
-  const optionsWithIds = withIdentifiers(process.options);
+  const fanoutOptions = fanoutOptionsOf(process);
+  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const optionsWithIds = withIdentifiers(plainOptions);
 
-  if (optionsWithIds.length > 0) {
+  if (optionsWithIds.length > 0 || fanoutOptions.length > 0) {
     lines.push("    # Initialize variables");
     for (const [option, id] of optionsWithIds) {
       if (option.dataType === "None") {
@@ -41,6 +89,9 @@ function generateBashTemplate(process: ProgramProcess): string {
           lines.push("    fi");
         }
       }
+    }
+    for (const fanoutOption of fanoutOptions) {
+      lines.push(...fanoutReadLines(process, fanoutOption));
     }
     lines.push("");
   }
@@ -73,7 +124,9 @@ function pythonDefaultLiteral(dataType: OptionDataType): string {
 }
 
 function generatePythonTemplate(process: ProgramProcess): string {
-  const optionsWithIds = withIdentifiers(process.options);
+  const fanoutOptions = fanoutOptionsOf(process);
+  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = [
     "import argparse",
@@ -107,6 +160,8 @@ function generatePythonTemplate(process: ProgramProcess): string {
     }
   }
 
+  lines.push(...fanoutTodoLines(fanoutOptions, "#"));
+
   lines.push("", `# ${TEMPLATE_MARKER}`);
 
   return lines.join("\n");
@@ -136,7 +191,9 @@ function perlDefaultLiteral(dataType: OptionDataType): string {
 }
 
 function generatePerlTemplate(process: ProgramProcess): string {
-  const optionsWithIds = withIdentifiers(process.options);
+  const fanoutOptions = fanoutOptionsOf(process);
+  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = [
     "use strict;",
@@ -160,13 +217,17 @@ function generatePerlTemplate(process: ProgramProcess): string {
     lines.push('    or die "Error in command line arguments\\n";');
   }
 
+  lines.push(...fanoutTodoLines(fanoutOptions, "#"));
+
   lines.push("", `# ${TEMPLATE_MARKER}`);
 
   return lines.join("\n");
 }
 
 function generateRTemplate(process: ProgramProcess): string {
-  const optionsWithIds = withIdentifiers(process.options);
+  const fanoutOptions = fanoutOptionsOf(process);
+  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = ["args <- commandArgs(trailingOnly = TRUE)"];
 
@@ -198,13 +259,17 @@ function generateRTemplate(process: ProgramProcess): string {
     }
   }
 
+  lines.push(...fanoutTodoLines(fanoutOptions, "#"));
+
   lines.push("", `# ${TEMPLATE_MARKER}`);
 
   return lines.join("\n");
 }
 
 function generateGroovyTemplate(process: ProgramProcess): string {
-  const optionsWithIds = withIdentifiers(process.options);
+  const fanoutOptions = fanoutOptionsOf(process);
+  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = [];
 
@@ -234,6 +299,8 @@ function generateGroovyTemplate(process: ProgramProcess): string {
       lines.push(`def ${id} = options.${id}`);
     }
   }
+
+  lines.push(...fanoutTodoLines(fanoutOptions, "//"));
 
   lines.push("", `// ${TEMPLATE_MARKER}`);
 

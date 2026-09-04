@@ -11,7 +11,7 @@ import ArrayConfigEditor from "./ArrayConfigEditor";
 import ManualConfigEditor from "./ManualConfigEditor";
 import ProcessNameDialog from "./ProcessNameDialog";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
-import { isValidOptionLabel } from "../models/option";
+import { isValidOptionLabel, fanoutBaseLabel, isFanoutOption } from "../models/option";
 
 
 export default function Inspector() {
@@ -272,7 +272,14 @@ export default function Inspector() {
           >
 
             <span>
-              {option.label}
+              {selectedProcess.optionsHandler.mode === "standard" && isFanoutOption(option.label) ? (
+                <>
+                  {fanoutBaseLabel(option.label)}
+                  <span style={{ color: "#c0392b" }}>ith</span>
+                </>
+              ) : (
+                option.label
+              )}
             </span>
 
 

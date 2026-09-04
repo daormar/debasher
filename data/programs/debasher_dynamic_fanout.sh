@@ -307,10 +307,9 @@ dispatch_define_opts()
     define_opt_from_proc_out "-ind" "fragment" "-outd" optlist || return 1
 
     # Add output option for w files
-    local w
-    w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
+    local w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
     for ((i=0; i<w; i++)); do
-        define_opt "-outf$i" "${process_outdir}/block_list_${i}.txt" optlist || return 1
+        define_opt "-outf${i}" "${process_outdir}/block_list_${i}.txt" optlist || return 1
     done
 
     # Save option list
@@ -392,17 +391,20 @@ worker_define_opts()
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
-    local optlist=""
 
-    # Define worker parameters
-    local w
-    w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
+    # Build one array element per worker task
+    local w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
+    local array=()
     for ((i=0; i<w; i++)); do
-        local specific_optlist=${optlist}
-        define_opt "-id" $i specific_optlist || return 1
-        define_opt_from_proc_out "-inf" "dispatch" "-outf$i" specific_optlist || return 1
-        define_opt "-outd" "${process_outdir}/${i}" specific_optlist || return 1
-        save_opt_list specific_optlist
+        array+=("$i")
+    done
+
+    for idx in "${!array[@]}"; do
+        local optlist=""
+        define_opt "-id" "${idx}" optlist || return 1
+        define_opt_from_proc_out "-inf" "dispatch" "-outf${idx}" optlist || return 1
+        define_opt "-outd" "${process_outdir}/${idx}" optlist || return 1
+        save_opt_list optlist
     done
 }
 
@@ -483,10 +485,9 @@ aggregate_define_opts()
     define_cmdline_opt "$cmdline" "-w" optlist || return 1
 
     # Define parameters so as to collect workers output
-    local w
-    w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
+    local w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
     for ((i=0; i<w; i++)); do
-        define_opt_from_proc_task_out "-ind$i" "worker" "${i}" "-outd" optlist || return 1
+        define_opt_from_proc_task_out "-ind${i}" "worker" "${i}" "-outd" optlist || return 1
     done
 
     # Define name of output file
