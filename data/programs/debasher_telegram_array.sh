@@ -63,28 +63,28 @@ decomposer_define_opts()
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
-    local optlist=""
 
     # Obtain value of -f option
     pref_of_files=`get_cmdline_opt "${cmdline}" "-f"`
 
-    # Process files
-    local i=0
+    # Array of files matching the -f prefix
+    array=()
     for file in "${pref_of_files}"*; do
-        local specific_optlist=${optlist}
+        array+=("${file}")
+    done
+
+    for idx in "${!array[@]}"; do
+        local optlist=""
 
         # Define name of input file
-        define_opt "-f" "${file}" specific_optlist || return 1
+        define_opt "-f" "${array[$idx]}" optlist || return 1
 
         # Define name of output file
-        local outf="${process_outdir}/words_$i.txt"
-        define_opt "-outf" "${outf}" specific_optlist || return 1
+        local outf="${process_outdir}/words_${idx}.txt"
+        define_opt "-outf" "${outf}" optlist || return 1
 
         # Save option list
-        save_opt_list specific_optlist
-
-        # Increase index
-        i=$((i + 1))
+        save_opt_list optlist
     done
 }
 
@@ -96,31 +96,34 @@ recomposer_define_opts()
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
-    local optlist=""
 
     # Obtain value of -f option
     pref_of_files=`get_cmdline_opt "${cmdline}" "-f"`
 
-    # -c option
-    define_cmdline_opt "$cmdline" "-c" optlist || return 1
-
-    # Process files
-    local i=0
+    # Array of files matching the -f prefix
+    array=()
     for file in "${pref_of_files}"*; do
-        local specific_optlist=${optlist}
+        array+=("${file}")
+    done
+
+    for idx in "${!array[@]}"; do
+        local optlist=""
+
+        # -c option (its value never depends on idx, but every option is
+        # still defined once per iteration — array mode always re-emits
+        # every option's call inside the loop, rather than hoisting
+        # idx-independent ones out of it)
+        define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
         # -inf option
-        define_opt_from_proc_task_out "-inf" "decomposer" "$i" "-outf" specific_optlist || return 1
+        define_opt_from_proc_task_out "-inf" "decomposer" "${idx}" "-outf" optlist || return 1
 
         # Define name of output file
-        local outf="${process_outdir}/output_$i.txt"
-        define_opt "-outf" "${outf}" specific_optlist || return 1
+        local outf="${process_outdir}/output_${idx}.txt"
+        define_opt "-outf" "${outf}" optlist || return 1
 
         # Save option list
-        save_opt_list specific_optlist
-
-        # Increase index
-        i=$((i + 1))
+        save_opt_list optlist
     done
 }
 

@@ -128,7 +128,7 @@ decomposer_define_opts()
     define_opt_from_proc_out "-inf" "rseq" "-outf" optlist || return 1
 
     # Define option for decomposer FIFO
-    fifoname="dc_fifo"
+    local fifoname="dc_fifo"
     define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Save option list
@@ -191,7 +191,7 @@ recomposer_define_opts()
     define_opt_from_proc_out "-inf" "decomposer" "-outf" optlist || return 1
 
     # Define option for decomposer FIFO
-    fifoname="rc_fifo"
+    local fifoname="rc_fifo"
     define_fifo_opt "-outf" "${fifoname}" optlist || return 1
 
     # Save option list
