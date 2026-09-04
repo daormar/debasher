@@ -165,6 +165,32 @@ would look as follows:
     }
 
 
+Process Documentation
+----------------------
+
+Just like a module can define a ``document`` method to provide a short
+description of itself (see the ``debasher_file_example_document``
+function shown in the `Module Configuration`_ Section), a process can
+define its own ``document`` method using the ``document_process`` API
+function. This is not mandatory, but it is recommended, since it allows
+other users of the process to quickly understand what it does without
+having to inspect its implementation.
+
+For the ``file_writer`` and ``file_reader`` processes, the ``document``
+method would look as follows:
+
+.. code-block:: bash
+
+    file_writer_document()
+    {
+        document_process "Prints a string to a file."
+    }
+
+    file_reader_document()
+    {
+        document_process "Reads a string from a file."
+    }
+
 Option Explanation
 ------------------
 

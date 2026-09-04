@@ -118,6 +118,11 @@ stored in a file with the same name and Bash extension,
 
 .. code-block:: bash
 
+    hello_world_document()
+    {
+        document_process "Prints a hello world message."
+    }
+
     hello_world_explain_opts()
     {
         # -s option
@@ -183,6 +188,10 @@ In the "Hello World!" example shown above, we have a module named
 ``debasher_hello_world.sh`` file. The module internally defines a
 program that executes the process ``hello_world``.  Below we describe
 the functions involved:
+
+* ``hello_world_document``: this function implements the ``document``
+  method for ``hello_world``, which provides a short description of
+  what the process does via the ``document_process`` API function.
 
 * ``hello_world_explain_opts``: this function implements the
   ``explain_opts`` method for ``hello_world``. Such method defines the

@@ -3,6 +3,11 @@ Program with Cycles
 
 .. code-block:: bash
 
+    process_a_document()
+    {
+        document_process "Executes a process reading and writing from fifos."
+    }
+
     process_a_explain_opts()
     {
         # -n option

@@ -3,6 +3,11 @@ Docker Example
 
 .. code-block:: bash
 
+    docker_example_document()
+    {
+        document_process "Runs the hello-world Docker image and writes its output to a file."
+    }
+
     docker_example_explain_opts()
     {
         # -outf option

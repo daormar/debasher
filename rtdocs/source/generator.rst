@@ -3,6 +3,11 @@ Process Array Example using Generators
 
 .. code-block:: bash
 
+    array_writer_document()
+    {
+        document_process "Executes an array of 4 tasks. Each task creates a file containing the task index."
+    }
+
     array_writer_explain_opts()
     {
         # -c option
@@ -79,6 +84,11 @@ Process Array Example using Generators
         if [ -f "${outf}" ]; then
             rm "${outf}"
         fi
+    }
+
+    array_reader_document()
+    {
+        document_process "Reads each array_writer task's output file and copies its content to the reader's own output file."
     }
 
     array_reader_explain_opts()

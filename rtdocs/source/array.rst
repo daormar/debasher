@@ -74,6 +74,11 @@ Process Array Example
         fi
     }
 
+    array_reader_document()
+    {
+        document_process "Reads each array_writer task's output file and copies its content to the reader's own output file."
+    }
+
     array_reader_explain_opts()
     {
         # -id option

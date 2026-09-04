@@ -3,6 +3,11 @@ Conda Example
 
 .. code-block:: bash
 
+    conda_example_document()
+    {
+        document_process "Prints Python version to file \`python_ver.txt\`."
+    }
+
     conda_example_explain_opts()
     {
         # -outf option
