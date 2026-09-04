@@ -61,10 +61,20 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
         </h3>
 
         <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
-          Bash code that builds an array named <code>array</code>, run once
-          before the per-task loop. Option values below can then reference{" "}
-          <code>{"${array[$idx]}"}</code> (the current element) or{" "}
-          <code>{"${idx}"}</code> (its index).
+          Add your code below. Bash code that builds an array named{" "}
+          <code>array</code>, run once before the per-task loop. Option
+          values below can then reference <code>{"${array[$idx]}"}</code>{" "}
+          (the current element) or <code>{"${idx}"}</code> (its index).
+          Taking into account that it will be preceded by the following
+          variable initialization:
+          <br />
+          <code>local cmdline=$1</code>
+          <br />
+          <code>local process_spec=$2</code>
+          <br />
+          <code>local process_name=$3</code>
+          <br />
+          <code>local process_outdir=$4</code>
         </p>
 
         <div
