@@ -12,6 +12,7 @@ import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
 
 export default function ProcessNode({
   data,
+  selected,
 }: NodeProps<Node<ProgramProcessData>>) {
 
   const process = data.process;
@@ -35,7 +36,7 @@ export default function ProcessNode({
       style={{
         minWidth: 180,
         padding: 12,
-        border: "1px solid #999",
+        border: selected ? "2px solid #1a73e8" : "1px solid #999",
         borderRadius: 8,
         background: "white",
         position: "relative",
