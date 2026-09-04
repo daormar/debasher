@@ -8,6 +8,7 @@ import type { Program } from "../models/program";
 import type { ProgramProcess } from "../models/process";
 import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
+import { isFanoutOption } from "../models/option";
 
 /**
  * Data stored inside every React Flow node.
@@ -41,6 +42,21 @@ export function programToReactFlowNodes(
 }
 
 /**
+ * Whether `option` (declared on `process`) is a fanout family option —
+ * see isFanoutOption. Only meaningful on a "standard"-mode process.
+ */
+function isFanoutEndpoint(
+  process: ProgramProcess | undefined,
+  option: { label: string } | undefined
+): boolean {
+  return (
+    process?.optionsHandler.mode === "standard" &&
+    !!option &&
+    isFanoutOption(option.label)
+  );
+}
+
+/**
  * Converts program edges into React Flow edges.
  */
 export function programToReactFlowEdges(
@@ -57,6 +73,18 @@ export function programToReactFlowEdges(
       option => option.id === edge.sourceOptionId
     );
 
+    const targetProcess = program.processes.find(
+      process => process.id === edge.targetProcessId
+    );
+
+    const targetOption = targetProcess?.options.find(
+      option => option.id === edge.targetOptionId
+    );
+
+    const sourceIsFanout = isFanoutEndpoint(sourceProcess, sourceOption);
+    const targetIsFanout = isFanoutEndpoint(targetProcess, targetOption);
+    const isFanoutEdge = sourceIsFanout || targetIsFanout;
+
     return {
 
       id: edge.id,
@@ -68,6 +96,12 @@ export function programToReactFlowEdges(
       target: edge.targetProcessId,
 
       targetHandle: edge.targetOptionId,
+
+      type: isFanoutEdge ? "fanout" : undefined,
+
+      data: isFanoutEdge
+        ? { narrowEnd: sourceIsFanout ? "source" : "target" }
+        : undefined,
 
       style: sourceOption?.channel === "fifo"
         ? { strokeDasharray: "6 4" }
@@ -119,6 +153,19 @@ export function isValidProgramConnection(
       edge.targetProcessId === target &&
       edge.targetOptionId === targetHandle
   );
+
+  // A fanout family option (see isFanoutOption) on a "standard" process
+  // may only pair with an "array"-mode process on the other end, and
+  // fanout options can't chain directly into one another.
+  const sourceIsFanout = isFanoutEndpoint(sourceProcess, sourceOptionDef);
+  const targetIsFanout = isFanoutEndpoint(targetProcess, targetOptionDef);
+
+  if (sourceIsFanout && (targetProcess?.optionsHandler.mode !== "array" || targetIsFanout)) {
+    return false;
+  }
+  if (targetIsFanout && (sourceProcess?.optionsHandler.mode !== "array" || sourceIsFanout)) {
+    return false;
+  }
 
   return (
     sourceOptionDef?.direction === "output" &&

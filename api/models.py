@@ -26,6 +26,11 @@ class ProgramOption(BaseModel):
     value: str
     commandLine: bool
     mandatory: bool = False
+    # On a "standard"-mode process only, the id of another option on the
+    # same process (with commandLine=True) supplying the runtime count
+    # for a fanout family (a label ending in "ith") — see
+    # script_generation.py's _is_fanout_label/_fanout_definition_lines.
+    countSourceOptionId: Optional[str] = None
 
 
 class ComputationalSpecs(BaseModel):
