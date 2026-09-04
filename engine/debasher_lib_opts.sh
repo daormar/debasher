@@ -319,6 +319,47 @@ debasher::read_opt_value_from_func_args()
 read_opt_value_from_func_args() { debasher::read_opt_value_from_func_args "$@"; }
 
 ########
+# Public: Reads whether a given flag was provided in function arguments.
+#
+# $1 - Flag name to check for.
+# $2,$3,...,$n - List of function arguments (typically they are provided
+#                by the caller using the special parameter "$@").
+#
+# Examples
+#
+#   if debasher::read_flag_from_func_args "-m" "$@"; then
+#
+# The function returns 0 if the flag was given, 1 otherwise.
+debasher::read_flag_from_func_args()
+{
+    local flag=$1
+    shift
+
+    while [ $# -gt 0 ]; do
+        if [ "$1" = "${flag}" ]; then
+            return 0
+        fi
+        shift
+    done
+
+    return 1
+}
+
+########
+# Public: Reads whether a given flag was provided in function arguments.
+#
+# $1 - Flag name to check for.
+# $2,$3,...,$n - List of function arguments (typically they are provided
+#                by the caller using the special parameter "$@").
+#
+# Examples
+#
+#   if read_flag_from_func_args "-m" "$@"; then
+#
+# The function returns 0 if the flag was given, 1 otherwise.
+read_flag_from_func_args() { debasher::read_flag_from_func_args "$@"; }
+
+########
 debasher::read_opt_value_from_line()
 {
     local cmdline=$1
