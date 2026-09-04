@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from .debasher_constants import (
+    PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
 )
@@ -145,23 +146,28 @@ def _extract_preamble(script_path: Path) -> str:
     return "\n".join(lines).rstrip()
 
 
-def _downgrade_unverifiable_generator_connections(
+# Modes whose resolved OptionsHandler guarantees a task N to actually
+# pull from — mirrors script_generation.py's own _TASK_INDEXED_MODES.
+_TASK_INDEXED_MODES = {"generator", "array"}
+
+
+def _downgrade_unverifiable_task_indexed_connections(
     processes: list[ProgramProcess],
     pending_connections: list[tuple[str, ConnectionRef]],
     option_handler_code_by_process: dict[str, dict[str, str]],
 ) -> None:
     """
-    A define_opt_from_proc_task_out "${task_idx}" connection only means
+    A define_opt_from_proc_task_out "${idx_var}" connection only means
     "my task N pairs with the source's task N" if the source process is
-    itself generator-shaped, i.e. guaranteed to have a task N at all --
-    script_generation.py only ever regenerates ${task_idx} for a
-    generator-to-generator pair (see _add_opts_definition_func in
-    script_generation.py). A process that resolved to "generator" mode
-    via such a connection into a non-generator (or unrecognized, e.g. a
-    different module's) source can't be faithfully regenerated that way,
-    so it's downgraded to "manual" here, with its _generate_opts_size/
-    _generate_opts kept verbatim — mirroring resolve_options_handler's
-    own fallback for an unparseable body.
+    itself generator- or array-shaped, i.e. guaranteed to have a task N
+    at all — script_generation.py only ever regenerates that for a pair
+    both in _TASK_INDEXED_MODES (see _option_definition_line in
+    script_generation.py). A process that resolved to "generator" or
+    "array" mode via such a connection into a source outside that set
+    (or an unrecognized one, e.g. a different module's) can't be
+    faithfully regenerated that way, so it's downgraded to "manual"
+    here, with its option-handler source kept verbatim — mirroring
+    resolve_options_handler's own fallback for an unparseable body.
     """
     processes_by_name = {process.name: process for process in processes}
 
@@ -170,17 +176,20 @@ def _downgrade_unverifiable_generator_connections(
             continue
 
         target = processes_by_name.get(target_name)
-        if target is None or target.optionsHandler.mode != "generator":
+        if target is None or target.optionsHandler.mode not in _TASK_INDEXED_MODES:
             continue
 
         source = processes_by_name.get(connection.source_process)
-        if source is not None and source.optionsHandler.mode == "generator":
+        if source is not None and source.optionsHandler.mode in _TASK_INDEXED_MODES:
             continue
 
         raw = option_handler_code_by_process.get(target_name, {})
-        generate_opts_size = raw.get(PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX, "")
-        generate_opts = raw.get(PROCESS_METHOD_GENERATE_OPTS_SUFFIX)
-        combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
+        if target.optionsHandler.mode == "generator":
+            generate_opts_size = raw.get(PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX, "")
+            generate_opts = raw.get(PROCESS_METHOD_GENERATE_OPTS_SUFFIX)
+            combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
+        else:  # "array"
+            combined = raw.get(PROCESS_METHOD_DEFINE_OPTS_SUFFIX, "")
         target.optionsHandler = OptionsHandler(mode="manual", manualCode=combined)
 
 
@@ -294,11 +303,14 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     connections it implies are recovered on a best-effort basis by
     statically parsing its _define_opts/_generate_opts_size/
     _generate_opts source (see option_handler_import.py for the
-    recovery rules and their limits — in particular, a process whose
-    option definition uses control flow or a real per-task generator
-    falls back to "manual"/"array" mode with its source kept verbatim,
-    executing exactly as it originally did but without necessarily
-    recovering every connection for the canvas). The preamble is
+    recovery rules and their limits — a loop-shaped _define_opts
+    round-trips into "array" mode only when it matches
+    script_generation.py's exact fixed shape; anything else with a loop,
+    other control flow, or a real per-task generator that doesn't verify
+    (see _downgrade_unverifiable_task_indexed_connections) falls back to
+    "manual" with its source kept verbatim, executing exactly as it
+    originally did but without necessarily recovering every connection
+    for the canvas). The preamble is
     recovered too, heuristically, by reading `script_path` itself rather
     than debasher_doc_mod's Markdown (see _extract_preamble). Each
     process's computational/additional specs are recovered from
@@ -360,7 +372,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
             )
         )
 
-    _downgrade_unverifiable_generator_connections(processes, pending_connections, option_handler_code_by_process)
+    _downgrade_unverifiable_task_indexed_connections(processes, pending_connections, option_handler_code_by_process)
 
     edges = _build_edges(processes, pending_connections)
     _layout_processes(processes, edges)
