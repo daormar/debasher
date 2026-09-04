@@ -90,6 +90,12 @@ process_a()
 }
 
 ########
+process_b_document()
+{
+    document_process "Reads an input file and prints its content to the standard output."
+}
+
+########
 process_b_explain_opts()
 {
     # -inf option

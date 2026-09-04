@@ -35,6 +35,12 @@ debasher_docker_example_shared_dirs()
 ######################################
 
 ########
+docker_example_document()
+{
+    document_process "Runs the hello-world Docker image and writes its output to a file."
+}
+
+########
 docker_example_explain_opts()
 {
     # -outf option

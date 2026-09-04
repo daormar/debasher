@@ -103,6 +103,12 @@ host1()
 }
 
 ########
+host2_document()
+{
+    document_process "Executes an array of n tasks. Each task prints the host name."
+}
+
+########
 host2_explain_opts()
 {
     # -n option
