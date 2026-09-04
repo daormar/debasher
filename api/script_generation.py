@@ -1,3 +1,4 @@
+import re
 import tempfile
 from pathlib import Path
 
@@ -171,6 +172,126 @@ def _task_idx_var(mode):
     return "task_idx" if mode == "generator" else "idx"
 
 
+# debasher's own convention (see data/programs/debasher_dynamic_fanout.sh)
+# for a dynamic-count family of options on a "standard"-mode process: a
+# label ending in "ith" (e.g. "-outfith" standing for "-outf0", "-outf1",
+# ...), mirrored from frontend/src/models/option.ts's isFanoutOption/
+# fanoutBaseLabel. Only meaningful on a "standard"-mode process — the
+# same label on array/generator/manual is just an ordinary option.
+_FANOUT_SUFFIX = "ith"
+
+
+def _fanout_base_label(label: str) -> str:
+    return label[: -len(_FANOUT_SUFFIX)]
+
+
+def _is_fanout_label(label: str) -> bool:
+    if not label.endswith(_FANOUT_SUFFIX):
+        return False
+    # Excludes the degenerate bare "-ith"/"--ith".
+    return _fanout_base_label(label).lstrip("-") != ""
+
+
+def _fanout_count_var(count_source_label: str) -> str:
+    # Derived from the count-source option's own label (e.g. "-w" ->
+    # "w") so generated code reads like the hand-written reference
+    # script. Two fanout options sharing one count source each emit a
+    # harmless redundant "local <var>=..." — acceptable.
+    return re.sub(r"[^a-zA-Z0-9]+", "_", count_source_label.lstrip("-")) or "n"
+
+
+def _fanout_count_source_option(process, option):
+    source = next(
+        (o for o in process.options if o.id == option.countSourceOptionId),
+        None,
+    )
+    if source is None or not source.commandLine:
+        raise ValueError(
+            f'Fanout option "{option.label}" on process "{process.name}" needs '
+            "countSourceOptionId set to a command-line option declared on the same process."
+        )
+    return source
+
+
+def _validate_fanout_option(process, option, process_modes) -> None:
+    if option.dataType == "None":
+        raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t be a flag.')
+    if option.commandLine:
+        raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t itself be command-line.')
+    if option.direction == "output":
+        # "fifo" is the one channel a fanout output can use besides
+        # "none" — a family of per-task named pipes (e.g.
+        # "dispatch_fifo_${i}"), same primitive as an ordinary fifo
+        # option (see data/programs/debasher_dynamic_fanout_fifos.sh's
+        # dispatch). "value_desc" makes no sense here (there is no
+        # single engine-synthesized descriptor for a whole family).
+        if option.channel not in ("none", "fifo"):
+            raise ValueError(
+                f'Fanout output "{option.label}" on "{process.name}" must use channel "none" or "fifo".'
+            )
+        if _opt_is_connected_to_proc(option):
+            raise ValueError(
+                f'Fanout output "{option.label}" on "{process.name}" can\'t be connected — '
+                'give it a literal value referencing "$i" instead.'
+            )
+    else:
+        # A gather input is always a connection to an array-mode
+        # process's per-task output (define_opt_from_proc_task_out) —
+        # incompatible with any other channel.
+        if option.channel != "none":
+            raise ValueError(f'Fanout input "{option.label}" on "{process.name}" must use channel "none".')
+        if not _opt_is_connected_to_proc(option):
+            raise ValueError(
+                f'Fanout input "{option.label}" on "{process.name}" must be connected '
+                'to an "array"-mode process output.'
+            )
+        conn_proc, _ = _get_process_plus_opt(option)
+        if process_modes.get(conn_proc) != "array":
+            raise ValueError(
+                f'Fanout input "{option.label}" on "{process.name}" is connected to '
+                f'"{conn_proc}", which is not "array"-mode — v1 only supports standard '
+                "<-> array fanout pairings."
+            )
+
+
+def _fanout_definition_lines(process, option, process_modes, indent: str) -> list[str]:
+    """
+    Multi-line _define_opts codegen for a fanout family option on a
+    "standard" process: reads its runtime count off another cmdline
+    option on the same process (option.countSourceOptionId), then loops
+    0..count-1 emitting one define_opt (scatter, an unconnected output
+    with a literal "$i"-referencing value) or one
+    define_opt_from_proc_task_out (gather, an input connected to an
+    "array"-mode process's output) per iteration — see
+    data/programs/debasher_dynamic_fanout.sh's dispatch_define_opts/
+    aggregate_define_opts for the hand-written equivalent.
+    """
+    _validate_fanout_option(process, option, process_modes)
+
+    count_source = _fanout_count_source_option(process, option)
+    count_var = _fanout_count_var(count_source.label)
+    base_label = _fanout_base_label(option.label)
+
+    lines = [
+        f'{indent}local {count_var}=$(debasher::read_opt_value_from_line "${{cmdline}}" "{count_source.label}")',
+        f'{indent}for ((i=0; i<{count_var}; i++)); do',
+    ]
+
+    if option.direction == "output":
+        func = "define_fifo_opt" if option.channel == "fifo" else "define_opt"
+        lines.append(
+            f'{indent}{INDENT}debasher::{func} "{base_label}${{i}}" "{option.value}" optlist || return 1'
+        )
+    else:
+        conn_proc, conn_opt = _get_process_plus_opt(option)
+        lines.append(
+            f'{indent}{INDENT}debasher::define_opt_from_proc_task_out "{base_label}${{i}}" "{conn_proc}" "${{i}}" "{conn_opt}" optlist || return 1'
+        )
+
+    lines.append(f'{indent}done')
+    return lines
+
+
 def _option_definition_line(process, option, process_modes):
     # channel is checked ahead of commandLine: an option can be both a
     # mandatory command-line option (for _identify_cmdline_opts/
@@ -192,6 +313,24 @@ def _option_definition_line(process, option, process_modes):
         return f'debasher::define_cmdline_opt_if_given "${{cmdline}}" "{option.label}" optlist || return 1'
     if _opt_is_connected_to_proc(option):
         conn_proc, conn_opt = _get_process_plus_opt(option)
+        if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
+            # Consumer side of a scatter connection: conn_opt is a fanout
+            # family declared on a "standard" process (e.g. "-outfith"),
+            # so it isn't a real option name by itself — the member this
+            # option actually reads is picked by this ("array"-mode)
+            # process's own per-task loop variable. One save_opt_list
+            # call on the source side (unlike _TASK_INDEXED_MODES, which
+            # addresses N repeated calls of the SAME name), hence plain
+            # define_opt_from_proc_out rather than _task_out.
+            if process.optionsHandler.mode != "array":
+                raise ValueError(
+                    f'Option "{option.label}" on "{process.name}" is connected to fanout '
+                    f'family "{conn_opt}" on "{conn_proc}", but "{process.name}" is not '
+                    '"array"-mode — v1 only supports standard <-> array fanout pairings.'
+                )
+            idx_var = _task_idx_var(process.optionsHandler.mode)
+            base_conn_opt = _fanout_base_label(conn_opt)
+            return f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1'
         if process.optionsHandler.mode in _TASK_INDEXED_MODES and process_modes.get(conn_proc) in _TASK_INDEXED_MODES:
             idx_var = _task_idx_var(process.optionsHandler.mode)
             return f'debasher::define_opt_from_proc_task_out "{option.label}" "{conn_proc}" "${{{idx_var}}}" "{conn_opt}" optlist || return 1'
@@ -205,7 +344,10 @@ def _add_opts_definition_func(process, suffix, header_lines, process_modes):
     lines.append("")
     if process.options:
         for option in process.options:
-            lines.append(INDENT + _option_definition_line(process, option, process_modes))
+            if process.optionsHandler.mode == "standard" and _is_fanout_label(option.label):
+                lines.extend(_fanout_definition_lines(process, option, process_modes, INDENT))
+            else:
+                lines.append(INDENT + _option_definition_line(process, option, process_modes))
     lines.append("")
     lines.extend(_define_opts_func_foot())
     lines.append("}")
