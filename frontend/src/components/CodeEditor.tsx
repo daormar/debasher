@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
 import { languageExtension } from "./codeLanguages";
+import { generateCodeTemplate, isCodeStillTemplate } from "./codeTemplates";
 import type { ProgramProcess } from "../models/process";
 
 interface Props {
@@ -14,8 +15,11 @@ export default function CodeEditor({ process, onClose }: Props) {
 
   const { setProcessCode } = useProgram();
 
-  const [draft, setDraft] =
-    useState(process.code);
+  const [draft, setDraft] = useState(() =>
+    isCodeStillTemplate(process.code)
+      ? generateCodeTemplate(process)
+      : process.code
+  );
 
   function handleSave() {
     setProcessCode(process.id, draft);
