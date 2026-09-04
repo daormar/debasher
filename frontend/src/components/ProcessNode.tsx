@@ -9,6 +9,22 @@ import type {
 } from "@xyflow/react";
 
 import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
+import { fanoutBaseLabel, isFanoutOption } from "../models/option";
+
+function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) {
+
+  if (!isFanout) {
+    return <>{label}</>;
+  }
+
+  return (
+    <>
+      {fanoutBaseLabel(label)}
+      <span style={{ color: "#c0392b" }}>ith</span>
+    </>
+  );
+
+}
 
 export default function ProcessNode({
   data,
@@ -16,6 +32,8 @@ export default function ProcessNode({
 }: NodeProps<Node<ProgramProcessData>>) {
 
   const process = data.process;
+
+  const isStandard = process.optionsHandler.mode === "standard";
 
 
   const inputOptions =
@@ -80,12 +98,13 @@ export default function ProcessNode({
               />
 
               <span
+                title={isStandard && isFanoutOption(option.label) ? "Fanout family option (dynamic count)" : undefined}
                 style={{
                   fontSize: 11,
                   whiteSpace: "nowrap",
                 }}
               >
-                {option.label}
+                <OptionLabel label={option.label} isFanout={isStandard && isFanoutOption(option.label)} />
               </span>
 
             </div>
@@ -134,12 +153,13 @@ export default function ProcessNode({
             >
 
               <span
+                title={isStandard && isFanoutOption(option.label) ? "Fanout family option (dynamic count)" : undefined}
                 style={{
                   fontSize: 11,
                   whiteSpace: "nowrap",
                 }}
               >
-                {option.label}
+                <OptionLabel label={option.label} isFanout={isStandard && isFanoutOption(option.label)} />
               </span>
 
               <Handle

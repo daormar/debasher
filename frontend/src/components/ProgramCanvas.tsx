@@ -24,6 +24,7 @@ import {
   isValidProgramConnection,
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
+import FanoutEdge from "./FanoutEdge";
 import RunStatusIndicator from "./RunStatusIndicator";
 
 export default function ProgramCanvas() {
@@ -52,6 +53,13 @@ export default function ProgramCanvas() {
   const nodeTypes = useMemo(
     () => ({
       program: ProcessNode,
+    }),
+    []
+  );
+
+  const edgeTypes = useMemo(
+    () => ({
+      fanout: FanoutEdge,
     }),
     []
   );
@@ -187,6 +195,7 @@ export default function ProgramCanvas() {
         nodes={localNodes}
         edges={localEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onConnect={onConnect}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
