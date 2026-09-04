@@ -18,6 +18,11 @@ from .models import ComputationalSpecs, AdditionalSpecs, Program
 
 INDENT_WIDTH = 4
 INDENT = " " * INDENT_WIDTH
+
+
+def _indent_block(text: str, indent: str) -> str:
+    """Prefixes every non-blank line of `text` with `indent`, preserving its own relative indentation."""
+    return "\n".join(indent + line if line else line for line in text.splitlines())
 SCRIPT_HEADER = "# AUTOMATICALLY GENERATED DEBASHER SCRIPT"
 
 def _computational_specs_str(specs: ComputationalSpecs) -> str:
@@ -151,48 +156,93 @@ def _get_process_plus_opt(option):
     return tuple(option.value[1:-1].split(";"))
 
 
+# Modes whose _define_opts/_generate_opts is guaranteed to produce one
+# save_opt_list call per task, numbered 0..N-1 — generator via the
+# engine calling _generate_opts once per task_idx, array via a loop that
+# calls save_opt_list once per idx (see debasher_array_example.sh). Only
+# a source in one of these modes can be trusted to actually have a task
+# N to connect to; a standard source has only task 0, and a manual
+# source's task shape is unknown, so both default to task 0 instead (see
+# _opt_is_connected_to_proc below).
+_TASK_INDEXED_MODES = {"generator", "array"}
+
+
+def _task_idx_var(mode):
+    return "task_idx" if mode == "generator" else "idx"
+
+
+def _option_definition_line(process, option, process_modes):
+    # channel is checked ahead of commandLine: an option can be both a
+    # mandatory command-line option (for _identify_cmdline_opts/
+    # documentation purposes) and, in _define_opts, actually sourced
+    # from a fifo/value descriptor instead — see
+    # debasher_cycle_trigger_interactive.sh's worker, whose "-threshold"
+    # is exactly that.
+    if option.dataType == "None":
+        if option.commandLine:
+            return f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1'
+        return f'debasher::define_flag "{option.label}" optlist || return 1'
+    if option.channel == "value_desc":
+        return f'debasher::define_value_desc_opt "{option.label}" optlist || return 1'
+    if option.channel == "fifo":
+        return f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist || return 1'
+    if option.commandLine:
+        if option.mandatory:
+            return f'debasher::define_cmdline_opt "${{cmdline}}" "{option.label}" optlist || return 1'
+        return f'debasher::define_cmdline_opt_if_given "${{cmdline}}" "{option.label}" optlist || return 1'
+    if _opt_is_connected_to_proc(option):
+        conn_proc, conn_opt = _get_process_plus_opt(option)
+        if process.optionsHandler.mode in _TASK_INDEXED_MODES and process_modes.get(conn_proc) in _TASK_INDEXED_MODES:
+            idx_var = _task_idx_var(process.optionsHandler.mode)
+            return f'debasher::define_opt_from_proc_task_out "{option.label}" "{conn_proc}" "${{{idx_var}}}" "{conn_opt}" optlist || return 1'
+        return f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1'
+    return f'debasher::define_opt "{option.label}" "{option.value}" optlist || return 1'
+
+
 def _add_opts_definition_func(process, suffix, header_lines, process_modes):
     lines = [f"{process.name}{suffix}()", "{"]
     lines.extend(header_lines)
     lines.append("")
     if process.options:
         for option in process.options:
-            # channel is checked ahead of commandLine: an option can be
-            # both a mandatory command-line option (for
-            # _identify_cmdline_opts/documentation purposes) and, in
-            # _define_opts, actually sourced from a fifo/value descriptor
-            # instead — see debasher_cycle_trigger_interactive.sh's
-            # worker, whose "-threshold" is exactly that.
-            if option.dataType == "None":
-                if option.commandLine:
-                    lines.append(f'{INDENT}debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1')
-                else:
-                    lines.append(f'{INDENT}debasher::define_flag "{option.label}" optlist || return 1')
-            elif option.channel == "value_desc":
-                lines.append(f'{INDENT}debasher::define_value_desc_opt "{option.label}" optlist || return 1')
-            elif option.channel == "fifo":
-                lines.append(f'{INDENT}debasher::define_fifo_opt "{option.label}" "{option.value}" optlist || return 1')
-            elif option.commandLine:
-                if option.mandatory:
-                    lines.append(f'{INDENT}debasher::define_cmdline_opt "${{cmdline}}" "{option.label}" optlist || return 1')
-                else:
-                    lines.append(f'{INDENT}debasher::define_cmdline_opt_if_given "${{cmdline}}" "{option.label}" optlist || return 1')
-            elif _opt_is_connected_to_proc(option):
-                conn_proc, conn_opt = _get_process_plus_opt(option)
-                # ${task_idx} on the connected process's own task_idx only
-                # ever means something if the source process actually has
-                # one per task to offer — i.e. it's generator too. A
-                # standard source has only task 0, and a manual source's
-                # task shape is unknown, so both default to task 0 rather
-                # than assume a task N that may not exist.
-                if process.optionsHandler.mode == "generator" and process_modes.get(conn_proc) == "generator":
-                    lines.append(f'{INDENT}debasher::define_opt_from_proc_task_out "{option.label}" "{conn_proc}" "${{task_idx}}" "{conn_opt}" optlist || return 1')
-                else:
-                    lines.append(f'{INDENT}debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1')
-            else:
-                lines.append(f'{INDENT}debasher::define_opt "{option.label}" "{option.value}" optlist || return 1')
+            lines.append(INDENT + _option_definition_line(process, option, process_modes))
     lines.append("")
     lines.extend(_define_opts_func_foot())
+    lines.append("}")
+    return lines
+
+
+def _add_array_opts_func(process, process_modes):
+    # array mode: the engine's per-process task numbering (see
+    # debasher::_save_opt_list_loop) already treats "call save_opt_list
+    # N times inside one _define_opts" as N tasks — the same mechanism
+    # debasher_array_example.sh uses by hand — so, unlike generator
+    # mode, no separate _generate_opts_size is needed. The array itself
+    # is built by the user's own arrayCode, embedded verbatim, under the
+    # fixed name "array"; the fixed loop variable "idx" (mirroring
+    # generator mode's "task_idx") is then available to option values as
+    # "${array[$idx]}" or "${idx}" and to connections (see
+    # _option_definition_line/_task_idx_var).
+    #
+    # Unlike "standard"/"generator", the header's own "local optlist="
+    # is dropped: every option is (re)defined inside the loop regardless
+    # of whether its value actually depends on idx (uniform — no
+    # idx-independent option gets hoisted out as a one-time "shared
+    # prefix"), so "optlist" itself is simply declared fresh, empty, at
+    # the top of each iteration instead of copied from an outer one.
+    lines = [f"{process.name}{PROCESS_METHOD_DEFINE_OPTS_SUFFIX}()", "{"]
+    lines.extend(_define_opts_func_header()[:-1])
+    lines.append("")
+    if process.optionsHandler.arrayCode:
+        lines.append(_indent_block(process.optionsHandler.arrayCode, INDENT))
+        lines.append("")
+    lines.append(f'{INDENT}for idx in "${{!array[@]}}"; do')
+    lines.append(f'{INDENT * 2}local optlist=""')
+    if process.options:
+        for option in process.options:
+            lines.append(INDENT * 2 + _option_definition_line(process, option, process_modes))
+    lines.append(f'{INDENT * 2}save_opt_list optlist')
+    lines.append(f'{INDENT}done')
     lines.append("}")
     return lines
 
@@ -219,6 +269,8 @@ def _add_opts_handler(process, process_modes):
             )
         )
         return lines
+    if handler.mode == "array":
+        return _add_array_opts_func(process, process_modes)
     if handler.mode == "manual":
         manual_code = handler.manualCode
         return [manual_code] if manual_code else []

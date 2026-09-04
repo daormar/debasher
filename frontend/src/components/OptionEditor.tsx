@@ -15,6 +15,11 @@ interface Props {
   onClose: () => void;
 }
 
+// Modes whose _define_opts/_generate_opts produces one save_opt_list
+// call per task, numbered 0..N-1 — see script_generation.py's own
+// _TASK_INDEXED_MODES, which this mirrors for display purposes only.
+const TASK_INDEXED_MODES = new Set(["generator", "array"]);
+
 export default function OptionEditor({ processId, option, manualMode, onClose }: Props) {
 
   const { program, updateOption } = useProgram();
@@ -48,21 +53,26 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
   })();
 
   // Informational only — matches script_generation.py's own rule
-  // (_add_opts_definition_func): ${task_idx} is only ever regenerated
-  // when both this option's own process and the connected source are
-  // generator mode, since that's the only combination where the source
-  // is guaranteed to actually have a task N to pull from.
+  // (_option_definition_line/_TASK_INDEXED_MODES): a task-indexed
+  // connection is only ever regenerated when both this option's own
+  // process and the connected source are generator or array mode,
+  // since that's the only combination where the source is guaranteed
+  // to actually have a task N to pull from. The index variable itself
+  // is "task_idx" for a generator-mode owner, "idx" for an array-mode
+  // one (see script_generation.py's _task_idx_var).
   const ownerProcess = program.processes.find(
     process => process.id === processId
   );
 
   const isTaskIndexed =
-    ownerProcess?.optionsHandler.mode === "generator" &&
-    connectedSourceOption?.sourceProcess.optionsHandler.mode === "generator";
+    !!ownerProcess && TASK_INDEXED_MODES.has(ownerProcess.optionsHandler.mode) &&
+    !!connectedSourceOption && TASK_INDEXED_MODES.has(connectedSourceOption.sourceProcess.optionsHandler.mode);
+
+  const idxVar = ownerProcess?.optionsHandler.mode === "generator" ? "task_idx" : "idx";
 
   const connectedSourceLabel = connectedSourceOption &&
     (isTaskIndexed
-      ? `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label};\${task_idx}]`
+      ? `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label};\${${idxVar}}]`
       : `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label}]`);
 
   const [label, setLabel] =

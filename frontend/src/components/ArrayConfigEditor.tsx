@@ -60,6 +60,13 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
           Array Configuration — {process.name}
         </h3>
 
+        <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
+          Bash code that builds an array named <code>array</code>, run once
+          before the per-task loop. Option values below can then reference{" "}
+          <code>{"${array[$idx]}"}</code> (the current element) or{" "}
+          <code>{"${idx}"}</code> (its index).
+        </p>
+
         <div
           style={{
             border: "1px solid #ccc",
@@ -73,7 +80,7 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
             height="400px"
 
             extensions={[
-              languageExtension(process.language),
+              languageExtension("bash"),
             ]}
 
             onChange={value => setDraft(value)}
