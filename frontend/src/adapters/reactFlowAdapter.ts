@@ -97,7 +97,11 @@ export function programToReactFlowEdges(
 
       targetHandle: edge.targetOptionId,
 
-      type: isFanoutEdge ? "fanout" : undefined,
+      // Omitted (rather than set to undefined) for a non-fanout edge, so
+      // ReactFlow's `{...defaultEdgeOptions, ...edge}` merge doesn't have
+      // an explicit `type: undefined` here clobbering the default type
+      // ProgramCanvas configures (see its defaultEdgeOptions).
+      ...(isFanoutEdge ? { type: "fanout" } : {}),
 
       data: isFanoutEdge
         ? { narrowEnd: sourceIsFanout ? "source" : "target" }
