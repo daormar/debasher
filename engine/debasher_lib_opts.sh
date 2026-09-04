@@ -360,6 +360,19 @@ debasher::read_flag_from_func_args()
 read_flag_from_func_args() { debasher::read_flag_from_func_args "$@"; }
 
 ########
+# Public: Reads the value of a given option from a serialized command
+# line.
+#
+# $1 - Serialized command line (as stored in a process's "cmdline"
+#      variable, typically received as an argument to an option
+#      definition function).
+# $2 - Option name whose value we want to obtain.
+#
+# Examples
+#
+#   local n=$(debasher::read_opt_value_from_line "${cmdline}" "-n")
+#
+# The function prints the value of the option if it was given, or the "DEBASHER_OPT_NOT_FOUND" constant otherwise.
 debasher::read_opt_value_from_line()
 {
     local cmdline=$1
@@ -372,6 +385,65 @@ debasher::read_opt_value_from_line()
     # Get opt value
     debasher::_get_opt_value_from_func_args "${opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
 }
+
+########
+# Public: Reads the value of a given option from a serialized command
+# line.
+#
+# $1 - Serialized command line (as stored in a process's "cmdline"
+#      variable, typically received as an argument to an option
+#      definition function).
+# $2 - Option name whose value we want to obtain.
+#
+# Examples
+#
+#   local n=$(read_opt_value_from_line "${cmdline}" "-n")
+#
+# The function prints the value of the option if it was given, or the "DEBASHER_OPT_NOT_FOUND" constant otherwise.
+read_opt_value_from_line() { debasher::read_opt_value_from_line "$@"; }
+
+########
+# Public: Reads whether a given flag was provided in a serialized
+# command line.
+#
+# $1 - Serialized command line (as stored in a process's "cmdline"
+#      variable, typically received as an argument to an option
+#      definition function).
+# $2 - Flag name to check for.
+#
+# Examples
+#
+#   if debasher::read_flag_from_line "${cmdline}" "-m"; then
+#
+# The function returns 0 if the flag was given, 1 otherwise.
+debasher::read_flag_from_line()
+{
+    local cmdline=$1
+    local flag=$2
+
+    # Convert string to array (result is placed into the
+    # DEBASHER_DESERIALIZED_ARGS variable)
+    debasher::_deserialize_args "${cmdline}"
+
+    # Check for flag
+    debasher::read_flag_from_func_args "${flag}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
+}
+
+########
+# Public: Reads whether a given flag was provided in a serialized
+# command line.
+#
+# $1 - Serialized command line (as stored in a process's "cmdline"
+#      variable, typically received as an argument to an option
+#      definition function).
+# $2 - Flag name to check for.
+#
+# Examples
+#
+#   if read_flag_from_line "${cmdline}" "-m"; then
+#
+# The function returns 0 if the flag was given, 1 otherwise.
+read_flag_from_line() { debasher::read_flag_from_line "$@"; }
 
 ########
 debasher::_read_memoized_opt_value()

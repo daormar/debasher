@@ -14,6 +14,13 @@ for name in "${proc_impl_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_proc_impl_doc.md
 done
 
+# Generate serialized command line reading API file
+serialized_cmdline_reading_symbols=("read_opt_value_from_line()" "read_flag_from_line()")
+rm -f rtdocs/source/api_serialized_cmdline_reading_doc.md
+for name in "${serialized_cmdline_reading_symbols[@]}"; do
+    sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_serialized_cmdline_reading_doc.md
+done
+
 # Generate option characterization API file
 char_opts_symbols=("explain_cmdline_opt()" "explain_opt()" "explain_flag()" "opt_is_cmdline()" "opt_is_non_mandatory_cmdline()")
 rm -f rtdocs/source/api_characterize_opts_doc.md
