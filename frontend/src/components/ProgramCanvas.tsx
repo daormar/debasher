@@ -25,6 +25,7 @@ import {
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
+import BackEdge from "./BackEdge";
 import RunStatusIndicator from "./RunStatusIndicator";
 
 export default function ProgramCanvas() {
@@ -60,6 +61,7 @@ export default function ProgramCanvas() {
   const edgeTypes = useMemo(
     () => ({
       fanout: FanoutEdge,
+      backedge: BackEdge,
     }),
     []
   );

@@ -56,12 +56,50 @@ function isFanoutEndpoint(
   );
 }
 
+// Horizontal clearance (px) between the detour lane a back edge (see
+// isBackEdge) is routed through and the rightmost process in the
+// program, so the lane sits clear of every node's box. Unlike a
+// process's left edge (its bare position.x), its right edge isn't in
+// the Program model at all — ProcessNode has no fixed width, only a
+// minWidth, and grows with however many options it has — so this
+// margin has to double as a stand-in for "widest plausible node width"
+// too. Comfortable for the option counts in data/programs today; a
+// process with an unusually large number of options could in
+// principle still poke past it.
+const BACK_EDGE_MARGIN = 260;
+
+/**
+ * Whether an edge points "backward" — its target sitting at or above
+ * its source (smaller/equal y) — which a cyclic program always has at
+ * least one of, since a strict top-to-bottom layering can't exist for
+ * a cycle. Rendered via BackEdge instead of a plain edge; see there for
+ * why a plain one would cut through intervening nodes.
+ */
+function isBackEdge(
+  sourceProcess: ProgramProcess | undefined,
+  targetProcess: ProgramProcess | undefined
+): boolean {
+  return (
+    !!sourceProcess &&
+    !!targetProcess &&
+    targetProcess.position.y <= sourceProcess.position.y
+  );
+}
+
 /**
  * Converts program edges into React Flow edges.
  */
 export function programToReactFlowEdges(
   program: Program
 ): Edge[] {
+
+  // Computed once per call (not per edge): every back edge shares the
+  // same detour lane, positioned clear of every process in the
+  // program regardless of which ones actually sit between a given
+  // back edge's source and target.
+  const maxProcessX = program.processes.length
+    ? Math.max(...program.processes.map(process => process.position.x))
+    : 0;
 
   return program.edges.map(edge => {
 
@@ -84,6 +122,7 @@ export function programToReactFlowEdges(
     const sourceIsFanout = isFanoutEndpoint(sourceProcess, sourceOption);
     const targetIsFanout = isFanoutEndpoint(targetProcess, targetOption);
     const isFanoutEdge = sourceIsFanout || targetIsFanout;
+    const backEdge = !isFanoutEdge && isBackEdge(sourceProcess, targetProcess);
 
     return {
 
@@ -97,14 +136,16 @@ export function programToReactFlowEdges(
 
       targetHandle: edge.targetOptionId,
 
-      // Omitted (rather than set to undefined) for a non-fanout edge, so
+      // Omitted (rather than set to undefined) for a plain edge, so
       // ReactFlow's `{...defaultEdgeOptions, ...edge}` merge doesn't have
       // an explicit `type: undefined` here clobbering the default type
       // ProgramCanvas configures (see its defaultEdgeOptions).
-      ...(isFanoutEdge ? { type: "fanout" } : {}),
+      ...(isFanoutEdge ? { type: "fanout" } : backEdge ? { type: "backedge" } : {}),
 
       data: isFanoutEdge
         ? { narrowEnd: sourceIsFanout ? "source" : "target" }
+        : backEdge
+        ? { detourX: maxProcessX + BACK_EDGE_MARGIN }
         : undefined,
 
       style: sourceOption?.channel === "fifo"
