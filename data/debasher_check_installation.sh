@@ -186,8 +186,8 @@ else
     ((checks_failed++))
 fi
 
-# Check debasher_array_example program
-progname="debasher_array_example"
+# Check debasher_array_example_original program
+progname="debasher_array_example_original"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
@@ -204,8 +204,8 @@ case $? in
         ;;
 esac
 
-# Check debasher_array_example_ui program
-progname="debasher_array_example_ui"
+# Check debasher_array_example program
+progname="debasher_array_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=128

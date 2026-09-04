@@ -16,14 +16,15 @@
 
 # *- bash -*
 
-# Same scenario as debasher_array_example.sh (an array of 4 writer/reader
-# tasks), but each _define_opts follows the frontend's "array" option
-# handler convention instead of a hand-rolled loop: a fixed-name array
-# ("array") built by user code, looped over with a fixed index ("idx").
-# This is the exact shape api/script_generation.py's _add_array_opts_func
-# emits and api/option_handler_import.py's _parse_array_define_opts
-# recovers, so importing this file resolves both processes to "array"
-# mode in the app rather than falling back to "manual".
+# Same scenario as debasher_array_example_original.sh (an array of 4
+# writer/reader tasks), but each _define_opts follows the frontend's
+# "array" option handler convention instead of a hand-rolled loop: a
+# fixed-name array ("array") built by user code, looped over with a
+# fixed index ("idx"). This is the exact shape
+# api/script_generation.py's _add_array_opts_func emits and
+# api/option_handler_import.py's _parse_array_define_opts recovers, so
+# importing this file resolves both processes to "array" mode in the
+# app rather than falling back to "manual".
 
 #############
 # CONSTANTS #
@@ -34,7 +35,7 @@
 #################
 
 ########
-debasher_array_example_ui_shared_dirs()
+debasher_array_example_shared_dirs()
 {
     :
 }
@@ -218,7 +219,7 @@ array_reader_post()
 #################################
 
 ########
-debasher_array_example_ui_program()
+debasher_array_example_program()
 {
     add_debasher_process "array_writer" "cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2"
     add_debasher_process "array_reader" "cpus=1 mem=32 time=00:01:00 throttle=4"

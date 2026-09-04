@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_array_example_shared_dirs()
+debasher_array_example_original_shared_dirs()
 {
     :
 }
@@ -190,7 +190,7 @@ array_reader_post()
 #################################
 
 ########
-debasher_array_example_program()
+debasher_array_example_original_program()
 {
     add_debasher_process "array_writer" "cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2"
     add_debasher_process "array_reader" "cpus=1 mem=32 time=00:01:00 throttle=4"
