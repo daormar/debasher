@@ -16,15 +16,6 @@
 
 # *- bash -*
 
-# Same scenario as debasher_array_example.sh (an array of 4 writer/reader
-# tasks), but each _define_opts follows the frontend's "array" option
-# handler convention instead of a hand-rolled loop: a fixed-name array
-# ("array") built by user code, looped over with a fixed index ("idx").
-# This is the exact shape api/script_generation.py's _add_array_opts_func
-# emits and api/option_handler_import.py's _parse_array_define_opts
-# recovers, so importing this file resolves both processes to "array"
-# mode in the app rather than falling back to "manual".
-
 #############
 # CONSTANTS #
 #############
@@ -34,7 +25,7 @@
 #################
 
 ########
-debasher_array_example_ui_shared_dirs()
+debasher_array_example_shared_dirs()
 {
     :
 }
@@ -79,28 +70,17 @@ array_writer_define_opts()
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
+    local optlist=""
 
-    # Array of task ids: the simplest case, where each element is just
-    # its own index
-    array=(0 1 2 3)
+    # -c option
+    define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
-    for idx in "${!array[@]}"; do
-        local optlist=""
-
-        # -c option (its value never depends on idx, but every option is
-        # still defined once per iteration — the app's array mode always
-        # re-emits every option's call inside the loop, rather than
-        # hoisting idx-independent ones out of it)
-        define_cmdline_opt "$cmdline" "-c" optlist || return 1
-
-        # -id option
-        define_opt "-id" "${array[$idx]}" optlist || return 1
-
-        # -outf option
-        define_opt "-outf" "${process_outdir}/${idx}" optlist || return 1
-
-        # Save option list
-        save_opt_list optlist
+    # Save option list so as to execute process four times
+    for id in 0 1 2 3; do
+        local specific_optlist=${optlist}
+        define_opt "-id" $id specific_optlist || return 1
+        define_opt "-outf" "${process_outdir}/${id}" specific_optlist || return 1
+        save_opt_list specific_optlist
     done
 }
 
@@ -163,23 +143,15 @@ array_reader_define_opts()
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
+    local optlist=""
 
-    array=(0 1 2 3)
-
-    for idx in "${!array[@]}"; do
-        local optlist=""
-
-        # -id option
-        define_opt "-id" "${array[$idx]}" optlist || return 1
-
-        # -infile option: connected to array_writer's own task idx
-        define_opt_from_proc_task_out "-infile" "array_writer" "${idx}" "-outf" optlist || return 1
-
-        # -outdir option
-        define_opt "-outdir" "${process_outdir}" optlist || return 1
-
-        # Save option list
-        save_opt_list optlist
+    # Save option list so as to execute process four times
+    for id in 0 1 2 3; do
+        local specific_optlist=${optlist}
+        define_opt "-id" $id specific_optlist || return 1
+        define_opt_from_proc_task_out "-infile" "array_writer" "${id}" "-outf" specific_optlist || return 1
+        define_opt "-outdir" "${process_outdir}" specific_optlist || return 1
+        save_opt_list specific_optlist
     done
 }
 
@@ -218,7 +190,7 @@ array_reader_post()
 #################################
 
 ########
-debasher_array_example_ui_program()
+debasher_array_example_program()
 {
     add_debasher_process "array_writer" "cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2"
     add_debasher_process "array_reader" "cpus=1 mem=32 time=00:01:00 throttle=4"

@@ -35,17 +35,25 @@ Process Array Example
         local process_spec=$2
         local process_name=$3
         local process_outdir=$4
-        local optlist=""
 
-        # -c option
-        define_cmdline_opt "$cmdline" "-c" optlist || return 1
+        # Array of task ids: the simplest case, where each element is
+        # just its own index
+        array=(0 1 2 3)
 
-        # Save option list so as to execute process four times
-        for id in 0 1 2 3; do
-            local specific_optlist=${optlist}
-            define_opt "-id" $id specific_optlist || return 1
-            define_opt "-outf" "${process_outdir}/${id}" specific_optlist || return 1
-            save_opt_list specific_optlist
+        for idx in "${!array[@]}"; do
+            local optlist=""
+
+            # -c option
+            define_cmdline_opt "$cmdline" "-c" optlist || return 1
+
+            # -id option
+            define_opt "-id" "${array[$idx]}" optlist || return 1
+
+            # -outf option
+            define_opt "-outf" "${process_outdir}/${idx}" optlist || return 1
+
+            # Save option list
+            save_opt_list optlist
         done
     }
 
@@ -102,15 +110,23 @@ Process Array Example
         local process_spec=$2
         local process_name=$3
         local process_outdir=$4
-        local optlist=""
 
-        # Save option list so as to execute process four times
-        for id in 0 1 2 3; do
-            local specific_optlist=${optlist}
-            define_opt "-id" $id specific_optlist || return 1
-            define_opt_from_proc_task_out "-infile" "array_writer" "${id}" "-outf" specific_optlist || return 1
-            define_opt "-outdir" "${process_outdir}" specific_optlist || return 1
-            save_opt_list specific_optlist
+        array=(0 1 2 3)
+
+        for idx in "${!array[@]}"; do
+            local optlist=""
+
+            # -id option
+            define_opt "-id" "${array[$idx]}" optlist || return 1
+
+            # -infile option: connected to array_writer's own task idx
+            define_opt_from_proc_task_out "-infile" "array_writer" "${idx}" "-outf" optlist || return 1
+
+            # -outdir option
+            define_opt "-outdir" "${process_outdir}" optlist || return 1
+
+            # Save option list
+            save_opt_list optlist
         done
     }
 
