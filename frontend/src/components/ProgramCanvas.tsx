@@ -172,6 +172,10 @@ export default function ProgramCanvas() {
     [selectProcess]
   );
 
+  const onPaneClick = useCallback(() => {
+    selectProcess(null);
+  }, [selectProcess]);
+
   return (
     <div
       style={{
@@ -186,6 +190,7 @@ export default function ProgramCanvas() {
         onConnect={onConnect}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodesDelete={onNodesDelete}
