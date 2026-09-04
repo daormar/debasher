@@ -70,7 +70,6 @@ array_writer_generate_opts_size()
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
-    local optlist=""
 
     echo 4
 }
@@ -155,7 +154,6 @@ array_reader_generate_opts_size()
     local process_spec=$2
     local process_name=$3
     local process_outdir=$4
-    local optlist=""
 
     echo 4
 }
