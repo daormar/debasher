@@ -1027,6 +1027,106 @@ debasher::define_cmdline_opt_if_given()
 define_cmdline_opt_if_given() { debasher::define_cmdline_opt_if_given "$@"; }
 
 ########
+# Public: Defines process option from a command-line option, verifying
+# that it names an existing file and normalizing it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_cmdline_infile_opt "${cmdline}" "-f" "optlist"
+#
+# The function does not return any value
+debasher::define_cmdline_infile_opt()
+{
+    local cmdline=$1
+    local opt=$2
+    local varname=$3
+
+    # Get value for option
+    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
+    local value="${_OPT_VALUE_}"
+
+    # Verify file exists and normalize to an absolute path
+    debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
+    value=`debasher::_get_absolute_path "$value"`
+
+    # Add option
+    debasher::define_opt "$opt" "$value" "$varname"
+}
+
+########
+# Public: Defines process option from a command-line option, verifying
+# that it names an existing file and normalizing it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_infile_opt "${cmdline}" "-f" "optlist"
+#
+# The function does not return any value
+define_cmdline_infile_opt() { debasher::define_cmdline_infile_opt "$@"; }
+
+########
+# Public: Defines process option from a command-line option that names
+# an existing file, only if the option was given through the command
+# line; verifies the file exists and normalizes it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_cmdline_infile_opt_if_given "${cmdline}" "-f" "optlist"
+#
+# The function does not return any value
+debasher::define_cmdline_infile_opt_if_given()
+{
+    local cmdline=$1
+    local opt=$2
+    local varname=$3
+
+    # Get value for option
+    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    local value=${_OPT_VALUE_}
+
+    if [ "$value" != ${DEBASHER_OPT_NOT_FOUND} ]; then
+        # Verify file exists and normalize to an absolute path
+        debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
+        value=`debasher::_get_absolute_path "$value"`
+
+        # Add option
+        debasher::define_opt "$opt" "$value" "$varname"
+    fi
+}
+
+########
+# Public: Defines process option from a command-line option that names
+# an existing file, only if the option was given through the command
+# line; verifies the file exists and normalizes it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_infile_opt_if_given "${cmdline}" "-f" "optlist"
+#
+# The function does not return any value
+define_cmdline_infile_opt_if_given() { debasher::define_cmdline_infile_opt_if_given "$@"; }
+
+########
 # Public: Defines flag only if it was given through the command-line.
 #
 # $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.

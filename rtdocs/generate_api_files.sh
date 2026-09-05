@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Generate process options API file
-proc_opts_symbols=("define_opt()" "define_flag()" "define_cmdline_opt()" "define_cmdline_opt_if_given()" "define_cmdline_flag_if_given()" "define_fifo_opt()" "define_fifo_opt_generator()" "define_opt_from_proc_out()" "define_opt_from_proc_task_out()" "define_value_desc_opt()" "save_opt_list()")
+proc_opts_symbols=("define_opt()" "define_flag()" "define_cmdline_opt()" "define_cmdline_opt_if_given()" "define_cmdline_infile_opt()" "define_cmdline_infile_opt_if_given()" "define_cmdline_flag_if_given()" "define_fifo_opt()" "define_fifo_opt_generator()" "define_opt_from_proc_out()" "define_opt_from_proc_task_out()" "define_value_desc_opt()" "save_opt_list()")
 rm -f rtdocs/source/api_proc_opts_doc.md
 for name in "${proc_opts_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_proc_opts_doc.md

@@ -29,10 +29,11 @@ import):
   back to "manual" with the pair kept verbatim.
 - _define_opts is matched against the grammar of option-definition
   primitives (define_opt[_from_proc_out[_task_out]],
-  define_cmdline_opt[_if_given], define_cmdline_flag_if_given,
-  define_flag, define_value_desc_opt, define_fifo_opt[_generator] — all
-  of them just other ways to define an option's value, not something
-  exotic). A body that's exactly the standard boilerplate header/footer
+  define_cmdline_opt[_if_given], define_cmdline_infile_opt[_if_given],
+  define_cmdline_flag_if_given, define_flag, define_value_desc_opt,
+  define_fifo_opt[_generator] — all of them just other ways to define
+  an option's value, not something exotic). A body that's exactly the
+  standard boilerplate header/footer
   plus a flat sequence of those calls with literal label/proc/opt
   arguments round-trips structurally, so it's parsed into "standard"
   mode option values plus real connections.
@@ -151,7 +152,8 @@ def _strip_one_quote_layer(text: str) -> str:
 
 
 _DEFINE_OPTS_CALL_RE = re.compile(
-    r"^(?:debasher::)?(?P<func>define_cmdline_flag_if_given|define_cmdline_opt_if_given|"
+    r"^(?:debasher::)?(?P<func>define_cmdline_flag_if_given|define_cmdline_infile_opt_if_given|"
+    r"define_cmdline_opt_if_given|define_cmdline_infile_opt|"
     r"define_cmdline_opt|define_value_desc_opt|define_fifo_opt_generator|define_fifo_opt|"
     r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|define_opt)"
     r"(?:\s+(?P<args>.*?))?\s*(?:\|\|.*)?$"
@@ -164,6 +166,8 @@ _CALL_TOKEN_COUNTS = {
     "define_cmdline_flag_if_given": 3,  # <cmdline> <label> <optlist>
     "define_cmdline_opt_if_given": 3,
     "define_cmdline_opt": 3,
+    "define_cmdline_infile_opt": 3,  # <cmdline> <label> <optlist>
+    "define_cmdline_infile_opt_if_given": 3,
     "define_flag": 2,  # <label> <optlist>
     "define_value_desc_opt": 2,  # <label> <optlist>
     "define_fifo_opt": 3,  # <label> <fifoname> <optlist>
@@ -495,7 +499,7 @@ def _parse_primitive_calls(
             label = tokens[0]
             if not label[1]:
                 return None
-        else:  # the three define_cmdline_* variants: <cmdline_ref> <label> <optlist>
+        else:  # the five define_cmdline_* variants: <cmdline_ref> <label> <optlist>
             label = tokens[1]
             if not label[1]:
                 return None
