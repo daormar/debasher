@@ -9,6 +9,6 @@ Subprogram Example
 
     debasher_subprogram_example_program()
     {
-        add_debasher_program "debasher_array_example" "test"
-        add_debasher_program "debasher_fifo_example" "test"
+        add_debasher_program "debasher_array_example"
+        add_debasher_program "debasher_fifo_example"
     }

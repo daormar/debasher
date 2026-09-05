@@ -134,5 +134,5 @@ recomposer_define_opts()
 ########
 debasher_telegram_array_program()
 {
-    add_debasher_program "debasher_telegram" ""
+    add_debasher_program "debasher_telegram"
 }

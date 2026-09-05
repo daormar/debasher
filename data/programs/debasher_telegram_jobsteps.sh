@@ -89,5 +89,5 @@ recomposer_define_opts()
 ########
 debasher_telegram_jobsteps_program()
 {
-    add_debasher_program "debasher_telegram" ""
+    add_debasher_program "debasher_telegram"
 }
