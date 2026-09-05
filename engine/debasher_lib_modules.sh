@@ -166,7 +166,7 @@ debasher::load_debasher_module()
             DEBASHER_PROGRAM_MODULES+=("${fullmodname}")
         fi
     else
-        echo "File not found (consider setting an appropriate value for DEBASHER_MOD_DIR environment variable)">&2
+        echo "File not found: ${fullmodname} (module \"${module}\"; consider setting an appropriate value for DEBASHER_MOD_DIR environment variable)">&2
         exit 1
     fi
 }
