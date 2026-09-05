@@ -565,6 +565,25 @@ debasher::add_debasher_program()
     debasher::_exec_program_func_for_module "${pfile}"
 }
 
+########
+# Public: Adds the program defined by another module to the current
+# DeBasher program.
+#
+# $1 - Name of the module whose program is to be incorporated.
+#
+# Examples
+#
+#    load_debasher_module "debasher_array_example"
+#
+#    debasher_subprogram_example_program()
+#    {
+#        add_debasher_program "debasher_array_example"
+#    }
+#
+# The function executes the ``program`` method of the given module,
+# so that all of the processes added by that method become part of the
+# program currently being defined. The module must have been previously
+# loaded by means of the ``load_debasher_module`` API function.
 add_debasher_program() { debasher::add_debasher_program "$@"; }
 
 ########

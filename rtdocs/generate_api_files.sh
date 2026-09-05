@@ -36,7 +36,7 @@ for name in "${mod_conf_symbols[@]}"; do
 done
 
 # Generate program definition API file
-prog_def_symbols=("add_debasher_process()")
+prog_def_symbols=("add_debasher_process()" "add_debasher_program()")
 rm -f rtdocs/source/api_prog_def_doc.md
 for name in "${prog_def_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_programs.sh >> rtdocs/source/api_prog_def_doc.md
