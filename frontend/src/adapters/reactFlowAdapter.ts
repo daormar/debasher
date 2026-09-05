@@ -124,6 +124,38 @@ export function programToReactFlowEdges(
     const isFanoutEdge = sourceIsFanout || targetIsFanout;
     const backEdge = !isFanoutEdge && isBackEdge(sourceProcess, targetProcess);
 
+    // How many output ports sit to the right of the source port on its
+    // node (0 for the rightmost). BackEdge uses this to lift a back
+    // edge's near-node detour higher the further left its source port
+    // sits, so back edges from different output ports on the same node
+    // fan out at different heights instead of overlapping.
+    const sourceOutputOptions = sourceProcess?.options.filter(
+      option => option.direction === "output"
+    ) ?? [];
+
+    const sourceOptionIndex = sourceOutputOptions.findIndex(
+      option => option.id === edge.sourceOptionId
+    );
+
+    const sourceLeftRank = sourceOptionIndex === -1
+      ? 0
+      : sourceOutputOptions.length - 1 - sourceOptionIndex;
+
+    // Same idea, on the receiving end: how many input ports sit to the
+    // right of the target port on its node. BackEdge uses this to raise
+    // the target-side rise the further left the target port sits.
+    const targetInputOptions = targetProcess?.options.filter(
+      option => option.direction === "input"
+    ) ?? [];
+
+    const targetOptionIndex = targetInputOptions.findIndex(
+      option => option.id === edge.targetOptionId
+    );
+
+    const targetLeftRank = targetOptionIndex === -1
+      ? 0
+      : targetInputOptions.length - 1 - targetOptionIndex;
+
     return {
 
       id: edge.id,
@@ -145,7 +177,7 @@ export function programToReactFlowEdges(
       data: isFanoutEdge
         ? { narrowEnd: sourceIsFanout ? "source" : "target" }
         : backEdge
-        ? { detourX: maxProcessX + BACK_EDGE_MARGIN }
+        ? { detourX: maxProcessX + BACK_EDGE_MARGIN, sourceLeftRank, targetLeftRank }
         : undefined,
 
       style: sourceOption?.channel === "fifo"
