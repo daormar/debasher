@@ -308,9 +308,14 @@ def _option_definition_line(process, option, process_modes):
     if option.channel == "fifo":
         return f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist || return 1'
     if option.commandLine:
+        # A file-typed command-line option gets the validating variant
+        # (checks the path exists and normalizes it to absolute) —
+        # see debasher::define_cmdline_infile_opt[_if_given] in
+        # engine/debasher_lib_opts.sh.
+        base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
         if option.mandatory:
-            return f'debasher::define_cmdline_opt "${{cmdline}}" "{option.label}" optlist || return 1'
-        return f'debasher::define_cmdline_opt_if_given "${{cmdline}}" "{option.label}" optlist || return 1'
+            return f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1'
+        return f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1'
     if _opt_is_connected_to_proc(option):
         conn_proc, conn_opt = _get_process_plus_opt(option)
         if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
