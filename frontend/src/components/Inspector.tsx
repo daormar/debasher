@@ -1,9 +1,23 @@
 import { useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 
 import { useProgram } from "../store/ProgramContext";
 import { PROCESS_LANGUAGES } from "./codeLanguages";
 import CodeEditor from "./CodeEditor";
 import OptionEditor from "./OptionEditor";
+import OptionRow from "./OptionRow";
 import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
 import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import GeneratorConfigEditor from "./GeneratorConfigEditor";
@@ -11,7 +25,7 @@ import ArrayConfigEditor from "./ArrayConfigEditor";
 import ManualConfigEditor from "./ManualConfigEditor";
 import ProcessNameDialog from "./ProcessNameDialog";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
-import { isValidOptionLabel, fanoutBaseLabel, isFanoutOption } from "../models/option";
+import { isValidOptionLabel } from "../models/option";
 
 
 export default function Inspector() {
@@ -24,9 +38,16 @@ export default function Inspector() {
     setProcessDescription,
     addOption,
     removeOption,
+    reorderOptionGroup,
     setProcessLanguage,
     setOptionsHandler,
   } = useProgram();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 4 },
+    })
+  );
 
 
   const [optionLabel, setOptionLabel] =
@@ -63,7 +84,7 @@ export default function Inspector() {
 
       <aside
         style={{
-          width: 280,
+          width: 340,
           padding: 16,
           borderLeft: "1px solid #ddd",
           background: "#fafafa",
@@ -81,11 +102,54 @@ export default function Inspector() {
   }
 
 
+  function handleOptionDragEnd(event: DragEndEvent) {
+
+    const { active, over } = event;
+
+    if (!selectedProcess || !over || active.id === over.id) {
+      return;
+    }
+
+    const activeOption = selectedProcess.options.find(
+      o => o.id === active.id
+    );
+
+    const overOption = selectedProcess.options.find(
+      o => o.id === over.id
+    );
+
+    if (
+      !activeOption ||
+      !overOption ||
+      activeOption.direction !== overOption.direction
+    ) {
+      return;
+    }
+
+    const groupIds = selectedProcess.options
+      .filter(o => o.direction === activeOption.direction)
+      .map(o => o.id);
+
+    const newOrder = arrayMove(
+      groupIds,
+      groupIds.indexOf(activeOption.id),
+      groupIds.indexOf(overOption.id)
+    );
+
+    reorderOptionGroup(
+      selectedProcess.id,
+      activeOption.direction,
+      newOrder
+    );
+
+  }
+
+
   return (
 
     <aside
       style={{
-        width: 280,
+        width: 340,
         padding: 16,
         borderLeft: "1px solid #ddd",
         background: "#fafafa",
@@ -260,65 +324,50 @@ export default function Inspector() {
         }}
       >
 
-        {selectedProcess.options.map(option => (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleOptionDragEnd}
+        >
 
-          <div
-            key={option.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: 8,
-            }}
-          >
+          {(["input", "output"] as const).map(direction => {
 
-            <span>
-              {selectedProcess.optionsHandler.mode === "standard" && isFanoutOption(option.label) ? (
-                <>
-                  {fanoutBaseLabel(option.label)}
-                  <span style={{ color: "#c0392b" }}>ith</span>
-                </>
-              ) : (
-                option.label
-              )}
-            </span>
+            const groupOptions = selectedProcess.options.filter(
+              o => o.direction === direction
+            );
 
+            if (groupOptions.length === 0) {
+              return null;
+            }
 
-            <span>
-
-              <button
-
-                onClick={() =>
-                  setEditingOptionId(option.id)
-                }
-
+            return (
+              <SortableContext
+                key={direction}
+                items={groupOptions.map(o => o.id)}
+                strategy={verticalListSortingStrategy}
               >
-                Edit
-              </button>
 
+                {groupOptions.map(option => (
+                  <OptionRow
+                    key={option.id}
+                    option={option}
+                    isFanoutMode={selectedProcess.optionsHandler.mode === "standard"}
+                    onEdit={() => setEditingOptionId(option.id)}
+                    onRemove={() =>
+                      removeOption(
+                        selectedProcess.id,
+                        option.id
+                      )
+                    }
+                  />
+                ))}
 
-              <button
+              </SortableContext>
+            );
 
-                onClick={() =>
-                  removeOption(
-                    selectedProcess.id,
-                    option.id
-                  )
-                }
+          })}
 
-                style={{
-                  marginLeft: 4,
-                }}
-
-              >
-                Remove
-              </button>
-
-            </span>
-
-
-          </div>
-
-        ))}
+        </DndContext>
 
       </div>
 

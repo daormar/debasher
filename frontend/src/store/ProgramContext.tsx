@@ -19,7 +19,7 @@ import type {
   ProcessInfoOption,
 } from "../models/process";
 import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
-import type { ProgramOption } from "../models/option";
+import type { ProgramOption, OptionDirection } from "../models/option";
 import { getOptionDirection } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
 import { buildConnectionSentinel } from "../models/edge";
@@ -153,6 +153,12 @@ interface ProgramContextType {
   removeOption: (
     processId: string,
     optionId: string
+  ) => void;
+
+  reorderOptionGroup: (
+    processId: string,
+    direction: OptionDirection,
+    orderedIds: string[]
   ) => void;
 
   connect: (
@@ -813,6 +819,58 @@ export function ProgramProvider({
 
   }
 
+  function reorderOptionGroup(
+    processId: string,
+    direction: OptionDirection,
+    orderedIds: string[]
+  ) {
+
+    setProgram(current => ({
+
+      ...current,
+
+      processes: current.processes.map(process => {
+
+        if (process.id !== processId) {
+          return process;
+        }
+
+        const groupIndices = process.options.reduce<number[]>(
+          (indices, o, i) =>
+            o.direction === direction
+              ? [...indices, i]
+              : indices,
+          []
+        );
+
+        if (groupIndices.length !== orderedIds.length) {
+          return process;
+        }
+
+        const optionsById = new Map(
+          process.options.map(o => [o.id, o])
+        );
+
+        const options = [...process.options];
+
+        groupIndices.forEach((index, i) => {
+
+          const option = optionsById.get(orderedIds[i]);
+
+          if (option) {
+            options[index] = option;
+          }
+
+        });
+
+        return { ...process, options };
+
+      }),
+
+    }));
+
+  }
+
   function setOptionValue(
     processes: ProgramProcess[],
     processId: string,
@@ -964,6 +1022,8 @@ export function ProgramProvider({
     updateOption,
 
     removeOption,
+
+    reorderOptionGroup,
 
     connect,
 
