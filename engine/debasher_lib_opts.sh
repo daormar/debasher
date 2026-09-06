@@ -1546,6 +1546,16 @@ debasher::_prepare_fifos_owned_by_process()
 }
 
 ########
+# Public: Obtains the absolute path of a shared directory.
+#
+# $1 - Name of the shared directory (as given to define_shared_dir).
+#
+# Examples
+#
+#   local abs_shrdir=$(debasher::get_absolute_shdirname "data")
+#
+# The function prints the absolute path of the shared directory to the
+# standard output.
 debasher::get_absolute_shdirname()
 {
     local shdirname=$1
@@ -1554,6 +1564,17 @@ debasher::get_absolute_shdirname()
     echo "${DEBASHER_PROGRAM_OUTDIR}/${shdirname}"
 }
 
+########
+# Public: Obtains the absolute path of a shared directory.
+#
+# $1 - Name of the shared directory (as given to define_shared_dir).
+#
+# Examples
+#
+#   local abs_shrdir=$(get_absolute_shdirname "data")
+#
+# The function prints the absolute path of the shared directory to the
+# standard output.
 get_absolute_shdirname() { debasher::get_absolute_shdirname "$@"; }
 
 ########
