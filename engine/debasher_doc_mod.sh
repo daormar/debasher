@@ -32,13 +32,17 @@ usage()
     echo "debasher_doc_mod          -m <string> [-s <string>]"
     echo "                          [--show-shdirs] [--show-all-shdirs] [--show-meths]"
     echo "                          [--show-vars] [--show-opts] [--show-opthnd]"
-    echo "                          [--show-impl] [--show-specs] [--help]"
+    echo "                          [--show-impl] [--show-specs]"
+    echo "                          [--resolve-var <string>]... [--help]"
     echo ""
     echo "-m <string>               Module file name"
     echo "-s <string>               Process name whose information should be obtained"
     echo "--show-shdirs             Show shared directories defined directly by the module"
     echo "--show-all-shdirs         Show every shared directory reachable from the program"
     echo "                          (the module plus every module it loads, transitively)"
+    echo "--resolve-var <string>    Show the value of a variable already set after loading"
+    echo "                          the module (may be given multiple times); this is a"
+    echo "                          plain variable read, not a function call"
     echo "--show-meths              Show process methods information"
     echo "--show-vars               Show process variables information"
     echo "--show-opts               Show process options information"
@@ -61,6 +65,7 @@ read_pars()
     showopthnd_given=0
     showimpl_given=0
     showspecs_given=0
+    resolvevars=()
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -93,6 +98,11 @@ read_pars()
             "--show-impl") showimpl_given=1
                           ;;
             "--show-specs") showspecs_given=1
+                          ;;
+            "--resolve-var") shift
+                          if [ $# -ne 0 ]; then
+                              resolvevars+=("$1")
+                          fi
                           ;;
         esac
         shift
@@ -132,6 +142,22 @@ obtain_info_for_module()
         echo "## All Shared Directories"
         echo ""
         debasher::_show_all_program_shared_dirs
+        echo ""
+    fi
+
+    # Show the current value of every variable requested via
+    # --resolve-var, once the module (and everything it loads) has
+    # been sourced. This is a plain bash indirect-expansion read
+    # (${!varname}), not a function call, so it carries no more
+    # execution risk than the module load debasher_doc_mod already
+    # performs for every other --show-* section.
+    if [ ${#resolvevars[@]} -gt 0 ]; then
+        echo "## Resolved Variables"
+        echo ""
+        local varname
+        for varname in "${resolvevars[@]}"; do
+            echo "- \`${varname}\`: \`${!varname}\`"
+        done
         echo ""
     fi
 
