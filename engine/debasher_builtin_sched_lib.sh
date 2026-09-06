@@ -1433,7 +1433,6 @@ debasher_builtin_sched::_prepare_files_and_dirs_for_process()
         # Prepare files and directories for process
         if [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
             debasher::_create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
-            debasher::_create_shdirs_owned_by_process "${processname}" || { echo "Error when creating shared directories determined by script option definition" >&2 ; return 1; }
         else
             debasher_builtin_sched::_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         fi

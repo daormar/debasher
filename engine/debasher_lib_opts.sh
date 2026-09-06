@@ -904,28 +904,55 @@ debasher::define_fifo_opt_generator()
 define_fifo_opt_generator() { debasher::define_fifo_opt_generator "$@"; }
 
 ########
+# Public: Defines a shared directory owned by a module.
+#
+# $1 - Name of the shared directory.
+#
+# This function should only be called from a module's shared_dirs
+# function (see load_debasher_module). The directory is created once,
+# before any process in the program is executed, and its absolute path
+# can be retrieved from any process by means of get_absolute_shdirname.
+#
+# Examples
+#
+#   debasher::define_shared_dir "data"
+#
+# The function does not return any value
 debasher::define_shared_dir()
 {
     local shared_dir=$1
 
-    # Check whether the shared directory is being defined by a module or
-    # by a process
-
-    # Try to get process name from define_opts or generate_opts method
+    # Check that the call is not being made from a process' define_opts
+    # or generate_opts method, since shared directories can only be
+    # owned by a module
     local processname=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"`
     if [ -z "${processname}" ]; then
         processname=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"`
     fi
-
-    # If processname variable is void, then the shared directory was
-    # defined at module-level
-    if [ -z "${processname}" ]; then
-        DEBASHER_PROGRAM_SHDIRS["${shared_dir}"]=${DEBASHER_SHDIR_MODULE_OWNER}
-    else
-        DEBASHER_PROGRAM_SHDIRS["${shared_dir}"]=${processname}
+    if [ -n "${processname}" ]; then
+        echo "define_shared_dir: Error, this function should only be called from a module's shared_dirs function" >&2
+        exit 1
     fi
+
+    # Register shared directory as owned by the module
+    DEBASHER_PROGRAM_SHDIRS["${shared_dir}"]=${DEBASHER_SHDIR_MODULE_OWNER}
 }
 
+########
+# Public: Defines a shared directory owned by a module.
+#
+# $1 - Name of the shared directory.
+#
+# This function should only be called from a module's shared_dirs
+# function (see load_debasher_module). The directory is created once,
+# before any process in the program is executed, and its absolute path
+# can be retrieved from any process by means of get_absolute_shdirname.
+#
+# Examples
+#
+#   define_shared_dir "data"
+#
+# The function does not return any value
 define_shared_dir() { debasher::define_shared_dir "$@"; }
 
 ########
@@ -1475,23 +1502,6 @@ debasher::_create_mod_shdirs()
     for dirname in "${!DEBASHER_PROGRAM_SHDIRS[@]}"; do
         local owner=${DEBASHER_PROGRAM_SHDIRS["${dirname}"]}
         if [ "${owner}" = "${DEBASHER_SHDIR_MODULE_OWNER}" ]; then
-            local absdir=`debasher::get_absolute_shdirname "$dirname"`
-            if [ ! -d "${absdir}" ]; then
-                "${MKDIR}" -p "${absdir}" || exit 1
-            fi
-        fi
-    done
-}
-
-########
-debasher::_create_shdirs_owned_by_process()
-{
-    local processname=$1
-    # Create shared directories for process
-    local dirname
-    for dirname in "${!DEBASHER_PROGRAM_SHDIRS[@]}"; do
-        local owner=${DEBASHER_PROGRAM_SHDIRS["${dirname}"]}
-        if [ "${processname}" = "${owner}" ]; then
             local absdir=`debasher::get_absolute_shdirname "$dirname"`
             if [ ! -d "${absdir}" ]; then
                 "${MKDIR}" -p "${absdir}" || exit 1
