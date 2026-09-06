@@ -8,7 +8,12 @@ from .debasher_constants import (
     PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
 )
-from .doc_mod import parse_module_markdown, run_doc_mod
+from .doc_mod import (
+    parse_module_markdown,
+    run_doc_mod,
+    run_doc_mod_all_shared_dirs,
+    run_doc_mod_resolve_vars,
+)
 from .markdown_parsing import ProcessInfoOption, parse_proc_info_markdown
 from .models import (
     AdditionalSpecs,
@@ -21,7 +26,7 @@ from .models import (
     ProgramOption,
     ProgramProcess,
 )
-from .option_handler_import import ConnectionRef, resolve_options_handler
+from .option_handler_import import ConnectionRef, SharedDirRef, resolve_options_handler
 
 # Default layout for imported processes: debasher_doc_mod's output
 # carries no position information, so processes are laid out in layers
@@ -248,6 +253,95 @@ def _build_edges(
     return edges
 
 
+def _resolve_shared_dir_refs(
+    processes: list[ProgramProcess],
+    pending_shared_dir_refs: list[tuple[str, str, SharedDirRef]],
+    script_path: Path,
+    debasher_mod_dir: str,
+) -> list[str]:
+    """
+    Tags each option named in `pending_shared_dir_refs` as
+    channel="shared_dir" once its SharedDirRef (see
+    option_handler_import.py) resolves to a name that's actually part of
+    the program's real reachable shared-directory set
+    (--show-all-shdirs) — a defensive cross-check, since in principle a
+    variable could resolve to something that isn't a real shared
+    directory at all. A ref that fails this check (an unresolved
+    variable, or a name --show-all-shdirs doesn't know about) is left
+    alone — the option keeps the plain literal value
+    resolve_options_handler already gave it, exactly as if the ref had
+    never been recognized.
+
+    Returns the program's full reachable set (Program.
+    availableSharedDirs) — computed here since it's already needed for
+    the cross-check, off the same debasher_doc_mod call
+    run_doc_mod_all_shared_dirs makes; empty (skipping that call
+    entirely) when there's nothing to resolve.
+    """
+    if not pending_shared_dir_refs:
+        return []
+
+    all_shared_dirs = run_doc_mod_all_shared_dirs(script_path, debasher_mod_dir)
+    all_shared_dirs_set = set(all_shared_dirs)
+
+    var_names = sorted({ref.var_name for _, _, ref in pending_shared_dir_refs if ref.var_name})
+    resolved_vars = run_doc_mod_resolve_vars(script_path, var_names, debasher_mod_dir) if var_names else {}
+
+    processes_by_name = {process.name: process for process in processes}
+    for process_name, option_label, ref in pending_shared_dir_refs:
+        name = ref.literal_name if ref.literal_name is not None else resolved_vars.get(ref.var_name, "")
+        if not name or name not in all_shared_dirs_set:
+            continue
+        process = processes_by_name.get(process_name)
+        if process is None:
+            continue
+        option = next((o for o in process.options if o.label == option_label), None)
+        if option is None:
+            continue
+        option.channel = "shared_dir"
+        option.value = name
+
+    return all_shared_dirs
+
+
+def _build_shared_dir_edges(processes: list[ProgramProcess]) -> list[ProgramEdge]:
+    """
+    Synthesizes one edge for every (output, input) pair of "shared_dir"
+    options naming the identical directory, across the whole program —
+    mirrors what hand-connecting them in the canvas would produce (see
+    reactFlowAdapter.ts's isValidProgramConnection's fan-in rule), so an
+    imported program's canvas shows the same writer/reader relationships
+    a hand-built one would. Purely documentary: script_generation.py's
+    "shared_dir" codegen branch ignores connections entirely, so a
+    program with N writers and M readers of the same directory gets
+    N*M edges here, same as the editor's own fan-in already allows.
+    """
+    options_by_value: dict[str, list[tuple[ProgramProcess, ProgramOption]]] = {}
+    for process in processes:
+        for option in process.options:
+            if option.channel == "shared_dir" and option.value:
+                options_by_value.setdefault(option.value, []).append((process, option))
+
+    edges: list[ProgramEdge] = []
+    for owned_options in options_by_value.values():
+        outputs = [pair for pair in owned_options if pair[1].direction == "output"]
+        inputs = [pair for pair in owned_options if pair[1].direction == "input"]
+        for source_process, source_option in outputs:
+            for target_process, target_option in inputs:
+                if source_process is target_process:
+                    continue
+                edges.append(
+                    ProgramEdge(
+                        id=str(uuid.uuid4()),
+                        sourceProcessId=source_process.id,
+                        sourceOptionId=source_option.id,
+                        targetProcessId=target_process.id,
+                        targetOptionId=target_option.id,
+                    )
+                )
+    return edges
+
+
 def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> None:
     """
     Positions processes in layers by data-flow depth, so a process
@@ -332,6 +426,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
 
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
+    pending_shared_dir_refs: list[tuple[str, str, SharedDirRef]] = []
     option_handler_code_by_process: dict[str, dict[str, str]] = {}
 
     for process_name, chunk in process_chunks:
@@ -370,6 +465,9 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 fanout_option.countSourceOptionId = count_source_option.id
 
         pending_connections.extend((process_name, connection) for connection in result.connections)
+        pending_shared_dir_refs.extend(
+            (process_name, option_label, ref) for option_label, ref in result.shared_dir_refs.items()
+        )
 
         processes.append(
             ProgramProcess(
@@ -388,7 +486,11 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
 
     _downgrade_unverifiable_task_indexed_connections(processes, pending_connections, option_handler_code_by_process)
 
-    edges = _build_edges(processes, pending_connections)
+    available_shared_dirs = _resolve_shared_dir_refs(
+        processes, pending_shared_dir_refs, script_path, debasher_mod_dir
+    )
+
+    edges = _build_edges(processes, pending_connections) + _build_shared_dir_edges(processes)
     _layout_processes(processes, edges)
 
     return Program(
@@ -407,6 +509,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         executionOptions=ExecutionOptions(scheduler="BUILTIN"),
         programOptions={},
         sharedDirs=shared_dirs,
+        availableSharedDirs=available_shared_dirs,
         processes=processes,
         edges=edges,
     )

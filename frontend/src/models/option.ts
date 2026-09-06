@@ -4,8 +4,10 @@ export type OptionDataType = "int" | "float" | "string" | "file" | "None";
 
 // How the value is delivered, independent of its type — see
 // api/models.py's ProgramOption.channel for the full rationale
-// (value_desc is output-only, fifo isn't direction-restricted).
-export type OptionChannel = "none" | "value_desc" | "fifo";
+// (value_desc is output-only; fifo and shared_dir aren't
+// direction-restricted). A "shared_dir" option's value names one of
+// Program.sharedDirs rather than holding a literal value.
+export type OptionChannel = "none" | "value_desc" | "fifo" | "shared_dir";
 
 export interface ProgramOption {
   id: string;

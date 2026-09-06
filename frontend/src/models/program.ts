@@ -42,6 +42,14 @@ export interface Program {
   // _add_shared_dirs_func).
   sharedDirs: string[];
 
+  // Every shared directory name reachable from this program — its own
+  // sharedDirs plus every one declared by a module it loads,
+  // transitively (see api/doc_mod.py's run_doc_mod_all_shared_dirs).
+  // Populated only by import (api/program_import.py); purely additive,
+  // never written back by script generation, and never a substitute for
+  // sharedDirs, which is what codegen actually emits from.
+  availableSharedDirs: string[];
+
   processes: ProgramProcess[];
 
   edges: ProgramEdge[];

@@ -90,6 +90,17 @@ class ConnectionRef:
 
 
 @dataclass
+class SharedDirRef:
+    # Exactly one of the two is set: a literal directory name resolved
+    # directly from the source text, or the name of a variable whose
+    # value (the actual directory name) program_import.py resolves
+    # later via debasher_doc_mod --resolve-var — this module never
+    # executes anything to find out.
+    literal_name: str | None = None
+    var_name: str | None = None
+
+
+@dataclass
 class OptionHandlerResult:
     handler: OptionsHandler
     # Option label -> literal/expression value text, recovered only for
@@ -115,6 +126,14 @@ class OptionHandlerResult:
     # program_import.py resolves the label into an actual
     # ProgramOption.countSourceOptionId once both options have real ids.
     fanout_count_source_labels: dict[str, str] = field(default_factory=dict)
+    # Option label -> SharedDirRef, for every define_opt recognized as
+    # script_generation.py's one-step shared_dir shape (see
+    # _try_parse_shared_dir_define_opt). Additive: a matched label also
+    # keeps its ordinary option_values[label] entry (the raw
+    # "$(get_absolute_shdirname ...)" text), so an option
+    # program_import.py can't confirm against a real shared directory
+    # still round-trips as a plain value rather than vanishing.
+    shared_dir_refs: dict[str, SharedDirRef] = field(default_factory=dict)
 
 
 _HEADER_BOILERPLATE_RES = [
@@ -267,6 +286,58 @@ _FANOUT_DO_LINE = "do"
 _FANOUT_DONE_LINE = "done"
 
 
+# script_generation.py's one-step shared_dir shape (see
+# _option_definition_line's "shared_dir" branch):
+#     define_opt "<label>" "$(get_absolute_shdirname "<arg>")" optlist || return 1
+# <arg> is either a literal directory name or a variable reference —
+# both quoted the same way, e.g. "data" or "${SOME_BASENAME}". The
+# nested double quotes around <arg> aren't a quoting context the
+# generic _tokenize (which has no notion of "$(...)" as its own scope)
+# can split correctly — it sees the inner `"` as closing the outer
+# value token early — so this is matched against the raw line
+# directly, the same way _try_parse_fanout_block matches its own fixed
+# shape, rather than going through _tokenize at all.
+_SHARED_DIR_DEFINE_OPT_RE = re.compile(
+    r'^(?:debasher::)?define_opt\s+"(?P<label>[^"]+)"\s+'
+    r'"(?P<value>\$\(get_absolute_shdirname\s+"(?P<arg>[^"]*)"\))"'
+    r'\s+optlist\s*(?:\|\|.*)?$'
+)
+
+
+def _shared_dir_ref_from_arg(arg: str) -> SharedDirRef:
+    var_match = _VAR_REF_RE.match(arg)
+    if var_match:
+        return SharedDirRef(var_name=var_match.group("name"))
+    return SharedDirRef(literal_name=arg)
+
+
+def _try_parse_shared_dir_define_opt(line: str) -> tuple[str, SharedDirRef, str] | None:
+    """
+    Recognizes one line matching _SHARED_DIR_DEFINE_OPT_RE. Returns
+    (label, SharedDirRef, raw value text) — the value text is kept as
+    the option's ordinary value too (see OptionHandlerResult.
+    shared_dir_refs) — or None if `line` isn't this exact shape.
+    """
+    match = _SHARED_DIR_DEFINE_OPT_RE.match(line)
+    if match is None:
+        return None
+    return match.group("label"), _shared_dir_ref_from_arg(match.group("arg")), match.group("value")
+
+
+_SHARED_DIR_SCAN_RE = re.compile(
+    r'(?:debasher::)?define_opt\s+"(?P<label>[^"]+)"\s+'
+    r'"\$\(get_absolute_shdirname\s+"(?P<arg>[^"]*)"\)"'
+)
+
+
+def scan_shared_dir_refs(source: str) -> dict[str, SharedDirRef]:
+    """Best-effort companion to scan_connections/..., same reasoning."""
+    return {
+        match.group("label"): _shared_dir_ref_from_arg(match.group("arg"))
+        for match in _SHARED_DIR_SCAN_RE.finditer(source)
+    }
+
+
 def _fanout_for_re(var: str) -> re.Pattern:
     return re.compile(rf'^for\s+\(\(i=0;\s*i<{re.escape(var)};\s*i\+\+\)\)$')
 
@@ -356,7 +427,7 @@ def _parse_primitive_calls(
     idx_var: str = "task_idx",
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
     """
     Parses a function body against the closed grammar of option-
     definition primitives — used for _define_opts (standard and, inside
@@ -387,6 +458,7 @@ def _parse_primitive_calls(
     value_descriptor_labels: set[str] = set()
     fifo_labels: set[str] = set()
     fanout_count_source_labels: dict[str, str] = {}
+    shared_dir_refs: dict[str, SharedDirRef] = {}
     locals_table: dict[str, str] = {}
 
     i = 0
@@ -416,6 +488,14 @@ def _parse_primitive_calls(
                         fifo_labels.add(fanout_label)
                 i += consumed
                 continue
+
+        shared_dir_match = _try_parse_shared_dir_define_opt(line)
+        if shared_dir_match is not None:
+            label, shared_dir_ref, value_text = shared_dir_match
+            values[label] = value_text
+            shared_dir_refs[label] = shared_dir_ref
+            i += 1
+            continue
 
         local_match = _LOCAL_ASSIGN_RE.match(line)
         if local_match:
@@ -506,14 +586,14 @@ def _parse_primitive_calls(
 
         i += 1
 
-    return values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels
+    return values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels, shared_dir_refs
 
 
 def _parse_function_source(
     source: str,
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
     body = _function_body_lines(source)
     if body is None:
         return None
@@ -540,7 +620,7 @@ _ARRAY_DONE_LINE = "done"
 
 def _parse_array_define_opts(
     source: str,
-) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str]] | None:
+) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, SharedDirRef]] | None:
     """
     Recognizes script_generation.py's exact array-mode shape (see
     _add_array_opts_func) in a _define_opts body: the standard header
@@ -587,8 +667,8 @@ def _parse_array_define_opts(
     parsed = _parse_primitive_calls(loop_body, idx_var="idx", allow_fanout_consumer=True)
     if parsed is None:
         return None
-    values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels = parsed
-    return array_code, values, connections, value_descriptor_labels, fifo_labels
+    values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels, shared_dir_refs = parsed
+    return array_code, values, connections, value_descriptor_labels, fifo_labels, shared_dir_refs
 
 
 def scan_connections(source: str) -> list[ConnectionRef]:
@@ -652,13 +732,14 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         parsed = _parse_function_source(generate_opts) if generate_opts else None
 
         if generator_size_code is not None and parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels = parsed
+            values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels, shared_dir_refs = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="generator", generatorSizeCode=generator_size_code),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                shared_dir_refs=shared_dir_refs,
             )
 
         if generator_size_code is not None and not generate_opts:
@@ -679,6 +760,7 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
             connections=scan_connections(combined),
             value_descriptor_labels=scan_value_descriptor_labels(combined),
             fifo_labels=scan_fifo_labels(combined),
+            shared_dir_refs=scan_shared_dir_refs(combined),
         )
 
     if define_opts:
@@ -687,7 +769,7 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         # among the flat primitive calls.
         parsed = _parse_function_source(define_opts, allow_fanout_blocks=True)
         if parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels = parsed
+            values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels, shared_dir_refs = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="standard"),
                 option_values=values,
@@ -695,6 +777,7 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
                 fanout_count_source_labels=fanout_count_source_labels,
+                shared_dir_refs=shared_dir_refs,
             )
 
         # Not the flat "standard" grammar — try script_generation.py's
@@ -702,13 +785,14 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         # giving up to "manual".
         array_parsed = _parse_array_define_opts(define_opts)
         if array_parsed is not None:
-            array_code, values, connections, value_descriptor_labels, fifo_labels = array_parsed
+            array_code, values, connections, value_descriptor_labels, fifo_labels, shared_dir_refs = array_parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="array", arrayCode=array_code),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                shared_dir_refs=shared_dir_refs,
             )
 
         return OptionHandlerResult(
@@ -716,6 +800,7 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
             connections=scan_connections(define_opts),
             value_descriptor_labels=scan_value_descriptor_labels(define_opts),
             fifo_labels=scan_fifo_labels(define_opts),
+            shared_dir_refs=scan_shared_dir_refs(define_opts),
         )
 
     return OptionHandlerResult(handler=OptionsHandler(mode="standard"))

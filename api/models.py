@@ -20,8 +20,17 @@ class ProgramOption(BaseModel):
     # the consuming side never marks itself, it just connects normally),
     # "fifo" is a named pipe, which — unlike value_desc — isn't
     # direction-restricted: a process can legitimately open an input via
-    # a fifo it rendezvous on rather than a plain connection.
-    channel: Literal["none", "value_desc", "fifo"] = "none"
+    # a fifo it rendezvous on rather than a plain connection. "shared_dir"
+    # isn't direction-restricted either: its value always comes from
+    # get_absolute_shdirname(value) regardless of any connection — value
+    # holds the shared directory's name (one of Program.sharedDirs), not
+    # a path. Connections between two shared_dir options (see
+    # frontend's isValidProgramConnection) are purely documentary/DAG-
+    # visualization aids: the engine already derives the real dependency
+    # from every writer resolving to the identical absolute path
+    # (DEBASHER_OUT_VALUE_TO_PROCESSES in engine/debasher_lib_opts.sh),
+    # independent of whether such a connection is drawn at all.
+    channel: Literal["none", "value_desc", "fifo", "shared_dir"] = "none"
     description: str
     value: str
     commandLine: bool
@@ -99,5 +108,14 @@ class Program(BaseModel):
     # becoming one debasher::define_shared_dir call in the generated
     # <name>_shared_dirs function.
     sharedDirs: list[str] = []
+    # Every shared directory name reachable from this program — its own
+    # sharedDirs plus every one declared by a module it loads,
+    # transitively (see doc_mod.run_doc_mod_all_shared_dirs, populated
+    # only by program_import.py). Purely additive: never written back by
+    # script generation, and never a substitute for sharedDirs, which is
+    # what codegen actually emits from — a module this program merely
+    # loads may declare shared directories of its own that this program
+    # never redeclares.
+    availableSharedDirs: list[str] = []
     processes: list[ProgramProcess]
     edges: list[ProgramEdge]

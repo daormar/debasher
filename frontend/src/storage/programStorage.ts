@@ -91,6 +91,7 @@ export function createEmptyProgram(name: string): Program {
     executionOptions: { scheduler: "BUILTIN" },
     programOptions: {},
     sharedDirs: [],
+    availableSharedDirs: [],
     processes: [],
     edges: [],
   };

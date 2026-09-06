@@ -143,6 +143,15 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
   const isValueDescriptor = channel === "value_desc";
   const isFifo = channel === "fifo";
+  const isSharedDir = channel === "shared_dir";
+
+  // Union of the program's own declared shared dirs and every one it
+  // inherits from a loaded module (see Program.availableSharedDirs) —
+  // an imported program like golem_java.sh declares none of its own but
+  // should still offer the ones it inherits.
+  const selectableSharedDirs = [
+    ...new Set([...program.sharedDirs, ...program.availableSharedDirs]),
+  ];
 
   useEffect(() => {
     if (direction === "output" && dataType === "None") {
@@ -164,8 +173,10 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
     // never from its own define_value_desc_opt/define_fifo_opt call — the
     // channel describes how the *source* option got its value, not how
     // this one receives it, so a connected option's own channel is always
-    // "none".
-    if (connectedSourceLabel && channel !== "none") {
+    // "none". "shared_dir" is the one exception: its value never depends
+    // on a connection at all (see isValidProgramConnection), so a
+    // "shared_dir" option keeps its channel regardless of edges.
+    if (connectedSourceLabel && channel !== "none" && channel !== "shared_dir") {
       setChannel("none");
     }
   }, [connectedSourceLabel, channel]);
@@ -188,7 +199,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       label,
       direction: getOptionDirection(label),
       dataType,
-      channel: isFlag || connectedSourceLabel ? "none" : channel,
+      channel: isFlag ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel,
       description,
       value: isFlag || isValueDescriptor ? "" : value,
       commandLine,
@@ -452,6 +463,10 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
                   FIFO
                 </option>
 
+                <option value="shared_dir">
+                  Shared directory
+                </option>
+
               </select>
 
             )}
@@ -481,7 +496,9 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
                   opacity: commandLine ? 0.5 : 1,
                 }}
               >
-                {connectedSourceLabels.length === 1
+                {isSharedDir
+                  ? `[${value}]`
+                  : connectedSourceLabels.length === 1
                   ? connectedSourceLabels[0]
                   : connectedSourceLabels.map((sourceLabel, index) => (
                       <div key={index}>
@@ -489,6 +506,36 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
                       </div>
                     ))}
               </div>
+
+            ) : isSharedDir ? (
+
+              <select
+
+                value={value}
+
+                disabled={commandLine || manualMode}
+
+                onChange={(event) =>
+                  setValue(event.target.value)
+                }
+
+                style={{
+                  width: "100%",
+                }}
+
+              >
+
+                <option value="">
+                  (select shared directory)
+                </option>
+
+                {selectableSharedDirs.map(dir => (
+                  <option key={dir} value={dir}>
+                    {dir}
+                  </option>
+                ))}
+
+              </select>
 
             ) : (
 

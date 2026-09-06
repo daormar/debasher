@@ -230,6 +230,15 @@ function normalizeConnectedOptionValues(source: Program): Program {
 
       options: process.options.map(option => {
 
+        // A "shared_dir" option's value is always its declared
+        // directory name, independent of any connection — a connection
+        // into/out of it exists purely to document the multi-writer
+        // dependency in the canvas (see isValidProgramConnection), not
+        // to supply its value the way a "none"-channel connection does.
+        if (option.channel === "shared_dir") {
+          return option;
+        }
+
         const connectedValue =
           connectedValueByOptionKey.get(`${process.id}:${option.id}`);
 
@@ -908,6 +917,28 @@ export function ProgramProvider({
 
   }
 
+  function setOptionSharedDir(
+    processes: ProgramProcess[],
+    processId: string,
+    optionId: string,
+    sharedDirName: string
+  ): ProgramProcess[] {
+
+    return processes.map(process =>
+      process.id === processId
+        ? {
+            ...process,
+            options: process.options.map(o =>
+              o.id === optionId
+                ? { ...o, channel: "shared_dir" as const, value: sharedDirName }
+                : o
+            ),
+          }
+        : process
+    );
+
+  }
+
   function connect(
     edge: ProgramEdge
   ) {
@@ -922,13 +953,30 @@ export function ProgramProvider({
         o => o.id === edge.sourceOptionId
       );
 
+      // A "shared_dir" source's channel/value already fully determines
+      // its resolved path — connecting it into a plain target promotes
+      // that target into a matching "shared_dir" option too, instead
+      // of the usual "[proc;option]" sentinel, so a second connection
+      // from another writer of the same directory validates against an
+      // already-tagged, matching target (see isValidProgramConnection)
+      // and both keep generating the same compact
+      // get_absolute_shdirname-based code (see script_generation.py's
+      // shared_dir branch) rather than one becoming a
+      // define_opt_from_proc_out reference to this specific source.
       const processes = sourceProcess && sourceOption
-        ? setOptionValue(
-            current.processes,
-            edge.targetProcessId,
-            edge.targetOptionId,
-            buildConnectionSentinel(sourceProcess.name, sourceOption.label)
-          )
+        ? sourceOption.channel === "shared_dir"
+          ? setOptionSharedDir(
+              current.processes,
+              edge.targetProcessId,
+              edge.targetOptionId,
+              sourceOption.value
+            )
+          : setOptionValue(
+              current.processes,
+              edge.targetProcessId,
+              edge.targetOptionId,
+              buildConnectionSentinel(sourceProcess.name, sourceOption.label)
+            )
         : current.processes;
 
       return {
@@ -954,7 +1002,14 @@ export function ProgramProvider({
         e => e.id === edgeId
       );
 
-      const processes = removedEdge
+      const targetOption = removedEdge && current.processes
+        .find(process => process.id === removedEdge.targetProcessId)
+        ?.options.find(o => o.id === removedEdge.targetOptionId);
+
+      // A "shared_dir" option's value is independent of any connection
+      // (see connect above) — removing an edge into one shouldn't
+      // clear its declared directory name.
+      const processes = removedEdge && targetOption?.channel !== "shared_dir"
         ? setOptionValue(
             current.processes,
             removedEdge.targetProcessId,

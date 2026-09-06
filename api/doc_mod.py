@@ -18,6 +18,9 @@ _MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
 _SHARED_DIRS_HEADING_RE = re.compile(r"^## Shared Directories$")
 _SHARED_DIR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`$")
 _PROCESS_HEADING_RE = re.compile(r"^## (?P<name>.+)$")
+_ALL_SHARED_DIRS_HEADING_RE = re.compile(r"^## All Shared Directories$")
+_RESOLVED_VARS_HEADING_RE = re.compile(r"^## Resolved Variables$")
+_RESOLVED_VAR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`: `(?P<value>.*)`$")
 
 
 def run_doc_mod(
@@ -109,6 +112,95 @@ def run_get_proc_info(script_path: Path, process_name: str, debasher_mod_dir: st
         )
 
     return result.stdout
+
+
+def _parse_bullet_section(
+    markdown: str, heading_re: re.Pattern[str], item_re: re.Pattern[str]
+) -> list[re.Match[str]]:
+    """
+    Collect "- ..." bullet matches under the first line matching
+    `heading_re`, stopping at the next "## ..." heading — mirrors how
+    parse_module_markdown scopes its own "## Shared Directories"
+    section. Used for the two standalone (single-section) doc_mod
+    calls below, each run with only its own flag so no other "## ..."
+    section precedes it.
+    """
+    matches: list[re.Match[str]] = []
+    in_section = False
+    for line in markdown.splitlines():
+        if not in_section:
+            if heading_re.match(line):
+                in_section = True
+            continue
+        if _PROCESS_HEADING_RE.match(line):
+            break
+        item_match = item_re.match(line)
+        if item_match:
+            matches.append(item_match)
+    return matches
+
+
+def parse_all_shared_dirs_markdown(markdown: str) -> list[str]:
+    """
+    Parse the output of run_doc_mod_all_shared_dirs: every shared
+    directory reachable from a program (the module named after -m plus
+    every module it loads, transitively — see
+    debasher::_show_all_program_shared_dirs), as opposed to
+    parse_module_markdown's `shared_dirs`, which is scoped to the named
+    module's own declarations only.
+    """
+    return [
+        m.group("name").strip()
+        for m in _parse_bullet_section(markdown, _ALL_SHARED_DIRS_HEADING_RE, _SHARED_DIR_ITEM_RE)
+    ]
+
+
+def parse_resolved_vars_markdown(markdown: str) -> dict[str, str]:
+    """
+    Parse the output of run_doc_mod_resolve_vars. A name that was never
+    set after loading the module comes back mapped to "", not omitted.
+    """
+    return {
+        m.group("name").strip(): m.group("value")
+        for m in _parse_bullet_section(markdown, _RESOLVED_VARS_HEADING_RE, _RESOLVED_VAR_ITEM_RE)
+    }
+
+
+def run_doc_mod_all_shared_dirs(script_path: Path, debasher_mod_dir: str = "") -> list[str]:
+    """
+    Return every shared directory reachable from `script_path`'s
+    program: its own plus every module it `load_debasher_module`s,
+    transitively (--show-all-shdirs). Runs debasher_doc_mod with only
+    that one flag, since the caller typically only wants this set on
+    its own (e.g. to cross-check a resolved shared-dir name from
+    run_doc_mod_resolve_vars).
+    """
+    markdown = run_doc_mod(script_path, debasher_mod_dir, flags=("--show-all-shdirs",))
+    return parse_all_shared_dirs_markdown(markdown)
+
+
+def run_doc_mod_resolve_vars(
+    script_path: Path, names: list[str] | tuple[str, ...], debasher_mod_dir: str = ""
+) -> dict[str, str]:
+    """
+    Resolve each name in `names` to its value once `script_path`'s
+    module (and everything it loads) has been sourced, via
+    debasher_doc_mod --resolve-var. This is a plain bash
+    indirect-expansion read (`${!name}`), not a function call, so it
+    carries no more execution risk than any other run_doc_mod call —
+    important since `script_path` can be caller-supplied (see
+    routers/programs.py's import endpoint).
+
+    Used by program_import.py to resolve a bare-variable argument to
+    get_absolute_shdirname (e.g. `` `get_absolute_shdirname
+    ${SOME_BASENAME}` ``) to the literal directory name it names,
+    without ever executing the process function that contains it.
+    """
+    if not names:
+        return {}
+    flags = tuple(flag for name in names for flag in ("--resolve-var", name))
+    markdown = run_doc_mod(script_path, debasher_mod_dir, flags=flags)
+    return parse_resolved_vars_markdown(markdown)
 
 
 def parse_module_markdown(

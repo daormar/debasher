@@ -195,12 +195,17 @@ export function programToReactFlowEdges(
  * an input option, and the two options must belong to different
  * processes. An output may always feed multiple inputs (fan-out). An
  * input, by default, accepts at most one connected output — except a
- * non-command-line input (and not a fanout-family one, which keeps its
- * own single-source pairing rule), which may accept several: the
- * engine now resolves each connection's actual value at run time and
- * only requires that they all agree (see debasher::_load_curr_opt_list_loop/
- * debasher::_dedup_resolved_opts in the engine), so such fan-in is safe
- * to allow here.
+ * "shared_dir" input (and not a fanout-family one, which keeps its own
+ * single-source pairing rule), which may accept several, one per writer
+ * of that same shared directory. That's the one case the engine
+ * actually guarantees every connected source resolves to an identical
+ * value (debasher::_dedup_resolved_opts) — every "shared_dir" option
+ * naming the same directory always resolves via get_absolute_shdirname
+ * to the same absolute path — which is what makes gathering several
+ * connections into one option safe in the first place; a plain option
+ * has no such guarantee, so it stays limited to a single connection. A
+ * "shared_dir" option, on either end, may also only ever pair with
+ * another "shared_dir" option naming the identical directory.
  */
 export function isValidProgramConnection(
   program: Program,
@@ -243,23 +248,45 @@ export function isValidProgramConnection(
     return false;
   }
 
-  // Only a plain (non-fanout) command-line input is limited to a single
-  // incoming connection; a non-command-line input may gather several.
-  const targetAllowsMultipleConnections =
-    targetOptionDef?.commandLine === false && !targetIsFanout;
+  const sourceIsSharedDir = sourceOptionDef?.channel === "shared_dir";
+  const targetIsSharedDir = targetOptionDef?.channel === "shared_dir";
 
-  const targetAlreadyConnected =
-    !targetAllowsMultipleConnections &&
-    program.edges.some(
-      edge =>
-        edge.targetProcessId === target &&
-        edge.targetOptionId === targetHandle
-    );
+  // Fan-in (more than one incoming connection into the same input) is
+  // only ever allowed when both ends are "shared_dir" options naming
+  // the identical directory — the one case the engine guarantees every
+  // connected source resolves to an identical value
+  // (debasher::_dedup_resolved_opts). A single connection into any
+  // other input follows the ordinary one-source rule regardless of
+  // either option's channel — e.g. a "shared_dir" output can still
+  // feed a single, ordinary "none"-channel input just like any other
+  // output, exactly as decompress_deliverable's "-out-extractdir" feeds
+  // a plain "-extractd" input.
+  const targetAllowsMultipleConnections =
+    targetIsSharedDir && sourceIsSharedDir && !targetIsFanout;
+
+  const targetAlreadyConnected = program.edges.some(
+    edge =>
+      edge.targetProcessId === target &&
+      edge.targetOptionId === targetHandle
+  );
+
+  if (targetAlreadyConnected && !targetAllowsMultipleConnections) {
+    return false;
+  }
+
+  // Two "shared_dir" options may only ever pair with each other, and
+  // only when they name the identical directory — a mismatched pair
+  // would resolve to two different absolute paths, which is exactly
+  // the case debasher::_dedup_resolved_opts rejects at run time.
+  if (sourceIsSharedDir && targetIsSharedDir) {
+    if (!sourceOptionDef!.value || sourceOptionDef!.value !== targetOptionDef!.value) {
+      return false;
+    }
+  }
 
   return (
     sourceOptionDef?.direction === "output" &&
-    targetOptionDef?.direction === "input" &&
-    !targetAlreadyConnected
+    targetOptionDef?.direction === "input"
   );
 
 }
