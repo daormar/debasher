@@ -213,6 +213,7 @@ document_module() { debasher::document_module "$@"; }
 debasher::_show_module_documentation()
 {
     local modulename=$1
+    local show_shrdirs=$2
 
     # Print header
     local modname=`debasher::_get_modname_from_absmodname "${modulename}"`
@@ -228,4 +229,33 @@ debasher::_show_module_documentation()
         echo "Warning: no document function was defined" >&2
         echo "" >&2
     fi
+
+    if [ "${show_shrdirs}" = 1 ]; then
+        echo "## Shared Directories"
+        debasher::_show_module_shared_dirs "${modulename}"
+        echo ""
+    fi
+}
+
+########
+debasher::_show_module_shared_dirs()
+{
+    local absmodname=$1
+
+    # Reset global variable so that only the shared directories
+    # defined directly by this module are taken into account (and not
+    # those defined by other modules)
+    DEBASHER_PROGRAM_SHDIRS=()
+
+    # Execute the module's shared_dirs method, if defined
+    local shrdirs_funcname=`debasher::_get_shrdirs_funcname "${absmodname}"`
+    if debasher::_func_exists "${shrdirs_funcname}"; then
+        ${shrdirs_funcname} || exit 1
+    fi
+
+    # Print shared directory names
+    local dirname
+    for dirname in "${!DEBASHER_PROGRAM_SHDIRS[@]}"; do
+        echo "- \`${dirname}\`"
+    done
 }

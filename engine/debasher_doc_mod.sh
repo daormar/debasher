@@ -30,12 +30,13 @@ print_desc()
 usage()
 {
     echo "debasher_doc_mod          -m <string> [-s <string>]"
-    echo "                          [--show-meths] [--show-vars]"
+    echo "                          [--show-shdirs] [--show-meths] [--show-vars]"
     echo "                          [--show-opts] [--show-opthnd]"
     echo "                          [--show-impl] [--show-specs] [--help]"
     echo ""
     echo "-m <string>               Module file name"
     echo "-s <string>               Process name whose information should be obtained"
+    echo "--show-shdirs             Show shared directories defined by the module"
     echo "--show-meths              Show process methods information"
     echo "--show-vars               Show process variables information"
     echo "--show-opts               Show process options information"
@@ -50,6 +51,7 @@ read_pars()
 {
     m_given=0
     s_given=0
+    showshdirs_given=0
     showmeths_given=0
     showvars_given=0
     showopts_given=0
@@ -73,6 +75,8 @@ read_pars()
                       s_given=1
                   fi
                   ;;
+            "--show-shdirs") showshdirs_given=1
+                          ;;
             "--show-meths") showmeths_given=1
                           ;;
             "--show-vars") showvars_given=1
@@ -114,7 +118,7 @@ obtain_info_for_module()
     debasher::_exec_program_func_for_module "${module_fname}"
 
     # Show module documentation
-    debasher::_show_module_documentation "${module_fname}"
+    debasher::_show_module_documentation "${module_fname}" "${showshdirs_given}"
 
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
