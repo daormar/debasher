@@ -1495,6 +1495,24 @@ debasher::_register_module_program_shdirs()
 }
 
 ########
+debasher::_show_all_program_shared_dirs()
+{
+    # Unlike debasher::_show_module_shared_dirs (scoped to the single
+    # module named after -m), this reports every shared directory
+    # reachable from the whole program: the named module plus every
+    # module it load_debasher_module's, transitively (DEBASHER_PROGRAM_MODULES
+    # holds all of them by the time this runs — see
+    # debasher::load_debasher_module).
+    DEBASHER_PROGRAM_SHDIRS=()
+    debasher::_register_module_program_shdirs
+
+    local dirname
+    for dirname in "${!DEBASHER_PROGRAM_SHDIRS[@]}"; do
+        echo "- \`${dirname}\`"
+    done
+}
+
+########
 debasher::_create_mod_shdirs()
 {
     # Create shared directories for modules

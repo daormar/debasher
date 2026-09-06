@@ -30,13 +30,15 @@ print_desc()
 usage()
 {
     echo "debasher_doc_mod          -m <string> [-s <string>]"
-    echo "                          [--show-shdirs] [--show-meths] [--show-vars]"
-    echo "                          [--show-opts] [--show-opthnd]"
+    echo "                          [--show-shdirs] [--show-all-shdirs] [--show-meths]"
+    echo "                          [--show-vars] [--show-opts] [--show-opthnd]"
     echo "                          [--show-impl] [--show-specs] [--help]"
     echo ""
     echo "-m <string>               Module file name"
     echo "-s <string>               Process name whose information should be obtained"
-    echo "--show-shdirs             Show shared directories defined by the module"
+    echo "--show-shdirs             Show shared directories defined directly by the module"
+    echo "--show-all-shdirs         Show every shared directory reachable from the program"
+    echo "                          (the module plus every module it loads, transitively)"
     echo "--show-meths              Show process methods information"
     echo "--show-vars               Show process variables information"
     echo "--show-opts               Show process options information"
@@ -52,6 +54,7 @@ read_pars()
     m_given=0
     s_given=0
     showshdirs_given=0
+    showallshdirs_given=0
     showmeths_given=0
     showvars_given=0
     showopts_given=0
@@ -76,6 +79,8 @@ read_pars()
                   fi
                   ;;
             "--show-shdirs") showshdirs_given=1
+                          ;;
+            "--show-all-shdirs") showallshdirs_given=1
                           ;;
             "--show-meths") showmeths_given=1
                           ;;
@@ -119,6 +124,16 @@ obtain_info_for_module()
 
     # Show module documentation
     debasher::_show_module_documentation "${module_fname}" "${showshdirs_given}"
+
+    # Show every shared directory reachable from the program (own,
+    # plus every module it loads transitively) — distinct from
+    # --show-shdirs, which is scoped to the module named after -m
+    if [ "${showallshdirs_given}" -eq 1 ]; then
+        echo "## All Shared Directories"
+        echo ""
+        debasher::_show_all_program_shared_dirs
+        echo ""
+    fi
 
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
