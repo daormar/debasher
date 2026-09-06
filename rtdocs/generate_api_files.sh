@@ -34,6 +34,10 @@ rm -f rtdocs/source/api_mod_conf_doc.md
 for name in "${mod_conf_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_modules.sh >> rtdocs/source/api_mod_conf_doc.md
 done
+shdir_symbols=("define_shared_dir()")
+for name in "${shdir_symbols[@]}"; do
+    sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh >> rtdocs/source/api_mod_conf_doc.md
+done
 
 # Generate program definition API file
 prog_def_symbols=("add_debasher_process()" "add_debasher_program()")
