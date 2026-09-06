@@ -643,6 +643,65 @@ debasher::_gen_opts_for_process_and_task()
         done
     }
 
+    # Verifies that no option was given conflicting values once every
+    # process-output descriptor has been resolved to a literal; options
+    # repeated with an identical resolved value are silently collapsed.
+    # WARNING: must run after DEBASHER_DESERIALIZED_ARGS no longer holds
+    # any unresolved descriptor, and must not call any helper that
+    # clobbers DEBASHER_DESERIALIZED_ARGS while still reading from it.
+    debasher::_dedup_resolved_opts()
+    {
+        local processname=$1
+
+        local -a tokens=("${DEBASHER_DESERIALIZED_ARGS[@]}")
+        local -A opt_list
+        local -a opt_order=()
+
+        local i=0
+        while [ $i -lt ${#tokens[@]} ]; do
+            local elem=${tokens[$i]}
+
+            if ! debasher::_str_is_option "${elem}"; then
+                i=$((i+1))
+                continue
+            fi
+
+            local opt=${elem}
+            local value=""
+            local next_idx=$((i+1))
+            if [ $next_idx -lt ${#tokens[@]} ] && ! debasher::_str_is_option "${tokens[$next_idx]}"; then
+                value=${tokens[$next_idx]}
+                i=$((i+2))
+            else
+                i=$((i+1))
+            fi
+
+            [[ -v opt_list[${opt}] ]] || opt_order+=("${opt}")
+            debasher::_merge_opt_value opt_list "${opt}" "${value}"
+        done
+
+        # Rebuild the deduplicated token list, failing if any option
+        # ended up with more than one distinct resolved value
+        local -a result=()
+        local opt
+        for opt in "${opt_order[@]}"; do
+            debasher::_split_opt_multival "${opt_list[${opt}]}"
+            local -a candidates=("${DEBASHER_DESERIALIZED_ARGS[@]}")
+
+            if [ "${#candidates[@]}" -gt 1 ]; then
+                echo "Error: option ${opt} for process ${processname} was given multiple, conflicting values (${candidates[*]})" >&2
+                return 1
+            fi
+
+            result+=("${opt}")
+            [ -n "${candidates[0]}" ] && result+=("${candidates[0]}")
+        done
+
+        unset DEBASHER_DESERIALIZED_ARGS
+        declare -ga DEBASHER_DESERIALIZED_ARGS
+        DEBASHER_DESERIALIZED_ARGS=("${result[@]}")
+    }
+
     local cmdline=$1
     local processname=$2
     local proc_outdir=$3
@@ -655,6 +714,9 @@ debasher::_gen_opts_for_process_and_task()
 
     # Resolve descriptors for connected processes
     debasher::_resolve_proc_out_descriptors "${cmdline}"
+
+    # Ensure no option received conflicting values
+    debasher::_dedup_resolved_opts "${processname}" || return 1
 
     # Obtain serialized args
     debasher::_serialize_args_nameref "sargs_nr" "${DEBASHER_DESERIALIZED_ARGS[@]}"
