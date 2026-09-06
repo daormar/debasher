@@ -400,7 +400,11 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         homeDir="",
         outputDir="",
         sourceDir=str(script_path.resolve().parent),
-        executionOptions=ExecutionOptions(scheduler=""),
+        # Matches the frontend's ExecutionOptionsEditor/createEmptyProgram
+        # default, so an imported program still gets a real --sched value
+        # (see routers/execution.py) if it's run without ever opening
+        # that dialog.
+        executionOptions=ExecutionOptions(scheduler="BUILTIN"),
         programOptions={},
         sharedDirs=shared_dirs,
         processes=processes,

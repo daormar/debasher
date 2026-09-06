@@ -85,7 +85,10 @@ export function createEmptyProgram(name: string): Program {
     homeDir: "",
     outputDir: "",
     sourceDir: "",
-    executionOptions: { scheduler: "" },
+    // Matches ExecutionOptionsEditor's own displayed default, so a
+    // program that's run without ever opening that dialog still gets
+    // a real --sched value instead of an empty one.
+    executionOptions: { scheduler: "BUILTIN" },
     programOptions: {},
     sharedDirs: [],
     processes: [],
