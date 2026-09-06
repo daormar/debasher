@@ -36,6 +36,12 @@ export interface Program {
 
   programOptions: Record<string, string>;
 
+  // Names of the module-level shared directories declared for this
+  // program, each becoming one debasher::define_shared_dir call in the
+  // generated <name>_shared_dirs function (see script_generation.py's
+  // _add_shared_dirs_func).
+  sharedDirs: string[];
+
   processes: ProgramProcess[];
 
   edges: ProgramEdge[];

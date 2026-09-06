@@ -12,9 +12,11 @@ _GET_PROC_INFO_TOOL_NAME = "debasher_get_proc_info"
 # preamble) should just fail the caller rather than block the request.
 _TOOL_TIMEOUT_SECS = 20
 
-DEFAULT_FLAGS = ("--show-opts", "--show-opthnd", "--show-impl", "--show-specs")
+DEFAULT_FLAGS = ("--show-shdirs", "--show-opts", "--show-opthnd", "--show-impl", "--show-specs")
 
 _MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
+_SHARED_DIRS_HEADING_RE = re.compile(r"^## Shared Directories$")
+_SHARED_DIR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`$")
 _PROCESS_HEADING_RE = re.compile(r"^## (?P<name>.+)$")
 
 
@@ -25,12 +27,12 @@ def run_doc_mod(
 ) -> str:
     """
     Run debasher_doc_mod over `script_path` and return its Markdown
-    documentation. `flags` selects which "### <section>" blocks it
-    prints per process (see engine/debasher_doc_mod's usage) — defaults
-    to every section (name/description, options, option handler,
-    implementation, specs); pass a narrower tuple (e.g. ("--show-impl",))
-    when the caller only needs one of them, to skip the rest of the work
-    debasher_doc_mod would otherwise do.
+    documentation. `flags` selects which "## Shared Directories"/
+    "### <section>" blocks it prints (see engine/debasher_doc_mod's
+    usage) — defaults to every section (shared directories, options,
+    option handler, implementation, specs); pass a narrower tuple (e.g.
+    ("--show-impl",)) when the caller only needs one of them, to skip
+    the rest of the work debasher_doc_mod would otherwise do.
 
     `debasher_mod_dir`, if given, is forwarded as DEBASHER_MOD_DIR so
     the script's own `load_debasher_module` calls (for shared modules
@@ -109,21 +111,29 @@ def run_get_proc_info(script_path: Path, process_name: str, debasher_mod_dir: st
     return result.stdout
 
 
-def parse_module_markdown(markdown: str) -> tuple[str, str, list[tuple[str, str]]]:
+def parse_module_markdown(
+    markdown: str,
+) -> tuple[str, str, list[str], list[tuple[str, str]]]:
     """
     Split debasher_doc_mod's output into the module name, its
-    description, and a (process name, per-process Markdown) pair for
-    each "## <process>" section — each of which
-    markdown_parsing.parse_proc_info_markdown can parse on its own,
-    exactly as it does for a single-process debasher_get_proc_info
-    block.
+    description, the names listed under its "## Shared Directories"
+    section (present only when debasher_doc_mod was run with
+    --show-shdirs — see debasher::_show_module_shared_dirs in
+    engine/debasher_lib_modules.sh, which lists one "- `<name>`" bullet
+    per directory the module itself defines directly), and a (process
+    name, per-process Markdown) pair for each "## <process>" section —
+    each of which markdown_parsing.parse_proc_info_markdown can parse on
+    its own, exactly as it does for a single-process
+    debasher_get_proc_info block.
     """
     name = ""
     description_lines: list[str] = []
+    shared_dirs: list[str] = []
     processes: list[tuple[str, str]] = []
 
     current_process_name: str | None = None
     current_process_lines: list[str] = []
+    in_shared_dirs_section = False
 
     def flush_process() -> None:
         if current_process_name is not None:
@@ -138,17 +148,25 @@ def parse_module_markdown(markdown: str) -> tuple[str, str, list[tuple[str, str]
             start = 1
 
     for line in lines[start:]:
+        if current_process_name is None and _SHARED_DIRS_HEADING_RE.match(line):
+            in_shared_dirs_section = True
+            continue
         heading_match = _PROCESS_HEADING_RE.match(line)
         if heading_match:
+            in_shared_dirs_section = False
             flush_process()
             current_process_name = heading_match.group("name").strip()
             current_process_lines = []
         elif current_process_name is not None:
             current_process_lines.append(line)
+        elif in_shared_dirs_section:
+            item_match = _SHARED_DIR_ITEM_RE.match(line)
+            if item_match:
+                shared_dirs.append(item_match.group("name").strip())
         else:
             description_lines.append(line)
     flush_process()
 
     description = "\n".join(description_lines).strip()
 
-    return name, description, processes
+    return name, description, shared_dirs, processes

@@ -297,8 +297,11 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     Import a Program from an existing DeBasher script by running
     debasher_doc_mod over it and parsing the Markdown it generates.
 
-    Beyond the program's name/description and each process's name,
-    description, options, and implementation code, each process's
+    Beyond the program's name/description/shared directories (see
+    parse_module_markdown, which requires debasher_doc_mod's
+    --show-shdirs output — one of run_doc_mod's DEFAULT_FLAGS) and each
+    process's name, description, options, and implementation code, each
+    process's
     options-handler mode, per-option values, and any process-to-process
     connections it implies are recovered on a best-effort basis by
     statically parsing its _define_opts/_generate_opts_size/
@@ -325,7 +328,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     running it, or re-fetching a process's info from its preamble).
     """
     markdown = run_doc_mod(script_path, debasher_mod_dir)
-    name, description, process_chunks = parse_module_markdown(markdown)
+    name, description, shared_dirs, process_chunks = parse_module_markdown(markdown)
 
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
@@ -399,6 +402,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         sourceDir=str(script_path.resolve().parent),
         executionOptions=ExecutionOptions(scheduler=""),
         programOptions={},
+        sharedDirs=shared_dirs,
         processes=processes,
         edges=edges,
     )

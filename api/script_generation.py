@@ -5,6 +5,7 @@ from pathlib import Path
 from .debasher_constants import (
     MODULE_DOCUMENT_SUFFIX,
     MODULE_PROGRAM_SUFFIX,
+    MODULE_SHARED_DIRS_SUFFIX,
     PROCESS_METHOD_DOCUMENT_SUFFIX,
     PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX,
     PROCESS_METHOD_IDENTIFY_CMDLINE_OPTS_SUFFIX,
@@ -71,6 +72,17 @@ def _add_document_module_func(name, description):
     lines = [f"{name}{MODULE_DOCUMENT_SUFFIX}()", "{"]
     if description:
         lines.append(f'{INDENT}debasher::document_module "{description}"')
+    else:
+        lines.append(INDENT + ":")
+    lines.append("}")
+    return lines
+
+
+def _add_shared_dirs_func(name, shared_dirs):
+    lines = [f"{name}{MODULE_SHARED_DIRS_SUFFIX}()", "{"]
+    if shared_dirs:
+        for shared_dir in shared_dirs:
+            lines.append(f'{INDENT}debasher::define_shared_dir "{shared_dir}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
@@ -571,6 +583,10 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
 
     # Add program description
     lines.extend(_add_document_module_func(program.name, program.description))
+    lines.extend(["", ""])
+
+    # Add shared directories
+    lines.extend(_add_shared_dirs_func(program.name, program.sharedDirs))
     lines.extend(["", ""])
 
     # Add process functions

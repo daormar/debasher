@@ -5,6 +5,7 @@ import { useProgram } from "../store/ProgramContext";
 import EnvVarsEditor from "./EnvVarsEditor";
 import PreambleEditor from "./PreambleEditor";
 import ProgramDescriptionEditor from "./ProgramDescriptionEditor";
+import SharedDirsEditor from "./SharedDirsEditor";
 import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
 import RunMenu from "./RunMenu";
@@ -31,6 +32,9 @@ export default function Toolbar({ onClose }: Props) {
     useState(false);
 
   const [isDescriptionOpen, setDescriptionOpen] =
+    useState(false);
+
+  const [isSharedDirsOpen, setSharedDirsOpen] =
     useState(false);
 
   const [isEnvVarsOpen, setEnvVarsOpen] =
@@ -148,6 +152,12 @@ export default function Toolbar({ onClose }: Props) {
       </button>
 
       <button
+        onClick={() => setSharedDirsOpen(true)}
+      >
+        Shared dirs
+      </button>
+
+      <button
         onClick={() => setNewProcessOpen(true)}
       >
         Add process
@@ -174,6 +184,12 @@ export default function Toolbar({ onClose }: Props) {
       {isDescriptionOpen && (
         <ProgramDescriptionEditor
           onClose={() => setDescriptionOpen(false)}
+        />
+      )}
+
+      {isSharedDirsOpen && (
+        <SharedDirsEditor
+          onClose={() => setSharedDirsOpen(false)}
         />
       )}
 

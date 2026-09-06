@@ -94,5 +94,10 @@ class Program(BaseModel):
     sourceDir: str = ""
     executionOptions: ExecutionOptions
     programOptions: dict[str, str]
+    # Names of the module-level shared directories declared for this
+    # program (see script_generation.py's _add_shared_dirs_func), each
+    # becoming one debasher::define_shared_dir call in the generated
+    # <name>_shared_dirs function.
+    sharedDirs: list[str] = []
     processes: list[ProgramProcess]
     edges: list[ProgramEdge]

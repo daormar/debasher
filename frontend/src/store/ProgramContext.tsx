@@ -78,6 +78,10 @@ interface ProgramContextType {
     preamble: string
   ) => void;
 
+  setSharedDirs: (
+    sharedDirs: string[]
+  ) => void;
+
   setEnvVar: (
     name: string,
     value: string
@@ -493,6 +497,17 @@ export function ProgramProvider({
     setProgram(current => ({
       ...current,
       preamble,
+    }));
+
+  }
+
+  function setSharedDirs(
+    sharedDirs: string[]
+  ) {
+
+    setProgram(current => ({
+      ...current,
+      sharedDirs,
     }));
 
   }
@@ -990,6 +1005,8 @@ export function ProgramProvider({
     setDescription,
 
     setPreamble,
+
+    setSharedDirs,
 
     setEnvVar,
 

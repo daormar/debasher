@@ -87,6 +87,7 @@ export function createEmptyProgram(name: string): Program {
     sourceDir: "",
     executionOptions: { scheduler: "" },
     programOptions: {},
+    sharedDirs: [],
     processes: [],
     edges: [],
   };
