@@ -157,6 +157,38 @@ def _get_process_plus_opt(option):
     return tuple(option.value[1:-1].split(";"))
 
 
+def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, str]]]:
+    """
+    Maps a target option's id to every edge connected to it, as
+    (source process name, source option label, source process mode)
+    triples — used by _option_definition_line to emit one
+    define_opt_from_proc_out[_task_out] per connection instead of the
+    single one implied by option.value's own "[proc;opt]" sentinel (see
+    _opt_is_connected_to_proc/_get_process_plus_opt), which only ever
+    records one. A non-command-line, non-fanout input may have more
+    than one entry here (fan-in, see isValidProgramConnection in the
+    frontend); every other option has at most one, or none.
+    """
+    processes_by_id = {process.id: process for process in program.processes}
+    result: dict[str, list[tuple[str, str, str]]] = {}
+
+    for edge in program.edges:
+        source_process = processes_by_id.get(edge.sourceProcessId)
+        if source_process is None:
+            continue
+        source_option = next(
+            (option for option in source_process.options if option.id == edge.sourceOptionId),
+            None,
+        )
+        if source_option is None:
+            continue
+        result.setdefault(edge.targetOptionId, []).append(
+            (source_process.name, source_option.label, source_process.optionsHandler.mode)
+        )
+
+    return result
+
+
 # Modes whose _define_opts/_generate_opts is guaranteed to produce one
 # save_opt_list call per task, numbered 0..N-1 — generator via the
 # engine calling _generate_opts once per task_idx, array via a loop that
@@ -292,7 +324,16 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
     return lines
 
 
-def _option_definition_line(process, option, process_modes):
+def _option_definition_line(process, option, process_modes, connections_by_option):
+    """
+    Returns the _define_opts/_generate_opts line(s) for `option` — a
+    list since a connected, non-command-line, non-fanout option may
+    have more than one incoming edge (fan-in): one
+    define_opt_from_proc_out[_task_out] call is emitted per connection
+    in connections_by_option (see _connections_by_option), each
+    independently choosing the task-indexed variant based on its own
+    source's mode. Every other case still returns exactly one line.
+    """
     # channel is checked ahead of commandLine: an option can be both a
     # mandatory command-line option (for _identify_cmdline_opts/
     # documentation purposes) and, in _define_opts, actually sourced
@@ -301,12 +342,12 @@ def _option_definition_line(process, option, process_modes):
     # is exactly that.
     if option.dataType == "None":
         if option.commandLine:
-            return f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1'
-        return f'debasher::define_flag "{option.label}" optlist || return 1'
+            return [f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
+        return [f'debasher::define_flag "{option.label}" optlist || return 1']
     if option.channel == "value_desc":
-        return f'debasher::define_value_desc_opt "{option.label}" optlist || return 1'
+        return [f'debasher::define_value_desc_opt "{option.label}" optlist || return 1']
     if option.channel == "fifo":
-        return f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist || return 1'
+        return [f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist || return 1']
     if option.commandLine:
         # A file-typed command-line option gets the validating variant
         # (checks the path exists and normalizes it to absolute) —
@@ -314,8 +355,8 @@ def _option_definition_line(process, option, process_modes):
         # engine/debasher_lib_opts.sh.
         base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
         if option.mandatory:
-            return f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1'
-        return f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1'
+            return [f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1']
+        return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
     if _opt_is_connected_to_proc(option):
         conn_proc, conn_opt = _get_process_plus_opt(option)
         if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
@@ -326,7 +367,8 @@ def _option_definition_line(process, option, process_modes):
             # process's own per-task loop variable. One save_opt_list
             # call on the source side (unlike _TASK_INDEXED_MODES, which
             # addresses N repeated calls of the SAME name), hence plain
-            # define_opt_from_proc_out rather than _task_out.
+            # define_opt_from_proc_out rather than _task_out. Fanout
+            # options stay single-connection, so this is never fan-in.
             if process.optionsHandler.mode != "array":
                 raise ValueError(
                     f'Option "{option.label}" on "{process.name}" is connected to fanout '
@@ -335,15 +377,34 @@ def _option_definition_line(process, option, process_modes):
                 )
             idx_var = _task_idx_var(process.optionsHandler.mode)
             base_conn_opt = _fanout_base_label(conn_opt)
-            return f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1'
-        if process.optionsHandler.mode in _TASK_INDEXED_MODES and process_modes.get(conn_proc) in _TASK_INDEXED_MODES:
-            idx_var = _task_idx_var(process.optionsHandler.mode)
-            return f'debasher::define_opt_from_proc_task_out "{option.label}" "{conn_proc}" "${{{idx_var}}}" "{conn_opt}" optlist || return 1'
-        return f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1'
-    return f'debasher::define_opt "{option.label}" "{option.value}" optlist || return 1'
+            return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1']
+
+        # Plain connection: one define_opt_from_proc_out[_task_out] per
+        # edge into this option — usually just one, but a non-command-
+        # line input may gather from several (fan-in; see
+        # isValidProgramConnection in the frontend). Falls back to the
+        # single value-sentinel-derived connection if no matching edge
+        # was found, e.g. a hand-edited/stale file.
+        connections = connections_by_option.get(option.id) or [
+            (conn_proc, conn_opt, process_modes.get(conn_proc))
+        ]
+
+        lines = []
+        for src_proc, src_opt, src_mode in connections:
+            if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
+                idx_var = _task_idx_var(process.optionsHandler.mode)
+                lines.append(
+                    f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{idx_var}}}" "{src_opt}" optlist || return 1'
+                )
+            else:
+                lines.append(
+                    f'debasher::define_opt_from_proc_out "{option.label}" "{src_proc}" "{src_opt}" optlist || return 1'
+                )
+        return lines
+    return [f'debasher::define_opt "{option.label}" "{option.value}" optlist || return 1']
 
 
-def _add_opts_definition_func(process, suffix, header_lines, process_modes):
+def _add_opts_definition_func(process, suffix, header_lines, process_modes, connections_by_option):
     lines = [f"{process.name}{suffix}()", "{"]
     lines.extend(header_lines)
     lines.append("")
@@ -352,14 +413,17 @@ def _add_opts_definition_func(process, suffix, header_lines, process_modes):
             if process.optionsHandler.mode == "standard" and _is_fanout_label(option.label):
                 lines.extend(_fanout_definition_lines(process, option, process_modes, INDENT))
             else:
-                lines.append(INDENT + _option_definition_line(process, option, process_modes))
+                lines.extend(
+                    INDENT + line
+                    for line in _option_definition_line(process, option, process_modes, connections_by_option)
+                )
     lines.append("")
     lines.extend(_define_opts_func_foot())
     lines.append("}")
     return lines
 
 
-def _add_array_opts_func(process, process_modes):
+def _add_array_opts_func(process, process_modes, connections_by_option):
     # array mode: the engine's per-process task numbering (see
     # debasher::_save_opt_list_loop) already treats "call save_opt_list
     # N times inside one _define_opts" as N tasks — the same mechanism
@@ -387,7 +451,10 @@ def _add_array_opts_func(process, process_modes):
     lines.append(f'{INDENT * 2}local optlist=""')
     if process.options:
         for option in process.options:
-            lines.append(INDENT * 2 + _option_definition_line(process, option, process_modes))
+            lines.extend(
+                INDENT * 2 + line
+                for line in _option_definition_line(process, option, process_modes, connections_by_option)
+            )
     lines.append(f'{INDENT * 2}save_opt_list optlist')
     lines.append(f'{INDENT}done')
     lines.append("}")
@@ -411,23 +478,23 @@ def _add_generate_opts_size_func(process):
     return lines
 
 
-def _add_opts_handler(process, process_modes):
+def _add_opts_handler(process, process_modes, connections_by_option):
     handler = process.optionsHandler
     if handler.mode == "standard":
         return _add_opts_definition_func(
-            process, PROCESS_METHOD_DEFINE_OPTS_SUFFIX, _define_opts_func_header(), process_modes
+            process, PROCESS_METHOD_DEFINE_OPTS_SUFFIX, _define_opts_func_header(), process_modes, connections_by_option
         )
     if handler.mode == "generator":
         lines = _add_generate_opts_size_func(process)
         lines.extend(["", ""])
         lines.extend(
             _add_opts_definition_func(
-                process, PROCESS_METHOD_GENERATE_OPTS_SUFFIX, _generate_opts_func_header(), process_modes
+                process, PROCESS_METHOD_GENERATE_OPTS_SUFFIX, _generate_opts_func_header(), process_modes, connections_by_option
             )
         )
         return lines
     if handler.mode == "array":
-        return _add_array_opts_func(process, process_modes)
+        return _add_array_opts_func(process, process_modes, connections_by_option)
     if handler.mode == "manual":
         manual_code = handler.manualCode
         return [manual_code] if manual_code else []
@@ -494,6 +561,7 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
     lines = [SCRIPT_HEADER, "", ""]
 
     process_modes = {p.name: p.optionsHandler.mode for p in program.processes}
+    connections_by_option = _connections_by_option(program)
 
     # Add preamble
     preamble_lines = _add_preamble(program.preamble)
@@ -516,7 +584,7 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
         lines.extend(_add_identify_cmdline_opts_func(process))
         lines.extend(["", ""])
 
-        lines.extend(_add_opts_handler(process, process_modes))
+        lines.extend(_add_opts_handler(process, process_modes, connections_by_option))
         lines.extend(["", ""])
 
         if process.name not in skip_exec_for:

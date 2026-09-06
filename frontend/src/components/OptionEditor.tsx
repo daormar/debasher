@@ -24,49 +24,42 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
   const { program, updateOption } = useProgram();
 
-  const connectingEdge = program.edges.find(
+  // A non-command-line, non-fanout input may gather from more than one
+  // source (see isValidProgramConnection) — everything below keys off
+  // the full list; connectedSourceOption (its first/only entry) remains
+  // for the fanout-gather and scatter-consumer checks below, which stay
+  // single-connection by construction.
+  const connectingEdges = program.edges.filter(
     edge =>
       edge.targetProcessId === processId &&
       edge.targetOptionId === option.id
   );
 
-  const connectedSourceOption = (() => {
+  const connectedSourceOptions = connectingEdges
+    .map(edge => {
 
-    if (!connectingEdge) {
-      return null;
-    }
+      const sourceProcess = program.processes.find(
+        process => process.id === edge.sourceProcessId
+      );
 
-    const sourceProcess = program.processes.find(
-      process => process.id === connectingEdge.sourceProcessId
-    );
+      const sourceOption = sourceProcess?.options.find(
+        o => o.id === edge.sourceOptionId
+      );
 
-    const sourceOption = sourceProcess?.options.find(
-      o => o.id === connectingEdge.sourceOptionId
-    );
+      if (!sourceProcess || !sourceOption) {
+        return null;
+      }
 
-    if (!sourceProcess || !sourceOption) {
-      return null;
-    }
+      return { sourceProcess, sourceOption };
 
-    return { sourceProcess, sourceOption };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
-  })();
+  const connectedSourceOption = connectedSourceOptions[0] ?? null;
 
-  // Informational only — matches script_generation.py's own rule
-  // (_option_definition_line/_TASK_INDEXED_MODES): a task-indexed
-  // connection is only ever regenerated when both this option's own
-  // process and the connected source are generator or array mode,
-  // since that's the only combination where the source is guaranteed
-  // to actually have a task N to pull from. The index variable itself
-  // is "task_idx" for a generator-mode owner, "idx" for an array-mode
-  // one (see script_generation.py's _task_idx_var).
   const ownerProcess = program.processes.find(
     process => process.id === processId
   );
-
-  const isTaskIndexed =
-    !!ownerProcess && TASK_INDEXED_MODES.has(ownerProcess.optionsHandler.mode) &&
-    !!connectedSourceOption && TASK_INDEXED_MODES.has(connectedSourceOption.sourceProcess.optionsHandler.mode);
 
   const idxVar = ownerProcess?.optionsHandler.mode === "generator" ? "task_idx" : "idx";
 
@@ -80,12 +73,31 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
     !!connectedSourceOption &&
     connectedSourceOption.sourceProcess.optionsHandler.mode === "array";
 
-  const connectedSourceLabel = connectedSourceOption &&
-    (isTaskIndexed
-      ? `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label};\${${idxVar}}]`
-      : isFanoutGather
-      ? `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label};\${i}]`
-      : `[${connectedSourceOption.sourceProcess.name};${connectedSourceOption.sourceOption.label}]`);
+  // Informational only — matches script_generation.py's own rule
+  // (_option_definition_line/_TASK_INDEXED_MODES): a task-indexed
+  // connection is only ever regenerated when both this option's own
+  // process and that connection's source are generator or array mode,
+  // since that's the only combination where the source is guaranteed
+  // to actually have a task N to pull from. Computed per connection —
+  // a non-command-line input can gather from several sources whose
+  // modes differ.
+  const connectedSourceLabels = connectedSourceOptions.map(entry => {
+
+    const entryIsTaskIndexed =
+      !!ownerProcess && TASK_INDEXED_MODES.has(ownerProcess.optionsHandler.mode) &&
+      TASK_INDEXED_MODES.has(entry.sourceProcess.optionsHandler.mode);
+
+    if (entryIsTaskIndexed) {
+      return `[${entry.sourceProcess.name};${entry.sourceOption.label};\${${idxVar}}]`;
+    }
+    if (isFanoutGather) {
+      return `[${entry.sourceProcess.name};${entry.sourceOption.label};\${i}]`;
+    }
+    return `[${entry.sourceProcess.name};${entry.sourceOption.label}]`;
+
+  });
+
+  const connectedSourceLabel = connectedSourceLabels[0];
 
   // Consumer side of a scatter connection (see
   // script_generation.py's _option_definition_line "conn_opt" branch):
@@ -456,7 +468,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
               {isFifo ? "FIFO name" : "Value"}
             </label>
 
-            {connectedSourceLabel ? (
+            {connectedSourceLabels.length > 0 ? (
 
               <div
                 style={{
@@ -469,7 +481,13 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
                   opacity: commandLine ? 0.5 : 1,
                 }}
               >
-                {connectedSourceLabel}
+                {connectedSourceLabels.length === 1
+                  ? connectedSourceLabels[0]
+                  : connectedSourceLabels.map((sourceLabel, index) => (
+                      <div key={index}>
+                        {sourceLabel}
+                      </div>
+                    ))}
               </div>
 
             ) : (

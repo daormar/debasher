@@ -191,11 +191,16 @@ export function programToReactFlowEdges(
 }
 
 /**
- * Whether a connection is allowed: it must go from an output
- * option to an input option, the two options must belong to
- * different processes, and the target input must not already have
- * an incoming connection (an input accepts at most one connected
- * output, while an output may feed multiple inputs).
+ * Whether a connection is allowed: it must go from an output option to
+ * an input option, and the two options must belong to different
+ * processes. An output may always feed multiple inputs (fan-out). An
+ * input, by default, accepts at most one connected output — except a
+ * non-command-line input (and not a fanout-family one, which keeps its
+ * own single-source pairing rule), which may accept several: the
+ * engine now resolves each connection's actual value at run time and
+ * only requires that they all agree (see debasher::_load_curr_opt_list_loop/
+ * debasher::_dedup_resolved_opts in the engine), so such fan-in is safe
+ * to allow here.
  */
 export function isValidProgramConnection(
   program: Program,
@@ -225,12 +230,6 @@ export function isValidProgramConnection(
     option => option.id === targetHandle
   );
 
-  const targetAlreadyConnected = program.edges.some(
-    edge =>
-      edge.targetProcessId === target &&
-      edge.targetOptionId === targetHandle
-  );
-
   // A fanout family option (see isFanoutOption) on a "standard" process
   // may only pair with an "array"-mode process on the other end, and
   // fanout options can't chain directly into one another.
@@ -243,6 +242,19 @@ export function isValidProgramConnection(
   if (targetIsFanout && (sourceProcess?.optionsHandler.mode !== "array" || sourceIsFanout)) {
     return false;
   }
+
+  // Only a plain (non-fanout) command-line input is limited to a single
+  // incoming connection; a non-command-line input may gather several.
+  const targetAllowsMultipleConnections =
+    targetOptionDef?.commandLine === false && !targetIsFanout;
+
+  const targetAlreadyConnected =
+    !targetAllowsMultipleConnections &&
+    program.edges.some(
+      edge =>
+        edge.targetProcessId === target &&
+        edge.targetOptionId === targetHandle
+    );
 
   return (
     sourceOptionDef?.direction === "output" &&
