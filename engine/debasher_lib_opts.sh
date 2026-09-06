@@ -1603,6 +1603,54 @@ debasher::_get_opt_list_name()
 }
 
 ########
+# Splits a raw option value that may encode several pending candidate
+# values (see debasher::_merge_opt_value) into DEBASHER_DESERIALIZED_ARGS.
+debasher::_split_opt_multival()
+{
+    local raw=$1
+
+    if [[ "${raw}" == *"${DEBASHER_OPT_MULTIVAL_SEP}"* ]]; then
+        debasher::_deserialize_args_given_sep "${raw}" "${DEBASHER_OPT_MULTIVAL_SEP}"
+    else
+        unset DEBASHER_DESERIALIZED_ARGS
+        declare -ga DEBASHER_DESERIALIZED_ARGS
+        DEBASHER_DESERIALIZED_ARGS=("${raw}")
+    fi
+}
+
+########
+# Records a raw option value for an option, keeping every distinct
+# value seen so far instead of silently overwriting a previous one.
+# Resolution/comparison of the resulting candidates happens later, in
+# debasher::_load_curr_opt_list_loop, once process-output descriptors
+# have been resolved to actual values.
+#
+# $1 - Name of the associative array storing the option list.
+# $2 - Option name.
+# $3 - Raw value to record (a literal, an empty string for a flag, or
+#      a process-output descriptor).
+debasher::_merge_opt_value()
+{
+    local -n ref=$1
+    local opt=$2
+    local value=$3
+
+    if [[ ! -v ref[${opt}] ]]; then
+        ref["${opt}"]="${value}"
+        return 0
+    fi
+
+    debasher::_split_opt_multival "${ref[${opt}]}"
+
+    local candidate
+    for candidate in "${DEBASHER_DESERIALIZED_ARGS[@]}"; do
+        [ "${candidate}" = "${value}" ] && return 0
+    done
+
+    ref["${opt}"]="${ref[${opt}]}${DEBASHER_OPT_MULTIVAL_SEP}${value}"
+}
+
+########
 # Public: Saves option list for a given process.
 #
 # $1 - Name of variable storing the option list.
@@ -1625,7 +1673,6 @@ debasher::save_opt_list()
         local opt_list_name
         opt_list_name=$(debasher::_get_opt_list_name "${processname}" "${task_idx}")
         declare -gA "${opt_list_name}"
-        local -n opt_list=${opt_list_name}
 
         debasher::_deserialize_args "${opts}"
 
@@ -1652,11 +1699,11 @@ debasher::save_opt_list()
             # value; record it as empty and don't shift, so it's picked
             # up as a new option next iteration
             if debasher::_str_is_option "$1"; then
-                opt_list["${opt}"]=""
+                debasher::_merge_opt_value "${opt_list_name}" "${opt}" ""
                 continue
             fi
 
-            opt_list["${opt}"]="$1"
+            debasher::_merge_opt_value "${opt_list_name}" "${opt}" "$1"
             shift
         done
     }
@@ -1830,6 +1877,27 @@ debasher::_load_curr_opt_list_loop()
         echo "${connected_proc_info}" | awk -F "${DEBASHER_ASSOC_ARRAY_ELEM_SEP}" '{print $1}'
     }
 
+    debasher::_resolve_opt_candidate()
+    {
+        local cmdline=$1
+        local processname=$2
+        local opt=$3
+        local candidate=$4
+
+        if debasher::_str_is_proc_out_opt_descriptor "${candidate}"; then
+            local resolved
+            resolved=`debasher::_resolve_proc_output_desc "${cmdline}" "${candidate}"`
+            if [ -z "${resolved}" ]; then
+                local conn_proc=`debasher::extract_processname_from_proc_output_desc "${candidate}"`
+                echo "Error: value of option ${opt} for process ${processname} could not be determined. Check if connected process ${conn_proc} does exist" >&2
+                return 1
+            fi
+            echo "${resolved}"
+        else
+            echo "${candidate}"
+        fi
+    }
+
     local cmdline=$1
     local processname=$2
 
@@ -1847,21 +1915,23 @@ debasher::_load_curr_opt_list_loop()
         # Process options for task
         local opt
         for opt in "${!opt_list[@]}"; do
-            local value
+            debasher::_split_opt_multival "${opt_list[$opt]}"
+            local -a opt_candidates=("${DEBASHER_DESERIALIZED_ARGS[@]}")
 
-            # Resolve process output descriptor if necessary
-            if debasher::_str_is_proc_out_opt_descriptor "${opt_list[$opt]}"; then
-                local proc_out_desc
-                proc_out_desc=${opt_list[$opt]}
-                value=`debasher::_resolve_proc_output_desc "${cmdline}" "${proc_out_desc}"`
-                if [ -z "${value}" ]; then
-                    local conn_proc=`debasher::extract_processname_from_proc_output_desc "${proc_out_desc}"`
-                    echo "Error: value of option ${opt} for process ${processname} could not be determined. Check if connected process ${conn_proc} does exist" >&2
+            local value
+            value=$(debasher::_resolve_opt_candidate "${cmdline}" "${processname}" "${opt}" "${opt_candidates[0]}") || exit 1
+
+            # If the option was given multiple times, every occurrence must
+            # resolve to the same value; otherwise report the conflict
+            local i
+            for (( i=1; i<${#opt_candidates[@]}; i++ )); do
+                local other_value
+                other_value=$(debasher::_resolve_opt_candidate "${cmdline}" "${processname}" "${opt}" "${opt_candidates[$i]}") || exit 1
+                if [ "${other_value}" != "${value}" ]; then
+                    echo "Error: option ${opt} for process ${processname} was given multiple, conflicting values (${value} vs ${other_value})" >&2
                     exit 1
                 fi
-            else
-                value=${opt_list[$opt]}
-            fi
+            done
 
             # Define option
             if [ -z "${value}" ]; then
