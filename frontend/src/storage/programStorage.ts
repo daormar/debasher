@@ -71,6 +71,23 @@ export async function importProgram(
   return response.json();
 }
 
+export async function getAllEnvVars(
+  program: Program
+): Promise<Record<string, string>> {
+  const response = await fetch("/api/programs/all-envvars", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get all env vars: ${await errorMessage(response)}`);
+  }
+
+  const { envVars } = await response.json();
+  return envVars;
+}
+
 /**
  * Not persisted yet — just builds a blank program in memory.
  * It only gets stored once the user actually saves it.
