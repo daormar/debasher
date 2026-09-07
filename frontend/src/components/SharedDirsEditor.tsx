@@ -25,6 +25,17 @@ export default function SharedDirsEditor({ onClose }: Props) {
   const [draft, setDraft] =
     useState(program.sharedDirs.join("\n"));
 
+  // Shared directories reachable from this program but not declared by
+  // it — inherited from a module it loads (see api/doc_mod.py's
+  // run_doc_mod_all_shared_dirs, populated only by import). Shown
+  // separately, read-only: they aren't this program's own to edit —
+  // sharedDirs is what script generation actually emits from — and
+  // any already in sharedDirs are left out here since the editable box
+  // above already shows them.
+  const inheritedSharedDirs = program.availableSharedDirs.filter(
+    (name) => !program.sharedDirs.includes(name)
+  );
+
   function handleSave() {
     setSharedDirs(linesToSharedDirs(draft));
     onClose();
@@ -82,6 +93,38 @@ export default function SharedDirsEditor({ onClose }: Props) {
           }}
 
         />
+
+        {inheritedSharedDirs.length > 0 && (
+
+          <>
+
+            <h4 style={{ margin: 0 }}>
+              Previously defined (inherited) shared directories
+            </h4>
+
+            <textarea
+
+              value={inheritedSharedDirs.join("\n")}
+
+              readOnly
+
+              rows={6}
+
+              spellCheck={false}
+
+              style={{
+                width: "100%",
+                fontFamily: "ui-monospace, Consolas, monospace",
+                resize: "vertical",
+                background: "#f0f0f0",
+                color: "#555",
+              }}
+
+            />
+
+          </>
+
+        )}
 
         <div
           style={{
