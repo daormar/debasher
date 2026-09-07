@@ -162,12 +162,76 @@ _COMMENT_RE = re.compile(r"^#")
 # line, isn't chased further and is left to the manual-mode fallback.
 _LOCAL_ASSIGN_RE = re.compile(r"^local\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)=(?P<expr>.*)$")
 _VAR_REF_RE = re.compile(r"^\$\{?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\}?$")
+_EMBEDDED_VAR_RE = re.compile(r"\$\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)\}|\$(?P<bare>[A-Za-z_][A-Za-z0-9_]*)")
 
 
 def _strip_one_quote_layer(text: str) -> str:
     if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
         return text[1:-1]
     return text
+
+
+def _resolve_embedded_refs(expr: str, locals_table: dict[str, str], known_local_names: set[str]) -> str | None:
+    """
+    Substitutes every ${name}/$name occurrence *embedded* in `expr` (as
+    opposed to a bare whole-string reference — see _VAR_REF_RE) that
+    names an already-resolved local with that local's own (already
+    self-contained) text — e.g. geno-debasher's
+    `local abs_datadir=`get_absolute_shdirname "${DATADIR_BASENAME}"``
+    then `local outfile="${abs_datadir}"/out.bam`: without this, a
+    define_opt using `$outfile` as its value would inline "${abs_datadir}"/out.bam
+    verbatim — a dangling reference, since script_generation.py never
+    re-emits a local's own declaration, only the option value ultimately
+    built from it.
+
+    Returns None if `expr` embeds a reference to a *different* local
+    name that wasn't itself resolved this way (known to be a local at
+    all, i.e. in `known_local_names`, but not in `locals_table`) —
+    leaving that reference as literal text would dangle the same way, so
+    the caller must reject the whole body rather than guess. A reference
+    to anything else — a header arg (cmdline/process_spec/process_name/
+    process_outdir/task_idx) or a genuinely global name sourced from
+    elsewhere — is left untouched either way, since those are equally
+    available once regenerated; they're just never local-scoped to the
+    function.
+    """
+    unresolved = False
+
+    def substitute(match: re.Match) -> str:
+        nonlocal unresolved
+        name = match.group("braced") or match.group("bare")
+        if name in locals_table:
+            return locals_table[name]
+        if name in known_local_names:
+            unresolved = True
+        return match.group(0)
+
+    resolved = _EMBEDDED_VAR_RE.sub(substitute, expr)
+    return None if unresolved else resolved
+
+
+def _chase_local_value(
+    value_text: str, locals_table: dict[str, str], known_local_names: set[str]
+) -> tuple[str, bool]:
+    """
+    Resolves a define_opt/define_fifo_opt value token that's a *bare*
+    reference to a local (see _LOCAL_ASSIGN_RE's chasing) into that
+    local's own text. Returns (value_text, False) instead — the caller
+    must reject the whole body — if the token bare-references a local
+    that itself couldn't be resolved to something self-contained (see
+    _resolve_embedded_refs): leaving that reference as literal text
+    would dangle, since script_generation.py never re-emits a local's
+    own declaration.
+    """
+    var_ref_match = _VAR_REF_RE.match(value_text)
+    if not var_ref_match:
+        return value_text, True
+    name = var_ref_match.group("name")
+    if name in locals_table:
+        return locals_table[name], True
+    if name in known_local_names:
+        return value_text, False
+    return value_text, True
 
 
 _DEFINE_OPTS_CALL_RE = re.compile(
@@ -397,6 +461,8 @@ def _parse_primitive_calls(
     idx_var: str = "task_idx",
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
+    initial_locals: dict[str, str] | None = None,
+    initial_known_local_names: set[str] | None = None,
 ) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
     """
     Parses a function body against the closed grammar of option-
@@ -420,6 +486,17 @@ def _parse_primitive_calls(
     accepts a define_opt_from_proc_out whose connected option name is
     "<base>${idx_var}" instead of a plain literal, reconstructing it as
     a connection to that "standard" process's "<base>ith" fanout family.
+
+    `initial_locals`/`initial_known_local_names` seed the local-chasing
+    state (see _resolve_embedded_refs/_chase_local_value) — only ever
+    set for an array-mode loop body, whose preceding arrayCode section
+    is otherwise kept opaque/verbatim (see _parse_array_define_opts):
+    without this, a local declared there (e.g. geno-debasher's
+    `local abs_splitdir=`get_absolute_shdirname ...``, used by a loop-
+    body option built as `"${abs_splitdir}"/name_${contig}.bam`) would
+    look like a genuinely global name to the loop body's own parse,
+    since it never saw the declaration — letting a dangling reference
+    to it through instead of correctly rejecting the body to "manual".
     """
     idx_re = _idx_var_re(idx_var)
     fanout_consumer_re = _fanout_consumer_opt_re(idx_var) if allow_fanout_consumer else None
@@ -429,7 +506,8 @@ def _parse_primitive_calls(
     fifo_labels: set[str] = set()
     fanout_count_source_labels: dict[str, str] = {}
     shared_dir_refs: dict[str, SharedDirRef] = {}
-    locals_table: dict[str, str] = {}
+    locals_table: dict[str, str] = dict(initial_locals) if initial_locals else {}
+    known_local_names: set[str] = set(initial_known_local_names) if initial_known_local_names else set()
 
     i = 0
     while i < len(body):
@@ -461,7 +539,12 @@ def _parse_primitive_calls(
 
         local_match = _LOCAL_ASSIGN_RE.match(line)
         if local_match:
-            locals_table[local_match.group("name")] = _strip_one_quote_layer(local_match.group("expr"))
+            name = local_match.group("name")
+            expr = _strip_one_quote_layer(local_match.group("expr"))
+            resolved = _resolve_embedded_refs(expr, locals_table, known_local_names)
+            if resolved is not None:
+                locals_table[name] = resolved
+            known_local_names.add(name)
             i += 1
             continue
 
@@ -508,10 +591,9 @@ def _parse_primitive_calls(
             label, value = tokens[0], tokens[1]
             if not label[1]:
                 return None
-            value_text = value[0]
-            var_ref_match = _VAR_REF_RE.match(value_text)
-            if var_ref_match and var_ref_match.group("name") in locals_table:
-                value_text = locals_table[var_ref_match.group("name")]
+            value_text, ok = _chase_local_value(value[0], locals_table, known_local_names)
+            if not ok:
+                return None
             values[label[0]] = value_text
         elif func == "define_opt_from_shared_dir":
             label, shdirname = tokens[0], tokens[1]
@@ -542,10 +624,9 @@ def _parse_primitive_calls(
             label, value = tokens[0], tokens[1]
             if not label[1]:
                 return None
-            value_text = value[0]
-            var_ref_match = _VAR_REF_RE.match(value_text)
-            if var_ref_match and var_ref_match.group("name") in locals_table:
-                value_text = locals_table[var_ref_match.group("name")]
+            value_text, ok = _chase_local_value(value[0], locals_table, known_local_names)
+            if not ok:
+                return None
             values[label[0]] = value_text
             fifo_labels.add(label[0])
         elif func == "define_flag":
@@ -591,6 +672,30 @@ _ARRAY_DO_LINE = "do"
 _ARRAY_DONE_LINE = "done"
 
 
+def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
+    """
+    Extracts `local NAME=EXPR` assignments from `lines` (in order,
+    chasing each against the ones before it — see
+    _resolve_embedded_refs) without validating anything else about
+    `lines` — used only to seed _parse_primitive_calls's local-chasing
+    state for a loop body from its own arrayCode section, which is
+    otherwise left opaque/verbatim (see _parse_array_define_opts).
+    """
+    locals_table: dict[str, str] = {}
+    known_local_names: set[str] = set()
+    for line in lines:
+        local_match = _LOCAL_ASSIGN_RE.match(line)
+        if not local_match:
+            continue
+        name = local_match.group("name")
+        expr = _strip_one_quote_layer(local_match.group("expr"))
+        resolved = _resolve_embedded_refs(expr, locals_table, known_local_names)
+        if resolved is not None:
+            locals_table[name] = resolved
+        known_local_names.add(name)
+    return locals_table, known_local_names
+
+
 def _parse_array_define_opts(
     source: str,
 ) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, SharedDirRef]] | None:
@@ -633,11 +738,25 @@ def _parse_array_define_opts(
     array_code = "\n".join(rest[:for_index]).strip()
     loop_body = rest[for_index + 2:-1]
 
+    # array_code precedes the loop and is otherwise kept opaque/verbatim
+    # (arbitrary user code) — but a local it declares (e.g. geno-
+    # debasher's `local abs_splitdir=`get_absolute_shdirname ...``) may
+    # still be referenced by a loop-body option's own local (see
+    # _resolve_embedded_refs), so its locals are scanned (not otherwise
+    # parsed/validated) to seed the loop body's chasing state.
+    seed_locals, seed_known_local_names = _scan_locals(rest[:for_index])
+
     # allow_fanout_consumer: the loop body may connect to a "standard"
     # process's fanout family via "<base>${idx}" (see
     # _fanout_consumer_opt_re) — array mode has no fanout family
     # options of its own, so allow_fanout_blocks stays off.
-    parsed = _parse_primitive_calls(loop_body, idx_var="idx", allow_fanout_consumer=True)
+    parsed = _parse_primitive_calls(
+        loop_body,
+        idx_var="idx",
+        allow_fanout_consumer=True,
+        initial_locals=seed_locals,
+        initial_known_local_names=seed_known_local_names,
+    )
     if parsed is None:
         return None
     values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels, shared_dir_refs = parsed
