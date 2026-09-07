@@ -361,13 +361,13 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     if option.channel == "fifo":
         return [f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist || return 1']
     if option.channel == "shared_dir":
-        # Always a plain get_absolute_shdirname lookup, regardless of
-        # any edges into/out of this option — those exist purely to
-        # document the dependency in the canvas (see the frontend's
+        # Always define_opt_from_shared_dir, regardless of any edges
+        # into/out of this option — those exist purely to document the
+        # dependency in the canvas (see the frontend's
         # isValidProgramConnection); the engine derives the real
         # processdeps on its own, from every writer of the same
         # directory resolving to an identical absolute path.
-        return [f'debasher::define_opt "{option.label}" "$(debasher::get_absolute_shdirname "{option.value}")" optlist || return 1']
+        return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
     if option.commandLine:
         # A file-typed command-line option gets the validating variant
         # (checks the path exists and normalizes it to absolute) —

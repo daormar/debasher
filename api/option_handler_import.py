@@ -28,7 +28,7 @@ import):
   values/connections; only a body that can't be parsed that way falls
   back to "manual" with the pair kept verbatim.
 - _define_opts is matched against the grammar of option-definition
-  primitives (define_opt[_from_proc_out[_task_out]],
+  primitives (define_opt[_from_proc_out[_task_out]|_from_shared_dir],
   define_cmdline_opt[_if_given], define_cmdline_infile_opt[_if_given],
   define_cmdline_flag_if_given, define_flag, define_value_desc_opt,
   define_fifo_opt[_generator] — all of them just other ways to define
@@ -126,11 +126,11 @@ class OptionHandlerResult:
     # program_import.py resolves the label into an actual
     # ProgramOption.countSourceOptionId once both options have real ids.
     fanout_count_source_labels: dict[str, str] = field(default_factory=dict)
-    # Option label -> SharedDirRef, for every define_opt recognized as
-    # script_generation.py's one-step shared_dir shape (see
-    # _try_parse_shared_dir_define_opt). Additive: a matched label also
-    # keeps its ordinary option_values[label] entry (the raw
-    # "$(get_absolute_shdirname ...)" text), so an option
+    # Option label -> SharedDirRef, for every define_opt_from_shared_dir
+    # call (see the dispatch in _parse_primitive_calls). Additive: a
+    # matched label also keeps its ordinary option_values[label] entry
+    # (a synthesized "$(debasher::get_absolute_shdirname ...)"
+    # expression — see _parse_primitive_calls), so an option
     # program_import.py can't confirm against a real shared directory
     # still round-trips as a plain value rather than vanishing.
     shared_dir_refs: dict[str, SharedDirRef] = field(default_factory=dict)
@@ -174,7 +174,8 @@ _DEFINE_OPTS_CALL_RE = re.compile(
     r"^(?:debasher::)?(?P<func>define_cmdline_flag_if_given|define_cmdline_infile_opt_if_given|"
     r"define_cmdline_opt_if_given|define_cmdline_infile_opt|"
     r"define_cmdline_opt|define_value_desc_opt|define_fifo_opt_generator|define_fifo_opt|"
-    r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|define_opt)"
+    r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|"
+    r"define_opt_from_shared_dir|define_opt)"
     r"(?:\s+(?P<args>.*?))?\s*(?:\|\|.*)?$"
 )
 _TOKEN_RE = re.compile(r'"(?P<q>[^"]*)"|(?P<bare>\S+)')
@@ -193,6 +194,7 @@ _CALL_TOKEN_COUNTS = {
     "define_fifo_opt_generator": 4,  # <label> <fifoname> <task_idx> <optlist>
     "define_opt_from_proc_out": 4,  # <label> <proc> <opt> <optlist>
     "define_opt_from_proc_task_out": 5,  # <label> <proc> <task_idx> <opt> <optlist>
+    "define_opt_from_shared_dir": 3,  # <label> <shdirname> <optlist>
     "define_opt": 3,  # <label> <value> <optlist>
 }
 
@@ -286,24 +288,6 @@ _FANOUT_DO_LINE = "do"
 _FANOUT_DONE_LINE = "done"
 
 
-# script_generation.py's one-step shared_dir shape (see
-# _option_definition_line's "shared_dir" branch):
-#     define_opt "<label>" "$(get_absolute_shdirname "<arg>")" optlist || return 1
-# <arg> is either a literal directory name or a variable reference —
-# both quoted the same way, e.g. "data" or "${SOME_BASENAME}". The
-# nested double quotes around <arg> aren't a quoting context the
-# generic _tokenize (which has no notion of "$(...)" as its own scope)
-# can split correctly — it sees the inner `"` as closing the outer
-# value token early — so this is matched against the raw line
-# directly, the same way _try_parse_fanout_block matches its own fixed
-# shape, rather than going through _tokenize at all.
-_SHARED_DIR_DEFINE_OPT_RE = re.compile(
-    r'^(?:debasher::)?define_opt\s+"(?P<label>[^"]+)"\s+'
-    r'"(?P<value>\$\(get_absolute_shdirname\s+"(?P<arg>[^"]*)"\))"'
-    r'\s+optlist\s*(?:\|\|.*)?$'
-)
-
-
 def _shared_dir_ref_from_arg(arg: str) -> SharedDirRef:
     var_match = _VAR_REF_RE.match(arg)
     if var_match:
@@ -311,22 +295,8 @@ def _shared_dir_ref_from_arg(arg: str) -> SharedDirRef:
     return SharedDirRef(literal_name=arg)
 
 
-def _try_parse_shared_dir_define_opt(line: str) -> tuple[str, SharedDirRef, str] | None:
-    """
-    Recognizes one line matching _SHARED_DIR_DEFINE_OPT_RE. Returns
-    (label, SharedDirRef, raw value text) — the value text is kept as
-    the option's ordinary value too (see OptionHandlerResult.
-    shared_dir_refs) — or None if `line` isn't this exact shape.
-    """
-    match = _SHARED_DIR_DEFINE_OPT_RE.match(line)
-    if match is None:
-        return None
-    return match.group("label"), _shared_dir_ref_from_arg(match.group("arg")), match.group("value")
-
-
 _SHARED_DIR_SCAN_RE = re.compile(
-    r'(?:debasher::)?define_opt\s+"(?P<label>[^"]+)"\s+'
-    r'"\$\(get_absolute_shdirname\s+"(?P<arg>[^"]*)"\)"'
+    r'(?:debasher::)?define_opt_from_shared_dir\s+"(?P<label>[^"]+)"\s+"(?P<arg>[^"]*)"'
 )
 
 
@@ -489,14 +459,6 @@ def _parse_primitive_calls(
                 i += consumed
                 continue
 
-        shared_dir_match = _try_parse_shared_dir_define_opt(line)
-        if shared_dir_match is not None:
-            label, shared_dir_ref, value_text = shared_dir_match
-            values[label] = value_text
-            shared_dir_refs[label] = shared_dir_ref
-            i += 1
-            continue
-
         local_match = _LOCAL_ASSIGN_RE.match(line)
         if local_match:
             locals_table[local_match.group("name")] = _strip_one_quote_layer(local_match.group("expr"))
@@ -551,6 +513,17 @@ def _parse_primitive_calls(
             if var_ref_match and var_ref_match.group("name") in locals_table:
                 value_text = locals_table[var_ref_match.group("name")]
             values[label[0]] = value_text
+        elif func == "define_opt_from_shared_dir":
+            label, shdirname = tokens[0], tokens[1]
+            if not label[1]:
+                return None
+            shared_dir_refs[label[0]] = _shared_dir_ref_from_arg(shdirname[0])
+            # Kept as the option's ordinary value too (see
+            # OptionHandlerResult.shared_dir_refs) — a synthesized,
+            # behavior-preserving expression, used only if
+            # program_import.py can't confirm shared_dir_refs[label]
+            # against a real shared directory.
+            values[label[0]] = f'$(debasher::get_absolute_shdirname "{shdirname[0]}")'
         elif func == "define_value_desc_opt":
             # Its value is an engine-synthesized descriptor for the
             # process's own output, consumed elsewhere via

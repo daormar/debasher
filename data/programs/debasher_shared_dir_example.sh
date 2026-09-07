@@ -83,7 +83,7 @@ shared_dir_writer_define_opts()
 
     # Define data directory option (the shared directory itself, not a
     # specific file inside it)
-    define_opt "-out-datadir" "$(get_absolute_shdirname "data")" optlist || return 1
+    define_opt_from_shared_dir "-out-datadir" "data" optlist || return 1
 
     # Save option list
     save_opt_list optlist
@@ -136,7 +136,7 @@ shared_dir_reader_define_opts()
     # directory: the engine derives the dependency between the two
     # processes on its own, from both resolving to the identical
     # absolute path)
-    define_opt "-datadir" "$(get_absolute_shdirname "data")" optlist || return 1
+    define_opt_from_shared_dir "-datadir" "data" optlist || return 1
 
     # Save option list
     save_opt_list optlist
