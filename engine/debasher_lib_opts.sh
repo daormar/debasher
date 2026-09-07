@@ -1596,6 +1596,42 @@ debasher::get_absolute_shdirname()
 get_absolute_shdirname() { debasher::get_absolute_shdirname "$@"; }
 
 ########
+# Public: Defines process option whose value is the absolute path of a
+# shared directory.
+#
+# $1 - Option name.
+# $2 - Name of the shared directory (as given to define_shared_dir).
+# $3 - Name of variable that will store the information about the option to be added.
+#
+# Examples
+#
+#   debasher::define_opt_from_shared_dir "-datadir" "data" "optlist"
+#
+# The function does not return any value
+debasher::define_opt_from_shared_dir()
+{
+    local opt=$1
+    local shdirname=$2
+    local abs_shdirname=`debasher::get_absolute_shdirname "${shdirname}"`
+    debasher::define_opt "${opt}" "${abs_shdirname}" "$3"
+}
+
+########
+# Public: Defines process option whose value is the absolute path of a
+# shared directory.
+#
+# $1 - Option name.
+# $2 - Name of the shared directory (as given to define_shared_dir).
+# $3 - Name of variable that will store the information about the option to be added.
+#
+# Examples
+#
+#   define_opt_from_shared_dir "-datadir" "data" "optlist"
+#
+# The function does not return any value
+define_opt_from_shared_dir() { debasher::define_opt_from_shared_dir "$@"; }
+
+########
 debasher::_get_absolute_fifodir()
 {
     echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_FIFOS_DIRNAME}"
