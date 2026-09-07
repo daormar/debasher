@@ -2,7 +2,7 @@ import pydantic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import persistence, program_import
+from .. import persistence, program_import, script_generation
 from ..models import Program
 
 router = APIRouter(prefix="/api/programs", tags=["programs"])
@@ -25,6 +25,14 @@ class LoadProgramRequest(BaseModel):
 class ImportProgramRequest(BaseModel):
     scriptPath: str
     debasherModDir: str = ""
+
+
+class GetAllEnvVarsRequest(BaseModel):
+    program: Program
+
+
+class GetAllEnvVarsResponse(BaseModel):
+    envVars: dict[str, str]
 
 
 @router.post("/save", response_model=SaveProgramResponse)
@@ -91,3 +99,15 @@ def import_program(request: ImportProgramRequest) -> Program:
         )
     except RuntimeError as err:
         raise HTTPException(status_code=400, detail=str(err))
+
+
+@router.post("/all-envvars", response_model=GetAllEnvVarsResponse)
+def get_all_envvars(request: GetAllEnvVarsRequest) -> GetAllEnvVarsResponse:
+    """
+    Every variable newly bound while sourcing the program's current
+    preamble (see script_generation.get_all_envvars) — recomputed live
+    each time this is called, e.g. every time the Env vars editor's
+    read-only "module-defined" section is opened, rather than cached
+    against whatever was true when the program was last imported.
+    """
+    return GetAllEnvVarsResponse(envVars=script_generation.get_all_envvars(request.program))

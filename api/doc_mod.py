@@ -19,6 +19,7 @@ _SHARED_DIRS_HEADING_RE = re.compile(r"^## Shared Directories$")
 _SHARED_DIR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`$")
 _PROCESS_HEADING_RE = re.compile(r"^## (?P<name>.+)$")
 _ALL_SHARED_DIRS_HEADING_RE = re.compile(r"^## All Shared Directories$")
+_ALL_ENVVARS_HEADING_RE = re.compile(r"^## All Module Variables$")
 _RESOLVED_VARS_HEADING_RE = re.compile(r"^## Resolved Variables$")
 _RESOLVED_VAR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`: `(?P<value>.*)`$")
 
@@ -153,6 +154,23 @@ def parse_all_shared_dirs_markdown(markdown: str) -> list[str]:
         m.group("name").strip()
         for m in _parse_bullet_section(markdown, _ALL_SHARED_DIRS_HEADING_RE, _SHARED_DIR_ITEM_RE)
     ]
+
+
+def parse_all_envvars_markdown(markdown: str) -> dict[str, str]:
+    """
+    Parse the output of debasher_doc_mod --show-all-envvars: every
+    variable newly bound while sourcing the module (plus every module it
+    loads, transitively) — see debasher::_show_all_program_envvars —
+    as opposed to parse_resolved_vars_markdown, which requires already
+    knowing the name to look up. Used by script_generation.get_all_envvars
+    against a program's own (possibly stubbed, see there) generated
+    script, run with only this one flag, so no other "## ..." section
+    precedes it — see _parse_bullet_section.
+    """
+    return {
+        m.group("name").strip(): m.group("value")
+        for m in _parse_bullet_section(markdown, _ALL_ENVVARS_HEADING_RE, _RESOLVED_VAR_ITEM_RE)
+    }
 
 
 def parse_resolved_vars_markdown(markdown: str) -> dict[str, str]:

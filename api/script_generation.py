@@ -14,7 +14,7 @@ from .debasher_constants import (
     PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
     PROCESS_METHOD_EXEC_SUFFIX,
 )
-from .doc_mod import run_get_proc_info
+from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
 from .models import ComputationalSpecs, AdditionalSpecs, Program
 
@@ -660,6 +660,88 @@ def _own_code_canonicalized(process_name: str, language: str, code: str, debashe
         return _proc_info_code(code_path, process_name, debasher_mod_dir)
 
 
+def _stub_processes_missing_code(program: Program) -> Program:
+    """
+    Returns a copy of `program` where every non-alias process with no
+    code yet gets a trivial bash stub ("<name>() { :; }") — just enough
+    to satisfy add_debasher_process's exec-function check (see
+    get_all_envvars) — leaving every other process, and the real
+    `program` passed in, untouched. An alias/external-alias process
+    needs no stub: it supplies no exec function of its own even when
+    finished (see _add_exec_func), so an empty one isn't "missing"
+    anything add_debasher_process would reject.
+    """
+    stubbed_processes = []
+    changed = False
+    for process in program.processes:
+        has_alias = process.additionalSpecs.alias or process.additionalSpecs.externalAlias
+        if has_alias or process.code:
+            stubbed_processes.append(process)
+            continue
+        changed = True
+        stubbed_processes.append(
+            process.copy(update={"language": "bash", "code": f"{process.name}()\n{{\n    :\n}}"})
+        )
+    return program.copy(update={"processes": stubbed_processes}) if changed else program
+
+
+def get_all_envvars(program: Program) -> dict[str, str]:
+    """
+    Every variable newly bound while sourcing the program's own
+    generated script (see generate_script) — the module-defined/
+    inherited variables the Env vars editor's read-only section shows,
+    always recomputed against the program's current preamble/processes
+    rather than a stale snapshot from whenever it might have been
+    imported.
+
+    Runs debasher_doc_mod --show-all-envvars against the FULL generated
+    script (not just the preamble) so a variable bound by something
+    other than the preamble is seen too. debasher_doc_mod requires the
+    file to define a "_program" function and calls add_debasher_process
+    for every process in it (see _add_program_function) — which
+    hard-fails the *whole* run if any one process has no exec function
+    (debasher::_add_debasher_regular_process's `|| exit 1` in
+    engine/debasher_lib_programs.sh, not a per-process skip). Since this
+    runs live while the program is still being edited — where an
+    in-progress process routinely has no code yet — every such process
+    gets a trivial stub for this check only (_stub_processes_missing_code),
+    never for the program's real saved/generated script.
+
+    Calls generate_script(..., skip_redundant_check=True), skipping
+    _find_redundant_exec_funcs: that check exists to avoid embedding a
+    process's code when a loaded module already provides it (so the
+    real generated script doesn't duplicate it), which costs one or two
+    debasher_get_proc_info subprocess calls per process — real money
+    for a script that's regenerated on every keystroke, but pointless
+    here, where the script is thrown away right after this one
+    debasher_doc_mod call and nothing depends on which copy of a
+    same-named function bash ends up keeping.
+
+    A failure (tool missing, generation error, timeout) is a
+    convenience miss, not a hard error — mirrors how
+    _find_redundant_exec_funcs treats _module_provided_code failing —
+    so this returns {} rather than raising.
+    """
+    if not program.name:
+        return {}
+
+    debasher_mod_dir = program.envVars.get("DEBASHER_MOD_DIR", "")
+    stubbed_program = _stub_processes_missing_code(program)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # debasher_doc_mod derives the expected "_program" function name
+        # from the file's own basename (debasher::_get_program_funcname
+        # in engine/debasher_lib_modules.sh), which must match what
+        # _add_program_function actually emitted.
+        script_path = Path(tmp_dir) / f"{program.name}.sh"
+        script_path.write_text(generate_script(stubbed_program, skip_redundant_check=True))
+        try:
+            markdown = run_doc_mod(script_path, debasher_mod_dir, flags=("--show-all-envvars",))
+        except RuntimeError:
+            return {}
+    return parse_all_envvars_markdown(markdown)
+
+
 def _find_redundant_exec_funcs(program: Program) -> frozenset[str]:
     """
     Returns the names of processes whose exec function shouldn't be
@@ -703,7 +785,7 @@ def _find_redundant_exec_funcs(program: Program) -> frozenset[str]:
     return frozenset(redundant)
 
 
-def generate_script(program: Program) -> str:
+def generate_script(program: Program, skip_redundant_check: bool = False) -> str:
     """
     Generate the contents of the <program.name>.sh file for `program`.
 
@@ -714,6 +796,11 @@ def generate_script(program: Program) -> str:
 
     A process's exec function is left out when it's redundant with one
     already provided by a module the preamble loads — see
-    _find_redundant_exec_funcs.
+    _find_redundant_exec_funcs — unless `skip_redundant_check` is set,
+    which skips that check (and its debasher_get_proc_info subprocess
+    calls) entirely: get_all_envvars sets it, since it throws the script
+    away right after one debasher_doc_mod call, where the duplicate-code
+    concern _find_redundant_exec_funcs exists for doesn't apply.
     """
-    return _build_script(program, skip_exec_for=_find_redundant_exec_funcs(program))
+    skip_exec_for = frozenset() if skip_redundant_check else _find_redundant_exec_funcs(program)
+    return _build_script(program, skip_exec_for=skip_exec_for)

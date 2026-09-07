@@ -30,7 +30,8 @@ print_desc()
 usage()
 {
     echo "debasher_doc_mod          -m <string> [-s <string>]"
-    echo "                          [--show-shdirs] [--show-all-shdirs] [--show-meths]"
+    echo "                          [--show-shdirs] [--show-all-shdirs] [--show-all-envvars]"
+    echo "                          [--show-meths]"
     echo "                          [--show-vars] [--show-opts] [--show-opthnd]"
     echo "                          [--show-impl] [--show-specs]"
     echo "                          [--resolve-var <string>]... [--help]"
@@ -40,6 +41,10 @@ usage()
     echo "--show-shdirs             Show shared directories defined directly by the module"
     echo "--show-all-shdirs         Show every shared directory reachable from the program"
     echo "                          (the module plus every module it loads, transitively)"
+    echo "--show-all-envvars        Show every variable newly bound while loading the module"
+    echo "                          (the module plus every module it loads, transitively),"
+    echo "                          excluding names already set beforehand and the engine's"
+    echo "                          own internal bookkeeping"
     echo "--resolve-var <string>    Show the value of a variable already set after loading"
     echo "                          the module (may be given multiple times); this is a"
     echo "                          plain variable read, not a function call"
@@ -59,6 +64,7 @@ read_pars()
     s_given=0
     showshdirs_given=0
     showallshdirs_given=0
+    showallenvvars_given=0
     showmeths_given=0
     showvars_given=0
     showopts_given=0
@@ -86,6 +92,8 @@ read_pars()
             "--show-shdirs") showshdirs_given=1
                           ;;
             "--show-all-shdirs") showallshdirs_given=1
+                          ;;
+            "--show-all-envvars") showallenvvars_given=1
                           ;;
             "--show-meths") showmeths_given=1
                           ;;
@@ -126,8 +134,27 @@ check_pars()
 ########
 obtain_info_for_module()
 {
+    # Capture every variable name already bound before the module (and
+    # everything it loads) is sourced, so --show-all-envvars can report
+    # only what loading actually added. Must happen before the load
+    # below, and is skipped entirely when not requested.
+    local envvars_before=""
+    local envvars_after=""
+    if [ "${showallenvvars_given}" -eq 1 ]; then
+        envvars_before=$(compgen -v)
+    fi
+
     # Load debasher module
     debasher::load_debasher_module "$module_fname" || return 1
+
+    # Snapshot right after loading (sourcing) the module — where a real
+    # module's own variables are actually defined — rather than after
+    # the next step below, which only registers processes and, in
+    # doing so, leaks a few of the engine's own loop variables (see
+    # debasher::_show_all_program_envvars).
+    if [ "${showallenvvars_given}" -eq 1 ]; then
+        envvars_after=$(compgen -v)
+    fi
 
     # Execute program function for module
     debasher::_exec_program_func_for_module "${module_fname}"
@@ -142,6 +169,16 @@ obtain_info_for_module()
         echo "## All Shared Directories"
         echo ""
         debasher::_show_all_program_shared_dirs
+        echo ""
+    fi
+
+    # Show every variable newly bound by loading the module — distinct
+    # from --resolve-var, which requires already knowing the name to
+    # look up
+    if [ "${showallenvvars_given}" -eq 1 ]; then
+        echo "## All Module Variables"
+        echo ""
+        debasher::_show_all_program_envvars "${envvars_before}" "${envvars_after}"
         echo ""
     fi
 

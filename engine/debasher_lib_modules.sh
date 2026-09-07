@@ -184,6 +184,40 @@ debasher::load_debasher_module()
 load_debasher_module() { debasher::load_debasher_module "$@"; }
 
 ########
+debasher::_show_all_program_envvars()
+{
+    # $1 - newline-separated variable names (as produced by "compgen
+    #      -v") captured right before load_debasher_module ran.
+    # $2 - the same, captured right after loading the module (plus
+    #      everything it loads, transitively). Both snapshots are taken
+    #      by the caller, in its own stack frame, rather than here: a
+    #      "compgen -v" run from *inside* this function would also see
+    #      this function's own locals, which would then wrongly show up
+    #      as "new".
+    #
+    # Anything in $2 but not $1 was bound while loading — a
+    # caller-supplied name like DEBASHER_MOD_DIR is excluded because it
+    # was already set beforehand, and the engine's own bookkeeping
+    # (DEBASHER_*, plus plain bash/shell state a "cd" or subshell
+    # naturally updates) is excluded so only the module's own variables
+    # show.
+    local before=$1
+    local after=$2
+
+    local name
+    while IFS= read -r name; do
+        case "$name" in
+            DEBASHER_*|BASH_*) continue ;;
+            OLDPWD|PWD|DIRSTACK|PIPESTATUS|FUNCNAME|GROUPS|SECONDS|RANDOM|\
+LINENO|REPLY|EUID|UID|PPID|BASHPID|SHLVL|HISTCMD|OPTIND|OPTARG|IFS) continue ;;
+        esac
+        if ! "${GREP}" -qxF "$name" <<< "$before"; then
+            echo "- \`${name}\`: \`${!name}\`"
+        fi
+    done <<< "$after"
+}
+
+########
 debasher::_get_mod_vars_and_funcs_fname()
 {
     local dirname=$1
