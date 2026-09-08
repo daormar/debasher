@@ -132,10 +132,14 @@ export default function ProgramCanvas() {
       changes.forEach(change => {
         if (change.type === "position" && change.position) {
           moveProcess(change.id, change.position);
+        } else if (change.type === "select" && change.selected) {
+          // Dragging a node selects it in React Flow (selectNodesOnDrag)
+          // without firing onNodeClick, so mirror that into app state here.
+          selectProcess(change.id);
         }
       });
     },
-    [moveProcess]
+    [moveProcess, selectProcess]
   );
 
   const onConnect = useCallback(
