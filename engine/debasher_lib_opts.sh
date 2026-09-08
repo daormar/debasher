@@ -1012,6 +1012,70 @@ debasher::define_cmdline_opt()
 define_cmdline_opt() { debasher::define_cmdline_opt "$@"; }
 
 ########
+# Public: Defines process option from a process specification attribute
+# (computational or additional). The attribute is searched for first
+# among the process's computational specs (cpus, mem, time, nodes,
+# account, partition, throttle) and, if not found there, among its
+# additional specs (processdeps, force, alias, ext_alias); aborts if
+# found in neither.
+#
+# $1 - Process specification, as given to the `define_opts` method.
+# $2 - Name of the option to be added.
+# $3 - Name of the process specification attribute (e.g. "cpus", "mem").
+# $4 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_procspec_opt "${process_spec}" "-cpus" "cpus" "optlist"
+#
+# The function does not return any value
+debasher::define_procspec_opt()
+{
+    local process_spec=$1
+    local opt=$2
+    local specname=$3
+    local varname=$4
+
+    # Look for the attribute among computational specs
+    local comp_specs=`debasher::extract_process_comp_specs "${process_spec}"`
+    local value=`debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}"`
+
+    # Fall back to additional specs if not found
+    if [ "${value}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        local additional_specs=`debasher::extract_process_additional_specs "${process_spec}"`
+        value=`debasher::extract_attr_from_process_additional_specs "${additional_specs}" "${specname}"`
+    fi
+
+    if [ "${value}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        debasher::errmsg "${specname} attribute not found in process spec (option: $opt)"
+        return 1
+    fi
+
+    # Add option
+    debasher::define_opt "$opt" "$value" "$varname"
+}
+
+########
+# Public: Defines process option from a process specification attribute
+# (computational or additional). The attribute is searched for first
+# among the process's computational specs (cpus, mem, time, nodes,
+# account, partition, throttle) and, if not found there, among its
+# additional specs (processdeps, force, alias, ext_alias); aborts if
+# found in neither.
+#
+# $1 - Process specification, as given to the `define_opts` method.
+# $2 - Name of the option to be added.
+# $3 - Name of the process specification attribute (e.g. "cpus", "mem").
+# $4 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_procspec_opt "${process_spec}" "-cpus" "cpus" "optlist"
+#
+# The function does not return any value
+define_procspec_opt() { debasher::define_procspec_opt "$@"; }
+
+########
 # Public: Defines process option only if it was given through the command-line.
 #
 # $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.

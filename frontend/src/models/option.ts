@@ -19,12 +19,41 @@ export interface ProgramOption {
   value: string;
   commandLine: boolean;
   mandatory: boolean;
+  // On a "standard"-mode process only, whether this option's value comes
+  // from an attribute of the process's own process spec (via
+  // debasher::define_procspec_opt) rather than a literal/connection/
+  // channel-delivered value — see api/models.py's
+  // ProgramOption.fromProcessSpec for why this is deliberately its own
+  // flag rather than folded into `channel`. Mutually exclusive with
+  // commandLine. When true, `value` holds the spec attribute's name
+  // (e.g. "cpus", one of PROCESS_SPEC_ATTRIBUTE_NAMES) rather than a
+  // literal value — the same convention a "shared_dir"-channel option
+  // already uses for its own `value` (a directory name, not a path).
+  fromProcessSpec: boolean;
   // On a "standard"-mode process only (see isFanoutOption), the id of
   // another option on the SAME process (with commandLine=true) whose
   // value supplies the runtime count for this fanout family — e.g.
   // "-outfith"'s countSourceOptionId points at that process's own "-w".
   countSourceOptionId?: string;
 }
+
+// Process-spec attribute names a "from process spec" option can name in
+// `value` — restricted to the ones ComputationalSpecs/AdditionalSpecs
+// (see models/process.ts) actually model and let a user set elsewhere in
+// this editor, out of the full set debasher::define_procspec_opt itself
+// accepts (which also includes the engine's nodes/account/partition/
+// throttle computational-spec attributes — process.ts has no fields for
+// those, so offering them here would let a user reference a value they
+// can't set anywhere in the app).
+export const PROCESS_SPEC_ATTRIBUTE_NAMES = [
+  "cpus",
+  "mem",
+  "time",
+  "processdeps",
+  "force",
+  "alias",
+  "ext_alias",
+] as const;
 
 export function getOptionDirection(label: string): OptionDirection {
   return label.startsWith("-out") || label.startsWith("--out")

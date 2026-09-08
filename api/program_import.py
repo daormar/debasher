@@ -452,6 +452,12 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 option.channel = "value_desc"
             if option.label in result.fifo_labels:
                 option.channel = "fifo"
+            # Not a channel (see ProgramOption.fromProcessSpec) — a
+            # process-spec-sourced option is an ordinary literal once
+            # resolved, this only flags where the value in `option.value`
+            # (the spec attribute's name, e.g. "cpus") came from.
+            if option.label in result.procspec_labels:
+                option.fromProcessSpec = True
 
         # Resolve each recovered fanout family's count-source label (see
         # OptionHandlerResult.fanout_count_source_labels) into the

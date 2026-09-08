@@ -6,7 +6,12 @@ import type {
   OptionDataType,
   OptionChannel,
 } from "../models/option";
-import { getOptionDirection, isValidOptionLabel, isFanoutOption } from "../models/option";
+import {
+  getOptionDirection,
+  isValidOptionLabel,
+  isFanoutOption,
+  PROCESS_SPEC_ATTRIBUTE_NAMES,
+} from "../models/option";
 
 interface Props {
   processId: string;
@@ -190,10 +195,26 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
   const [commandLine, setCommandLine] =
     useState(option.commandLine);
 
+  const [fromProcessSpec, setFromProcessSpec] =
+    useState(option.fromProcessSpec);
+
   const [mandatory, setMandatory] =
     useState(option.mandatory);
 
+  useEffect(() => {
+    // Not a channel (see ProgramOption.fromProcessSpec) — but, like a
+    // connection, it's still incompatible with one: a process-spec-
+    // sourced option's value comes from exactly one define_procspec_opt
+    // call, which can't also be a define_value_desc_opt/define_fifo_opt/
+    // define_opt_from_shared_dir call for the same label.
+    if (fromProcessSpec && channel !== "none") {
+      setChannel("none");
+    }
+  }, [fromProcessSpec, channel]);
+
   function handleSave() {
+
+    const savedFromProcessSpec = !isFlag && fromProcessSpec;
 
     updateOption(processId, option.id, {
       label,
@@ -202,8 +223,9 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       channel: isFlag ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel,
       description,
       value: isFlag || isValueDescriptor ? "" : value,
-      commandLine,
-      mandatory: commandLine && mandatory && !isFlag,
+      commandLine: commandLine && !savedFromProcessSpec,
+      fromProcessSpec: savedFromProcessSpec,
+      mandatory: commandLine && !savedFromProcessSpec && mandatory && !isFlag,
       countSourceOptionId: isFanout ? (countSourceOptionId || undefined) : undefined,
     });
 
@@ -227,7 +249,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
       <div
         style={{
-          width: 360,
+          width: 480,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -372,47 +394,141 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         />
 
-        <label>
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+          }}
+        >
 
-          <input
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
 
-            type="checkbox"
+            <label>
 
-            checked={commandLine}
+              <input
 
-            onChange={(event) =>
-              setCommandLine(event.target.checked)
-            }
+                type="checkbox"
 
-          />
-          {" "}Command line
+                checked={commandLine}
 
-        </label>
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setCommandLine(checked);
+                  if (checked) {
+                    setFromProcessSpec(false);
+                  }
+                }}
 
-        <label style={{ color: commandLine && !isFlag ? undefined : "#999" }}>
+              />
+              {" "}Command line
 
-          <input
+            </label>
 
-            type="checkbox"
+            <label style={{ color: commandLine && !isFlag ? undefined : "#999" }}>
 
-            checked={isFlag ? false : mandatory}
+              <input
 
-            disabled={!commandLine || isFlag}
+                type="checkbox"
 
-            onChange={(event) =>
-              setMandatory(event.target.checked)
-            }
+                checked={isFlag ? false : mandatory}
 
-          />
-          {" "}Mandatory
+                disabled={!commandLine || isFlag}
 
-        </label>
+                onChange={(event) =>
+                  setMandatory(event.target.checked)
+                }
+
+              />
+              {" "}Mandatory
+
+            </label>
+
+          </div>
+
+          {!isFlag && (
+
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                borderLeft: "1px solid #ddd",
+                paddingLeft: 16,
+              }}
+            >
+
+              <label>
+
+                <input
+
+                  type="checkbox"
+
+                  checked={fromProcessSpec}
+
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setFromProcessSpec(checked);
+                    if (checked) {
+                      setCommandLine(false);
+                    }
+                  }}
+
+                />
+                {" "}From process spec
+
+              </label>
+
+              <label style={{ color: fromProcessSpec ? undefined : "#999" }}>
+                Process spec attribute
+              </label>
+
+              <select
+
+                value={value}
+
+                disabled={!fromProcessSpec}
+
+                onChange={(event) =>
+                  setValue(event.target.value)
+                }
+
+                style={{
+                  width: "100%",
+                }}
+
+              >
+
+                <option value="">
+                  (select attribute)
+                </option>
+
+                {PROCESS_SPEC_ATTRIBUTE_NAMES.map(attr => (
+                  <option key={attr} value={attr}>
+                    {attr}
+                  </option>
+                ))}
+
+              </select>
+
+            </div>
+
+          )}
+
+        </div>
 
         {!isFlag && (
 
           <>
 
-            <label style={{ color: manualMode ? "#999" : undefined }}>
+            <label style={{ color: manualMode || commandLine || fromProcessSpec ? "#999" : undefined }}>
               Channel
             </label>
 
@@ -437,7 +553,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
                 value={channel}
 
-                disabled={manualMode}
+                disabled={manualMode || commandLine || fromProcessSpec}
 
                 onChange={(event) =>
                   setChannel(event.target.value as OptionChannel)
@@ -479,7 +595,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
           <>
 
-            <label style={{ color: commandLine || isValueDescriptor || manualMode ? "#999" : undefined }}>
+            <label style={{ color: commandLine || fromProcessSpec || isValueDescriptor || manualMode ? "#999" : undefined }}>
               {isFifo ? "FIFO name" : "Value"}
             </label>
 
@@ -513,7 +629,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
                 value={value}
 
-                disabled={commandLine || manualMode}
+                disabled={commandLine || fromProcessSpec || manualMode}
 
                 onChange={(event) =>
                   setValue(event.target.value)
@@ -541,9 +657,9 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
               <input
 
-                value={isValueDescriptor ? "" : value}
+                value={isValueDescriptor || fromProcessSpec || commandLine ? "" : value}
 
-                disabled={commandLine || isValueDescriptor || manualMode}
+                disabled={commandLine || fromProcessSpec || isValueDescriptor || manualMode}
 
                 onChange={(event) =>
                   setValue(event.target.value)

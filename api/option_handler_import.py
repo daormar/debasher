@@ -118,6 +118,15 @@ class OptionHandlerResult:
     # best-effort in "manual" mode, exact otherwise.
     value_descriptor_labels: set[str] = field(default_factory=set)
     fifo_labels: set[str] = field(default_factory=set)
+    # Labels defined via define_procspec_opt — program_import.py sets
+    # their option's fromProcessSpec (not channel — see
+    # ProgramOption.fromProcessSpec's own docstring for why) from these.
+    # Additive, like shared_dir_refs below: a matched label also keeps
+    # its ordinary option_values[label] entry, holding the spec
+    # attribute's name itself (e.g. "cpus") rather than its runtime
+    # value, which only the process_spec the engine passes in at
+    # schedule time can resolve.
+    procspec_labels: set[str] = field(default_factory=set)
     # Fanout family option label (e.g. "-outfith") -> the label of the
     # command-line option on the SAME process that supplies its runtime
     # count (e.g. "-w") — see script_generation.py's
@@ -239,7 +248,7 @@ _DEFINE_OPTS_CALL_RE = re.compile(
     r"define_cmdline_opt_if_given|define_cmdline_infile_opt|"
     r"define_cmdline_opt|define_value_desc_opt|define_fifo_opt_generator|define_fifo_opt|"
     r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|"
-    r"define_opt_from_shared_dir|define_opt)"
+    r"define_opt_from_shared_dir|define_procspec_opt|define_opt)"
     r"(?:\s+(?P<args>.*?))?\s*(?:\|\|.*)?$"
 )
 _TOKEN_RE = re.compile(r'"(?P<q>[^"]*)"|(?P<bare>\S+)')
@@ -259,6 +268,7 @@ _CALL_TOKEN_COUNTS = {
     "define_opt_from_proc_out": 4,  # <label> <proc> <opt> <optlist>
     "define_opt_from_proc_task_out": 5,  # <label> <proc> <task_idx> <opt> <optlist>
     "define_opt_from_shared_dir": 3,  # <label> <shdirname> <optlist>
+    "define_procspec_opt": 4,  # <process_spec> <label> <specname> <optlist>
     "define_opt": 3,  # <label> <value> <optlist>
 }
 
@@ -279,6 +289,16 @@ _TASK_CONNECTION_SCAN_RE = re.compile(
 )
 _VALUE_DESC_SCAN_RE = re.compile(r'(?:debasher::)?define_value_desc_opt\s+"(?P<label>[^"]*)"')
 _FIFO_SCAN_RE = re.compile(r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"')
+# The process_spec argument comes first (typically "${process_spec}", one
+# token with no internal space) — skipped the same way
+# _TASK_CONNECTION_SCAN_RE skips a task-index argument. Unlike
+# _FIFO_SCAN_RE/_VALUE_DESC_SCAN_RE, the specname argument is captured
+# too (like _SHARED_DIR_SCAN_RE's own dirname) — it's always a clean
+# literal right there in the call regardless of what else in the body
+# caused the fallback, so recovering it here is exact, not a guess.
+_PROCSPEC_SCAN_RE = re.compile(
+    r'(?:debasher::)?define_procspec_opt\s+[^\s]+\s+"(?P<label>[^"]*)"\s+"(?P<specname>[^"]*)"'
+)
 
 
 def _function_body_lines(source: str) -> list[str] | None:
@@ -463,7 +483,7 @@ def _parse_primitive_calls(
     allow_fanout_consumer: bool = False,
     initial_locals: dict[str, str] | None = None,
     initial_known_local_names: set[str] | None = None,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
     """
     Parses a function body against the closed grammar of option-
     definition primitives — used for _define_opts (standard and, inside
@@ -504,6 +524,7 @@ def _parse_primitive_calls(
     connections: list[ConnectionRef] = []
     value_descriptor_labels: set[str] = set()
     fifo_labels: set[str] = set()
+    procspec_labels: set[str] = set()
     fanout_count_source_labels: dict[str, str] = {}
     shared_dir_refs: dict[str, SharedDirRef] = {}
     locals_table: dict[str, str] = dict(initial_locals) if initial_locals else {}
@@ -629,6 +650,17 @@ def _parse_primitive_calls(
                 return None
             values[label[0]] = value_text
             fifo_labels.add(label[0])
+        elif func == "define_procspec_opt":
+            # <process_spec> <label> <specname> <optlist>. specname isn't
+            # chased through locals (unlike define_opt/define_fifo_opt's
+            # value) — script_generation.py always regenerates it as a
+            # literal, never a computed expression, so anything else
+            # isn't this grammar at all.
+            label, specname = tokens[1], tokens[2]
+            if not (label[1] and specname[1]):
+                return None
+            values[label[0]] = specname[0]
+            procspec_labels.add(label[0])
         elif func == "define_flag":
             label = tokens[0]
             if not label[1]:
@@ -640,14 +672,14 @@ def _parse_primitive_calls(
 
         i += 1
 
-    return values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels, shared_dir_refs
+    return values, connections, value_descriptor_labels, fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs
 
 
 def _parse_function_source(
     source: str,
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
     body = _function_body_lines(source)
     if body is None:
         return None
@@ -698,7 +730,7 @@ def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
 
 def _parse_array_define_opts(
     source: str,
-) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str], dict[str, SharedDirRef]] | None:
+) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str], set[str], dict[str, SharedDirRef]] | None:
     """
     Recognizes script_generation.py's exact array-mode shape (see
     _add_array_opts_func) in a _define_opts body: the standard header
@@ -759,8 +791,8 @@ def _parse_array_define_opts(
     )
     if parsed is None:
         return None
-    values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels, shared_dir_refs = parsed
-    return array_code, values, connections, value_descriptor_labels, fifo_labels, shared_dir_refs
+    values, connections, value_descriptor_labels, fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
+    return array_code, values, connections, value_descriptor_labels, fifo_labels, procspec_labels, shared_dir_refs
 
 
 def scan_connections(source: str) -> list[ConnectionRef]:
@@ -789,6 +821,27 @@ def scan_value_descriptor_labels(source: str) -> set[str]:
 def scan_fifo_labels(source: str) -> set[str]:
     """Best-effort companion to scan_connections/scan_value_descriptor_labels, same reasoning."""
     return {match.group("label") for match in _FIFO_SCAN_RE.finditer(source)}
+
+
+def scan_procspec_values(source: str) -> dict[str, str]:
+    """
+    Best-effort companion to scan_connections, for the same reason —
+    but unlike scan_value_descriptor_labels/scan_fifo_labels, the spec
+    attribute name is captured too (see _PROCSPEC_SCAN_RE), the same way
+    scan_shared_dir_refs captures its own dirname: label -> spec
+    attribute name, doubling as the option's option_values entry so a
+    process that falls back to "manual" still shows the right dropdown
+    selection instead of a blank one.
+    """
+    return {
+        match.group("label"): match.group("specname")
+        for match in _PROCSPEC_SCAN_RE.finditer(source)
+    }
+
+
+def scan_procspec_labels(source: str) -> set[str]:
+    """Best-effort companion to scan_connections/scan_value_descriptor_labels, same reasoning."""
+    return set(scan_procspec_values(source))
 
 
 def _extract_generator_size_code(source: str) -> str | None:
@@ -824,13 +877,14 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         parsed = _parse_function_source(generate_opts) if generate_opts else None
 
         if generator_size_code is not None and parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, _fanout_count_source_labels, shared_dir_refs = parsed
+            values, connections, value_descriptor_labels, fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="generator", generatorSizeCode=generator_size_code),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                procspec_labels=procspec_labels,
                 shared_dir_refs=shared_dir_refs,
             )
 
@@ -849,9 +903,11 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
         return OptionHandlerResult(
             handler=OptionsHandler(mode="manual", manualCode=combined),
+            option_values=scan_procspec_values(combined),
             connections=scan_connections(combined),
             value_descriptor_labels=scan_value_descriptor_labels(combined),
             fifo_labels=scan_fifo_labels(combined),
+            procspec_labels=scan_procspec_labels(combined),
             shared_dir_refs=scan_shared_dir_refs(combined),
         )
 
@@ -861,13 +917,14 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         # among the flat primitive calls.
         parsed = _parse_function_source(define_opts, allow_fanout_blocks=True)
         if parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, fanout_count_source_labels, shared_dir_refs = parsed
+            values, connections, value_descriptor_labels, fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="standard"),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                procspec_labels=procspec_labels,
                 fanout_count_source_labels=fanout_count_source_labels,
                 shared_dir_refs=shared_dir_refs,
             )
@@ -877,21 +934,24 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         # giving up to "manual".
         array_parsed = _parse_array_define_opts(define_opts)
         if array_parsed is not None:
-            array_code, values, connections, value_descriptor_labels, fifo_labels, shared_dir_refs = array_parsed
+            array_code, values, connections, value_descriptor_labels, fifo_labels, procspec_labels, shared_dir_refs = array_parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="array", arrayCode=array_code),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                procspec_labels=procspec_labels,
                 shared_dir_refs=shared_dir_refs,
             )
 
         return OptionHandlerResult(
             handler=OptionsHandler(mode="manual", manualCode=define_opts),
+            option_values=scan_procspec_values(define_opts),
             connections=scan_connections(define_opts),
             value_descriptor_labels=scan_value_descriptor_labels(define_opts),
             fifo_labels=scan_fifo_labels(define_opts),
+            procspec_labels=scan_procspec_labels(define_opts),
             shared_dir_refs=scan_shared_dir_refs(define_opts),
         )
 

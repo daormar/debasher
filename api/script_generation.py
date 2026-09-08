@@ -262,6 +262,8 @@ def _validate_fanout_option(process, option, process_modes) -> None:
         raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t be a flag.')
     if option.commandLine:
         raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t itself be command-line.')
+    if option.fromProcessSpec:
+        raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t be sourced from process spec.')
     if option.direction == "output":
         # "fifo" is the one channel a fanout output can use besides
         # "none" — a family of per-task named pipes (e.g.
@@ -368,6 +370,18 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         # processdeps on its own, from every writer of the same
         # directory resolving to an identical absolute path.
         return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
+    if option.fromProcessSpec:
+        # Not a channel (see ProgramOption.fromProcessSpec's own
+        # docstring) — mutually exclusive with commandLine, unlike the
+        # three channel checks above: a process-spec-sourced option's
+        # value comes from exactly one define_procspec_opt call, which
+        # can't also be a define_cmdline_opt call for the same label.
+        if option.commandLine:
+            raise ValueError(
+                f'Option "{option.label}" on "{process.name}" can\'t be both '
+                '"from process spec" and command-line.'
+            )
+        return [f'debasher::define_procspec_opt "${{process_spec}}" "{option.label}" "{option.value}" optlist || return 1']
     if option.commandLine:
         # A file-typed command-line option gets the validating variant
         # (checks the path exists and normalizes it to absolute) —

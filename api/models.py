@@ -35,6 +35,23 @@ class ProgramOption(BaseModel):
     value: str
     commandLine: bool
     mandatory: bool = False
+    # On a "standard"-mode process only, whether this option's value comes
+    # from an attribute of the process's own process_spec (searched among
+    # computational specs — cpus, mem, time, nodes, account, partition,
+    # throttle — then among additional specs — processdeps, force, alias,
+    # ext_alias — via debasher::define_procspec_opt) rather than being a
+    # literal/connection/channel-delivered value. Deliberately not folded
+    # into `channel`: unlike value_desc/fifo/shared_dir, which describe a
+    # genuinely different runtime delivery mechanism, a process-spec-
+    # sourced option is an ordinary literal once resolved — this is
+    # define-time provenance only, the same kind of thing commandLine
+    # already captures for cmdline-sourced options. Mutually exclusive
+    # with commandLine (see script_generation.py's _option_definition_line).
+    # When true, `value` holds the spec attribute's name (e.g. "cpus"),
+    # not its runtime value — mirroring how a "shared_dir"-channel
+    # option's `value` holds the shared directory's name rather than its
+    # resolved path.
+    fromProcessSpec: bool = False
     # On a "standard"-mode process only, the id of another option on the
     # same process (with commandLine=True) supplying the runtime count
     # for a fanout family (a label ending in "ith") — see
