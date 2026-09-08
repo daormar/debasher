@@ -337,14 +337,30 @@ def _tokenize(args: str) -> list[tuple[str, bool]]:
     interpolated strings) is not, but its raw text is still returned
     since a value argument (unlike a label/proc/opt one) is carried
     through unevaluated regardless of literalness.
+
+    Adjacent matches with no gap between them (e.g. "${abs_datadir}"/out.bam,
+    a quoted piece directly concatenated with a bare one, no space) are one
+    shell word, not two — merged into a single (non-literal) token so a
+    later embedded-reference resolution (_resolve_embedded_refs) sees the
+    whole value at once, same as if it had all been written inside one
+    pair of quotes.
     """
-    tokens = []
+    tokens: list[tuple[str, bool]] = []
+    prev_end: int | None = None
     for match in _TOKEN_RE.finditer(args):
         if match.group("q") is not None:
             text = match.group("q")
-            tokens.append((text, "$" not in text and "`" not in text))
+            is_literal = "$" not in text and "`" not in text
         else:
-            tokens.append((match.group("bare"), False))
+            text = match.group("bare")
+            is_literal = False
+
+        if tokens and match.start() == prev_end:
+            prev_text, _ = tokens[-1]
+            tokens[-1] = (prev_text + text, False)
+        else:
+            tokens.append((text, is_literal))
+        prev_end = match.end()
     return tokens
 
 
