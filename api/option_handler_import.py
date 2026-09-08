@@ -223,24 +223,23 @@ def _chase_local_value(
     value_text: str, locals_table: dict[str, str], known_local_names: set[str]
 ) -> tuple[str, bool]:
     """
-    Resolves a define_opt/define_fifo_opt value token that's a *bare*
-    reference to a local (see _LOCAL_ASSIGN_RE's chasing) into that
-    local's own text. Returns (value_text, False) instead — the caller
-    must reject the whole body — if the token bare-references a local
-    that itself couldn't be resolved to something self-contained (see
-    _resolve_embedded_refs): leaving that reference as literal text
-    would dangle, since script_generation.py never re-emits a local's
-    own declaration.
+    Resolves every local reference in a define_opt/define_fifo_opt value
+    token — whether it's a *bare* whole-string reference (e.g. "$outfile",
+    the common case, produced by chasing an intermediate local per
+    _LOCAL_ASSIGN_RE) or one *embedded* alongside other literal text (e.g.
+    "${abs_datadir}/normal.bam", skipping the intermediate local) — into
+    self-contained text, via _resolve_embedded_refs (a bare reference is
+    just the embedded case spanning the whole string). Returns
+    (value_text, False) instead — the caller must reject the whole body —
+    if the token references a local that itself couldn't be resolved to
+    something self-contained: leaving that reference as literal text
+    would dangle, since script_generation.py never re-emits a local's own
+    declaration.
     """
-    var_ref_match = _VAR_REF_RE.match(value_text)
-    if not var_ref_match:
-        return value_text, True
-    name = var_ref_match.group("name")
-    if name in locals_table:
-        return locals_table[name], True
-    if name in known_local_names:
+    resolved = _resolve_embedded_refs(value_text, locals_table, known_local_names)
+    if resolved is None:
         return value_text, False
-    return value_text, True
+    return resolved, True
 
 
 _DEFINE_OPTS_CALL_RE = re.compile(
