@@ -249,10 +249,18 @@ def _fanout_count_source_option(process, option):
         (o for o in process.options if o.id == option.countSourceOptionId),
         None,
     )
-    if source is None or not source.commandLine:
+    if source is None:
         raise ValueError(
             f'Fanout option "{option.label}" on process "{process.name}" needs '
             "countSourceOptionId set to a command-line option declared on the same process."
+        )
+    if not source.commandLine:
+        raise ValueError(
+            f'Fanout option "{option.label}" on process "{process.name}" has '
+            f'countSourceOptionId set to "{source.label}", but that option isn\'t marked '
+            "as command-line. Check that "
+            f'"{process.name}_identify_cmdline_opts" calls opt_is_cmdline (or '
+            f'opt_is_non_mandatory_cmdline) on "{source.label}".'
         )
     return source
 
