@@ -76,7 +76,7 @@ if [ "$#" -gt 0 ]; then
 fi
 
 # Extract functions to be unset
-funcs_to_unset=`extract_sched_funcs`
+funcs_to_unset=$(extract_sched_funcs)
 
 # Unset previously defined variables and functions
 unset_previous_vars_and_funcs

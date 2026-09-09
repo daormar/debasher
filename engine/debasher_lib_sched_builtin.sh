@@ -53,7 +53,7 @@ debasher::_process_is_unfinished_but_runnable_builtin_sched()
     local processname=$2
 
     # Get .id files of finished tasks
-    local ids=`debasher::_get_launched_array_task_ids "$dirname" $processname`
+    local ids=$(debasher::_get_launched_array_task_ids "$dirname" $processname)
     local -A launched_array_tids
     local id
     for id in ${ids}; do
@@ -70,9 +70,9 @@ debasher::_process_is_unfinished_but_runnable_builtin_sched()
 
         # Check that not all array tasks were launched
 
-        local num_tasks_completed=`debasher::_get_num_tasks_completed "${dirname}" ${processname}`
+        local num_tasks_completed=$(debasher::_get_num_tasks_completed "${dirname}" ${processname})
         if [ "${num_tasks_completed}" -gt 0 ]; then
-            local num_array_tasks_to_finish=`debasher::_get_num_array_tasks "${dirname}" "${processname}"`
+            local num_array_tasks_to_finish=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
             if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
                 return 1
             fi
@@ -97,25 +97,25 @@ debasher::_get_elapsed_time_for_process_builtin()
     local processname=$2
 
     # Obtain number of tasks completed
-    local num_tasks_completed=`debasher::_get_num_tasks_completed "${dirname}" ${processname}`
+    local num_tasks_completed=$(debasher::_get_num_tasks_completed "${dirname}" ${processname})
 
     if [ "${num_tasks_completed}" -gt 0 ]; then
         # Get number of array tasks
-        local num_tasks=`debasher::_get_num_array_tasks "${dirname}" "${processname}"`
+        local num_tasks=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
         case $num_tasks in
             0)  echo ${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
                 ;;
             1)  # Process is not a task array
-                log_filename=`debasher::_get_process_log_filename "${dirname}" ${processname}`
-                local difft=`debasher::_get_elapsed_time_from_logfile "${log_filename}"`
+                log_filename=$(debasher::_get_process_log_filename "${dirname}" ${processname})
+                local difft=$(debasher::_get_elapsed_time_from_logfile "${log_filename}")
                 echo ${difft}
                 ;;
             *)  # Process is a task array
                 local result=""
                 local taskidx
-                for taskidx in `debasher::_get_finished_array_task_indices "${dirname}" ${processname}`; do
-                    local log_filename=`debasher::_get_task_log_filename "${dirname}" ${processname} ${taskidx}`
-                    local difft=`debasher::_get_elapsed_time_from_logfile "${log_filename}"`
+                for taskidx in $(debasher::_get_finished_array_task_indices "${dirname}" ${processname}); do
+                    local log_filename=$(debasher::_get_task_log_filename "${dirname}" ${processname} ${taskidx})
+                    local difft=$(debasher::_get_elapsed_time_from_logfile "${log_filename}")
                     if [ ! -z "${result}" ]; then
                         result="${result} "
                     fi

@@ -117,7 +117,7 @@ debasher::_create_script()
     local processname=$3
     local opt_array_size=$4
 
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
             debasher::_create_slurm_script "${cmdline}" "${dirname}" "$processname" "${opt_array_size}"
@@ -215,7 +215,7 @@ debasher::_launch()
     local outvar=$7
 
     # Launch process
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER}) ## Launch using slurm
             debasher::_slurm_launch "${dirname}" "${processname}" "${array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "${outvar}" || return 1
@@ -231,7 +231,7 @@ debasher::_get_primary_id()
     # may be necessary to complete process execution)
     local launch_id_info=$1
 
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
             debasher::_get_primary_id_slurm "${launch_id_info}"
@@ -250,7 +250,7 @@ debasher::_get_global_id()
     # the others jobs/processes are completed
     local launch_id_info=$1
 
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
             debasher::_get_global_id_slurm "${launch_id_info}"
@@ -277,7 +277,7 @@ debasher::_id_exists()
     local id=$1
 
     # Check id depending on the scheduler
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     local exit_code
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
@@ -298,7 +298,7 @@ debasher::_map_deptype_if_necessary()
 {
     local deptype=$1
 
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
             debasher::_map_deptype_if_necessary_slurm "${deptype}"
@@ -318,7 +318,7 @@ debasher::_write_env_vars_and_funcs()
         local dirname=$1
 
         # Write DeBasher start variables and functions
-        local vars_and_funcs_fname=`debasher::_get_deblib_vars_and_funcs_fname "${dirname}"`
+        local vars_and_funcs_fname=$(debasher::_get_deblib_vars_and_funcs_fname "${dirname}")
         "${CAT}" "${vars_and_funcs_fname}"
 
         # Write environment functions
@@ -337,7 +337,7 @@ debasher::_write_env_vars_and_funcs()
     {
         local dirname=$1
 
-        local vars_and_funcs_fname=`debasher::_get_mod_vars_and_funcs_fname "${dirname}"`
+        local vars_and_funcs_fname=$(debasher::_get_mod_vars_and_funcs_fname "${dirname}")
         "${CAT}" "${vars_and_funcs_fname}"
     }
 
@@ -353,7 +353,7 @@ debasher::_write_env_vars_and_funcs()
 ########
 debasher::seq_execute()
 {
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
 
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
@@ -429,7 +429,7 @@ debasher::_get_elapsed_time_for_process()
     local processname=$2
 
     # Get name of log file
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     local log_filename
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})

@@ -132,15 +132,15 @@ check_pars()
 absolutize_file_paths()
 {
     if [ ${pfile_given} -eq 1 ]; then
-        pfile=`debasher::_get_absolute_path "${pfile}"`
+        pfile=$(debasher::_get_absolute_path "${pfile}")
     fi
 
     if [ ${prg_sopts_given} -eq 1 ]; then
-        prg_sopts=`debasher::_get_absolute_path "${prg_sopts}"`
+        prg_sopts=$(debasher::_get_absolute_path "${prg_sopts}")
     fi
 
     if [ ${prg_opts_given} -eq 1 ]; then
-        prg_opts=`debasher::_get_absolute_path "${prg_opts}"`
+        prg_opts=$(debasher::_get_absolute_path "${prg_opts}")
     fi
 }
 
@@ -190,7 +190,7 @@ process_pars()
     # Set options
     local prg_opts_str
     if [ ${prg_opts_given} -eq 1 ]; then
-        prg_opts_str=`get_prg_opts_str`
+        prg_opts_str=$(get_prg_opts_str)
         eval "prg_opts_arr=(${prg_opts_str})"
     else
         prg_opts_arr=()
@@ -198,7 +198,7 @@ process_pars()
 
     # Get pipe_exec path
     local pipe_exec_path
-    debasher_exec_path=`debasher::_get_debasher_exec_path`
+    debasher_exec_path=$(debasher::_get_debasher_exec_path)
 
     # Read metadata file
     local entry_num=1
@@ -209,7 +209,7 @@ process_pars()
         eval "prg_sopts_arr=(${prg_sopts_str})"
 
         # Obtain --dflt-nodes option
-        dflt_nodes_opt=`get_dflt_nodes_opt`
+        dflt_nodes_opt=$(get_dflt_nodes_opt)
 
         # Print command to execute program
         debasher::_serialize_cmd_as_qstr "${debasher_exec_path}" --pfile "${pfile}" --sched "${sched}" ${dflt_nodes_opt} "${prg_sopts_arr[@]}" "${prg_opts_arr[@]}"

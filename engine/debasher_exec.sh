@@ -151,7 +151,7 @@ read_pars()
             "--builtinsched-mem") shift
                   if [ $# -ne 0 ]; then
                       builtin_sched_mem=$1
-                      builtin_sched_mem=`debasher::_convert_mem_value_to_mb ${builtin_sched_mem}` || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
+                      builtin_sched_mem=$(debasher::_convert_mem_value_to_mb ${builtin_sched_mem}) || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
                       if ! debasher::_str_is_natural_number ${builtin_sched_mem}; then
                           echo "Value for --builtinsched_mem option should be a natural number" >&2
                           return 1
@@ -218,7 +218,7 @@ check_pars()
             exit 1
         else
             # Absolutize file path
-            pfile=`debasher::_get_absolute_path "${pfile}"`
+            pfile=$(debasher::_get_absolute_path "${pfile}")
         fi
     fi
 
@@ -270,7 +270,7 @@ get_deblib_vars_and_funcs()
 
     local outd=$1
 
-    local vars_and_funcs_fname=`debasher::_get_deblib_vars_and_funcs_fname "${outd}"`
+    local vars_and_funcs_fname=$(debasher::_get_deblib_vars_and_funcs_fname "${outd}")
     "${debasher_libexecdir}"/debasher_get_deblib_vars_and_funcs > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
 
     echo "Extraction complete" >&2
@@ -285,7 +285,7 @@ get_mod_vars_and_funcs()
 
     local outd=$1
 
-    local vars_and_funcs_fname=`debasher::_get_mod_vars_and_funcs_fname "${outd}"`
+    local vars_and_funcs_fname=$(debasher::_get_mod_vars_and_funcs_fname "${outd}")
 
     # Get variables and functions from program modules
     "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${DEBASHER_PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
@@ -414,7 +414,7 @@ configure_scheduler()
         # scheduler is determined, it will be set using the
         # debasher::_set_debasher_scheduler function
         echo "## Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
-        local sched=`debasher::_determine_scheduler`
+        local sched=$(debasher::_determine_scheduler)
         debasher::_set_debasher_scheduler "${sched}" || return 1
         echo "scheduler: ${sched}" >&2
         echo "" >&2
@@ -443,14 +443,14 @@ show_cmdline_opts()
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         local opts_funcname
         local identify_cmdline_opt_funcname
-        opts_funcname=`debasher::_get_explain_cmdline_opts_funcname ${processname}`
+        opts_funcname=$(debasher::_get_explain_cmdline_opts_funcname ${processname})
         if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-            opts_funcname=`debasher::_get_explain_opts_funcname ${processname}`
+            opts_funcname=$(debasher::_get_explain_opts_funcname ${processname})
             if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
                 echo "Warning: function to explain command-line options for process ${processname} was not found" >&2
                 continue
             else
-                identify_cmdline_opt_funcname=`debasher::_get_identify_cmdline_opts_funcname ${processname}`
+                identify_cmdline_opt_funcname=$(debasher::_get_identify_cmdline_opts_funcname ${processname})
                 if [ "${identify_cmdline_opt_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
                     identify_cmdline_opt_funcname=""
                 fi
@@ -498,7 +498,7 @@ check_process_opts()
 
                 # Write option array to file (line by line)
                 local opt_array_size=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}
-                local opts_fname=`debasher::_get_sched_opts_fname_for_process "${dirname}" "${processname}"`
+                local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${dirname}" "${processname}")
                 debasher::_write_opt_array "DEBASHER_CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
                 # Clear variables
@@ -527,7 +527,7 @@ check_process_opts()
         local processname
         for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             # Store process options in an array for visualization
-            local serial_process_opts=`debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}"`
+            local serial_process_opts=$(debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}")
 
             # Print info about options
             echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
@@ -559,7 +559,7 @@ check_process_opts()
     local program_fifos_file=$5
 
     # Clear scheduler options directory
-    local sched_opts_dir=`debasher::get_sched_opts_dir_given_basedir "${dirname}"`
+    local sched_opts_dir=$(debasher::get_sched_opts_dir_given_basedir "${dirname}")
     "${RM}" -f "${sched_opts_dir}"/*
 
     # Initialize option information
@@ -595,7 +595,7 @@ handle_conda_requirements()
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Process conda envs information
-        local conda_envs_funcname=`debasher::_get_conda_envs_funcname "${processname}"`
+        local conda_envs_funcname=$(debasher::_get_conda_envs_funcname "${processname}")
         if debasher::_func_exists ${conda_envs_funcname}; then
             echo "Handling conda requirements for process ${processname}..." >&2
             ${conda_envs_funcname} || exit 1
@@ -616,7 +616,7 @@ handle_docker_requirements()
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Process conda envs information
-        local docker_imgs_funcname=`debasher::_get_docker_imgs_funcname "${processname}"`
+        local docker_imgs_funcname=$(debasher::_get_docker_imgs_funcname "${processname}")
         if debasher::_func_exists "${docker_imgs_funcname}"; then
             echo "Handling docker requirements for process ${processname}..." >&2
             "${docker_imgs_funcname}" || exit 1
@@ -662,7 +662,7 @@ register_all_rerun_processes()
 ########
 print_rerun_processes()
 {
-    local rerun_processes_string=`debasher::_get_rerun_processes_as_string`
+    local rerun_processes_string=$(debasher::_get_rerun_processes_as_string)
 
     if [ ! -z "${rerun_processes_string}" ]; then
         echo "# Printing list of processes to rerun..." >&2
@@ -722,7 +722,7 @@ set_debasher_output_dir()
 
     # Get absolute file path (very important so as to ensure correct
     # execution of processes)
-    outd=`debasher::_get_absolute_path "${outd}"`
+    outd=$(debasher::_get_absolute_path "${outd}")
 
     # Set outd as the output directory of debasher
     debasher::_set_debasher_outdir "${outd}"
@@ -735,19 +735,19 @@ create_basic_dirs()
 {
     echo "# Creating basic directories..." >&2
 
-    local execdir=`debasher::_get_prg_exec_dir`
+    local execdir=$(debasher::_get_prg_exec_dir)
     "${MKDIR}" -p "${execdir}" || { echo "Error! cannot create exec directory" >&2; return 1; }
 
-    local sched_opts_dir=`debasher::_get_sched_opts_dir`
+    local sched_opts_dir=$(debasher::_get_sched_opts_dir)
     "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
 
-    local graphsdir=`debasher::_get_prg_graphs_dir`
+    local graphsdir=$(debasher::_get_prg_graphs_dir)
     "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 
-    local fifodir=`debasher::_get_absolute_fifodir`
+    local fifodir=$(debasher::_get_absolute_fifodir)
     "${MKDIR}" -p "${fifodir}" || { echo "Error! cannot create fifos directory" >&2; return 1; }
 
-    local condadir=`debasher::_get_absolute_condadir`
+    local condadir=$(debasher::_get_absolute_condadir)
     if [ ${conda_support_given} -eq 1 ]; then
         "${MKDIR}" -p "${condadir}"
     fi
@@ -797,14 +797,14 @@ prepare_files_and_dirs_for_process()
     echo "Preparing files and directories for process ${processname}" >&2
 
     # Obtain process status
-    local status=`debasher::_get_process_status ${dirname} "${processname}"`
+    local status=$(debasher::_get_process_status ${dirname} "${processname}")
 
     # Decide whether the process should be executed (NOTE: for a
     # process that should not be executed, files and directories are
     # still prepared)
     if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
         # Obtain array size
-        local array_size=`debasher::_get_numtasks_for_process "${processname}"`
+        local array_size=$(debasher::_get_numtasks_for_process "${processname}")
 
         # Prepare files and directories for process
         if [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
@@ -847,7 +847,7 @@ revise_rerun_proc_status()
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Get process status
-        local status=`debasher::_get_process_status ${dirname} "${processname}"`
+        local status=$(debasher::_get_process_status ${dirname} "${processname}")
 
         # If process is marked as rerun and it was finished, its process completion is reset
         if debasher::_process_marked_as_rerun ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
@@ -867,17 +867,17 @@ get_processdeps_with_id_info_from_detailed_spec()
     local pdeps=""
 
     # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
-    local separator=`debasher::_get_processdeps_separator ${processdeps_spec}`
+    local separator=$(debasher::_get_processdeps_separator ${processdeps_spec})
     if [ "${separator}" = "" ]; then
         local processdeps_spec_blanks=${processdeps_spec}
     else
-        local processdeps_spec_blanks=`debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec}`
+        local processdeps_spec_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec})
     fi
     local dep_spec
     for dep_spec in ${processdeps_spec_blanks}; do
-        local deptype=`debasher::_get_deptype_part_in_dep ${dep_spec}`
-        local mapped_deptype=`debasher::_map_deptype_if_necessary ${deptype}`
-        local processname=`debasher::_get_processname_part_in_dep ${dep_spec}`
+        local deptype=$(debasher::_get_deptype_part_in_dep ${dep_spec})
+        local mapped_deptype=$(debasher::_map_deptype_if_necessary ${deptype})
+        local processname=$(debasher::_get_processname_part_in_dep ${dep_spec})
         # Check if there is an id for the process
         if [ ! -z "${DB_EXEC_PROCESS_IDS[${processname}]}" ]; then
             if [ -z "${pdeps}" ]; then
@@ -918,23 +918,23 @@ launch_process()
     # Execute process
 
     # Obtain process status
-    local status=`debasher::_get_process_status ${dirname} "${processname}"`
+    local status=$(debasher::_get_process_status ${dirname} "${processname}")
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Decide whether the process should be executed
     if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
         # Create script
-        local opt_array_size=`debasher::_get_numtasks_for_process "${processname}"`
+        local opt_array_size=$(debasher::_get_numtasks_for_process "${processname}")
         debasher::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
         # Launch process
-        local task_array_list=`debasher::_get_task_array_list "${dirname}" "${processname}" "${opt_array_size}"`
-        local processdeps_spec=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
-        local processdeps=`get_processdeps_with_id_info "${DB_EXEC_PROCESS_ID_LIST}" "${processdeps_spec}"`
+        local task_array_list=$(debasher::_get_task_array_list "${dirname}" "${processname}" "${opt_array_size}")
+        local processdeps_spec=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
+        local processdeps=$(get_processdeps_with_id_info "${DB_EXEC_PROCESS_ID_LIST}" "${processdeps_spec}")
         debasher::_launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
-        local primary_id=`debasher::_get_primary_id "${launch_outvar}"`
+        local primary_id=$(debasher::_get_primary_id "${launch_outvar}")
         DB_EXEC_PROCESS_IDS[${processname}]=${primary_id}
         DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
 
@@ -944,8 +944,8 @@ launch_process()
         # If process is in progress, its id should be retrieved so as to
         # correctly express dependencies
         if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
-            local sid_info=`debasher::_read_process_id_info_from_file "${dirname}" "${processname}"` || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
-            local global_id=`debasher::_get_global_id "${sid_info}"`
+            local sid_info=$(debasher::_read_process_id_info_from_file "${dirname}" "${processname}") || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
+            local global_id=$(debasher::_get_global_id "${sid_info}")
             DB_EXEC_PROCESS_IDS["${processname}"]=${global_id}
             DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
         fi
@@ -981,7 +981,7 @@ there_are_in_progress_processes()
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Obtain process status
-        local status=`debasher::_get_process_status ${dirname} "${processname}"`
+        local status=$(debasher::_get_process_status ${dirname} "${processname}")
 
         if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
             return 0
@@ -1000,7 +1000,7 @@ wait_for_program_processes()
     local dirname=$1
 
     # Obtain number of processes
-    local num_procs=`debasher::_get_num_processes`
+    local num_procs=$(debasher::_get_num_processes)
 
     while there_are_in_progress_processes "${dirname}"; do
         if [ "${num_procs}" -le 10 ]; then
@@ -1027,7 +1027,7 @@ launch_process_debug()
     # Launch process (it only shows its status and specification)
 
     # Obtain process status
-    local status=`debasher::_get_process_status "${dirname}" "${processname}"`
+    local status=$(debasher::_get_process_status "${dirname}" "${processname}")
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 }
 
@@ -1109,7 +1109,7 @@ if [ $# -eq 0 ]; then
 fi
 
 # Save command line
-command_line=`debasher::_serialize_args "$0" "$@"`
+command_line=$(debasher::_serialize_args "$0" "$@")
 
 read_pars "$@" || exit 1
 
@@ -1149,7 +1149,7 @@ program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
 old_program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_OLD_FEXT}"
 program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
 program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
-prg_graphs_dir=`debasher::_get_prg_graphs_dir`
+prg_graphs_dir=$(debasher::_get_prg_graphs_dir)
 procgraph_file_prefix="${prg_graphs_dir}/process_graph"
 depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
@@ -1204,7 +1204,7 @@ if [ ${debug} -eq 1 ]; then
     # Restore old process options (if they exist)
     restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
 else
-    sched=`debasher::_determine_scheduler`
+    sched=$(debasher::_determine_scheduler)
     if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
         debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || exit 1
         print_post_exec_wait_help

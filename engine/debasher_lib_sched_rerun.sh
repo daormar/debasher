@@ -88,7 +88,7 @@ debasher::_define_rerun_processes_due_to_input_changes()
 
     # Obtain processes with input change
     local changed_procs
-    changed_procs=`"${debasher_libexecdir}"/debasher_compare_opts --changed "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null`
+    changed_procs=$("${debasher_libexecdir}"/debasher_compare_opts --changed "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null)
 
     # Iterate processes with input change
     while IFS= read -r proc; do
@@ -98,7 +98,7 @@ debasher::_define_rerun_processes_due_to_input_changes()
 
     # Obtain new processes
     local new_procs
-    new_procs=`"${debasher_libexecdir}"/debasher_compare_opts --new "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null`
+    new_procs=$("${debasher_libexecdir}"/debasher_compare_opts --new "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null)
 
     # Iterate over new processes
     while IFS= read -r proc; do
@@ -116,7 +116,7 @@ debasher::_define_forced_rerun_processes()
         local process_spec="${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}"
 
         # Register process as forced to rerun if appliable
-        local process_forced=`debasher::_extract_force_from_process_spec "$process_spec" "force"`
+        local process_forced=$(debasher::_extract_force_from_process_spec "$process_spec" "force")
         if [ ${process_forced} = "yes" ]; then
             DEBASHER_FORCED_RERUN_PROCESSES+="${PROCESSNAME}"
             debasher::_mark_process_as_rerun $processname ${DEBASHER_FORCED_RERUN_REASON}
@@ -164,8 +164,8 @@ debasher::_define_rerun_processes_due_to_code_update()
     local processname
     for processname in "${DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Extract process information
-        local status=`debasher::_get_process_status "${dirname}" "${processname}"`
-        local script_filename=`debasher::_get_script_filename "${dirname}" "${processname}"`
+        local status=$(debasher::_get_process_status "${dirname}" "${processname}")
+        local script_filename=$(debasher::_get_script_filename "${dirname}" "${processname}")
 
         # Handle checkings depending of process status
         if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
@@ -196,14 +196,14 @@ debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner()
         local user_procname="${fifo_user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
         # Obtain user process status
-        local user_status=`debasher::_get_process_status ${dirname} "${user_procname}"`
+        local user_status=$(debasher::_get_process_status ${dirname} "${user_procname}")
 
         # Obtain owner process name
         local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
         local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
         # Obtain owner process status
-        local owner_status=`debasher::_get_process_status ${dirname} "${owner_procname}"`
+        local owner_status=$(debasher::_get_process_status ${dirname} "${owner_procname}")
 
         # If fifo user process is finished but fifo owner is not, or viceversa, then
         # mark both processes as rerun
@@ -276,12 +276,12 @@ debasher::_propagate_rerun_processes()
     local dirname=$1
 
     local prev_marked_procs=0
-    local num_marked_procs=`debasher::_num_processes_marked_as_rerun`
+    local num_marked_procs=$(debasher::_num_processes_marked_as_rerun)
 
     while (( prev_marked_procs < num_marked_procs )); do
         debasher::_propagate_rerun_mark_due_to_deps_iter
         debasher::_propagate_rerun_mark_due_to_fifos_iter "${dirname}"
         prev_marked_procs=${num_marked_procs}
-        num_marked_procs=`debasher::_num_processes_marked_as_rerun`
+        num_marked_procs=$(debasher::_num_processes_marked_as_rerun)
     done
 }

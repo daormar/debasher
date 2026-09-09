@@ -23,7 +23,7 @@ debasher::_get_modname_from_absmodname()
 {
     local absmodname=$1
 
-    local modname=`${BASENAME} "${absmodname}"`
+    local modname=$(${BASENAME} "${absmodname}")
 
     modname="${modname%.sh}"
 
@@ -35,7 +35,7 @@ debasher::_get_mod_document_funcname()
 {
     local absmodname=$1
 
-    local modname=`debasher::_get_modname_from_absmodname "${absmodname}"`
+    local modname=$(debasher::_get_modname_from_absmodname "${absmodname}")
 
     debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_DOCUMENT}"
 }
@@ -45,7 +45,7 @@ debasher::_get_shrdirs_funcname()
 {
     local absmodname=$1
 
-    local modname=`debasher::_get_modname_from_absmodname "${absmodname}"`
+    local modname=$(debasher::_get_modname_from_absmodname "${absmodname}")
 
     debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_SHRDIRS}"
 }
@@ -55,7 +55,7 @@ debasher::_get_program_funcname()
 {
     local absmodname=$1
 
-    local modname=`debasher::_get_modname_from_absmodname "${absmodname}"`
+    local modname=$(debasher::_get_modname_from_absmodname "${absmodname}")
 
     debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_PROGRAM}"
 }
@@ -80,7 +80,7 @@ debasher::_search_mod_in_dirs()
                 if debasher::_is_absolute_path "${fname}"; then
                     fullmodname="${fname}"
                 else
-                    fullmodname=`debasher::_get_absolute_path "${fname}"`
+                    fullmodname=$(debasher::_get_absolute_path "${fname}")
                 fi
                 break
             fi
@@ -102,7 +102,7 @@ debasher::_determine_full_module_name()
     if debasher::_is_absolute_path "${module}"; then
         fullmodname="${module}"
     else
-        fullmodname=`debasher::_search_mod_in_dirs "${module}"`
+        fullmodname=$(debasher::_search_mod_in_dirs "${module}")
     fi
 
     echo "$fullmodname"
@@ -140,7 +140,7 @@ debasher::load_debasher_module()
     local module=$1
 
     # Determine full module name
-    local fullmodname=`debasher::_determine_full_module_name "$module"`
+    local fullmodname=$(debasher::_determine_full_module_name "$module")
 
     echo "Loading module $module (${fullmodname})..." >&2
 
@@ -151,7 +151,7 @@ debasher::load_debasher_module()
             :
         else
             # Obtain directory for module
-            local dirname=`"${DIRNAME}" "${fullmodname}"`
+            local dirname=$("${DIRNAME}" "${fullmodname}")
 
             # Change to module dir
             pushd "${dirname}" > /dev/null
@@ -250,12 +250,12 @@ debasher::_show_module_documentation()
     local show_shrdirs=$2
 
     # Print header
-    local modname=`debasher::_get_modname_from_absmodname "${modulename}"`
+    local modname=$(debasher::_get_modname_from_absmodname "${modulename}")
     echo "# ${modname}"
     echo ""
 
     # Print body
-    local document_funcname=`debasher::_get_mod_document_funcname ${modulename}`
+    local document_funcname=$(debasher::_get_mod_document_funcname ${modulename})
     if debasher::_func_exists ${document_funcname}; then
         ${document_funcname}
         echo ""
@@ -282,7 +282,7 @@ debasher::_show_module_shared_dirs()
     DEBASHER_PROGRAM_SHDIRS=()
 
     # Execute the module's shared_dirs method, if defined
-    local shrdirs_funcname=`debasher::_get_shrdirs_funcname "${absmodname}"`
+    local shrdirs_funcname=$(debasher::_get_shrdirs_funcname "${absmodname}")
     if debasher::_func_exists "${shrdirs_funcname}"; then
         ${shrdirs_funcname} || exit 1
     fi

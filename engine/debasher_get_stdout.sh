@@ -110,18 +110,18 @@ get_out()
 {
     local dirname=$1
     local process=$2
-    local absdirname=`debasher::_get_absolute_path "${dirname}"`
+    local absdirname=$(debasher::_get_absolute_path "${dirname}")
     local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
     # Extract information from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local pfile
-    pfile=`debasher::_get_abspfile_from_command_line_file "${command_line_file}"` || return 1
+    pfile=$(debasher::_get_abspfile_from_command_line_file "${command_line_file}") || return 1
     local sched
-    sched=`debasher::_get_sched_from_command_line_file "${command_line_file}"` || return 1
+    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
 
     # Get original output directory
     local orig_outdir
-    orig_outdir=`debasher::_get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
+    orig_outdir=$(debasher::_get_orig_outdir_from_command_line_file "${command_line_file}") || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
@@ -137,7 +137,7 @@ get_out()
 
     # Get output
     if [ "${t_given}" -eq 0 ]; then
-        local stdout_fname=`debasher::_get_process_stdout_filename "${absdirname}" ${process} 1`
+        local stdout_fname=$(debasher::_get_process_stdout_filename "${absdirname}" ${process} 1)
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else
@@ -145,7 +145,7 @@ get_out()
             return 1
         fi
     else
-        local stdout_fname=`debasher::_get_process_stdout_filename "${absdirname}" ${process} 2 "${task_idx}"`
+        local stdout_fname=$(debasher::_get_process_stdout_filename "${absdirname}" ${process} 2 "${task_idx}")
         if [ -f "${stdout_fname}" ]; then
             cat "${stdout_fname}"
         else

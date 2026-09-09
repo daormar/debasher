@@ -293,7 +293,7 @@ debasher::read_opt_value_from_func_args()
     local opt=$1
 
     # Get value for option
-    local value=`debasher::_get_opt_value_from_func_args "$@"`
+    local value=$(debasher::_get_opt_value_from_func_args "$@")
 
     # If the value is a descriptor and opt is not an output option, then
     # we should read the descriptor
@@ -468,7 +468,7 @@ debasher::_read_opt_value_from_line_memoiz()
 
     if [ "${DEBASHER_LAST_PROC_LINE_MEMOPTS}" = "$cmdline" ]; then
         # Given line was previously processed, return memoized result
-        _OPT_VALUE_=`debasher::_read_memoized_opt_value $opt` || return 1
+        _OPT_VALUE_=$(debasher::_read_memoized_opt_value $opt) || return 1
     else
         # Process not memoized line
         debasher::_memoize_opts "$cmdline"
@@ -477,7 +477,7 @@ debasher::_read_opt_value_from_line_memoiz()
         DEBASHER_LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
-        _OPT_VALUE_=`debasher::_read_memoized_opt_value $opt` || return 1
+        _OPT_VALUE_=$(debasher::_read_memoized_opt_value $opt) || return 1
     fi
 }
 
@@ -504,9 +504,9 @@ debasher::explain_cmdline_opt()
     local categ=$4
 
     # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}")
     if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+        proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}")
     fi
 
     # Assign default category if not given
@@ -562,9 +562,9 @@ debasher::explain_opt()
     local categ=$4
 
     # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}")
     if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+        proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}")
     fi
 
     # Assign default category if not given
@@ -615,9 +615,9 @@ debasher::explain_flag()
     local categ=$3
 
     # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}"`
+    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_CMDLINE_OPTS}")
     if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}"`
+        proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS}")
     fi
 
     # Assign default category if not given
@@ -663,7 +663,7 @@ debasher::opt_is_cmdline()
     local opt=$1
 
     # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}"`
+    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}")
 
     # Define option as a command-line options
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
@@ -698,7 +698,7 @@ debasher::opt_is_non_mandatory_cmdline()
     local opt=$1
 
     # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}"`
+    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_IDENTIFY_CMDLINE_OPTS}")
 
     # Define option as a command-line options
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
@@ -803,14 +803,14 @@ debasher::define_fifo_opt()
     local varname=$3
 
     # Check that the call is valid
-    local proc_generate=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    local proc_generate=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
     if [ -n "${proc_generate}" ]; then
         echo "define_fifo_opt: Error, this function cannot be called from an option generator" >&2
         exit 1
     fi
 
     # Get process name
-    local processname=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
 
     # Get task index
     local task_idx=${#DEBASHER_CURRENT_PROCESS_OPT_LIST[@]}
@@ -866,14 +866,14 @@ debasher::define_fifo_opt_generator()
     local varname=$4
 
     # Check that the call is valid
-    local proc_define=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local proc_define=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
     if [ -n "${proc_define}" ]; then
         echo "define_fifo_opt_generator: Error, this function should only be called from an option generator" >&2
         exit 1
     fi
 
     # Get process name
-    local processname=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
 
     # Define FIFO
     debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}"
@@ -925,9 +925,9 @@ debasher::define_shared_dir()
     # Check that the call is not being made from a process' define_opts
     # or generate_opts method, since shared directories can only be
     # owned by a module
-    local processname=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+    local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
     if [ -z "${processname}" ]; then
-        processname=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+        processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
     fi
     if [ -n "${processname}" ]; then
         echo "define_shared_dir: Error, this function should only be called from a module's shared_dirs function" >&2
@@ -1037,13 +1037,13 @@ debasher::define_procspec_opt()
     local varname=$4
 
     # Look for the attribute among computational specs
-    local comp_specs=`debasher::extract_process_comp_specs "${process_spec}"`
-    local value=`debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}"`
+    local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
+    local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
 
     # Fall back to additional specs if not found
     if [ "${value}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-        local additional_specs=`debasher::extract_process_additional_specs "${process_spec}"`
-        value=`debasher::extract_attr_from_process_additional_specs "${additional_specs}" "${specname}"`
+        local additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
+        value=$(debasher::extract_attr_from_process_additional_specs "${additional_specs}" "${specname}")
     fi
 
     if [ "${value}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
@@ -1143,7 +1143,7 @@ debasher::define_cmdline_infile_opt()
 
     # Verify file exists and normalize to an absolute path
     debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
-    value=`debasher::_get_absolute_path "$value"`
+    value=$(debasher::_get_absolute_path "$value")
 
     # Add option
     debasher::define_opt "$opt" "$value" "$varname"
@@ -1193,7 +1193,7 @@ debasher::define_cmdline_infile_opt_if_given()
     if [ "$value" != ${DEBASHER_OPT_NOT_FOUND} ]; then
         # Verify file exists and normalize to an absolute path
         debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
-        value=`debasher::_get_absolute_path "$value"`
+        value=$(debasher::_get_absolute_path "$value")
 
         # Add option
         debasher::define_opt "$opt" "$value" "$varname"
@@ -1509,9 +1509,9 @@ debasher::define_value_desc_opt()
     local varname=$2
 
     # Obtain caller process name
-    local proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}"`
+    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
     if [ -z "${proc_name}" ]; then
-        proc_name=`debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}"`
+        proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
     fi
 
     # Get name of value descriptor
@@ -1539,7 +1539,7 @@ debasher::_show_program_shdirs()
 {
     local dirname
     for dirname in "${!DEBASHER_PROGRAM_SHDIRS[@]}"; do
-        local absdir=`debasher::get_absolute_shdirname "$dirname"`
+        local absdir=$(debasher::get_absolute_shdirname "$dirname")
         echo "${absdir}"
     done
 }
@@ -1551,7 +1551,7 @@ debasher::_register_module_program_shdirs()
     # modules
     local absmodname
     for absmodname in "${DEBASHER_PROGRAM_MODULES[@]}"; do
-        local shrdirs_funcname=`debasher::_get_shrdirs_funcname ${absmodname}`
+        local shrdirs_funcname=$(debasher::_get_shrdirs_funcname ${absmodname})
         if debasher::_func_exists "${shrdirs_funcname}"; then
             ${shrdirs_funcname} || exit 1
         fi
@@ -1584,7 +1584,7 @@ debasher::_create_mod_shdirs()
     for dirname in "${!DEBASHER_PROGRAM_SHDIRS[@]}"; do
         local owner=${DEBASHER_PROGRAM_SHDIRS["${dirname}"]}
         if [ "${owner}" = "${DEBASHER_SHDIR_MODULE_OWNER}" ]; then
-            local absdir=`debasher::get_absolute_shdirname "$dirname"`
+            local absdir=$(debasher::get_absolute_shdirname "$dirname")
             if [ ! -d "${absdir}" ]; then
                 "${MKDIR}" -p "${absdir}" || exit 1
             fi
@@ -1607,7 +1607,7 @@ debasher::_prepare_fifos_owned_by_process()
     local processname=$1
 
     # Obtain name of directory for FIFOS
-    local fifodir=`debasher::_get_absolute_fifodir`
+    local fifodir=$(debasher::_get_absolute_fifodir)
 
     # Create FIFOS
     local augm_fifoname
@@ -1615,7 +1615,7 @@ debasher::_prepare_fifos_owned_by_process()
         local proc_plus_idx=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
         local proc="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
         if [ "${proc}" = "${processname}" ]; then
-            local dirname=`"${DIRNAME}" "${augm_fifoname}"`
+            local dirname=$("${DIRNAME}" "${augm_fifoname}")
             if [ ! -d "${fifodir}/${dirname}" ]; then
                 "${MKDIR}" -p "${fifodir}/${dirname}"
             fi
@@ -1676,7 +1676,7 @@ debasher::define_opt_from_shared_dir()
 {
     local opt=$1
     local shdirname=$2
-    local abs_shdirname=`debasher::get_absolute_shdirname "${shdirname}"`
+    local abs_shdirname=$(debasher::get_absolute_shdirname "${shdirname}")
     debasher::define_opt "${opt}" "${abs_shdirname}" "$3"
 }
 
@@ -1707,7 +1707,7 @@ debasher::_get_absolute_fifoname()
     local owner_process=$1
     local fifoname=$2
     local augm_fifoname="${owner_process}/${fifoname}"
-    local fifodir=`debasher::_get_absolute_fifodir`
+    local fifodir=$(debasher::_get_absolute_fifodir)
 
     echo "${fifodir}/${augm_fifoname}"
 }
@@ -1995,15 +1995,15 @@ debasher::_load_curr_opt_list_loop()
         # different
         if debasher::_uses_option_generator "${connected_proc}"; then
             # Obtain name of options generator
-            local generate_opts_funcname=`debasher::_get_generate_opts_funcname ${connected_proc}`
+            local generate_opts_funcname=$(debasher::_get_generate_opts_funcname ${connected_proc})
 
             # Call options generator (output stored into DEBASHER_DESERIALIZED_ARGS)
             local connected_proc_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${connected_proc}"]}
-            local connected_proc_outdir=`debasher::_get_process_outdir "${connected_proc}"`
+            local connected_proc_outdir=$(debasher::_get_process_outdir "${connected_proc}")
             ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${task_idx}" || return 1
 
             # Get option value from function arguments
-            value=`debasher::_get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}"`
+            value=$(debasher::_get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}")
 
             # Obtain value from list
             echo ${value}
@@ -2035,9 +2035,9 @@ debasher::_load_curr_opt_list_loop()
 
         if debasher::_str_is_proc_out_opt_descriptor "${candidate}"; then
             local resolved
-            resolved=`debasher::_resolve_proc_output_desc "${cmdline}" "${candidate}"`
+            resolved=$(debasher::_resolve_proc_output_desc "${cmdline}" "${candidate}")
             if [ -z "${resolved}" ]; then
-                local conn_proc=`debasher::extract_processname_from_proc_output_desc "${candidate}"`
+                local conn_proc=$(debasher::extract_processname_from_proc_output_desc "${candidate}")
                 echo "Error: value of option ${opt} for process ${processname} could not be determined. Check if connected process ${conn_proc} does exist" >&2
                 return 1
             fi
@@ -2100,13 +2100,13 @@ debasher::_show_curr_opt_list()
     local processname=$2
 
     # Show array length
-    local num_tasks=`debasher::_get_numtasks_for_process "${processname}"`
+    local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
     echo "${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${DEBASHER_ASSOC_ARRAY_KEY_LEN} -> ${num_tasks}"
 
     # Show options
     local task_idx
     for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
-        local opts=`debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
+        local opts=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}")
         echo "${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx} -> ${opts}"
     done
 }
@@ -2121,12 +2121,12 @@ debasher::_get_serial_process_opts()
     # Store options in array
     local process_opts_array=()
     local ellipsis=""
-    local num_tasks=`debasher::_get_numtasks_for_process "${processname}"`
+    local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
 
     local task_idx
     for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
         # Obtain process options
-        local process_opts=`debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}"`
+        local process_opts=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}")
 
         # Obtain human-readable representation of process options
         hr_process_opts=$(debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "$process_opts")
@@ -2140,7 +2140,7 @@ debasher::_get_serial_process_opts()
     done
 
     # Serialize array
-    local serial_process_opts=`debasher::_serialize_string_array "process_opts_array" "${DEBASHER_ARRAY_TASK_SEP}"`
+    local serial_process_opts=$(debasher::_serialize_string_array "process_opts_array" "${DEBASHER_ARRAY_TASK_SEP}")
 
     # Return result
     echo "${serial_process_opts} ${ellipsis}"
@@ -2227,6 +2227,6 @@ debasher::_get_sched_opts_fname_for_process()
     local dirname=$1
     local processname=$2
 
-    local sched_opts_dir=`debasher::get_sched_opts_dir_given_basedir "${dirname}"`
+    local sched_opts_dir=$(debasher::get_sched_opts_dir_given_basedir "${dirname}")
     echo "${sched_opts_dir}/${DEBASHER_SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX}${processname}"
 }

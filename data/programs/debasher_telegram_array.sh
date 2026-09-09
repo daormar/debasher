@@ -65,7 +65,7 @@ decomposer_define_opts()
     local process_outdir=$4
 
     # Obtain value of -f option
-    pref_of_files=`get_cmdline_opt "${cmdline}" "-f"`
+    pref_of_files=$(get_cmdline_opt "${cmdline}" "-f")
 
     # Array of files matching the -f prefix
     array=()
@@ -98,7 +98,7 @@ recomposer_define_opts()
     local process_outdir=$4
 
     # Obtain value of -f option
-    pref_of_files=`get_cmdline_opt "${cmdline}" "-f"`
+    pref_of_files=$(get_cmdline_opt "${cmdline}" "-f")
 
     # Array of files matching the -f prefix
     array=()

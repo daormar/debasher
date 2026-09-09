@@ -110,8 +110,8 @@ debasher::_get_absolute_path_existing()
         else
             # Path corresponds to a file
             local oldpwd=$PWD
-            local basetmp=`"$BASENAME" "$PWD/$file"`
-            local dirtmp=`"$DIRNAME" "$PWD/$file"`
+            local basetmp=$("$BASENAME" "$PWD/$file")
+            local dirtmp=$("$DIRNAME" "$PWD/$file")
             # Check if directory containing the file exists
             if [ -d "$dirtmp" ]; then
                 cd "$dirtmp"
@@ -135,7 +135,7 @@ debasher::_normalize_dirname()
 {
     local dir=$1
 
-    echo `echo "${dir}/" | "$TR" -s "/"`
+    echo $(echo "${dir}/" | "$TR" -s "/")
 }
 
 ########
@@ -144,8 +144,8 @@ debasher::_dirnames_are_equal()
     local dir1=$1
     local dir2=$2
 
-    norm_dir1=`debasher::_normalize_dirname "$dir1"`
-    norm_dir2=`debasher::_normalize_dirname "$dir2"`
+    norm_dir1=$(debasher::_normalize_dirname "$dir1")
+    norm_dir2=$(debasher::_normalize_dirname "$dir2")
 
     if [ "${norm_dir1}" = "${norm_dir2}" ]; then
         return 0
@@ -308,9 +308,9 @@ debasher::_log_warning_rerun()
 ########
 debasher::_get_script_log_filenames()
 {
-    local exec_dirname=`debasher::_get_prg_exec_dir`
+    local exec_dirname=$(debasher::_get_prg_exec_dir)
 
-    local sched=`debasher::_get_scheduler`
+    local sched=$(debasher::_get_scheduler)
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
             debasher::_get_script_log_filenames_slurm "${exec_dirname}"
@@ -500,7 +500,7 @@ debasher::_str_is_val_descriptor()
     local str=$1
 
     if debasher::_is_absolute_path "${str}"; then
-        local basename=`"${BASENAME}" "${str}"`
+        local basename=$("${BASENAME}" "${str}")
         if [[ "${basename}" == "${DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX}"* ]]; then
             return 0
         else
@@ -618,7 +618,7 @@ debasher::_search_process_func()
     local method_name=$2
 
     # Check if function exists
-    local process_function=`debasher::_get_process_funcname "${processname}" "${method_name}"`
+    local process_function=$(debasher::_get_process_funcname "${processname}" "${method_name}")
     if debasher::_func_exists "${process_function}"; then
         echo "${process_function}"
         return 0
@@ -635,7 +635,7 @@ debasher::_search_process_var()
     local var_name=$2
 
     # Check if function exists
-    local process_var=`debasher::_get_process_varname "${processname}" "${var_name}"`
+    local process_var=$(debasher::_get_process_varname "${processname}" "${var_name}")
     if debasher::_var_exists "${process_var}"; then
         echo "${process_var}"
         return 0
@@ -653,7 +653,7 @@ debasher::_search_process_func_nameref()
     local -n var_ref=$3
 
     # Check if function exists
-    local process_function=`debasher::_get_process_funcname "${processname}" "${method_name}"`
+    local process_function=$(debasher::_get_process_funcname "${processname}" "${method_name}")
     if debasher::_func_exists "${process_function}"; then
         var_ref="${process_function}"
         return 0

@@ -90,7 +90,7 @@ configure_scheduler()
     if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
         # If the scheduler was not set in the command line, it is
         # automatically determined
-        local sched=`debasher::_determine_scheduler`
+        local sched=$(debasher::_determine_scheduler)
         debasher::_set_debasher_scheduler "${sched}" || return 1
     else
         debasher::_set_debasher_scheduler "${sched}" || return 1
@@ -101,18 +101,18 @@ configure_scheduler()
 process_stop_for_pfile()
 {
     local dirname=$1
-    local absdirname=`debasher::_get_absolute_path "${dirname}"`
+    local absdirname=$(debasher::_get_absolute_path "${dirname}")
     local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
     # Extract information from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local pfile
-    pfile=`debasher::_get_abspfile_from_command_line_file "${command_line_file}"` || return 1
+    pfile=$(debasher::_get_abspfile_from_command_line_file "${command_line_file}") || return 1
     local sched
-    sched=`debasher::_get_sched_from_command_line_file "${command_line_file}"` || return 1
+    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
 
     # Get original output directory
     local orig_outdir
-    orig_outdir=`debasher::_get_orig_outdir_from_command_line_file "${command_line_file}"` || return 1
+    orig_outdir=$(debasher::_get_orig_outdir_from_command_line_file "${command_line_file}") || return 1
 
     # Show warning if directory provided as option is different than the
     # original working directory
@@ -141,11 +141,11 @@ process_stop_for_pfile()
         fi
 
         # Check process status
-        local status=`debasher::_get_process_status "${absdirname}" ${processname}`
+        local status=$(debasher::_get_process_status "${absdirname}" ${processname})
 
         # Obtain ids
         local ids_info
-        ids_info=`debasher::_read_ids_from_files "${absdirname}" ${processname}`
+        ids_info=$(debasher::_read_ids_from_files "${absdirname}" ${processname})
 
         # Print status
         if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then

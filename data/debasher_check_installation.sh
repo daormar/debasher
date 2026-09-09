@@ -72,7 +72,7 @@ check_program()
 # Create directory for temporary files
 echo "# Creating directory for temporary files..."
 echo ""
-tmpdir=`mktemp -d $HOME/debasher_installcheck_XXXXXX`
+tmpdir=$(mktemp -d $HOME/debasher_installcheck_XXXXXX)
 # trap "rm -rf $tmpdir 2>/dev/null" EXIT
 echo "Temporary files will be stored in ${tmpdir}"
 echo ""

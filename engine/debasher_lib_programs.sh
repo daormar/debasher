@@ -22,7 +22,7 @@
 debasher::_get_orig_workdir()
 {
     local command_line_file=$1
-    local workdir=`$HEAD -1 ${command_line_file} | "$AWK" '{print $2}'` ; debasher::pipe_fail || return 1
+    local workdir=$($HEAD -1 ${command_line_file} | "$AWK" '{print $2}') ; debasher::pipe_fail || return 1
     echo $workdir
 }
 
@@ -41,10 +41,10 @@ debasher::_get_orig_outdir_from_command_line_file()
 
     # Extract information from command line file
     local workdir
-    workdir=`debasher::_get_orig_workdir "${command_line_file}"` || return 1
+    workdir=$(debasher::_get_orig_workdir "${command_line_file}") || return 1
     local cmdline
-    qcmdline=`debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}"` || return 1
-    local outdir=`debasher::_get_opt_value_from_quoted_cmd "$qcmdline" "--outdir"`
+    qcmdline=$(debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}") || return 1
+    local outdir=$(debasher::_get_opt_value_from_quoted_cmd "$qcmdline" "--outdir")
 
     # Retrieve original output directory
     if debasher::_is_absolute_path "$outdir"; then
@@ -58,8 +58,8 @@ debasher::_get_orig_outdir_from_command_line_file()
 debasher::_get_pfile_from_command_line_file()
 {
     local command_line_file=$1
-    local qcmdline=`debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}"`
-    local pfile=`debasher::_get_opt_value_from_quoted_cmd "$qcmdline" "--pfile"` || return 1
+    local qcmdline=$(debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}")
+    local pfile=$(debasher::_get_opt_value_from_quoted_cmd "$qcmdline" "--pfile") || return 1
     echo "${pfile}"
 }
 
@@ -67,7 +67,7 @@ debasher::_get_pfile_from_command_line_file()
 debasher::_get_currdir_from_command_line_file()
 {
     local command_line_file=$1
-    local currdir=`"${HEAD}" -1 "${command_line_file}" | "${AWK}" '{print $2}'`
+    local currdir=$("${HEAD}" -1 "${command_line_file}" | "${AWK}" '{print $2}')
     echo "${currdir}"
 }
 
@@ -75,8 +75,8 @@ debasher::_get_currdir_from_command_line_file()
 debasher::_get_sched_from_command_line_file()
 {
     local command_line_file=$1
-    local qcmdline=`debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}"`
-    local sched=`debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"` || return 1
+    local qcmdline=$(debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}")
+    local sched=$(debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--sched") || return 1
     echo "${sched}"
 }
 
@@ -88,14 +88,14 @@ debasher::_get_abspfile_from_command_line_file()
 
     # Obtain program file and current dir
     local cmdline_pfile
-    cmdline_pfile=`debasher::_get_pfile_from_command_line_file "${command_line_file}"` || return 1
+    cmdline_pfile=$(debasher::_get_pfile_from_command_line_file "${command_line_file}") || return 1
     local cmdline_currdir
-    cmdline_currdir=`debasher::_get_currdir_from_command_line_file "${command_line_file}"` || return 1
+    cmdline_currdir=$(debasher::_get_currdir_from_command_line_file "${command_line_file}") || return 1
 
     # Obtain absolute program file name
     local abspfile
     pushd "${cmdline_currdir}" > /dev/null
-    abspfile=`debasher::_get_absolute_path "${cmdline_pfile}"`
+    abspfile=$(debasher::_get_absolute_path "${cmdline_pfile}")
     popd > /dev/null
 
     # Check if resulting program file exists
@@ -114,7 +114,7 @@ debasher::_exec_program_func_for_module()
     local pfile=$1
 
     local program_funcname
-    program_funcname=`debasher::_get_program_funcname "${pfile}"`
+    program_funcname=$(debasher::_get_program_funcname "${pfile}")
 
     # Add program file to stack
     DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK+=("${pfile}")
@@ -215,7 +215,7 @@ debasher::_is_heredoc_process()
 
     # Search for a suitable function to execute the process
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
+        local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
         if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
             echo "${proc_varname}"
             return 0
@@ -233,7 +233,7 @@ debasher::_create_heredoc_func_body()
 
     # Search for a suitable function to execute the process
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local proc_varname=`debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}"`
+        local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
         if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
             printf -v escaped_interpreter '%q' "${DEBASHER_HEREDOC_INTERPRETERS[$i]}"
             echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\${${proc_varname}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
@@ -511,11 +511,11 @@ debasher::add_debasher_process()
     fi
 
     # Store process entry
-    local process_entry=`debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}"`
+    local process_entry=$(debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}")
     DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]="${process_entry}"
 
     # Check process limit
-    local num_processes=`debasher::_get_num_processes`
+    local num_processes=$(debasher::_get_num_processes)
     if [ "${num_processes}" -gt "${DEBASHER_MAX_NUM_PROCESSES}" ]; then
         echo "Error: Maximum number of processes (${DEBASHER_MAX_NUM_PROCESSES}) exceeded" >&2
         exit 1

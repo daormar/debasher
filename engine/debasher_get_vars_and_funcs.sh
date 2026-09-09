@@ -19,7 +19,7 @@
 unset_previous_vars_and_funcs()
 {
     # Unset variables
-    for var in `compgen -v`; do
+    for var in $(compgen -v); do
         if [ "${var}" != "PATH" ]; then
             unset ${var}
         fi

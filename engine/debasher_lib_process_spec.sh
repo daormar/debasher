@@ -32,22 +32,22 @@ debasher::_program_process_spec_is_ok()
     fi
 
     # Extract process information
-    local processname=`debasher::_extract_processname_from_process_spec "$process_spec"`
+    local processname=$(debasher::_extract_processname_from_process_spec "$process_spec")
 
     # Check if basic computational specifications were provided
-    local cpus=`debasher::_extract_cpus_from_process_spec "$process_spec"`
+    local cpus=$(debasher::_extract_cpus_from_process_spec "$process_spec")
     if [ "$cpus" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
         echo "Error: cpus computational specification not given for process ${processname}" >&2
         return 1
     fi
 
-    local mem=`debasher::_extract_mem_from_process_spec "$process_spec"`
+    local mem=$(debasher::_extract_mem_from_process_spec "$process_spec")
     if [ "$mem" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
         echo "Error: mem computational specification not given for process ${processname}" >&2
         return 1
     fi
 
-    local time=`debasher::_extract_time_from_process_spec "$process_spec"`
+    local time=$(debasher::_extract_time_from_process_spec "$process_spec")
     if [ "$time" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
         echo "Error: time computational specification not given for process ${processname}" >&2
         return 1
@@ -246,7 +246,7 @@ debasher::_all_process_deps_pre_specified()
         local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
 
         # Extract dependencies from process specification
-        local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
+        local procdeps=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
 
         # Check if dependencies were given
         if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
@@ -265,15 +265,15 @@ debasher::_get_processdeps_from_detailed_spec()
     local result
 
     # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
-    local separator=`debasher::_get_processdeps_separator ${processdeps_spec}`
+    local separator=$(debasher::_get_processdeps_separator ${processdeps_spec})
     if [ "${separator}" = "" ]; then
         local processdeps_spec_blanks=${processdeps_spec}
     else
-        local processdeps_spec_blanks=`debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec}`
+        local processdeps_spec_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec})
     fi
     local dep_spec
     for dep_spec in ${processdeps_spec_blanks}; do
-        local processname=`debasher::_get_processname_part_in_dep ${dep_spec}`
+        local processname=$(debasher::_get_processname_part_in_dep ${dep_spec})
         if [ -z "${result}" ]; then
             result="$processname"
         else
@@ -299,25 +299,25 @@ debasher::_gen_final_procspec()
         fi
 
         # Extract dependencies from process specification
-        local procdeps=`debasher::_extract_processdeps_from_process_spec "${process_spec}"`
+        local procdeps=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
 
         # Check if dependencies were given
         if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # Dependencies not given, so they should be obtained
-            procdeps=`debasher::_get_procdeps_for_process_cached "${cmdline}" "${process_spec}"`
+            procdeps=$(debasher::_get_procdeps_for_process_cached "${cmdline}" "${process_spec}")
 
             # Register dependencies
-            DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=`debasher::_get_processdeps_from_detailed_spec "${procdeps}"`
+            DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=$(debasher::_get_processdeps_from_detailed_spec "${procdeps}")
 
             # Register process spec
             local augmented_process_spec
-            augmented_process_spec=`debasher::_add_additional_spec "${process_spec}" "${procdeps}"`
+            augmented_process_spec=$(debasher::_add_additional_spec "${process_spec}" "${procdeps}")
             DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${augmented_process_spec}"
         else
             # Dependencies were given
 
             # Register dependencies
-            DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=`debasher::_get_processdeps_from_detailed_spec "${procdeps}"`
+            DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=$(debasher::_get_processdeps_from_detailed_spec "${procdeps}")
 
             # Register process spec
             DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${process_spec}"

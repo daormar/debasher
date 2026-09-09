@@ -25,10 +25,10 @@ debasher::define_conda_env()
     local yml_file=$2
 
     if ! debasher::_conda_env_exists "${env_name}"; then
-        local condadir=`debasher::_get_absolute_condadir`
+        local condadir=$(debasher::_get_absolute_condadir)
 
         # Obtain absolute yml file name
-        local abs_yml_fname=`debasher::_get_abs_yml_fname "${yml_file}"`
+        local abs_yml_fname=$(debasher::_get_abs_yml_fname "${yml_file}")
 
         echo "Creating conda environment ${env_name} from file ${abs_yml_fname}..." >&2
         debasher::_conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
@@ -96,7 +96,7 @@ debasher::_get_abs_yml_fname()
 
     # Fallback to debasher yml package
     if [ -z "${abs_yml_fname}" ]; then
-        debasher_yml_dir=`debasher::_get_debasher_yml_dir`
+        debasher_yml_dir=$(debasher::_get_debasher_yml_dir)
         abs_yml_fname="${debasher_yml_dir}/${yml_fname}"
     fi
 

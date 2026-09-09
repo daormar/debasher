@@ -148,15 +148,15 @@ check_pars()
 absolutize_file_paths()
 {
     if [ ${f_given} -eq 1 ]; then
-        file=`debasher::_get_absolute_path "${file}"`
+        file=$(debasher::_get_absolute_path "${file}")
     fi
 
     if [ ${o_given} -eq 1 ]; then
-        outd=`debasher::_get_absolute_path "${outd}"`
+        outd=$(debasher::_get_absolute_path "${outd}")
     fi
 
     if [ ${k_given} -eq 1 ]; then
-        k_val=`debasher::_get_absolute_path "${k_val}"`
+        k_val=$(debasher::_get_absolute_path "${k_val}")
     fi
 }
 
@@ -200,7 +200,7 @@ post_prg_finish_actions_are_executed()
             return 1
         fi
     else
-        destdir=`get_dest_dir_for_prg "${program_outd}" "${outd}"`
+        destdir=$(get_dest_dir_for_prg "${program_outd}" "${outd}")
         if [ -f "${destdir}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}" ]; then
             return 0
         else
@@ -218,7 +218,7 @@ signal_execution_of_post_prg_finish_actions()
     if [ -z "${outd}" ]; then
         touch "${program_outd}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
     else
-        destdir=`get_dest_dir_for_prg "${program_outd}" "${outd}"`
+        destdir=$(get_dest_dir_for_prg "${program_outd}" "${outd}")
         touch "${destdir}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
     fi
 }
@@ -279,7 +279,7 @@ get_prg_status()
     # directory is not the same as the original output directory
     if [ "${outd}" != "" ]; then
         # Get program directory after moving
-        local final_outdir=`get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}"`
+        local final_outdir=$(get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}")
         if [ -d "${final_outdir}" ]; then
             # If output directory exists, it is assumed that the
             # program completed execution
@@ -290,12 +290,12 @@ get_prg_status()
     # If original output directory exists then check program status
     if [ -d "${pipe_cmd_outd}" ]; then
         # Obtain program status
-        local tmpfile=`"${MKTEMP}"`
+        local tmpfile=$("${MKTEMP}")
         "${debasher_bindir}"/debasher_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
         # Obtain percentage of unfinished processes
-        local unfinished_process_perc=`get_unfinished_process_perc "${tmpfile}"`
+        local unfinished_process_perc=$(get_unfinished_process_perc "${tmpfile}")
         "${RM}" "${tmpfile}"
 
         # Evaluate exit code of pipe_status
@@ -335,7 +335,7 @@ prg_has_processes_to_rerun()
     # directory is not the same as the original output directory
     if [ "${outd}" != "" ]; then
         # Get program directory after moving
-        local final_outdir=`get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}"`
+        local final_outdir=$(get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}")
         if [ -d "${final_outdir}" ]; then
             # If output directory exists, it is assumed that the
             # program completed execution
@@ -434,7 +434,7 @@ get_dest_dir_for_prg()
 {
     local program_outd=$1
     local outd=$2
-    basedir=`"$BASENAME" "${program_outd}"`
+    basedir=$("$BASENAME" "${program_outd}")
     echo "${outd}/${basedir}"
 }
 
@@ -443,7 +443,7 @@ move_dir()
 {
     local program_outd=$1
     local outd=$2
-    destdir=`get_dest_dir_for_prg "${program_outd}" "${outd}"`
+    destdir=$(get_dest_dir_for_prg "${program_outd}" "${outd}")
 
     # Move directory
     if [ -d "${destdir}" ]; then
@@ -519,7 +519,7 @@ execute_batches()
 
         # Execute built-in tilde expansion to avoid problems with "~"
         # symbol in file and directory paths
-        pipe_exec_cmd=`debasher::_expand_tildes "${pipe_exec_cmd}"`
+        pipe_exec_cmd=$(debasher::_expand_tildes "${pipe_exec_cmd}")
 
         echo "* Processing line ${lineno}..." >&2
         echo "" >&2
@@ -534,12 +534,12 @@ execute_batches()
 
         echo "** Extract output directory for program..." >&2
         local pipe_cmd_outd
-        pipe_cmd_outd=`extract_outd_from_pipe_exec_cmd "${pipe_exec_cmd}"` || { echo "Error: program command does not contain --outdir option">&2; return 1; }
+        pipe_cmd_outd=$(extract_outd_from_pipe_exec_cmd "${pipe_exec_cmd}") || { echo "Error: program command does not contain --outdir option">&2; return 1; }
         echo "${pipe_cmd_outd}"
         echo "" >&2
 
         echo "** Check correctness of output directory..." >&2
-        local base_pipe_cmd_outd=`"${DIRNAME}" "${pipe_cmd_outd}"`
+        local base_pipe_cmd_outd=$("${DIRNAME}" "${pipe_cmd_outd}")
         if debasher::_dirnames_are_equal "${outd}" "${base_pipe_cmd_outd}"; then
             echo "Error: final output directory is equal to the directory containing the output directory for program">&2
             return 1;
