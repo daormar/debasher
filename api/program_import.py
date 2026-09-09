@@ -342,6 +342,52 @@ def _build_shared_dir_edges(processes: list[ProgramProcess]) -> list[ProgramEdge
     return edges
 
 
+def _sync_connected_option_values(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> None:
+    """
+    Sets every connected option's `value` to its "[sourceProcess;
+    sourceOption]" sentinel, mutating `processes` in place — the same
+    thing frontend/src/store/ProgramContext.tsx's
+    normalizeConnectedOptionValues does on load, needed here for the
+    same reason: script_generation.py's _opt_is_connected_to_proc (and
+    thus _option_definition_line/_validate_fanout_option) treats that
+    sentinel, not the edge itself, as the source of truth for "is this
+    option connected" — `edges` alone (what _build_edges/
+    _build_shared_dir_edges produce) only feeds the secondary fan-in
+    lookup (_connections_by_option). Without this, generate_script
+    silently emits an empty literal for a connected option instead of
+    a define_opt_from_proc_out/_task_out call (or, for a fanout gather
+    option, raises _validate_fanout_option's "must be connected"
+    ValueError outright).
+
+    A "shared_dir" option is skipped — its value is always its declared
+    directory name (see ProgramOption.channel), and the edges into/out
+    of it (from _build_shared_dir_edges) are purely documentary.
+    """
+    processes_by_id = {process.id: process for process in processes}
+    sentinel_by_target: dict[tuple[str, str], str] = {}
+
+    for edge in edges:
+        source_process = processes_by_id.get(edge.sourceProcessId)
+        source_option = next(
+            (option for option in source_process.options if option.id == edge.sourceOptionId),
+            None,
+        ) if source_process is not None else None
+        if source_process is not None and source_option is not None:
+            sentinel_by_target[(edge.targetProcessId, edge.targetOptionId)] = (
+                f"[{source_process.name};{source_option.label}]"
+            )
+
+    for process in processes:
+        for option in process.options:
+            if option.channel == "shared_dir":
+                continue
+            sentinel = sentinel_by_target.get((process.id, option.id))
+            if sentinel is not None:
+                option.value = sentinel
+            elif option.value.startswith("[") and option.value.endswith("]"):
+                option.value = ""
+
+
 def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> None:
     """
     Positions processes in layers by data-flow depth, so a process
@@ -497,6 +543,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     )
 
     edges = _build_edges(processes, pending_connections) + _build_shared_dir_edges(processes)
+    _sync_connected_option_values(processes, edges)
     _layout_processes(processes, edges)
 
     return Program(
