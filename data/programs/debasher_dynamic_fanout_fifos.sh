@@ -459,6 +459,12 @@ aggregate_explain_opts()
 }
 
 ########
+aggregate_identify_cmdline_opts()
+{
+    opt_is_cmdline "-w"
+}
+
+########
 aggregate_define_opts()
 {
     # Initialize variables
