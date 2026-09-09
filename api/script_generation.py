@@ -211,6 +211,13 @@ def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, s
 # _opt_is_connected_to_proc below).
 _TASK_INDEXED_MODES = {"generator", "array"}
 
+# The non-"-ith" side of a fanout/fanin pairing: whatever "array"-mode
+# offered originally (task-numbered members 0..N-1 to read one-by-one via
+# define_opt_from_proc_task_out/define_opt_from_proc_out), a "generator"
+# process also provides — its own tasks are numbered the same way (see
+# _TASK_INDEXED_MODES above). The "-ith" side itself stays "standard"-only.
+_FANOUT_PARTNER_MODES = {"array", "generator"}
+
 
 def _task_idx_var(mode):
     return "task_idx" if mode == "generator" else "idx"
@@ -297,14 +304,14 @@ def _validate_fanout_option(process, option, process_modes) -> None:
         if not _opt_is_connected_to_proc(option):
             raise ValueError(
                 f'Fanout input "{option.label}" on "{process.name}" must be connected '
-                'to an "array"-mode process output.'
+                'to an "array"- or "generator"-mode process output.'
             )
         conn_proc, _ = _get_process_plus_opt(option)
-        if process_modes.get(conn_proc) != "array":
+        if process_modes.get(conn_proc) not in _FANOUT_PARTNER_MODES:
             raise ValueError(
                 f'Fanout input "{option.label}" on "{process.name}" is connected to '
-                f'"{conn_proc}", which is not "array"-mode — v1 only supports standard '
-                "<-> array fanout pairings."
+                f'"{conn_proc}", which is not "array"- or "generator"-mode — v1 only '
+                "supports standard <-> array/generator fanout pairings."
             )
 
 
@@ -316,7 +323,7 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
     0..count-1 emitting one define_opt (scatter, an unconnected output
     with a literal "$i"-referencing value) or one
     define_opt_from_proc_task_out (gather, an input connected to an
-    "array"-mode process's output) per iteration — see
+    "array"- or "generator"-mode process's output) per iteration — see
     data/programs/debasher_dynamic_fanout.sh's dispatch_define_opts/
     aggregate_define_opts for the hand-written equivalent.
     """
@@ -405,17 +412,19 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
             # Consumer side of a scatter connection: conn_opt is a fanout
             # family declared on a "standard" process (e.g. "-outfith"),
             # so it isn't a real option name by itself — the member this
-            # option actually reads is picked by this ("array"-mode)
-            # process's own per-task loop variable. One save_opt_list
+            # option actually reads is picked by this (_FANOUT_PARTNER_MODES,
+            # i.e. "array"- or "generator"-mode) process's own per-task loop
+            # variable. One save_opt_list
             # call on the source side (unlike _TASK_INDEXED_MODES, which
             # addresses N repeated calls of the SAME name), hence plain
             # define_opt_from_proc_out rather than _task_out. Fanout
             # options stay single-connection, so this is never fan-in.
-            if process.optionsHandler.mode != "array":
+            if process.optionsHandler.mode not in _FANOUT_PARTNER_MODES:
                 raise ValueError(
                     f'Option "{option.label}" on "{process.name}" is connected to fanout '
                     f'family "{conn_opt}" on "{conn_proc}", but "{process.name}" is not '
-                    '"array"-mode — v1 only supports standard <-> array fanout pairings.'
+                    '"array"- or "generator"-mode — v1 only supports standard <-> '
+                    "array/generator fanout pairings."
                 )
             idx_var = _task_idx_var(process.optionsHandler.mode)
             base_conn_opt = _fanout_base_label(conn_opt)

@@ -889,7 +889,17 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
 
     if generate_opts_size:
         generator_size_code = _extract_generator_size_code(generate_opts_size)
-        parsed = _parse_function_source(generate_opts) if generate_opts else None
+        # allow_fanout_consumer: like array mode, a generator's per-task
+        # body may connect to a "standard" process's fanout family via
+        # "<base>${task_idx}" (see _fanout_consumer_opt_re and
+        # script_generation.py's _FANOUT_PARTNER_MODES) — generator mode
+        # has no fanout family options of its own, so allow_fanout_blocks
+        # stays off.
+        parsed = (
+            _parse_function_source(generate_opts, allow_fanout_consumer=True)
+            if generate_opts
+            else None
+        )
 
         if generator_size_code is not None and parsed is not None:
             values, connections, value_descriptor_labels, fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed

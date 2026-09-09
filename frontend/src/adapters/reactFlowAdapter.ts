@@ -56,6 +56,15 @@ function isFanoutEndpoint(
   );
 }
 
+// The non-"-ith" side of a fanout/fanin pairing — mirrors
+// script_generation.py's _FANOUT_PARTNER_MODES.
+function isFanoutPartnerMode(process: ProgramProcess | undefined): boolean {
+  return (
+    process?.optionsHandler.mode === "array" ||
+    process?.optionsHandler.mode === "generator"
+  );
+}
+
 // Horizontal clearance (px) between the detour lane a back edge (see
 // isBackEdge) is routed through and the rightmost process in the
 // program, so the lane sits clear of every node's box. Unlike a
@@ -236,15 +245,16 @@ export function isValidProgramConnection(
   );
 
   // A fanout family option (see isFanoutOption) on a "standard" process
-  // may only pair with an "array"-mode process on the other end, and
-  // fanout options can't chain directly into one another.
+  // may only pair with an "array"- or "generator"-mode process on the
+  // other end (mirrors script_generation.py's _FANOUT_PARTNER_MODES),
+  // and fanout options can't chain directly into one another.
   const sourceIsFanout = isFanoutEndpoint(sourceProcess, sourceOptionDef);
   const targetIsFanout = isFanoutEndpoint(targetProcess, targetOptionDef);
 
-  if (sourceIsFanout && (targetProcess?.optionsHandler.mode !== "array" || targetIsFanout)) {
+  if (sourceIsFanout && (!isFanoutPartnerMode(targetProcess) || targetIsFanout)) {
     return false;
   }
-  if (targetIsFanout && (sourceProcess?.optionsHandler.mode !== "array" || sourceIsFanout)) {
+  if (targetIsFanout && (!isFanoutPartnerMode(sourceProcess) || sourceIsFanout)) {
     return false;
   }
 

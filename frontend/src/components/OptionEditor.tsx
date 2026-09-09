@@ -68,15 +68,17 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
   const idxVar = ownerProcess?.optionsHandler.mode === "generator" ? "task_idx" : "idx";
 
-  // A "standard"-mode owner gathering from an "array"-mode source
-  // (see script_generation.py's _fanout_definition_lines) doesn't share
-  // a loop with the source the way generator/array do — it expands into
-  // its own local "i" loop at script-gen time, one connection per task.
+  // A "standard"-mode owner gathering from an "array"- or "generator"-
+  // mode source (see script_generation.py's _fanout_definition_lines and
+  // its _FANOUT_PARTNER_MODES) doesn't share a loop with the source the
+  // way generator/array do — it expands into its own local "i" loop at
+  // script-gen time, one connection per task.
   const isFanoutGather =
     isFanoutOption(option.label) &&
     ownerProcess?.optionsHandler.mode === "standard" &&
     !!connectedSourceOption &&
-    connectedSourceOption.sourceProcess.optionsHandler.mode === "array";
+    (connectedSourceOption.sourceProcess.optionsHandler.mode === "array" ||
+      connectedSourceOption.sourceProcess.optionsHandler.mode === "generator");
 
   // Informational only — matches script_generation.py's own rule
   // (_option_definition_line/_TASK_INDEXED_MODES): a task-indexed
@@ -107,14 +109,17 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
   // Consumer side of a scatter connection (see
   // script_generation.py's _option_definition_line "conn_opt" branch):
   // this option is connected to a fanout family declared on a
-  // "standard" process, so this ("array"-mode) process's own task count
-  // is implicitly forced to match whatever that family's own count
-  // source computes — flagged here since nothing enforces it
+  // "standard" process, so this ("array"- or "generator"-mode) process's
+  // own task count is implicitly forced to match whatever that family's
+  // own count source computes — flagged here since nothing enforces it
   // structurally.
   const isScatterConsumer =
     !!connectedSourceOption &&
     connectedSourceOption.sourceProcess.optionsHandler.mode === "standard" &&
     isFanoutOption(connectedSourceOption.sourceOption.label);
+
+  const scatterConsumerModeNoun =
+    ownerProcess?.optionsHandler.mode === "generator" ? "generator" : "array";
 
   const scatterCountSource = isScatterConsumer
     ? connectedSourceOption.sourceProcess.options.find(
@@ -270,7 +275,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
             {scatterCountSource
               ? `that process's own "${scatterCountSource.label}" option`
               : "that process's count source (not configured yet)"}
-            {" "}— this process's array must produce exactly that many tasks.
+            {" "}— this process's {scatterConsumerModeNoun} must produce exactly that many tasks.
           </p>
         )}
 
