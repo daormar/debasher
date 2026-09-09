@@ -185,6 +185,7 @@ function toProgramOption(info: ProcessInfoOption): ProgramOption {
     value: "",
     commandLine: info.commandLine,
     mandatory: info.mandatory,
+    fromProcessSpec: false,
   };
 }
 
@@ -769,6 +770,8 @@ export function ProgramProvider({
       commandLine: false,
 
       mandatory: false,
+
+      fromProcessSpec: false,
 
     };
 
