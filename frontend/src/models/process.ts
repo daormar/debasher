@@ -24,6 +24,14 @@ export const DEFAULT_COMPUTATIONAL_SPECS: Required<ComputationalSpecs> = {
   time: "01:00:00",
 };
 
+export interface AliasOptMapping {
+
+  fromLabel: string;
+
+  toLabel: string;
+
+}
+
 export interface AdditionalSpecs {
 
   force: boolean;
@@ -31,6 +39,14 @@ export interface AdditionalSpecs {
   processdeps?: string;
 
   alias?: string;
+
+  // Only meaningful alongside `alias` — renames this process's own
+  // option labels (fromLabel) into the ones the aliased process's
+  // implementation expects (toLabel) before delegating, via the
+  // engine's "alias_opt_map" process spec attribute. Lets an alias
+  // process keep its own option names even when they differ from the
+  // aliased implementation's.
+  aliasOptMap?: AliasOptMapping[];
 
   externalAlias?: string;
 

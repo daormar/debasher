@@ -154,6 +154,8 @@ debasher::_show_proc_specs()
     [ "${processdeps}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`processdeps\`: ${processdeps}"
     local alias=$(debasher::_extract_alias_from_process_spec "${process_spec}")
     [ "${alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`alias\`: ${alias}"
+    local alias_opt_map=$(debasher::_extract_alias_opt_map_from_process_spec "${process_spec}")
+    [ "${alias_opt_map}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`alias_opt_map\`: ${alias_opt_map}"
     local ext_alias=$(debasher::_extract_ext_alias_from_process_spec "${process_spec}")
     [ "${ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`ext_alias\`: ${ext_alias}"
 }

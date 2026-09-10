@@ -17,6 +17,7 @@ from .doc_mod import (
 from .markdown_parsing import ProcessInfoOption, parse_proc_info_markdown
 from .models import (
     AdditionalSpecs,
+    AliasOptMapping,
     ComputationalSpecs,
     ExecutionOptions,
     OptionsHandler,
@@ -110,6 +111,22 @@ def _to_computational_specs(raw: dict[str, str]) -> ComputationalSpecs:
     )
 
 
+def _to_alias_opt_map(raw_value: str | None) -> list[AliasOptMapping]:
+    """
+    Parses the engine's "alias_opt_map" attribute value
+    ("OLD:NEW[,OLD:NEW...]", see
+    debasher::_validate_alias_opt_map in
+    engine/debasher_lib_programs.sh) into the app's typed pairs.
+    """
+    if not raw_value:
+        return []
+    mappings = []
+    for pair in raw_value.split(","):
+        old, _, new = pair.partition(":")
+        mappings.append(AliasOptMapping(fromLabel=old, toLabel=new))
+    return mappings
+
+
 def _to_additional_specs(raw: dict[str, str]) -> AdditionalSpecs:
     """
     Maps debasher::_show_proc_specs's raw "### Additional
@@ -122,6 +139,7 @@ def _to_additional_specs(raw: dict[str, str]) -> AdditionalSpecs:
         force="force" in raw,
         processdeps=raw.get("processdeps"),
         alias=raw.get("alias"),
+        aliasOptMap=_to_alias_opt_map(raw.get("alias_opt_map")),
         externalAlias=raw.get("ext_alias"),
     )
 

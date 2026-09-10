@@ -52,13 +52,24 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
         parts.append(f"processdeps={specs.processdeps}")
     if specs.alias:
         parts.append(f"alias={specs.alias}")
+        if specs.aliasOptMap:
+            # The engine's own attribute key is "alias_opt_map" (see
+            # debasher::_add_debasher_alias_process /
+            # add_debasher_process in engine/debasher_lib_programs.sh) —
+            # only valid alongside "alias".
+            joined = ",".join(f"{m.fromLabel}:{m.toLabel}" for m in specs.aliasOptMap)
+            parts.append(f"alias_opt_map={joined}")
     if specs.externalAlias:
         # The engine's own attribute key is "ext_alias" (see
         # debasher::_extract_ext_alias_from_process_spec /
         # add_debasher_process in engine/debasher_lib_programs.sh) —
         # "externalAlias" is only this app's field name for it.
         parts.append(f"ext_alias={specs.externalAlias}")
-    return " ".join(parts)
+    # The engine's extract_attr_from_process_additional_specs (unlike
+    # its comp-specs counterpart) always splits on ";", with no
+    # legacy-space fallback — so joining with anything else here would
+    # silently break extraction of every attribute after the first.
+    return ";".join(parts)
 
 
 def _add_preamble(preamble):
