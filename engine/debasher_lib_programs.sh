@@ -463,6 +463,7 @@ debasher::_create_process_func_ext_alias()
 {
     local processname=$1
     local process_ext_alias=$2
+    local alias_opt_map=$3
     local interpreter_for_file=$(debasher::_get_interpreter_for_file "${process_ext_alias}")
 
     if [ -n "${interpreter_for_file}" ]; then
@@ -470,7 +471,11 @@ debasher::_create_process_func_ext_alias()
         printf -v escaped_interpreter '%q' "${interpreter_for_file}"
         local escaped_alias
         printf -v escaped_alias '%q' "${process_ext_alias}"
-        eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
+        if [ -z "${alias_opt_map}" ]; then
+            eval "$processname() { ${escaped_interpreter} ${escaped_alias} \"\$@\"; }"
+        else
+            eval "$processname() { local _debasher_renamed=(); debasher::_rename_opt_args _debasher_renamed '${alias_opt_map}' \"\$@\"; ${escaped_interpreter} ${escaped_alias} \"\${_debasher_renamed[@]}\"; }"
+        fi
     else
         echo "Error: external alias ${process_ext_alias} for process ${processname} is not valid: no suitable interpreter was found. Aborting execution..." >&2
         return 1
@@ -491,6 +496,7 @@ debasher::_add_debasher_ext_alias_process()
 {
     local processname=$1
     local process_ext_alias=$2
+    local alias_opt_map=$3
     local current_pfile_dir=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
     # Check if alias corresponds to an external file
@@ -510,8 +516,13 @@ debasher::_add_debasher_ext_alias_process()
         return 1
     fi
 
+    # Validate alias_opt_map, if given
+    if [ -n "${alias_opt_map}" ]; then
+        debasher::_validate_alias_opt_map "${processname}" "${alias_opt_map}" || return 1
+    fi
+
     # Create process function
-    debasher::_create_process_func_ext_alias "${processname}" "${external_file}" || return 1
+    debasher::_create_process_func_ext_alias "${processname}" "${external_file}" "${alias_opt_map}" || return 1
 
     # Store process name in associative array (alias information is also
     # stored)
@@ -535,11 +546,11 @@ debasher::_print_process_entry()
 # $1 - Name of the process to add into the program.
 # $2 - Computational specifications.
 # $3 - Additional specifications for the process. Besides "force",
-#      "processdeps", "alias" and "ext_alias", an "alias" process may
-#      also carry an "alias_opt_map" attribute ("OLD:NEW[,OLD:NEW...]")
-#      to rename its own option names into the ones its aliased
-#      implementation expects (e.g. "alias_opt_map=-l-a:-l") -- invalid
-#      without "alias".
+#      "processdeps", "alias" and "ext_alias", an "alias" or "ext_alias"
+#      process may also carry an "alias_opt_map" attribute
+#      ("OLD:NEW[,OLD:NEW...]") to rename its own option names into the
+#      ones its aliased implementation expects (e.g.
+#      "alias_opt_map=-l-a:-l") -- invalid without "alias"/"ext_alias".
 #
 # Examples
 #
@@ -573,26 +584,30 @@ debasher::add_debasher_process()
     if debasher::_is_heredoc_process "${processname}" >/dev/null; then
         debasher::_add_debasher_heredoc_process "${processname}" || exit 1
     else
+        # alias_opt_map is shared by alias and ext_alias -- extracted
+        # once, whichever of the two (mutually exclusive) is present
+        # gets it.
+        local process_alias_opt_map=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias_opt_map")
+        [ "${process_alias_opt_map}" = "${DEBASHER_ATTR_NOT_FOUND}" ] && process_alias_opt_map=""
+
         # Treat process alias if provided
         local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
         if [ "${process_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # A process alias was given
-            local process_alias_opt_map=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias_opt_map")
-            [ "${process_alias_opt_map}" = "${DEBASHER_ATTR_NOT_FOUND}" ] && process_alias_opt_map=""
             debasher::_add_debasher_alias_process "${processname}" "${process_alias}" "${process_alias_opt_map}" || exit 1
         else
-            # alias_opt_map only makes sense alongside an alias
-            if [ "$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias_opt_map")" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-                echo "Error: alias_opt_map given for process ${processname} without an alias attribute. Aborting execution..." >&2
-                exit 1
-            fi
-
             # Treat process external alias if provided
             local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
             if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
                 # A process external alias was given
-                debasher::_add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" || exit 1
+                debasher::_add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" "${process_alias_opt_map}" || exit 1
             else
+                # alias_opt_map only makes sense alongside alias or ext_alias
+                if [ -n "${process_alias_opt_map}" ]; then
+                    echo "Error: alias_opt_map given for process ${processname} without an alias or ext_alias attribute. Aborting execution..." >&2
+                    exit 1
+                fi
+
                 # No heredoc nor aliases were given
                 debasher::_add_debasher_regular_process "${processname}" || exit 1
             fi
@@ -617,11 +632,11 @@ debasher::add_debasher_process()
 # $1 - Name of the process to add into the program.
 # $2 - Computational specifications.
 # $3 - Additional specifications for the process. Besides "force",
-#      "processdeps", "alias" and "ext_alias", an "alias" process may
-#      also carry an "alias_opt_map" attribute ("OLD:NEW[,OLD:NEW...]")
-#      to rename its own option names into the ones its aliased
-#      implementation expects (e.g. "alias_opt_map=-l-a:-l") -- invalid
-#      without "alias".
+#      "processdeps", "alias" and "ext_alias", an "alias" or "ext_alias"
+#      process may also carry an "alias_opt_map" attribute
+#      ("OLD:NEW[,OLD:NEW...]") to rename its own option names into the
+#      ones its aliased implementation expects (e.g.
+#      "alias_opt_map=-l-a:-l") -- invalid without "alias"/"ext_alias".
 #
 # Examples
 #

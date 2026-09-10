@@ -36,10 +36,18 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
 
   function handleAliasChange(value: string) {
     setAlias(value);
-    if (!value.trim()) {
-      // alias_opt_map is invalid without alias (see
-      // debasher::add_debasher_process) — clear it along with alias,
-      // same as OptionEditor clears channel when fromProcessSpec is set.
+    if (!value.trim() && !externalAlias.trim()) {
+      // alias_opt_map is invalid without alias or externalAlias (see
+      // debasher::add_debasher_process) — clear it once neither is set
+      // any more, same as OptionEditor clears channel when
+      // fromProcessSpec is set.
+      setAliasOptMap([]);
+    }
+  }
+
+  function handleExternalAliasChange(value: string) {
+    setExternalAlias(value);
+    if (!value.trim() && !alias.trim()) {
       setAliasOptMap([]);
     }
   }
@@ -64,8 +72,9 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
   function handleSave() {
 
     const trimmedAlias = alias.trim();
+    const trimmedExternalAlias = externalAlias.trim();
 
-    const validAliasOptMap = trimmedAlias
+    const validAliasOptMap = (trimmedAlias || trimmedExternalAlias)
       ? aliasOptMap.filter(mapping => mapping.fromLabel.trim() && mapping.toLabel.trim())
       : [];
 
@@ -74,7 +83,7 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
       processdeps: processdeps.trim() ? processdeps : undefined,
       alias: trimmedAlias ? trimmedAlias : undefined,
       aliasOptMap: validAliasOptMap.length > 0 ? validAliasOptMap : undefined,
-      externalAlias: externalAlias.trim() ? externalAlias : undefined,
+      externalAlias: trimmedExternalAlias ? trimmedExternalAlias : undefined,
     });
 
     onClose();
@@ -164,7 +173,25 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
 
         />
 
-        {alias.trim() && (
+        <label>
+          External Alias
+        </label>
+
+        <input
+
+          value={externalAlias}
+
+          onChange={(event) =>
+            handleExternalAliasChange(event.target.value)
+          }
+
+          style={{
+            width: "100%",
+          }}
+
+        />
+
+        {(alias.trim() || externalAlias.trim()) && (
 
           <div
             style={{
@@ -269,24 +296,6 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
           </div>
 
         )}
-
-        <label>
-          External Alias
-        </label>
-
-        <input
-
-          value={externalAlias}
-
-          onChange={(event) =>
-            setExternalAlias(event.target.value)
-          }
-
-          style={{
-            width: "100%",
-          }}
-
-        />
 
         <div
           style={{

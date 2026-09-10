@@ -74,11 +74,13 @@ class AdditionalSpecs(BaseModel):
     force: bool
     processdeps: Optional[str] = None
     alias: Optional[str] = None
-    # Only meaningful alongside "alias" — renames this process's own
-    # option labels (fromLabel) into the ones the aliased process's
-    # implementation expects (toLabel) before delegating, via the
-    # engine's "alias_opt_map" process spec attribute (see
-    # debasher::_add_debasher_alias_process in
+    # Only meaningful alongside "alias" or "externalAlias" (mutually
+    # exclusive with each other — see script_generation.py's
+    # _additional_specs_str) — renames this process's own option labels
+    # (fromLabel) into the ones the aliased implementation expects
+    # (toLabel) before delegating, via the engine's "alias_opt_map"
+    # process spec attribute (see debasher::_add_debasher_alias_process
+    # / _add_debasher_ext_alias_process in
     # engine/debasher_lib_programs.sh). Lets an alias process keep its
     # own _explain_opts/_identify_cmdline_opts/_define_opts option
     # names even when they differ from the aliased implementation's.

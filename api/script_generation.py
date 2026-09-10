@@ -38,6 +38,12 @@ def _computational_specs_str(specs: ComputationalSpecs) -> str:
     return " ".join(parts)
 
 
+def _alias_opt_map_str(specs: AdditionalSpecs) -> str | None:
+    if not specs.aliasOptMap:
+        return None
+    return ",".join(f"{m.fromLabel}:{m.toLabel}" for m in specs.aliasOptMap)
+
+
 def _additional_specs_str(specs: AdditionalSpecs) -> str:
     parts = []
     if specs.force:
@@ -52,19 +58,25 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
         parts.append(f"processdeps={specs.processdeps}")
     if specs.alias:
         parts.append(f"alias={specs.alias}")
-        if specs.aliasOptMap:
-            # The engine's own attribute key is "alias_opt_map" (see
-            # debasher::_add_debasher_alias_process /
-            # add_debasher_process in engine/debasher_lib_programs.sh) —
-            # only valid alongside "alias".
-            joined = ",".join(f"{m.fromLabel}:{m.toLabel}" for m in specs.aliasOptMap)
-            parts.append(f"alias_opt_map={joined}")
+        # The engine's own attribute key is "alias_opt_map" (see
+        # debasher::_add_debasher_alias_process / add_debasher_process
+        # in engine/debasher_lib_programs.sh) — only valid alongside
+        # "alias" or "ext_alias". "alias" wins when both are somehow
+        # set (see debasher::add_debasher_process's own precedence), so
+        # it claims the map first.
+        alias_opt_map = _alias_opt_map_str(specs)
+        if alias_opt_map:
+            parts.append(f"alias_opt_map={alias_opt_map}")
     if specs.externalAlias:
         # The engine's own attribute key is "ext_alias" (see
         # debasher::_extract_ext_alias_from_process_spec /
         # add_debasher_process in engine/debasher_lib_programs.sh) —
         # "externalAlias" is only this app's field name for it.
         parts.append(f"ext_alias={specs.externalAlias}")
+        if not specs.alias:
+            alias_opt_map = _alias_opt_map_str(specs)
+            if alias_opt_map:
+                parts.append(f"alias_opt_map={alias_opt_map}")
     # The engine's extract_attr_from_process_additional_specs (unlike
     # its comp-specs counterpart) always splits on ";", with no
     # legacy-space fallback — so joining with anything else here would
