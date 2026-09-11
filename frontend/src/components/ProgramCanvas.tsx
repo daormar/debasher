@@ -37,6 +37,7 @@ export default function ProgramCanvas() {
     connect,
     disconnect,
     runPhase,
+    runOutput,
     dismissProgramRun,
   } = useProgram();
 
@@ -221,6 +222,7 @@ export default function ProgramCanvas() {
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
             <RunStatusIndicator
               phase={runPhase}
+              output={runOutput}
               onClose={dismissProgramRun}
             />
           </Panel>
