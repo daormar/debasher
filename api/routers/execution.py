@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -23,6 +24,26 @@ _STATE_BY_EXIT_CODE: dict[int, ProgramState] = {
     0: "finished",
     2: "in-progress",
 }
+
+
+# Applies everywhere the "Inspect execution" context menu shows a
+# file's worth of text — stdout, scheduler output, options, and a "Show
+# inputs and outputs" > "View" path (see _read_text_capped, which caps
+# the same way but streams a path instead of an in-memory string) —
+# so none of them can ship an arbitrarily large response to the
+# browser.
+_MAX_INSPECT_LINES = 10_000
+
+
+def _cap_lines(text: str, max_lines: int = _MAX_INSPECT_LINES) -> str:
+    lines = text.splitlines(keepends=True)
+    if len(lines) <= max_lines:
+        return text
+
+    return (
+        f"Warning: output has more than {max_lines} lines — "
+        f"showing only the first {max_lines}.\n\n"
+    ) + "".join(lines[:max_lines])
 
 
 def _debasher_env(program: Program) -> dict[str, str]:
@@ -105,6 +126,72 @@ def _run_debasher_dir_tool(program: Program, tool_name: str) -> tuple[str, int]:
 def _get_program_state(program: Program) -> tuple[ProgramState, str]:
     output, returncode = _run_debasher_dir_tool(program, "debasher_status")
     return _STATE_BY_EXIT_CODE.get(returncode, "unfinished"), output
+
+
+def _run_debasher_process_tool(
+    program: Program,
+    tool_name: str,
+    process_name: str,
+    task_index: int | None = None,
+) -> str:
+    """
+    Run a DeBasher bin tool that takes "-d <outputDir> -p <processName>
+    [-t <taskIndex>]" (debasher_get_stdout, debasher_get_sched_out).
+    `task_index` selects one task's file for an array/generator/manual
+    process that ran as more than one task (see get_process_tasks);
+    omit it for a "standard" one-file process. Returns the combined
+    output — including the tool's own "file could not be found" error,
+    e.g. for a process that hasn't produced one yet — capped at
+    _MAX_INSPECT_LINES lines.
+    """
+    tool = paths.find_bin_tool(tool_name)
+    if tool is None:
+        return f"Error: {tool_name} tool not found."
+
+    command = [str(tool), "-d", program.outputDir, "-p", process_name]
+    if task_index is not None:
+        command += ["-t", str(task_index)]
+
+    result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
+
+    return _cap_lines(result.stdout + result.stderr)
+
+
+# Matches "<processName>_<idx>.stdout" / "<processName>_<idx>.sched_out" /
+# "<processName>_<idx>.opts" (see engine/debasher_lib_processes.sh's
+# _get_process_stdout_filename/_get_process_schedout_filename/
+# _get_process_opts_filename) — the per-task files an array/generator/
+# manual process produces when it runs as more than one task, as
+# opposed to a "standard" process's single
+# "<processName>.stdout"/"<processName>.sched_out"/"<processName>.opts".
+def _task_indices_for_process(outdir: str, process_name: str) -> list[int]:
+    exec_dir = Path(outdir).expanduser() / "__exec__" / process_name
+
+    if not exec_dir.is_dir():
+        return []
+
+    prefix = f"{process_name}_"
+    indices: set[int] = set()
+
+    # A directory listing stays cheap even for the many thousands of
+    # files a large task array can leave behind — unlike shelling out
+    # to a DeBasher tool per task, which is what makes listing them
+    # this way (rather than, say, probing task indices one by one)
+    # the right approach at that scale.
+    for entry in exec_dir.iterdir():
+        name = entry.name
+        if not name.startswith(prefix):
+            continue
+
+        suffix = name[len(prefix):]
+        for ext in (".stdout", ".sched_out", ".opts"):
+            if suffix.endswith(ext):
+                idx_str = suffix[: -len(ext)]
+                if idx_str.isdigit():
+                    indices.add(int(idx_str))
+                break
+
+    return sorted(indices)
 
 
 # Matches debasher_status's per-process lines (see
@@ -218,6 +305,242 @@ def get_process_statuses(program: Program) -> ProcessStatusesResponse:
     """
     output, _ = _run_debasher_dir_tool(program, "debasher_status")
     return ProcessStatusesResponse(statuses=_parse_process_statuses(output))
+
+
+class ProcessTasksRequest(BaseModel):
+    program: Program
+    processName: str
+
+
+class ProcessTasksResponse(BaseModel):
+    # Empty for a "standard" one-task process; the list of task
+    # indices found (not necessarily contiguous — a task still
+    # running, or that never produced output, leaves a gap) otherwise.
+    taskIndices: list[int]
+
+
+@router.post("/process-tasks", response_model=ProcessTasksResponse)
+def get_process_tasks(request: ProcessTasksRequest) -> ProcessTasksResponse:
+    """
+    List the task indices that have a stdout or scheduler-output file
+    for `processName`, for the "Inspect execution" menu's task picker
+    (skipped when this comes back empty — a "standard" process's
+    single file needs no index).
+    """
+    return ProcessTasksResponse(
+        taskIndices=_task_indices_for_process(request.program.outputDir, request.processName)
+    )
+
+
+class ProcessOutputRequest(BaseModel):
+    program: Program
+    processName: str
+    # Selects one task's file for an array/generator/manual process
+    # that ran as more than one task (see /process-tasks); omit for a
+    # "standard" one-file process.
+    taskIndex: int | None = None
+
+
+class ProcessOutputResponse(BaseModel):
+    output: str
+
+
+@router.post("/process-stdout", response_model=ProcessOutputResponse)
+def get_process_stdout(request: ProcessOutputRequest) -> ProcessOutputResponse:
+    """
+    Get a process's captured stdout (debasher_get_stdout -d <outputDir>
+    -p <processName> [-t <taskIndex>]), for the canvas's right-click
+    "Inspect execution" menu.
+    """
+    output = _run_debasher_process_tool(
+        request.program, "debasher_get_stdout", request.processName, request.taskIndex
+    )
+    return ProcessOutputResponse(output=output)
+
+
+@router.post("/process-sched-out", response_model=ProcessOutputResponse)
+def get_process_sched_out(request: ProcessOutputRequest) -> ProcessOutputResponse:
+    """
+    Get a process's scheduler output (debasher_get_sched_out -d
+    <outputDir> -p <processName> [-t <taskIndex>]), for the canvas's
+    right-click "Inspect execution" menu.
+    """
+    output = _run_debasher_process_tool(
+        request.program, "debasher_get_sched_out", request.processName, request.taskIndex
+    )
+    return ProcessOutputResponse(output=output)
+
+
+# There's no "debasher_get_opts" bin tool (unlike stdout/sched-out) — the
+# ".opts" file (see engine/debasher_lib_processes.sh's
+# _get_process_opts_filename and debasher_lib_opts.sh's
+# _print_opts_as_qstrings) is read directly, the same way
+# _task_indices_for_process already reads __exec__ directly.
+def _get_process_opts_path(outdir: str, process_name: str, task_index: int | None) -> Path:
+    exec_dir = Path(outdir).expanduser() / "__exec__" / process_name
+    if task_index is None:
+        return exec_dir / f"{process_name}.opts"
+    return exec_dir / f"{process_name}_{task_index}.opts"
+
+
+@router.post("/process-opts", response_model=ProcessOutputResponse)
+def get_process_opts(request: ProcessOutputRequest) -> ProcessOutputResponse:
+    """
+    Get a process's resolved command-line options, one `printf '%q'`
+    escaped option/value per line, from its ".opts" file, for the
+    canvas's right-click "Inspect execution" menu's "See options" —
+    capped at _MAX_INSPECT_LINES lines.
+    """
+    opts_path = _get_process_opts_path(
+        request.program.outputDir, request.processName, request.taskIndex
+    )
+    try:
+        output = _read_text_capped(opts_path)
+    except OSError:
+        output = f"Error: options file for process {request.processName} could not be found!"
+
+    return ProcessOutputResponse(output=output)
+
+
+# Each ".opts" line is one option, `printf '%q'`-escaped and (when it
+# has a value) shell-word-split from its value — e.g. `-i input\ file`
+# or `--flag`. shlex.split undoes that quoting, giving back the actual
+# flag/value strings the process ran with.
+def _parse_opts_file(opts_path: Path) -> dict[str, str]:
+    if not opts_path.is_file():
+        return {}
+
+    values: dict[str, str] = {}
+    for line in opts_path.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            tokens = shlex.split(line)
+        except ValueError:
+            continue
+        if tokens:
+            values[tokens[0]] = tokens[1] if len(tokens) > 1 else ""
+
+    return values
+
+
+class ProcessResolvedOptionsResponse(BaseModel):
+    # {option label: resolved value} from the process's own ".opts"
+    # file — empty when the program hasn't produced one yet (e.g. it
+    # hasn't been run).
+    values: dict[str, str]
+
+
+@router.post("/process-resolved-options", response_model=ProcessResolvedOptionsResponse)
+def get_process_resolved_options(request: ProcessOutputRequest) -> ProcessResolvedOptionsResponse:
+    """
+    Parse a process's ".opts" file into a {label: value} map, for the
+    canvas's right-click "Inspect execution" menu's "Show inputs and
+    outputs" — this is how a fifo/shared-dir/value-descriptor option's
+    actual resolved value (rather than the program model's own
+    possibly-unresolved `value` field) gets shown.
+    """
+    opts_path = _get_process_opts_path(
+        request.program.outputDir, request.processName, request.taskIndex
+    )
+    return ProcessResolvedOptionsResponse(values=_parse_opts_file(opts_path))
+
+
+class InspectPathRequest(BaseModel):
+    path: str
+
+
+class InspectPathResponse(BaseModel):
+    kind: Literal["file", "binary", "directory", "missing"]
+    content: str | None = None
+    # Directory listing entries, each name suffixed with "/" when it is
+    # itself a subdirectory.
+    entries: list[str] | None = None
+
+
+# Sniffs the first chunk of a file the same way `file`/git do: a NUL
+# byte, or a decode failure, means it isn't text worth dumping into the
+# "Show inputs and outputs" modal.
+def _looks_binary(path: Path, sample_size: int = 8192) -> bool:
+    try:
+        with path.open("rb") as f:
+            chunk = f.read(sample_size)
+    except OSError:
+        return False
+
+    if b"\x00" in chunk:
+        return True
+
+    try:
+        chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        return True
+
+    return False
+
+
+# Reads at most `max_lines` lines, without loading a much larger file
+# into memory first just to find out it's too big — same cap and
+# warning wording as _cap_lines, just streamed from a path instead of
+# an in-memory string.
+def _read_text_capped(path: Path, max_lines: int = _MAX_INSPECT_LINES) -> str:
+    lines: list[str] = []
+    truncated = False
+
+    with path.open("r", errors="replace") as f:
+        for i, line in enumerate(f):
+            if i >= max_lines:
+                truncated = True
+                break
+            lines.append(line)
+
+    content = "".join(lines)
+    if truncated:
+        content = (
+            f"Warning: file has more than {max_lines} lines — "
+            f"showing only the first {max_lines}.\n\n"
+        ) + content
+
+    return content
+
+
+@router.post("/inspect-path", response_model=InspectPathResponse)
+def inspect_path(request: InspectPathRequest) -> InspectPathResponse:
+    """
+    Inspect a resolved option's value as a filesystem path, for the
+    "Show inputs and outputs" modal's per-option "View" button: a file's
+    content (kind="binary" and no content when it doesn't look like
+    text; truncated with a leading warning past _MAX_INSPECT_LINES
+    lines), or a directory's listing (likewise truncated).
+    """
+    resolved = Path(request.path).expanduser()
+
+    if resolved.is_dir():
+        entries = sorted(
+            f"{entry.name}/" if entry.is_dir() else entry.name
+            for entry in resolved.iterdir()
+        )
+        if len(entries) > _MAX_INSPECT_LINES:
+            total = len(entries)
+            entries = entries[:_MAX_INSPECT_LINES]
+            entries.insert(
+                0,
+                f"Warning: directory has {total} entries — "
+                f"showing only the first {_MAX_INSPECT_LINES}.",
+            )
+        return InspectPathResponse(kind="directory", entries=entries)
+
+    if resolved.is_file():
+        if _looks_binary(resolved):
+            return InspectPathResponse(kind="binary")
+
+        try:
+            content = _read_text_capped(resolved)
+        except OSError as e:
+            content = f"Error: could not read file: {e}"
+        return InspectPathResponse(kind="file", content=content)
+
+    return InspectPathResponse(kind="missing")
 
 
 class CheckProgramOptionsResponse(BaseModel):

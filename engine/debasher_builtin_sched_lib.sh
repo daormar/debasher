@@ -1074,6 +1074,11 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # the DEBASHER_DESERIALIZED_ARGS variable)
     debasher::_deserialize_args "${sargs}"
 
+    # Dump resolved options to the process's ".opts" file (webui "See
+    # options" inspect action)
+    local opts_fname=$(debasher::_get_process_opts_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
+    debasher::_print_opts_as_qstrings "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${opts_fname}"
+
     # Execute process skip function if it was provided
     if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
         ${skip_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}" && { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }

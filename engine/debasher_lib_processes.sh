@@ -941,6 +941,24 @@ debasher::_get_process_stdout_filename()
 }
 
 ########
+debasher::_get_process_opts_filename()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    # Get exec dir
+    execdir=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+
+    if [ "${opt_array_size}" -eq 1 ]; then
+        echo "${execdir}/${processname}.${DEBASHER_OPTS_FEXT}"
+    else
+        echo "${execdir}/${processname}_${task_idx}.${DEBASHER_OPTS_FEXT}"
+    fi
+}
+
+########
 debasher::_get_process_log_filename()
 {
     local dirname=$1

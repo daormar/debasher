@@ -85,6 +85,16 @@ export function isFanoutOption(label: string): boolean {
   return fanoutBaseLabel(label).replace(/^-+/, "").length > 0;
 }
 
+// A fanout/fanin option family too large to list inline, so
+// ProcessIOModal shows a "Pick index" row for it (backed by
+// ProcessTaskPicker) instead — see ProgramCanvas's
+// expandFanoutOptions/MAX_FANOUT_INLINE.
+export interface FanoutFamily {
+  option: ProgramOption;
+  baseLabel: string;
+  count: number;
+}
+
 /**
  * Command line options declared across all of a program's processes,
  * deduplicated by label (the same option can be declared on more than
