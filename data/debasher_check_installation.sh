@@ -157,6 +157,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_hello_world_alias_opt_map program
+progname="debasher_hello_world_alias_opt_map"
+sched="BUILTIN"
+bs_cpus=2
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_cycle program
 progname="debasher_cycle"
 sched="BUILTIN"

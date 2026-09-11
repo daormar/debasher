@@ -749,3 +749,5 @@ functionality offered by the tool. The examples can also be found in the
    conda
 
    docker
+
+   alias_opt_map
