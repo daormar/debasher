@@ -14,8 +14,12 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
     setExecutionOptions,
   } = useProgram();
 
+  // ProgramContext's normalizeProgram guarantees this is never falsy, so
+  // no fallback here — a fallback would just mask a genuinely empty
+  // stored value behind a display that looks fine, which is exactly what
+  // let that case go unnoticed before (see normalizeProgram).
   const [scheduler, setScheduler] =
-    useState(program.executionOptions.scheduler || "BUILTIN");
+    useState(program.executionOptions.scheduler);
 
   const [schedulers, setSchedulers] =
     useState<string[]>([]);
