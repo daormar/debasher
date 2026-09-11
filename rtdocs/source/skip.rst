@@ -3,6 +3,15 @@ Process Skip Example
 
 .. code-block:: bash
 
+    # This module reuses the value_writer and value_reader processes
+    # from the value pass example to demonstrate the skip method.
+    # value_reader_skip reads the same value descriptor as value_reader
+    # itself and returns 1 when the value is even, telling DeBasher to
+    # skip the process entirely for that run, or 0 when it is odd,
+    # letting value_reader execute normally. This shows how a process
+    # can decide, from its own options, whether it needs to run at all
+    # before the scheduler commits any resources to it.
+
     value_writer_document()
     {
         document_process "Takes two numbers and produce their sum as output."

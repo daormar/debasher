@@ -3,6 +3,15 @@ Conda Example
 
 .. code-block:: bash
 
+    # This module shows how a process can run inside a Conda
+    # environment managed by DeBasher itself. conda_example_conda_envs
+    # declares the py27 environment from a py27.yml file using
+    # define_conda_env, and the conda_example process activates it with
+    # conda activate before running python and deactivates it
+    # afterward. DeBasher takes care of creating the environment from
+    # the given file the first time the program runs, so the process
+    # code only needs to assume it exists.
+
     conda_example_document()
     {
         document_process "Prints Python version to file \`python_ver.txt\`."

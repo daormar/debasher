@@ -3,6 +3,15 @@ Program with Cycles
 
 .. code-block:: bash
 
+    # This module shows that DeBasher workflows are not restricted to
+    # acyclic graphs. process_a and process_b each declare their output
+    # FIFO through define_fifo_opt and read the other's FIFO through
+    # define_opt_from_proc_out, so each one depends on the other and the
+    # resulting graph contains a cycle. At runtime the two processes run
+    # concurrently and exchange values back and forth over the FIFOs
+    # until process_a sends the DEBASHER_SHUTDOWN_TOKEN constant, at
+    # which point process_b exits its loop and the program finishes.
+
     process_a_document()
     {
         document_process "Executes a process reading and writing from fifos."

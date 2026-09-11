@@ -1,19 +1,18 @@
-Process Array Example using Generators
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Process Array Example
+^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
-    # This module shows DeBasher's generator method as a third way to
-    # create multiple tasks for the same process, besides the loop
-    # written by hand and the array option handler seen in the previous
-    # two examples. Instead of a define_opts function that decides how
-    # many tasks to create and saves each option list itself,
-    # array_writer and array_reader implement generate_opts_size
-    # (returning the number of tasks) and generate_opts (building the
-    # option list for one task, given its index). DeBasher calls
-    # generate_opts_size once and then generate_opts once per index, so
-    # the iteration itself belongs to the engine rather than to the
-    # module.
+    # This module shows the basic pattern for running an array of
+    # parallel tasks. array_writer_define_opts loops over a fixed set
+    # of task identifiers and calls save_opt_list once per iteration,
+    # so DeBasher schedules one array_writer task per call with its own
+    # "-id" and "-outf" options. array_reader_define_opts mirrors the
+    # same loop, reading each writer task's output through
+    # define_opt_from_proc_task_out. The loop itself is written by hand
+    # here: compare it with the following example, where the same
+    # scenario is expressed through DeBasher's array option handler
+    # convention instead.
 
     array_writer_document()
     {
@@ -27,11 +26,11 @@ Process Array Example using Generators
         explain_opt "-c" "<int>" "$description"
 
         # -id option
-        local description="process id"
+        local description="id of writer"
         explain_opt "-id" "<int>" "$description"
 
         # -outf option
-        local description="output file"
+        local description="output file of writer"
         explain_opt "-outf" "<file>" "$description"
     }
 
@@ -40,37 +39,25 @@ Process Array Example using Generators
         opt_is_cmdline "-c"
     }
 
-    array_writer_generate_opts_size()
+    array_writer_define_opts()
     {
         # Initialize variables
         local cmdline=$1
         local process_spec=$2
         local process_name=$3
         local process_outdir=$4
-
-        echo 4
-    }
-
-    array_writer_generate_opts()
-    {
-        # Initialize variables
-        local cmdline=$1
-        local process_spec=$2
-        local process_name=$3
-        local process_outdir=$4
-        local task_idx=$5
         local optlist=""
 
         # -c option
         define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
-        # -id option
-        define_opt "-id" $task_idx optlist || return 1
-
-        # -outf option
-        define_opt "-outf" "${process_outdir}/${task_idx}" optlist || return 1
-
-        save_opt_list optlist
+        # Save option list so as to execute process four times
+        for id in 0 1 2 3; do
+            local specific_optlist=${optlist}
+            define_opt "-id" $id specific_optlist || return 1
+            define_opt "-outf" "${process_outdir}/${id}" specific_optlist || return 1
+            save_opt_list specific_optlist
+        done
     }
 
     array_writer()
@@ -106,15 +93,11 @@ Process Array Example using Generators
     array_reader_explain_opts()
     {
         # -id option
-        local description="process id"
+        local description="id of reader"
         explain_opt "-id" "<int>" "$description"
 
-        # -infile option
-        local description="input file"
-        explain_opt "-inf" "<file>" "$description"
-
         # -outdir option
-        local description="output directory"
+        local description="output directory of reader"
         explain_opt "-outdir" "<file>" "$description"
     }
 
@@ -123,37 +106,23 @@ Process Array Example using Generators
         :
     }
 
-    array_reader_generate_opts_size()
+    array_reader_define_opts()
     {
         # Initialize variables
         local cmdline=$1
         local process_spec=$2
         local process_name=$3
         local process_outdir=$4
-
-        echo 4
-    }
-
-    array_reader_generate_opts()
-    {
-        # Initialize variables
-        local cmdline=$1
-        local process_spec=$2
-        local process_name=$3
-        local process_outdir=$4
-        local task_idx=$5
         local optlist=""
 
-        # -id option
-        define_opt "-id" $task_idx optlist || return 1
-
-        # -infile option
-        define_opt_from_proc_task_out "-infile" "array_writer" "${task_idx}" "-outf" optlist || return 1
-
-        # -outdir option
-        define_opt "-outdir" "${process_outdir}" optlist || return 1
-
-        save_opt_list optlist
+        # Save option list so as to execute process four times
+        for id in 0 1 2 3; do
+            local specific_optlist=${optlist}
+            define_opt "-id" $id specific_optlist || return 1
+            define_opt_from_proc_task_out "-infile" "array_writer" "${id}" "-outf" specific_optlist || return 1
+            define_opt "-outdir" "${process_outdir}" specific_optlist || return 1
+            save_opt_list specific_optlist
+        done
     }
 
     array_reader()
@@ -184,7 +153,7 @@ Process Array Example using Generators
         logmsg "Cleaning finished"
     }
 
-    debasher_generator_example_program()
+    debasher_array_example_original_program()
     {
         add_debasher_process "array_writer" "cpus=1 mem=32 time=00:01:00,00:02:00 throttle=2"
         add_debasher_process "array_reader" "cpus=1 mem=32 time=00:01:00 throttle=4"

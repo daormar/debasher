@@ -1,7 +1,17 @@
-Process Array Example
-^^^^^^^^^^^^^^^^^^^^^
+Process Array Example Using the Array Option Handler
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
+
+    # This module reproduces the exact same array_writer and array_reader
+    # scenario as the previous example, but each define_opts method
+    # follows DeBasher's array option handler convention instead of a
+    # loop written by hand: an array variable named "array", built by
+    # user code, is iterated over using an index variable named "idx".
+    # This is exactly the shape produced by the frontend's option
+    # handler code generation and recognized back by its import logic,
+    # so loading this module resolves both processes to array mode in
+    # the visual editor instead of falling back to a manual handler.
 
     array_writer_document()
     {

@@ -3,6 +3,16 @@ File Writer and File Reader Example
 
 .. code-block:: bash
 
+    # This module shows the most direct way to pass information between
+    # two processes in DeBasher, through a plain file on disk.
+    # file_writer takes the "-s" command line option and writes its
+    # value to a file whose path it defines itself with define_opt.
+    # file_reader then obtains that same path through
+    # define_opt_from_proc_out, which both connects the two processes
+    # and makes DeBasher infer that file_reader must run after
+    # file_writer, and prints the file content to its own standard
+    # output.
+
     file_writer_document()
     {
         document_process "Prints a string to a file."

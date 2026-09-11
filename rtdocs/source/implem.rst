@@ -17,7 +17,7 @@ corresponding options. Option definition will implicitly define a
 network connecting the inputs and outputs of the different processes.
 
 **HINT**: A wide range of DeBasher program examples can be found in the
-``example/programs`` folder after cloning the GitHub repository.
+``data/programs`` folder after cloning the GitHub repository.
 
 The following sections explain how to implement a simple program with
 two processes: ``file_writer`` and ``file_reader``. We will store the
@@ -723,31 +723,59 @@ Examples
 --------
 
 Below we show a list of DeBasher program examples exploring the
-functionality offered by the tool. The examples can also be found in the
-``example/programs`` folder after cloning the GitHub repository.
+functionality offered by the tool, in the same order in which they are
+checked by the ``debasher_check_installation`` script. The examples can
+also be found in the ``data/programs`` folder after cloning the GitHub
+repository.
 
 .. toctree::
 
-   fwriter_freader
+   hello_world_py
 
-   fifo
+   hello_world_alias
 
-   array
+   hello_world_ext_alias
 
-   generator
+   alias_opt_map
+
+   cycle
 
    value_pass
 
    skip
 
-   subprogram
-
    explicit_deps
 
-   cycle
+   array_original
+
+   array
+
+   fwriter_freader
+
+   fifo
+
+   generator
+
+   subprogram
+
+   host_workflow
+
+   host_workflow_expl_deps
+
+   host_workflow_force
+
+   telegram
+
+   telegram_jobsteps
+
+   telegram_imperative
+
+   telegram_morrison
 
    conda
 
    docker
 
-   alias_opt_map
+   dynamic_fanout
+
+   dynamic_fanout_fifos

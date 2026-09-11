@@ -3,6 +3,18 @@ FIFO Writer and FIFO Reader Example
 
 .. code-block:: bash
 
+    # This module reproduces the writer and reader scenario from the
+    # file example, but communicates through a named pipe instead of a
+    # plain file. fifo_writer declares its output FIFO with
+    # define_fifo_opt instead of a regular path, and fifo_reader
+    # obtains it the same way as before, through
+    # define_opt_from_proc_out. Because a FIFO must be open on both
+    # ends before either process can proceed, fifo_reader also
+    # implements define_opt_deps, explicitly declaring an "after"
+    # dependency on fifo_writer for its "-inf" option rather than
+    # relying on the default dependency DeBasher infers for a regular
+    # file.
+
     fifo_writer_document()
     {
         document_process "Prints a string to a FIFO."

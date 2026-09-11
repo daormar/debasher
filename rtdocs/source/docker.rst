@@ -3,6 +3,14 @@ Docker Example
 
 .. code-block:: bash
 
+    # This module shows how a process can run inside a Docker container
+    # managed by DeBasher itself. docker_example_docker_imgs declares
+    # the "library/hello-world" image with pull_docker_img, and the
+    # docker_example process simply runs "docker run hello-world" and
+    # redirects its output to a file. DeBasher takes care of pulling
+    # the declared image before the process executes, so the process
+    # code can assume it is already available locally.
+
     docker_example_document()
     {
         document_process "Runs the hello-world Docker image and writes its output to a file."

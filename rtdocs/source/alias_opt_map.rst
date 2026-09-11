@@ -10,11 +10,11 @@ Alias Option Map Example
     # data/programs/debasher_hello_world.sh), whose implementation reads
     # its greeting string from a "-s" option. Here the process is meant to
     # expose a more descriptive "-msg" option on the command line instead
-    # of "-s" -- the two option names never coexist within one program, so
-    # a plain alias (see debasher_hello_world_alias.sh) can't reconcile
-    # them: whatever _define_opts puts into the optlist under "-msg" would
-    # reach "hello_world"'s implementation as "-msg", not the "-s" it
-    # actually reads.
+    # of "-s". Since the two option names never coexist within one
+    # program, a plain alias (see debasher_hello_world_alias.sh) cannot
+    # reconcile them: whatever _define_opts puts into the optlist under
+    # "-msg" would reach "hello_world"'s implementation as "-msg", not
+    # the "-s" it actually reads.
     #
     # The "alias_opt_map" additional spec attribute solves exactly this:
     # it renames "-msg" into "-s" right before delegating to "hello_world",

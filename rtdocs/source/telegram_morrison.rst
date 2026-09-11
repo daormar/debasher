@@ -1,0 +1,259 @@
+Telegram Example Using Four Pipeline Stages
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+    # This variant turns the two stage baseline into a four stage
+    # streaming pipeline by adding a dedicated reader process, rseq,
+    # and a dedicated writer process, wseq, each connected to its
+    # neighbor through its own FIFO. rseq only copies the input file
+    # into the first FIFO, decomposer splits that stream into words
+    # and forwards them through a second FIFO, recomposer packs the
+    # words into fixed width lines and forwards them through a third
+    # FIFO, and wseq copies that final stream into the output file.
+    # Splitting file access into its own processes at both ends of the
+    # pipeline lets every stage run concurrently and keeps the middle
+    # stages free of any direct file handling.
+
+    rseq_document()
+    {
+        debasher::document_process "Telegram problem RSEQ module."
+    }
+
+    rseq_explain_opts()
+    {
+        # -f option
+        local description="File to be processed"
+        explain_opt "-f" "<file>" "$description"
+
+        # -outf option
+        local description="output file"
+        explain_opt "-outf" "<string>" "$description"
+    }
+
+    rseq_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-f"
+    }
+
+    rseq_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local optlist=""
+
+        # Define option for rseq FIFO
+        local fifoname="rseq_fifo"
+        define_fifo_opt "-outf" "${fifoname}" optlist || return 1
+
+        # -f option
+        define_cmdline_opt "$cmdline" "-f" optlist || return 1
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+    rseq()
+    {
+        # Initialize variables
+        local outf=$(read_opt_value_from_func_args "-outf" "$@")
+        local file=$(read_opt_value_from_func_args "-f" "$@")
+
+        # Read sequence
+        cat "${file}" > "${outf}" || return 1
+    }
+
+    decomposer_document()
+    {
+        debasher::document_process "Telegram Problem Decomposer module."
+    }
+
+    decomposer_explain_opts()
+    {
+        # -inf option
+        local description="input fifo"
+        explain_opt "-inf" "<string>" "$description"
+
+        # -outf option
+        local description="output fifo"
+        explain_opt "-outf" "<string>" "$description"
+    }
+
+    decomposer_identify_cmdline_opts()
+    {
+        :
+    }
+
+    decomposer_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local optlist=""
+
+        # -inf option
+        define_opt_from_proc_out "-inf" "rseq" "-outf" optlist || return 1
+
+        # Define option for decomposer FIFO
+        local fifoname="dc_fifo"
+        define_fifo_opt "-outf" "${fifoname}" optlist || return 1
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+    decomposer()
+    {
+        # Initialize variables
+        local inf=$(read_opt_value_from_func_args "-inf" "$@")
+        local outf=$(read_opt_value_from_func_args "-outf" "$@")
+
+        # Decompose input
+        awk '{for(i=1;i<=NF;++i) print $i}' "${inf}" > "${outf}" ; pipe_fail || return 1
+    }
+
+    recomposer_document()
+    {
+        debasher::document_process "Telegram Problem Recomposer module."
+    }
+
+    recomposer_explain_opts()
+    {
+        # -c option
+        local description="Line length in characters"
+        explain_opt "-c" "<int>" "$description"
+
+        # -inf option
+        local description="input fifo"
+        explain_opt "-outf" "<string>" "$description"
+
+        # -outf option
+        local description="output fifo"
+        explain_opt "-outf" "<string>" "$description"
+    }
+
+    recomposer_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-c"
+    }
+
+    recomposer_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local optlist=""
+
+        # -c option
+        define_cmdline_opt "$cmdline" "-c" optlist || return 1
+
+        # -inf option
+        define_opt_from_proc_out "-inf" "decomposer" "-outf" optlist || return 1
+
+        # Define option for decomposer FIFO
+        local fifoname="rc_fifo"
+        define_fifo_opt "-outf" "${fifoname}" optlist || return 1
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+    recompose()
+    {
+        local char_lim=$1
+        local file=$2
+
+        awk -v char_lim="${char_lim}" 'BEGIN{len=0}
+                 {
+                  if(len + length($0) <= char_lim)
+                  {
+                    if(len > 0) printf" "
+                    printf" %s", $0
+                    len = len + length($0)
+                  }
+                  else
+                  {
+                    printf"\n%s",$0
+                    len = length($0)
+                  }
+                  if(len+1 <= char_lim)
+                   len = len + 1
+                 }' "${file}"
+    }
+
+    recomposer()
+    {
+        # Initialize variables
+        local char_lim=$(read_opt_value_from_func_args "-c" "$@")
+        local inf=$(read_opt_value_from_func_args "-inf" "$@")
+        local outf=$(read_opt_value_from_func_args "-outf" "$@")
+
+        # Recompose input
+        recompose "${char_lim}" "${inf}" > "${outf}" ; pipe_fail || return 1
+    }
+
+    wseq_document()
+    {
+        debasher::document_process "Telegram Problem WSEQ module."
+    }
+
+    wseq_explain_opts()
+    {
+        # -inf option
+        local description="input fifo"
+        explain_opt "-inf" "<string>" "$description"
+
+        # -outf option
+        local description="output fifo"
+        explain_opt "-outf" "<string>" "$description"
+    }
+
+    wseq_identify_cmdline_opts()
+    {
+        :
+    }
+
+    wseq_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local optlist=""
+
+        # Define name of output file
+        local outf="${process_outdir}/output.txt"
+        define_opt "-outf" "${outf}" optlist || return 1
+
+        # -inf option
+        define_opt_from_proc_out "-inf" "recomposer" "-outf" optlist || return 1
+
+        # Save option list
+        save_opt_list optlist
+    }
+
+    wseq()
+    {
+        # Initialize variables
+        local outf=$(read_opt_value_from_func_args "-outf" "$@")
+        local inf=$(read_opt_value_from_func_args "-inf" "$@")
+
+        # Write sequence
+        cat "${inf}" > "${outf}" || return 1
+    }
+
+    debasher_telegram_morrison_program()
+    {
+        add_debasher_process "rseq"        "cpus=1 mem=32 time=00:05:00"
+        add_debasher_process "decomposer"  "cpus=1 mem=32 time=00:05:00"
+        add_debasher_process "recomposer"  "cpus=1 mem=32 time=00:05:00"
+        add_debasher_process "wseq"        "cpus=1 mem=32 time=00:05:00"
+    }
