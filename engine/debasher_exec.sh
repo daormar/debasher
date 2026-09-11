@@ -634,8 +634,8 @@ register_all_rerun_processes()
     echo "# Registering all processes to rerun (if any)..." >&2
 
     local dirname=$1
-    local old_program_opts_file=$2
-    local program_opts_file=$3
+    local program_opts_file=$2
+    local old_program_opts_file=$3
     local rerun_outdated_processes=$4
 
     if [ -f "${old_program_opts_file}" ]; then
