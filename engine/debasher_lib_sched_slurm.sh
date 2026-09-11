@@ -142,6 +142,11 @@ debasher::_print_script_body_slurm_sched()
     # Retrieve and deserialize process options
     debasher::_print_opt_code_slurm_sched "${cmdline}" "${processname}" "${opt_array_size}"
 
+    # Dump resolved options to the process's ".opts" file (webui "See
+    # options" inspect action)
+    echo "opts_fname=\$(debasher::_get_process_opts_filename $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${SLURM_ARRAY_TASK_ID}\")"
+    echo "debasher::_print_opts_as_qstrings \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" > \"\${opts_fname}\""
+
     # Write skip function if it was provided
     if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
         echo "${skip_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" && { echo \"Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code \$?\" >&2; exit 1; }"

@@ -89,6 +89,30 @@ debasher::_serialize_cmd_as_qstr()
 }
 
 ########
+# Print a resolved options array (flag, value, flag, value, ... with a
+# value-less flag simply not followed by one — see
+# debasher::_dedup_resolved_opts) one option per line, each flag paired
+# with its value (if any) on the same line, printf '%q'-escaped (used
+# to dump a process's resolved command-line options to its ".opts"
+# file for the webui's "See options" inspect action).
+debasher::_print_opts_as_qstrings()
+{
+    local -a args=("$@")
+    local n=${#args[@]}
+    local i=0
+    while [ $i -lt $n ]; do
+        local opt=${args[$i]}
+        i=$((i + 1))
+        if [ $i -lt $n ] && ! debasher::_str_is_option "${args[$i]}"; then
+            printf '%q %q\n' "${opt}" "${args[$i]}"
+            i=$((i + 1))
+        else
+            printf '%q\n' "${opt}"
+        fi
+    done
+}
+
+########
 # Convert a string serialized with a custom separator to a printf '%q'
 # escaped string. The separator is passed as a parameter.
 debasher::_sep_serialized_to_qstr()
