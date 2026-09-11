@@ -15,6 +15,8 @@ import {
 } from "@xyflow/react";
 
 import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
+import type { ProgramProcess } from "../models/process";
+import { getProcessSchedOut, getProcessStdout, getProcessTasks } from "../api/executionApi";
 
 import { useProgram } from "../store/ProgramContext";
 import {
@@ -27,6 +29,14 @@ import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
 import BackEdge from "./BackEdge";
 import RunStatusIndicator from "./RunStatusIndicator";
+import ProcessContextMenu, { type ProcessOutputKind } from "./ProcessContextMenu";
+import ProcessTaskPicker from "./ProcessTaskPicker";
+import CommandOutputModal from "./CommandOutputModal";
+
+const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
+  stdout: "stdout",
+  "sched-out": "scheduler output",
+};
 
 export default function ProgramCanvas() {
   const {
@@ -191,6 +201,126 @@ export default function ProgramCanvas() {
     selectProcess(null);
   }, [selectProcess]);
 
+  // Right-click "Inspect execution" menu — see ProcessContextMenu.
+  const [processContextMenu, setProcessContextMenu] =
+    useState<{ process: ProgramProcess; x: number; y: number } | null>(null);
+
+  const [isProcessOutputPending, setProcessOutputPending] =
+    useState(false);
+
+  const [processCommandOutput, setProcessCommandOutput] =
+    useState<{ title: string; output: string } | null>(null);
+
+  // Set instead of fetching straight away whenever the process ran as
+  // more than one task (see ProcessTaskPicker) — populated only after
+  // getProcessTasks comes back with more than one index.
+  const [processTaskPicker, setProcessTaskPicker] =
+    useState<{ process: ProgramProcess; kind: ProcessOutputKind; taskIndices: number[] } | null>(null);
+
+  const [isTaskPickerPending, setTaskPickerPending] =
+    useState(false);
+
+  const [taskPickerError, setTaskPickerError] =
+    useState<string | null>(null);
+
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node<ProgramProcessData>) => {
+      event.preventDefault();
+      setProcessContextMenu({
+        process: node.data.process,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    []
+  );
+
+  async function fetchProcessOutput(
+    process: ProgramProcess,
+    kind: ProcessOutputKind,
+    taskIndex?: number
+  ): Promise<{ title: string; output: string }> {
+
+    const taskSuffix = taskIndex !== undefined ? ` [task ${taskIndex}]` : "";
+    const title = `${process.name}${taskSuffix} — ${OUTPUT_KIND_LABEL[kind]}`;
+
+    const output = kind === "stdout"
+      ? await getProcessStdout(program, process.name, taskIndex)
+      : await getProcessSchedOut(program, process.name, taskIndex);
+
+    return { title, output };
+
+  }
+
+  async function handleProcessOutputSelect(kind: ProcessOutputKind) {
+
+    if (!processContextMenu) {
+      return;
+    }
+
+    const { process } = processContextMenu;
+
+    setProcessOutputPending(true);
+
+    try {
+
+      // A "standard" process has no per-task files at all (empty list,
+      // so taskIndices[0] is undefined — the plain no-task-index
+      // request) and a process that only ever ran as one task doesn't
+      // need picking either; anything more brings up the picker rather
+      // than guessing which task the user wants.
+      const taskIndices = await getProcessTasks(program, process.name);
+
+      if (taskIndices.length > 1) {
+        setProcessTaskPicker({ process, kind, taskIndices });
+        setProcessContextMenu(null);
+        return;
+      }
+
+      const result = await fetchProcessOutput(process, kind, taskIndices[0]);
+      setProcessCommandOutput(result);
+      setProcessContextMenu(null);
+
+    } catch (err) {
+      setProcessCommandOutput({
+        title: process.name,
+        output: err instanceof Error ? err.message : "Failed to inspect process execution.",
+      });
+      setProcessContextMenu(null);
+    } finally {
+      setProcessOutputPending(false);
+    }
+
+  }
+
+  async function handleTaskPickerConfirm(taskIndex: number) {
+
+    if (!processTaskPicker) {
+      return;
+    }
+
+    const { process, kind } = processTaskPicker;
+
+    setTaskPickerPending(true);
+    setTaskPickerError(null);
+
+    try {
+      const result = await fetchProcessOutput(process, kind, taskIndex);
+      setProcessCommandOutput(result);
+      setProcessTaskPicker(null);
+    } catch (err) {
+      setTaskPickerError(err instanceof Error ? err.message : "Failed to get process output.");
+    } finally {
+      setTaskPickerPending(false);
+    }
+
+  }
+
+  function handleTaskPickerCancel() {
+    setProcessTaskPicker(null);
+    setTaskPickerError(null);
+  }
+
   return (
     <div
       style={{
@@ -206,6 +336,7 @@ export default function ProgramCanvas() {
         onConnect={onConnect}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -228,6 +359,36 @@ export default function ProgramCanvas() {
           </Panel>
         )}
       </ReactFlow>
+
+      {processContextMenu && (
+        <ProcessContextMenu
+          x={processContextMenu.x}
+          y={processContextMenu.y}
+          isPending={isProcessOutputPending}
+          onSelect={handleProcessOutputSelect}
+          onClose={() => setProcessContextMenu(null)}
+        />
+      )}
+
+      {processTaskPicker && (
+        <ProcessTaskPicker
+          processName={processTaskPicker.process.name}
+          kindLabel={OUTPUT_KIND_LABEL[processTaskPicker.kind]}
+          taskIndices={processTaskPicker.taskIndices}
+          isPending={isTaskPickerPending}
+          error={taskPickerError}
+          onConfirm={handleTaskPickerConfirm}
+          onCancel={handleTaskPickerCancel}
+        />
+      )}
+
+      {processCommandOutput && (
+        <CommandOutputModal
+          title={processCommandOutput.title}
+          output={processCommandOutput.output}
+          onClose={() => setProcessCommandOutput(null)}
+        />
+      )}
     </div>
   );
 }

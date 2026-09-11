@@ -115,6 +115,89 @@ export async function getProcessStatuses(program: Program): Promise<Record<strin
   return statuses;
 }
 
+async function fetchProcessOutput(
+  endpoint: string,
+  program: Program,
+  processName: string,
+  taskIndex: number | undefined,
+  fallback: string
+): Promise<string> {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, taskIndex }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, fallback));
+  }
+
+  const { output } = await response.json();
+  return output;
+}
+
+// A process's captured stdout (the canvas's right-click "Inspect
+// execution" menu's "Show stdout"). `taskIndex` selects one task's
+// file for a process that ran as more than one task — see
+// getProcessTasks — and is omitted for a "standard" one-file process.
+export async function getProcessStdout(
+  program: Program,
+  processName: string,
+  taskIndex?: number
+): Promise<string> {
+  return fetchProcessOutput(
+    "/api/execution/process-stdout",
+    program,
+    processName,
+    taskIndex,
+    `Failed to get stdout for ${processName}.`
+  );
+}
+
+// A process's scheduler output (the canvas's right-click "Inspect
+// execution" menu's "Show scheduler output"). See getProcessStdout
+// for `taskIndex`.
+export async function getProcessSchedOut(
+  program: Program,
+  processName: string,
+  taskIndex?: number
+): Promise<string> {
+  return fetchProcessOutput(
+    "/api/execution/process-sched-out",
+    program,
+    processName,
+    taskIndex,
+    `Failed to get scheduler output for ${processName}.`
+  );
+}
+
+// The task indices that have a stdout or scheduler-output file for
+// `processName` — empty for a "standard" one-task process, otherwise
+// the "Inspect execution" menu shows a task picker before fetching
+// either output (see ProcessTaskPicker). Not necessarily contiguous,
+// and can run into the thousands for a large array/generator, so this
+// is the one place that count is dealt with — everything downstream
+// just gets a plain number to pass back as taskIndex.
+export async function getProcessTasks(
+  program: Program,
+  processName: string
+): Promise<number[]> {
+  const response = await fetch("/api/execution/process-tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await errorDetail(response, `Failed to list tasks for ${processName}.`)
+    );
+  }
+
+  const { taskIndices } = await response.json();
+  return taskIndices;
+}
+
 export async function checkProgramOptions(program: Program): Promise<string> {
   const response = await fetch("/api/execution/check-program-options", {
     method: "POST",

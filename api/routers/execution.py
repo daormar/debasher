@@ -107,6 +107,70 @@ def _get_program_state(program: Program) -> tuple[ProgramState, str]:
     return _STATE_BY_EXIT_CODE.get(returncode, "unfinished"), output
 
 
+def _run_debasher_process_tool(
+    program: Program,
+    tool_name: str,
+    process_name: str,
+    task_index: int | None = None,
+) -> str:
+    """
+    Run a DeBasher bin tool that takes "-d <outputDir> -p <processName>
+    [-t <taskIndex>]" (debasher_get_stdout, debasher_get_sched_out).
+    `task_index` selects one task's file for an array/generator/manual
+    process that ran as more than one task (see get_process_tasks);
+    omit it for a "standard" one-file process. Returns the combined
+    output — including the tool's own "file could not be found" error,
+    e.g. for a process that hasn't produced one yet.
+    """
+    tool = paths.find_bin_tool(tool_name)
+    if tool is None:
+        return f"Error: {tool_name} tool not found."
+
+    command = [str(tool), "-d", program.outputDir, "-p", process_name]
+    if task_index is not None:
+        command += ["-t", str(task_index)]
+
+    result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
+
+    return result.stdout + result.stderr
+
+
+# Matches "<processName>_<idx>.stdout" / "<processName>_<idx>.sched_out"
+# (see engine/debasher_lib_processes.sh's
+# _get_process_stdout_filename/_get_process_schedout_filename) — the
+# per-task files an array/generator/manual process produces when it
+# runs as more than one task, as opposed to a "standard" process's
+# single "<processName>.stdout"/"<processName>.sched_out".
+def _task_indices_for_process(outdir: str, process_name: str) -> list[int]:
+    exec_dir = Path(outdir).expanduser() / "__exec__" / process_name
+
+    if not exec_dir.is_dir():
+        return []
+
+    prefix = f"{process_name}_"
+    indices: set[int] = set()
+
+    # A directory listing stays cheap even for the many thousands of
+    # files a large task array can leave behind — unlike shelling out
+    # to a DeBasher tool per task, which is what makes listing them
+    # this way (rather than, say, probing task indices one by one)
+    # the right approach at that scale.
+    for entry in exec_dir.iterdir():
+        name = entry.name
+        if not name.startswith(prefix):
+            continue
+
+        suffix = name[len(prefix):]
+        for ext in (".stdout", ".sched_out"):
+            if suffix.endswith(ext):
+                idx_str = suffix[: -len(ext)]
+                if idx_str.isdigit():
+                    indices.add(int(idx_str))
+                break
+
+    return sorted(indices)
+
+
 # Matches debasher_status's per-process lines (see
 # engine/debasher_status.sh's process_status_for_pfile): "PROCESS: <name>
 # ; STATUS: <status>", optionally followed by "; SCHED_IDS: ..." (not
@@ -218,6 +282,70 @@ def get_process_statuses(program: Program) -> ProcessStatusesResponse:
     """
     output, _ = _run_debasher_dir_tool(program, "debasher_status")
     return ProcessStatusesResponse(statuses=_parse_process_statuses(output))
+
+
+class ProcessTasksRequest(BaseModel):
+    program: Program
+    processName: str
+
+
+class ProcessTasksResponse(BaseModel):
+    # Empty for a "standard" one-task process; the list of task
+    # indices found (not necessarily contiguous — a task still
+    # running, or that never produced output, leaves a gap) otherwise.
+    taskIndices: list[int]
+
+
+@router.post("/process-tasks", response_model=ProcessTasksResponse)
+def get_process_tasks(request: ProcessTasksRequest) -> ProcessTasksResponse:
+    """
+    List the task indices that have a stdout or scheduler-output file
+    for `processName`, for the "Inspect execution" menu's task picker
+    (skipped when this comes back empty — a "standard" process's
+    single file needs no index).
+    """
+    return ProcessTasksResponse(
+        taskIndices=_task_indices_for_process(request.program.outputDir, request.processName)
+    )
+
+
+class ProcessOutputRequest(BaseModel):
+    program: Program
+    processName: str
+    # Selects one task's file for an array/generator/manual process
+    # that ran as more than one task (see /process-tasks); omit for a
+    # "standard" one-file process.
+    taskIndex: int | None = None
+
+
+class ProcessOutputResponse(BaseModel):
+    output: str
+
+
+@router.post("/process-stdout", response_model=ProcessOutputResponse)
+def get_process_stdout(request: ProcessOutputRequest) -> ProcessOutputResponse:
+    """
+    Get a process's captured stdout (debasher_get_stdout -d <outputDir>
+    -p <processName> [-t <taskIndex>]), for the canvas's right-click
+    "Inspect execution" menu.
+    """
+    output = _run_debasher_process_tool(
+        request.program, "debasher_get_stdout", request.processName, request.taskIndex
+    )
+    return ProcessOutputResponse(output=output)
+
+
+@router.post("/process-sched-out", response_model=ProcessOutputResponse)
+def get_process_sched_out(request: ProcessOutputRequest) -> ProcessOutputResponse:
+    """
+    Get a process's scheduler output (debasher_get_sched_out -d
+    <outputDir> -p <processName> [-t <taskIndex>]), for the canvas's
+    right-click "Inspect execution" menu.
+    """
+    output = _run_debasher_process_tool(
+        request.program, "debasher_get_sched_out", request.processName, request.taskIndex
+    )
+    return ProcessOutputResponse(output=output)
 
 
 class CheckProgramOptionsResponse(BaseModel):
