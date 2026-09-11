@@ -31,6 +31,7 @@ extra decoration. Use --human for a readable summary instead.
 """
 
 import argparse
+import shlex
 import sys
 from typing import Dict, List
 
@@ -47,12 +48,22 @@ class OptsParseError(Exception):
 def parse_options(options_str: str) -> Instance:
     """Parse a string of '-flag value -flag value ...' into a dict.
 
-    A flag with no following value (or followed by another flag) is
-    stored with an empty string value. Note: this simple tokenizer
-    assumes option values never start with '-' (e.g. negative numbers
-    are not supported as values); that is a known limitation.
+    Values are written out via bash's `printf '%q'` (see
+    debasher::_sep_serialized_to_qstr in engine/debasher_lib_opts.sh),
+    so a value containing spaces or shell-special characters arrives
+    here backslash-escaped (or quoted) as a single token, e.g.
+    'Hello\\ World\\!'. shlex.split() undoes that escaping the same
+    way a POSIX shell would, so tokens are compared on their actual
+    (unescaped) content. Note: this does not cover bash's $'...'
+    ANSI-C quoting (used for values containing control characters such
+    as newlines/tabs), and like before, values are assumed to never
+    start with '-' (e.g. negative numbers are not supported); those
+    are known limitations.
     """
-    tokens = options_str.split()
+    try:
+        tokens = shlex.split(options_str)
+    except ValueError as exc:
+        raise OptsParseError(f"could not tokenize options '{options_str}': {exc}")
     result: Instance = {}
     i = 0
     while i < len(tokens):
