@@ -1,4 +1,6 @@
 import os
+import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Literal
@@ -105,6 +107,22 @@ def _get_program_state(program: Program) -> tuple[ProgramState, str]:
     return _STATE_BY_EXIT_CODE.get(returncode, "unfinished"), output
 
 
+# Matches debasher_status's per-process lines (see
+# engine/debasher_status.sh's process_status_for_pfile): "PROCESS: <name>
+# ; STATUS: <status>", optionally followed by "; SCHED_IDS: ..." (not
+# requested here, but tolerated).
+_PROCESS_STATUS_LINE_RE = re.compile(r"^PROCESS:\s*(\S+)\s*;\s*STATUS:\s*(\S+)")
+
+
+def _parse_process_statuses(output: str) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    for line in output.splitlines():
+        match = _PROCESS_STATUS_LINE_RE.match(line.strip())
+        if match:
+            statuses[match.group(1)] = match.group(2)
+    return statuses
+
+
 class ListSchedulersResponse(BaseModel):
     schedulers: list[str]
 
@@ -183,6 +201,25 @@ def get_program_status(program: Program) -> ProgramStatusResponse:
     return ProgramStatusResponse(output=output, state=state)
 
 
+class ProcessStatusesResponse(BaseModel):
+    statuses: dict[str, str]
+
+
+@router.post("/process-statuses", response_model=ProcessStatusesResponse)
+def get_process_statuses(program: Program) -> ProcessStatusesResponse:
+    """
+    Get each process's individual status (debasher_status -d
+    <outputDir>, parsed per-process), used to color nodes in the canvas.
+
+    Returns an empty map whenever debasher_status has nothing to report
+    (e.g. the output directory hasn't been initialized by a run yet, or
+    the tool isn't found) rather than raising, so the frontend can poll
+    this unconditionally and simply show no color in that case.
+    """
+    output, _ = _run_debasher_dir_tool(program, "debasher_status")
+    return ProcessStatusesResponse(statuses=_parse_process_statuses(output))
+
+
 class CheckProgramOptionsResponse(BaseModel):
     output: str
 
@@ -208,3 +245,51 @@ def stop_program(program: Program) -> StopProgramResponse:
     """
     output, _ = _run_debasher_dir_tool(program, "debasher_stop")
     return StopProgramResponse(output=output)
+
+
+class ResetOutputDirResponse(BaseModel):
+    # False whenever a guard below made this a no-op — the caller can
+    # tell the user there was nothing to reset.
+    cleared: bool
+
+
+@router.post("/reset-output-dir", response_model=ResetOutputDirResponse)
+def reset_output_dir(program: Program) -> ResetOutputDirResponse:
+    """
+    Delete everything inside program.outputDir (the directory itself is
+    kept), for the Run menu's "Reset output directory" action.
+
+    Guards against a mistaken mass deletion: a no-op (cleared=False,
+    nothing raised) whenever outputDir is blank — an empty string would
+    otherwise resolve to the server's current directory, not "nowhere"
+    — doesn't resolve to an existing directory, or resolves to the
+    filesystem root or the server user's home directory (the two paths
+    a corrupted/mistaken outputDir would do the most damage at).
+    """
+    outdir = program.outputDir.strip()
+    if not outdir:
+        return ResetOutputDirResponse(cleared=False)
+
+    resolved = Path(outdir).expanduser().resolve()
+
+    if not resolved.is_dir():
+        return ResetOutputDirResponse(cleared=False)
+
+    if resolved == Path(resolved.root) or resolved == Path.home():
+        return ResetOutputDirResponse(cleared=False)
+
+    try:
+        for entry in resolved.iterdir():
+            # A symlink is removed as itself, never followed — so a
+            # symlink into another directory can't cause this to
+            # recurse and delete outside outputDir.
+            if entry.is_symlink() or not entry.is_dir():
+                entry.unlink()
+            else:
+                shutil.rmtree(entry)
+    except OSError as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to reset output directory: {e}"
+        ) from e
+
+    return ResetOutputDirResponse(cleared=True)

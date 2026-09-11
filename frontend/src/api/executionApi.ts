@@ -60,12 +60,16 @@ export async function runProgramDebug(program: Program): Promise<string> {
 
 export type ProgramState = "finished" | "in-progress" | "unfinished";
 
-interface ProgramStatusResult {
+export interface ProgramStatusResult {
   output: string;
   state: ProgramState;
 }
 
-async function fetchProgramStatus(program: Program): Promise<ProgramStatusResult> {
+// Exported (not just used internally by getProgramStatus/getProgramState
+// below) so the run-completion poll in ProgramContext can get both the
+// state and the debasher_status output from one call, to show the
+// latter alongside an "unfinished" run-finished notice.
+export async function fetchProgramStatus(program: Program): Promise<ProgramStatusResult> {
   const response = await fetch("/api/execution/status", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -92,6 +96,25 @@ export async function getProgramState(program: Program): Promise<ProgramState> {
   return state;
 }
 
+// Per-process statuses as reported by debasher_status (e.g. "FINISHED",
+// "IN-PROGRESS", "UNFINISHED", "UNFINISHED_BUT_RUNNABLE", "TO-DO"),
+// keyed by process name. Used to color nodes in the canvas — see
+// ProgramContext's status polling and ProcessNode's use of it.
+export async function getProcessStatuses(program: Program): Promise<Record<string, string>> {
+  const response = await fetch("/api/execution/process-statuses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get process statuses (${response.status})`);
+  }
+
+  const { statuses } = await response.json();
+  return statuses;
+}
+
 export async function checkProgramOptions(program: Program): Promise<string> {
   const response = await fetch("/api/execution/check-program-options", {
     method: "POST",
@@ -105,6 +128,27 @@ export async function checkProgramOptions(program: Program): Promise<string> {
 
   const { output } = await response.json();
   return output;
+}
+
+// Deletes everything inside program.outputDir. Resolves to false
+// (rather than throwing) when the backend's own guards made it a
+// no-op — e.g. outputDir is blank — so the caller can tell the user
+// there was nothing to reset.
+export async function resetOutputDir(program: Program): Promise<boolean> {
+  const response = await fetch("/api/execution/reset-output-dir", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await errorDetail(response, `Failed to reset output directory (${response.status})`)
+    );
+  }
+
+  const { cleared } = await response.json();
+  return cleared;
 }
 
 export async function stopProgram(program: Program): Promise<string> {

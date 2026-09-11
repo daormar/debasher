@@ -25,15 +25,25 @@ import type { ProgramEdge } from "../models/edge";
 import { buildConnectionSentinel } from "../models/edge";
 import type { Position } from "../models/position";
 import { saveProgram } from "../storage/programStorage";
-import type { ProgramState } from "../api/executionApi";
+import type { ProgramStatusResult } from "../api/executionApi";
 import {
+  fetchProgramStatus,
+  getProcessStatuses,
   getProgramState,
+  resetOutputDir as requestOutputDirReset,
   runProgram,
   stopProgram,
 } from "../api/executionApi";
 
 // How often to poll for a background run's completion, in milliseconds.
 const RUN_POLL_INTERVAL_MS = 5000;
+
+// How often to poll debasher_status for per-process node colors, in
+// milliseconds. Runs continuously whenever an output directory is set,
+// independently of runPhase (which only tracks runs launched from this
+// UI) — the output directory may hold a run that's already in
+// progress from outside it.
+const PROCESS_STATUS_POLL_INTERVAL_MS = 5000;
 
 export type ProgramRunPhase = "idle" | "running" | "finished" | "unfinished";
 
@@ -47,6 +57,25 @@ interface ProgramContextType {
   save: (outputDir: string) => Promise<void>;
 
   runPhase: ProgramRunPhase;
+
+  // debasher_status's output from the poll that settled runPhase into
+  // "unfinished" (see startRunPolling); null otherwise.
+  runOutput: string | null;
+
+  // Latest per-process statuses from debasher_status (see
+  // processNodeBackground), keyed by process name. Empty whenever no
+  // output directory is set or the last poll failed/had nothing to
+  // report.
+  processStatuses: Record<string, string>;
+
+  // Deletes everything inside the output directory (Run menu's "Reset
+  // output directory", after its confirmation modal). Resolves to
+  // false when the backend's own guards made it a no-op (e.g.
+  // outputDir is blank); throws on a real failure so the caller can
+  // show it inline. On success, clears processStatuses immediately —
+  // every node's background goes back to white right away, rather
+  // than waiting for the next status poll tick.
+  resetOutputDir: () => Promise<boolean>;
 
   // Launches "Run program" in the background; throws (e.g. if a run
   // is already in progress) rather than resolving with an error, so
@@ -261,6 +290,34 @@ function normalizeConnectedOptionValues(source: Program): Program {
 
 }
 
+// Matches createEmptyProgram's/program_import.py's own default.
+const DEFAULT_SCHEDULER = "BUILTIN";
+
+/**
+ * Self-heals a falsy executionOptions.scheduler (e.g. a file saved
+ * while it was blank — see ExecutionOptionsEditor, whose dropdown
+ * defaults its *displayed* value to "BUILTIN" without ever correcting
+ * a genuinely empty stored one, since Cancel is a no-op) back to a
+ * valid default. Without this, debasher_exec/debasher_status get
+ * "--sched ''" and fail with "Error: is not a valid scheduler" even
+ * though the UI appears to show "BUILTIN" selected.
+ */
+function normalizeProgram(source: Program): Program {
+
+  const normalized = normalizeConnectedOptionValues(source);
+
+  return normalized.executionOptions.scheduler
+    ? normalized
+    : {
+        ...normalized,
+        executionOptions: {
+          ...normalized.executionOptions,
+          scheduler: DEFAULT_SCHEDULER,
+        },
+      };
+
+}
+
 interface Props {
   children: ReactNode;
   initialProgram: Program;
@@ -272,14 +329,15 @@ export function ProgramProvider({
 }: Props) {
 
   const [program, setProgramRaw] =
-    useState<Program>(() => normalizeConnectedOptionValues(initialProgram));
+    useState<Program>(() => normalizeProgram(initialProgram));
 
   // Re-derives every connected option's "[process;option]" value from the
   // current edges/names on every update, so renaming a process or a
   // connected option's label can't leave a stale reference behind in what
-  // gets saved/generated (see normalizeConnectedOptionValues above).
+  // gets saved/generated, and re-heals executionOptions.scheduler if it's
+  // ever falsy (see normalizeProgram above).
   function setProgram(updater: (current: Program) => Program) {
-    setProgramRaw(current => normalizeConnectedOptionValues(updater(current)));
+    setProgramRaw(current => normalizeProgram(updater(current)));
   }
 
   async function save(outputDir: string) {
@@ -290,6 +348,13 @@ export function ProgramProvider({
 
   const [runPhase, setRunPhase] =
     useState<ProgramRunPhase>("idle");
+
+  // debasher_status's output from the poll that settled runPhase into
+  // "unfinished" — shown alongside the run-finished notice so a
+  // genuine failure can be diagnosed without a separate "Get program
+  // status" call. Not meaningful (and not shown) for any other phase.
+  const [runOutput, setRunOutput] =
+    useState<string | null>(null);
 
   const pollTimerRef =
     useRef<number | null>(null);
@@ -346,6 +411,7 @@ export function ProgramProvider({
 
     runningProgramRef.current = runningProgram;
     setRunPhase("running");
+    setRunOutput(null);
 
     const beforeUnloadHandler = () => {
       const blob = new Blob([JSON.stringify(runningProgram)], {
@@ -357,19 +423,44 @@ export function ProgramProvider({
     beforeUnloadHandlerRef.current = beforeUnloadHandler;
     window.addEventListener("beforeunload", beforeUnloadHandler);
 
+    // "unfinished" (debasher_status's neither-finished-nor-in-progress
+    // exit code) is ambiguous: it also fires during an ordinary brief
+    // gap between processes — the previous one's job id is already
+    // gone but its completion marker, or the next one's job id, hasn't
+    // landed yet — which looks identical to a genuinely finished-with-
+    // failures run from a single reading. Requiring it twice in a row
+    // (one poll interval apart) filters that out: a run that's still
+    // actually going almost always shows "in-progress" again by the
+    // next tick, while a truly finished one keeps reading "unfinished".
+    let consecutiveUnfinished = 0;
+
     pollTimerRef.current = window.setInterval(async () => {
 
-      let state: ProgramState;
+      let result: ProgramStatusResult;
 
       try {
-        state = await getProgramState(runningProgram);
+        result = await fetchProgramStatus(runningProgram);
       } catch {
         return; // transient failure — try again next tick
       }
 
-      if (state !== "in-progress") {
+      if (result.state === "in-progress") {
+        consecutiveUnfinished = 0;
+        return;
+      }
+
+      if (result.state === "finished") {
         stopRunPolling();
-        setRunPhase(state === "finished" ? "finished" : "unfinished");
+        setRunPhase("finished");
+        return;
+      }
+
+      consecutiveUnfinished += 1;
+
+      if (consecutiveUnfinished >= 2) {
+        stopRunPolling();
+        setRunOutput(result.output);
+        setRunPhase("unfinished");
       }
 
     }, RUN_POLL_INTERVAL_MS);
@@ -401,6 +492,70 @@ export function ProgramProvider({
     }
 
     setRunPhase("idle");
+    setRunOutput(null);
+
+  }
+
+  const [processStatuses, setProcessStatuses] =
+    useState<Record<string, string>>({});
+
+  // Kept in sync on every render so the status-poll effect below (which
+  // only restarts when outputDir/DEBASHER_MOD_DIR change, not on every
+  // program edit) always sends the current program rather than a stale
+  // closure over it.
+  const programRef =
+    useRef(program);
+
+  useEffect(() => {
+    programRef.current = program;
+  }, [program]);
+
+  useEffect(() => {
+
+    if (!program.outputDir.trim()) {
+      setProcessStatuses({});
+      return;
+    }
+
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const statuses = await getProcessStatuses(programRef.current);
+        if (!cancelled) {
+          setProcessStatuses(statuses);
+        }
+      } catch {
+        // Nothing to show while debasher_status can't be run (e.g. the
+        // output directory hasn't been initialized by a run yet).
+        if (!cancelled) {
+          setProcessStatuses({});
+        }
+      }
+    }
+
+    poll();
+    const timer = window.setInterval(poll, PROCESS_STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program.outputDir, program.envVars.DEBASHER_MOD_DIR]);
+
+  async function resetOutputDir() {
+
+    const cleared = await requestOutputDirReset(program);
+
+    if (cleared) {
+      // Don't wait for the next poll tick — every node's background
+      // should go back to white as soon as the reset is confirmed.
+      setProcessStatuses({});
+    }
+
+    return cleared;
 
   }
 
@@ -1050,6 +1205,12 @@ export function ProgramProvider({
 
     runPhase,
 
+    runOutput,
+
+    processStatuses,
+
+    resetOutputDir,
+
     startProgramRun,
 
     dismissProgramRun,
@@ -1108,6 +1269,8 @@ export function ProgramProvider({
     program,
     selectedProcess,
     runPhase,
+    runOutput,
+    processStatuses,
   ]);
 
   return (
