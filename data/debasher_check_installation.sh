@@ -204,6 +204,42 @@ else
     ((checks_failed++))
 fi
 
+# Check debasher_skip_example program
+progname="debasher_skip_example"
+sched="BUILTIN"
+bs_cpus=2
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check debasher_explicit_deps_example program
+progname="debasher_explicit_deps_example"
+sched="BUILTIN"
+bs_cpus=2
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_array_example_original program
 progname="debasher_array_example_original"
 sched="BUILTIN"
@@ -258,8 +294,44 @@ case $? in
         ;;
 esac
 
+# Check debasher_fifo_example program
+progname="debasher_fifo_example"
+sched="BUILTIN"
+bs_cpus=2
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_generator_example program
 progname="debasher_generator_example"
+sched="BUILTIN"
+bs_cpus=4
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check debasher_subprogram_example program
+progname="debasher_subprogram_example"
 sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
