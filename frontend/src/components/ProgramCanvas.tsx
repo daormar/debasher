@@ -16,7 +16,7 @@ import {
 
 import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
 import type { ProgramProcess } from "../models/process";
-import { getProcessSchedOut, getProcessStdout, getProcessTasks } from "../api/executionApi";
+import { getProcessOpts, getProcessSchedOut, getProcessStdout, getProcessTasks } from "../api/executionApi";
 
 import { useProgram } from "../store/ProgramContext";
 import {
@@ -34,6 +34,7 @@ import ProcessTaskPicker from "./ProcessTaskPicker";
 import CommandOutputModal from "./CommandOutputModal";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
+  opts: "options",
   stdout: "stdout",
   "sched-out": "scheduler output",
 };
@@ -246,7 +247,9 @@ export default function ProgramCanvas() {
 
     const output = kind === "stdout"
       ? await getProcessStdout(program, process.name, taskIndex)
-      : await getProcessSchedOut(program, process.name, taskIndex);
+      : kind === "sched-out"
+        ? await getProcessSchedOut(program, process.name, taskIndex)
+        : await getProcessOpts(program, process.name, taskIndex);
 
     return { title, output };
 

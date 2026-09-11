@@ -135,12 +135,13 @@ def _run_debasher_process_tool(
     return result.stdout + result.stderr
 
 
-# Matches "<processName>_<idx>.stdout" / "<processName>_<idx>.sched_out"
-# (see engine/debasher_lib_processes.sh's
-# _get_process_stdout_filename/_get_process_schedout_filename) — the
-# per-task files an array/generator/manual process produces when it
-# runs as more than one task, as opposed to a "standard" process's
-# single "<processName>.stdout"/"<processName>.sched_out".
+# Matches "<processName>_<idx>.stdout" / "<processName>_<idx>.sched_out" /
+# "<processName>_<idx>.opts" (see engine/debasher_lib_processes.sh's
+# _get_process_stdout_filename/_get_process_schedout_filename/
+# _get_process_opts_filename) — the per-task files an array/generator/
+# manual process produces when it runs as more than one task, as
+# opposed to a "standard" process's single
+# "<processName>.stdout"/"<processName>.sched_out"/"<processName>.opts".
 def _task_indices_for_process(outdir: str, process_name: str) -> list[int]:
     exec_dir = Path(outdir).expanduser() / "__exec__" / process_name
 
@@ -161,7 +162,7 @@ def _task_indices_for_process(outdir: str, process_name: str) -> list[int]:
             continue
 
         suffix = name[len(prefix):]
-        for ext in (".stdout", ".sched_out"):
+        for ext in (".stdout", ".sched_out", ".opts"):
             if suffix.endswith(ext):
                 idx_str = suffix[: -len(ext)]
                 if idx_str.isdigit():
@@ -345,6 +346,36 @@ def get_process_sched_out(request: ProcessOutputRequest) -> ProcessOutputRespons
     output = _run_debasher_process_tool(
         request.program, "debasher_get_sched_out", request.processName, request.taskIndex
     )
+    return ProcessOutputResponse(output=output)
+
+
+# There's no "debasher_get_opts" bin tool (unlike stdout/sched-out) — the
+# ".opts" file (see engine/debasher_lib_processes.sh's
+# _get_process_opts_filename and debasher_lib_opts.sh's
+# _print_args_as_qstrings) is read directly, the same way
+# _task_indices_for_process already reads __exec__ directly.
+def _get_process_opts_path(outdir: str, process_name: str, task_index: int | None) -> Path:
+    exec_dir = Path(outdir).expanduser() / "__exec__" / process_name
+    if task_index is None:
+        return exec_dir / f"{process_name}.opts"
+    return exec_dir / f"{process_name}_{task_index}.opts"
+
+
+@router.post("/process-opts", response_model=ProcessOutputResponse)
+def get_process_opts(request: ProcessOutputRequest) -> ProcessOutputResponse:
+    """
+    Get a process's resolved command-line options, one `printf '%q'`
+    escaped option/value per line, from its ".opts" file, for the
+    canvas's right-click "Inspect execution" menu's "See options".
+    """
+    opts_path = _get_process_opts_path(
+        request.program.outputDir, request.processName, request.taskIndex
+    )
+    try:
+        output = opts_path.read_text()
+    except OSError:
+        output = f"Error: options file for process {request.processName} could not be found!"
+
     return ProcessOutputResponse(output=output)
 
 

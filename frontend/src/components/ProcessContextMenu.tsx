@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 
-const MENU_ITEMS = ["Show stdout", "Show scheduler output"] as const;
+const MENU_ITEMS = ["Show options", "Show stdout", "Show scheduler output"] as const;
 
-export type ProcessOutputKind = "stdout" | "sched-out";
+export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 
 const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessOutputKind> = {
+  "Show options": "opts",
   "Show stdout": "stdout",
   "Show scheduler output": "sched-out",
 };

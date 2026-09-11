@@ -171,10 +171,27 @@ export async function getProcessSchedOut(
   );
 }
 
-// The task indices that have a stdout or scheduler-output file for
-// `processName` — empty for a "standard" one-task process, otherwise
-// the "Inspect execution" menu shows a task picker before fetching
-// either output (see ProcessTaskPicker). Not necessarily contiguous,
+// A process's resolved command-line options (the canvas's right-click
+// "Inspect execution" menu's "See options"). See getProcessStdout for
+// `taskIndex`.
+export async function getProcessOpts(
+  program: Program,
+  processName: string,
+  taskIndex?: number
+): Promise<string> {
+  return fetchProcessOutput(
+    "/api/execution/process-opts",
+    program,
+    processName,
+    taskIndex,
+    `Failed to get options for ${processName}.`
+  );
+}
+
+// The task indices that have a stdout, scheduler-output, or options
+// file for `processName` — empty for a "standard" one-task process,
+// otherwise the "Inspect execution" menu shows a task picker before
+// fetching either output (see ProcessTaskPicker). Not necessarily contiguous,
 // and can run into the thousands for a large array/generator, so this
 // is the one place that count is dealt with — everything downstream
 // just gets a plain number to pass back as taskIndex.
