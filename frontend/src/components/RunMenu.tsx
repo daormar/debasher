@@ -12,6 +12,7 @@ import CommandOutputModal from "./CommandOutputModal";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
 import ProgramOptionsEditor from "./ProgramOptionsEditor";
+import ResetOutputDirConfirm from "./ResetOutputDirConfirm";
 
 const MENU_ITEMS = [
   "Set output directory",
@@ -22,6 +23,7 @@ const MENU_ITEMS = [
   "Run program",
   "Get program status",
   "Stop program",
+  "Reset output directory",
 ] as const;
 
 type MenuItem = (typeof MENU_ITEMS)[number];
@@ -32,6 +34,7 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Run program",
   "Get program status",
   "Stop program",
+  "Reset output directory",
 ]);
 
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
@@ -55,7 +58,7 @@ interface CommandOutput {
 
 export default function RunMenu() {
 
-  const { program, runPhase, startProgramRun } = useProgram();
+  const { program, runPhase, startProgramRun, resetOutputDir } = useProgram();
 
   const [isOpen, setOpen] =
     useState(false);
@@ -68,6 +71,15 @@ export default function RunMenu() {
 
   const [isProgramOptionsOpen, setProgramOptionsOpen] =
     useState(false);
+
+  const [isResetConfirmOpen, setResetConfirmOpen] =
+    useState(false);
+
+  const [isResetPending, setResetPending] =
+    useState(false);
+
+  const [resetError, setResetError] =
+    useState<string | null>(null);
 
   const [commandOutput, setCommandOutput] =
     useState<CommandOutput | null>(null);
@@ -122,6 +134,30 @@ export default function RunMenu() {
 
   }
 
+  async function handleConfirmReset() {
+
+    setResetPending(true);
+    setResetError(null);
+
+    try {
+      const cleared = await resetOutputDir();
+      setResetConfirmOpen(false);
+      setCommandOutput({
+        title: "Reset output directory",
+        output: cleared
+          ? `Cleared ${program.outputDir}.`
+          : "Nothing was reset — the output directory doesn't exist, or is a protected path.",
+      });
+    } catch (err) {
+      setResetError(
+        err instanceof Error ? err.message : "Failed to reset output directory."
+      );
+    } finally {
+      setResetPending(false);
+    }
+
+  }
+
   function handleItemClick(item: MenuItem) {
 
     if (REQUIRES_OUTPUT_DIR.has(item) && !program.outputDir.trim()) {
@@ -153,6 +189,10 @@ export default function RunMenu() {
       runOutputAction(item, "Program status", getProgramStatus);
     } else if (item === "Stop program") {
       runOutputAction(item, "Stop program", stopProgram);
+    } else if (item === "Reset output directory") {
+      setOpen(false);
+      setResetError(null);
+      setResetConfirmOpen(true);
     } else {
       setOpen(false);
     }
@@ -228,7 +268,10 @@ export default function RunMenu() {
 
               disabled={
                 pendingAction !== null ||
-                (item === "Run program" && runPhase === "running")
+                (item === "Run program" && runPhase === "running") ||
+                // Wiping the output directory out from under a run this
+                // UI is tracking would delete files it's using.
+                (item === "Reset output directory" && runPhase === "running")
               }
 
               style={{
@@ -268,6 +311,16 @@ export default function RunMenu() {
       {isOutputDirOpen && (
         <OutputDirEditor
           onClose={() => setOutputDirOpen(false)}
+        />
+      )}
+
+      {isResetConfirmOpen && (
+        <ResetOutputDirConfirm
+          outputDir={program.outputDir}
+          isPending={isResetPending}
+          error={resetError}
+          onConfirm={handleConfirmReset}
+          onCancel={() => setResetConfirmOpen(false)}
         />
       )}
 
