@@ -172,7 +172,7 @@ export async function getProcessSchedOut(
 }
 
 // A process's resolved command-line options (the canvas's right-click
-// "Inspect execution" menu's "See options"). See getProcessStdout for
+// "Inspect execution" menu's "Show options"). See getProcessStdout for
 // `taskIndex`.
 export async function getProcessOpts(
   program: Program,
@@ -186,6 +186,54 @@ export async function getProcessOpts(
     taskIndex,
     `Failed to get options for ${processName}.`
   );
+}
+
+// An {label: resolved value} map for a process's command-line options,
+// parsed from its ".opts" file (the canvas's right-click "Inspect
+// execution" menu's "Show inputs and outputs") — empty when the
+// program hasn't been run yet. See getProcessStdout for `taskIndex`.
+export async function getProcessResolvedOptions(
+  program: Program,
+  processName: string,
+  taskIndex?: number
+): Promise<Record<string, string>> {
+  const response = await fetch("/api/execution/process-resolved-options", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, taskIndex }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await errorDetail(response, `Failed to get resolved options for ${processName}.`)
+    );
+  }
+
+  const { values } = await response.json();
+  return values;
+}
+
+export type PathInspection =
+  | { kind: "file"; content: string }
+  | { kind: "binary" }
+  | { kind: "directory"; entries: string[] }
+  | { kind: "missing" };
+
+// Inspects a resolved option's value as a filesystem path — a file's
+// content, or a directory's listing — for the "Show inputs and
+// outputs" modal's per-option "View" button.
+export async function inspectPath(path: string): Promise<PathInspection> {
+  const response = await fetch("/api/execution/inspect-path", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to inspect ${path}.`));
+  }
+
+  return response.json();
 }
 
 // The task indices that have a stdout, scheduler-output, or options

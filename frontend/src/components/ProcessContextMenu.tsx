@@ -1,20 +1,30 @@
 import { useEffect, useRef } from "react";
 
-const MENU_ITEMS = ["Show options", "Show stdout", "Show scheduler output"] as const;
+const MENU_ITEMS = [
+  "Show options",
+  "Show stdout",
+  "Show scheduler output",
+  "Show inputs and outputs",
+] as const;
 
 export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 
-const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessOutputKind> = {
+// "io" opens the structured "Show inputs and outputs" modal rather
+// than a plain-text CommandOutputModal — see ProgramCanvas's onSelect.
+export type ProcessMenuAction = ProcessOutputKind | "io";
+
+const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show options": "opts",
   "Show stdout": "stdout",
   "Show scheduler output": "sched-out",
+  "Show inputs and outputs": "io",
 };
 
 interface Props {
   x: number;
   y: number;
   isPending: boolean;
-  onSelect: (kind: ProcessOutputKind) => void;
+  onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
 }
 
