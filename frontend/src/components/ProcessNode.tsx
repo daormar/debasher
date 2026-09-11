@@ -10,6 +10,8 @@ import type {
 
 import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
+import { processNodeBackground } from "../models/processStatus";
+import { useProgram } from "../store/ProgramContext";
 
 function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) {
 
@@ -32,6 +34,10 @@ export default function ProcessNode({
 }: NodeProps<Node<ProgramProcessData>>) {
 
   const process = data.process;
+
+  const { processStatuses } = useProgram();
+
+  const background = processNodeBackground(processStatuses[process.name]);
 
   const isStandard = process.optionsHandler.mode === "standard";
 
@@ -56,7 +62,7 @@ export default function ProcessNode({
         padding: 12,
         border: selected ? "2px solid #1a73e8" : "1px solid #999",
         borderRadius: 8,
-        background: "white",
+        background,
         position: "relative",
       }}
     >
