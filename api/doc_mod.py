@@ -7,6 +7,7 @@ from . import paths
 
 _DOC_MOD_TOOL_NAME = "debasher_doc_mod"
 _GET_PROC_INFO_TOOL_NAME = "debasher_get_proc_info"
+_GET_VERBATIM_FUNC_SOURCE_TOOL_NAME = "debasher_get_verbatim_func_source"
 
 # Editor convenience: a script that hangs while loading (a broken/looping
 # preamble) should just fail the caller rather than block the request.
@@ -120,6 +121,58 @@ def run_get_proc_info(script_path: Path, process_name: str, debasher_mod_dir: st
         )
 
     return result.stdout
+
+
+def run_get_verbatim_func_source(
+    script_path: Path, funcname: str, debasher_mod_dir: str = ""
+) -> str | None:
+    """
+    Run debasher_get_verbatim_func_source over `script_path` for
+    `funcname` and return its exact original source text -- comments and
+    indentation intact -- or None if it couldn't be recovered (tool
+    missing, funcname not found, timeout, or the file it actually turned
+    out to be defined in couldn't be sliced -- see
+    debasher::_get_verbatim_func_source in
+    engine/debasher_lib_utils.sh for when that happens).
+
+    `funcname` must already be the exact, fully resolved function name
+    (e.g. pulled from the header line of a `declare -f` dump this same
+    caller also fetched, via markdown_parsing._function_header_name) --
+    this never does any process/method-name resolution of its own (no
+    DEBASHER_PROCESS_METHODS suffix search, no alias/ext_alias
+    dispatch), unlike debasher_get_proc_info.
+
+    This is a best-effort enhancement over the `declare -f` source
+    markdown_parsing.parse_code/parse_methods_with_code/
+    parse_option_handler already recover from run_doc_mod/
+    run_get_proc_info -- callers should keep using that as the fallback
+    (and as the only source for anything that needs `declare -f`'s
+    predictable one-statement-per-line shape, e.g. option_handler_import.
+    py's grammar matching), swapping in this verbatim text only for
+    fields that are stored and re-embedded byte for byte.
+    """
+    tool = paths.find_libexec_tool(_GET_VERBATIM_FUNC_SOURCE_TOOL_NAME)
+    if tool is None:
+        return None
+
+    env = os.environ.copy()
+    env["DEBASHER_MOD_DIR"] = debasher_mod_dir
+
+    try:
+        result = subprocess.run(
+            [str(tool), str(script_path), funcname],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=_TOOL_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        return None
+
+    if result.returncode != 0 or not result.stdout:
+        return None
+
+    return result.stdout.rstrip("\n")
 
 
 def _parse_bullet_section(

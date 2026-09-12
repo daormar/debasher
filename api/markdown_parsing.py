@@ -238,6 +238,82 @@ def function_body_lines(source: str) -> list[str] | None:
     return body
 
 
+def function_header_name(source: str) -> str | None:
+    """
+    Pulls the function name out of a `declare -f` dump's own header line
+    ("<name> ()", see _FUNC_HEADER_RE) — this is the *actual*, fully
+    resolved name debasher::_search_process_func found (a process's exec
+    function, an alias target's, a method's, an option-handler's, ...),
+    so it's what should be handed to
+    doc_mod.run_get_verbatim_func_source rather than re-deriving it from
+    the process name and a guessed suffix.
+    """
+    if not source:
+        return None
+    match = _FUNC_HEADER_RE.match(source.splitlines()[0])
+    return match.group("name") if match else None
+
+
+def join_verbatim_body_lines(lines: list[str]) -> str:
+    """
+    Joins a verbatim function body (see verbatim_function_body_lines)
+    back into text, trimming only whole blank lines off either end —
+    never a plain str.strip(), which would also eat the first
+    remaining line's own leading indentation (the normalized
+    `declare -f` equivalent, "\\n".join(body).strip(), is safe there only
+    because function_body_lines already stripped every line
+    individually — a verbatim body must not be).
+    """
+    start = 0
+    end = len(lines)
+    while start < end and not lines[start].strip():
+        start += 1
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return "\n".join(lines[start:end])
+
+
+def verbatim_function_body_lines(source: str) -> list[str] | None:
+    """
+    Like function_body_lines, but for a verbatim source string (see
+    doc_mod.run_get_verbatim_func_source) rather than a `declare -f`
+    dump: strips the header/opening-brace/closing-brace shape down to
+    the body, but keeps every body line exactly as written — no
+    stripping, no trailing-";" removal — since the whole point of a
+    verbatim source is to preserve the author's own indentation and
+    comments.
+
+    Unlike function_body_lines, the header isn't assumed to be on the
+    very first line: a verbatim source may carry a leading "# ..."
+    doc-comment block ahead of it (see
+    debasher::_get_verbatim_func_source), so this locates the header by
+    its own "name ()" shape (_FUNC_HEADER_RE) first, dropping any
+    comment lines before it — a doc-comment describes the *original*
+    function, which is meaningless once its body is spliced into a
+    freshly synthesized one (see script_generation.py's
+    _add_method_body_func/_add_array_opts_func/
+    _add_generate_opts_size_func, the only callers that use this rather
+    than embedding a verbatim source whole).
+
+    None whenever no such header can be found, or what follows it isn't
+    the exact "{\\n...\\n}" shape (e.g. "name() { ... }" all on the
+    header's own line, or a brace-less single-statement body) — callers
+    should fall back to function_body_lines on the `declare -f` version
+    of the same function in that case, same as if the verbatim source
+    were unavailable at all.
+    """
+    lines = source.splitlines()
+    header_index = next((i for i, line in enumerate(lines) if _FUNC_HEADER_RE.match(line)), None)
+    if header_index is None:
+        return None
+    brace_index = header_index + 1
+    if brace_index >= len(lines) - 1:
+        return None
+    if lines[brace_index].strip() != "{" or lines[-1].strip() != "}":
+        return None
+    return lines[brace_index + 1 : -1]
+
+
 def parse_code_blocks(lines: list[str]) -> list[str]:
     """
     Like parse_code, but returns every ```<lang> ... ``` fenced block in
