@@ -31,6 +31,13 @@ class ProgramOption(BaseModel):
     # (DEBASHER_OUT_VALUE_TO_PROCESSES in engine/debasher_lib_opts.sh),
     # independent of whether such a connection is drawn at all.
     channel: Literal["none", "value_desc", "fifo", "shared_dir"] = "none"
+    # Only meaningful when channel == "fifo" and direction == "output"
+    # (i.e. this process writes to the fifo): duplicates every line this
+    # process writes into a separate, non-destructively readable mirror
+    # log file (engine's define_fifo_opt --mirror), so the canvas's
+    # right-click "Watch FIFO" action can show it without stealing data
+    # from the fifo's real downstream reader.
+    mirror: bool = False
     description: str
     value: str
     commandLine: bool

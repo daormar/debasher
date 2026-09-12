@@ -517,6 +517,8 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 option.channel = "value_desc"
             if option.label in result.fifo_labels:
                 option.channel = "fifo"
+            if option.label in result.mirrored_fifo_labels:
+                option.mirror = True
             # Not a channel (see ProgramOption.fromProcessSpec) — a
             # process-spec-sourced option is an ordinary literal once
             # resolved, this only flags where the value in `option.value`

@@ -119,6 +119,11 @@ class OptionHandlerResult:
     # best-effort in "manual" mode, exact otherwise.
     value_descriptor_labels: set[str] = field(default_factory=set)
     fifo_labels: set[str] = field(default_factory=set)
+    # Subset of fifo_labels whose define_fifo_opt[_generator] call carried
+    # a trailing "--mirror" token — program_import.py sets their option's
+    # `mirror` from this. Recovered the same way as fifo_labels itself
+    # (best-effort in "manual" mode, exact otherwise).
+    mirrored_fifo_labels: set[str] = field(default_factory=set)
     # Labels defined via define_procspec_opt — program_import.py sets
     # their option's fromProcessSpec (not channel — see
     # ProgramOption.fromProcessSpec's own docstring for why) from these.
@@ -263,8 +268,8 @@ _CALL_TOKEN_COUNTS = {
     "define_cmdline_infile_opt_if_given": 3,
     "define_flag": 2,  # <label> <optlist>
     "define_value_desc_opt": 2,  # <label> <optlist>
-    "define_fifo_opt": 3,  # <label> <fifoname> <optlist>
-    "define_fifo_opt_generator": 4,  # <label> <fifoname> <task_idx> <optlist>
+    "define_fifo_opt": 3,  # <label> <fifoname> <optlist> [--mirror, stripped before this check]
+    "define_fifo_opt_generator": 4,  # <label> <fifoname> <task_idx> <optlist> [--mirror, stripped before this check]
     "define_opt_from_proc_out": 4,  # <label> <proc> <opt> <optlist>
     "define_opt_from_proc_task_out": 5,  # <label> <proc> <task_idx> <opt> <optlist>
     "define_opt_from_shared_dir": 3,  # <label> <shdirname> <optlist>
@@ -289,6 +294,12 @@ _TASK_CONNECTION_SCAN_RE = re.compile(
 )
 _VALUE_DESC_SCAN_RE = re.compile(r'(?:debasher::)?define_value_desc_opt\s+"(?P<label>[^"]*)"')
 _FIFO_SCAN_RE = re.compile(r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"')
+# Best-effort companion to _FIFO_SCAN_RE: same call, but only when its
+# line also carries a trailing "--mirror" token (see
+# script_generation.py's _option_definition_line).
+_MIRRORED_FIFO_SCAN_RE = re.compile(
+    r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"[^\n]*--mirror\b'
+)
 # The process_spec argument comes first (typically "${process_spec}", one
 # token with no internal space) — skipped the same way
 # _TASK_CONNECTION_SCAN_RE skips a task-index argument. Unlike
@@ -470,7 +481,7 @@ def _parse_primitive_calls(
     allow_fanout_consumer: bool = False,
     initial_locals: dict[str, str] | None = None,
     initial_known_local_names: set[str] | None = None,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
     """
     Parses a function body against the closed grammar of option-
     definition primitives — used for _define_opts (standard and, inside
@@ -511,6 +522,7 @@ def _parse_primitive_calls(
     connections: list[ConnectionRef] = []
     value_descriptor_labels: set[str] = set()
     fifo_labels: set[str] = set()
+    mirrored_fifo_labels: set[str] = set()
     procspec_labels: set[str] = set()
     fanout_count_source_labels: dict[str, str] = {}
     shared_dir_refs: dict[str, SharedDirRef] = {}
@@ -564,6 +576,20 @@ def _parse_primitive_calls(
 
         func = call_match.group("func")
         tokens = _tokenize(call_match.group("args") or "")
+
+        # A define_fifo_opt[_generator] call may carry one extra trailing
+        # "--mirror" token beyond its ordinary positional args (see
+        # script_generation.py's _option_definition_line) — strip it
+        # before the exact positional-count check below, same as every
+        # other primitive here, and remember it for the fifo branch.
+        is_mirrored_fifo_call = (
+            func in ("define_fifo_opt", "define_fifo_opt_generator")
+            and tokens
+            and tokens[-1] == ("--mirror", False)
+        )
+        if is_mirrored_fifo_call:
+            tokens = tokens[:-1]
+
         if len(tokens) != _CALL_TOKEN_COUNTS[func]:
             return None
 
@@ -637,6 +663,8 @@ def _parse_primitive_calls(
                 return None
             values[label[0]] = value_text
             fifo_labels.add(label[0])
+            if is_mirrored_fifo_call:
+                mirrored_fifo_labels.add(label[0])
         elif func == "define_procspec_opt":
             # <process_spec> <label> <specname> <optlist>. specname isn't
             # chased through locals (unlike define_opt/define_fifo_opt's
@@ -659,14 +687,14 @@ def _parse_primitive_calls(
 
         i += 1
 
-    return values, connections, value_descriptor_labels, fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs
+    return values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs
 
 
 def _parse_function_source(
     source: str,
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
+) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
     body = function_body_lines(source)
     if body is None:
         return None
@@ -717,7 +745,7 @@ def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
 
 def _parse_array_define_opts(
     source: str,
-) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str], set[str], dict[str, SharedDirRef]] | None:
+) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str], set[str], set[str], dict[str, SharedDirRef]] | None:
     """
     Recognizes script_generation.py's exact array-mode shape (see
     _add_array_opts_func) in a _define_opts body: the standard header
@@ -778,8 +806,8 @@ def _parse_array_define_opts(
     )
     if parsed is None:
         return None
-    values, connections, value_descriptor_labels, fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
-    return array_code, values, connections, value_descriptor_labels, fifo_labels, procspec_labels, shared_dir_refs
+    values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
+    return array_code, values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, shared_dir_refs
 
 
 def scan_connections(source: str) -> list[ConnectionRef]:
@@ -808,6 +836,11 @@ def scan_value_descriptor_labels(source: str) -> set[str]:
 def scan_fifo_labels(source: str) -> set[str]:
     """Best-effort companion to scan_connections/scan_value_descriptor_labels, same reasoning."""
     return {match.group("label") for match in _FIFO_SCAN_RE.finditer(source)}
+
+
+def scan_mirrored_fifo_labels(source: str) -> set[str]:
+    """Best-effort companion to scan_fifo_labels, same reasoning."""
+    return {match.group("label") for match in _MIRRORED_FIFO_SCAN_RE.finditer(source)}
 
 
 def scan_procspec_values(source: str) -> dict[str, str]:
@@ -874,13 +907,14 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         )
 
         if generator_size_code is not None and parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
+            values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="generator", generatorSizeCode=generator_size_code),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                mirrored_fifo_labels=mirrored_fifo_labels,
                 procspec_labels=procspec_labels,
                 shared_dir_refs=shared_dir_refs,
             )
@@ -904,6 +938,7 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
             connections=scan_connections(combined),
             value_descriptor_labels=scan_value_descriptor_labels(combined),
             fifo_labels=scan_fifo_labels(combined),
+            mirrored_fifo_labels=scan_mirrored_fifo_labels(combined),
             procspec_labels=scan_procspec_labels(combined),
             shared_dir_refs=scan_shared_dir_refs(combined),
         )
@@ -914,13 +949,14 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         # among the flat primitive calls.
         parsed = _parse_function_source(define_opts, allow_fanout_blocks=True)
         if parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs = parsed
+            values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs = parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="standard"),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                mirrored_fifo_labels=mirrored_fifo_labels,
                 procspec_labels=procspec_labels,
                 fanout_count_source_labels=fanout_count_source_labels,
                 shared_dir_refs=shared_dir_refs,
@@ -931,13 +967,14 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         # giving up to "manual".
         array_parsed = _parse_array_define_opts(define_opts)
         if array_parsed is not None:
-            array_code, values, connections, value_descriptor_labels, fifo_labels, procspec_labels, shared_dir_refs = array_parsed
+            array_code, values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, shared_dir_refs = array_parsed
             return OptionHandlerResult(
                 handler=OptionsHandler(mode="array", arrayCode=array_code),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
                 fifo_labels=fifo_labels,
+                mirrored_fifo_labels=mirrored_fifo_labels,
                 procspec_labels=procspec_labels,
                 shared_dir_refs=shared_dir_refs,
             )
@@ -948,6 +985,7 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
             connections=scan_connections(define_opts),
             value_descriptor_labels=scan_value_descriptor_labels(define_opts),
             fifo_labels=scan_fifo_labels(define_opts),
+            mirrored_fifo_labels=scan_mirrored_fifo_labels(define_opts),
             procspec_labels=scan_procspec_labels(define_opts),
             shared_dir_refs=scan_shared_dir_refs(define_opts),
         )

@@ -319,6 +319,11 @@ def _validate_fanout_option(process, option, process_modes) -> None:
             raise ValueError(
                 f'Fanout output "{option.label}" on "{process.name}" must use channel "none" or "fifo".'
             )
+        if option.mirror:
+            raise ValueError(
+                f'Fanout output "{option.label}" on "{process.name}" can\'t be mirrored — '
+                '"Watch FIFO" only supports a single, non-fanout output fifo for now.'
+            )
         if _opt_is_connected_to_proc(option):
             raise ValueError(
                 f'Fanout output "{option.label}" on "{process.name}" can\'t be connected — '
@@ -405,7 +410,13 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     if option.channel == "value_desc":
         return [f'debasher::define_value_desc_opt "{option.label}" optlist || return 1']
     if option.channel == "fifo":
-        return [f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist || return 1']
+        # --mirror only makes sense on the writing end (see
+        # ProgramOption.mirror's docstring); silently ignored on an
+        # input-direction fifo option rather than raising, since the
+        # frontend's OptionEditor already only ever offers the checkbox
+        # for direction == "output".
+        mirror_flag = " --mirror" if option.mirror and option.direction == "output" else ""
+        return [f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist{mirror_flag} || return 1']
     if option.channel == "shared_dir":
         # Always define_opt_from_shared_dir, regardless of any edges
         # into/out of this option — those exist purely to document the

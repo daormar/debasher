@@ -133,16 +133,19 @@ def _run_debasher_process_tool(
     tool_name: str,
     process_name: str,
     task_index: int | None = None,
+    extra_args: list[str] | None = None,
 ) -> str:
     """
     Run a DeBasher bin tool that takes "-d <outputDir> -p <processName>
-    [-t <taskIndex>]" (debasher_get_stdout, debasher_get_sched_out).
-    `task_index` selects one task's file for an array/generator/manual
-    process that ran as more than one task (see get_process_tasks);
-    omit it for a "standard" one-file process. Returns the combined
-    output — including the tool's own "file could not be found" error,
-    e.g. for a process that hasn't produced one yet — capped at
-    _MAX_INSPECT_LINES lines.
+    [-t <taskIndex>]" (debasher_get_stdout, debasher_get_sched_out,
+    debasher_get_fifo_mirror). `task_index` selects one task's file for
+    an array/generator/manual process that ran as more than one task
+    (see get_process_tasks); omit it for a "standard" one-file process.
+    `extra_args` appends any further flags a specific tool needs (e.g.
+    debasher_get_fifo_mirror's "-f <fifoName>") after "-t". Returns the
+    combined output — including the tool's own "file could not be
+    found" error, e.g. for a process that hasn't produced one yet —
+    capped at _MAX_INSPECT_LINES lines.
     """
     tool = paths.find_bin_tool(tool_name)
     if tool is None:
@@ -151,6 +154,8 @@ def _run_debasher_process_tool(
     command = [str(tool), "-d", program.outputDir, "-p", process_name]
     if task_index is not None:
         command += ["-t", str(task_index)]
+    if extra_args:
+        command += extra_args
 
     result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
@@ -367,6 +372,32 @@ def get_process_sched_out(request: ProcessOutputRequest) -> ProcessOutputRespons
     """
     output = _run_debasher_process_tool(
         request.program, "debasher_get_sched_out", request.processName, request.taskIndex
+    )
+    return ProcessOutputResponse(output=output)
+
+
+class FifoMirrorRequest(BaseModel):
+    program: Program
+    processName: str
+    # The fifo's name as given to define_fifo_opt (a mirrored option's
+    # own `value`, per ProgramOption.mirror) — not the option's label.
+    fifoName: str
+    taskIndex: int | None = None
+
+
+@router.post("/fifo-mirror", response_model=ProcessOutputResponse)
+def get_fifo_mirror(request: FifoMirrorRequest) -> ProcessOutputResponse:
+    """
+    Get a mirrored output fifo's captured content (debasher_get_fifo_mirror
+    -d <outputDir> -p <processName> -f <fifoName> [-t <taskIndex>]), for
+    the canvas's right-click "Watch FIFO" action.
+    """
+    output = _run_debasher_process_tool(
+        request.program,
+        "debasher_get_fifo_mirror",
+        request.processName,
+        request.taskIndex,
+        extra_args=["-f", request.fifoName],
     )
     return ProcessOutputResponse(output=output)
 
