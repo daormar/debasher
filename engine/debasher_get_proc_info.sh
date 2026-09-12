@@ -29,9 +29,11 @@ processname=$2
 source "$file"
 
 showmeths=1
+showmethswithcode=0
 showvars=1
+showvarswithvalues=0
 showopts=1
 showopthnd=1
 showimpl=1
 showspecs=0
-debasher::_show_process_documentation "${processname}" "${showmeths}" "${showvars}" "${showopts}" "${showopthnd}" "${showimpl}" "${showspecs}"
+debasher::_show_process_documentation "${processname}" "${showmeths}" "${showmethswithcode}" "${showvars}" "${showvarswithvalues}" "${showopts}" "${showopthnd}" "${showimpl}" "${showspecs}"

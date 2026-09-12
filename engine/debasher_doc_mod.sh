@@ -31,8 +31,9 @@ usage()
 {
     echo "debasher_doc_mod          -m <string> [-s <string>]"
     echo "                          [--show-shdirs] [--show-all-shdirs] [--show-all-envvars]"
-    echo "                          [--show-meths]"
-    echo "                          [--show-vars] [--show-opts] [--show-opthnd]"
+    echo "                          [--show-meths] [--show-meths-with-code]"
+    echo "                          [--show-vars] [--show-vars-with-values]"
+    echo "                          [--show-opts] [--show-opthnd]"
     echo "                          [--show-impl] [--show-specs]"
     echo "                          [--resolve-var <string>]... [--help]"
     echo ""
@@ -49,7 +50,11 @@ usage()
     echo "                          the module (may be given multiple times); this is a"
     echo "                          plain variable read, not a function call"
     echo "--show-meths              Show process methods information"
+    echo "--show-meths-with-code    Show process methods information, including the full"
+    echo "                          code of every method the process defines"
     echo "--show-vars               Show process variables information"
+    echo "--show-vars-with-values   Show process variables information, including the"
+    echo "                          value of every variable the process defines"
     echo "--show-opts               Show process options information"
     echo "--show-opthnd             Show process option handler information"
     echo "--show-impl               Show process implementation information"
@@ -66,7 +71,9 @@ read_pars()
     showallshdirs_given=0
     showallenvvars_given=0
     showmeths_given=0
+    showmethswithcode_given=0
     showvars_given=0
+    showvarswithvalues_given=0
     showopts_given=0
     showopthnd_given=0
     showimpl_given=0
@@ -97,7 +104,11 @@ read_pars()
                           ;;
             "--show-meths") showmeths_given=1
                           ;;
+            "--show-meths-with-code") showmethswithcode_given=1
+                          ;;
             "--show-vars") showvars_given=1
+                          ;;
+            "--show-vars-with-values") showvarswithvalues_given=1
                           ;;
             "--show-opts") showopts_given=1
                           ;;
@@ -201,7 +212,7 @@ obtain_info_for_module()
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         if [ "${s_given}" -eq 0 ] || [ "${processname}" = "${given_processname}" ]; then
-            debasher::_show_process_documentation "${processname}" "${showmeths_given}" "${showvars_given}" "${showopts_given}" "${showopthnd_given}" "${showimpl_given}" "${showspecs_given}"
+            debasher::_show_process_documentation "${processname}" "${showmeths_given}" "${showmethswithcode_given}" "${showvars_given}" "${showvarswithvalues_given}" "${showopts_given}" "${showopthnd_given}" "${showimpl_given}" "${showspecs_given}"
         fi
     done
 }

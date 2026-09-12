@@ -73,29 +73,78 @@ debasher::_show_proc_opts()
 }
 
 ########
+# processname's short method name for method suffix $2 (an entry of
+# DEBASHER_PROCESS_METHODS, e.g. "_reset_outfiles") -- just that suffix
+# with its leading DEBASHER_PROCESS_METHOD_SEP stripped, except "exec"
+# itself, whose suffix is the empty string.
+debasher::_proc_method_label()
+{
+    local method_suffix=$1
+
+    local label=${method_suffix#"${DEBASHER_PROCESS_METHOD_SEP}"}
+    if [ -z "${label}" ]; then
+        echo "exec"
+    else
+        echo "${label}"
+    fi
+}
+
+########
 debasher::_show_proc_methods()
 {
     local processname=$1
+    local show_code=$2
 
+    local i
     for i in "${!DEBASHER_PROCESS_METHODS[@]}"; do
         if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}" >/dev/null; then
             local proc_func=$(debasher::_get_process_funcname "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}")
             echo "- \`${proc_func}\`"
         fi
     done
+
+    if [ "${show_code}" = 1 ]; then
+        for i in "${!DEBASHER_PROCESS_METHODS[@]}"; do
+            if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}" >/dev/null; then
+                local proc_func=$(debasher::_get_process_funcname "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}")
+                echo ""
+                echo "#### $(debasher::_proc_method_label "${DEBASHER_PROCESS_METHODS[$i]}")"
+                echo ""
+                echo '```'bash
+                declare -f "${proc_func}"
+                echo '```'
+            fi
+        done
+    fi
 }
 
 ########
 debasher::_show_proc_vars()
 {
     local processname=$1
+    local show_values=$2
 
+    local i
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
         local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
         if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
             echo "- \`${proc_varname}\`"
         fi
     done
+
+    if [ "${show_values}" = 1 ]; then
+        for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
+            local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
+            if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
+                echo ""
+                echo "#### ${DEBASHER_HEREDOC_LANGUAGES[$i]}"
+                echo ""
+                echo '```'"${DEBASHER_HEREDOC_LANGUAGES[$i]}"
+                echo "${!proc_varname}"
+                echo '```'
+            fi
+        done
+    fi
 }
 
 ########
@@ -315,11 +364,13 @@ debasher::_show_process_documentation()
 {
     local processname=$1
     local show_methods=$2
-    local show_varnames=$3
-    local show_options=$4
-    local show_opt_handler=$5
-    local show_implem=$6
-    local show_specs=$7
+    local show_methods_with_code=$3
+    local show_varnames=$4
+    local show_varnames_with_values=$5
+    local show_options=$6
+    local show_opt_handler=$7
+    local show_implem=$8
+    local show_specs=$9
 
     # Print header
     echo "## ${processname}"
@@ -336,15 +387,15 @@ debasher::_show_process_documentation()
         echo ""
     fi
 
-    if [ "${show_methods}" = 1 ]; then
+    if [ "${show_methods}" = 1 ] || [ "${show_methods_with_code}" = 1 ]; then
         echo "### Process Methods"
-        debasher::_show_proc_methods "${processname}"
+        debasher::_show_proc_methods "${processname}" "${show_methods_with_code}"
         echo ""
     fi
 
-    if [ "${show_varnames}" = 1 ]; then
+    if [ "${show_varnames}" = 1 ] || [ "${show_varnames_with_values}" = 1 ]; then
         echo "### Process Variables"
-        debasher::_show_proc_vars "${processname}"
+        debasher::_show_proc_vars "${processname}" "${show_varnames_with_values}"
         echo ""
     fi
 
@@ -1482,7 +1533,7 @@ debasher::_get_process_outdir_given_dirname()
     if [ "${process_function_outdir}" = "${DEBASHER_FUNCT_NOT_FOUND}" ]; then
         debasher::_get_default_process_outdir_given_dirname "$dirname" "$processname"
     else
-        local outdir_basename=${process_function_outdir}
+        local outdir_basename=$("${process_function_outdir}")
         echo "${dirname}/${outdir_basename}"
     fi
 }
