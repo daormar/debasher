@@ -11,7 +11,12 @@ from ..debasher_constants import (
     RESERVED_HEREDOC_SUFFIXES,
     RESERVED_PROCESS_METHOD_SUFFIXES,
 )
-from ..markdown_parsing import ProcessInfo, ProcessInfoOption, parse_proc_info_markdown
+from ..markdown_parsing import (
+    ProcessInfo,
+    ProcessInfoOption,
+    function_header_name,
+    parse_proc_info_markdown,
+)
 
 router = APIRouter(prefix="/api/processes", tags=["processes"])
 
@@ -65,6 +70,7 @@ def validate_process_name(request: ValidateProcessNameRequest) -> ValidateProces
 
 _LIST_PROC_NAMES_SCRIPT = "debasher_list_proc_names"
 _GET_PROC_INFO_SCRIPT = "debasher_get_proc_info"
+_GET_VERBATIM_FUNC_SOURCE_SCRIPT = "debasher_get_verbatim_func_source"
 
 # Time budget for sourcing a (possibly still-being-edited) preamble.
 # These are editor conveniences, so a slow/hanging preamble should just
@@ -189,7 +195,32 @@ def _get_proc_info(
     if not info.description and not info.options and not info.code:
         return None
 
-    return info
+    return info.copy(update={"code": _verbatim_code(info.code, preamble, program_env_vars)})
+
+
+def _verbatim_code(code: str, preamble: str, program_env_vars: dict[str, str]) -> str:
+    """
+    Best-effort upgrade of a process's `declare -f`-derived `code` (see
+    _get_proc_info) to its exact original source -- comments and
+    indentation intact -- via libexec/debasher_get_verbatim_func_source.
+    Falls back to `code` unchanged (today's behavior) whenever the
+    upgrade isn't available: the tool is missing, `code`'s own header
+    line doesn't parse as a function name (shouldn't happen for
+    debasher_get_proc_info's own output, but `code` could in principle
+    be empty), or the verbatim source can't be recovered (see
+    debasher::_get_verbatim_func_source's own failure cases).
+    """
+    if not code:
+        return code
+
+    funcname = function_header_name(code)
+    if funcname is None:
+        return code
+
+    verbatim = _run_preamble_tool(
+        _GET_VERBATIM_FUNC_SOURCE_SCRIPT, preamble, program_env_vars, funcname
+    )
+    return verbatim.rstrip("\n") if verbatim else code
 
 
 class GetProcessInfoRequest(BaseModel):
