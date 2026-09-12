@@ -86,6 +86,15 @@ _FUNC_HEADER_RE = re.compile(r"^(?P<name>\S+)\s*\(\)")
 # the Markdown was produced with --show-specs.
 _SPEC_LINE_RE = re.compile(r"^-\s*`(?P<key>[^`]+)`:\s*(?P<value>.*)$")
 
+# debasher::_show_proc_methods (engine/debasher_lib_processes) prints one
+# "#### <label>" subheading per method (e.g. "reset_outfiles", "post",
+# "exec") followed by its own ```bash ... ``` `declare -f` fence, all
+# under the single "### Process Methods" heading — only present when the
+# Markdown was produced with --show-meths-with-code (a plain --show-meths
+# only lists method names as bullets, with no "#### " subsections at
+# all).
+_METHOD_HEADING_RE = re.compile(r"^#### (?P<label>.+)$")
+
 OptionDataType = Literal["int", "float", "string", "file", "None"]
 ProcessLanguage = Literal["bash", "python", "perl", "r", "groovy"]
 
@@ -116,6 +125,12 @@ class ProcessInfo(BaseModel):
     # program_import.py for that). Only populated with --show-specs.
     computationalSpecs: dict[str, str] = Field(default_factory=dict)
     additionalSpecs: dict[str, str] = Field(default_factory=dict)
+    # Method label (e.g. "reset_outfiles", "skip", "exec") -> raw
+    # `declare -f` source, for every method the process defines. Only
+    # populated when the Markdown was produced with
+    # --show-meths-with-code; empty otherwise (see
+    # additional_methods_import.py for what recovers from it).
+    methods: dict[str, str] = Field(default_factory=dict)
 
 
 def split_markdown_sections(markdown: str) -> dict[str, list[str]]:
@@ -194,6 +209,35 @@ def parse_code(lines: list[str]) -> tuple[ProcessLanguage, str]:
     return language, "\n".join(code_lines)
 
 
+def function_body_lines(source: str) -> list[str] | None:
+    """
+    Strips a `declare -f` dump ("<name> ()\\n{\\n ... \\n}") down to its
+    body, one stripped statement per line. None if the source doesn't
+    have that exact three-part shape (header, opening brace, closing
+    brace) — declare -f always produces it, so this only trips on
+    malformed/truncated input.
+
+    declare -f also reprints every simple statement with its trailing
+    ";" statement terminator, even when the original source had one
+    statement per line and never needed it (bash normalizes this) — so
+    a single trailing ";" is stripped from each line here rather than
+    threading that through every regex below.
+    """
+    lines = source.splitlines()
+    if len(lines) < 3:
+        return None
+    if lines[1].strip() != "{" or lines[-1].strip() != "}":
+        return None
+
+    body = []
+    for line in lines[2:-1]:
+        stripped = line.strip()
+        if stripped.endswith(";"):
+            stripped = stripped[:-1].rstrip()
+        body.append(stripped)
+    return body
+
+
 def parse_code_blocks(lines: list[str]) -> list[str]:
     """
     Like parse_code, but returns every ```<lang> ... ``` fenced block in
@@ -236,6 +280,38 @@ def parse_option_handler(lines: list[str]) -> dict[str, str]:
     return handlers
 
 
+def parse_methods_with_code(lines: list[str]) -> dict[str, str]:
+    """
+    Maps method label -> raw `declare -f` source, for each "#### <label>"
+    subsection under "### Process Methods" (see _METHOD_HEADING_RE).
+    Empty when the section has no such subsections at all, i.e. the
+    Markdown was produced with a plain --show-meths rather than
+    --show-meths-with-code.
+    """
+    methods: dict[str, str] = {}
+    current_label: str | None = None
+    current_block: list[str] | None = None
+
+    for line in lines:
+        heading_match = _METHOD_HEADING_RE.match(line)
+        if heading_match:
+            current_label = heading_match.group("label").strip()
+            current_block = None
+            continue
+        if current_block is None:
+            if current_label is not None and _CODE_FENCE_START_RE.match(line):
+                current_block = []
+            continue
+        if line.strip() == "```":
+            methods[current_label] = "\n".join(current_block)
+            current_label = None
+            current_block = None
+        else:
+            current_block.append(line)
+
+    return methods
+
+
 def parse_specs(lines: list[str]) -> dict[str, str]:
     specs = {}
 
@@ -256,6 +332,7 @@ def parse_proc_info_markdown(markdown: str) -> ProcessInfo:
     option_handler = parse_option_handler(sections.get("Process Option Handler", []))
     computational_specs = parse_specs(sections.get("Computational Specifications", []))
     additional_specs = parse_specs(sections.get("Additional Specifications", []))
+    methods = parse_methods_with_code(sections.get("Process Methods", []))
 
     return ProcessInfo(
         description=description,
@@ -263,6 +340,7 @@ def parse_proc_info_markdown(markdown: str) -> ProcessInfo:
         language=language,
         code=code,
         optionHandler=option_handler,
+        methods=methods,
         computationalSpecs=computational_specs,
         additionalSpecs=additional_specs,
     )

@@ -12,7 +12,14 @@ _GET_PROC_INFO_TOOL_NAME = "debasher_get_proc_info"
 # preamble) should just fail the caller rather than block the request.
 _TOOL_TIMEOUT_SECS = 20
 
-DEFAULT_FLAGS = ("--show-shdirs", "--show-opts", "--show-opthnd", "--show-impl", "--show-specs")
+DEFAULT_FLAGS = (
+    "--show-shdirs",
+    "--show-meths-with-code",
+    "--show-opts",
+    "--show-opthnd",
+    "--show-impl",
+    "--show-specs",
+)
 
 _MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
 _SHARED_DIRS_HEADING_RE = re.compile(r"^## Shared Directories$")

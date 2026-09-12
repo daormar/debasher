@@ -14,6 +14,7 @@ from .doc_mod import (
     run_doc_mod_all_shared_dirs,
     run_doc_mod_resolve_vars,
 )
+from .additional_methods_import import resolve_additional_methods
 from .markdown_parsing import ProcessInfoOption, parse_proc_info_markdown
 from .models import (
     AdditionalSpecs,
@@ -551,6 +552,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 code=info.code,
                 computationalSpecs=_to_computational_specs(info.computationalSpecs),
                 additionalSpecs=_to_additional_specs(info.additionalSpecs),
+                additionalMethods=resolve_additional_methods(info.methods),
             )
         )
 

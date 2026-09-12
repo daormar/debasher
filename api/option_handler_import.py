@@ -73,6 +73,7 @@ from .debasher_constants import (
     PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
 )
+from .markdown_parsing import function_body_lines
 from .models import OptionsHandler
 
 
@@ -298,35 +299,6 @@ _FIFO_SCAN_RE = re.compile(r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?
 _PROCSPEC_SCAN_RE = re.compile(
     r'(?:debasher::)?define_procspec_opt\s+[^\s]+\s+"(?P<label>[^"]*)"\s+"(?P<specname>[^"]*)"'
 )
-
-
-def _function_body_lines(source: str) -> list[str] | None:
-    """
-    Strips a `declare -f` dump ("<name> ()\\n{\\n ... \\n}") down to its
-    body, one stripped statement per line. None if the source doesn't
-    have that exact three-part shape (header, opening brace, closing
-    brace) — declare -f always produces it, so this only trips on
-    malformed/truncated input.
-
-    declare -f also reprints every simple statement with its trailing
-    ";" statement terminator, even when the original source had one
-    statement per line and never needed it (bash normalizes this) — so
-    a single trailing ";" is stripped from each line here rather than
-    threading that through every regex below.
-    """
-    lines = source.splitlines()
-    if len(lines) < 3:
-        return None
-    if lines[1].strip() != "{" or lines[-1].strip() != "}":
-        return None
-
-    body = []
-    for line in lines[2:-1]:
-        stripped = line.strip()
-        if stripped.endswith(";"):
-            stripped = stripped[:-1].rstrip()
-        body.append(stripped)
-    return body
 
 
 def _tokenize(args: str) -> list[tuple[str, bool]]:
@@ -695,7 +667,7 @@ def _parse_function_source(
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
 ) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
-    body = _function_body_lines(source)
+    body = function_body_lines(source)
     if body is None:
         return None
     return _parse_primitive_calls(
@@ -763,7 +735,7 @@ def _parse_array_define_opts(
     trailing statements after the loop, a stray non-primitive call in
     the loop body, etc. — leaving the caller to fall back to "manual".
     """
-    body = _function_body_lines(source)
+    body = function_body_lines(source)
     if body is None:
         return None
 
@@ -862,7 +834,7 @@ def scan_procspec_labels(source: str) -> set[str]:
 def _extract_generator_size_code(source: str) -> str | None:
     """
     Returns _generate_opts_size's body, verbatim (declare -f-normalized —
-    see _function_body_lines — so relative indentation within it is
+    see function_body_lines — so relative indentation within it is
     flattened, same as arrayCode via _parse_array_define_opts), minus the
     fixed header script_generation.py's _add_generate_opts_size_func
     always emits ahead of it (the same header as _define_opts minus
@@ -871,7 +843,7 @@ def _extract_generator_size_code(source: str) -> str | None:
     present in that exact form, or the source isn't a well-formed
     function dump.
     """
-    body = _function_body_lines(source)
+    body = function_body_lines(source)
     if body is None:
         return None
     if len(body) < len(_ARRAY_HEADER_RES):
