@@ -13,9 +13,10 @@ from .doc_mod import (
     run_doc_mod,
     run_doc_mod_all_shared_dirs,
     run_doc_mod_resolve_vars,
+    run_get_verbatim_func_source,
 )
 from .additional_methods_import import resolve_additional_methods
-from .markdown_parsing import ProcessInfoOption, parse_proc_info_markdown
+from .markdown_parsing import ProcessInfoOption, function_header_name, parse_proc_info_markdown
 from .models import (
     AdditionalSpecs,
     AliasOptMapping,
@@ -145,6 +146,26 @@ def _to_additional_specs(raw: dict[str, str]) -> AdditionalSpecs:
     )
 
 
+def _verbatim_code(script_path: Path, code: str, debasher_mod_dir: str) -> str:
+    """
+    Best-effort upgrade of a process's `declare -f`-derived `code` (from
+    debasher_doc_mod's Markdown, see parse_proc_info_markdown) to its
+    exact original source -- comments and indentation intact -- via
+    debasher_get_verbatim_func_source, run against the same script this
+    program is being imported from. Falls back to `code` unchanged
+    whenever that isn't possible (see routers/processes.py's twin
+    _verbatim_code for why: no header line to resolve a function name
+    from, tool missing, or the underlying scan failing).
+    """
+    if not code:
+        return code
+    funcname = function_header_name(code)
+    if funcname is None:
+        return code
+    verbatim = run_get_verbatim_func_source(script_path, funcname, debasher_mod_dir)
+    return verbatim if verbatim else code
+
+
 def _extract_preamble(script_path: Path) -> str:
     """
     Heuristic recovery of the program's preamble: debasher_doc_mod's
@@ -190,8 +211,13 @@ def _downgrade_unverifiable_task_indexed_connections(
     "array" mode via such a connection into a source outside that set
     (or an unrecognized one, e.g. a different module's) can't be
     faithfully regenerated that way, so it's downgraded to "manual"
-    here, with its option-handler source kept verbatim — mirroring
-    resolve_options_handler's own fallback for an unparseable body.
+    here, using `option_handler_code_by_process`'s already-`declare -f`-
+    normalized source (mirroring resolve_options_handler's own fallback
+    for an unparseable body) rather than resolve_options_handler's exact
+    original source — this downgrade only fires for the rare
+    unverifiable-connection case, so it hasn't been worth threading
+    script_path/debasher_mod_dir through here too just to upgrade it the
+    same way.
     """
     processes_by_name = {process.name: process for process in processes}
 
@@ -499,7 +525,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         options = [_to_program_option(option) for option in info.options]
         option_handler_code_by_process[process_name] = info.optionHandler
 
-        result = resolve_options_handler(info.optionHandler)
+        result = resolve_options_handler(info.optionHandler, script_path, debasher_mod_dir)
         for option in options:
             value = result.option_values.get(option.label)
             if value is not None:
@@ -551,10 +577,10 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 options=options,
                 optionsHandler=result.handler,
                 language=info.language,
-                code=info.code,
+                code=_verbatim_code(script_path, info.code, debasher_mod_dir),
                 computationalSpecs=_to_computational_specs(info.computationalSpecs),
                 additionalSpecs=_to_additional_specs(info.additionalSpecs),
-                additionalMethods=resolve_additional_methods(info.methods),
+                additionalMethods=resolve_additional_methods(info.methods, script_path, debasher_mod_dir),
             )
         )
 
