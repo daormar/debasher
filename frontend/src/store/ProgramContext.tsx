@@ -15,6 +15,7 @@ import type {
   ComputationalSpecs,
   AdditionalSpecs,
   OptionsHandler,
+  AdditionalMethods,
   ProcessInfo,
   ProcessInfoOption,
 } from "../models/process";
@@ -170,6 +171,11 @@ interface ProgramContextType {
   setOptionsHandler: (
     processId: string,
     optionsHandler: OptionsHandler
+  ) => void;
+
+  setAdditionalMethods: (
+    processId: string,
+    additionalMethods: AdditionalMethods
   ) => void;
 
   addOption: (
@@ -599,6 +605,8 @@ export function ProgramProvider({
         force: false,
       },
 
+      additionalMethods: {},
+
     };
 
     setProgram(current => ({
@@ -894,6 +902,25 @@ export function ProgramProvider({
       processes: current.processes.map(process =>
         process.id === processId
           ? { ...process, optionsHandler }
+          : process
+      ),
+
+    }));
+
+  }
+
+  function setAdditionalMethods(
+    processId: string,
+    additionalMethods: AdditionalMethods
+  ) {
+
+    setProgram(current => ({
+
+      ...current,
+
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, additionalMethods }
           : process
       ),
 
@@ -1252,6 +1279,8 @@ export function ProgramProvider({
     setAdditionalSpecs,
 
     setOptionsHandler,
+
+    setAdditionalMethods,
 
     addOption,
 

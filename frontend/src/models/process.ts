@@ -70,6 +70,29 @@ export interface OptionsHandler {
 
 }
 
+/**
+ * Bodies (not full function definitions, unlike ProgramProcess.code) for
+ * the DEBASHER_PROCESS_METHODS (engine/debasher_lib.sh) not covered
+ * elsewhere in the Inspector — "document" has its own Description field,
+ * "exec" is ProgramProcess.code, and the option explanation/definition
+ * methods are driven by ProgramProcess.options / optionsHandler.
+ */
+export interface AdditionalMethods {
+
+  resetOutfilesCode?: string;
+
+  postCode?: string;
+
+  outdirBasenameCode?: string;
+
+  skipCode?: string;
+
+  condaEnvsCode?: string;
+
+  dockerImgsCode?: string;
+
+}
+
 export interface ProgramProcess {
 
   id: string;
@@ -91,6 +114,8 @@ export interface ProgramProcess {
   computationalSpecs: ComputationalSpecs;
 
   additionalSpecs: AdditionalSpecs;
+
+  additionalMethods: AdditionalMethods;
 
 }
 

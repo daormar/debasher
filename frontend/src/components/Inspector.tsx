@@ -16,6 +16,7 @@ import {
 import { useProgram } from "../store/ProgramContext";
 import { PROCESS_LANGUAGES } from "./codeLanguages";
 import CodeEditor from "./CodeEditor";
+import AdditionalMethodsEditor from "./AdditionalMethodsEditor";
 import OptionEditor from "./OptionEditor";
 import OptionRow from "./OptionRow";
 import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
@@ -54,6 +55,9 @@ export default function Inspector() {
     useState("");
 
   const [isCodeEditorOpen, setCodeEditorOpen] =
+    useState(false);
+
+  const [isAdditionalMethodsOpen, setAdditionalMethodsOpen] =
     useState(false);
 
   const [editingOptionId, setEditingOptionId] =
@@ -511,10 +515,26 @@ export default function Inspector() {
       )}
 
 
+      <button
+        style={{ marginLeft: 16 }}
+        onClick={() => setAdditionalMethodsOpen(true)}
+      >
+        Configure additional methods
+      </button>
+
+
       {isCodeEditorOpen && (
         <CodeEditor
           process={selectedProcess}
           onClose={() => setCodeEditorOpen(false)}
+        />
+      )}
+
+
+      {isAdditionalMethodsOpen && (
+        <AdditionalMethodsEditor
+          process={selectedProcess}
+          onClose={() => setAdditionalMethodsOpen(false)}
         />
       )}
 
