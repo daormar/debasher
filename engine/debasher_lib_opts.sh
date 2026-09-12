@@ -1714,7 +1714,8 @@ debasher::_run_fifo_mirror_tap()
         if [ "${line}" = "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" ]; then
             exit 0
         fi
-        printf '%s\n' "${line}" | "${TEE}" -a "${mirrorfile}" > "${realfifo}" || exit 1
+        printf '%s\n' "${line}" | "${TEE}" -a "${mirrorfile}" > "${realfifo}"
+        debasher::pipe_fail || exit 1
     done
 }
 
