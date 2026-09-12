@@ -632,6 +632,212 @@ mentioned above, DeBasher works with three main entities: processes,
 programs and modules, and it offers multiple alternatives to fully
 characterize them.
 
+Document Methods
+^^^^^^^^^^^^^^^^^
+
+As explained above, both modules (`Module Configuration`_) and
+processes (`Process Documentation`_) can define a ``document`` method
+describing themselves. Once those methods (and any of the other ones
+described in `Process Methods`_ below) have been defined, the
+``debasher_doc_mod`` tool can be used to generate Markdown
+documentation for a whole module directly from its code, without
+having to read through the module's own source file:
+
+.. code-block:: bash
+
+    $ debasher_doc_mod -m debasher_file_example.sh -s file_writer \
+        --show-opts --show-opthnd --show-impl --show-specs --show-meths
+
+The ``-m`` option gives the module file, and the optional ``-s`` option
+restricts the output to a single process (omit it to document every
+process the module defines). Each ``--show-*`` flag adds one more
+section to the report: ``--show-opts``/``--show-opthnd``/``--show-impl``
+show, respectively, the process options (as documented by
+``explain_opts``), the option-handler method actually used
+(``define_opts``, or the ``generate_opts_size``/``generate_opts``
+pair), and the process implementation itself; ``--show-specs`` shows
+its computational and additional specifications (see `Process
+Specifications`_ below); ``--show-meths`` lists, by name, every method
+from `Process Methods`_ below that the process actually defines.
+Passing ``--show-meths-with-code`` instead of ``--show-meths`` (or
+``--show-vars-with-values`` instead of ``--show-vars``, for a
+non-Bash implementation) prints each one's full definition rather than
+just its name. Run ``debasher_doc_mod --help`` for the complete list of
+flags.
+
+Process Methods
+^^^^^^^^^^^^^^^^
+
+Besides the methods already covered above (``document``,
+``explain_opts``, ``identify_cmdline_opts``,
+``define_opts``/``generate_opts_size``/``generate_opts``, and the
+process implementation itself), a process may define a few more
+methods to further characterize its behavior. All of them are
+optional, and DeBasher falls back to a sensible default whenever one is
+missing.
+
+* ``reset_outfiles``: run instead of DeBasher's default output
+  directory cleanup, right before the process implementation itself.
+  It receives the exact same options as the implementation, so it is
+  defined the same way:
+
+  .. code-block:: bash
+
+      array_writer_reset_outfiles()
+      {
+          # Initialize variables
+          local outf=$(read_opt_value_from_func_args "-outf" "$@")
+
+          # Remove output file
+          if [ -f "${outf}" ]; then
+              rm "${outf}"
+          fi
+      }
+
+  (taken from the ``array`` example, where ``array_writer`` uses it to
+  remove a stale output file from a previous run before recreating it.)
+
+* ``post``: run right after the process implementation finishes
+  successfully, e.g. for post-processing or cleanup. It also receives
+  the same options as the implementation:
+
+  .. code-block:: bash
+
+      array_reader_post()
+      {
+          logmsg "Cleaning directory..."
+
+          # Initialize variables
+          local id=$(read_opt_value_from_func_args "-id" "$@")
+          local outd=$(read_opt_value_from_func_args "-outdir" "$@")
+
+          # Remove auxiliary file
+          rm "${outd}"/${id}_aux
+
+          logmsg "Cleaning finished"
+      }
+
+  (also taken from the ``array`` example, this time from
+  ``array_reader``.)
+
+* ``skip``: decides, from the process's own options, whether to skip
+  running it entirely for a given execution. **Returning 0 means the
+  process is skipped; any other exit code lets it run normally.**
+
+  .. code-block:: bash
+
+      value_reader_skip()
+      {
+          # Initialize variables
+          local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
+
+          # Read value from descriptor
+          local value=$(read_value_from_desc "${val_desc}")
+
+          # Skip if the read value is odd
+          if ((value % 2 == 1)); then
+              return 0
+          else
+              return 1
+          fi
+      }
+
+  (see the ``skip`` example for the full module.)
+
+* ``outdir_basename``: echoes the basename to use for the process's own
+  output directory, instead of the default (the process name itself):
+
+  .. code-block:: bash
+
+      my_process_outdir_basename()
+      {
+          echo "my_custom_dirname"
+      }
+
+* ``conda_envs``: declares the Conda environments the process needs,
+  using the ``define_conda_env`` function (given an environment name
+  and a ``.yml`` file). DeBasher creates the environment the first time
+  the program runs, and the process implementation can just assume it
+  already exists:
+
+  .. code-block:: bash
+
+      conda_example_conda_envs()
+      {
+          define_conda_env py27 py27.yml
+      }
+
+  (see the ``conda`` example.)
+
+* ``docker_imgs``: declares the Docker images the process needs, using
+  the ``pull_docker_img`` function. DeBasher pulls the image before the
+  process executes:
+
+  .. code-block:: bash
+
+      docker_example_docker_imgs()
+      {
+          pull_docker_img "library/hello-world"
+      }
+
+  (see the ``docker`` example.)
+
+Unlike ``reset_outfiles``/``post``/``skip``, the ``outdir_basename``,
+``conda_envs`` and ``docker_imgs`` methods take no input parameters,
+and each of the latter two is only run once per process, regardless of
+how many tasks it executes.
+
+Process Specifications
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The second and third arguments of ``add_debasher_process`` (see
+`Program Definition`_ above), the process's computational and
+additional specifications, accept a few more attributes besides the
+``cpus``/``mem``/``time`` ones already shown.
+
+Computational specifications (space-separated ``attribute=value``
+pairs, second argument):
+
+* ``cpus``, ``mem``, ``time``: number of CPUs, amount of RAM (in MBs)
+  and wall-clock time budget assigned to the process.
+* ``nodes``, ``account``, ``partition``: SLURM-specific scheduling
+  attributes (number of nodes, billing account, and partition/queue to
+  submit to) — only meaningful when running under the SLURM scheduler.
+* ``throttle``: caps how many tasks of an array/generator process are
+  scheduled at the same time.
+
+**HINT**: under the SLURM scheduler, ``mem`` and ``time`` may each be
+given as a comma-separated list (e.g. ``time=00:01:00,00:02:00``, as
+used by the ``array`` example) to give increasingly generous budgets to
+successive retry attempts of the same process, instead of a single
+fixed one.
+
+Additional specifications (``;``-separated ``attribute=value`` pairs,
+third argument):
+
+* ``force``: set to ``yes`` to force the process to always rerun, even
+  if DeBasher would otherwise consider it already completed.
+* ``processdeps``: explicit dependencies on other processes (e.g.
+  ``afterok:other_process``, ``aftercorr:other_process``, ``none``,
+  ...), needed when a dependency is not already implied by an option
+  connection. See the ``explicit_deps``/``host_workflow_expl_deps``
+  examples.
+* ``alias``/``ext_alias``: reuse another process's implementation (one
+  already defined in the same module tree, or an external script file,
+  respectively) as this process's own, instead of providing one
+  directly. See the ``hello_world_alias``/``hello_world_ext_alias``
+  examples.
+* ``alias_opt_map``: only valid alongside ``alias``/``ext_alias`` — a
+  comma-separated list of ``OLD:NEW`` option-label pairs, renaming this
+  process's own option names into the ones the aliased implementation
+  expects. See the ``alias_opt_map`` example.
+
+For the exhaustive, authoritative description of every attribute, see
+the ``add_debasher_process`` entry in the :ref:`prog-def` Section.
+
+Further Information
+^^^^^^^^^^^^^^^^^^^^
+
 Instead of incorporating additional detailed explanations here, it can
 be more useful to provide a list of examples exploiting different
 aspects of the Debasher's functionality. Such examples are described in
