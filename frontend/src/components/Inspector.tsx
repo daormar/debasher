@@ -27,6 +27,7 @@ import ManualConfigEditor from "./ManualConfigEditor";
 import ProcessNameDialog from "./ProcessNameDialog";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
 import { isValidOptionLabel } from "../models/option";
+import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 
 
 export default function Inspector() {
@@ -106,6 +107,13 @@ export default function Inspector() {
   }
 
 
+  // Which node edge (top/bottom) each option currently renders at —
+  // matches ProcessNode exactly, including a mutual-FIFO cycle's
+  // flipped return option (see computeFlippedOptionIds), so dragging
+  // here can reorder options that are visually adjacent on the canvas
+  // even when they're not the same direction.
+  const flippedOptionIds = computeFlippedOptionIds(program);
+
   function handleOptionDragEnd(event: DragEndEvent) {
 
     const { active, over } = event;
@@ -122,16 +130,19 @@ export default function Inspector() {
       o => o.id === over.id
     );
 
-    if (
-      !activeOption ||
-      !overOption ||
-      activeOption.direction !== overOption.direction
-    ) {
+    if (!activeOption || !overOption) {
+      return;
+    }
+
+    const activeRow = optionRow(activeOption, flippedOptionIds);
+    const overRow = optionRow(overOption, flippedOptionIds);
+
+    if (activeRow !== overRow) {
       return;
     }
 
     const groupIds = selectedProcess.options
-      .filter(o => o.direction === activeOption.direction)
+      .filter(o => optionRow(o, flippedOptionIds) === activeRow)
       .map(o => o.id);
 
     const newOrder = arrayMove(
@@ -142,7 +153,7 @@ export default function Inspector() {
 
     reorderOptionGroup(
       selectedProcess.id,
-      activeOption.direction,
+      activeRow,
       newOrder
     );
 
@@ -334,10 +345,10 @@ export default function Inspector() {
           onDragEnd={handleOptionDragEnd}
         >
 
-          {(["input", "output"] as const).map(direction => {
+          {(["top", "bottom"] as const).map(row => {
 
             const groupOptions = selectedProcess.options.filter(
-              o => o.direction === direction
+              o => optionRow(o, flippedOptionIds) === row
             );
 
             if (groupOptions.length === 0) {
@@ -346,7 +357,7 @@ export default function Inspector() {
 
             return (
               <SortableContext
-                key={direction}
+                key={row}
                 items={groupOptions.map(o => o.id)}
                 strategy={verticalListSortingStrategy}
               >

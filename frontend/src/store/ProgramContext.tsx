@@ -20,11 +20,12 @@ import type {
   ProcessInfoOption,
 } from "../models/process";
 import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
-import type { ProgramOption, OptionDirection } from "../models/option";
+import type { ProgramOption } from "../models/option";
 import { getOptionDirection } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
 import { buildConnectionSentinel } from "../models/edge";
 import type { Position } from "../models/position";
+import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 import { saveProgram } from "../storage/programStorage";
 import type { ProgramStatusResult } from "../api/executionApi";
 import {
@@ -196,7 +197,7 @@ interface ProgramContextType {
 
   reorderOptionGroup: (
     processId: string,
-    direction: OptionDirection,
+    row: "top" | "bottom",
     orderedIds: string[]
   ) => void;
 
@@ -1033,53 +1034,59 @@ export function ProgramProvider({
 
   function reorderOptionGroup(
     processId: string,
-    direction: OptionDirection,
+    row: "top" | "bottom",
     orderedIds: string[]
   ) {
 
-    setProgram(current => ({
+    setProgram(current => {
 
-      ...current,
+      const flippedOptionIds = computeFlippedOptionIds(current);
 
-      processes: current.processes.map(process => {
+      return {
 
-        if (process.id !== processId) {
-          return process;
-        }
+        ...current,
 
-        const groupIndices = process.options.reduce<number[]>(
-          (indices, o, i) =>
-            o.direction === direction
-              ? [...indices, i]
-              : indices,
-          []
-        );
+        processes: current.processes.map(process => {
 
-        if (groupIndices.length !== orderedIds.length) {
-          return process;
-        }
-
-        const optionsById = new Map(
-          process.options.map(o => [o.id, o])
-        );
-
-        const options = [...process.options];
-
-        groupIndices.forEach((index, i) => {
-
-          const option = optionsById.get(orderedIds[i]);
-
-          if (option) {
-            options[index] = option;
+          if (process.id !== processId) {
+            return process;
           }
 
-        });
+          const groupIndices = process.options.reduce<number[]>(
+            (indices, o, i) =>
+              optionRow(o, flippedOptionIds) === row
+                ? [...indices, i]
+                : indices,
+            []
+          );
 
-        return { ...process, options };
+          if (groupIndices.length !== orderedIds.length) {
+            return process;
+          }
 
-      }),
+          const optionsById = new Map(
+            process.options.map(o => [o.id, o])
+          );
 
-    }));
+          const options = [...process.options];
+
+          groupIndices.forEach((index, i) => {
+
+            const option = optionsById.get(orderedIds[i]);
+
+            if (option) {
+              options[index] = option;
+            }
+
+          });
+
+          return { ...process, options };
+
+        }),
+
+      };
+
+    });
 
   }
 
