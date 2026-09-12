@@ -72,9 +72,11 @@ echo_fifo_define_opts()
     local infifoname="echo_fifo_in"
     define_fifo_opt "-inf" "${infifoname}" optlist || return 1
 
-    # Define option for output FIFO
+    # Define option for output FIFO (mirrored so its traffic can be
+    # watched from the frontend without stealing data from the real
+    # downstream reader — see engine's define_fifo_opt --mirror)
     local outfifoname="echo_fifo_out"
-    define_fifo_opt "-outf" "${outfifoname}" optlist || return 1
+    define_fifo_opt "-outf" "${outfifoname}" optlist --mirror || return 1
 
     # Save option list
     save_opt_list optlist
