@@ -13,6 +13,12 @@ from .debasher_constants import (
     PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
     PROCESS_METHOD_EXEC_SUFFIX,
+    PROCESS_METHOD_RESET_OUTFILES_SUFFIX,
+    PROCESS_METHOD_POST_SUFFIX,
+    PROCESS_METHOD_OUTDIR_BASENAME_SUFFIX,
+    PROCESS_METHOD_SKIP_SUFFIX,
+    PROCESS_METHOD_CONDA_ENVS_SUFFIX,
+    PROCESS_METHOD_DOCKER_IMGS_SUFFIX,
 )
 from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
@@ -613,6 +619,44 @@ def _add_exec_func(process):
     return _code_definition_lines(process.name, process.language, process.code)
 
 
+# The DEBASHER_PROCESS_METHODS (engine/debasher_lib.sh) not covered by any
+# other _add_*_func: unlike _add_exec_func, the frontend only collects
+# each of these as a function *body* (see AdditionalMethodsEditor.tsx),
+# so the definition itself is generated here rather than embedded
+# verbatim. None of them take a fixed positional-arg header — reset_
+# outfiles/post/skip receive the same args as the process's own exec
+# function (accessible via "$@", see debasher_builtin_sched_lib.sh's
+# _execute_funct_plus_postfunct), while outdir_basename/conda_envs/
+# docker_imgs are called with no arguments at all.
+_ADDITIONAL_METHOD_SUFFIXES = (
+    ("resetOutfilesCode", PROCESS_METHOD_RESET_OUTFILES_SUFFIX),
+    ("postCode", PROCESS_METHOD_POST_SUFFIX),
+    ("outdirBasenameCode", PROCESS_METHOD_OUTDIR_BASENAME_SUFFIX),
+    ("skipCode", PROCESS_METHOD_SKIP_SUFFIX),
+    ("condaEnvsCode", PROCESS_METHOD_CONDA_ENVS_SUFFIX),
+    ("dockerImgsCode", PROCESS_METHOD_DOCKER_IMGS_SUFFIX),
+)
+
+
+def _add_method_body_func(process_name, suffix, code):
+    if not code:
+        return []
+    lines = [f"{process_name}{suffix}()", "{"]
+    lines.append(_indent_block(code, INDENT))
+    lines.append("}")
+    return lines
+
+
+def _add_additional_methods_funcs(process):
+    lines = []
+    for field, suffix in _ADDITIONAL_METHOD_SUFFIXES:
+        method_lines = _add_method_body_func(process.name, suffix, getattr(process.additionalMethods, field))
+        if method_lines:
+            lines.extend(method_lines)
+            lines.extend(["", ""])
+    return lines
+
+
 def _add_program_function(program):
     lines = [f"{program.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
     for process in program.processes:
@@ -670,6 +714,8 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
             if exec_func_lines:
                 lines.extend(exec_func_lines)
                 lines.extend(["", ""])
+
+        lines.extend(_add_additional_methods_funcs(process))
 
     # Add program function
     lines.extend(_add_program_function(program))

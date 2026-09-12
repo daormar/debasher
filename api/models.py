@@ -95,6 +95,21 @@ class OptionsHandler(BaseModel):
     manualCode: Optional[str] = None
 
 
+class AdditionalMethods(BaseModel):
+    # Bodies (not full function definitions, unlike ProgramProcess.code)
+    # for the DEBASHER_PROCESS_METHODS (engine/debasher_lib.sh) that
+    # aren't covered elsewhere in the frontend: "document" has its own
+    # Description field, "exec" is ProgramProcess.code, and the option
+    # explanation/definition methods are driven by ProgramProcess.options
+    # / optionsHandler. See script_generation.py's _add_method_body_func.
+    resetOutfilesCode: Optional[str] = None
+    postCode: Optional[str] = None
+    outdirBasenameCode: Optional[str] = None
+    skipCode: Optional[str] = None
+    condaEnvsCode: Optional[str] = None
+    dockerImgsCode: Optional[str] = None
+
+
 class ProgramProcess(BaseModel):
     id: str
     name: str
@@ -106,6 +121,7 @@ class ProgramProcess(BaseModel):
     code: str
     computationalSpecs: ComputationalSpecs
     additionalSpecs: AdditionalSpecs
+    additionalMethods: AdditionalMethods = AdditionalMethods()
 
 
 class ProgramEdge(BaseModel):
