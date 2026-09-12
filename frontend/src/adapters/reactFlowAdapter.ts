@@ -8,6 +8,7 @@ import type { Program } from "../models/program";
 import type { ProgramProcess } from "../models/process";
 import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
+import type { ProgramOption } from "../models/option";
 import { isFanoutOption } from "../models/option";
 
 /**
@@ -15,6 +16,7 @@ import { isFanoutOption } from "../models/option";
  */
 export interface ProgramProcessData {
   process: ProgramProcess;
+  flippedOptionIds: Set<string>;
   [key: string]: unknown;
 }
 
@@ -24,6 +26,8 @@ export interface ProgramProcessData {
 export function programToReactFlowNodes(
   program: Program
 ): Node<ProgramProcessData>[] {
+
+  const flippedOptionIds = computeFlippedOptionIds(program);
 
   return program.processes.map(process => ({
 
@@ -35,6 +39,7 @@ export function programToReactFlowNodes(
 
     data: {
       process,
+      flippedOptionIds,
     },
 
   }));
@@ -96,6 +101,95 @@ function isBackEdge(
 }
 
 /**
+ * Option ids whose handle should render on the opposite side from its
+ * direction's default (Position.Top for input, Position.Bottom for
+ * output). This applies only to the two options carrying the "return"
+ * edge of a direct, mutual FIFO cycle between two vertically stacked
+ * processes — e.g. process A above sends A.output(fifo) to
+ * B.input(fifo), and B replies via B.output(fifo) to A.input(fifo).
+ * Flipping just that return pair turns it into a short direct edge
+ * instead of routing all the way around via isBackEdge/BackEdge. A
+ * FIFO option is point-to-point by construction (one writer, one
+ * reader — see isValidProgramConnection's shared_dir-only fan-out/
+ * fan-in allowance), so each flipped option id unambiguously refers
+ * back to the one edge that earned it.
+ */
+export function computeFlippedOptionIds(program: Program): Set<string> {
+
+  const byPair = new Map<string, { forward: ProgramEdge[]; backward: ProgramEdge[] }>();
+
+  for (const edge of program.edges) {
+
+    const sourceProcess = program.processes.find(process => process.id === edge.sourceProcessId);
+    const targetProcess = program.processes.find(process => process.id === edge.targetProcessId);
+    const sourceOption = sourceProcess?.options.find(option => option.id === edge.sourceOptionId);
+    const targetOption = targetProcess?.options.find(option => option.id === edge.targetOptionId);
+
+    if (!sourceProcess || !targetProcess || sourceOption?.channel !== "fifo") {
+      continue;
+    }
+    if (isFanoutEndpoint(sourceProcess, sourceOption) || isFanoutEndpoint(targetProcess, targetOption)) {
+      continue;
+    }
+
+    const [firstId, secondId] = [sourceProcess.id, targetProcess.id].sort();
+    const pairKey = `${firstId}|${secondId}`;
+    const entry = byPair.get(pairKey) ?? { forward: [], backward: [] };
+
+    if (sourceProcess.id === firstId) {
+      entry.forward.push(edge);
+    } else {
+      entry.backward.push(edge);
+    }
+
+    byPair.set(pairKey, entry);
+
+  }
+
+  const flippedOptionIds = new Set<string>();
+
+  for (const { forward, backward } of byPair.values()) {
+
+    if (forward.length === 0 || backward.length === 0) {
+      continue;
+    }
+
+    const firstProcess = program.processes.find(process => process.id === forward[0].sourceProcessId)!;
+    const secondProcess = program.processes.find(process => process.id === backward[0].sourceProcessId)!;
+
+    if (firstProcess.position.y === secondProcess.position.y) {
+      continue;
+    }
+
+    const lowerIsFirst = firstProcess.position.y > secondProcess.position.y;
+    const returnEdge = lowerIsFirst ? forward[0] : backward[0];
+
+    flippedOptionIds.add(returnEdge.sourceOptionId);
+    flippedOptionIds.add(returnEdge.targetOptionId);
+
+  }
+
+  return flippedOptionIds;
+
+}
+
+/**
+ * Which edge of its process node `option` renders at — used both by
+ * ProcessNode (to group options into its top/bottom flex rows) and by
+ * the Inspector's option-reorder UI (so dragging there matches what's
+ * actually adjacent on the canvas, including a flipped option — see
+ * computeFlippedOptionIds).
+ */
+export function optionRow(
+  option: ProgramOption,
+  flippedOptionIds: Set<string>
+): "top" | "bottom" {
+  return (option.direction === "input") !== flippedOptionIds.has(option.id)
+    ? "top"
+    : "bottom";
+}
+
+/**
  * Converts program edges into React Flow edges.
  */
 export function programToReactFlowEdges(
@@ -109,6 +203,8 @@ export function programToReactFlowEdges(
   const maxProcessX = program.processes.length
     ? Math.max(...program.processes.map(process => process.position.x))
     : 0;
+
+  const flippedOptionIds = computeFlippedOptionIds(program);
 
   return program.edges.map(edge => {
 
@@ -131,7 +227,17 @@ export function programToReactFlowEdges(
     const sourceIsFanout = isFanoutEndpoint(sourceProcess, sourceOption);
     const targetIsFanout = isFanoutEndpoint(targetProcess, targetOption);
     const isFanoutEdge = sourceIsFanout || targetIsFanout;
-    const backEdge = !isFanoutEdge && isBackEdge(sourceProcess, targetProcess);
+
+    // A flipped mutual-FIFO return edge (see computeFlippedOptionIds)
+    // already has its handles facing each other, so it never needs
+    // BackEdge's rectilinear detour even though its target still sits
+    // at or above its source.
+    const isFlippedReturnEdge =
+      flippedOptionIds.has(edge.sourceOptionId) &&
+      flippedOptionIds.has(edge.targetOptionId);
+
+    const backEdge =
+      !isFanoutEdge && !isFlippedReturnEdge && isBackEdge(sourceProcess, targetProcess);
 
     // How many output ports sit to the right of the source port on its
     // node (0 for the rightmost). BackEdge uses this to lift a back

@@ -33,6 +33,7 @@ import {
   programToReactFlowEdges,
   connectionToProgramEdge,
   isValidProgramConnection,
+  computeFlippedOptionIds,
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
@@ -184,8 +185,21 @@ export default function ProgramCanvas() {
     [program.processes]
   );
 
-  // Syncs localNodes with program ONLY on structural changes,
-  // always preserving the position React Flow already has (so we
+  // Fingerprint of which options are currently rendered with a flipped
+  // handle (see computeFlippedOptionIds) — this is position-dependent
+  // (it can change when a process is dragged past a FIFO partner it
+  // forms a cycle with), unlike structuralKey above, so it's tracked
+  // separately rather than folded into it. As a memoized string,
+  // equal values across consecutive drag frames are ===-equal, so this
+  // only changes on the rare frame a pair's relative order actually
+  // flips — it doesn't reintroduce per-frame resyncing below.
+  const flipFingerprint = useMemo(
+    () => [...computeFlippedOptionIds(program)].sort().join(","),
+    [program]
+  );
+
+  // Syncs localNodes with program on structural changes or a handle
+  // flip, always preserving the position React Flow already has (so we
   // don't overwrite it mid-drag).
   useEffect(() => {
     setLocalNodes(current => {
@@ -207,7 +221,7 @@ export default function ProgramCanvas() {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [structuralKey]);
+  }, [structuralKey, flipFingerprint]);
 
   // "React Flow" edges: kept in a local copy so that selection
   // changes (needed for delete-key handling) round-trip through

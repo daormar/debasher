@@ -9,6 +9,7 @@ import type {
 } from "@xyflow/react";
 
 import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
+import { optionRow } from "../adapters/reactFlowAdapter";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import { processNodeBackground } from "../models/processStatus";
 import { useProgram } from "../store/ProgramContext";
@@ -34,6 +35,7 @@ export default function ProcessNode({
 }: NodeProps<Node<ProgramProcessData>>) {
 
   const process = data.process;
+  const flippedOptionIds = data.flippedOptionIds;
 
   const { processStatuses } = useProgram();
 
@@ -42,15 +44,15 @@ export default function ProcessNode({
   const isStandard = process.optionsHandler.mode === "standard";
 
 
-  const inputOptions =
+  const topOptions =
     process.options.filter(
-      option => option.direction === "input"
+      option => optionRow(option, flippedOptionIds) === "top"
     );
 
 
-  const outputOptions =
+  const bottomOptions =
     process.options.filter(
-      option => option.direction === "output"
+      option => optionRow(option, flippedOptionIds) === "bottom"
     );
 
 
@@ -67,7 +69,7 @@ export default function ProcessNode({
       }}
     >
 
-      {/* Inputs, along the top edge */}
+      {/* Inputs, plus any output flipped here by a mutual-FIFO cycle, along the top edge */}
 
       <div
         style={{
@@ -79,7 +81,7 @@ export default function ProcessNode({
         }}
       >
 
-        {inputOptions.map(
+        {topOptions.map(
           option => (
 
             <div
@@ -97,7 +99,7 @@ export default function ProcessNode({
 
                 id={option.id}
 
-                type="target"
+                type={option.direction === "input" ? "target" : "source"}
 
                 position={Position.Top}
 
@@ -132,7 +134,7 @@ export default function ProcessNode({
       </div>
 
 
-      {/* Outputs, along the bottom edge */}
+      {/* Outputs, plus any input flipped here by a mutual-FIFO cycle, along the bottom edge */}
 
       <div
         style={{
@@ -144,7 +146,7 @@ export default function ProcessNode({
         }}
       >
 
-        {outputOptions.map(
+        {bottomOptions.map(
           option => (
 
             <div
@@ -172,7 +174,7 @@ export default function ProcessNode({
 
                 id={option.id}
 
-                type="source"
+                type={option.direction === "input" ? "target" : "source"}
 
                 position={Position.Bottom}
 
