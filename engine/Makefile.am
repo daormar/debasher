@@ -9,7 +9,7 @@ debasher_compare_opts debasher_solve_knapsack_bb		\
 debasher_solve_knapsack_ga debasher_solve_knapsack_greedy	\
 debasher_gen_knapsack_problem debasher_gen_telegram_data	\
 debasher_list_deblib_pub_funcs debasher_list_proc_names		\
-debasher_get_proc_info
+debasher_get_proc_info debasher_get_verbatim_func_source
 
 python_PYTHON= debasher_runtime_lib.py debasher_prg_lib.py
 
@@ -41,7 +41,8 @@ debasher_check_prg_files.py debasher_stop.sh debasher_status.sh		\
 debasher_stats.sh debasher_exec_process.sh debasher_doc_mod.sh		\
 debasher_proc_dataset.sh debasher_fifo_writer_loop.sh			\
 debasher_list_deblib_pub_funcs.sh debasher_list_proc_names.sh		\
-debasher_get_proc_info.sh debasher_reformat_status.py			\
+debasher_get_proc_info.sh debasher_get_verbatim_func_source.sh	\
+debasher_reformat_status.py						\
 debasher_solve_knapsack_bb.py debasher_solve_knapsack_ga.py		\
 debasher_knapsack_ga.py debasher_solve_knapsack_greedy.py		\
 debasher_gen_knapsack_problem.py debasher_compare_opts.py		\

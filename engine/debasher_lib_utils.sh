@@ -664,6 +664,95 @@ debasher::_search_process_func_nameref()
 }
 
 ########
+# Prints funcname's exact original source text -- from its header line
+# through its own matching closing brace/closing token -- byte for byte
+# as written in the file that defines it, comments and indentation
+# intact. Unlike "declare -f funcname" (used throughout
+# debasher_lib_processes.sh's debasher::_show_proc_* family), which
+# reprints a reparsed, comment-stripped, re-indented reconstruction of
+# the function -- bash discards comments in its lexer before it ever
+# builds the parsed function object, so no introspection of the
+# function itself, declare -f included, can recover them; only the
+# original file on disk can.
+#
+# Requires "shopt -s extdebug" to already be in effect (as callers of
+# debasher::_collect_func_deps already arrange) so that "declare -F"
+# reports the (file, line) where funcname's definition begins, instead
+# of just its name -- this is also what correctly finds funcname's real
+# defining file even when it lives in a different file than the one the
+# caller sourced directly (e.g. a process function pulled in via
+# load_debasher_module).
+#
+# bash never reports where a function definition *ends*, so this finds
+# it by growing a candidate slice of the defining file, one line at a
+# time starting right at that start line, and asking a real "bash -n"
+# whether the slice is already a complete, syntactically valid script on
+# its own. funcname's own outermost compound command stays unbalanced at
+# every shorter slice, so the first slice "bash -n" accepts is
+# necessarily exactly funcname's own definition -- growing it further
+# could go on to *also* validate later (e.g. once it swallows whatever
+# follows funcname whole), so this deliberately scans from the shortest
+# candidate upward one line at a time rather than bisecting for "the
+# first valid slice": the valid/invalid sequence isn't monotonic past
+# funcname's own end, so only a linear scan is guaranteed to land on the
+# first one. The one shape this can't isolate is two function
+# definitions sharing one physical line -- since the scan works at line
+# granularity, both come back as that whole shared line -- but that
+# isn't a style this package, or the frontend's own code editor, ever
+# produces.
+#
+# Also includes any "# ..." comment block immediately preceding the
+# function -- a doc-comment for it, if the author wrote one -- by
+# walking backward from the start line while lines keep matching that
+# shape, stopping at the first one that doesn't.
+#
+# Prints nothing and returns 1 if funcname isn't a real function,
+# extdebug can't place it in a real file on disk (e.g. it was defined
+# via eval rather than sourced from a file), or the scan reaches the end
+# of the file without ever finding a balanced slice -- which "declare
+# -f" itself never fails to do for a real function, so this is only a
+# defensive fallback for debasher_get_verbatim_func_source's caller to
+# fall back to plain "declare -f" on.
+debasher::_get_verbatim_func_source()
+{
+    local funcname=$1
+
+    local func_meta
+    func_meta=$(declare -F "${funcname}" 2>/dev/null)
+    [ -z "${func_meta}" ] && return 1
+
+    local fname start_line srcfile
+    read -r fname start_line srcfile <<<"${func_meta}"
+    [ -n "${srcfile}" ] && [ -f "${srcfile}" ] || return 1
+
+    local total_lines
+    total_lines=$("${WC}" -l <"${srcfile}")
+
+    local end_line=""
+    local n
+    for ((n = start_line; n <= total_lines; n++)); do
+        if "${SED}" -n "${start_line},${n}p" "${srcfile}" | bash -n 2>/dev/null; then
+            end_line=$n
+            break
+        fi
+    done
+    [ -z "${end_line}" ] && return 1
+
+    local doc_start=${start_line}
+    local prev=$((start_line - 1))
+    while [ "${prev}" -ge 1 ]; do
+        local prev_line
+        prev_line=$("${SED}" -n "${prev}p" "${srcfile}")
+        case "${prev_line}" in
+            \#*) doc_start=${prev}; prev=$((prev - 1)) ;;
+            *) break ;;
+        esac
+    done
+
+    "${SED}" -n "${doc_start},${end_line}p" "${srcfile}"
+}
+
+########
 debasher::_copy_func()
 {
     local existing_funcname=$1
