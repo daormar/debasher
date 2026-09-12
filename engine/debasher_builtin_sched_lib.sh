@@ -1097,12 +1097,24 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
         ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
     fi
 
+    # Start mirror taps (if any) for fifos this process owns and writes
+    # to (see debasher::_start_fifo_mirror_taps_for_process) — must run
+    # after the ".opts" dump above so that inspector keeps showing the
+    # real fifo path, and before the process function below so it gets
+    # each mirrored option's shim path instead.
+    debasher::_start_fifo_mirror_taps_for_process "${processname}"
+
     # Execute process function
 
     DEBASHER_PROCESS_STDOUT_FILENAME=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
     "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
 
     local funct_exit_code=${PIPESTATUS[0]}
+
+    # Stop mirror taps and fail the process if any of them died
+    # abnormally, rather than silently losing mirrored output.
+    debasher::_stop_fifo_mirror_taps || funct_exit_code=1
+
     if [ ${funct_exit_code} -ne 0 ]; then
         echo "Error: execution of ${processname} failed with exit code ${funct_exit_code}" >&2
     else

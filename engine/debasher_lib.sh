@@ -183,6 +183,14 @@ DEBASHER_EXTERNAL_FIFO_USER="__EXTERNAL__${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
 # FLOW-BASED PROGRAMMING CONSTANTS
 DEBASHER_SHUTDOWN_TOKEN="__SHUTDOWN_TOKEN__"
 
+# FIFO MIRRORING CONSTANTS
+#
+# Deliberately distinct from DEBASHER_SHUTDOWN_TOKEN: not every fifo
+# writer's own data-plane protocol emits a shutdown token (only
+# "cycle"-style processes do), so a mirror tap's own termination can't
+# depend on it.
+DEBASHER_FIFO_MIRROR_STOP_TOKEN="__FIFO_MIRROR_TAP_STOP__"
+
 # RERUN REASONS
 DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_user_owner"
 DEBASHER_FORCED_RERUN_REASON="forced"
@@ -373,6 +381,11 @@ declare -A DEBASHER_PROGRAM_FIFOS
 # Declare associative array to store users of fifos (The process
 # defining the FIFO with debasher::define_fifo_opt becomes the owner)
 declare -A DEBASHER_FIFO_USERS
+
+# Declare associative array flagging which fifos (by augmented name,
+# "<processname>/<fifoname>") were declared with define_fifo_opt's
+# --mirror flag (see debasher::_start_fifo_mirror_taps_for_process)
+declare -A DEBASHER_FIFO_MIRRORED
 
 # Declare general scheduler-related variables
 declare DEBASHER_SCHEDULER
