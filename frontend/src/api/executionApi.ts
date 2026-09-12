@@ -210,6 +210,58 @@ export async function getFifoMirror(
   );
 }
 
+// Writes one line to an unconnected input fifo (the "Talk to FIFOs"
+// action) — see api/routers/execution.py's /fifo-write. `fifoName` is
+// the fifo's name as given to define_fifo_opt, not the option's label.
+// Never throws for an ordinary failure (no reader connected, fifo not
+// ready yet) — that comes back as `{ ok: false, error }` so the caller
+// can show it inline instead of via a thrown Error.
+export async function writeFifo(
+  program: Program,
+  processName: string,
+  fifoName: string,
+  text: string
+): Promise<{ ok: boolean; error?: string }> {
+  const response = await fetch("/api/execution/fifo-write", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, fifoName, text }),
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: await errorDetail(response, `Failed to write to ${fifoName}.`) };
+  }
+
+  return response.json();
+}
+
+// Reads one line from an unconnected output fifo (the "Talk to FIFOs"
+// action) — see api/routers/execution.py's /fifo-read, which blocks
+// server-side for a short bounded time. `timedOut: true` means nothing
+// arrived within that window — the expected, common case while
+// waiting for a response — not an error; the caller just calls again.
+// `signal` lets the caller abort an in-flight call (e.g. the dialog
+// closing) via AbortController.
+export async function readFifo(
+  program: Program,
+  processName: string,
+  fifoName: string,
+  signal?: AbortSignal
+): Promise<{ line?: string; timedOut?: boolean; error?: string }> {
+  const response = await fetch("/api/execution/fifo-read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, fifoName }),
+    signal,
+  });
+
+  if (!response.ok) {
+    return { error: await errorDetail(response, `Failed to read from ${fifoName}.`) };
+  }
+
+  return response.json();
+}
+
 // An {label: resolved value} map for a process's command-line options,
 // parsed from its ".opts" file (the canvas's right-click "Inspect
 // execution" menu's "Show inputs and outputs") — empty when the

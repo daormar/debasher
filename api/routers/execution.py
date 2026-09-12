@@ -402,6 +402,112 @@ def get_fifo_mirror(request: FifoMirrorRequest) -> ProcessOutputResponse:
     return ProcessOutputResponse(output=output)
 
 
+# Bounded so a stuck write (no reader ever connects) or an empty read
+# (nothing produced yet) can't hang a request forever — the frontend's
+# "Talk to FIFOs" action just calls /fifo-read again on a timeout, so a
+# short-ish bound here just controls the retry cadence, not correctness.
+_FIFO_WRITE_TIMEOUT_SECS = 8
+_FIFO_READ_TIMEOUT_SECS = 8
+
+
+def _resolve_fifo_path(program: Program, process_name: str, fifo_name: str) -> Path:
+    """
+    A fifo's real path is a fixed convention (see engine/debasher_lib_
+    opts.sh's debasher::_get_absolute_fifoname) — no ".opts"/resolved-
+    value lookup needed, the same way _task_indices_for_process (above)
+    reads the "__exec__" convention directly instead of shelling out to
+    a tool.
+    """
+    return Path(program.outputDir).expanduser() / "__fifos__" / process_name / fifo_name
+
+
+class FifoIORequest(BaseModel):
+    program: Program
+    processName: str
+    # The fifo's name as given to define_fifo_opt — not the option's label.
+    fifoName: str
+
+
+class FifoWriteRequest(FifoIORequest):
+    text: str
+
+
+class FifoWriteResponse(BaseModel):
+    ok: bool
+    error: str | None = None
+
+
+@router.post("/fifo-write", response_model=FifoWriteResponse)
+def write_fifo(request: FifoWriteRequest) -> FifoWriteResponse:
+    """
+    Write one line to an (unconnected) input fifo, for the "Talk to
+    FIFOs" action. Opening a fifo for writing blocks until a reader
+    connects, so this is bounded by _FIFO_WRITE_TIMEOUT_SECS — a
+    timeout here means no process is currently reading that fifo.
+    """
+    path = _resolve_fifo_path(request.program, request.processName, request.fifoName)
+    if not path.exists():
+        return FifoWriteResponse(
+            ok=False,
+            error=f"Fifo not found: {path} (has the owning process started yet?)",
+        )
+
+    try:
+        result = subprocess.run(
+            ["bash", "-c", 'printf "%s\n" "$1" > "$2"', "_", request.text, str(path)],
+            capture_output=True,
+            text=True,
+            timeout=_FIFO_WRITE_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        return FifoWriteResponse(
+            ok=False, error="Timed out waiting for a reader on the input fifo."
+        )
+
+    if result.returncode != 0:
+        return FifoWriteResponse(ok=False, error=result.stderr.strip() or "Write failed.")
+
+    return FifoWriteResponse(ok=True)
+
+
+class FifoReadResponse(BaseModel):
+    line: str | None = None
+    # A timeout here is the expected, common case (nothing produced yet
+    # by the owning process) — the frontend just calls again — not an
+    # error.
+    timedOut: bool = False
+    error: str | None = None
+
+
+@router.post("/fifo-read", response_model=FifoReadResponse)
+def read_fifo(request: FifoIORequest) -> FifoReadResponse:
+    """
+    Read one line from an (unconnected) output fifo, for the "Talk to
+    FIFOs" action. Bounded by _FIFO_READ_TIMEOUT_SECS; the frontend
+    calls this repeatedly until it gets a line or a real error.
+    """
+    path = _resolve_fifo_path(request.program, request.processName, request.fifoName)
+    if not path.exists():
+        return FifoReadResponse(
+            error=f"Fifo not found: {path} (has the owning process started yet?)"
+        )
+
+    try:
+        result = subprocess.run(
+            ["bash", "-c", 'IFS= read -r line < "$1" && printf "%s" "$line"', "_", str(path)],
+            capture_output=True,
+            text=True,
+            timeout=_FIFO_READ_TIMEOUT_SECS,
+        )
+    except subprocess.TimeoutExpired:
+        return FifoReadResponse(timedOut=True)
+
+    if result.returncode != 0:
+        return FifoReadResponse(error=result.stderr.strip() or "Read failed.")
+
+    return FifoReadResponse(line=result.stdout)
+
+
 # There's no "debasher_get_opts" bin tool (unlike stdout/sched-out) — the
 # ".opts" file (see engine/debasher_lib_processes.sh's
 # _get_process_opts_filename and debasher_lib_opts.sh's

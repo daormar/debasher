@@ -13,6 +13,7 @@ import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
 import ProgramOptionsEditor from "./ProgramOptionsEditor";
 import ResetOutputDirConfirm from "./ResetOutputDirConfirm";
+import TalkToFifosDialog from "./TalkToFifosDialog";
 
 const MENU_ITEMS = [
   "Set output directory",
@@ -24,6 +25,7 @@ const MENU_ITEMS = [
   "Get program status",
   "Stop program",
   "Reset output directory",
+  "Talk to FIFOs",
 ] as const;
 
 type MenuItem = (typeof MENU_ITEMS)[number];
@@ -73,6 +75,9 @@ export default function RunMenu() {
     useState(false);
 
   const [isResetConfirmOpen, setResetConfirmOpen] =
+    useState(false);
+
+  const [isTalkToFifosOpen, setTalkToFifosOpen] =
     useState(false);
 
   const [isResetPending, setResetPending] =
@@ -193,6 +198,9 @@ export default function RunMenu() {
       setOpen(false);
       setResetError(null);
       setResetConfirmOpen(true);
+    } else if (item === "Talk to FIFOs") {
+      setOpen(false);
+      setTalkToFifosOpen(true);
     } else {
       setOpen(false);
     }
@@ -271,7 +279,10 @@ export default function RunMenu() {
                 (item === "Run program" && runPhase === "running") ||
                 // Wiping the output directory out from under a run this
                 // UI is tracking would delete files it's using.
-                (item === "Reset output directory" && runPhase === "running")
+                (item === "Reset output directory" && runPhase === "running") ||
+                // A fifo only exists on disk once its owning process
+                // has started.
+                (item === "Talk to FIFOs" && runPhase !== "running")
               }
 
               style={{
@@ -341,6 +352,12 @@ export default function RunMenu() {
           title={commandOutput.title}
           output={commandOutput.output}
           onClose={() => setCommandOutput(null)}
+        />
+      )}
+
+      {isTalkToFifosOpen && (
+        <TalkToFifosDialog
+          onClose={() => setTalkToFifosOpen(false)}
         />
       )}
 
