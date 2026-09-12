@@ -1252,9 +1252,20 @@ debasher_builtin_sched::_launch()
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
-    # Execute file
+    # Execute file, with job control enabled just for this one launch
+    # so it becomes its own process group (pgid == pid). The launched
+    # script always forks at least one child of its own (the stdout-
+    # capturing tee pipeline every process runs through — see
+    # debasher_builtin_sched::_execute_funct_plus_postfunct — plus a
+    # mirrored fifo's background tap, if any); without a distinct
+    # process group, killing just this pid (debasher::_stop_pid, used
+    # by debasher_stop) leaves those children running as orphans. Job
+    # control is normally off in a non-interactive script — toggling it
+    # only around the launch keeps the scope narrow.
+    set -m
     "${file}" &
     local pid=$!
+    set +m
 
     # Wait for PID file to be created
     local max_num_iters=10000

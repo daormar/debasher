@@ -266,7 +266,14 @@ debasher::_stop_pid()
 {
     local pid=$1
 
-    kill -9 "$pid"  > /dev/null 2>&1 || return 1
+    # Kill the whole process group ("-$pid"), not just $pid:
+    # debasher_builtin_sched::_launch starts each process's script with
+    # job control enabled so it becomes its own process group leader
+    # (pgid == pid) precisely so this can reach every child it forks
+    # (its own stdout-capturing tee pipeline, plus a mirrored fifo's
+    # background tap, if any) instead of leaving them running as
+    # orphans.
+    kill -9 -- "-$pid" > /dev/null 2>&1 || return 1
 
     return 0
 }
