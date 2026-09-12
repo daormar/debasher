@@ -67,13 +67,20 @@ import):
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .debasher_constants import (
     PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
 )
-from .markdown_parsing import function_body_lines
+from .doc_mod import run_get_verbatim_func_source
+from .markdown_parsing import (
+    function_body_lines,
+    function_header_name,
+    join_verbatim_body_lines,
+    verbatim_function_body_lines,
+)
 from .models import OptionsHandler
 
 
@@ -718,6 +725,14 @@ _ARRAY_FOR_RE = re.compile(r'^for\s+idx\s+in\s+"\$\{!array\[@\]\}"$')
 _ARRAY_DO_LINE = "do"
 _ARRAY_DONE_LINE = "done"
 
+# Verbatim counterpart to _ARRAY_FOR_RE: the normalized `declare -f` body
+# _ARRAY_FOR_RE matches against always has "for ...; do" split across two
+# lines (bash's own declare -f pretty-printing), but a hand/DeBasher-
+# authored source overwhelmingly writes it as a single "for ...; do"
+# line instead (see e.g. share/debasher/programs/debasher_array_example.
+# sh) -- so this optionally allows the same trailing "; do" inline.
+_VERBATIM_ARRAY_FOR_RE = re.compile(r'^for\s+idx\s+in\s+"\$\{!array\[@\]\}"\s*(?:;\s*do)?$')
+
 
 def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
     """
@@ -887,7 +902,141 @@ def _extract_generator_size_code(source: str) -> str | None:
     return "\n".join(body[len(_ARRAY_HEADER_RES):]).strip()
 
 
-def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandlerResult:
+def _verbatim_whole_function(script_path: Path, code: str, debasher_mod_dir: str) -> str:
+    """
+    Best-effort upgrade of a whole `declare -f` function dump to its
+    exact original source, comments and indentation intact (see
+    doc_mod.run_get_verbatim_func_source) -- mirrors program_import.
+    _verbatim_code/routers/processes._verbatim_code, used here for
+    manualCode, which -- unlike arrayCode/generatorSizeCode -- is
+    embedded as a complete function definition, header included (see
+    script_generation.py's "manual" mode, which returns handler.
+    manualCode as-is with no re-wrapping). Falls back to `code` unchanged
+    whenever the upgrade isn't available.
+    """
+    if not code:
+        return code
+    funcname = function_header_name(code)
+    if funcname is None:
+        return code
+    verbatim = run_get_verbatim_func_source(script_path, funcname, debasher_mod_dir)
+    return verbatim if verbatim else code
+
+
+def _skip_verbatim_header(body: list[str]) -> int | None:
+    """
+    Finds where the shared _ARRAY_HEADER_RES 4-line boilerplate ends
+    within a verbatim function body, tolerating any number of leading
+    blank/comment-only lines before it -- e.g. a "# Initialize
+    variables" comment, which is how virtually every DeBasher-authored
+    process introduces its header (see share/debasher/programs/*.sh).
+    Matching straight against body[:4] (as if the header always were the
+    body's literal first 4 lines, true of the normalized `declare -f`
+    body this mirrors, since declare -f strips comments entirely) would
+    essentially never match a verbatim body in practice.
+
+    None if no such 4-line run immediately follows the leading blank/
+    comment lines.
+    """
+    start = 0
+    while start < len(body) and (not body[start].strip() or body[start].strip().startswith("#")):
+        start += 1
+    end = start + len(_ARRAY_HEADER_RES)
+    if end > len(body):
+        return None
+    for regex, line in zip(_ARRAY_HEADER_RES, body[start:end]):
+        if not regex.match(line.strip()):
+            return None
+    return end
+
+
+def _verbatim_header_stripped_body(script_path: Path, code: str, debasher_mod_dir: str) -> str | None:
+    """
+    Best-effort verbatim counterpart to _extract_generator_size_code's
+    normalized header-stripping: recovers the exact original body of the
+    function whose `declare -f` dump is `code`, with the shared
+    _ARRAY_HEADER_RES boilerplate (_define_opts_func_header's 4 fixed
+    lines) removed from the front -- matched against each line's own
+    stripped text, so the author's original indentation never affects
+    whether the header is recognized -- keeping every remaining line
+    exactly as written otherwise.
+
+    None if `code` is empty, has no resolvable function name, the
+    verbatim source can't be recovered at all, or that verbatim source
+    doesn't happen to start with the same 4-line header in that exact
+    form -- the caller falls back to the already-normalized value in
+    every such case, same as if this verbatim upgrade didn't exist.
+    """
+    if not code:
+        return None
+    funcname = function_header_name(code)
+    if funcname is None:
+        return None
+    verbatim = run_get_verbatim_func_source(script_path, funcname, debasher_mod_dir)
+    if not verbatim:
+        return None
+    body = verbatim_function_body_lines(verbatim)
+    if body is None:
+        return None
+    header_end = _skip_verbatim_header(body)
+    if header_end is None:
+        return None
+    return join_verbatim_body_lines(body[header_end:])
+
+
+def _find_verbatim_array_for_index(rest: list[str]) -> int | None:
+    """
+    Verbatim counterpart to matching _ARRAY_FOR_RE at a fixed index: the
+    "; do" may be inline (see _VERBATIM_ARRAY_FOR_RE) or on its own next
+    line (_ARRAY_DO_LINE, same as the normalized shape) -- either is
+    accepted. None if no line matches the for-loop shape at all, or one
+    does but isn't actually followed by a "do" either way (malformed).
+    """
+    for i, line in enumerate(rest):
+        stripped = line.strip()
+        if not _VERBATIM_ARRAY_FOR_RE.match(stripped):
+            continue
+        if stripped.endswith("do"):
+            return i
+        if i + 1 < len(rest) and rest[i + 1].strip() == _ARRAY_DO_LINE:
+            return i
+        return None
+    return None
+
+
+def _verbatim_array_code(script_path: Path, code: str, debasher_mod_dir: str) -> str | None:
+    """
+    Best-effort verbatim counterpart to _parse_array_define_opts's own
+    header/loop-boundary trim: same idea as _verbatim_header_stripped_body,
+    but additionally cuts off at the "for idx in ..." loop marker (see
+    _ARRAY_FOR_RE) -- arrayCode is only ever the code *before* that loop;
+    script_generation.py's _add_array_opts_func re-emits the loop itself
+    fresh from the process's parsed options, never from stored text.
+    """
+    if not code:
+        return None
+    funcname = function_header_name(code)
+    if funcname is None:
+        return None
+    verbatim = run_get_verbatim_func_source(script_path, funcname, debasher_mod_dir)
+    if not verbatim:
+        return None
+    body = verbatim_function_body_lines(verbatim)
+    if body is None:
+        return None
+    header_end = _skip_verbatim_header(body)
+    if header_end is None:
+        return None
+    rest = body[header_end:]
+    for_index = _find_verbatim_array_for_index(rest)
+    if for_index is None:
+        return None
+    return join_verbatim_body_lines(rest[:for_index])
+
+
+def resolve_options_handler(
+    option_handler_code: dict[str, str], script_path: Path, debasher_mod_dir: str = ""
+) -> OptionHandlerResult:
     generate_opts = option_handler_code.get(PROCESS_METHOD_GENERATE_OPTS_SUFFIX)
     generate_opts_size = option_handler_code.get(PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX)
     define_opts = option_handler_code.get(PROCESS_METHOD_DEFINE_OPTS_SUFFIX)
@@ -908,8 +1057,12 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
 
         if generator_size_code is not None and parsed is not None:
             values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
+            verbatim_size_code = _verbatim_header_stripped_body(script_path, generate_opts_size, debasher_mod_dir)
             return OptionHandlerResult(
-                handler=OptionsHandler(mode="generator", generatorSizeCode=generator_size_code),
+                handler=OptionsHandler(
+                    mode="generator",
+                    generatorSizeCode=verbatim_size_code if verbatim_size_code is not None else generator_size_code,
+                ),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
@@ -924,16 +1077,23 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
             # actually retrieve a task's options at run time (the engine
             # always needs the latter once the former exists) — treat it as
             # an incomplete generator rather than guessing further.
+            verbatim_size_code = _verbatim_header_stripped_body(script_path, generate_opts_size, debasher_mod_dir)
             return OptionHandlerResult(
-                handler=OptionsHandler(mode="generator", generatorSizeCode=generator_size_code),
+                handler=OptionsHandler(
+                    mode="generator",
+                    generatorSizeCode=verbatim_size_code if verbatim_size_code is not None else generator_size_code,
+                ),
             )
 
         # generate_opts doesn't fit the primitive-call grammar —
         # script_generation.py can't reproduce it, so this falls back to
         # manual with everything kept verbatim.
         combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
+        combined_verbatim = _verbatim_whole_function(script_path, generate_opts_size, debasher_mod_dir)
+        if generate_opts:
+            combined_verbatim = f"{combined_verbatim}\n\n{_verbatim_whole_function(script_path, generate_opts, debasher_mod_dir)}"
         return OptionHandlerResult(
-            handler=OptionsHandler(mode="manual", manualCode=combined),
+            handler=OptionsHandler(mode="manual", manualCode=combined_verbatim),
             option_values=scan_procspec_values(combined),
             connections=scan_connections(combined),
             value_descriptor_labels=scan_value_descriptor_labels(combined),
@@ -968,8 +1128,12 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
         array_parsed = _parse_array_define_opts(define_opts)
         if array_parsed is not None:
             array_code, values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, shared_dir_refs = array_parsed
+            verbatim_array_code = _verbatim_array_code(script_path, define_opts, debasher_mod_dir)
             return OptionHandlerResult(
-                handler=OptionsHandler(mode="array", arrayCode=array_code),
+                handler=OptionsHandler(
+                    mode="array",
+                    arrayCode=verbatim_array_code if verbatim_array_code is not None else array_code,
+                ),
                 option_values=values,
                 connections=connections,
                 value_descriptor_labels=value_descriptor_labels,
@@ -980,7 +1144,9 @@ def resolve_options_handler(option_handler_code: dict[str, str]) -> OptionHandle
             )
 
         return OptionHandlerResult(
-            handler=OptionsHandler(mode="manual", manualCode=define_opts),
+            handler=OptionsHandler(
+                mode="manual", manualCode=_verbatim_whole_function(script_path, define_opts, debasher_mod_dir)
+            ),
             option_values=scan_procspec_values(define_opts),
             connections=scan_connections(define_opts),
             value_descriptor_labels=scan_value_descriptor_labels(define_opts),

@@ -15,6 +15,8 @@ _add_additional_methods_funcs re-wraps it into "<name><suffix>() { ... }"
 on codegen, so only the body, not the function header/braces, is kept.
 """
 
+from pathlib import Path
+
 from .debasher_constants import (
     PROCESS_METHOD_CONDA_ENVS_SUFFIX,
     PROCESS_METHOD_DOCKER_IMGS_SUFFIX,
@@ -23,7 +25,13 @@ from .debasher_constants import (
     PROCESS_METHOD_RESET_OUTFILES_SUFFIX,
     PROCESS_METHOD_SKIP_SUFFIX,
 )
-from .markdown_parsing import function_body_lines
+from .doc_mod import run_get_verbatim_func_source
+from .markdown_parsing import (
+    function_body_lines,
+    function_header_name,
+    join_verbatim_body_lines,
+    verbatim_function_body_lines,
+)
 from .models import AdditionalMethods
 
 # Method label (what debasher::_proc_method_label prints, i.e. the
@@ -38,7 +46,9 @@ _FIELD_BY_SUFFIX = {
 }
 
 
-def resolve_additional_methods(methods_code: dict[str, str]) -> AdditionalMethods:
+def resolve_additional_methods(
+    methods_code: dict[str, str], script_path: Path, debasher_mod_dir: str = ""
+) -> AdditionalMethods:
     fields: dict[str, str] = {}
 
     for suffix, field_name in _FIELD_BY_SUFFIX.items():
@@ -46,7 +56,24 @@ def resolve_additional_methods(methods_code: dict[str, str]) -> AdditionalMethod
         if not source:
             continue
         body = function_body_lines(source)
-        if body:
-            fields[field_name] = "\n".join(body).strip()
+        if not body:
+            continue
+        fields[field_name] = "\n".join(body).strip()
+
+        # Best-effort upgrade to the method's exact original source
+        # (comments/indentation intact) -- no fixed positional-arg
+        # header to strip here (unlike arrayCode/generatorSizeCode),
+        # since script_generation.py's _add_method_body_func wraps the
+        # stored body straight into "<name><suffix>() { ... }" with no
+        # header lines of its own — see this module's own docstring.
+        funcname = function_header_name(source)
+        if funcname is None:
+            continue
+        verbatim = run_get_verbatim_func_source(script_path, funcname, debasher_mod_dir)
+        if not verbatim:
+            continue
+        verbatim_body = verbatim_function_body_lines(verbatim)
+        if verbatim_body is not None:
+            fields[field_name] = join_verbatim_body_lines(verbatim_body)
 
     return AdditionalMethods(**fields)
