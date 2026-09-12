@@ -21,6 +21,27 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   const [scheduler, setScheduler] =
     useState(program.executionOptions.scheduler);
 
+  const [builtinSchedCpus, setBuiltinSchedCpus] =
+    useState(program.executionOptions.builtinSchedCpus ?? "");
+
+  const [builtinSchedMem, setBuiltinSchedMem] =
+    useState(program.executionOptions.builtinSchedMem ?? "");
+
+  const [dfltNodes, setDfltNodes] =
+    useState(program.executionOptions.dfltNodes ?? "");
+
+  const [dfltThrottle, setDfltThrottle] =
+    useState(program.executionOptions.dfltThrottle ?? "");
+
+  const [rerunOutdatedProcs, setRerunOutdatedProcs] =
+    useState(program.executionOptions.rerunOutdatedProcs ?? false);
+
+  const [condaSupport, setCondaSupport] =
+    useState(program.executionOptions.condaSupport ?? false);
+
+  const [dockerSupport, setDockerSupport] =
+    useState(program.executionOptions.dockerSupport ?? false);
+
   const [schedulers, setSchedulers] =
     useState<string[]>([]);
 
@@ -60,7 +81,16 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   }, []);
 
   function handleSave() {
-    setExecutionOptions({ scheduler });
+    setExecutionOptions({
+      scheduler,
+      builtinSchedCpus,
+      builtinSchedMem,
+      dfltNodes,
+      dfltThrottle,
+      rerunOutdatedProcs,
+      condaSupport,
+      dockerSupport,
+    });
     onClose();
   }
 
@@ -134,6 +164,93 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
             {error}
           </div>
         )}
+
+        {scheduler === "BUILTIN" && (
+          <>
+
+            <label style={{ fontSize: 14 }}>
+              Built-in scheduler CPUs (blank = unlimited)
+            </label>
+
+            <input
+              type="text"
+              value={builtinSchedCpus}
+              placeholder="e.g. 4"
+              onChange={(event) => setBuiltinSchedCpus(event.target.value)}
+              style={{ width: "100%" }}
+            />
+
+            <label style={{ fontSize: 14 }}>
+              Built-in scheduler memory (blank = unlimited)
+            </label>
+
+            <input
+              type="text"
+              value={builtinSchedMem}
+              placeholder="e.g. 4096 or 4G"
+              onChange={(event) => setBuiltinSchedMem(event.target.value)}
+              style={{ width: "100%" }}
+            />
+
+          </>
+        )}
+
+        {scheduler === "SLURM" && (
+          <>
+
+            <label style={{ fontSize: 14 }}>
+              Default nodes (blank = scheduler default)
+            </label>
+
+            <input
+              type="text"
+              value={dfltNodes}
+              placeholder="e.g. node01,node02 or node[01-04]"
+              onChange={(event) => setDfltNodes(event.target.value)}
+              style={{ width: "100%" }}
+            />
+
+          </>
+        )}
+
+        <label style={{ fontSize: 14 }}>
+          Default job array throttle (blank = unthrottled)
+        </label>
+
+        <input
+          type="text"
+          value={dfltThrottle}
+          placeholder="e.g. 10"
+          onChange={(event) => setDfltThrottle(event.target.value)}
+          style={{ width: "100%" }}
+        />
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={rerunOutdatedProcs}
+            onChange={(event) => setRerunOutdatedProcs(event.target.checked)}
+          />
+          Rerun processes with outdated code
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={condaSupport}
+            onChange={(event) => setCondaSupport(event.target.checked)}
+          />
+          Enable conda support
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={dockerSupport}
+            onChange={(event) => setDockerSupport(event.target.checked)}
+          />
+          Enable docker support
+        </label>
 
         <div
           style={{

@@ -83,8 +83,25 @@ def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str
         "--pfile", str(script_path),
         "--outdir", program.outputDir,
         "--sched", program.executionOptions.scheduler,
-        mode_flag,
     ]
+
+    exec_opts = program.executionOptions
+    if exec_opts.builtinSchedCpus:
+        command += ["--builtinsched-cpus", exec_opts.builtinSchedCpus]
+    if exec_opts.builtinSchedMem:
+        command += ["--builtinsched-mem", exec_opts.builtinSchedMem]
+    if exec_opts.dfltNodes:
+        command += ["--dflt-nodes", exec_opts.dfltNodes]
+    if exec_opts.dfltThrottle:
+        command += ["--dflt-throttle", exec_opts.dfltThrottle]
+    if exec_opts.rerunOutdatedProcs:
+        command.append("--rerun-outdated-procs")
+    if exec_opts.condaSupport:
+        command.append("--conda-support")
+    if exec_opts.dockerSupport:
+        command.append("--docker-support")
+
+    command.append(mode_flag)
 
     option_types = _command_line_option_types(program)
     for label, value in program.programOptions.items():

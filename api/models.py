@@ -141,6 +141,17 @@ class ProgramEdge(BaseModel):
 
 class ExecutionOptions(BaseModel):
     scheduler: str
+    # All fields below are optional debasher_exec flags: an empty/None
+    # value means "not given", so debasher_exec falls back to its own
+    # default (see execution.py's _prepare_debasher_exec_command and
+    # the frontend's ExecutionOptionsEditor).
+    builtinSchedCpus: str = ""
+    builtinSchedMem: str = ""
+    dfltNodes: str = ""
+    dfltThrottle: str = ""
+    rerunOutdatedProcs: bool = False
+    condaSupport: bool = False
+    dockerSupport: bool = False
 
 
 class Program(BaseModel):

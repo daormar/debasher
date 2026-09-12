@@ -5,6 +5,41 @@ export interface ExecutionOptions {
 
   scheduler: string;
 
+  // All fields below are optional debasher_exec flags: an empty/falsy
+  // value means "not given", so debasher_exec falls back to its own
+  // default (see ExecutionOptionsEditor and execution.py's
+  // _prepare_debasher_exec_command).
+
+  // --builtinsched-cpus <int> (BUILTIN scheduler only).
+  builtinSchedCpus?: string;
+
+  // --builtinsched-mem <int> (BUILTIN scheduler only). Despite the
+  // "<int>" in debasher_exec's own --help, it accepts a plain number
+  // (MB) or one with a K/M/G/T suffix (see
+  // debasher::_convert_mem_value_to_mb) — free-form text, not an
+  // integer input.
+  builtinSchedMem?: string;
+
+  // --dflt-nodes <string> (SLURM scheduler only): a node list passed
+  // straight through to sbatch's -w, e.g. "node01,node02" or
+  // "node[01-04]" — not an index/count despite living next to the
+  // (actually numeric) cpus/mem options above.
+  dfltNodes?: string;
+
+  // --dflt-throttle <string>: max concurrent tasks for a job array,
+  // applied by both schedulers (see
+  // debasher::_get_scheduler_throttle). Empty means unthrottled.
+  dfltThrottle?: string;
+
+  // --rerun-outdated-procs
+  rerunOutdatedProcs?: boolean;
+
+  // --conda-support
+  condaSupport?: boolean;
+
+  // --docker-support
+  dockerSupport?: boolean;
+
 }
 
 export interface Program {
