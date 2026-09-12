@@ -632,16 +632,40 @@ mentioned above, DeBasher works with three main entities: processes,
 programs and modules, and it offers multiple alternatives to fully
 characterize them.
 
-Document Methods
-^^^^^^^^^^^^^^^^^
+Module Methods
+^^^^^^^^^^^^^^
 
-As explained above, both modules (`Module Configuration`_) and
-processes (`Process Documentation`_) can define a ``document`` method
-describing themselves. Once those methods (and any of the other ones
-described in `Process Methods`_ below) have been defined, the
+Besides the process-level ``document`` method described above, a
+DeBasher module can define its own methods, similarly to a process (see
+`Process Methods`_ below):
+
+* ``document``: describes the module itself, using ``document_module``
+  (see `Module Configuration`_ above).
+* ``program``: incorporates processes into the program, using
+  ``add_debasher_process`` (see `Program Definition`_ above), and/or
+  whole programs defined by other modules, using ``add_debasher_program``
+  (see `Reusing Processes and Programs`_ below).
+* ``shared_dirs``: not shown so far, declares one or more directories
+  shared by several processes, using ``define_shared_dir``:
+
+  .. code-block:: bash
+
+      debasher_shared_dir_example_shared_dirs()
+      {
+          define_shared_dir "data"
+      }
+
+  A shared directory declared this way is created once, before any
+  process in the program executes, and its absolute path can then be
+  retrieved from any process's own methods by means of
+  ``get_absolute_shdirname`` (e.g. ``get_absolute_shdirname "data"``) —
+  letting two processes agree on a common directory without one having
+  to pass it to the other as a regular connected option.
+
+Once a module (and/or its processes) defines any of these methods, the
 ``debasher_doc_mod`` tool can be used to generate Markdown
-documentation for a whole module directly from its code, without
-having to read through the module's own source file:
+documentation for it directly from its code, without having to read
+through the module's own source file:
 
 .. code-block:: bash
 
