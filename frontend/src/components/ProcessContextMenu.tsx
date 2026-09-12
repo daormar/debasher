@@ -5,19 +5,23 @@ const MENU_ITEMS = [
   "Show stdout",
   "Show scheduler output",
   "Show inputs and outputs",
+  "Watch FIFO",
 ] as const;
 
 export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 
 // "io" opens the structured "Show inputs and outputs" modal rather
 // than a plain-text CommandOutputModal — see ProgramCanvas's onSelect.
-export type ProcessMenuAction = ProcessOutputKind | "io";
+// "watch-fifo" opens FifoWatchModal on one of this process's mirrored
+// output fifo options (see ProgramCanvas's handleProcessMenuSelect).
+export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo";
 
 const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show options": "opts",
   "Show stdout": "stdout",
   "Show scheduler output": "sched-out",
   "Show inputs and outputs": "io",
+  "Watch FIFO": "watch-fifo",
 };
 
 interface Props {

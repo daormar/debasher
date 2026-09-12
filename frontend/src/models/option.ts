@@ -15,6 +15,12 @@ export interface ProgramOption {
   direction: OptionDirection;
   dataType: OptionDataType;
   channel: OptionChannel;
+  // Only meaningful when channel === "fifo" && direction === "output"
+  // (this process writes to the fifo): duplicates every line written
+  // into a separate mirror log file the canvas's "Watch FIFO" action
+  // can poll, without stealing data from the fifo's real reader — see
+  // api/models.py's ProgramOption.mirror.
+  mirror: boolean;
   description: string;
   value: string;
   commandLine: boolean;

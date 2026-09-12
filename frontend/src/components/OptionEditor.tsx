@@ -155,6 +155,9 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
   const isFifo = channel === "fifo";
   const isSharedDir = channel === "shared_dir";
 
+  const [mirror, setMirror] =
+    useState(option.mirror);
+
   // Union of the program's own declared shared dirs and every one it
   // inherits from a loaded module (see Program.availableSharedDirs) —
   // an imported program like golem_java.sh declares none of its own but
@@ -177,6 +180,16 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       setChannel("none");
     }
   }, [direction, channel]);
+
+  useEffect(() => {
+    // Mirroring only makes sense on an output-direction fifo option
+    // (see ProgramOption.mirror's docstring) — clear it as soon as
+    // either condition stops holding, rather than leaving a stale
+    // checked state hidden behind the checkbox's own conditional render.
+    if (mirror && !(isFifo && direction === "output")) {
+      setMirror(false);
+    }
+  }, [mirror, isFifo, direction]);
 
   useEffect(() => {
     // A connected option's value always comes from define_opt_from_proc_out,
@@ -226,6 +239,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
       direction: getOptionDirection(label),
       dataType,
       channel: isFlag ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel,
+      mirror: !isFlag && isFifo && direction === "output" && !connectedSourceLabel && mirror,
       description,
       value: isFlag || isValueDescriptor ? "" : value,
       commandLine: commandLine && !savedFromProcessSpec,
@@ -593,6 +607,28 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
             )}
 
           </>
+
+        )}
+
+        {isFifo && direction === "output" && (
+
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+
+            <input
+
+              type="checkbox"
+
+              checked={mirror}
+
+              onChange={(event) =>
+                setMirror(event.target.checked)
+              }
+
+            />
+
+            Mirror (let "Watch FIFO" show this output live)
+
+          </label>
 
         )}
 

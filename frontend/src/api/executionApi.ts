@@ -120,12 +120,13 @@ async function fetchProcessOutput(
   program: Program,
   processName: string,
   taskIndex: number | undefined,
-  fallback: string
+  fallback: string,
+  extra: Record<string, unknown> = {}
 ): Promise<string> {
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ program, processName, taskIndex }),
+    body: JSON.stringify({ program, processName, taskIndex, ...extra }),
   });
 
   if (!response.ok) {
@@ -185,6 +186,27 @@ export async function getProcessOpts(
     processName,
     taskIndex,
     `Failed to get options for ${processName}.`
+  );
+}
+
+// A mirrored output fifo's captured content (the canvas's right-click
+// "Watch FIFO" action) — see api/routers/execution.py's /fifo-mirror.
+// `fifoName` is the fifo's name as given to define_fifo_opt (the
+// mirrored option's own `value`, per ProgramOption.mirror). See
+// getProcessStdout for `taskIndex`.
+export async function getFifoMirror(
+  program: Program,
+  processName: string,
+  fifoName: string,
+  taskIndex?: number
+): Promise<string> {
+  return fetchProcessOutput(
+    "/api/execution/fifo-mirror",
+    program,
+    processName,
+    taskIndex,
+    `Failed to get mirrored fifo output for ${processName}.`,
+    { fifoName }
   );
 }
 

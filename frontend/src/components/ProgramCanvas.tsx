@@ -42,6 +42,7 @@ import ProcessContextMenu, { type ProcessMenuAction, type ProcessOutputKind } fr
 import ProcessTaskPicker from "./ProcessTaskPicker";
 import CommandOutputModal from "./CommandOutputModal";
 import ProcessIOModal from "./ProcessIOModal";
+import FifoWatchModal from "./FifoWatchModal";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
   opts: "options",
@@ -55,6 +56,7 @@ const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
 const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   ...OUTPUT_KIND_LABEL,
   io: "inputs and outputs",
+  "watch-fifo": "mirrored fifo output",
 };
 
 // Above this many indices, listing the family inline stops being
@@ -336,6 +338,25 @@ export default function ProgramCanvas() {
   const [isPathViewPending, setPathViewPending] =
     useState(false);
 
+  // "Watch FIFO" — a live-polling FifoWatchModal (see
+  // handleProcessMenuSelect's "watch-fifo" branch) rather than a
+  // one-shot processCommandOutput.
+  const [fifoWatch, setFifoWatch] = useState<{
+    title: string;
+    processName: string;
+    fifoName: string;
+    taskIndex?: number;
+  } | null>(null);
+
+  // Set instead of opening fifoWatch directly whenever a process has
+  // more than one mirrored output fifo option — mirrors
+  // processTaskPicker's own "pick first" pattern.
+  const [fifoPicker, setFifoPicker] = useState<{
+    process: ProgramProcess;
+    options: ProgramOption[];
+    taskIndex?: number;
+  } | null>(null);
+
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node<ProgramProcessData>) => {
       event.preventDefault();
@@ -441,6 +462,51 @@ export default function ProgramCanvas() {
 
   }
 
+  // Shared by handleProcessMenuSelect and handleTaskPickerConfirm's own
+  // "watch-fifo" branch. No network call needed to find the candidate
+  // options — process.options (with channel/direction/mirror already
+  // resolved) is loaded client-side, same data fetchProcessIO reads.
+  function openFifoWatch(process: ProgramProcess, taskIndex?: number) {
+
+    const mirroredOptions = process.options.filter(
+      o => o.channel === "fifo" && o.direction === "output" && o.mirror
+    );
+
+    if (mirroredOptions.length === 0) {
+      setProcessCommandOutput({
+        title: process.name,
+        output: 'No mirrored output fifo on this process — enable "Mirror" on an output fifo option first.',
+      });
+    } else if (mirroredOptions.length === 1) {
+      setFifoWatch({
+        title: `${process.name}: ${mirroredOptions[0].label} (fifo)`,
+        processName: process.name,
+        fifoName: mirroredOptions[0].value,
+        taskIndex,
+      });
+    } else {
+      setFifoPicker({ process, options: mirroredOptions, taskIndex });
+    }
+
+  }
+
+  function handleFifoPickerSelect(option: ProgramOption) {
+
+    if (!fifoPicker) {
+      return;
+    }
+
+    setFifoWatch({
+      title: `${fifoPicker.process.name}: ${option.label} (fifo)`,
+      processName: fifoPicker.process.name,
+      fifoName: option.value,
+      taskIndex: fifoPicker.taskIndex,
+    });
+
+    setFifoPicker(null);
+
+  }
+
   async function handleProcessMenuSelect(action: ProcessMenuAction) {
 
     if (!processContextMenu) {
@@ -468,6 +534,8 @@ export default function ProgramCanvas() {
 
       if (action === "io") {
         setProcessIO(await fetchProcessIO(process, taskIndices[0]));
+      } else if (action === "watch-fifo") {
+        openFifoWatch(process, taskIndices[0]);
       } else {
         setProcessCommandOutput(await fetchProcessOutput(process, action, taskIndices[0]));
       }
@@ -499,6 +567,8 @@ export default function ProgramCanvas() {
     try {
       if (kind === "io") {
         setProcessIO(await fetchProcessIO(process, taskIndex));
+      } else if (kind === "watch-fifo") {
+        openFifoWatch(process, taskIndex);
       } else {
         setProcessCommandOutput(await fetchProcessOutput(process, kind, taskIndex));
       }
@@ -644,6 +714,57 @@ export default function ProgramCanvas() {
           title={pathContent.title}
           output={pathContent.output}
           onClose={() => setPathContent(null)}
+        />
+      )}
+
+      {fifoPicker && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              width: 320,
+              background: "#fff",
+              borderRadius: 4,
+              padding: 16,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <h3 style={{ margin: 0 }}>
+              {fifoPicker.process.name}: pick a mirrored fifo
+            </h3>
+            {fifoPicker.options.map(option => (
+              <button key={option.id} onClick={() => handleFifoPickerSelect(option)}>
+                {option.label}
+              </button>
+            ))}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => setFifoPicker(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fifoWatch && (
+        <FifoWatchModal
+          title={fifoWatch.title}
+          program={program}
+          processName={fifoWatch.processName}
+          fifoName={fifoWatch.fifoName}
+          taskIndex={fifoWatch.taskIndex}
+          onClose={() => setFifoWatch(null)}
         />
       )}
     </div>

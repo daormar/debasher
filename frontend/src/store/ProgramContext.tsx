@@ -216,6 +216,7 @@ function toProgramOption(info: ProcessInfoOption): ProgramOption {
     label: info.label,
     dataType: info.dataType,
     channel: "none",
+    mirror: false,
     description: info.description,
     value: "",
     commandLine: info.commandLine,
@@ -944,6 +945,8 @@ export function ProgramProvider({
       dataType: "string",
 
       channel: "none",
+
+      mirror: false,
 
       description: "",
 
