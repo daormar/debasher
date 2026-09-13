@@ -121,6 +121,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_namespace_multidot_example program
+progname="debasher_namespace_multidot_example"
+sched="BUILTIN"
+bs_cpus=2
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "--gen-proc-graph"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_hello_world_py program
 progname="debasher_hello_world_py"
 sched="BUILTIN"

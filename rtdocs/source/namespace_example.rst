@@ -6,12 +6,13 @@ Namespace Example
     # This module reimplements the hello_world process introduced in
     # the Quickstart guide, but naming it "mymodule.hello_world"
     # instead of plain "hello_world". A process name can optionally
-    # be qualified with a single "namespace.name" prefix, where both
-    # "namespace" and "name" follow the usual naming rules (they must
-    # start with a letter or underscore, followed by letters, digits
-    # or underscores). This is recommended for modules meant to be
-    # shared with other people, since it prevents the process names
-    # they define from colliding with those defined by other DeBasher
+    # be qualified with one or more "namespace.name" prefixes (see the
+    # following example for more than one level), where each
+    # dot-separated part follows the usual naming rules (it must start
+    # with a letter or underscore, followed by letters, digits or
+    # underscores). This is recommended for modules meant to be shared
+    # with other people, since it prevents the process names they
+    # define from colliding with those defined by other DeBasher
     # modules. See the :ref:`process naming <process-naming>` note in
     # the Implementation Section for details.
 

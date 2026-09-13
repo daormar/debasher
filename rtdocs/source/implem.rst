@@ -103,9 +103,9 @@ Process Naming and Namespaces
 
 A process name must start with a letter or underscore, followed by any
 number of letters, digits or underscores. Optionally, it can be
-qualified with a single namespace prefix separated by a dot
-(``namespace.name``), where both ``namespace`` and ``name`` follow the
-same rule.
+qualified with one or more namespace prefixes separated by dots (e.g.
+``namespace.name`` or ``org.namespace.name``), where each dot-separated
+part follows the same rule.
 
 **If you are implementing a module that you plan to share with other
 people, it is strongly recommended that you qualify all of its process
@@ -118,7 +118,9 @@ process under the same short, generic name (such as ``download`` or
 ``filter``).
 
 See the :doc:`namespace_example` example for a module that reimplements
-``hello_world`` under the ``mymodule`` namespace.
+``hello_world`` under the ``mymodule`` namespace, and
+:doc:`namespace_multidot_example` for the same module under the
+``org.mymodule`` namespace.
 
 One exception: a process implemented in another language (Python, R,
 Perl or Groovy) provides its code through a suffixed variable (legacy,
@@ -995,6 +997,8 @@ repository.
 .. toctree::
 
    namespace_example
+
+   namespace_multidot_example
 
    hello_world_py
 

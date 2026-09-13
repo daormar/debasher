@@ -21,7 +21,7 @@ from ..markdown_parsing import (
 router = APIRouter(prefix="/api/processes", tags=["processes"])
 
 
-_PROCESS_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)?$")
+_PROCESS_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*$")
 
 
 def _collides_with_reserved_suffix(name: str, suffix: str) -> bool:

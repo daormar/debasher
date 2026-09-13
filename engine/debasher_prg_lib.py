@@ -256,7 +256,7 @@ class DependencyGraph:
     def syntax_ok(self):
         return self.syntax_ok
 
-    PRNAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)?$")
+    PRNAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*$")
 
     def prname_valid(self, prname):
         return 1 if self.PRNAME_RE.match(prname) else 0
