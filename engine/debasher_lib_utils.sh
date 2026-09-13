@@ -646,6 +646,35 @@ debasher::_search_process_var()
 }
 
 ########
+# Looks up the code providing a HEREDOC process implementation, given
+# the suffix identifying its language (e.g. "_py"). A function with
+# that name is preferred, since it works regardless of whether
+# "processname" contains a namespace separator; a variable with that
+# name is still accepted for backwards compatibility (a namespaced
+# process name cannot be used to build a valid variable name, so this
+# form is only usable for unnamespaced process names). Echoes
+# "<name> func" or "<name> var" when found.
+debasher::_search_heredoc_provider()
+{
+    local processname=$1
+    local var_name=$2
+
+    local process_function=$(debasher::_get_process_funcname "${processname}" "${var_name}")
+    if debasher::_func_exists "${process_function}"; then
+        echo "${process_function} func"
+        return 0
+    fi
+
+    local process_var=$(debasher::_get_process_varname "${processname}" "${var_name}")
+    if debasher::_var_exists "${process_var}"; then
+        echo "${process_var} var"
+        return 0
+    fi
+
+    return 1
+}
+
+########
 debasher::_search_process_func_nameref()
 {
     local processname=$1

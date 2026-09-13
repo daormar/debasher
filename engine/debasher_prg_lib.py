@@ -256,16 +256,15 @@ class DependencyGraph:
     def syntax_ok(self):
         return self.syntax_ok
 
+    PRNAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)?$")
+
     def prname_valid(self, prname):
-        for c in prname:
-            if not(c.isalpha() or c.isdigit() or c=="_"):
-                return 0
-        return 1
+        return 1 if self.PRNAME_RE.match(prname) else 0
 
     def prnames_valid(self):
         for prname in self.processdeps_map:
             if(not self.prname_valid(prname)):
-                print("Error: process name", prname, "contains not allowed characters (only letters, numbers and underscores are allowed)", file=sys.stderr)
+                print("Error: process name", prname, "contains not allowed characters (only letters, numbers, underscores and a single '.' namespace separator are allowed)", file=sys.stderr)
                 return 0
         return 1
 
@@ -376,10 +375,10 @@ class DependencyGraph:
         for process in self.processdeps_map:
             line_style = self.get_graph_linestyle(self.processdeps_sep[process])
             if len(self.processdeps_map[process]) == 0:
-                print("start", "->", process, "[ label= \"\" ,", "color = black ];")
+                print("start", "->", '"'+process+'"', "[ label= \"\" ,", "color = black ];")
             else:
                 for elem in self.processdeps_map[process]:
-                    print('"'+elem.processname+'"', "->", process, "[ label= \""+elem.deptype+"\" ,","style=", line_style, ", color = black ];")
+                    print('"'+elem.processname+'"', "->", '"'+process+'"', "[ label= \""+elem.deptype+"\" ,","style=", line_style, ", color = black ];")
 
         # Print footer
         print("}")
@@ -512,7 +511,7 @@ class ProcessGraph:
         clusters = self.gen_clusters(process_graph_set, opt_graph_set, opt_hub_graph_set)
 
         # Set representation for processes and options
-        print("node [shape = " + PROCESS_NODE_SHAPE + "];", "; ".join(process_graph_repres))
+        print("node [shape = " + PROCESS_NODE_SHAPE + "];", "; ".join('"' + p + '"' for p in process_graph_repres))
         print("node [shape = " + OPTION_NODE_SHAPE + "];", "; ".join(opt_repres))
         print("node [shape = " + OPTION_HUB_SHAPE + "];", "; ".join(opt_hub_repres))
 
@@ -689,10 +688,10 @@ class ProcessGraph:
 
     def print_clusters(self, clusters):
         for proc_graph in clusters:
-            print("subgraph", "cluster_" + proc_graph, "{")
+            print("subgraph", '"cluster_' + proc_graph + '"', "{")
             print("style=" + CLUSTER_STYLE + ";")
             print("color=" + CLUSTER_FILL_COLOR + ";")
-            print(proc_graph + ";")
+            print('"' + proc_graph + '"' + ";")
             for elem in clusters[proc_graph]:
                 print('"' + elem + '"' + ";")
             print("}")
@@ -727,13 +726,13 @@ class ProcessGraph:
         # Print arc
         if self.str_is_output_option(opt):
             if self.process_is_fifo_owner(process_info, opt_val):
-                print(processname, "->", '"'+ opt_graph +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
+                print('"'+ processname +'"', "->", '"'+ opt_graph +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             else:
-                print(processname, "->", '"'+ opt_graph +'"', ";")
+                print('"'+ processname +'"', "->", '"'+ opt_graph +'"', ";")
         elif self.process_is_fifo_user(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
-            print('"'+ opt_graph +'"', "->", processname, "[ style=" + FIFO_ARC_STYLE + " ] ;")
+            print('"'+ opt_graph +'"', "->", '"'+ processname +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
         else:
-            print('"'+ opt_graph +'"', "->", processname, ";")
+            print('"'+ opt_graph +'"', "->", '"'+ processname +'"', ";")
 
     def print_opt_to_proc_args_arr(self, process_info, opt, opt_val):
         # Initialize variables
@@ -749,20 +748,20 @@ class ProcessGraph:
         if self.str_is_output_option(opt):
             if self.process_is_fifo_owner(process_info, opt_val):
                 if task_idx == 0:
-                    print(processname, "->", '"'+ opt_hub +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
+                    print('"'+ processname +'"', "->", '"'+ opt_hub +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
                 print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             else:
                 if task_idx == 0:
-                    print(processname, "->", '"'+ opt_hub +'"', ";")
+                    print('"'+ processname +'"', "->", '"'+ opt_hub +'"', ";")
                 print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', ";")
         elif self.process_is_fifo_user(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
             print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             if task_idx == 0:
-                print('"'+ opt_hub +'"', "->", processname, "[ style=" + FIFO_ARC_STYLE + " ] ;")
+                print('"'+ opt_hub +'"', "->", '"'+ processname +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
         else:
             print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', ";")
             if task_idx == 0:
-                print('"'+ opt_hub +'"', "->", processname, ";")
+                print('"'+ opt_hub +'"', "->", '"'+ processname +'"', ";")
 
     def get_augm_fifoname(self, abs_fifoname):
         basename = os.path.basename(abs_fifoname)

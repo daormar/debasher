@@ -159,7 +159,7 @@ debasher::_processname_contains_invalid_characters()
     local processname="$1"
 
     # Check characters
-    if [[ "$processname" =~ ^[a-zA-Z_][a-zA-Z_0-9]*(::[a-zA-Z_][a-zA-Z_0-9]*)?$ ]]; then
+    if [[ "$processname" =~ ^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)?$ ]]; then
         return 1
     else
         return 0
@@ -171,16 +171,14 @@ debasher::_processname_contains_reserved_suffixes()
 {
     local processname="$1"
 
-    # Check process methods
+    # Check process methods (this also covers the HEREDOC language
+    # suffixes, e.g. "_py", since DEBASHER_PROCESS_METHODS includes
+    # them -- see debasher_lib.sh)
     for method in "${DEBASHER_PROCESS_METHODS[@]}"; do
-        if [[ "$processname" == "$method" || "$processname" == *_"$method" ]]; then
-            return 0
-        fi
-    done
-
-    # Check HereDoc suffixes
-    for suffix in "${DEBASHER_HEREDOC_SUFFIXES[@]}"; do
-        if [[ "$processname" == "$suffix" || "$processname" == *_"$suffix" ]]; then
+        # The empty "exec" entry has no suffix: every process name
+        # trivially "ends with" it, so it is skipped.
+        [ -z "${method}" ] && continue
+        if [[ "$processname" == *"$method" ]]; then
             return 0
         fi
     done
@@ -205,6 +203,16 @@ debasher::_is_valid_processname()
         return 1
     fi
 
+    # Check reserved marker used internally to mangle the namespace
+    # separator when building variable names (see
+    # debasher::_get_opt_list_name); a process name containing it
+    # verbatim could collide with a namespaced process name once
+    # mangled.
+    if [[ "${processname}" == *"${DEBASHER_PROCESSNAME_NS_SEP_MANGLED}"* ]]; then
+        echo "Process name '${processname}' is not valid: it contains the reserved marker '${DEBASHER_PROCESSNAME_NS_SEP_MANGLED}'" >&2
+        return 1
+    fi
+
     return 0
 }
 
@@ -213,11 +221,11 @@ debasher::_is_heredoc_process()
 {
     local processname=$1
 
-    # Search for a suitable function to execute the process
+    # Search for a suitable function or variable to execute the process
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
-        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-            echo "${proc_varname}"
+        local provider=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
+        if [ -n "${provider}" ]; then
+            echo "${provider}"
             return 0
         fi
     done
@@ -231,12 +239,18 @@ debasher::_create_heredoc_func_body()
     local processname=$1
     local escaped_interpreter
 
-    # Search for a suitable function to execute the process
+    # Search for a suitable function or variable to execute the process
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
-        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
+        local provider=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
+        if [ -n "${provider}" ]; then
+            local provider_name=${provider% *}
+            local provider_kind=${provider##* }
             printf -v escaped_interpreter '%q' "${DEBASHER_HEREDOC_INTERPRETERS[$i]}"
-            echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\${${proc_varname}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+            if [ "${provider_kind}" = "func" ]; then
+                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\$(${provider_name})\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+            else
+                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\${${provider_name}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+            fi
             return 0
         fi
     done

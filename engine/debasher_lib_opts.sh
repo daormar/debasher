@@ -1963,7 +1963,13 @@ debasher::_get_opt_list_name()
     local processname=$1
     local task_idx=$2
 
-    echo "DEBASHER_OPT_LIST_${processname}_${task_idx}"
+    # A namespaced process name (e.g. "ns.name") is not a valid Bash
+    # identifier, so the namespace separator is replaced here (with a
+    # marker unlikely to appear in an ordinary process name) to build
+    # a safe variable name.
+    local safe_processname="${processname//./${DEBASHER_PROCESSNAME_NS_SEP_MANGLED}}"
+
+    echo "DEBASHER_OPT_LIST_${safe_processname}_${task_idx}"
 }
 
 ########
