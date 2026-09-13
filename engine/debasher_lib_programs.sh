@@ -681,7 +681,8 @@ debasher::add_debasher_program()
 {
     # Initialize variables
     local modname=$1
-    local pfile=$(debasher::_determine_full_module_name "${modname}")
+    debasher::_determine_full_module_name "${modname}"
+    local pfile="${DEBASHER_RESOLVED_MODNAME}"
 
     # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution

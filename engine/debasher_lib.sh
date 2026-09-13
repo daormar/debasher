@@ -43,6 +43,8 @@ DEBASHER_ASSOC_ARRAY_PROC_SEP="__PROCSEP__"
 DEBASHER_OPT_MULTIVAL_SEP="__OPTMULTIVALSEP__"
 DEBASHER_PROCESSNAME_NS_SEP_MANGLED="__NSSEP__"
 DEBASHER_MOD_DIR_SEP=":"
+DEBASHER_UI_PROGRAM_DIRNAME=".debasher"
+DEBASHER_UI_PROGRAM_METADATA_FNAME="program.json"
 DEBASHER_YML_DIR_SEP=":"
 DEBASHER_PROCESS_METHOD_SEP="_"
 DEBASHER_MODULE_METHOD_SEP="_"
@@ -355,6 +357,31 @@ declare DEBASHER_PROGRAM_OUTDIR
 
 # Declare array to store file names of loaded modules
 declare -a DEBASHER_PROGRAM_MODULES
+
+# Declare array to store, from the last module search, same-named
+# candidates found one level below a DEBASHER_MOD_DIR entry that were
+# rejected for not being a genuine DeBasher UI program directory (see
+# debasher::_is_ui_program_dir in debasher_lib_modules.sh). Populated by
+# debasher::_search_mod_in_dirs so that a subsequent "module not found"
+# error can mention them.
+declare -a DEBASHER_REJECTED_MOD_CANDIDATES
+
+# Declare variable used by debasher::_search_mod_in_immediate_subdirs to
+# hand its match back to debasher::_search_mod_in_dirs. A plain "echo
+# and capture via $(...)" would run the function in a subshell, losing
+# the DEBASHER_REJECTED_MOD_CANDIDATES entries it appends along the way
+# -- so the match travels via this global instead.
+declare DEBASHER_SUBDIR_MOD_MATCH
+
+# Declare variable used by debasher::_search_mod_in_dirs and
+# debasher::_determine_full_module_name to hand their resolved module
+# path back to their callers (debasher::load_debasher_module and
+# debasher::add_debasher_program) -- for the same reason as
+# DEBASHER_SUBDIR_MOD_MATCH above: those callers need
+# DEBASHER_REJECTED_MOD_CANDIDATES populated in their own shell, not a
+# subshell's copy of it, so the whole chain is called directly instead
+# of through $(...).
+declare DEBASHER_RESOLVED_MODNAME
 
 # Declare array to store a stack for the program files for each program
 # function that is invoked
