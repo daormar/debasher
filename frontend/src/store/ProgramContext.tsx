@@ -61,6 +61,14 @@ interface ProgramContextType {
 
   save: (outputDir: string) => Promise<void>;
 
+  // True whenever processStatuses reports at least one process as
+  // "IN-PROGRESS" — i.e. a run is going for program.outputDir, whether
+  // launched from this tab or not (unlike runPhase, which only tracks
+  // a run this tab itself launched). Drives SaveDialog's proactive
+  // disable — see save()'s own guard below for why saving mid-run is
+  // unsafe.
+  isRunInProgress: boolean;
+
   runPhase: ProgramRunPhase;
 
   // debasher_status's output from the poll that settled runPhase into
@@ -362,6 +370,25 @@ export function ProgramProvider({
   }
 
   async function save(outputDir: string) {
+
+    // Saving regenerates the .sh script in homeDir (see
+    // persistence.save_script) — but engine/debasher_exec_process
+    // reloads that same file from disk each time a process starts,
+    // not just once when the run launches. Overwriting it while a run
+    // is in progress can leave already-started processes on the old
+    // script and not-yet-started ones silently picking up the new one:
+    // a single run mixing two versions, with nothing to flag it. Kept
+    // here (not just as SaveDialog's proactive disable) so any other
+    // future caller of save() gets the same protection.
+    if (isRunInProgress) {
+      throw new Error(
+        "Cannot save while a run is in progress for this program's output " +
+        "directory: it would overwrite the script that not-yet-started " +
+        "processes read from disk when they start. Wait for the run to " +
+        "finish, or stop it first."
+      );
+    }
+
     const updated = { ...program, homeDir: outputDir };
     await saveProgram(updated, outputDir);
     setProgram(() => updated);
@@ -520,6 +547,9 @@ export function ProgramProvider({
   const [processStatuses, setProcessStatuses] =
     useState<Record<string, string>>({});
 
+  const isRunInProgress =
+    Object.values(processStatuses).includes("IN-PROGRESS");
+
   // Kept in sync on every render so the status-poll effect below (which
   // only restarts when outputDir/DEBASHER_MOD_DIR change, not on every
   // program edit) always sends the current program rather than a stale
@@ -567,6 +597,18 @@ export function ProgramProvider({
   }, [program.outputDir, program.envVars.DEBASHER_MOD_DIR]);
 
   async function resetOutputDir() {
+
+    // Same reasoning as save()'s guard above, and kept here for the
+    // same defense-in-depth reason: wiping outputDir out from under a
+    // run that's actually in progress (this tab's or not, per
+    // isRunInProgress) would delete files a not-yet-finished process
+    // is using.
+    if (isRunInProgress) {
+      throw new Error(
+        "Cannot reset the output directory while a run is in progress for " +
+        "it. Wait for the run to finish, or stop it first."
+      );
+    }
 
     const cleared = await requestOutputDirReset(program);
 
@@ -1468,6 +1510,8 @@ export function ProgramProvider({
     selectProcess,
 
     save,
+
+    isRunInProgress,
 
     runPhase,
 

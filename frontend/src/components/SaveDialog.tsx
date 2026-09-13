@@ -8,7 +8,7 @@ interface Props {
 
 export default function SaveDialog({ onClose }: Props) {
 
-  const { program, save } = useProgram();
+  const { program, save, isRunInProgress } = useProgram();
 
   const [outputDir, setOutputDir] =
     useState(program.homeDir);
@@ -103,6 +103,15 @@ export default function SaveDialog({ onClose }: Props) {
 
         />
 
+        {isRunInProgress && (
+          <div style={{ color: "#8a6d00", fontSize: 14 }}>
+            A run is in progress for this program's output directory.
+            Saving is disabled until it finishes: it would overwrite
+            the script that not-yet-started processes read from disk
+            when they start.
+          </div>
+        )}
+
         {error && (
           <div style={{ color: "#b00020", fontSize: 14 }}>
             {error}
@@ -121,7 +130,7 @@ export default function SaveDialog({ onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleSave} disabled={isSaving}>
+          <button onClick={handleSave} disabled={isSaving || isRunInProgress}>
             {isSaving ? "Saving..." : "Save"}
           </button>
 

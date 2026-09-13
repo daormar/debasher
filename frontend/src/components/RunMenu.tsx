@@ -60,7 +60,8 @@ interface CommandOutput {
 
 export default function RunMenu() {
 
-  const { program, runPhase, startProgramRun, resetOutputDir } = useProgram();
+  const { program, runPhase, isRunInProgress, startProgramRun, resetOutputDir } =
+    useProgram();
 
   const [isOpen, setOpen] =
     useState(false);
@@ -151,7 +152,7 @@ export default function RunMenu() {
         title: "Reset output directory",
         output: cleared
           ? `Cleared ${program.outputDir}.`
-          : "Nothing was reset — the output directory doesn't exist, or is a protected path.",
+          : "Nothing was reset: the output directory doesn't exist, or is a protected path.",
       });
     } catch (err) {
       setResetError(
@@ -277,9 +278,11 @@ export default function RunMenu() {
               disabled={
                 pendingAction !== null ||
                 (item === "Run program" && runPhase === "running") ||
-                // Wiping the output directory out from under a run this
-                // UI is tracking would delete files it's using.
-                (item === "Reset output directory" && runPhase === "running") ||
+                // Wiping the output directory out from under a run
+                // would delete files it's using — checked via
+                // isRunInProgress (not runPhase) so a run launched
+                // outside this tab is caught too.
+                (item === "Reset output directory" && isRunInProgress) ||
                 // A fifo only exists on disk once its owning process
                 // has started.
                 (item === "Talk to FIFOs" && runPhase !== "running")
