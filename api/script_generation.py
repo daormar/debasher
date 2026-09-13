@@ -828,6 +828,16 @@ def get_all_envvars(program: Program) -> dict[str, str]:
     debasher_doc_mod call and nothing depends on which copy of a
     same-named function bash ends up keeping.
 
+    Copies any relative AdditionalSpecs.externalAlias files into the
+    same throwaway directory (see persistence.copy_ext_alias_files) —
+    the engine resolves a relative ext_alias against the directory of
+    the .sh being loaded, which here is `tmp_dir`, not
+    program.sourceDir. Without this, any imported program with a
+    relative ext_alias process (e.g. a Python/Perl/R node) makes
+    debasher_doc_mod abort with "file not found", which is caught below
+    and swallowed into {} — silently hiding every inherited variable in
+    the program, not just that one process's.
+
     A failure (tool missing, generation error, timeout) is a
     convenience miss, not a hard error — mirrors how
     _find_redundant_exec_funcs treats _module_provided_code failing —
@@ -836,10 +846,15 @@ def get_all_envvars(program: Program) -> dict[str, str]:
     if not program.name:
         return {}
 
+    # Deferred import: persistence imports this module, so importing it
+    # at module scope here would be circular.
+    from .persistence import copy_ext_alias_files
+
     debasher_mod_dir = program.envVars.get("DEBASHER_MOD_DIR", "")
     stubbed_program = _stub_processes_missing_code(program)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
+        copy_ext_alias_files(stubbed_program, tmp_dir)
         # debasher_doc_mod derives the expected "_program" function name
         # from the file's own basename (debasher::_get_program_funcname
         # in engine/debasher_lib_modules.sh), which must match what

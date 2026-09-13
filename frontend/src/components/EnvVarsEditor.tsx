@@ -141,7 +141,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
           </div>
         )}
 
-        {!isLoadingInheritedVars && hasInheritedVars && (
+        {!isLoadingInheritedVars && (
 
           <>
 
@@ -149,31 +149,39 @@ export default function EnvVarsEditor({ onClose }: Props) {
               Module-defined (inherited) variables
             </h4>
 
-            <input
+            {hasInheritedVars && (
+              <input
 
-              type="text"
+                type="text"
 
-              value={filter}
+                value={filter}
 
-              onChange={(event) => setFilter(event.target.value)}
+                onChange={(event) => setFilter(event.target.value)}
 
-              placeholder="Filter by name..."
+                placeholder="Filter by name..."
 
-              style={{ width: "100%", boxSizing: "border-box" }}
+                style={{ width: "100%", boxSizing: "border-box" }}
 
-            />
+              />
+            )}
 
             <textarea
 
-              value={inheritedEntries
-                .map(([varName, value]) => `${varName}=${value}`)
-                .join("\n")}
+              value={
+                hasInheritedVars
+                  ? inheritedEntries
+                      .map(([varName, value]) => `${varName}=${value}`)
+                      .join("\n")
+                  : ""
+              }
 
               readOnly
 
               rows={8}
 
               spellCheck={false}
+
+              placeholder="(none)"
 
               style={{
                 width: "100%",
