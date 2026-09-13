@@ -40,6 +40,9 @@ import {
 // How often to poll for a background run's completion, in milliseconds.
 const RUN_POLL_INTERVAL_MS = 5000;
 
+// Matches engine/debasher_lib.sh's DEBASHER_MOD_DIR_SEP.
+const MOD_DIR_SEP = ":";
+
 // How often to poll debasher_status for per-process node colors, in
 // milliseconds. Runs continuously whenever an output directory is set,
 // independently of runPhase (which only tracks runs launched from this
@@ -91,6 +94,16 @@ interface ProgramContextType {
   dismissProgramRun: () => void;
 
   addProcess: (name: string, info: ProcessInfo | null) => void;
+
+  // Merges `loaded`'s processes/edges into the current program as a new
+  // group (see "Add program"): every merged process is tagged with a
+  // GroupSource so script_generation.py can emit a single
+  // add_debasher_program call for it while the group stays intact. Fails
+  // (via window.alert) instead of merging if any of `loaded`'s process
+  // names collide with an existing one — they can't be deduped by
+  // renaming, since add_debasher_program only knows the source module's
+  // own original names.
+  mergeProgram: (loaded: Program, sourceDir: string) => void;
 
   applyProcessInfo: (
     processId: string,
@@ -618,10 +631,158 @@ export function ProgramProvider({
 
   }
 
+  function mergeProgram(loaded: Program, sourceDir: string) {
+
+    const collisionName = loaded.processes.find(process =>
+      program.processes.some(
+        existing => existing.name.toLowerCase() === process.name.toLowerCase()
+      )
+    )?.name;
+
+    if (collisionName) {
+      window.alert(
+        `Cannot add program "${loaded.name}": it has a process named ` +
+        `"${collisionName}", which already exists in this program. Rename ` +
+        `the conflicting process (in either program) and try again.`
+      );
+      return;
+    }
+
+    const groupId = crypto.randomUUID();
+
+    // Places the merged batch to the right of whatever's already on the
+    // canvas, preserving the relative layout its processes had in
+    // `loaded` — there's no bounding-box UI to keep in sync (see
+    // ProcessNode's per-group color instead), just a one-off offset at
+    // merge time, same spirit as addProcess's own hardcoded position.
+    const currentMaxX = program.processes.reduce(
+      (max, process) => Math.max(max, process.position.x),
+      0
+    );
+
+    const loadedMinX = loaded.processes.reduce(
+      (min, process) => Math.min(min, process.position.x),
+      Infinity
+    );
+
+    const offsetX = loadedMinX === Infinity ? 0 : currentMaxX + 250 - loadedMinX;
+
+    const idMap = new Map<string, string>();
+
+    // Names are kept exactly as in `loaded` (checked above) — renaming a
+    // merged process's own name would desync it from the
+    // add_debasher_program call, which internally re-declares each
+    // process under its original name.
+    const mergedProcesses: ProgramProcess[] = loaded.processes.map(process => {
+
+      const id = crypto.randomUUID();
+      idMap.set(process.id, id);
+
+      return {
+        ...process,
+        id,
+        position: {
+          x: process.position.x + offsetX,
+          y: process.position.y,
+        },
+        groupSource: {
+          programName: loaded.name,
+          groupId,
+          groupSize: loaded.processes.length,
+          sourceDir,
+        },
+      };
+
+    });
+
+    const mergedEdges: ProgramEdge[] = loaded.edges.map(edge => ({
+      ...edge,
+      id: crypto.randomUUID(),
+      sourceProcessId: idMap.get(edge.sourceProcessId) ?? edge.sourceProcessId,
+      targetProcessId: idMap.get(edge.targetProcessId) ?? edge.targetProcessId,
+    }));
+
+    setProgram(current => {
+
+      const modDirEntries = (current.envVars.DEBASHER_MOD_DIR ?? "")
+        .split(MOD_DIR_SEP)
+        .map(entry => entry.trim())
+        .filter(Boolean);
+
+      const envVars = modDirEntries.includes(sourceDir)
+        ? current.envVars
+        : {
+            ...current.envVars,
+            DEBASHER_MOD_DIR: [...modDirEntries, sourceDir].join(MOD_DIR_SEP),
+          };
+
+      return {
+        ...current,
+        processes: [...current.processes, ...mergedProcesses],
+        edges: [...current.edges, ...mergedEdges],
+        envVars,
+      };
+
+    });
+
+  }
+
+  // A process tagged with GroupSource ("Add program") represents a
+  // process add_debasher_program will re-declare, unmodified, from its
+  // source module. Anything that changes that process's own definition
+  // — or which edges target it, since a connected option's
+  // define_opt_from_proc_out call lives in the *target*'s own generated
+  // function (see api/script_generation.py's _option_definition_line)
+  // — would silently get overwritten by that re-declaration once
+  // generated. So any such change first confirms detaching the whole
+  // group (stripping groupSource from every process sharing its
+  // groupId, not just this one) with the user, and is aborted if
+  // declined. Connecting/disconnecting an edge whose target ISN'T
+  // grouped stays free even when its source is (see connect/disconnect)
+  // — that only touches the (ungrouped) target's own function.
+  function confirmDetachIfGrouped(processId: string): boolean {
+
+    const groupSource = program.processes.find(
+      process => process.id === processId
+    )?.groupSource;
+
+    if (!groupSource) {
+      return true;
+    }
+
+    const confirmed = window.confirm(
+      `This process was added from program "${groupSource.programName}" via ` +
+      `"Add program". Changing it here will disconnect the whole group from ` +
+      `that program: it will stop being generated as ` +
+      `add_debasher_program "${groupSource.programName}" and each of its ` +
+      `processes will be generated on its own instead. Continue?`
+    );
+
+    if (!confirmed) {
+      return false;
+    }
+
+    setProgram(current => ({
+      ...current,
+      processes: current.processes.map(process =>
+        process.groupSource?.groupId === groupSource.groupId
+          ? { ...process, groupSource: undefined }
+          : process
+      ),
+    }));
+
+    return true;
+
+  }
+
   function applyProcessInfo(
     processId: string,
     info: ProcessInfo
   ) {
+
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
 
     setProgram(current => ({
 
@@ -736,6 +897,10 @@ export function ProgramProvider({
     processId: string
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -783,6 +948,10 @@ export function ProgramProvider({
     name: string
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -801,6 +970,10 @@ export function ProgramProvider({
     processId: string,
     description: string
   ) {
+
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
 
     setProgram(current => ({
 
@@ -821,6 +994,10 @@ export function ProgramProvider({
     language: ProcessLanguage
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -839,6 +1016,10 @@ export function ProgramProvider({
     processId: string,
     code: string
   ) {
+
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
 
     setProgram(current => ({
 
@@ -859,6 +1040,10 @@ export function ProgramProvider({
     computationalSpecs: ComputationalSpecs
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -877,6 +1062,10 @@ export function ProgramProvider({
     processId: string,
     additionalSpecs: AdditionalSpecs
   ) {
+
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
 
     setProgram(current => ({
 
@@ -897,6 +1086,10 @@ export function ProgramProvider({
     optionsHandler: OptionsHandler
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -916,6 +1109,10 @@ export function ProgramProvider({
     additionalMethods: AdditionalMethods
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -934,6 +1131,10 @@ export function ProgramProvider({
     processId: string,
     label: string
   ) {
+
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
 
     const option: ProgramOption = {
 
@@ -987,6 +1188,10 @@ export function ProgramProvider({
     changes: Partial<Omit<ProgramOption, "id">>
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -1013,6 +1218,10 @@ export function ProgramProvider({
     optionId: string
   ) {
 
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
+
     setProgram(current => ({
 
       ...current,
@@ -1037,6 +1246,10 @@ export function ProgramProvider({
     row: "top" | "bottom",
     orderedIds: string[]
   ) {
+
+    if (!confirmDetachIfGrouped(processId)) {
+      return;
+    }
 
     setProgram(current => {
 
@@ -1138,6 +1351,14 @@ export function ProgramProvider({
     edge: ProgramEdge
   ) {
 
+    // Only the *target*'s own generated function embeds the connection
+    // (see confirmDetachIfGrouped) — a grouped process's output feeding
+    // something new outside the group stays free, since that's encoded
+    // in the (ungrouped) target's function instead.
+    if (!confirmDetachIfGrouped(edge.targetProcessId)) {
+      return;
+    }
+
     setProgram(current => {
 
       const sourceProcess = current.processes.find(
@@ -1190,6 +1411,14 @@ export function ProgramProvider({
   function disconnect(
     edgeId: string
   ) {
+
+    const targetProcessId = program.edges.find(
+      e => e.id === edgeId
+    )?.targetProcessId;
+
+    if (targetProcessId && !confirmDetachIfGrouped(targetProcessId)) {
+      return;
+    }
 
     setProgram(current => {
 
@@ -1253,6 +1482,8 @@ export function ProgramProvider({
     dismissProgramRun,
 
     addProcess,
+
+    mergeProgram,
 
     applyProcessInfo,
 

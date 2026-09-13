@@ -668,9 +668,43 @@ def _add_additional_methods_funcs(process):
     return lines
 
 
+def _intact_group_ids(program):
+    """
+    groupIds whose full original membership (groupSource.groupSize) is
+    still present among program.processes — i.e. an "Add program" batch
+    nothing has been edited or removed from yet (see
+    frontend/src/store/ProgramContext.tsx's confirmDetachIfGrouped,
+    which is what normally guarantees this before generation ever runs;
+    this is only a defensive re-check, e.g. for a hand-edited
+    program.json).
+    """
+    group_sizes = {}
+    member_counts = {}
+    for process in program.processes:
+        group = process.groupSource
+        if group is None:
+            continue
+        group_sizes[group.groupId] = group.groupSize
+        member_counts[group.groupId] = member_counts.get(group.groupId, 0) + 1
+    return {
+        group_id
+        for group_id, size in group_sizes.items()
+        if member_counts[group_id] == size
+    }
+
+
 def _add_program_function(program):
     lines = [f"{program.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
+    intact_group_ids = _intact_group_ids(program)
+    emitted_group_ids = set()
     for process in program.processes:
+        group = process.groupSource
+        if group is not None and group.groupId in intact_group_ids:
+            if group.groupId in emitted_group_ids:
+                continue
+            emitted_group_ids.add(group.groupId)
+            lines.append(f'{INDENT}add_debasher_program "{group.programName}"')
+            continue
         comp_specs = _computational_specs_str(process.computationalSpecs)
         add_specs = _additional_specs_str(process.additionalSpecs)
         lines.append(

@@ -93,6 +93,32 @@ export interface AdditionalMethods {
 
 }
 
+/**
+ * Marks a process as having been brought in as part of a batch via
+ * "Add program" (see ProgramContext's mergeProgram), rather than
+ * authored directly in this canvas. `groupId` ties together every
+ * process merged in the same operation; `groupSize` is how many there
+ * were, so script_generation.py can tell an intact group (still all
+ * present, none detached) from a partial one. Cleared from every
+ * process sharing the same groupId the moment any one of them has its
+ * own content edited or is deleted (see ProgramContext's
+ * confirmDetachIfGrouped) — add_debasher_program can't express "this
+ * module except one process" or "with this process's code overridden",
+ * so once that happens the whole group falls back to being generated
+ * as ordinary add_debasher_process calls.
+ */
+export interface GroupSource {
+
+  programName: string;
+
+  groupId: string;
+
+  groupSize: number;
+
+  sourceDir: string;
+
+}
+
 export interface ProgramProcess {
 
   id: string;
@@ -116,6 +142,8 @@ export interface ProgramProcess {
   additionalSpecs: AdditionalSpecs;
 
   additionalMethods: AdditionalMethods;
+
+  groupSource?: GroupSource;
 
 }
 

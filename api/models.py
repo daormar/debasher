@@ -117,6 +117,17 @@ class AdditionalMethods(BaseModel):
     dockerImgsCode: Optional[str] = None
 
 
+class GroupSource(BaseModel):
+    # See the matching TS type in frontend/src/models/process.ts for the
+    # full rationale — marks a process as part of an intact "Add
+    # program" batch that script_generation.py can still emit as a
+    # single add_debasher_program call.
+    programName: str
+    groupId: str
+    groupSize: int
+    sourceDir: str
+
+
 class ProgramProcess(BaseModel):
     id: str
     name: str
@@ -129,6 +140,7 @@ class ProgramProcess(BaseModel):
     computationalSpecs: ComputationalSpecs
     additionalSpecs: AdditionalSpecs
     additionalMethods: AdditionalMethods = AdditionalMethods()
+    groupSource: Optional[GroupSource] = None
 
 
 class ProgramEdge(BaseModel):

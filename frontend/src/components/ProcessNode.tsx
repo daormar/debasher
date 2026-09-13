@@ -13,6 +13,7 @@ import { optionRow } from "../adapters/reactFlowAdapter";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import { processNodeBackground } from "../models/processStatus";
 import { useProgram } from "../store/ProgramContext";
+import { groupColor } from "../utils/groupColor";
 
 function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) {
 
@@ -55,6 +56,9 @@ export default function ProcessNode({
       option => optionRow(option, flippedOptionIds) === "bottom"
     );
 
+  const groupSource = process.groupSource;
+  const groupBorderColor = groupSource ? groupColor(groupSource.groupId) : null;
+
 
   return (
 
@@ -62,7 +66,11 @@ export default function ProcessNode({
       style={{
         minWidth: 180,
         padding: 12,
-        border: selected ? "2px solid #1a73e8" : "1px solid #999",
+        border: selected
+          ? "2px solid #1a73e8"
+          : groupBorderColor
+            ? `2px solid ${groupBorderColor}`
+            : "1px solid #999",
         borderRadius: 8,
         background,
         position: "relative",
@@ -126,12 +134,26 @@ export default function ProcessNode({
       <div
         style={{
           fontWeight: "bold",
-          marginBottom: 12,
+          marginBottom: groupSource ? 2 : 12,
           textAlign: "center",
         }}
       >
         {process.name}
       </div>
+
+      {groupSource && (
+        <div
+          title={`Added from program "${groupSource.programName}" via "Add program"`}
+          style={{
+            fontSize: 10,
+            color: groupBorderColor ?? undefined,
+            textAlign: "center",
+            marginBottom: 10,
+          }}
+        >
+          {groupSource.programName}
+        </div>
+      )}
 
 
       {/* Outputs, plus any input flipped here by a mutual-FIFO cycle, along the bottom edge */}

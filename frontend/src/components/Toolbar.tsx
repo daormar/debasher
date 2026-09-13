@@ -8,6 +8,7 @@ import ProgramDescriptionEditor from "./ProgramDescriptionEditor";
 import SharedDirsEditor from "./SharedDirsEditor";
 import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
+import AddProgramDialog from "./AddProgramDialog";
 import RunMenu from "./RunMenu";
 
 // Mirrors the shape of an identifier DeBasher can turn into function
@@ -26,6 +27,7 @@ export default function Toolbar({ onClose }: Props) {
     program,
     setName,
     addProcess,
+    mergeProgram,
   } = useProgram();
 
   const [isPreambleOpen, setPreambleOpen] =
@@ -44,6 +46,9 @@ export default function Toolbar({ onClose }: Props) {
     useState(false);
 
   const [isNewProcessOpen, setNewProcessOpen] =
+    useState(false);
+
+  const [isAddProgramOpen, setAddProgramOpen] =
     useState(false);
 
   const [nameDraft, setNameDraft] =
@@ -172,6 +177,19 @@ export default function Toolbar({ onClose }: Props) {
           envVars={program.envVars}
           onConfirm={addProcess}
           onClose={() => setNewProcessOpen(false)}
+        />
+      )}
+
+      <button
+        onClick={() => setAddProgramOpen(true)}
+      >
+        Add program
+      </button>
+
+      {isAddProgramOpen && (
+        <AddProgramDialog
+          onAdd={mergeProgram}
+          onClose={() => setAddProgramOpen(false)}
         />
       )}
 
