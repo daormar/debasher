@@ -223,7 +223,7 @@ debasher::_is_heredoc_process()
 
     # Search for a suitable function or variable to execute the process
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local provider=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
+        local provider=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_FUNCNAMES[$i]}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
         if [ -n "${provider}" ]; then
             echo "${provider}"
             return 0
@@ -241,7 +241,7 @@ debasher::_create_heredoc_func_body()
 
     # Search for a suitable function or variable to execute the process
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local provider=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
+        local provider=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_FUNCNAMES[$i]}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
         if [ -n "${provider}" ]; then
             local provider_name=${provider% *}
             local provider_kind=${provider##* }

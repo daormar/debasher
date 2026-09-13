@@ -72,7 +72,7 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_groovy()
+hello_world_heredoc_groovy()
 {
     cat <<'EOF'
 def parseArgs(args) {

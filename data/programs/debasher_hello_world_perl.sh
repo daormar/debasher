@@ -72,7 +72,7 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_perl()
+hello_world_heredoc_perl()
 {
     cat <<'EOF'
 use strict;

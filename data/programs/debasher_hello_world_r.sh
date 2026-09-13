@@ -72,7 +72,7 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_r()
+hello_world_heredoc_r()
 {
     cat <<'EOF'
 args <- commandArgs(trailingOnly = TRUE)

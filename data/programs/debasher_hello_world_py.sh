@@ -72,7 +72,7 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_py()
+hello_world_heredoc_py()
 {
     cat <<'EOF'
 import argparse
