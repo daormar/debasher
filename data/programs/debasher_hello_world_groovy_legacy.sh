@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_hello_world_perl_shared_dirs()
+debasher_hello_world_groovy_legacy_shared_dirs()
 {
     :
 }
@@ -72,31 +72,31 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_perl()
-{
-    cat <<'EOF'
-use strict;
-use warnings;
-use Getopt::Long;
+hello_world_groovy=$(cat <<'EOF'
+def parseArgs(args) {
+    def options = [string: 'Hello World!']
 
-# Default value
-my $string = "Hello World!";
+    args.eachWithIndex { arg, index ->
+        if (arg == '-s' && index < args.size() - 1) {
+            options.string = args[index + 1]
+        }
+    }
 
-# Parse command-line options
-GetOptions("s=s" => \$string)
-    or die "Error in command line arguments\n";
-
-# Print string
-print "$string\n";
-EOF
+    return options
 }
+
+def options = parseArgs(this.args)
+
+println "${options.string}"
+EOF
+)
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #
 #################################
 
 ########
-debasher_hello_world_perl_program()
+debasher_hello_world_groovy_legacy_program()
 {
     add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
 }

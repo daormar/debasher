@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_hello_world_perl_shared_dirs()
+debasher_hello_world_r_legacy_shared_dirs()
 {
     :
 }
@@ -72,31 +72,46 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_perl()
-{
-    cat <<'EOF'
-use strict;
-use warnings;
-use Getopt::Long;
+hello_world_r=$(cat <<'EOF'
+args <- commandArgs(trailingOnly = TRUE)
 
-# Default value
-my $string = "Hello World!";
-
-# Parse command-line options
-GetOptions("s=s" => \$string)
-    or die "Error in command line arguments\n";
-
-# Print string
-print "$string\n";
-EOF
+# Function to parse arguments
+parse_args <- function(args) {
+  options <- list()
+  i <- 1
+  while (i <= length(args)) {
+    if (args[i] == "-s") {
+      if ((i + 1) <= length(args)) {
+        options$string <- args[i + 1]
+        i <- i + 1
+      } else {
+        stop("Option -s requires a string argument.")
+      }
+    }
+    i <- i + 1
+  }
+  return(options)
 }
+
+# Parse the command-line arguments
+options <- parse_args(args)
+
+# Ensure the string was provided
+if (is.null(options$string)) {
+  options$string <- "Hello World!"
+}
+
+# Print the string
+print(options$string)
+EOF
+)
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #
 #################################
 
 ########
-debasher_hello_world_perl_program()
+debasher_hello_world_r_legacy_program()
 {
     add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
 }

@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_hello_world_perl_shared_dirs()
+debasher_hello_world_perl_legacy_shared_dirs()
 {
     :
 }
@@ -72,9 +72,7 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_perl()
-{
-    cat <<'EOF'
+hello_world_perl=$(cat <<'EOF'
 use strict;
 use warnings;
 use Getopt::Long;
@@ -89,14 +87,14 @@ GetOptions("s=s" => \$string)
 # Print string
 print "$string\n";
 EOF
-}
+)
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #
 #################################
 
 ########
-debasher_hello_world_perl_program()
+debasher_hello_world_perl_legacy_program()
 {
     add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
 }

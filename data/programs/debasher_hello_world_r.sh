@@ -72,7 +72,9 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_r=$(cat <<'EOF'
+hello_world_r()
+{
+    cat <<'EOF'
 args <- commandArgs(trailingOnly = TRUE)
 
 # Function to parse arguments
@@ -98,13 +100,13 @@ options <- parse_args(args)
 
 # Ensure the string was provided
 if (is.null(options$string)) {
-  string <- "Hello World!"
+  options$string <- "Hello World!"
 }
 
 # Print the string
 print(options$string)
 EOF
-)
+}
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #

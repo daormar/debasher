@@ -72,7 +72,9 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_groovy=$(cat <<'EOF'
+hello_world_groovy()
+{
+    cat <<'EOF'
 def parseArgs(args) {
     def options = [string: 'Hello World!']
 
@@ -89,7 +91,7 @@ def options = parseArgs(this.args)
 
 println "${options.string}"
 EOF
-)
+}
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #

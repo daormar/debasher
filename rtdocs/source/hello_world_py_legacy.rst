@@ -1,25 +1,23 @@
-Hello World Example in Python
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Hello World Example in Python (Legacy)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
     # This module reimplements the hello_world process introduced in
     # the Quickstart guide, but instead of a hello_world Bash function
-    # it defines a hello_world_py function that prints a Python
-    # script to its standard output. DeBasher looks up a function
-    # named after the process with a language suffix (here "_py")
-    # whenever no matching Bash function is found for the process
-    # itself, and runs the text it prints through the configured
-    # Python interpreter. All the other methods (document,
-    # explain_opts, identify_cmdline_opts and define_opts) stay in
-    # Bash exactly as before: only the process body itself moves to
-    # Python, showing that a process implementation can be written in
-    # a different language while its option handling remains in Bash.
+    # it defines a hello_world_py variable holding a Python script.
+    # DeBasher looks up a variable named after the process with a
+    # language suffix (here "_py") whenever no matching Bash function
+    # is found, and runs its contents through the configured Python
+    # interpreter.
     #
-    # Unlike the variable-based form shown in the legacy version of
-    # this example, a function name can contain the "." namespace
-    # separator, so this is the form to use for a namespaced process
-    # (see the namespace example).
+    # This variable-based form is kept for backwards compatibility
+    # (it is, for instance, the form shown in the supplementary
+    # material of the DeBasher paper), but it cannot be used with a
+    # namespaced process name, since a variable name cannot contain
+    # the "." namespace separator. See the following example for the
+    # function-based form, which supports namespaced process names and
+    # is otherwise equivalent.
 
     hello_world_document()
     {
@@ -54,9 +52,7 @@ Hello World Example in Python
         save_opt_list optlist
     }
 
-    hello_world_py()
-    {
-        cat <<'EOF'
+    hello_world_py=$(cat <<'EOF'
     import argparse
 
     # Create the parser
@@ -79,9 +75,9 @@ Hello World Example in Python
     # Print message
     print(s)
     EOF
-    }
+    )
 
-    debasher_hello_world_py_program()
+    debasher_hello_world_py_legacy_program()
     {
         add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
     }

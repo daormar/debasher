@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_hello_world_perl_shared_dirs()
+debasher_hello_world_py_legacy_shared_dirs()
 {
     :
 }
@@ -72,31 +72,37 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_perl()
-{
-    cat <<'EOF'
-use strict;
-use warnings;
-use Getopt::Long;
+hello_world_py=$(cat <<'EOF'
+import argparse
 
-# Default value
-my $string = "Hello World!";
+# Create the parser
+parser = argparse.ArgumentParser()
 
-# Parse command-line options
-GetOptions("s=s" => \$string)
-    or die "Error in command line arguments\n";
+# Add the "-s" option with a string argument
+parser.add_argument(
+    '-s',
+    type=str,
+    default='Hello World!',
+    help='String to be displayed'
+)
 
-# Print string
-print "$string\n";
+# Parse the arguments
+args = parser.parse_args()
+
+# Access the value of "-s"
+s = args.s
+
+# Print message
+print(s)
 EOF
-}
+)
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #
 #################################
 
 ########
-debasher_hello_world_perl_program()
+debasher_hello_world_py_legacy_program()
 {
     add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
 }

@@ -72,7 +72,9 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_py=$(cat <<'EOF'
+hello_world_py()
+{
+    cat <<'EOF'
 import argparse
 
 # Create the parser
@@ -95,7 +97,7 @@ s = args.s
 # Print message
 print(s)
 EOF
-)
+}
 
 #################################
 # PROGRAM DEFINED BY THE MODULE #

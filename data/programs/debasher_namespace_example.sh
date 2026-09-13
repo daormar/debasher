@@ -25,7 +25,7 @@
 #################
 
 ########
-debasher_hello_world_perl_shared_dirs()
+debasher_namespace_example_shared_dirs()
 {
     :
 }
@@ -35,13 +35,16 @@ debasher_hello_world_perl_shared_dirs()
 ######################################
 
 ########
-hello_world_document()
+mymodule.hello_world_document()
 {
-    document_process "Prints a hello world message."
+    document_process "Prints a hello world message. The process is \
+named using the 'namespace.name' convention, recommended for modules \
+meant to be shared, so that their process names do not collide with \
+those defined by other DeBasher modules."
 }
 
 ########
-hello_world_explain_opts()
+mymodule.hello_world_explain_opts()
 {
     # -s option
     local description="String to be displayed ('Hello World!' by default)"
@@ -49,13 +52,13 @@ hello_world_explain_opts()
 }
 
 ########
-hello_world_identify_cmdline_opts()
+mymodule.hello_world_identify_cmdline_opts()
 {
     opt_is_non_mandatory_cmdline "-s"
 }
 
 ########
-hello_world_define_opts()
+mymodule.hello_world_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -72,23 +75,17 @@ hello_world_define_opts()
 }
 
 ########
-hello_world_perl()
+mymodule.hello_world()
 {
-    cat <<'EOF'
-use strict;
-use warnings;
-use Getopt::Long;
+    # Initialize variables
+    local str=$(read_opt_value_from_func_args "-s" "$@")
 
-# Default value
-my $string = "Hello World!";
+    if [ "${str}" = "${DEBASHER_OPT_NOT_FOUND}" ]; then
+        str="Hello World!"
+    fi
 
-# Parse command-line options
-GetOptions("s=s" => \$string)
-    or die "Error in command line arguments\n";
-
-# Print string
-print "$string\n";
-EOF
+    # Show message
+    echo "${str}"
 }
 
 #################################
@@ -96,7 +93,7 @@ EOF
 #################################
 
 ########
-debasher_hello_world_perl_program()
+debasher_namespace_example_program()
 {
-    add_debasher_process "hello_world" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "mymodule.hello_world" "cpus=1 mem=32 time=00:01:00"
 }

@@ -96,6 +96,37 @@ function with such a name. For instance, if we want to implement the
         # Add process code here
     }
 
+.. _process-naming:
+
+Process Naming and Namespaces
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A process name must start with a letter or underscore, followed by any
+number of letters, digits or underscores. Optionally, it can be
+qualified with a single namespace prefix separated by a dot
+(``namespace.name``), where both ``namespace`` and ``name`` follow the
+same rule.
+
+**If you are implementing a module that you plan to share with other
+people, it is strongly recommended that you qualify all of its process
+names with a namespace of your own** (for instance, the name of your
+package or project). DeBasher does not keep any central registry of
+namespaces, so uniqueness is not enforced by the tool itself; but
+qualifying process names removes the most common source of accidental
+clashes between unrelated modules, namely two of them defining a
+process under the same short, generic name (such as ``download`` or
+``filter``).
+
+See the :doc:`namespace_example` example for a module that reimplements
+``hello_world`` under the ``mymodule`` namespace.
+
+One exception: a process implemented in another language (Python, R,
+Perl or Groovy) provides its code through a suffixed variable or
+function (e.g. ``hello_world_py``). Only the function form can be
+named after a namespaced process, since a Bash variable name cannot
+contain a ``.`` — see :doc:`hello_world_py` versus its legacy,
+variable-based counterpart :doc:`hello_world_py_legacy`.
+
 A DeBasher process can have input and output options, that are provided
 to the process as if it was a standard UNIX command.
 
@@ -960,7 +991,11 @@ repository.
 
 .. toctree::
 
+   namespace_example
+
    hello_world_py
+
+   hello_world_py_legacy
 
    hello_world_alias
 
