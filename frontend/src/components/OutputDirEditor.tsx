@@ -16,7 +16,13 @@ export default function OutputDirEditor({ onClose }: Props) {
   const [draft, setDraft] =
     useState(program.outputDir);
 
+  const conflictsWithHomeDir =
+    !!program.homeDir.trim() && draft.trim() === program.homeDir.trim();
+
   function handleSave() {
+    if (conflictsWithHomeDir) {
+      return;
+    }
     setOutputDir(draft);
     onClose();
   }
@@ -78,6 +84,15 @@ export default function OutputDirEditor({ onClose }: Props) {
 
         />
 
+        {conflictsWithHomeDir && (
+          <div style={{ color: "#8a6d00", fontSize: 14 }}>
+            This matches the program's save directory ({program.homeDir}).
+            Running here would mix engine-internal files into the saved
+            program, and "Reset output directory" would delete it — pick a
+            different directory.
+          </div>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -90,7 +105,7 @@ export default function OutputDirEditor({ onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleSave}>
+          <button onClick={handleSave} disabled={conflictsWithHomeDir}>
             Save
           </button>
 

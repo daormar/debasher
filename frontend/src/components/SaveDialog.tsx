@@ -19,10 +19,18 @@ export default function SaveDialog({ onClose }: Props) {
   const [error, setError] =
     useState<string | null>(null);
 
+  const conflictsWithOutputDir =
+    !!program.outputDir.trim() && outputDir.trim() === program.outputDir.trim();
+
   async function handleSave() {
 
     if (!outputDir.trim()) {
       setError("Please enter an output directory.");
+      return;
+    }
+
+    if (conflictsWithOutputDir) {
+      setError("This can't be the same as the program's output directory.");
       return;
     }
 
@@ -112,6 +120,15 @@ export default function SaveDialog({ onClose }: Props) {
           </div>
         )}
 
+        {conflictsWithOutputDir && (
+          <div style={{ color: "#8a6d00", fontSize: 14 }}>
+            This matches the program's output directory ({program.outputDir}).
+            Saving here would let a run overwrite the saved program, and
+            "Reset output directory" would delete it — pick a different
+            directory.
+          </div>
+        )}
+
         {error && (
           <div style={{ color: "#b00020", fontSize: 14 }}>
             {error}
@@ -130,7 +147,10 @@ export default function SaveDialog({ onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleSave} disabled={isSaving || isRunInProgress}>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || isRunInProgress || conflictsWithOutputDir}
+          >
             {isSaving ? "Saving..." : "Save"}
           </button>
 

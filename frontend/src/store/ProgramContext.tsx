@@ -389,6 +389,19 @@ export function ProgramProvider({
       );
     }
 
+    // homeDir (the .sh/.debasher directory being saved to) and outputDir
+    // (where a run writes its results) must stay distinct — otherwise a
+    // run would mix engine-internal files into the saved program, and
+    // "Reset output directory" would delete it. Kept here (not just as
+    // SaveDialog's proactive disable) so any other future caller of
+    // save() gets the same protection; the backend enforces this too.
+    if (program.outputDir.trim() && outputDir.trim() === program.outputDir.trim()) {
+      throw new Error(
+        "The save directory can't be the same as this program's output " +
+        "directory (Run menu > Set output directory)."
+      );
+    }
+
     const updated = { ...program, homeDir: outputDir };
     await saveProgram(updated, outputDir);
     setProgram(() => updated);
