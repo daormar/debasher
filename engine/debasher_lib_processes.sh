@@ -210,6 +210,48 @@ debasher::_show_proc_specs()
 }
 
 ########
+# debasher::_collect_func_deps helper: blanks out string-literal text
+# that bash's own grammar guarantees can never contain a command
+# invocation, so a later plain word-grep over the result doesn't
+# mistake prose for a call -- e.g. debasher_dynamic_fanout.sh's
+# aggregate(), whose `echo "Warning: no count files found..."` would
+# otherwise pull the unrelated "count" process in as a bogus dependency
+# purely because that English word appears in the message. Handles two
+# shapes: a single-quoted span (`'...'`, wholesale -- bash never expands
+# anything inside single quotes, so its content is never code) and a
+# double-quoted span with no "$" in it at all (a `$(...)`/`${...}`
+# substitution can genuinely contain a real call, so any double-quoted
+# span containing one is left untouched rather than risk dropping a
+# real dependency). Doesn't attempt to handle escaped quotes inside a
+# string (`\"`, `$'...'`) -- not a style this package's own scripts use.
+debasher::_blank_string_literals()
+{
+    sed -E "s/'[^']*'//g; s/\"[^\"$]*\"//g"
+}
+
+########
+# debasher::_collect_func_deps helper: prints, one per line, every name
+# $1's body declares as a local/declare/typeset variable -- i.e. names
+# that appear in that role purely as identifiers, never as an actual
+# command word, even though a plain word-grep of the body can't tell
+# the two apart (see debasher::_collect_func_deps for why that
+# matters). Only the declared name itself is printed, not whatever
+# follows an "=" on the same word (a "local x=$(some_func ...)"'s own
+# "some_func" is a real call, and stays a candidate).
+debasher::_declared_func_vars()
+{
+    local funcname=$1
+
+    declare -f "${funcname}" \
+        | debasher::_blank_string_literals \
+        | grep -oE '(^|;)[[:space:]]*(local|declare|typeset)[[:space:]]+[^;]*' \
+        | sed -E 's/^[;[:space:]]*(local|declare|typeset)[[:space:]]+//' \
+        | tr -s '[:space:]' '\n' \
+        | sed -E 's/=.*$//' \
+        | grep -E '^[A-Za-z_][A-Za-z0-9_]*$'
+}
+
+########
 # Recursively collects, into the "seen" associative array (passed by
 # name in $3), every function reachable from $1's body that is itself
 # defined in the same script file ($2) as $1 -- i.e. a helper the
@@ -218,6 +260,21 @@ debasher::_show_proc_specs()
 # external command. Relies on "shopt -s extdebug" already being active
 # in the caller, since that is what makes "declare -F" report a
 # function's defining file instead of just its name.
+#
+# Candidate names are every identifier-shaped word in $1's body -- a
+# plain grep, blind to whether a given occurrence is actually a command
+# word or just an argument/variable name -- other than ones
+# debasher::_declared_func_vars finds declared as a local variable
+# somewhere in that same body (e.g. debasher_dynamic_fanout.sh's
+# fragment(), which has "local ... count ..." and later "count=$((...
+# ))" purely as a loop counter that happens to collide with an
+# unrelated sibling process named "count": without this exclusion, the
+# mere presence of that identifier would pull "count" -- and
+# transitively whatever it calls -- in as a bogus dependency of
+# fragment. This can still be fooled the other way (a local variable
+# deliberately shadowing a function of the same name that the body
+# really does go on to call), but that isn't a style this package, or
+# the frontend's own code editor, ever produces.
 debasher::_collect_func_deps()
 {
     local funcname=$1
@@ -233,9 +290,16 @@ debasher::_collect_func_deps()
     [ -n "${_collected[$funcname]+x}" ] && return 0
     _collected[$funcname]=1
 
+    local -A declared_vars=()
+    local declared_var
+    while IFS= read -r declared_var; do
+        [ -n "${declared_var}" ] && declared_vars[${declared_var}]=1
+    done < <(debasher::_declared_func_vars "${funcname}")
+
     local word
-    for word in $(declare -f "${funcname}" | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | sort -u); do
+    for word in $(declare -f "${funcname}" | debasher::_blank_string_literals | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | sort -u); do
         [ -n "${_collected[$word]+x}" ] && continue
+        [ -n "${declared_vars[$word]+x}" ] && continue
         local defsite
         defsite=$(declare -F "${word}" 2>/dev/null)
         [ -z "${defsite}" ] && continue
