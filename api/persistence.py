@@ -14,6 +14,41 @@ METADATA_DIRNAME = ".debasher"
 PROGRAM_FILENAME = "program.json"
 
 
+def is_reserved_name(name: str) -> bool:
+    """
+    True for a file/directory name DeBasher itself manages inside a
+    program's home directory — the hidden .debasher metadata dir, a
+    dot-prefixed engine file (.debasher_webui_run.log, .conda,
+    .sched_opts, .deblib_vars_and_funcs.sh, .mod_vars_and_funcs.sh, ...),
+    a __dunder__-wrapped engine directory (__exec__, __graphs__,
+    __fifos__), or command_line.sh — the one engine-written name that
+    follows neither convention.
+
+    This is a rule, not a hardcoded list, so it also covers any future
+    engine-internal file added under the same naming convention. The
+    program-files browser (see routers/program_files.py) must never
+    show, descend into, or write to anything this matches.
+    """
+    return (
+        name.startswith(".")
+        or (name.startswith("__") and name.endswith("__"))
+        or name == "command_line.sh"
+    )
+
+
+def same_dir(a: str, b: str) -> bool:
+    """
+    True when both non-blank paths resolve to the same directory.
+
+    Blank-safe: a blank on either side is never considered a match, so
+    two not-yet-set directories don't trip a same-dir guard.
+    """
+    if not a.strip() or not b.strip():
+        return False
+
+    return Path(a).expanduser().resolve() == Path(b).expanduser().resolve()
+
+
 def delete_stale_script(output_dir: str, new_name: str) -> None:
     """
     If a program was already saved to `output_dir` under a different

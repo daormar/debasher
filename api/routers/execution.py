@@ -9,7 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import paths, persistence
+from .. import file_inspection, paths, persistence
 from ..models import Program
 
 router = APIRouter(prefix="/api/execution", tags=["execution"])
@@ -26,16 +26,7 @@ _STATE_BY_EXIT_CODE: dict[int, ProgramState] = {
 }
 
 
-# Applies everywhere the "Inspect execution" context menu shows a
-# file's worth of text — stdout, scheduler output, options, and a "Show
-# inputs and outputs" > "View" path (see _read_text_capped, which caps
-# the same way but streams a path instead of an in-memory string) —
-# so none of them can ship an arbitrarily large response to the
-# browser.
-_MAX_INSPECT_LINES = 10_000
-
-
-def _cap_lines(text: str, max_lines: int = _MAX_INSPECT_LINES) -> str:
+def _cap_lines(text: str, max_lines: int = file_inspection.MAX_INSPECT_LINES) -> str:
     lines = text.splitlines(keepends=True)
     if len(lines) <= max_lines:
         return text
@@ -612,52 +603,6 @@ class InspectPathResponse(BaseModel):
     entries: list[str] | None = None
 
 
-# Sniffs the first chunk of a file the same way `file`/git do: a NUL
-# byte, or a decode failure, means it isn't text worth dumping into the
-# "Show inputs and outputs" modal.
-def _looks_binary(path: Path, sample_size: int = 8192) -> bool:
-    try:
-        with path.open("rb") as f:
-            chunk = f.read(sample_size)
-    except OSError:
-        return False
-
-    if b"\x00" in chunk:
-        return True
-
-    try:
-        chunk.decode("utf-8")
-    except UnicodeDecodeError:
-        return True
-
-    return False
-
-
-# Reads at most `max_lines` lines, without loading a much larger file
-# into memory first just to find out it's too big — same cap and
-# warning wording as _cap_lines, just streamed from a path instead of
-# an in-memory string.
-def _read_text_capped(path: Path, max_lines: int = _MAX_INSPECT_LINES) -> str:
-    lines: list[str] = []
-    truncated = False
-
-    with path.open("r", errors="replace") as f:
-        for i, line in enumerate(f):
-            if i >= max_lines:
-                truncated = True
-                break
-            lines.append(line)
-
-    content = "".join(lines)
-    if truncated:
-        content = (
-            f"Warning: file has more than {max_lines} lines — "
-            f"showing only the first {max_lines}.\n\n"
-        ) + content
-
-    return content
-
-
 @router.post("/inspect-path", response_model=InspectPathResponse)
 def inspect_path(request: InspectPathRequest) -> InspectPathResponse:
     """
@@ -674,22 +619,22 @@ def inspect_path(request: InspectPathRequest) -> InspectPathResponse:
             f"{entry.name}/" if entry.is_dir() else entry.name
             for entry in resolved.iterdir()
         )
-        if len(entries) > _MAX_INSPECT_LINES:
+        if len(entries) > file_inspection.MAX_INSPECT_LINES:
             total = len(entries)
-            entries = entries[:_MAX_INSPECT_LINES]
+            entries = entries[: file_inspection.MAX_INSPECT_LINES]
             entries.insert(
                 0,
                 f"Warning: directory has {total} entries — "
-                f"showing only the first {_MAX_INSPECT_LINES}.",
+                f"showing only the first {file_inspection.MAX_INSPECT_LINES}.",
             )
         return InspectPathResponse(kind="directory", entries=entries)
 
     if resolved.is_file():
-        if _looks_binary(resolved):
+        if file_inspection.looks_binary(resolved):
             return InspectPathResponse(kind="binary")
 
         try:
-            content = _read_text_capped(resolved)
+            content = file_inspection.read_text_capped(resolved)
         except OSError as e:
             content = f"Error: could not read file: {e}"
         return InspectPathResponse(kind="file", content=content)
@@ -739,9 +684,13 @@ def reset_output_dir(program: Program) -> ResetOutputDirResponse:
     Guards against a mistaken mass deletion: a no-op (cleared=False,
     nothing raised) whenever outputDir is blank — an empty string would
     otherwise resolve to the server's current directory, not "nowhere"
-    — doesn't resolve to an existing directory, or resolves to the
+    — doesn't resolve to an existing directory, resolves to the
     filesystem root or the server user's home directory (the two paths
-    a corrupted/mistaken outputDir would do the most damage at).
+    a corrupted/mistaken outputDir would do the most damage at), or
+    equals the program's own homeDir — that's where the generated .sh
+    and .debasher/program.json live, and any files added through the
+    program-files panel, none of which "resetting the output directory"
+    should ever be able to wipe out.
     """
     outdir = program.outputDir.strip()
     if not outdir:
@@ -753,6 +702,9 @@ def reset_output_dir(program: Program) -> ResetOutputDirResponse:
         return ResetOutputDirResponse(cleared=False)
 
     if resolved == Path(resolved.root) or resolved == Path.home():
+        return ResetOutputDirResponse(cleared=False)
+
+    if persistence.same_dir(program.outputDir, program.homeDir):
         return ResetOutputDirResponse(cleared=False)
 
     try:
