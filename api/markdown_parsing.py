@@ -254,6 +254,26 @@ def function_header_name(source: str) -> str | None:
     return match.group("name") if match else None
 
 
+def split_function_blocks(code: str) -> list[str]:
+    """
+    Splits a "Process Implementation" code fence back into its
+    individual per-function `declare -f` dumps. debasher::_show_proc_
+    implem_bash_func (engine/debasher_lib_processes.sh) pulls in any
+    same-script helper function the process's exec function calls
+    alongside it, one blank line apart, exec function always last — so
+    a process with no such helpers still round-trips here as a single-
+    element list.
+
+    Splitting on blank lines is safe because `declare -f` never emits
+    one inside a function body (it reprints one statement per line with
+    no blank-line separators of its own) — only between the dumps this
+    concatenates, exactly like this splits back apart.
+    """
+    if not code:
+        return []
+    return [block for block in code.split("\n\n") if block.strip()]
+
+
 def join_verbatim_body_lines(lines: list[str]) -> str:
     """
     Joins a verbatim function body (see verbatim_function_body_lines)

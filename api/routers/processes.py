@@ -16,6 +16,7 @@ from ..markdown_parsing import (
     ProcessInfoOption,
     function_header_name,
     parse_proc_info_markdown,
+    split_function_blocks,
 )
 
 router = APIRouter(prefix="/api/processes", tags=["processes"])
@@ -203,24 +204,34 @@ def _verbatim_code(code: str, preamble: str, program_env_vars: dict[str, str]) -
     Best-effort upgrade of a process's `declare -f`-derived `code` (see
     _get_proc_info) to its exact original source -- comments and
     indentation intact -- via libexec/debasher_get_verbatim_func_source.
-    Falls back to `code` unchanged (today's behavior) whenever the
-    upgrade isn't available: the tool is missing, `code`'s own header
-    line doesn't parse as a function name (shouldn't happen for
-    debasher_get_proc_info's own output, but `code` could in principle
-    be empty), or the verbatim source can't be recovered (see
-    debasher::_get_verbatim_func_source's own failure cases).
+
+    `code` may bundle more than one function -- debasher::_show_proc_
+    implem_bash_func pulls in any same-script helper the exec function
+    calls alongside it (see split_function_blocks) -- so each is
+    resolved and upgraded independently and rejoined the same way,
+    rather than resolving a single function name from `code`'s first
+    line and upgrading the whole blob to just that one function's
+    source (which would silently drop every other function in it).
+    Falls back to a given function's own block unchanged whenever its
+    upgrade isn't available: the tool is missing, the block's own
+    header line doesn't parse as a function name (shouldn't happen for
+    debasher_get_proc_info's own output), or the verbatim source can't
+    be recovered (see debasher::_get_verbatim_func_source's own failure
+    cases).
     """
     if not code:
         return code
 
-    funcname = function_header_name(code)
-    if funcname is None:
-        return code
-
-    verbatim = _run_preamble_tool(
-        _GET_VERBATIM_FUNC_SOURCE_SCRIPT, preamble, program_env_vars, funcname
-    )
-    return verbatim.rstrip("\n") if verbatim else code
+    upgraded_blocks = []
+    for block in split_function_blocks(code):
+        funcname = function_header_name(block)
+        verbatim = (
+            _run_preamble_tool(_GET_VERBATIM_FUNC_SOURCE_SCRIPT, preamble, program_env_vars, funcname)
+            if funcname
+            else None
+        )
+        upgraded_blocks.append(verbatim.rstrip("\n") if verbatim else block)
+    return "\n\n".join(upgraded_blocks)
 
 
 class GetProcessInfoRequest(BaseModel):

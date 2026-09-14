@@ -16,7 +16,12 @@ from .doc_mod import (
     run_get_verbatim_func_source,
 )
 from .additional_methods_import import resolve_additional_methods
-from .markdown_parsing import ProcessInfoOption, function_header_name, parse_proc_info_markdown
+from .markdown_parsing import (
+    ProcessInfoOption,
+    function_header_name,
+    parse_proc_info_markdown,
+    split_function_blocks,
+)
 from .models import (
     AdditionalSpecs,
     AliasOptMapping,
@@ -152,18 +157,28 @@ def _verbatim_code(script_path: Path, code: str, debasher_mod_dir: str) -> str:
     debasher_doc_mod's Markdown, see parse_proc_info_markdown) to its
     exact original source -- comments and indentation intact -- via
     debasher_get_verbatim_func_source, run against the same script this
-    program is being imported from. Falls back to `code` unchanged
-    whenever that isn't possible (see routers/processes.py's twin
+    program is being imported from.
+
+    `code` may bundle more than one function -- debasher::_show_proc_
+    implem_bash_func pulls in any same-script helper the exec function
+    calls alongside it (see split_function_blocks) -- so each is
+    resolved and upgraded independently and rejoined the same way,
+    rather than resolving a single function name from `code`'s first
+    line and upgrading the whole blob to just that one function's
+    source (which would silently drop every other function in it).
+    Falls back to a given function's own block unchanged whenever its
+    upgrade isn't possible (see routers/processes.py's twin
     _verbatim_code for why: no header line to resolve a function name
     from, tool missing, or the underlying scan failing).
     """
     if not code:
         return code
-    funcname = function_header_name(code)
-    if funcname is None:
-        return code
-    verbatim = run_get_verbatim_func_source(script_path, funcname, debasher_mod_dir)
-    return verbatim if verbatim else code
+    upgraded_blocks = []
+    for block in split_function_blocks(code):
+        funcname = function_header_name(block)
+        verbatim = run_get_verbatim_func_source(script_path, funcname, debasher_mod_dir) if funcname else None
+        upgraded_blocks.append(verbatim if verbatim else block)
+    return "\n\n".join(upgraded_blocks)
 
 
 def _extract_preamble(script_path: Path) -> str:
