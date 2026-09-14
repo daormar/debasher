@@ -198,6 +198,45 @@ def make_directory(request: MkdirRequest) -> FileTreeResponse:
     return _tree_response(request.homeDir, request.programName)
 
 
+class WriteContentRequest(BaseModel):
+    homeDir: str
+    programName: str
+    path: str
+    content: str
+
+
+@router.post("/write-content", response_model=FileTreeResponse)
+def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
+    """
+    Overwrites an existing file's content, for the panel's in-place
+    editor. Refuses the protected `<programName>.sh` and any path that
+    doesn't already name a file — this isn't a way to create one.
+    """
+    if not request.path:
+        raise HTTPException(status_code=400, detail="path must not be empty")
+
+    try:
+        target = resolve_within(request.homeDir, request.path)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    home = Path(request.homeDir).expanduser().resolve()
+    if _is_protected_script(target, home, request.programName):
+        raise HTTPException(
+            status_code=400, detail="Cannot edit the program's generated script"
+        )
+
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail=f"{request.path!r} does not exist")
+
+    try:
+        target.write_text(request.content)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Could not write {request.path!r}: {e}")
+
+    return _tree_response(request.homeDir, request.programName)
+
+
 class DeleteRequest(BaseModel):
     homeDir: str
     programName: str
