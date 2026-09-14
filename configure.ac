@@ -65,6 +65,13 @@ AC_PATH_PROGS(WGET, wget)
 AC_PATH_PROGS(PANDOC, pandoc)
 AC_PATH_PROGS(JAVA, java)
 
+# Unit-testing tools (optional: their absence only skips that part of
+# `make check`, it never fails the build)
+AC_PATH_PROGS(BATS, bats)
+AM_CONDITIONAL([HAVE_BATS], [test -n "$BATS"])
+AC_PATH_PROGS(PYTEST, pytest)
+AM_CONDITIONAL([HAVE_PYTEST], [test -n "$PYTEST"])
+
 # BASH may already be set in the shell, if the admin then changes the
 # the /bin/sh symlink to a non-bash shell, then the installation will
 # break
@@ -500,5 +507,5 @@ AS_IF([test "x$enable_frontend" != xno], [
 ])
 AM_CONDITIONAL([BUILD_FRONTEND], [test "x$enable_frontend" = xyes])
 
-AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile api/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/conda_envs/Makefile])
+AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile api/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/conda_envs/Makefile test/Makefile test/engine/Makefile test/api/Makefile])
 AC_OUTPUT
