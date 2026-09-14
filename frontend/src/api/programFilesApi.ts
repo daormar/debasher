@@ -78,6 +78,26 @@ export async function createFolder(
   return entries;
 }
 
+export async function writeFileContent(
+  homeDir: string,
+  programName: string,
+  path: string,
+  content: string
+): Promise<FileEntry[]> {
+  const response = await fetch("/api/program-files/write-content", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ homeDir, programName, path, content }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to save ${path}.`));
+  }
+
+  const { entries }: FileTreeResponse = await response.json();
+  return entries;
+}
+
 export async function deleteEntry(
   homeDir: string,
   programName: string,

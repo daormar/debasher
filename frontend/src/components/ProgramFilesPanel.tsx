@@ -12,6 +12,7 @@ import {
   getFileTree,
   moveEntry,
   uploadFiles,
+  writeFileContent,
 } from "../api/programFilesApi";
 import type { FileEntry } from "../api/programFilesApi";
 
@@ -175,6 +176,16 @@ export default function ProgramFilesPanel() {
   const [previewLoading, setPreviewLoading] =
     useState(false);
 
+  // The editable buffer for whichever file is previewed — starts in
+  // sync with preview.content on load, diverges as the user types.
+  // null whenever there's nothing file-shaped to edit (a dir, binary,
+  // missing, or nothing selected yet).
+  const [draft, setDraft] =
+    useState<string | null>(null);
+
+  const [savingContent, setSavingContent] =
+    useState(false);
+
   const [isDragOver, setDragOver] =
     useState(false);
 
@@ -209,6 +220,12 @@ export default function ProgramFilesPanel() {
   const previewLanguage =
     preview && preview.kind === "file" ? languageForPath(preview.path) : null;
 
+  const canEditPreview =
+    !!selectedEntry && !selectedEntry.readonly && preview?.kind === "file";
+
+  const isDirty =
+    canEditPreview && draft !== null && draft !== preview?.content;
+
   // Where "Upload files" / "New folder" write to: the selected
   // directory, the selected file's parent, or the root when nothing
   // is selected.
@@ -233,10 +250,15 @@ export default function ProgramFilesPanel() {
 
   async function handleSelect(entry: FileEntry) {
 
+    if (isDirty && !window.confirm("Discard unsaved changes to this file?")) {
+      return;
+    }
+
     setSelectedPath(entry.path);
 
     if (entry.type === "dir") {
       setPreview(null);
+      setDraft(null);
       return;
     }
 
@@ -244,12 +266,30 @@ export default function ProgramFilesPanel() {
     try {
       const result = await getFileContent(program.homeDir, entry.path);
       setPreview({ path: entry.path, ...result });
+      setDraft(result.kind === "file" ? (result.content ?? "") : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to read ${entry.path}.`);
     } finally {
       setPreviewLoading(false);
     }
 
+  }
+
+  async function handleSaveContent() {
+    if (!selectedEntry || !canEditPreview || draft === null) {
+      return;
+    }
+    setSavingContent(true);
+    setError(null);
+    try {
+      const entries = await writeFileContent(program.homeDir, program.name, selectedEntry.path, draft);
+      setTree(entries);
+      setPreview(current => (current ? { ...current, content: draft } : current));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSavingContent(false);
+    }
   }
 
   async function handleUpload(files: File[]) {
@@ -436,6 +476,13 @@ export default function ProgramFilesPanel() {
                 Delete
               </button>
 
+              <button
+                onClick={handleSaveContent}
+                disabled={!canEditPreview || !isDirty || savingContent}
+              >
+                {savingContent ? "Saving..." : "Save"}
+              </button>
+
               <span style={{ alignSelf: "center", fontSize: 12, color: "#888" }}>
                 Uploads and new folders go into: {targetDir || "(root)"}
               </span>
@@ -529,20 +576,41 @@ export default function ProgramFilesPanel() {
                   // scrolling in both directions from there.
                   <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
                     <CodeMirror
-                      value={preview.content ?? ""}
+                      value={draft ?? ""}
                       height="100%"
                       style={{ flex: 1, minWidth: 0 }}
                       extensions={[languageExtension(previewLanguage)]}
-                      editable={false}
+                      editable={canEditPreview}
+                      onChange={value => setDraft(value)}
                       // No line-number/fold gutter here: it isn't used
                       // anywhere else CodeMirror shows up in this app
                       // (CodeEditor.tsx doesn't have one either), and
                       // it otherwise shifts this preview's text right
-                      // compared to every other file's plain <pre>
-                      // preview below, reading as a stray indent.
+                      // compared to every other file's plain <pre>/
+                      // <textarea> preview below, reading as a stray
+                      // indent.
                       basicSetup={{ lineNumbers: false, foldGutter: false }}
                     />
                   </div>
+                ) : canEditPreview ? (
+                  <textarea
+                    value={draft ?? ""}
+                    onChange={event => setDraft(event.target.value)}
+                    spellCheck={false}
+                    wrap="off"
+                    style={{
+                      flex: 1,
+                      minHeight: 0,
+                      margin: 0,
+                      padding: 8,
+                      border: "none",
+                      resize: "none",
+                      overflow: "auto",
+                      fontFamily: "ui-monospace, Consolas, monospace",
+                      fontSize: 13,
+                      whiteSpace: "pre",
+                    }}
+                  />
                 ) : (
                   <pre
                     style={{
@@ -556,7 +624,7 @@ export default function ProgramFilesPanel() {
                       whiteSpace: "pre",
                     }}
                   >
-                    {preview.content}
+                    {draft ?? ""}
                   </pre>
                 )}
 
