@@ -290,7 +290,7 @@ export function programToReactFlowEdges(
       ...(isFanoutEdge ? { type: "fanout" } : backEdge ? { type: "backedge" } : {}),
 
       data: isFanoutEdge
-        ? { narrowEnd: sourceIsFanout ? "source" : "target" }
+        ? { narrowEnd: sourceIsFanout ? "source" : "target", isFifo: sourceOption?.channel === "fifo" }
         : backEdge
         ? { detourX: maxProcessX + BACK_EDGE_MARGIN, sourceLeftRank, targetLeftRank }
         : undefined,

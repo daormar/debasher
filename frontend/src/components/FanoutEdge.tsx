@@ -20,7 +20,9 @@ export default function FanoutEdge({
   data,
 }: EdgeProps) {
 
-  const narrowEnd = (data as { narrowEnd?: "source" | "target" } | undefined)?.narrowEnd ?? "source";
+  const fanoutData = data as { narrowEnd?: "source" | "target"; isFifo?: boolean } | undefined;
+  const narrowEnd = fanoutData?.narrowEnd ?? "source";
+  const isFifo = fanoutData?.isFifo ?? false;
 
   const sourceHalfWidth = narrowEnd === "source" ? NARROW_HALF_WIDTH : WIDE_HALF_WIDTH;
   const targetHalfWidth = narrowEnd === "source" ? WIDE_HALF_WIDTH : NARROW_HALF_WIDTH;
@@ -42,11 +44,17 @@ export default function FanoutEdge({
     .map(([x, y]) => `${x},${y}`)
     .join(" ");
 
+  // A FIFO-backed fanout is filled lighter and outlined with the same
+  // dashed stroke used for plain FIFO edges (see reactFlowAdapter's
+  // strokeDasharray), so the wedge still reads as a FIFO connection
+  // instead of a solid, always-connected one.
   return (
     <polygon
       points={points}
       fill="#999"
-      stroke="none"
+      fillOpacity={isFifo ? 0.35 : 1}
+      stroke={isFifo ? "#999" : "none"}
+      strokeDasharray={isFifo ? "6 4" : undefined}
     />
   );
 
