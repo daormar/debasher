@@ -44,6 +44,18 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     if not request.outputDir.strip():
         raise HTTPException(status_code=400, detail="outputDir must not be empty")
 
+    if persistence.same_dir(request.outputDir, request.program.outputDir):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "outputDir (where the program is saved) must not be the same "
+                "directory as the program's execution output directory — "
+                "running the program would then mix engine-internal files "
+                "into the saved program, and resetting the execution "
+                "directory would delete the saved program along with them."
+            ),
+        )
+
     # Must run before save_program, which is what overwrites the
     # metadata file this reads the previous name from.
     persistence.delete_stale_script(request.outputDir, request.program.name)
