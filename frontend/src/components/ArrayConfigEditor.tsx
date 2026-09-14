@@ -57,7 +57,7 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Array Configuration — {process.name}
+          Array Configuration: {process.name}
         </h3>
 
         <p style={{ margin: 0, color: "#666", fontSize: 13 }}>

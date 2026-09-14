@@ -54,7 +54,7 @@ export default function CodeEditor({ process, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Code — {process.name} ({process.language})
+          Code: {process.name} ({process.language})
         </h3>
 
         <div

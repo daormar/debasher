@@ -289,7 +289,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
             {scatterCountSource
               ? `that process's own "${scatterCountSource.label}" option`
               : "that process's count source (not configured yet)"}
-            {" "}— this process's {scatterConsumerModeNoun} must produce exactly that many tasks.
+            {", so this process's "}{scatterConsumerModeNoun} must produce exactly that many tasks.
           </p>
         )}
 

@@ -124,7 +124,7 @@ export default function SaveDialog({ onClose }: Props) {
           <div style={{ color: "#8a6d00", fontSize: 14 }}>
             This matches the program's output directory ({program.outputDir}).
             Saving here would let a run overwrite the saved program, and
-            "Reset output directory" would delete it — pick a different
+            "Reset output directory" would delete it. Pick a different
             directory.
           </div>
         )}

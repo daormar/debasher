@@ -116,7 +116,7 @@ function FanoutFamilyRow({
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 
         <span style={{ flex: 1, fontSize: 13, color: "#888" }}>
-          {family.count.toLocaleString()} options ("{family.baseLabel}0" – "{family.baseLabel}{family.count - 1}")
+          {family.count.toLocaleString()} options ("{family.baseLabel}0" to "{family.baseLabel}{family.count - 1}")
         </span>
 
         <button onClick={() => onPickFanoutIndex(family)}>

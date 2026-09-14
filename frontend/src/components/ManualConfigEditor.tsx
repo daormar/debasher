@@ -57,7 +57,7 @@ export default function ManualConfigEditor({ process, onClose }: Props) {
       >
 
         <h3 style={{ margin: 0 }}>
-          Manual Configuration — {process.name}
+          Manual Configuration: {process.name}
         </h3>
 
         <div

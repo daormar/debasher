@@ -101,7 +101,7 @@ export default function ProcessTaskPicker({
         <p style={{ margin: 0, fontSize: 13, color: "#555" }}>
           {taskIndices.length.toLocaleString()} {itemLabel}{taskIndices.length === 1 ? "" : "s"} available
           {taskIndices.length > 0 &&
-            ` (${taskIndices[0]}–${taskIndices[taskIndices.length - 1]})`}
+            ` (${taskIndices[0]}-${taskIndices[taskIndices.length - 1]})`}
           .
         </p>
 

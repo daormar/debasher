@@ -290,7 +290,7 @@ export default function TalkToFifosDialog({ onClose }: Props) {
 
             {(inputCandidates.length === 0 || outputCandidates.length === 0) && (
               <p style={{ fontSize: 13, color: "#888" }}>
-                No unconnected input/output fifo options were found — a fifo only
+                No unconnected input/output fifo options were found: a fifo only
                 qualifies if no edge connects it to another process either way.
               </p>
             )}

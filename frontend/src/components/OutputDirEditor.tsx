@@ -88,7 +88,7 @@ export default function OutputDirEditor({ onClose }: Props) {
           <div style={{ color: "#8a6d00", fontSize: 14 }}>
             This matches the program's save directory ({program.homeDir}).
             Running here would mix engine-internal files into the saved
-            program, and "Reset output directory" would delete it — pick a
+            program, and "Reset output directory" would delete it. Pick a
             different directory.
           </div>
         )}

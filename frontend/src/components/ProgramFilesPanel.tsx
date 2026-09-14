@@ -366,7 +366,7 @@ export default function ProgramFilesPanel() {
       {!program.homeDir.trim() ? (
 
           <div style={{ color: "#8a6d00", fontSize: 14 }}>
-            Save the program before managing its files — this browses the
+            Save the program before managing its files. This browses the
             directory it's saved into.
           </div>
 
@@ -447,7 +447,7 @@ export default function ProgramFilesPanel() {
                   <div style={{ padding: 8, color: "#888" }}>Loading…</div>
                 ) : tree.length === 0 ? (
                   <div style={{ padding: 8, color: "#888" }}>
-                    No files yet — upload one, or drop it here.
+                    No files yet. Upload one, or drop it here.
                   </div>
                 ) : (
                   tree.map(entry => (
@@ -486,7 +486,7 @@ export default function ProgramFilesPanel() {
                 ) : !preview ? (
                   <div style={{ padding: 8, color: "#888" }}>Select a file to preview.</div>
                 ) : preview.kind === "binary" ? (
-                  <div style={{ padding: 8, color: "#888" }}>Binary file — no preview available.</div>
+                  <div style={{ padding: 8, color: "#888" }}>Binary file, no preview available.</div>
                 ) : preview.kind === "missing" ? (
                   <div style={{ padding: 8, color: "#888" }}>File not found.</div>
                 ) : preview.path.endsWith(".sh") ? (

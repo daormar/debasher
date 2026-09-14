@@ -490,7 +490,7 @@ export default function ProgramCanvas() {
     if (mirroredOptions.length === 0) {
       setProcessCommandOutput({
         title: process.name,
-        output: 'No mirrored output fifo on this process — enable "Mirror" on an output fifo option first.',
+        output: 'No mirrored output fifo on this process. Enable "Mirror" on an output fifo option first.',
       });
     } else if (mirroredOptions.length === 1) {
       setFifoWatch({
@@ -614,7 +614,7 @@ export default function ProgramCanvas() {
         : result.kind === "directory"
           ? (result.entries.length > 0 ? result.entries.join("\n") : "(empty directory)")
           : result.kind === "binary"
-            ? `Warning: ${resolvedValue} looks like a binary file — content not shown.`
+            ? `Warning: ${resolvedValue} looks like a binary file. Content not shown.`
             : `Path not found: ${resolvedValue}`;
 
       setPathContent({ title, output });

@@ -38,7 +38,7 @@ function fanoutOptionsOf(process: ProgramProcess): ProgramOption[] {
 function fanoutTodoLines(fanoutOptions: ProgramOption[], commentPrefix: string): string[] {
   return fanoutOptions.map(option => {
     const base = fanoutBaseLabel(option.label);
-    return `${commentPrefix} TODO: fanout option "${option.label}" isn't auto-handled for this language yet — read "${base}0".."${base}<N-1>" manually.`;
+    return `${commentPrefix} TODO: fanout option "${option.label}" isn't auto-handled for this language yet. Read "${base}0".."${base}<N-1>" manually.`;
   });
 }
 
