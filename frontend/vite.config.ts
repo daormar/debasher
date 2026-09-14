@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite'
+// `vitest/config` re-exports Vite's defineConfig with the `test` option
+// typed, so the same config file covers both `vite build` and `vitest`.
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
@@ -15,5 +17,9 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:8000",
     },
+  },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
   },
 })

@@ -11,6 +11,9 @@ $(FRONTEND_STAMP): package.json package-lock.json \
 
 all-local: $(FRONTEND_STAMP)
 
+check-local: $(FRONTEND_STAMP)
+	$(NPM) run test
+
 install-data-local: $(FRONTEND_STAMP)
 	$(MKDIR_P) $(DESTDIR)$(pkgdatadir)/web
 	cp -r dist/. $(DESTDIR)$(pkgdatadir)/web/
