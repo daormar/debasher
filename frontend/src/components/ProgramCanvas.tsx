@@ -44,6 +44,7 @@ import ProcessTaskPicker from "./ProcessTaskPicker";
 import CommandOutputModal from "./CommandOutputModal";
 import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
+import ProgramFilesPanel from "./ProgramFilesPanel";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
   opts: "options",
@@ -655,6 +656,10 @@ export default function ProgramCanvas() {
         <Background />
         <Controls />
         <MiniMap />
+
+        <Panel position="top-left">
+          <ProgramFilesPanel />
+        </Panel>
 
         {runPhase !== "idle" && (
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
