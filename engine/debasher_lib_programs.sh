@@ -497,12 +497,40 @@ debasher::_create_process_func_ext_alias()
 }
 
 ########
-debasher::_get_external_file_for_process_alias()
+# Resolves `value` against `pfile_dir`, verifying the result names an
+# existing file and canonicalizing it with realpath. An
+# already-absolute `value` is used as the starting point instead of
+# resolving it against `pfile_dir`, with a portability warning, but is
+# still required to exist and still gets canonicalized the same way.
+#
+# $1 - Path to resolve (relative or absolute).
+# $2 - Directory to resolve a relative `value` against -- typically
+#      the directory of the .sh that's relying on this resolution
+#      (e.g. dirname of DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK's
+#      top, or a looked-up DEBASHER_PROCESS_PFILE_DIR entry, depending
+#      on whether the caller runs while that stack still holds it).
+# $3 - Short description of what this path is, used only in the
+#      absolute-path warning (e.g. "external alias for process foo").
+#
+# Echoes the resolved, canonical path and returns 0. Returns 1 and
+# echoes nothing if the file doesn't exist — the caller is responsible
+# for reporting that failure with a message fitting its own context.
+debasher::_resolve_path_relative_to_pfile_dir()
 {
-    local current_pfile_dir=$1
-    local process_alias=$2
+    local value=$1
+    local pfile_dir=$2
+    local description=$3
+    local resolved="${value}"
 
-    echo "${current_pfile_dir}/${process_alias}"
+    if debasher::_is_absolute_path "${value}"; then
+        echo "Warning: ${description} uses an absolute path (${value}). This program is not portable across machines" >&2
+    else
+        resolved="${pfile_dir}/${value}"
+    fi
+
+    [ -f "${resolved}" ] || return 1
+
+    "${REALPATH}" "${resolved}"
 }
 
 ########
@@ -511,21 +539,17 @@ debasher::_add_debasher_ext_alias_process()
     local processname=$1
     local process_ext_alias=$2
     local alias_opt_map=$3
-    local current_pfile_dir=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
-    # Check if alias corresponds to an external file
-
-    # Get tentative name of external file
+    # Resolve alias to an external file, relative to the .sh that
+    # declares it. DEBASHER_PROCESS_PFILE_DIR[processname] is already
+    # populated at this point -- add_debasher_process (which dispatches
+    # here) sets it before doing so, from the same
+    # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK entry this would
+    # otherwise recompute -- so this reads that one recorded value
+    # instead of re-deriving it, the same way debasher::define_infile_opt
+    # does later, from a point where the stack itself is no longer valid.
     local external_file
-    if debasher::_is_absolute_path "${process_ext_alias}"; then
-        external_file="${process_ext_alias}"
-        echo "Warning: external alias for process ${processname} uses an absolute path (${external_file}). This program is not portable across machines" >&2
-    else
-        external_file="$(debasher::_get_external_file_for_process_alias "${current_pfile_dir}" "${process_ext_alias}")"
-    fi
-
-    # Check if file exists
-    if [ ! -f "${external_file}" ]; then
+    if ! external_file=$(debasher::_resolve_path_relative_to_pfile_dir "${process_ext_alias}" "${DEBASHER_PROCESS_PFILE_DIR[${processname}]}" "external alias for process ${processname}"); then
         echo "Error: external alias ${process_ext_alias} for process ${processname} is not valid: file not found. Aborting execution..." >&2
         return 1
     fi
@@ -593,6 +617,11 @@ debasher::add_debasher_process()
         echo "Error: process name ${processname} has already been defined. Aborting execution..." >&2
         exit 1
     fi
+
+    # Record which .sh directory added this process, while
+    # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK still holds it (see
+    # DEBASHER_PROCESS_PFILE_DIR's own declaration in debasher_lib.sh)
+    DEBASHER_PROCESS_PFILE_DIR["${processname}"]=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
 
     # Treat heredoc code if provided
     if debasher::_is_heredoc_process "${processname}" >/dev/null; then

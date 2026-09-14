@@ -425,6 +425,18 @@ declare -A DEBASHER_PROGRAM_PROCESSES
 declare -A DEBASHER_PROCESS_ALIAS_TARGETS
 declare -A DEBASHER_PROCESS_EXT_ALIAS_FILES
 
+# Declare associative array recording, for every process, the directory
+# of the .sh that added it (dirname of
+# DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK's top at the time
+# add_debasher_process ran) -- populated in
+# debasher::add_debasher_process (engine/debasher_lib_programs.sh),
+# since that stack only holds this while the program/module function
+# adding the process is still running, but a process's own
+# _define_opts function (where debasher::define_infile_opt needs it --
+# see engine/debasher_lib_opts.sh) runs later, once that stack entry
+# has already been popped.
+declare -A DEBASHER_PROCESS_PFILE_DIR
+
 # Declare array to store processes in topological order according to
 # their dependencies
 declare -a DEBASHER_PROGRAM_PROCESSES_TOPO_SORT

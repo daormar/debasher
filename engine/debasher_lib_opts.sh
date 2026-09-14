@@ -1523,6 +1523,63 @@ debasher::define_opt()
 define_opt() { debasher::define_opt "$@"; }
 
 ########
+# Defines process option whose value is a file path, resolving it
+# relative to the directory of the .sh that defines the process if
+# it's relative (or verifying it as an absolute path otherwise) —
+# same resolution debasher::_add_debasher_ext_alias_process uses for
+# an external alias script, so a "file" option's value can likewise
+# point at a file shipped alongside the program (e.g. via the
+# webui's program-files browser) using a portable, relative path.
+#
+# Looks up DEBASHER_PROCESS_PFILE_DIR[process_name] rather than
+# DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK directly: unlike
+# ext_alias resolution (which runs synchronously inside
+# add_debasher_process, while that stack still holds the right entry),
+# a process's _define_opts function -- where this is called from --
+# runs later, once the program/module function that registered the
+# process has already returned and popped its stack entry. See
+# DEBASHER_PROCESS_PFILE_DIR's declaration in debasher_lib.sh.
+#
+# $1 - Option name.
+# $2 - File path associated to the option being defined (relative or
+#      absolute).
+# $3 - Name of variable that will store the information about the option to be added.
+# $4 - Name of the process this option is being defined for.
+debasher::define_infile_opt()
+{
+    local opt=$1
+    local value=$2
+    local varname=$3
+    local process_name=$4
+    local pfile_dir="${DEBASHER_PROCESS_PFILE_DIR[${process_name}]}"
+
+    local resolved
+    if ! resolved=$(debasher::_resolve_path_relative_to_pfile_dir "${value}" "${pfile_dir}" "value for option ${opt}"); then
+        debasher::errmsg "file ${value} does not exist (${opt} option)"
+        return 1
+    fi
+
+    debasher::define_opt "$opt" "${resolved}" "$varname"
+}
+
+########
+# Public: Defines process option whose value is a file path, resolved
+# relative to the .sh defining the process.
+#
+# $1 - Option name.
+# $2 - File path associated to the option being defined (relative or
+#      absolute).
+# $3 - Name of variable that will store the information about the option to be added.
+# $4 - Name of the process this option is being defined for.
+#
+# Examples
+#
+#   define_infile_opt "-f" "config/settings.txt" "optlist" "${process_name}"
+#
+# The function does not return any value
+define_infile_opt() { debasher::define_infile_opt "$@"; }
+
+########
 debasher::_get_value_descriptor_name()
 {
     local process_name=$1
