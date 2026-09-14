@@ -10,11 +10,15 @@ export default function OutputDirEditor({ onClose }: Props) {
 
   const {
     program,
+    isRunInProgress,
     setOutputDir,
   } = useProgram();
 
   const [draft, setDraft] =
     useState(program.outputDir);
+
+  const [error, setError] =
+    useState<string | null>(null);
 
   const conflictsWithHomeDir =
     !!program.homeDir.trim() && draft.trim() === program.homeDir.trim();
@@ -23,8 +27,12 @@ export default function OutputDirEditor({ onClose }: Props) {
     if (conflictsWithHomeDir) {
       return;
     }
-    setOutputDir(draft);
-    onClose();
+    try {
+      setOutputDir(draft);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set output directory.");
+    }
   }
 
   return (
@@ -93,6 +101,19 @@ export default function OutputDirEditor({ onClose }: Props) {
           </div>
         )}
 
+        {isRunInProgress && (
+          <div style={{ color: "#8a6d00", fontSize: 14 }}>
+            A run is in progress for this program's output directory.
+            Changing it is disabled until the run finishes.
+          </div>
+        )}
+
+        {error && (
+          <div style={{ color: "#b00020", fontSize: 14 }}>
+            {error}
+          </div>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -105,7 +126,7 @@ export default function OutputDirEditor({ onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleSave} disabled={conflictsWithHomeDir}>
+          <button onClick={handleSave} disabled={conflictsWithHomeDir || isRunInProgress}>
             Save
           </button>
 

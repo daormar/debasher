@@ -919,6 +919,20 @@ export function ProgramProvider({
     outputDir: string
   ) {
 
+    // Changing outputDir while a run is going for the current one
+    // would silently redirect isRunInProgress itself, plus "Stop
+    // program"/"Get program status" (which act on the live `program`,
+    // not a snapshot) — to a different directory than the one the
+    // run actually uses, making the run invisible and unstoppable
+    // from this UI. Same defense-in-depth spot as save()/
+    // resetOutputDir() above.
+    if (isRunInProgress) {
+      throw new Error(
+        "Cannot change the output directory while a run is in progress " +
+        "for it. Wait for the run to finish, or stop it first."
+      );
+    }
+
     setProgram(current => ({
       ...current,
       outputDir,

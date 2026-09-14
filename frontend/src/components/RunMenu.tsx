@@ -279,9 +279,12 @@ export default function RunMenu() {
                 pendingAction !== null ||
                 (item === "Run program" && runPhase === "running") ||
                 // Wiping the output directory out from under a run
-                // would delete files it's using — checked via
-                // isRunInProgress (not runPhase) so a run launched
-                // outside this tab is caught too.
+                // (or repointing which directory this UI watches/
+                // controls) would delete files it's using or make it
+                // unstoppable — checked via isRunInProgress (not
+                // runPhase) so a run launched outside this tab is
+                // caught too.
+                (item === "Set output directory" && isRunInProgress) ||
                 (item === "Reset output directory" && isRunInProgress) ||
                 // A fifo only exists on disk once its owning process
                 // has started.
