@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { StreamLanguage } from "@codemirror/language";
-import { shell } from "@codemirror/legacy-modes/mode/shell";
 
 import { useProgram } from "../store/ProgramContext";
+import { languageExtension } from "./codeLanguages";
+import type { ProcessLanguage } from "../models/process";
 import {
   createFolder,
   deleteEntry,
@@ -14,6 +14,30 @@ import {
   uploadFiles,
 } from "../api/programFilesApi";
 import type { FileEntry } from "../api/programFilesApi";
+
+// Guesses a CodeMirror language from a previewed file's extension —
+// distinct from ProgramProcess.language, which is explicit metadata a
+// process always carries; a plain file in the program's home
+// directory has no such field, so this is the closest equivalent.
+// Anything unrecognized falls back to a plain-text <pre> preview.
+const LANGUAGE_BY_EXTENSION: Record<string, ProcessLanguage> = {
+  sh: "bash",
+  bash: "bash",
+  py: "python",
+  pl: "perl",
+  pm: "perl",
+  r: "r",
+  groovy: "groovy",
+  gvy: "groovy",
+};
+
+function languageForPath(path: string): ProcessLanguage | null {
+  const dot = path.lastIndexOf(".");
+  if (dot === -1) {
+    return null;
+  }
+  return LANGUAGE_BY_EXTENSION[path.slice(dot + 1).toLowerCase()] ?? null;
+}
 
 function parentOf(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -181,6 +205,9 @@ export default function ProgramFilesPanel() {
 
   const selectedEntry =
     selectedPath ? findEntry(tree, selectedPath) : null;
+
+  const previewLanguage =
+    preview && preview.kind === "file" ? languageForPath(preview.path) : null;
 
   // Where "Upload files" / "New folder" write to: the selected
   // directory, the selected file's parent, or the root when nothing
@@ -489,7 +516,7 @@ export default function ProgramFilesPanel() {
                   <div style={{ padding: 8, color: "#888" }}>Binary file, no preview available.</div>
                 ) : preview.kind === "missing" ? (
                   <div style={{ padding: 8, color: "#888" }}>File not found.</div>
-                ) : preview.path.endsWith(".sh") ? (
+                ) : previewLanguage ? (
                   // @uiw/react-codemirror renders its own wrapper div
                   // around .cm-editor with no height of its own, so a
                   // plain height:100% on the editor has nothing to
@@ -505,8 +532,15 @@ export default function ProgramFilesPanel() {
                       value={preview.content ?? ""}
                       height="100%"
                       style={{ flex: 1, minWidth: 0 }}
-                      extensions={[StreamLanguage.define(shell)]}
+                      extensions={[languageExtension(previewLanguage)]}
                       editable={false}
+                      // No line-number/fold gutter here: it isn't used
+                      // anywhere else CodeMirror shows up in this app
+                      // (CodeEditor.tsx doesn't have one either), and
+                      // it otherwise shifts this preview's text right
+                      // compared to every other file's plain <pre>
+                      // preview below, reading as a stray indent.
+                      basicSetup={{ lineNumbers: false, foldGutter: false }}
                     />
                   </div>
                 ) : (
