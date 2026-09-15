@@ -35,7 +35,7 @@ Dynamic Fanout Example Using FIFOs
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     generate_identify_cmdline_opts()
@@ -92,11 +92,11 @@ Dynamic Fanout Example Using FIFOs
     {
         # -inf option
         local description="input file"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<file>" "$description"
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     count_identify_cmdline_opts()
@@ -163,15 +163,15 @@ Dynamic Fanout Example Using FIFOs
 
         # -inf option
         local description="input file"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<file>" "$description"
 
         # -outd option
         local description="name of output directory"
-        explain_opt "-outd" "<string>" "$description"
+        explain_opt "-outd" "<file>" "$description"
 
         # -outf option
         local description="output fifo"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     fragment_identify_cmdline_opts()
@@ -270,11 +270,11 @@ Dynamic Fanout Example Using FIFOs
 
         # -inf option
         local description="input fifo"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<file>" "$description"
 
         # -outfi option
         local description="i'th output fifo"
-        explain_opt "-outfith" "<string>" "$description"
+        explain_opt "-outfith" "<file>" "$description"
     }
 
     dispatch_identify_cmdline_opts()
@@ -328,11 +328,11 @@ Dynamic Fanout Example Using FIFOs
 
         # -inf option
         local description="input fifo"
-        explain_opt "-inf" "<string>" "$description"
+        explain_opt "-inf" "<file>" "$description"
 
         # -outd option
         local description="output directory"
-        explain_opt "-outd" "<string>" "$description"
+        explain_opt "-outd" "<file>" "$description"
     }
 
     worker_identify_cmdline_opts()
@@ -410,11 +410,11 @@ Dynamic Fanout Example Using FIFOs
 
         # -indi option
         local description="i'th input directory"
-        explain_opt "-indith" "<string>" "$description"
+        explain_opt "-indith" "<file>" "$description"
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<string>" "$description"
+        explain_opt "-outf" "<file>" "$description"
     }
 
     aggregate_identify_cmdline_opts()
