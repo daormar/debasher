@@ -170,15 +170,16 @@ export default function ProgramCanvas() {
   // frame during dragging, via applyNodeChanges.
   const [localNodes, setLocalNodes] = useState(nodes);
 
-  // "Fingerprint" of everything except position: id, name and
-  // options. Changes whenever a process is added/removed/renamed, or
-  // an option is added/removed/edited, never when a process is moved.
+  // "Fingerprint" of everything except position: id, name, options
+  // handler mode, and options. Changes whenever a process is
+  // added/removed/renamed, its options handler mode is switched, or an
+  // option is added/removed/edited, never when a process is moved.
   const structuralKey = useMemo(
     () =>
       program.processes
         .map(
           process =>
-            `${process.id}:${process.name}:${process.options
+            `${process.id}:${process.name}:${process.optionsHandler.mode}:${process.options
               .map(o => `${o.id}:${o.label}:${o.direction}`)
               .join(",")}`
         )
