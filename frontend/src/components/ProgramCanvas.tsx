@@ -18,6 +18,7 @@ import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
 import type { ProgramProcess } from "../models/process";
 import type { ProgramOption, FanoutFamily } from "../models/option";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
+import type { ProgramEdge } from "../models/edge";
 import {
   getProcessOpts,
   getProcessResolvedOptions,
@@ -65,6 +66,39 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
 // reasonable — past it, the family gets a "Pick index" row (backed by
 // ProcessTaskPicker, see fanoutIndexPicker) instead.
 const MAX_FANOUT_INLINE = 10;
+
+// True if `option` itself is fifo-channel, or is a plain ("none"-
+// channel) connection whose upstream source is: a "-inf"-style input
+// on a "standard"-mode process is never itself channel === "fifo" —
+// only the writing end opens one, via define_fifo_opt (see
+// dispatch_define_opts/worker_define_opts's plain
+// define_opt_from_proc_out on the reading side, in
+// data/programs/debasher_dynamic_fanout_fifos.sh) — so its own
+// resolved value is a fifo path all the same, and ProcessIOModal's
+// "View" (a plain file read) is just as unsafe on it as on the fifo
+// option it's wired to.
+function isFifoBackedOption(
+  option: ProgramOption,
+  edges: ProgramEdge[],
+  processes: { options: ProgramOption[] }[]
+): boolean {
+
+  if (option.channel === "fifo") {
+    return true;
+  }
+
+  const sourceEdge = edges.find(edge => edge.targetOptionId === option.id);
+  if (!sourceEdge) {
+    return false;
+  }
+
+  const sourceOption = processes
+    .flatMap(process => process.options)
+    .find(o => o.id === sourceEdge.sourceOptionId);
+
+  return sourceOption?.channel === "fifo";
+
+}
 
 // On a "standard"-mode process, a fanout/fanin option's label (e.g.
 // "-outfith", "-indith" — see isFanoutOption) is only a template: the
@@ -333,6 +367,7 @@ export default function ProgramCanvas() {
     options: ProgramOption[];
     resolvedValues: Record<string, string>;
     families: FanoutFamily[];
+    fifoBackedOptionIds: Set<string>;
   } | null>(null);
 
   // A ProcessIOModal fanout family's own "Pick index" button — reuses
@@ -419,11 +454,22 @@ export default function ProgramCanvas() {
     options: ProgramOption[];
     resolvedValues: Record<string, string>;
     families: FanoutFamily[];
+    fifoBackedOptionIds: Set<string>;
   }> {
 
     const resolvedValues = await getProcessResolvedOptions(program, process.name, taskIndex);
 
     const candidates = process.options.filter(o => !o.fromProcessSpec);
+
+    // Resolved from candidates (real option ids, matching program.edges)
+    // before fanout expansion synthesizes any "id:index" ones — a
+    // fanout option's own concrete rows already inherit its channel
+    // unchanged (see expandFanoutOptions), so they don't need this.
+    const fifoBackedOptionIds = new Set(
+      candidates
+        .filter(option => isFifoBackedOption(option, program.edges, program.processes))
+        .map(option => option.id)
+    );
 
     // isFanoutOption/countSourceOptionId are only meaningful on a
     // "standard"-mode process (see models/option.ts) — elsewhere a
@@ -437,6 +483,7 @@ export default function ProgramCanvas() {
       options,
       resolvedValues,
       families,
+      fifoBackedOptionIds,
     };
 
   }
@@ -709,6 +756,7 @@ export default function ProgramCanvas() {
           options={processIO.options}
           resolvedValues={processIO.resolvedValues}
           families={processIO.families}
+          fifoBackedOptionIds={processIO.fifoBackedOptionIds}
           isViewPending={isPathViewPending}
           onViewPath={handleViewPath}
           onPickFanoutIndex={setFanoutIndexPicker}

@@ -17,6 +17,12 @@ interface Props {
   // ProgramCanvas's expandFanoutOptions/MAX_FANOUT_INLINE) — shown as
   // their own "Pick index" row instead.
   families: FanoutFamily[];
+  // Option ids ProgramCanvas's fetchProcessIO already determined are
+  // fifo-backed — either option.channel === "fifo" itself, or a plain
+  // connection whose upstream source is (see ProgramCanvas's
+  // isFifoBackedOption for why a reading-side option like "-inf" can't
+  // tell that from its own fields alone).
+  fifoBackedOptionIds: Set<string>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
   onPickFanoutIndex: (family: FanoutFamily) => void;
@@ -28,8 +34,15 @@ interface Props {
 // Anything else backed by a real path on disk (a "file" option, or a
 // "shared_dir" option, which always names a directory) gets a "View"
 // button, wired up in ProgramCanvas to /api/execution/inspect-path.
-function optionHasPathButton(option: ProgramOption): boolean {
-  return option.channel !== "fifo" &&
+//
+// option.channel === "fifo" is checked directly (rather than only via
+// fifoBackedOptionIds) because a fanout family's own expanded rows
+// (ProgramCanvas's expandFanoutOptions/handleFanoutIndexPickerConfirm)
+// carry a synthesized "familyId:index" id that never matches the
+// pre-expansion id fifoBackedOptionIds was built from, even though
+// they correctly inherit the family's real channel.
+function optionHasPathButton(option: ProgramOption, fifoBackedOptionIds: Set<string>): boolean {
+  return option.channel !== "fifo" && !fifoBackedOptionIds.has(option.id) &&
     (option.dataType === "file" || option.channel === "shared_dir");
 }
 
@@ -39,11 +52,13 @@ function optionHasPathButton(option: ProgramOption): boolean {
 function OptionRow({
   option,
   resolvedValue,
+  fifoBackedOptionIds,
   isViewPending,
   onViewPath,
 }: {
   option: ProgramOption;
   resolvedValue: string;
+  fifoBackedOptionIds: Set<string>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
 }) {
@@ -70,7 +85,7 @@ function OptionRow({
           {resolvedValue || "(no value)"}
         </span>
 
-        {optionHasPathButton(option) && resolvedValue && (
+        {optionHasPathButton(option, fifoBackedOptionIds) && resolvedValue && (
           <button
             onClick={() => onViewPath(option, resolvedValue)}
             disabled={isViewPending}
@@ -142,6 +157,7 @@ function OptionSection({
   options,
   families,
   resolvedValues,
+  fifoBackedOptionIds,
   isViewPending,
   onViewPath,
   onPickFanoutIndex,
@@ -150,6 +166,7 @@ function OptionSection({
   options: ProgramOption[];
   families: FanoutFamily[];
   resolvedValues: Record<string, string>;
+  fifoBackedOptionIds: Set<string>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
   onPickFanoutIndex: (family: FanoutFamily) => void;
@@ -172,6 +189,7 @@ function OptionSection({
           key={option.id}
           option={option}
           resolvedValue={resolvedValues[option.label] ?? option.value}
+          fifoBackedOptionIds={fifoBackedOptionIds}
           isViewPending={isViewPending}
           onViewPath={onViewPath}
         />
@@ -196,6 +214,7 @@ export default function ProcessIOModal({
   options,
   resolvedValues,
   families,
+  fifoBackedOptionIds,
   isViewPending,
   onViewPath,
   onPickFanoutIndex,
@@ -265,6 +284,7 @@ export default function ProcessIOModal({
                 options={inputs}
                 families={inputFamilies}
                 resolvedValues={resolvedValues}
+                fifoBackedOptionIds={fifoBackedOptionIds}
                 isViewPending={isViewPending}
                 onViewPath={onViewPath}
                 onPickFanoutIndex={onPickFanoutIndex}
@@ -275,6 +295,7 @@ export default function ProcessIOModal({
                 options={outputs}
                 families={outputFamilies}
                 resolvedValues={resolvedValues}
+                fifoBackedOptionIds={fifoBackedOptionIds}
                 isViewPending={isViewPending}
                 onViewPath={onViewPath}
                 onPickFanoutIndex={onPickFanoutIndex}
