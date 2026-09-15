@@ -108,21 +108,31 @@ function FileTreeNode({ entry, depth, expanded, selectedPath, onToggle, onSelect
           background: isSelected ? "#e0edff" : "transparent",
           fontFamily: "ui-monospace, Consolas, monospace",
           fontSize: 13,
+          // Rows wider than the pane should overflow it (triggering the
+          // pane's own horizontal scroll) rather than have flexbox
+          // shrink any child to fit — without flexShrink:0 below, an
+          // empty child (the arrow placeholder on a file row with no
+          // "(read-only)" tag to no-break against) shrinks to 0 first,
+          // since unlike the name/tag spans it has no content of its
+          // own to resist shrinking past, throwing off every row after
+          // it. whiteSpace here (inherited by the spans below) is the
+          // other half: nothing wraps to a second line either.
+          whiteSpace: "nowrap",
         }}
 
       >
 
-        <span style={{ width: 12, display: "inline-block", color: "#888" }}>
+        <span style={{ width: 12, flexShrink: 0, display: "inline-block", color: "#888" }}>
           {entry.type === "dir" ? (isExpanded ? "▾" : "▸") : ""}
         </span>
 
-        <span>
+        <span style={{ flexShrink: 0 }}>
           {entry.name}
           {entry.type === "dir" ? "/" : ""}
         </span>
 
         {entry.readonly && (
-          <span style={{ color: "#888", fontSize: 11 }}>
+          <span style={{ flexShrink: 0, color: "#888", fontSize: 11 }}>
             (read-only)
           </span>
         )}
