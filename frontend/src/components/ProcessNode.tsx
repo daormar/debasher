@@ -42,7 +42,10 @@ export default function ProcessNode({
 
   const background = processNodeBackground(processStatuses[process.name]);
 
-  const isStandard = process.optionsHandler.mode === "standard";
+  const optionsHandlerMode = process.optionsHandler.mode;
+  const isStandard = optionsHandlerMode === "standard";
+  const isTaskIndexed = optionsHandlerMode === "array" || optionsHandlerMode === "generator";
+  const isManual = optionsHandlerMode === "manual";
 
 
   const topOptions =
@@ -60,17 +63,21 @@ export default function ProcessNode({
   const groupBorderColor = groupSource ? groupColor(groupSource.groupId) : null;
 
 
+  const borderWidth = selected || groupBorderColor ? 2 : 1;
+  const borderColor = selected ? "#1a73e8" : groupBorderColor ?? "#999";
+  const borderStyle = isManual ? "dashed" : "solid";
+
   return (
 
     <div
       style={{
         minWidth: 180,
         padding: 12,
-        border: selected
-          ? "2px solid #1a73e8"
-          : groupBorderColor
-            ? `2px solid ${groupBorderColor}`
-            : "1px solid #999",
+        border: `${borderWidth}px ${borderStyle} ${borderColor}`,
+        // Double border signals a task-indexed options handler (array/generator),
+        // which fans this process out into multiple tasks at run time.
+        outline: isTaskIndexed ? `${borderWidth}px ${borderStyle} ${borderColor}` : undefined,
+        outlineOffset: isTaskIndexed ? 3 : undefined,
         borderRadius: 8,
         background,
         position: "relative",
