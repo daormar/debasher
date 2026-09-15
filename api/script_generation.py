@@ -492,14 +492,18 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
                     f'debasher::define_opt_from_proc_out "{option.label}" "{src_proc}" "{src_opt}" optlist || return 1'
                 )
         return lines
-    if option.dataType == "file":
+    if option.dataType == "file" and option.direction == "input":
         # Resolved relative to the .sh defining the process (see
         # debasher::define_infile_opt in engine/debasher_lib_opts.sh) —
         # lets a baked-in file value point at something shipped
         # alongside the program (e.g. via the webui's program-files
         # browser) with a portable, relative path, the same way
         # AdditionalSpecs.externalAlias already does for process
-        # scripts.
+        # scripts. Output-direction options fall through to the plain
+        # define_opt below instead: define_infile_opt requires the
+        # value to already exist on disk, which a "file"-typed output
+        # (e.g. "-outf") never does until the process itself creates
+        # it at run time.
         return [
             f'debasher::define_infile_opt "{option.label}" "{option.value}" optlist '
             f'"{process.name}" || return 1'
