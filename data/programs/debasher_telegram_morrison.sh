@@ -161,7 +161,7 @@ recomposer_explain_opts()
 
     # -inf option
     local description="input fifo"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-inf" "<string>" "$description"
 
     # -outf option
     local description="output fifo"

@@ -114,6 +114,10 @@ host2_explain_opts()
     # -n option
     local description="Number of array tasks"
     explain_opt "-n" "<int>" "$description"
+
+    # -id option
+    local description="id of task"
+    explain_opt "-id" "<int>" "$description"
 }
 
 ########
