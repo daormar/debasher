@@ -540,7 +540,7 @@ def get_process_opts(request: ProcessOutputRequest) -> ProcessOutputResponse:
         request.program.outputDir, request.processName, request.taskIndex
     )
     try:
-        output = _read_text_capped(opts_path)
+        output = file_inspection.read_text_capped(opts_path)
     except OSError:
         output = f"Error: options file for process {request.processName} could not be found!"
 
