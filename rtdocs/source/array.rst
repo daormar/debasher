@@ -103,6 +103,10 @@ Process Array Example Using the Array Option Handler
         local description="id of reader"
         explain_opt "-id" "<int>" "$description"
 
+        # -infile option
+        local description="input file"
+        explain_opt "-infile" "<file>" "$description"
+
         # -outdir option
         local description="output directory of reader"
         explain_opt "-outdir" "<file>" "$description"

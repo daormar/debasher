@@ -98,6 +98,14 @@ Host Workflow Example
         # -n option
         local description="Number of array tasks"
         explain_opt "-n" "<int>" "$description"
+
+        # -id option
+        local description="process id"
+        explain_opt "-id" "<int>" "$description"
+
+        # -inf option
+        local description="input file"
+        explain_opt "-inf" "<file>" "$description"
     }
 
     host2_identify_cmdline_opts()

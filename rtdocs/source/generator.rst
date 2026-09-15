@@ -111,7 +111,7 @@ Process Array Example using Generators
 
         # -infile option
         local description="input file"
-        explain_opt "-inf" "<file>" "$description"
+        explain_opt "-infile" "<file>" "$description"
 
         # -outdir option
         local description="output directory"

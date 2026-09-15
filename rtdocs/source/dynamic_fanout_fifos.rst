@@ -165,6 +165,10 @@ Dynamic Fanout Example Using FIFOs
         local description="input file"
         explain_opt "-inf" "<string>" "$description"
 
+        # -outd option
+        local description="name of output directory"
+        explain_opt "-outd" "<string>" "$description"
+
         # -outf option
         local description="output fifo"
         explain_opt "-outf" "<string>" "$description"
