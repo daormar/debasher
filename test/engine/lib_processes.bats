@@ -9,10 +9,36 @@
 # a process's exec function really calls must be pulled in, while a mere
 # identifier collision -- a local variable, or a word inside a string or
 # an embedded other-language script -- must not.
+#
+# The explain_opts-vs-actual-opts helpers further down (see
+# debasher::_check_opt_names_vs_explain's own comments) reach into
+# explain_opt/define_opt/save_opt_list and friends from
+# debasher_lib_opts.sh, so setup() sources the whole engine/
+# dependency chain (still entirely from ENGINE_BUILDDIR, via
+# debasher_lib.sh's own include section) rather than just
+# debasher_lib_processes on its own.
 
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
-    source "${ENGINE_BUILDDIR}/debasher_lib_processes"
+    debasher_pkglibdir="${ENGINE_BUILDDIR}"
+    source "${ENGINE_BUILDDIR}/debasher_lib.sh"
+
+    # bats runs setup() as a function body, and debasher_lib.sh's own
+    # top-level "declare -A ..." lines are written assuming they run
+    # at a real script's top level (as they do in production, where
+    # debasher_exec.sh sources debasher_lib outside of any function):
+    # a bare "declare" inside a function is local to that function, so
+    # without this, DEBASHER_PROGRAM_OPT_TYPE & co would silently
+    # vanish the moment setup() returns, before any @test body ran.
+    # Force them global here instead.
+    declare -gA DEBASHER_PROGRAM_OPT_DESC
+    declare -gA DEBASHER_PROGRAM_OPT_TYPE
+    declare -gA DEBASHER_PROGRAM_OPT_IS_CMDLINE
+    declare -gA DEBASHER_PROGRAM_OPT_CATEG
+    declare -gA DEBASHER_PROGRAM_CATEG_MAP
+    declare -gA DEBASHER_INITIAL_PROCESS_SPEC
+    declare -gA DEBASHER_PROGRAM_PROCESSES
+    declare -g DEBASHER_PROGRAM_OUTDIR
 }
 
 # --- debasher::_blank_string_literals --------------------------------
@@ -147,4 +173,157 @@ EOF
 
     result=$(collect_deps "${scriptfile}" "worker_task")
     [ "${result}" = "count_chars" ]
+}
+
+# --- debasher::_get_explained_opt_names --------------------------------
+
+@test "debasher::_get_explained_opt_names collects names declared via explain_opt and explain_flag" {
+    modernproc_explain_opts()
+    {
+        explain_opt "-a" "<int>" "desc a"
+        explain_flag "-f" "desc f"
+    }
+
+    local -A explained=()
+    debasher::_get_explained_opt_names "modernproc" explained
+    [ "${#explained[@]}" -eq 2 ]
+    [[ -v explained["-a"] ]]
+    [[ -v explained["-f"] ]]
+}
+
+@test "debasher::_get_explained_opt_names also collects names declared via the legacy explain_cmdline_opts" {
+    legacyproc_explain_cmdline_opts()
+    {
+        explain_cmdline_opt "-x" "<string>" "desc x"
+    }
+
+    local -A explained=()
+    debasher::_get_explained_opt_names "legacyproc" explained
+    [ "${#explained[@]}" -eq 1 ]
+    [[ -v explained["-x"] ]]
+}
+
+@test "debasher::_get_explained_opt_names returns 1 and leaves the set empty when the process declares no explain function" {
+    local -A explained=()
+    ! debasher::_get_explained_opt_names "noexplainproc" explained
+    [ "${#explained[@]}" -eq 0 ]
+}
+
+# --- debasher::_get_actual_opt_names_for_first_task ---------------------
+
+@test "debasher::_get_actual_opt_names_for_first_task reads the per-task array already populated for a non-generator process" {
+    declare -gA DEBASHER_OPT_LIST_readerproc_0=(["-a"]="1" ["-f"]="")
+
+    local -A actual=()
+    debasher::_get_actual_opt_names_for_first_task "" "readerproc" actual
+    [ "${#actual[@]}" -eq 2 ]
+    [[ -v actual["-a"] ]]
+    [[ -v actual["-f"] ]]
+}
+
+@test "debasher::_get_actual_opt_names_for_first_task leaves the set empty when no task was ever recorded for a non-generator process" {
+    local -A actual=()
+    debasher::_get_actual_opt_names_for_first_task "" "notaskproc" actual
+    [ "${#actual[@]}" -eq 0 ]
+}
+
+@test "debasher::_get_actual_opt_names_for_first_task calls generate_opts once for a generator process and extracts its option names" {
+    genproc_generate_opts_size()
+    {
+        echo 1
+    }
+
+    genproc_generate_opts()
+    {
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-id" "${task_idx}" optlist
+        define_flag "-verbose" optlist
+        save_opt_list optlist
+    }
+
+    DEBASHER_INITIAL_PROCESS_SPEC["genproc"]="genproc"
+    DEBASHER_PROGRAM_OUTDIR="/tmp/bats-debasher-outdir"
+
+    local -A actual=()
+    debasher::_get_actual_opt_names_for_first_task "" "genproc" actual
+    [ "${#actual[@]}" -eq 2 ]
+    [[ -v actual["-id"] ]]
+    [[ -v actual["-verbose"] ]]
+}
+
+@test "debasher::_get_actual_opt_names_for_first_task's extra generate_opts call leaves no DEBASHER_OPT_LIST_* array behind" {
+    genproc2_generate_opts_size()
+    {
+        echo 1
+    }
+
+    genproc2_generate_opts()
+    {
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-id" "${task_idx}" optlist
+        save_opt_list optlist
+    }
+
+    DEBASHER_INITIAL_PROCESS_SPEC["genproc2"]="genproc2"
+    DEBASHER_PROGRAM_OUTDIR="/tmp/bats-debasher-outdir"
+
+    local -A actual=()
+    debasher::_get_actual_opt_names_for_first_task "" "genproc2" actual
+
+    ! declare -p DEBASHER_OPT_LIST_genproc2_0 >/dev/null 2>&1
+}
+
+# --- debasher::_check_opt_names_vs_explain -------------------------------
+
+@test "debasher::_check_opt_names_vs_explain succeeds silently when defined and declared option names match" {
+    cleanproc_explain_opts()
+    {
+        explain_opt "-a" "<int>" "desc a"
+        explain_flag "-f" "desc f"
+    }
+    declare -gA DEBASHER_OPT_LIST_cleanproc_0=(["-a"]="1" ["-f"]="")
+    DEBASHER_PROGRAM_PROCESSES["cleanproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain aborts when a process defines an option its explain_opts never declared" {
+    badproc_explain_opts()
+    {
+        explain_opt "-a" "<int>" "desc a"
+    }
+    declare -gA DEBASHER_OPT_LIST_badproc_0=(["-a"]="1" ["-x"]="")
+    DEBASHER_PROGRAM_PROCESSES["badproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process badproc defines option -x, which is not declared in its explain_opts"* ]]
+}
+
+@test "debasher::_check_opt_names_vs_explain only warns, and still succeeds, when a declared option is missing from the first task" {
+    warnproc_explain_opts()
+    {
+        explain_opt "-a" "<int>" "desc a"
+        explain_opt "-b" "<int>" "desc b, only given via define_cmdline_opt_if_given"
+    }
+    declare -gA DEBASHER_OPT_LIST_warnproc_0=(["-a"]="1")
+    DEBASHER_PROGRAM_PROCESSES["warnproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"Warning: process warnproc declares option -b in explain_opts, but it was not found among the options generated for its first task"* ]]
 }
