@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
@@ -31,6 +31,11 @@ const LANGUAGE_BY_EXTENSION: Record<string, ProcessLanguage> = {
   groovy: "groovy",
   gvy: "groovy",
 };
+
+// Stable reference, not an inline object literal in the JSX below — a
+// new object every render makes @uiw/react-codemirror treat basicSetup
+// as changed and reconfigure the editor (see previewExtensions).
+const CODE_PREVIEW_BASIC_SETUP = { lineNumbers: false, foldGutter: false };
 
 function languageForPath(path: string): ProcessLanguage | null {
   const dot = path.lastIndexOf(".");
@@ -219,6 +224,19 @@ export default function ProgramFilesPanel() {
 
   const previewLanguage =
     preview && preview.kind === "file" ? languageForPath(preview.path) : null;
+
+  // Stable across every keystroke (draft changing re-renders this
+  // component): without this, `[languageExtension(previewLanguage)]`
+  // would be a brand-new array — and languageExtension() a brand-new
+  // Extension instance — every render, and CodeMirror reconfigures
+  // its whole state (dropping syntax highlighting for a frame, then
+  // reapplying it) whenever `extensions` changes identity, even when
+  // the language itself hasn't. Only reruns when the language
+  // actually changes.
+  const previewExtensions = useMemo(
+    () => (previewLanguage ? [languageExtension(previewLanguage)] : []),
+    [previewLanguage]
+  );
 
   const canEditPreview =
     !!selectedEntry && !selectedEntry.readonly && preview?.kind === "file";
@@ -579,7 +597,7 @@ export default function ProgramFilesPanel() {
                       value={draft ?? ""}
                       height="100%"
                       style={{ flex: 1, minWidth: 0 }}
-                      extensions={[languageExtension(previewLanguage)]}
+                      extensions={previewExtensions}
                       editable={canEditPreview}
                       onChange={value => setDraft(value)}
                       // No line-number/fold gutter here: it isn't used
@@ -588,8 +606,12 @@ export default function ProgramFilesPanel() {
                       // it otherwise shifts this preview's text right
                       // compared to every other file's plain <pre>/
                       // <textarea> preview below, reading as a stray
-                      // indent.
-                      basicSetup={{ lineNumbers: false, foldGutter: false }}
+                      // indent. Hoisted to a module-level constant, not
+                      // an inline object literal, for the same reason
+                      // previewExtensions is memoized above — a new
+                      // object every render makes CodeMirror reconfigure
+                      // (and briefly drop highlighting) on every keystroke.
+                      basicSetup={CODE_PREVIEW_BASIC_SETUP}
                     />
                   </div>
                 ) : canEditPreview ? (
