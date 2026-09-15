@@ -1117,6 +1117,14 @@ debasher::_get_actual_opt_names_for_first_task()
 # they are only present when given on the command line), so their
 # absence from a single sampled task is not necessarily an error.
 #
+# One more legitimate mismatch, handled separately by
+# debasher::_actual_opt_is_ith_instance below: a process whose number
+# of "-foo0", "-foo1", ... "-foo<N-1>" options depends on a run-time
+# value (N) cannot explain_opt each instance by its literal name, so
+# by convention it documents the whole family once, as "-fooith" (see
+# dispatch_define_opts/aggregate_define_opts in
+# debasher_dynamic_fanout.sh for the actual pattern this mirrors).
+#
 # $1 - Command line.
 #
 # Returns 1 if some process defines an undeclared option.
@@ -1136,6 +1144,7 @@ debasher::_check_opt_names_vs_explain()
         local opt
         for opt in "${!actual_opt_names[@]}"; do
             if [ -z "${explained_opt_names[${opt}]+x}" ]; then
+                debasher::_actual_opt_is_ith_instance "${opt}" explained_opt_names && continue
                 echo "Error: process ${processname} defines option ${opt}, which is not declared in its explain_opts" >&2
                 had_undeclared_opt=1
             fi
@@ -1143,12 +1152,63 @@ debasher::_check_opt_names_vs_explain()
 
         for opt in "${!explained_opt_names[@]}"; do
             if [ -z "${actual_opt_names[${opt}]+x}" ]; then
+                debasher::_ith_family_has_instance "${opt}" actual_opt_names && continue
                 echo "Warning: process ${processname} declares option ${opt} in explain_opts, but it was not found among the options generated for its first task" >&2
             fi
         done
     done
 
     [ "${had_undeclared_opt}" -eq 0 ]
+}
+
+########
+# True if actual_opt_name (e.g. "-outf3") is a concrete instance of an
+# "ith" option family the process documents once, as "<prefix>ith"
+# (e.g. "-outfith"), in explained_opt_names. See
+# debasher::_check_opt_names_vs_explain's own comment for why this
+# convention exists.
+#
+# $1 - Actual option name.
+# $2 - Name of an associative array of explained option names.
+debasher::_ith_family_name_for()
+{
+    local actual_opt_name=$1
+
+    [[ "${actual_opt_name}" =~ ^(.+[^0-9])[0-9]+$ ]] || return 1
+    echo "${BASH_REMATCH[1]}ith"
+}
+
+########
+debasher::_actual_opt_is_ith_instance()
+{
+    local actual_opt_name=$1
+    local -n ith_explained_ref=$2
+
+    local family
+    family=$(debasher::_ith_family_name_for "${actual_opt_name}") || return 1
+    [ -n "${ith_explained_ref[${family}]+x}" ]
+}
+
+########
+# True if some name in actual_opt_names (e.g. "-outf3") is a concrete
+# instance of the "ith" family explained_opt_name documents (e.g.
+# explained_opt_name "-outfith" matches actual "-outf3", "-outf0", ...).
+#
+# $1 - Explained option name.
+# $2 - Name of an associative array of actual option names.
+debasher::_ith_family_has_instance()
+{
+    local explained_opt_name=$1
+    local -n ith_actual_ref=$2
+
+    [[ "${explained_opt_name}" == *ith ]] || return 1
+
+    local a a_family
+    for a in "${!ith_actual_ref[@]}"; do
+        a_family=$(debasher::_ith_family_name_for "${a}") || continue
+        [ "${a_family}" = "${explained_opt_name}" ] && return 0
+    done
+    return 1
 }
 
 ########
