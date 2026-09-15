@@ -49,7 +49,7 @@ export default function CommandOutputModal({ title, output, onClose }: Props) {
             borderRadius: 4,
             fontFamily: "ui-monospace, Consolas, monospace",
             fontSize: 13,
-            whiteSpace: "pre-wrap",
+            whiteSpace: "pre",
             overflow: "auto",
             boxSizing: "border-box",
           }}

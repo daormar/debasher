@@ -62,7 +62,7 @@ export default function RunStatusIndicator({ phase, output, onClose }: Props) {
             borderRadius: 4,
             fontFamily: "ui-monospace, Consolas, monospace",
             fontSize: 12,
-            whiteSpace: "pre-wrap",
+            whiteSpace: "pre",
           }}
         >
           {output}
