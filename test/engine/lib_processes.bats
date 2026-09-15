@@ -327,3 +327,51 @@ EOF
     [ "${status}" -eq 0 ]
     [[ "${output}" == *"Warning: process warnproc declares option -b in explain_opts, but it was not found among the options generated for its first task"* ]]
 }
+
+# --- debasher::_check_opt_names_vs_explain, "ith" option families -------
+#
+# A process whose number of "-foo0", "-foo1", ... "-foo<N-1>" options
+# depends on a run-time value (N, e.g. a worker count) cannot
+# explain_opt each instance by its literal name, so by convention it
+# documents the whole family once, as "-fooith" (see
+# dispatch_define_opts/aggregate_define_opts in
+# debasher_dynamic_fanout.sh for the real pattern this mirrors).
+
+@test "debasher::_check_opt_names_vs_explain does not error on an actual option that is a concrete instance of a declared ith family" {
+    ithproc_explain_opts()
+    {
+        explain_opt "-outfith" "<file>" "desc, one per worker"
+    }
+    declare -gA DEBASHER_OPT_LIST_ithproc_0=(["-outf0"]="a" ["-outf1"]="b")
+    DEBASHER_PROGRAM_PROCESSES["ithproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain does not warn about a declared ith family that has a concrete instance" {
+    ithwarnproc_explain_opts()
+    {
+        explain_opt "-outfith" "<file>" "desc, one per worker"
+    }
+    declare -gA DEBASHER_OPT_LIST_ithwarnproc_0=(["-outf0"]="a")
+    DEBASHER_PROGRAM_PROCESSES["ithwarnproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain still errors on a numeric-suffixed option with no matching ith family declared" {
+    notithproc_explain_opts()
+    {
+        explain_opt "-a" "<int>" "desc a"
+    }
+    declare -gA DEBASHER_OPT_LIST_notithproc_0=(["-a"]="1" ["-x1"]="")
+    DEBASHER_PROGRAM_PROCESSES["notithproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process notithproc defines option -x1, which is not declared in its explain_opts"* ]]
+}
