@@ -49,7 +49,7 @@ decomposer_explain_opts()
 
     # -outf option
     local description="output fifo"
-    explain_opt "-outf" "<string>" "$description"
+    explain_opt "-outf" "<file>" "$description"
 }
 
 ########
@@ -105,7 +105,7 @@ recomposer_explain_opts()
 
     # -inf option
     local description="input fifo"
-    explain_opt "-inf" "<string>" "$description"
+    explain_opt "-inf" "<file>" "$description"
 
     # -outf option
     local description="output file"
