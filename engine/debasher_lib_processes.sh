@@ -213,20 +213,57 @@ debasher::_show_proc_specs()
 # debasher::_collect_func_deps helper: blanks out string-literal text
 # that bash's own grammar guarantees can never contain a command
 # invocation, so a later plain word-grep over the result doesn't
-# mistake prose for a call -- e.g. debasher_dynamic_fanout.sh's
-# aggregate(), whose `echo "Warning: no count files found..."` would
-# otherwise pull the unrelated "count" process in as a bogus dependency
-# purely because that English word appears in the message. Handles two
-# shapes: a single-quoted span (`'...'`, wholesale -- bash never expands
-# anything inside single quotes, so its content is never code) and a
-# double-quoted span with no "$" in it at all (a `$(...)`/`${...}`
-# substitution can genuinely contain a real call, so any double-quoted
-# span containing one is left untouched rather than risk dropping a
-# real dependency). Doesn't attempt to handle escaped quotes inside a
-# string (`\"`, `$'...'`) -- not a style this package's own scripts use.
+# mistake prose (or another language's syntax) for a call -- e.g.
+# debasher_dynamic_fanout.sh's aggregate(), whose `echo "Warning: no
+# count files found..."` would otherwise pull the unrelated "count"
+# process in as a bogus dependency purely because that English word
+# appears in the message; or count_chars()'s own embedded awk script
+# (`awk '... count[c]++ ...'`), whose "count" array name would
+# otherwise do the same to count_chars's own dependents (worker, via
+# worker_task) despite the process "count" never actually being called.
+#
+# Handles two shapes: a single-quoted span (`'...'`, wholesale -- bash
+# never expands anything inside single quotes, so its content is never
+# code) and a double-quoted span with no "$" in it at all (a
+# `$(...)`/`${...}` substitution can genuinely contain a real call, so
+# any double-quoted span containing one is left untouched rather than
+# risk dropping a real dependency). Processes the whole input as one
+# blob rather than line by line -- declare -f reprints a function's
+# body with real embedded newlines wherever the original source had
+# them (e.g. inside a multi-line single-quoted awk/perl script), so a
+# quoted span's opening and closing quote routinely land on different
+# lines. Doesn't attempt to handle escaped quotes inside a string
+# (`\"`, `$'...'`) -- not a style this package's own scripts use.
 debasher::_blank_string_literals()
 {
-    sed -E "s/'[^']*'//g; s/\"[^\"$]*\"//g"
+    awk -v sq="'" -v dq='"' '
+        { text = text $0 "\n" }
+        END {
+            state = 0   # 0 = normal, 1 = single-quoted, 2 = double-quoted
+            span = ""
+            sawdollar = 0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (state == 0) {
+                    if (c == sq) { state = 1 }
+                    else if (c == dq) { state = 2; span = ""; sawdollar = 0 }
+                    else { out = out c }
+                } else if (state == 1) {
+                    if (c == sq) { state = 0 }
+                } else {
+                    if (c == dq) {
+                        state = 0
+                        if (sawdollar) out = out dq span dq
+                    } else {
+                        if (c == "$") sawdollar = 1
+                        span = span c
+                    }
+                }
+            }
+            printf "%s", out
+        }
+    '
 }
 
 ########
