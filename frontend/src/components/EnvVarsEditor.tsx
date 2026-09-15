@@ -135,67 +135,57 @@ export default function EnvVarsEditor({ onClose }: Props) {
 
         />
 
-        {isLoadingInheritedVars && (
-          <div style={{ fontSize: 14, color: "#555" }}>
-            Loading module-defined variables...
-          </div>
-        )}
+        <h4 style={{ margin: 0 }}>
+          Module-defined (inherited) variables
+        </h4>
 
-        {!isLoadingInheritedVars && (
+        {/* Always rendered (rather than only once loaded, and only
+            when there's something to filter) so this section's height
+            stays fixed — nothing above the textarea below appears or
+            disappears once the async lookup settles. */}
+        <input
 
-          <>
+          type="text"
 
-            <h4 style={{ margin: 0 }}>
-              Module-defined (inherited) variables
-            </h4>
+          value={filter}
 
-            {hasInheritedVars && (
-              <input
+          onChange={(event) => setFilter(event.target.value)}
 
-                type="text"
+          disabled={isLoadingInheritedVars || !hasInheritedVars}
 
-                value={filter}
+          placeholder="Filter by name..."
 
-                onChange={(event) => setFilter(event.target.value)}
+          style={{ width: "100%", boxSizing: "border-box" }}
 
-                placeholder="Filter by name..."
+        />
 
-                style={{ width: "100%", boxSizing: "border-box" }}
+        <textarea
 
-              />
-            )}
+          value={
+            isLoadingInheritedVars || !hasInheritedVars
+              ? ""
+              : inheritedEntries
+                  .map(([varName, value]) => `${varName}=${value}`)
+                  .join("\n")
+          }
 
-            <textarea
+          readOnly
 
-              value={
-                hasInheritedVars
-                  ? inheritedEntries
-                      .map(([varName, value]) => `${varName}=${value}`)
-                      .join("\n")
-                  : ""
-              }
+          rows={8}
 
-              readOnly
+          spellCheck={false}
 
-              rows={8}
+          placeholder={isLoadingInheritedVars ? "Loading..." : "(none)"}
 
-              spellCheck={false}
+          style={{
+            width: "100%",
+            fontFamily: "ui-monospace, Consolas, monospace",
+            resize: "vertical",
+            background: "#f0f0f0",
+            color: "#555",
+          }}
 
-              placeholder="(none)"
-
-              style={{
-                width: "100%",
-                fontFamily: "ui-monospace, Consolas, monospace",
-                resize: "vertical",
-                background: "#f0f0f0",
-                color: "#555",
-              }}
-
-            />
-
-          </>
-
-        )}
+        />
 
         <div
           style={{
