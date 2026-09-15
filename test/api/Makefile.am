@@ -1,4 +1,4 @@
-EXTRA_DIST = conftest.py test_paths.py test_markdown_parsing.py test_program_import.py
+EXTRA_DIST = conftest.py test_paths.py test_markdown_parsing.py test_program_import.py test_script_generation.py
 
 if HAVE_PYTEST
 check-local:
