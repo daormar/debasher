@@ -565,6 +565,11 @@ check_process_opts()
     # Initialize option information
     init_option_info "${cmdline}" || return 1
 
+    # Verify that the options each process actually defines match the
+    # ones it declares via explain_opts (aborts on an undeclared option;
+    # see debasher::_check_opt_names_vs_explain)
+    debasher::_check_opt_names_vs_explain "${cmdline}" || return 1
+
     # Create option arrays
     create_option_arrays "${cmdline}" "${dirname}" || return 1
 

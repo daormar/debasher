@@ -996,6 +996,162 @@ debasher::_define_opts_for_process()
 }
 
 ########
+# Populates the given associative array (passed by name) with the set
+# of option names a process declares via explain_opts (or the legacy
+# explain_cmdline_opts). Mirrors the function resolution used to print
+# command-line options (see debasher::_show_program_cmdline_opts).
+#
+# $1 - Process name.
+# $2 - Name of an existing associative array to populate (opt name -> 1).
+#
+# Returns 1, leaving the array untouched, if the process defines
+# neither method.
+debasher::_get_explained_opt_names()
+{
+    local processname=$1
+    local -n explained_opt_names_ref=$2
+
+    local opts_funcname=$(debasher::_get_explain_cmdline_opts_funcname "${processname}")
+    if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        opts_funcname=$(debasher::_get_explain_opts_funcname "${processname}")
+    fi
+    if [ "${opts_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        return 1
+    fi
+
+    ${opts_funcname} || return 1
+
+    local prefix="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local key
+    for key in "${!DEBASHER_PROGRAM_OPT_TYPE[@]}"; do
+        case "${key}" in
+            "${prefix}"*)
+                explained_opt_names_ref["${key#${prefix}}"]=1
+                ;;
+        esac
+    done
+}
+
+########
+# Populates the given associative array (passed by name) with the set
+# of option names actually produced for a process's first task
+# (task_idx 0).
+#
+# For a process without an option generator, this reads the
+# DEBASHER_OPT_LIST_<proc>_0 array that debasher::_define_opts_for_process
+# already populated for real (save_opt_list only fills that array when
+# it detects it is being called, transitively, from a *_define_opts
+# function).
+#
+# For a process with an option generator, save_opt_list instead just
+# leaves the raw, still-serialized option tokens in
+# DEBASHER_DESERIALIZED_ARGS (it never populates DEBASHER_OPT_LIST_*
+# for a *_generate_opts caller), so its generate_opts method is
+# invoked once here, for task_idx 0 only, and the resulting tokens are
+# walked the same way debasher::_generate_opt_list does (odd tokens
+# are option names, the following token is their value unless it is
+# itself an option, in which case the first is treated as a flag) to
+# recover the option names. This extra call is made inside a subshell
+# so it is side-effect free (no stray FIFO registration, etc.) on the
+# program's real scheduling state -- only the resulting option names
+# are read back.
+#
+# $1 - Command line.
+# $2 - Process name.
+# $3 - Name of an existing associative array to populate (opt name -> 1).
+debasher::_get_actual_opt_names_for_first_task()
+{
+    local cmdline=$1
+    local processname=$2
+    local -n actual_opt_names_ref=$3
+
+    if debasher::_uses_option_generator "${processname}"; then
+        local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
+        local process_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}
+        local process_outdir=$(debasher::_get_process_outdir "${processname}")
+
+        local names
+        names=$(
+            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" 0 >/dev/null || exit 1
+            set -- "${DEBASHER_DESERIALIZED_ARGS[@]}"
+            while [ $# -gt 0 ]; do
+                local token="$1"
+                if ! debasher::_str_is_option "${token}"; then
+                    shift
+                    continue
+                fi
+                echo "${token}"
+                shift
+                [ $# -eq 0 ] && continue
+                debasher::_str_is_option "$1" && continue
+                shift
+            done
+        ) || return 1
+
+        local n
+        while IFS= read -r n; do
+            [ -n "${n}" ] && actual_opt_names_ref["${n}"]=1
+        done <<< "${names}"
+    else
+        local opt_list_name=$(debasher::_get_opt_list_name "${processname}" 0)
+        if declare -p "${opt_list_name}" >/dev/null 2>&1; then
+            declare -n first_task_opt_list_ref="${opt_list_name}"
+            local o
+            for o in "${!first_task_opt_list_ref[@]}"; do
+                actual_opt_names_ref["${o}"]=1
+            done
+        fi
+    fi
+}
+
+########
+# Sanity check: verifies that the option names a process actually
+# defines (for its first task) are declared in its explain_opts.
+#
+# An option that is actually defined but was never declared is treated
+# as an error (typically a typo or a name that drifted out of sync
+# with explain_opts) and causes the function to fail. An option that
+# is declared but not found among the first task's options only
+# triggers a warning: some options are legitimately conditional (e.g.
+# defined through define_cmdline_opt_if_given and similar helpers, so
+# they are only present when given on the command line), so their
+# absence from a single sampled task is not necessarily an error.
+#
+# $1 - Command line.
+#
+# Returns 1 if some process defines an undeclared option.
+debasher::_check_opt_names_vs_explain()
+{
+    local cmdline=$1
+
+    local had_undeclared_opt=0
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local -A explained_opt_names=()
+        debasher::_get_explained_opt_names "${processname}" explained_opt_names || continue
+
+        local -A actual_opt_names=()
+        debasher::_get_actual_opt_names_for_first_task "${cmdline}" "${processname}" actual_opt_names || return 1
+
+        local opt
+        for opt in "${!actual_opt_names[@]}"; do
+            if [ -z "${explained_opt_names[${opt}]+x}" ]; then
+                echo "Error: process ${processname} defines option ${opt}, which is not declared in its explain_opts" >&2
+                had_undeclared_opt=1
+            fi
+        done
+
+        for opt in "${!explained_opt_names[@]}"; do
+            if [ -z "${actual_opt_names[${opt}]+x}" ]; then
+                echo "Warning: process ${processname} declares option ${opt} in explain_opts, but it was not found among the options generated for its first task" >&2
+            fi
+        done
+    done
+
+    [ "${had_undeclared_opt}" -eq 0 ]
+}
+
+########
 debasher::_get_processdeps_separator()
 {
     local processdeps=$1
