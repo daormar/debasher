@@ -1,0 +1,38 @@
+.git
+.github
+
+# Host-side autotools build artifacts: the image runs its own
+# ./reconf && ./configure && make, so these would only bloat the
+# build context and risk stale state leaking in.
+autom4te.cache/
+config.log
+config.status
+config.guess
+config.sub
+configure
+configure~
+compile
+aclocal.m4
+Makefile
+Makefile.in
+*/Makefile
+*/Makefile.in
+*/*/Makefile
+*/*/Makefile.in
+bin/
+debug/
+dev_utils/
+debasher-*.tar.gz
+claude_sessions.txt
+
+# Frontend: built separately in its own stage, from clean sources.
+frontend/node_modules/
+frontend/dist/
+frontend/.build-stamp
+
+# Python caches / local venvs
+**/__pycache__/
+**/*.pyc
+.venv/
+api/debasher_webui
+api/debasher_webui.sh.orig

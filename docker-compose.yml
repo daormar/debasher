@@ -1,0 +1,11 @@
+services:
+  debasher:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - debasher-home:/home/debasher
+      - ./demo-data:/data
+
+volumes:
+  debasher-home:
