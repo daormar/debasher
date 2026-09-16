@@ -45,7 +45,7 @@ read_pars()
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
-                      exit 1
+                      exit 0
                       ;;
             "-d") shift
                   if [ $# -ne 0 ]; then
