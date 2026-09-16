@@ -7,7 +7,7 @@ async function errorDetail(response: Response, fallback: string): Promise<string
       return body.detail;
     }
   } catch {
-    // Not JSON — fall through to the fallback message.
+    // Not JSON, fall through to the fallback message.
   }
 
   return fallback;

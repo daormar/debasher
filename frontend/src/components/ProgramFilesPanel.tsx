@@ -16,7 +16,7 @@ import {
 } from "../api/programFilesApi";
 import type { FileEntry } from "../api/programFilesApi";
 
-// Guesses a CodeMirror language from a previewed file's extension —
+// Guesses a CodeMirror language from a previewed file's extension,
 // distinct from ProgramProcess.language, which is explicit metadata a
 // process always carries; a plain file in the program's home
 // directory has no such field, so this is the closest equivalent.
@@ -32,7 +32,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, ProcessLanguage> = {
   gvy: "groovy",
 };
 
-// Stable reference, not an inline object literal in the JSX below — a
+// Stable reference, not an inline object literal in the JSX below: a
 // new object every render makes @uiw/react-codemirror treat basicSetup
 // as changed and reconfigure the editor (see previewExtensions).
 const CODE_PREVIEW_BASIC_SETUP = { lineNumbers: false, foldGutter: false };
@@ -110,7 +110,7 @@ function FileTreeNode({ entry, depth, expanded, selectedPath, onToggle, onSelect
           fontSize: 13,
           // Rows wider than the pane should overflow it (triggering the
           // pane's own horizontal scroll) rather than have flexbox
-          // shrink any child to fit — without flexShrink:0 below, an
+          // shrink any child to fit: without flexShrink:0 below, an
           // empty child (the arrow placeholder on a file row with no
           // "(read-only)" tag to no-break against) shrinks to 0 first,
           // since unlike the name/tag spans it has no content of its
@@ -165,7 +165,7 @@ export default function ProgramFilesPanel() {
 
   const { program } = useProgram();
 
-  // Docked top-left on the canvas like the minimap — starts minimized to
+  // Docked top-left on the canvas like the minimap: starts minimized to
   // a small chip and expands into the full browser on click.
   const [isOpen, setOpen] =
     useState(false);
@@ -191,7 +191,7 @@ export default function ProgramFilesPanel() {
   const [previewLoading, setPreviewLoading] =
     useState(false);
 
-  // The editable buffer for whichever file is previewed — starts in
+  // The editable buffer for whichever file is previewed: starts in
   // sync with preview.content on load, diverges as the user types.
   // null whenever there's nothing file-shaped to edit (a dir, binary,
   // missing, or nothing selected yet).
@@ -237,8 +237,8 @@ export default function ProgramFilesPanel() {
 
   // Stable across every keystroke (draft changing re-renders this
   // component): without this, `[languageExtension(previewLanguage)]`
-  // would be a brand-new array — and languageExtension() a brand-new
-  // Extension instance — every render, and CodeMirror reconfigures
+  // would be a brand-new array, and languageExtension() a brand-new
+  // Extension instance, every render, and CodeMirror reconfigures
   // its whole state (dropping syntax highlighting for a frame, then
   // reapplying it) whenever `extensions` changes identity, even when
   // the language itself hasn't. Only reruns when the language
@@ -427,7 +427,7 @@ export default function ProgramFilesPanel() {
         // A definite height, not just maxHeight: a flex column with no
         // explicit height shrinks to fit its content instead of giving
         // its flex:1 children (the tree/preview row, and CodeMirror's
-        // height="100%" further down) any space to grow into — nothing
+        // height="100%" further down) any space to grow into: nothing
         // below this would ever get taller than its own natural size.
         height: "70vh",
         background: "#fff",
@@ -439,7 +439,7 @@ export default function ProgramFilesPanel() {
         flexDirection: "column",
         gap: 8,
         // Without this, content taller than maxHeight grows the card
-        // itself instead of being clipped — pushing each pane's own
+        // itself instead of being clipped, pushing each pane's own
         // scrollbar past the viewport instead of keeping it pinned to
         // that pane's own (always-visible) bottom edge.
         overflow: "hidden",
@@ -598,7 +598,7 @@ export default function ProgramFilesPanel() {
                   // resolve against and collapses to a few px. `display:
                   // "flex"` here (row, default align-items: stretch)
                   // stretches that wrapper to this div's full height
-                  // with no flex-grow needed on the wrapper itself —
+                  // with no flex-grow needed on the wrapper itself,
                   // *then* height="100%" below has something real to
                   // fill, and CodeMirror's own .cm-scroller takes over
                   // scrolling in both directions from there.
@@ -618,7 +618,7 @@ export default function ProgramFilesPanel() {
                       // <textarea> preview below, reading as a stray
                       // indent. Hoisted to a module-level constant, not
                       // an inline object literal, for the same reason
-                      // previewExtensions is memoized above — a new
+                      // previewExtensions is memoized above: a new
                       // object every render makes CodeMirror reconfigure
                       // (and briefly drop highlighting) on every keystroke.
                       basicSetup={CODE_PREVIEW_BASIC_SETUP}

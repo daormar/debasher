@@ -19,7 +19,7 @@ app.include_router(program_files.router)
 # launcher sets DEBASHER_WEBUI_STATIC_DIR to the installed location
 # (<pkgdatadir>/web); outside of that, fall back to the repo-relative
 # frontend/dist path used during development with `npm run build`. During
-# `npm run dev` neither may exist yet — that's fine, the mount is skipped.
+# `npm run dev` neither may exist yet: that's fine, the mount is skipped.
 static_dir = os.environ.get("DEBASHER_WEBUI_STATIC_DIR")
 frontend_dist = (
     Path(static_dir)

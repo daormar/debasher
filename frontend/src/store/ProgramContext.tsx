@@ -46,7 +46,7 @@ const MOD_DIR_SEP = ":";
 // How often to poll debasher_status for per-process node colors, in
 // milliseconds. Runs continuously whenever an output directory is set,
 // independently of runPhase (which only tracks runs launched from this
-// UI) — the output directory may hold a run that's already in
+// UI), the output directory may hold a run that's already in
 // progress from outside it.
 const PROCESS_STATUS_POLL_INTERVAL_MS = 5000;
 
@@ -62,10 +62,10 @@ interface ProgramContextType {
   save: (outputDir: string) => Promise<void>;
 
   // True whenever processStatuses reports at least one process as
-  // "IN-PROGRESS" — i.e. a run is going for program.outputDir, whether
+  // "IN-PROGRESS", i.e. a run is going for program.outputDir, whether
   // launched from this tab or not (unlike runPhase, which only tracks
   // a run this tab itself launched). Drives SaveDialog's proactive
-  // disable — see save()'s own guard below for why saving mid-run is
+  // disable, see save()'s own guard below for why saving mid-run is
   // unsafe.
   isRunInProgress: boolean;
 
@@ -85,15 +85,15 @@ interface ProgramContextType {
   // output directory", after its confirmation modal). Resolves to
   // false when the backend's own guards made it a no-op (e.g.
   // outputDir is blank); throws on a real failure so the caller can
-  // show it inline. On success, clears processStatuses immediately —
+  // show it inline. On success, clears processStatuses immediately:
   // every node's background goes back to white right away, rather
   // than waiting for the next status poll tick.
   resetOutputDir: () => Promise<boolean>;
 
   // Launches "Run program" in the background; throws (e.g. if a run
   // is already in progress) rather than resolving with an error, so
-  // callers can show it inline. Resolves once the run has launched —
-  // not once it's finished, see runPhase for that.
+  // callers can show it inline. Resolves once the run has launched,
+  // not once it's finished; see runPhase for that.
   startProgramRun: () => Promise<void>;
 
   // The running-progress indicator's Close button: stops the run if
@@ -108,7 +108,7 @@ interface ProgramContextType {
   // GroupSource so script_generation.py can emit a single
   // add_debasher_program call for it while the group stays intact. Fails
   // (via window.alert) instead of merging if any of `loaded`'s process
-  // names collide with an existing one — they can't be deduped by
+  // names collide with an existing one, they can't be deduped by
   // renaming, since add_debasher_program only knows the source module's
   // own original names.
   mergeProgram: (loaded: Program, sourceDir: string) => void;
@@ -290,7 +290,7 @@ function normalizeConnectedOptionValues(source: Program): Program {
       options: process.options.map(option => {
 
         // A "shared_dir" option's value is always its declared
-        // directory name, independent of any connection — a connection
+        // directory name, independent of any connection, a connection
         // into/out of it exists purely to document the multi-writer
         // dependency in the canvas (see isValidProgramConnection), not
         // to supply its value the way a "none"-channel connection does.
@@ -324,7 +324,7 @@ const DEFAULT_SCHEDULER = "BUILTIN";
 
 /**
  * Self-heals a falsy executionOptions.scheduler (e.g. a file saved
- * while it was blank — see ExecutionOptionsEditor, whose dropdown
+ * while it was blank, see ExecutionOptionsEditor, whose dropdown
  * defaults its *displayed* value to "BUILTIN" without ever correcting
  * a genuinely empty stored one, since Cancel is a no-op) back to a
  * valid default. Without this, debasher_exec/debasher_status get
@@ -372,7 +372,7 @@ export function ProgramProvider({
   async function save(outputDir: string) {
 
     // Saving regenerates the .sh script in homeDir (see
-    // persistence.save_script) — but engine/debasher_exec_process
+    // persistence.save_script), but engine/debasher_exec_process
     // reloads that same file from disk each time a process starts,
     // not just once when the run launches. Overwriting it while a run
     // is in progress can leave already-started processes on the old
@@ -390,7 +390,7 @@ export function ProgramProvider({
     }
 
     // homeDir (the .sh/.debasher directory being saved to) and outputDir
-    // (where a run writes its results) must stay distinct — otherwise a
+    // (where a run writes its results) must stay distinct, otherwise a
     // run would mix engine-internal files into the saved program, and
     // "Reset output directory" would delete it. Kept here (not just as
     // SaveDialog's proactive disable) so any other future caller of
@@ -411,7 +411,7 @@ export function ProgramProvider({
     useState<ProgramRunPhase>("idle");
 
   // debasher_status's output from the poll that settled runPhase into
-  // "unfinished" — shown alongside the run-finished notice so a
+  // "unfinished", shown alongside the run-finished notice so a
   // genuine failure can be diagnosed without a separate "Get program
   // status" call. Not meaningful (and not shown) for any other phase.
   const [runOutput, setRunOutput] =
@@ -426,9 +426,9 @@ export function ProgramProvider({
   const runningProgramRef =
     useRef<Program | null>(null);
 
-  // Mirrors runPhase for the unmount cleanup below, which — since its
+  // Mirrors runPhase for the unmount cleanup below, which, since its
   // effect has an empty dependency array and only runs once, on
-  // unmount — would otherwise only ever see the phase from initial
+  // unmount, would otherwise only ever see the phase from initial
   // mount rather than the current one.
   const runPhaseRef =
     useRef<ProgramRunPhase>(runPhase);
@@ -453,7 +453,7 @@ export function ProgramProvider({
 
   // Leaving the editor (the toolbar's "Close" button) unmounts this
   // provider without ever unloading the page, so beforeunload above
-  // doesn't fire — stop a still-running program here too, or it's
+  // doesn't fire, stop a still-running program here too, or it's
   // left running with nothing left to track or stop it.
   useEffect(() => {
     return () => {
@@ -461,7 +461,7 @@ export function ProgramProvider({
       if (runPhaseRef.current === "running") {
         const runningProgram = runningProgramRef.current ?? program;
         stopProgram(runningProgram).catch(() => {
-          // Best-effort — the UI tracking this run is already gone.
+          // Best-effort, the UI tracking this run is already gone.
         });
       }
     };
@@ -486,9 +486,9 @@ export function ProgramProvider({
 
     // "unfinished" (debasher_status's neither-finished-nor-in-progress
     // exit code) is ambiguous: it also fires during an ordinary brief
-    // gap between processes — the previous one's job id is already
+    // gap between processes, the previous one's job id is already
     // gone but its completion marker, or the next one's job id, hasn't
-    // landed yet — which looks identical to a genuinely finished-with-
+    // landed yet, which looks identical to a genuinely finished-with-
     // failures run from a single reading. Requiring it twice in a row
     // (one poll interval apart) filters that out: a run that's still
     // actually going almost always shows "in-progress" again by the
@@ -502,7 +502,7 @@ export function ProgramProvider({
       try {
         result = await fetchProgramStatus(runningProgram);
       } catch {
-        return; // transient failure — try again next tick
+        return; // transient failure, try again next tick
       }
 
       if (result.state === "in-progress") {
@@ -547,7 +547,7 @@ export function ProgramProvider({
       stopRunPolling();
       const runningProgram = runningProgramRef.current ?? program;
       stopProgram(runningProgram).catch(() => {
-        // Best-effort — nothing meaningful left to show once the
+        // Best-effort, nothing meaningful left to show once the
         // running indicator has already been dismissed.
       });
     }
@@ -626,7 +626,7 @@ export function ProgramProvider({
     const cleared = await requestOutputDirReset(program);
 
     if (cleared) {
-      // Don't wait for the next poll tick — every node's background
+      // Don't wait for the next poll tick, every node's background
       // should go back to white as soon as the reset is confirmed.
       setProcessStatuses({});
     }
@@ -707,7 +707,7 @@ export function ProgramProvider({
 
     // Places the merged batch to the right of whatever's already on the
     // canvas, preserving the relative layout its processes had in
-    // `loaded` — there's no bounding-box UI to keep in sync (see
+    // `loaded`, there's no bounding-box UI to keep in sync (see
     // ProcessNode's per-group color instead), just a one-off offset at
     // merge time, same spirit as addProcess's own hardcoded position.
     const currentMaxX = program.processes.reduce(
@@ -724,7 +724,7 @@ export function ProgramProvider({
 
     const idMap = new Map<string, string>();
 
-    // Names are kept exactly as in `loaded` (checked above) — renaming a
+    // Names are kept exactly as in `loaded` (checked above), renaming a
     // merged process's own name would desync it from the
     // add_debasher_program call, which internally re-declares each
     // process under its original name.
@@ -785,16 +785,16 @@ export function ProgramProvider({
   // A process tagged with GroupSource ("Add program") represents a
   // process add_debasher_program will re-declare, unmodified, from its
   // source module. Anything that changes that process's own definition
-  // — or which edges target it, since a connected option's
+  //, or which edges target it, since a connected option's
   // define_opt_from_proc_out call lives in the *target*'s own generated
   // function (see api/script_generation.py's _option_definition_line)
-  // — would silently get overwritten by that re-declaration once
+  //, would silently get overwritten by that re-declaration once
   // generated. So any such change first confirms detaching the whole
   // group (stripping groupSource from every process sharing its
   // groupId, not just this one) with the user, and is aborted if
   // declined. Connecting/disconnecting an edge whose target ISN'T
   // grouped stays free even when its source is (see connect/disconnect)
-  // — that only touches the (ungrouped) target's own function.
+  //, that only touches the (ungrouped) target's own function.
   function confirmDetachIfGrouped(processId: string): boolean {
 
     const groupSource = program.processes.find(
@@ -922,7 +922,7 @@ export function ProgramProvider({
     // Changing outputDir while a run is going for the current one
     // would silently redirect isRunInProgress itself, plus "Stop
     // program"/"Get program status" (which act on the live `program`,
-    // not a snapshot) — to a different directory than the one the
+    // not a snapshot), to a different directory than the one the
     // run actually uses, making the run invisible and unstoppable
     // from this UI. Same defense-in-depth spot as save()/
     // resetOutputDir() above.
@@ -1421,7 +1421,7 @@ export function ProgramProvider({
   ) {
 
     // Only the *target*'s own generated function embeds the connection
-    // (see confirmDetachIfGrouped) — a grouped process's output feeding
+    // (see confirmDetachIfGrouped), a grouped process's output feeding
     // something new outside the group stays free, since that's encoded
     // in the (ungrouped) target's function instead.
     if (!confirmDetachIfGrouped(edge.targetProcessId)) {
@@ -1439,7 +1439,7 @@ export function ProgramProvider({
       );
 
       // A "shared_dir" source's channel/value already fully determines
-      // its resolved path — connecting it into a plain target promotes
+      // its resolved path, connecting it into a plain target promotes
       // that target into a matching "shared_dir" option too, instead
       // of the usual "[proc;option]" sentinel, so a second connection
       // from another writer of the same directory validates against an
@@ -1500,7 +1500,7 @@ export function ProgramProvider({
         ?.options.find(o => o.id === removedEdge.targetOptionId);
 
       // A "shared_dir" option's value is independent of any connection
-      // (see connect above) — removing an edge into one shouldn't
+      // (see connect above), removing an edge into one shouldn't
       // clear its declared directory name.
       const processes = removedEdge && targetOption?.channel !== "shared_dir"
         ? setOptionValue(

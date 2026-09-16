@@ -54,7 +54,7 @@ const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
 };
 
 // Also covers "io" ("Show inputs and outputs"), which the plain output
-// kinds above don't — used for the task picker's label, shared by both
+// kinds above don't, used for the task picker's label, shared by both
 // flows.
 const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   ...OUTPUT_KIND_LABEL,
@@ -63,17 +63,17 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
 };
 
 // Above this many indices, listing the family inline stops being
-// reasonable — past it, the family gets a "Pick index" row (backed by
+// reasonable, past it, the family gets a "Pick index" row (backed by
 // ProcessTaskPicker, see fanoutIndexPicker) instead.
 const MAX_FANOUT_INLINE = 10;
 
 // True if `option` itself is fifo-channel, or is a plain ("none"-
 // channel) connection whose upstream source is: a "-inf"-style input
-// on a "standard"-mode process is never itself channel === "fifo" —
+// on a "standard"-mode process is never itself channel === "fifo":
 // only the writing end opens one, via define_fifo_opt (see
 // dispatch_define_opts/worker_define_opts's plain
 // define_opt_from_proc_out on the reading side, in
-// data/programs/debasher_dynamic_fanout_fifos.sh) — so its own
+// data/programs/debasher_dynamic_fanout_fifos.sh), so its own
 // resolved value is a fifo path all the same, and ProcessIOModal's
 // "View" (a plain file read) is just as unsafe on it as on the fifo
 // option it's wired to.
@@ -101,13 +101,13 @@ function isFifoBackedOption(
 }
 
 // On a "standard"-mode process, a fanout/fanin option's label (e.g.
-// "-outfith", "-indith" — see isFanoutOption) is only a template: the
+// "-outfith", "-indith", see isFanoutOption) is only a template: the
 // process actually runs with one concrete option per index ("-outf0",
 // "-outf1", ..., "-ind0", "-ind1", ...), one per its countSourceOptionId
 // sibling's value (e.g. "-w"). Splits each template into either its
 // expanded indexed rows (looked up in resolvedValues the same way as
 // any other option) when there are few enough, or a FanoutFamily for
-// ProcessIOModal to render as a "Pick index" row instead — which,
+// ProcessIOModal to render as a "Pick index" row instead, which,
 // like an array/generator process's own stdout/scheduler-output/
 // options, falls back on ProcessTaskPicker's own first/last-N sampling
 // for a family with many indices.
@@ -136,7 +136,7 @@ function expandFanoutOptions(
     const count = countValue !== undefined ? Number(countValue) : NaN;
 
     // Count unknown/unresolved (e.g. the program hasn't run yet, or
-    // its count-source option couldn't be found) — show the template
+    // its count-source option couldn't be found), show the template
     // row as-is rather than silently dropping the option.
     if (!Number.isInteger(count) || count <= 0) {
       return [option];
@@ -222,13 +222,13 @@ export default function ProgramCanvas() {
   );
 
   // Fingerprint of which options are currently rendered with a flipped
-  // handle (see computeFlippedOptionIds) — this is position-dependent
+  // handle (see computeFlippedOptionIds), this is position-dependent
   // (it can change when a process is dragged past a FIFO partner it
   // forms a cycle with), unlike structuralKey above, so it's tracked
   // separately rather than folded into it. As a memoized string,
   // equal values across consecutive drag frames are ===-equal, so this
   // only changes on the rare frame a pair's relative order actually
-  // flips — it doesn't reintroduce per-frame resyncing below.
+  // flips, it doesn't reintroduce per-frame resyncing below.
   const flipFingerprint = useMemo(
     () => [...computeFlippedOptionIds(program)].sort().join(","),
     [program]
@@ -338,7 +338,7 @@ export default function ProgramCanvas() {
     selectProcess(null);
   }, [selectProcess]);
 
-  // Right-click "Inspect execution" menu — see ProcessContextMenu.
+  // Right-click "Inspect execution" menu, see ProcessContextMenu.
   const [processContextMenu, setProcessContextMenu] =
     useState<{ process: ProgramProcess; x: number; y: number } | null>(null);
 
@@ -349,7 +349,7 @@ export default function ProgramCanvas() {
     useState<{ title: string; output: string } | null>(null);
 
   // Set instead of fetching straight away whenever the process ran as
-  // more than one task (see ProcessTaskPicker) — populated only after
+  // more than one task (see ProcessTaskPicker), populated only after
   // getProcessTasks comes back with more than one index.
   const [processTaskPicker, setProcessTaskPicker] =
     useState<{ process: ProgramProcess; kind: ProcessMenuAction; taskIndices: number[] } | null>(null);
@@ -360,7 +360,7 @@ export default function ProgramCanvas() {
   const [taskPickerError, setTaskPickerError] =
     useState<string | null>(null);
 
-  // "Show inputs and outputs" — a structured modal (ProcessIOModal)
+  // "Show inputs and outputs", a structured modal (ProcessIOModal)
   // rather than a plain-text CommandOutputModal.
   const [processIO, setProcessIO] = useState<{
     processName: string;
@@ -370,7 +370,7 @@ export default function ProgramCanvas() {
     fifoBackedOptionIds: Set<string>;
   } | null>(null);
 
-  // A ProcessIOModal fanout family's own "Pick index" button — reuses
+  // A ProcessIOModal fanout family's own "Pick index" button, reuses
   // ProcessTaskPicker (as ProcessTaskPicker's own doc comment puts it,
   // the same "could be huge" concern an array/generator process's own
   // tasks already have). Resolving a picked index needs no network
@@ -380,7 +380,7 @@ export default function ProgramCanvas() {
     useState<FanoutFamily | null>(null);
 
   // The second-level "View" modal a ProcessIOModal option's path
-  // button opens (a file's content, or a directory's listing) — kept
+  // button opens (a file's content, or a directory's listing), kept
   // separate from processCommandOutput so it stacks on top of
   // processIO instead of replacing it.
   const [pathContent, setPathContent] =
@@ -389,7 +389,7 @@ export default function ProgramCanvas() {
   const [isPathViewPending, setPathViewPending] =
     useState(false);
 
-  // "Watch FIFO" — a live-polling FifoWatchModal (see
+  // "Watch FIFO", a live-polling FifoWatchModal (see
   // handleProcessMenuSelect's "watch-fifo" branch) rather than a
   // one-shot processCommandOutput.
   const [fifoWatch, setFifoWatch] = useState<{
@@ -400,7 +400,7 @@ export default function ProgramCanvas() {
   } | null>(null);
 
   // Set instead of opening fifoWatch directly whenever a process has
-  // more than one mirrored output fifo option — mirrors
+  // more than one mirrored output fifo option, mirrors
   // processTaskPicker's own "pick first" pattern.
   const [fifoPicker, setFifoPicker] = useState<{
     process: ProgramProcess;
@@ -439,11 +439,11 @@ export default function ProgramCanvas() {
 
   }
 
-  // Excludes only fromProcessSpec options — a resource spec (cpus,
+  // Excludes only fromProcessSpec options, a resource spec (cpus,
   // mem, ...), shown instead in the inspector's "Specifications"
   // section. commandLine is NOT the right filter here: it means
   // "settable on the overall program's own command line" (opt_is_
-  // cmdline), not "is an input/output" — an auto-computed option like
+  // cmdline), not "is an input/output", an auto-computed option like
   // "-outf" (define_opt, not define_cmdline_opt) has commandLine=false
   // but is still a real output.
   async function fetchProcessIO(
@@ -462,7 +462,7 @@ export default function ProgramCanvas() {
     const candidates = process.options.filter(o => !o.fromProcessSpec);
 
     // Resolved from candidates (real option ids, matching program.edges)
-    // before fanout expansion synthesizes any "id:index" ones — a
+    // before fanout expansion synthesizes any "id:index" ones, a
     // fanout option's own concrete rows already inherit its channel
     // unchanged (see expandFanoutOptions), so they don't need this.
     const fifoBackedOptionIds = new Set(
@@ -472,7 +472,7 @@ export default function ProgramCanvas() {
     );
 
     // isFanoutOption/countSourceOptionId are only meaningful on a
-    // "standard"-mode process (see models/option.ts) — elsewhere a
+    // "standard"-mode process (see models/option.ts), elsewhere a
     // label ending in "ith" is just an ordinary option.
     const { options, families } = process.optionsHandler.mode === "standard"
       ? expandFanoutOptions(candidates, resolvedValues)
@@ -489,7 +489,7 @@ export default function ProgramCanvas() {
   }
 
   // Adds the picked index's concrete option (e.g. "-outf" family +
-  // index 7 -> "-outf7") to the open ProcessIOModal's option list —
+  // index 7 -> "-outf7") to the open ProcessIOModal's option list;
   // the family's own "Pick index" row stays put so more indices can
   // still be picked.
   function handleFanoutIndexPickerConfirm(index: number) {
@@ -527,7 +527,7 @@ export default function ProgramCanvas() {
 
   // Shared by handleProcessMenuSelect and handleTaskPickerConfirm's own
   // "watch-fifo" branch. No network call needed to find the candidate
-  // options — process.options (with channel/direction/mirror already
+  // options, process.options (with channel/direction/mirror already
   // resolved) is loaded client-side, same data fetchProcessIO reads.
   function openFifoWatch(process: ProgramProcess, taskIndex?: number) {
 
@@ -583,7 +583,7 @@ export default function ProgramCanvas() {
     try {
 
       // A "standard" process has no per-task files at all (empty list,
-      // so taskIndices[0] is undefined — the plain no-task-index
+      // so taskIndices[0] is undefined, the plain no-task-index
       // request) and a process that only ever ran as one task doesn't
       // need picking either; anything more brings up the picker rather
       // than guessing which task the user wants.

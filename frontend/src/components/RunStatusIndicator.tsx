@@ -1,7 +1,7 @@
 interface Props {
   phase: "running" | "finished" | "unfinished";
   // debasher_status's output from the poll that settled on
-  // "unfinished" — shown below the message so the failure can be
+  // "unfinished", shown below the message so the failure can be
   // diagnosed on the spot. Ignored for any other phase.
   output?: string | null;
   onClose: () => void;

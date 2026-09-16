@@ -49,7 +49,7 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
             status_code=400,
             detail=(
                 "outputDir (where the program is saved) must not be the same "
-                "directory as the program's execution output directory — "
+                "directory as the program's execution output directory: "
                 "running the program would then mix engine-internal files "
                 "into the saved program, and resetting the execution "
                 "directory would delete the saved program along with them."
@@ -117,7 +117,7 @@ def import_program(request: ImportProgramRequest) -> Program:
 def get_all_envvars(request: GetAllEnvVarsRequest) -> GetAllEnvVarsResponse:
     """
     Every variable newly bound while sourcing the program's current
-    preamble (see script_generation.get_all_envvars) — recomputed live
+    preamble (see script_generation.get_all_envvars), recomputed live
     each time this is called, e.g. every time the Env vars editor's
     read-only "module-defined" section is opened, rather than cached
     against whatever was true when the program was last imported.

@@ -32,7 +32,7 @@ def _cap_lines(text: str, max_lines: int = file_inspection.MAX_INSPECT_LINES) ->
         return text
 
     return (
-        f"Warning: output has more than {max_lines} lines — "
+        f"Warning: output has more than {max_lines} lines, "
         f"showing only the first {max_lines}.\n\n"
     ) + "".join(lines[:max_lines])
 
@@ -151,9 +151,8 @@ def _run_debasher_process_tool(
     (see get_process_tasks); omit it for a "standard" one-file process.
     `extra_args` appends any further flags a specific tool needs (e.g.
     debasher_get_fifo_mirror's "-f <fifoName>") after "-t". Returns the
-    combined output — including the tool's own "file could not be
-    found" error, e.g. for a process that hasn't produced one yet —
-    capped at _MAX_INSPECT_LINES lines.
+    combined output, including the tool's own "file could not be
+    found" error, e.g. for a process that hasn't produced one yet, capped at _MAX_INSPECT_LINES lines.
     """
     tool = paths.find_bin_tool(tool_name)
     if tool is None:
@@ -173,7 +172,7 @@ def _run_debasher_process_tool(
 # Matches "<processName>_<idx>.stdout" / "<processName>_<idx>.sched_out" /
 # "<processName>_<idx>.opts" (see engine/debasher_lib_processes.sh's
 # _get_process_stdout_filename/_get_process_schedout_filename/
-# _get_process_opts_filename) — the per-task files an array/generator/
+# _get_process_opts_filename), the per-task files an array/generator/
 # manual process produces when it runs as more than one task, as
 # opposed to a "standard" process's single
 # "<processName>.stdout"/"<processName>.sched_out"/"<processName>.opts".
@@ -187,7 +186,7 @@ def _task_indices_for_process(outdir: str, process_name: str) -> list[int]:
     indices: set[int] = set()
 
     # A directory listing stays cheap even for the many thousands of
-    # files a large task array can leave behind — unlike shelling out
+    # files a large task array can leave behind, unlike shelling out
     # to a DeBasher tool per task, which is what makes listing them
     # this way (rather than, say, probing task indices one by one)
     # the right approach at that scale.
@@ -327,7 +326,7 @@ class ProcessTasksRequest(BaseModel):
 
 class ProcessTasksResponse(BaseModel):
     # Empty for a "standard" one-task process; the list of task
-    # indices found (not necessarily contiguous — a task still
+    # indices found (not necessarily contiguous, a task still
     # running, or that never produced output, leaves a gap) otherwise.
     taskIndices: list[int]
 
@@ -337,7 +336,7 @@ def get_process_tasks(request: ProcessTasksRequest) -> ProcessTasksResponse:
     """
     List the task indices that have a stdout or scheduler-output file
     for `processName`, for the "Inspect execution" menu's task picker
-    (skipped when this comes back empty — a "standard" process's
+    (skipped when this comes back empty, a "standard" process's
     single file needs no index).
     """
     return ProcessTasksResponse(
@@ -388,7 +387,7 @@ class FifoMirrorRequest(BaseModel):
     program: Program
     processName: str
     # The fifo's name as given to define_fifo_opt (a mirrored option's
-    # own `value`, per ProgramOption.mirror) — not the option's label.
+    # own `value`, per ProgramOption.mirror), not the option's label.
     fifoName: str
     taskIndex: int | None = None
 
@@ -411,7 +410,7 @@ def get_fifo_mirror(request: FifoMirrorRequest) -> ProcessOutputResponse:
 
 
 # Bounded so a stuck write (no reader ever connects) or an empty read
-# (nothing produced yet) can't hang a request forever — the frontend's
+# (nothing produced yet) can't hang a request forever, the frontend's
 # "Talk to FIFOs" action just calls /fifo-read again on a timeout, so a
 # short-ish bound here just controls the retry cadence, not correctness.
 _FIFO_WRITE_TIMEOUT_SECS = 8
@@ -421,7 +420,7 @@ _FIFO_READ_TIMEOUT_SECS = 8
 def _resolve_fifo_path(program: Program, process_name: str, fifo_name: str) -> Path:
     """
     A fifo's real path is a fixed convention (see engine/debasher_lib_
-    opts.sh's debasher::_get_absolute_fifoname) — no ".opts"/resolved-
+    opts.sh's debasher::_get_absolute_fifoname), no ".opts"/resolved-
     value lookup needed, the same way _task_indices_for_process (above)
     reads the "__exec__" convention directly instead of shelling out to
     a tool.
@@ -432,7 +431,7 @@ def _resolve_fifo_path(program: Program, process_name: str, fifo_name: str) -> P
 class FifoIORequest(BaseModel):
     program: Program
     processName: str
-    # The fifo's name as given to define_fifo_opt — not the option's label.
+    # The fifo's name as given to define_fifo_opt, not the option's label.
     fifoName: str
 
 
@@ -450,7 +449,7 @@ def write_fifo(request: FifoWriteRequest) -> FifoWriteResponse:
     """
     Write one line to an (unconnected) input fifo, for the "Talk to
     FIFOs" action. Opening a fifo for writing blocks until a reader
-    connects, so this is bounded by _FIFO_WRITE_TIMEOUT_SECS — a
+    connects, so this is bounded by _FIFO_WRITE_TIMEOUT_SECS, a
     timeout here means no process is currently reading that fifo.
     """
     path = _resolve_fifo_path(request.program, request.processName, request.fifoName)
@@ -481,7 +480,7 @@ def write_fifo(request: FifoWriteRequest) -> FifoWriteResponse:
 class FifoReadResponse(BaseModel):
     line: str | None = None
     # A timeout here is the expected, common case (nothing produced yet
-    # by the owning process) — the frontend just calls again — not an
+    # by the owning process), the frontend just calls again, not an
     # error.
     timedOut: bool = False
     error: str | None = None
@@ -516,7 +515,7 @@ def read_fifo(request: FifoIORequest) -> FifoReadResponse:
     return FifoReadResponse(line=result.stdout)
 
 
-# There's no "debasher_get_opts" bin tool (unlike stdout/sched-out) — the
+# There's no "debasher_get_opts" bin tool (unlike stdout/sched-out), the
 # ".opts" file (see engine/debasher_lib_processes.sh's
 # _get_process_opts_filename and debasher_lib_opts.sh's
 # _print_opts_as_qstrings) is read directly, the same way
@@ -533,8 +532,7 @@ def get_process_opts(request: ProcessOutputRequest) -> ProcessOutputResponse:
     """
     Get a process's resolved command-line options, one `printf '%q'`
     escaped option/value per line, from its ".opts" file, for the
-    canvas's right-click "Inspect execution" menu's "See options" —
-    capped at _MAX_INSPECT_LINES lines.
+    canvas's right-click "Inspect execution" menu's "See options", capped at _MAX_INSPECT_LINES lines.
     """
     opts_path = _get_process_opts_path(
         request.program.outputDir, request.processName, request.taskIndex
@@ -548,7 +546,7 @@ def get_process_opts(request: ProcessOutputRequest) -> ProcessOutputResponse:
 
 
 # Each ".opts" line is one option, `printf '%q'`-escaped and (when it
-# has a value) shell-word-split from its value — e.g. `-i input\ file`
+# has a value) shell-word-split from its value, e.g. `-i input\ file`
 # or `--flag`. shlex.split undoes that quoting, giving back the actual
 # flag/value strings the process ran with.
 def _parse_opts_file(opts_path: Path) -> dict[str, str]:
@@ -571,7 +569,7 @@ def _parse_opts_file(opts_path: Path) -> dict[str, str]:
 
 class ProcessResolvedOptionsResponse(BaseModel):
     # {option label: resolved value} from the process's own ".opts"
-    # file — empty when the program hasn't produced one yet (e.g. it
+    # file, empty when the program hasn't produced one yet (e.g. it
     # hasn't been run).
     values: dict[str, str]
 
@@ -581,7 +579,7 @@ def get_process_resolved_options(request: ProcessOutputRequest) -> ProcessResolv
     """
     Parse a process's ".opts" file into a {label: value} map, for the
     canvas's right-click "Inspect execution" menu's "Show inputs and
-    outputs" — this is how a fifo/shared-dir/value-descriptor option's
+    outputs", this is how a fifo/shared-dir/value-descriptor option's
     actual resolved value (rather than the program model's own
     possibly-unresolved `value` field) gets shown.
     """
@@ -624,7 +622,7 @@ def inspect_path(request: InspectPathRequest) -> InspectPathResponse:
             entries = entries[: file_inspection.MAX_INSPECT_LINES]
             entries.insert(
                 0,
-                f"Warning: directory has {total} entries — "
+                f"Warning: directory has {total} entries, "
                 f"showing only the first {file_inspection.MAX_INSPECT_LINES}.",
             )
         return InspectPathResponse(kind="directory", entries=entries)
@@ -670,7 +668,7 @@ def stop_program(program: Program) -> StopProgramResponse:
 
 
 class ResetOutputDirResponse(BaseModel):
-    # False whenever a guard below made this a no-op — the caller can
+    # False whenever a guard below made this a no-op, the caller can
     # tell the user there was nothing to reset.
     cleared: bool
 
@@ -682,12 +680,12 @@ def reset_output_dir(program: Program) -> ResetOutputDirResponse:
     kept), for the Run menu's "Reset output directory" action.
 
     Guards against a mistaken mass deletion: a no-op (cleared=False,
-    nothing raised) whenever outputDir is blank — an empty string would
-    otherwise resolve to the server's current directory, not "nowhere"
-    — doesn't resolve to an existing directory, resolves to the
+    nothing raised) whenever outputDir is blank (an empty string would
+    otherwise resolve to the server's current directory, not "nowhere"),
+    doesn't resolve to an existing directory, resolves to the
     filesystem root or the server user's home directory (the two paths
     a corrupted/mistaken outputDir would do the most damage at), or
-    equals the program's own homeDir — that's where the generated .sh
+    equals the program's own homeDir: that's where the generated .sh
     and .debasher/program.json live, and any files added through the
     program-files panel, none of which "resetting the output directory"
     should ever be able to wipe out.
@@ -709,7 +707,7 @@ def reset_output_dir(program: Program) -> ResetOutputDirResponse:
 
     try:
         for entry in resolved.iterdir():
-            # A symlink is removed as itself, never followed — so a
+            # A symlink is removed as itself, never followed, so a
             # symlink into another directory can't cause this to
             # recurse and delete outside outputDir.
             if entry.is_symlink() or not entry.is_dir():

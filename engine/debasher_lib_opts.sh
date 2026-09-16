@@ -90,7 +90,7 @@ debasher::_serialize_cmd_as_qstr()
 
 ########
 # Print a resolved options array (flag, value, flag, value, ... with a
-# value-less flag simply not followed by one — see
+# value-less flag simply not followed by one, see
 # debasher::_dedup_resolved_opts) one option per line, each flag paired
 # with its value (if any) on the same line, printf '%q'-escaped (used
 # to dump a process's resolved command-line options to its ".opts"
@@ -1525,7 +1525,7 @@ define_opt() { debasher::define_opt "$@"; }
 ########
 # Defines process option whose value is a file path, resolving it
 # relative to the directory of the .sh that defines the process if
-# it's relative (or verifying it as an absolute path otherwise) —
+# it's relative (or verifying it as an absolute path otherwise):
 # same resolution debasher::_add_debasher_ext_alias_process uses for
 # an external alias script, so a "file" option's value can likewise
 # point at a file shipped alongside the program (e.g. via the
@@ -1667,7 +1667,7 @@ debasher::_show_all_program_shared_dirs()
     # module named after -m), this reports every shared directory
     # reachable from the whole program: the named module plus every
     # module it load_debasher_module's, transitively (DEBASHER_PROGRAM_MODULES
-    # holds all of them by the time this runs — see
+    # holds all of them by the time this runs, see
     # debasher::load_debasher_module).
     DEBASHER_PROGRAM_SHDIRS=()
     debasher::_register_module_program_shdirs
@@ -1781,7 +1781,7 @@ debasher::_run_fifo_mirror_tap()
 # DEBASHER_DESERIALIZED_ARGS (already populated by the caller),
 # rewriting each matching real-fifo argument to the tap's shim path
 # instead, so the process function's own argv is the only thing that
-# changes — the real fifo path stays exactly what was persisted to the
+# changes: the real fifo path stays exactly what was persisted to the
 # ".opts" file and what any connected reader resolved at DAG-definition
 # time. Populates DEBASHER_FIFO_MIRROR_TAP_PIDS/
 # DEBASHER_FIFO_MIRROR_TAP_SHIMS for debasher::_stop_fifo_mirror_taps to
@@ -1789,7 +1789,7 @@ debasher::_run_fifo_mirror_tap()
 #
 # Deliberately does NOT consult DEBASHER_PROGRAM_FIFOS/
 # DEBASHER_FIFO_MIRRORED: this runs inside the process's own generated
-# script, which — for both the builtin and Slurm schedulers — executes
+# script, which, for both the builtin and Slurm schedulers, executes
 # as a separate bash process from the one that ran every process's
 # _define_opts (and so populated those in-memory arrays) at DAG-load
 # time; they're empty here even though the shim fifo/mirror log files
@@ -1801,11 +1801,11 @@ debasher::_run_fifo_mirror_tap()
 #
 # Only ever substitutes the argument immediately following a "-out"/
 # "--out"-prefixed flag (DEBASHER_DESERIALIZED_ARGS is a flat "flag,
-# value, flag, value, ..." sequence — see debasher::_print_opts_as_
+# value, flag, value, ..." sequence, see debasher::_print_opts_as_
 # qstrings): a fifo's real path is identical in both the owner's
 # argv (whose flag names the "-outf"-style option --mirror was declared
 # on) and any connected reader's argv (whose flag is its own "-inf"-
-# style connection) — without this check, a reader would see its own
+# style connection), without this check, a reader would see its own
 # input argument redirected to the writer's shim and read nothing real
 # ever gets forwarded to. This mirrors the same "-out"/"--out" naming
 # convention frontend/src/models/option.ts's getOptionDirection already

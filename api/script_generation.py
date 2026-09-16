@@ -57,7 +57,7 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
         # debasher::_extract_force_from_process_spec /
         # _define_forced_rerun_processes in
         # engine/debasher_lib_sched_rerun.sh, which checks
-        # `[ ${process_forced} = "yes" ]`) — a bare "forced" token would
+        # `[ ${process_forced} = "yes" ]`), a bare "forced" token would
         # never match.
         parts.append("force=yes")
     if specs.processdeps:
@@ -66,7 +66,7 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
         parts.append(f"alias={specs.alias}")
         # The engine's own attribute key is "alias_opt_map" (see
         # debasher::_add_debasher_alias_process / add_debasher_process
-        # in engine/debasher_lib_programs.sh) — only valid alongside
+        # in engine/debasher_lib_programs.sh), only valid alongside
         # "alias" or "ext_alias". "alias" wins when both are somehow
         # set (see debasher::add_debasher_process's own precedence), so
         # it claims the map first.
@@ -76,7 +76,7 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
     if specs.externalAlias:
         # The engine's own attribute key is "ext_alias" (see
         # debasher::_extract_ext_alias_from_process_spec /
-        # add_debasher_process in engine/debasher_lib_programs.sh) —
+        # add_debasher_process in engine/debasher_lib_programs.sh);
         # "externalAlias" is only this app's field name for it.
         parts.append(f"ext_alias={specs.externalAlias}")
         if not specs.alias:
@@ -85,7 +85,7 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
                 parts.append(f"alias_opt_map={alias_opt_map}")
     # The engine's extract_attr_from_process_additional_specs (unlike
     # its comp-specs counterpart) always splits on ";", with no
-    # legacy-space fallback — so joining with anything else here would
+    # legacy-space fallback, so joining with anything else here would
     # silently break extraction of every attribute after the first.
     return ";".join(parts)
 
@@ -136,7 +136,7 @@ def _add_explain_opts_func(process):
                 lines.append(f'{INDENT}debasher::explain_flag "{option.label}" "{option.description}"')
             else:
                 # By convention throughout data/programs, e.g. "<int>",
-                # "<string>" — purely the value's type; how it's
+                # "<string>", purely the value's type; how it's
                 # delivered (option.channel) isn't encoded here, see
                 # markdown_parsing.py's _OPTION_TYPE_RE.
                 lines.append(f'{INDENT}debasher::explain_opt "{option.label}" "<{option.dataType}>" "{option.description}"')
@@ -202,7 +202,7 @@ def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, s
     """
     Maps a target option's id to every edge connected to it, as
     (source process name, source option label, source process mode)
-    triples — used by _option_definition_line to emit one
+    triples, used by _option_definition_line to emit one
     define_opt_from_proc_out[_task_out] per connection instead of the
     single one implied by option.value's own "[proc;opt]" sentinel (see
     _opt_is_connected_to_proc/_get_process_plus_opt), which only ever
@@ -231,7 +231,7 @@ def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, s
 
 
 # Modes whose _define_opts/_generate_opts is guaranteed to produce one
-# save_opt_list call per task, numbered 0..N-1 — generator via the
+# save_opt_list call per task, numbered 0..N-1, generator via the
 # engine calling _generate_opts once per task_idx, array via a loop that
 # calls save_opt_list once per idx (see debasher_array_example.sh). Only
 # a source in one of these modes can be trusted to actually have a task
@@ -243,7 +243,7 @@ _TASK_INDEXED_MODES = {"generator", "array"}
 # The non-"-ith" side of a fanout/fanin pairing: whatever "array"-mode
 # offered originally (task-numbered members 0..N-1 to read one-by-one via
 # define_opt_from_proc_task_out/define_opt_from_proc_out), a "generator"
-# process also provides — its own tasks are numbered the same way (see
+# process also provides, its own tasks are numbered the same way (see
 # _TASK_INDEXED_MODES above). The "-ith" side itself stays "standard"-only.
 _FANOUT_PARTNER_MODES = {"array", "generator"}
 
@@ -256,7 +256,7 @@ def _task_idx_var(mode):
 # for a dynamic-count family of options on a "standard"-mode process: a
 # label ending in "ith" (e.g. "-outfith" standing for "-outf0", "-outf1",
 # ...), mirrored from frontend/src/models/option.ts's isFanoutOption/
-# fanoutBaseLabel. Only meaningful on a "standard"-mode process — the
+# fanoutBaseLabel. Only meaningful on a "standard"-mode process, the
 # same label on array/generator/manual is just an ordinary option.
 _FANOUT_SUFFIX = "ith"
 
@@ -276,7 +276,7 @@ def _fanout_count_var(count_source_label: str) -> str:
     # Derived from the count-source option's own label (e.g. "-w" ->
     # "w") so generated code reads like the hand-written reference
     # script. Two fanout options sharing one count source each emit a
-    # harmless redundant "local <var>=..." — acceptable.
+    # harmless redundant "local <var>=...", acceptable.
     return re.sub(r"[^a-zA-Z0-9]+", "_", count_source_label.lstrip("-")) or "n"
 
 
@@ -310,7 +310,7 @@ def _validate_fanout_option(process, option, process_modes) -> None:
         raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t be sourced from process spec.')
     if option.direction == "output":
         # "fifo" is the one channel a fanout output can use besides
-        # "none" — a family of per-task named pipes (e.g.
+        # "none", a family of per-task named pipes (e.g.
         # "dispatch_fifo_${i}"), same primitive as an ordinary fifo
         # option (see data/programs/debasher_dynamic_fanout_fifos.sh's
         # dispatch). "value_desc" makes no sense here (there is no
@@ -321,17 +321,17 @@ def _validate_fanout_option(process, option, process_modes) -> None:
             )
         if option.mirror:
             raise ValueError(
-                f'Fanout output "{option.label}" on "{process.name}" can\'t be mirrored — '
+                f'Fanout output "{option.label}" on "{process.name}" can\'t be mirrored, '
                 '"Watch FIFO" only supports a single, non-fanout output fifo for now.'
             )
         if _opt_is_connected_to_proc(option):
             raise ValueError(
-                f'Fanout output "{option.label}" on "{process.name}" can\'t be connected — '
+                f'Fanout output "{option.label}" on "{process.name}" can\'t be connected, '
                 'give it a literal value referencing "$i" instead.'
             )
     else:
         # A gather input is always a connection to an array-mode
-        # process's per-task output (define_opt_from_proc_task_out) —
+        # process's per-task output (define_opt_from_proc_task_out);
         # incompatible with any other channel.
         if option.channel != "none":
             raise ValueError(f'Fanout input "{option.label}" on "{process.name}" must use channel "none".')
@@ -344,7 +344,7 @@ def _validate_fanout_option(process, option, process_modes) -> None:
         if process_modes.get(conn_proc) not in _FANOUT_PARTNER_MODES:
             raise ValueError(
                 f'Fanout input "{option.label}" on "{process.name}" is connected to '
-                f'"{conn_proc}", which is not "array"- or "generator"-mode — v1 only '
+                f'"{conn_proc}", which is not "array"- or "generator"-mode, v1 only '
                 "supports standard <-> array/generator fanout pairings."
             )
 
@@ -357,7 +357,7 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
     0..count-1 emitting one define_opt (scatter, an unconnected output
     with a literal "$i"-referencing value) or one
     define_opt_from_proc_task_out (gather, an input connected to an
-    "array"- or "generator"-mode process's output) per iteration — see
+    "array"- or "generator"-mode process's output) per iteration, see
     data/programs/debasher_dynamic_fanout.sh's dispatch_define_opts/
     aggregate_define_opts for the hand-written equivalent.
     """
@@ -389,7 +389,7 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
 
 def _option_definition_line(process, option, process_modes, connections_by_option):
     """
-    Returns the _define_opts/_generate_opts line(s) for `option` — a
+    Returns the _define_opts/_generate_opts line(s) for `option`, a
     list since a connected, non-command-line, non-fanout option may
     have more than one incoming edge (fan-in): one
     define_opt_from_proc_out[_task_out] call is emitted per connection
@@ -400,7 +400,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     # channel is checked ahead of commandLine: an option can be both a
     # mandatory command-line option (for _identify_cmdline_opts/
     # documentation purposes) and, in _define_opts, actually sourced
-    # from a fifo/value descriptor instead — see
+    # from a fifo/value descriptor instead, see
     # debasher_cycle_trigger_interactive.sh's worker, whose "-threshold"
     # is exactly that.
     if option.dataType == "None":
@@ -419,7 +419,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         return [f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist{mirror_flag} || return 1']
     if option.channel == "shared_dir":
         # Always define_opt_from_shared_dir, regardless of any edges
-        # into/out of this option — those exist purely to document the
+        # into/out of this option, those exist purely to document the
         # dependency in the canvas (see the frontend's
         # isValidProgramConnection); the engine derives the real
         # processdeps on its own, from every writer of the same
@@ -427,7 +427,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
     if option.fromProcessSpec:
         # Not a channel (see ProgramOption.fromProcessSpec's own
-        # docstring) — mutually exclusive with commandLine, unlike the
+        # docstring), mutually exclusive with commandLine, unlike the
         # three channel checks above: a process-spec-sourced option's
         # value comes from exactly one define_procspec_opt call, which
         # can't also be a define_cmdline_opt call for the same label.
@@ -439,7 +439,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         return [f'debasher::define_procspec_opt "${{process_spec}}" "{option.label}" "{option.value}" optlist || return 1']
     if option.commandLine:
         # A file-typed command-line option gets the validating variant
-        # (checks the path exists and normalizes it to absolute) —
+        # (checks the path exists and normalizes it to absolute),
         # see debasher::define_cmdline_infile_opt[_if_given] in
         # engine/debasher_lib_opts.sh.
         base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
@@ -451,7 +451,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
             # Consumer side of a scatter connection: conn_opt is a fanout
             # family declared on a "standard" process (e.g. "-outfith"),
-            # so it isn't a real option name by itself — the member this
+            # so it isn't a real option name by itself, the member this
             # option actually reads is picked by this (_FANOUT_PARTNER_MODES,
             # i.e. "array"- or "generator"-mode) process's own per-task loop
             # variable. One save_opt_list
@@ -463,7 +463,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
                 raise ValueError(
                     f'Option "{option.label}" on "{process.name}" is connected to fanout '
                     f'family "{conn_opt}" on "{conn_proc}", but "{process.name}" is not '
-                    '"array"- or "generator"-mode — v1 only supports standard <-> '
+                    '"array"- or "generator"-mode, v1 only supports standard <-> '
                     "array/generator fanout pairings."
                 )
             idx_var = _task_idx_var(process.optionsHandler.mode)
@@ -471,7 +471,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
             return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1']
 
         # Plain connection: one define_opt_from_proc_out[_task_out] per
-        # edge into this option — usually just one, but a non-command-
+        # edge into this option, usually just one, but a non-command-
         # line input may gather from several (fan-in; see
         # isValidProgramConnection in the frontend). Falls back to the
         # single value-sentinel-derived connection if no matching edge
@@ -494,7 +494,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         return lines
     if option.dataType == "file" and option.direction == "input":
         # Resolved relative to the .sh defining the process (see
-        # debasher::define_infile_opt in engine/debasher_lib_opts.sh) —
+        # debasher::define_infile_opt in engine/debasher_lib_opts.sh);
         # lets a baked-in file value point at something shipped
         # alongside the program (e.g. via the webui's program-files
         # browser) with a portable, relative path, the same way
@@ -533,8 +533,8 @@ def _add_opts_definition_func(process, suffix, header_lines, process_modes, conn
 def _add_array_opts_func(process, process_modes, connections_by_option):
     # array mode: the engine's per-process task numbering (see
     # debasher::_save_opt_list_loop) already treats "call save_opt_list
-    # N times inside one _define_opts" as N tasks — the same mechanism
-    # debasher_array_example.sh uses by hand — so, unlike generator
+    # N times inside one _define_opts" as N tasks, the same mechanism
+    # debasher_array_example.sh uses by hand, so, unlike generator
     # mode, no separate _generate_opts_size is needed. The array itself
     # is built by the user's own arrayCode, embedded verbatim, under the
     # fixed name "array"; the fixed loop variable "idx" (mirroring
@@ -544,7 +544,7 @@ def _add_array_opts_func(process, process_modes, connections_by_option):
     #
     # Unlike "standard"/"generator", the header's own "local optlist="
     # is dropped: every option is (re)defined inside the loop regardless
-    # of whether its value actually depends on idx (uniform — no
+    # of whether its value actually depends on idx (uniform, no
     # idx-independent option gets hoisted out as a one-time "shared
     # prefix"), so "optlist" itself is simply declared fresh, empty, at
     # the top of each iteration instead of copied from an outer one.
@@ -571,10 +571,10 @@ def _add_array_opts_func(process, process_modes, connections_by_option):
 def _add_generate_opts_size_func(process):
     # The user's own code, embedded verbatim (like arrayCode) rather than
     # wrapped as a single echo'd expression, so it can be arbitrarily
-    # complex — the only contract is that it must echo the task count.
+    # complex, the only contract is that it must echo the task count.
     # The engine calls this with the same 4 positional args as
     # _define_opts (see debasher::_define_opts_generator), so the same
-    # header is emitted ahead of it — minus "local optlist=", which this
+    # header is emitted ahead of it, minus "local optlist=", which this
     # function has no use for (it only echoes a task count).
     lines = [f"{process.name}{PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX}()", "{"]
     lines.extend(_define_opts_func_header()[:-1])
@@ -615,7 +615,7 @@ def _add_opts_handler(process, process_modes, connections_by_option):
 # "<processname>_<suffix>" (debasher_lib.sh's DEBASHER_PROCESS_VARNAMES/
 # DEBASHER_HEREDOC_LANGUAGES) holding the raw interpreter source, and
 # auto-generates the actual "<processname>()" wrapper around it
-# (debasher::_create_process_func_heredoc) — see
+# (debasher::_create_process_func_heredoc), see
 # debasher::_is_heredoc_process in engine/debasher_lib_programs.sh.
 _HEREDOC_LANGUAGE_SUFFIXES = {
     "python": "py",
@@ -635,7 +635,7 @@ def _code_definition_lines(process_name: str, language: str, code: str) -> list[
 def _add_exec_func(process):
     # An alias/external alias supplies the implementation itself (the
     # engine builds the "<processname>()" wrapper from the "alias"/
-    # "ext_alias" additional-spec attribute — see
+    # "ext_alias" additional-spec attribute, see
     # debasher::_add_debasher_alias_process/_add_debasher_ext_alias_process
     # in engine/debasher_lib_programs.sh), so process.code, if any, is
     # never actually used and embedding it would just be dead code.
@@ -650,7 +650,7 @@ def _add_exec_func(process):
 # other _add_*_func: unlike _add_exec_func, the frontend only collects
 # each of these as a function *body* (see AdditionalMethodsEditor.tsx),
 # so the definition itself is generated here rather than embedded
-# verbatim. None of them take a fixed positional-arg header — reset_
+# verbatim. None of them take a fixed positional-arg header, reset_
 # outfiles/post/skip receive the same args as the process's own exec
 # function (accessible via "$@", see debasher_builtin_sched_lib.sh's
 # _execute_funct_plus_postfunct), while outdir_basename/conda_envs/
@@ -687,7 +687,7 @@ def _add_additional_methods_funcs(process):
 def _intact_group_ids(program):
     """
     groupIds whose full original membership (groupSource.groupSize) is
-    still present among program.processes — i.e. an "Add program" batch
+    still present among program.processes, i.e. an "Add program" batch
     nothing has been edited or removed from yet (see
     frontend/src/store/ProgramContext.tsx's confirmDetachIfGrouped,
     which is what normally guarantees this before generation ever runs;
@@ -733,8 +733,7 @@ def _add_program_function(program):
 def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset()) -> str:
     """
     Build the <program.name>.sh contents, omitting the exec function
-    (_add_exec_func) for any process whose name is in `skip_exec_for` —
-    used by generate_script to leave out processes _find_redundant_exec_funcs
+    (_add_exec_func) for any process whose name is in `skip_exec_for`, used by generate_script to leave out processes _find_redundant_exec_funcs
     determined are already provided by a loaded module.
     """
     lines = [SCRIPT_HEADER, "", ""]
@@ -792,8 +791,7 @@ def _proc_info_code(script_path: Path, process_name: str, debasher_mod_dir: str)
 def _module_provided_code(process_name: str, preamble: str, debasher_mod_dir: str) -> str:
     """
     What debasher_get_proc_info reports for `process_name` when only
-    `preamble` (and whatever it load_debasher_module's in) is sourced —
-    i.e. the implementation this process would get "for free" without
+    `preamble` (and whatever it load_debasher_module's in) is sourced, i.e. the implementation this process would get "for free" without
     embedding process.code in the generated script at all. Empty if
     nothing sourced from the preamble defines it.
     """
@@ -807,7 +805,7 @@ def _own_code_canonicalized(process_name: str, language: str, code: str, debashe
     """
     debasher_get_proc_info's own `declare -f` canonicalization of `code`
     alone (a standalone file containing just this one process's own
-    implementation, nothing else) — so it's directly comparable to
+    implementation, nothing else), so it's directly comparable to
     _module_provided_code's output despite process.code being free-typed
     rather than already in debasher_doc_mod/debasher_get_proc_info's own
     printed format. Wrapped the same way _add_exec_func embeds it (a
@@ -824,9 +822,9 @@ def _own_code_canonicalized(process_name: str, language: str, code: str, debashe
 def _stub_processes_missing_code(program: Program) -> Program:
     """
     Returns a copy of `program` where every non-alias process with no
-    code yet gets a trivial bash stub ("<name>() { :; }") — just enough
+    code yet gets a trivial bash stub ("<name>() { :; }"), just enough
     to satisfy add_debasher_process's exec-function check (see
-    get_all_envvars) — leaving every other process, and the real
+    get_all_envvars), leaving every other process, and the real
     `program` passed in, untouched. An alias/external-alias process
     needs no stub: it supplies no exec function of its own even when
     finished (see _add_exec_func), so an empty one isn't "missing"
@@ -849,7 +847,7 @@ def _stub_processes_missing_code(program: Program) -> Program:
 def get_all_envvars(program: Program) -> dict[str, str]:
     """
     Every variable newly bound while sourcing the program's own
-    generated script (see generate_script) — the module-defined/
+    generated script (see generate_script), the module-defined/
     inherited variables the Env vars editor's read-only section shows,
     always recomputed against the program's current preamble/processes
     rather than a stale snapshot from whenever it might have been
@@ -859,12 +857,12 @@ def get_all_envvars(program: Program) -> dict[str, str]:
     script (not just the preamble) so a variable bound by something
     other than the preamble is seen too. debasher_doc_mod requires the
     file to define a "_program" function and calls add_debasher_process
-    for every process in it (see _add_program_function) — which
+    for every process in it (see _add_program_function), which
     hard-fails the *whole* run if any one process has no exec function
     (debasher::_add_debasher_regular_process's `|| exit 1` in
     engine/debasher_lib_programs.sh, not a per-process skip). Since this
-    runs live while the program is still being edited — where an
-    in-progress process routinely has no code yet — every such process
+    runs live while the program is still being edited, where an
+    in-progress process routinely has no code yet, every such process
     gets a trivial stub for this check only (_stub_processes_missing_code),
     never for the program's real saved/generated script.
 
@@ -872,26 +870,24 @@ def get_all_envvars(program: Program) -> dict[str, str]:
     _find_redundant_exec_funcs: that check exists to avoid embedding a
     process's code when a loaded module already provides it (so the
     real generated script doesn't duplicate it), which costs one or two
-    debasher_get_proc_info subprocess calls per process — real money
+    debasher_get_proc_info subprocess calls per process, real money
     for a script that's regenerated on every keystroke, but pointless
     here, where the script is thrown away right after this one
     debasher_doc_mod call and nothing depends on which copy of a
     same-named function bash ends up keeping.
 
     Copies any relative AdditionalSpecs.externalAlias files into the
-    same throwaway directory (see persistence.copy_ext_alias_files) —
-    the engine resolves a relative ext_alias against the directory of
+    same throwaway directory (see persistence.copy_ext_alias_files), the engine resolves a relative ext_alias against the directory of
     the .sh being loaded, which here is `tmp_dir`, not
     program.sourceDir. Without this, any imported program with a
     relative ext_alias process (e.g. a Python/Perl/R node) makes
     debasher_doc_mod abort with "file not found", which is caught below
-    and swallowed into {} — silently hiding every inherited variable in
+    and swallowed into {}, silently hiding every inherited variable in
     the program, not just that one process's.
 
     A failure (tool missing, generation error, timeout) is a
-    convenience miss, not a hard error — mirrors how
-    _find_redundant_exec_funcs treats _module_provided_code failing —
-    so this returns {} rather than raising.
+    convenience miss, not a hard error, mirrors how
+    _find_redundant_exec_funcs treats _module_provided_code failing, so this returns {} rather than raising.
     """
     if not program.name:
         return {}
@@ -923,11 +919,11 @@ def _find_redundant_exec_funcs(program: Program) -> frozenset[str]:
     Returns the names of processes whose exec function shouldn't be
     embedded in the generated script because it's already provided,
     identically, by a module the preamble loads (via
-    load_debasher_module) — so embedding process.code again would just
+    load_debasher_module), so embedding process.code again would just
     be a duplicate definition of the exact same bash function.
 
-    Checked per process via debasher_get_proc_info, which — unlike
-    debasher_doc_mod — never runs the script's "_program" function or
+    Checked per process via debasher_get_proc_info, which, unlike
+    debasher_doc_mod, never runs the script's "_program" function or
     registers anything through add_debasher_process, so it can't fail
     just because some unrelated process has no implementation of its
     own; it only ever looks at the one process name it's asked about
@@ -971,8 +967,8 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
     pipeline script.
 
     A process's exec function is left out when it's redundant with one
-    already provided by a module the preamble loads — see
-    _find_redundant_exec_funcs — unless `skip_redundant_check` is set,
+    already provided by a module the preamble loads, see
+    _find_redundant_exec_funcs, unless `skip_redundant_check` is set,
     which skips that check (and its debasher_get_proc_info subprocess
     calls) entirely: get_all_envvars sets it, since it throws the script
     away right after one debasher_doc_mod call, where the duplicate-code

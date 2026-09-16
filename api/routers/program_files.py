@@ -20,7 +20,7 @@ def resolve_within(home_dir: str, rel_path: str) -> Path:
     along the way. An empty `rel_path` resolves to `home_dir` itself.
 
     Raises ValueError (turned into a 400 by every caller below) on any
-    violation — never returns a path outside `home_dir`.
+    violation: never returns a path outside `home_dir`.
     """
     if not home_dir.strip():
         raise ValueError("homeDir must not be empty")
@@ -49,7 +49,7 @@ def resolve_within(home_dir: str, rel_path: str) -> Path:
 def _is_protected_script(target: Path, home: Path, program_name: str) -> bool:
     """
     True for the program's own generated `<programName>.sh`, and only
-    that file, at the top level of `home` — the one entry the panel
+    that file, at the top level of `home`: the one entry the panel
     shows but must never let the user delete, move, or overwrite.
     """
     try:
@@ -63,7 +63,7 @@ def _is_protected_script(target: Path, home: Path, program_name: str) -> bool:
 class FileEntry(BaseModel):
     name: str
     # Relative to homeDir, posix-style ("/" separators regardless of
-    # server OS — this app only targets Linux, but slashes are cheap to
+    # server OS: this app only targets Linux, but slashes are cheap to
     # be explicit about since the frontend round-trips this value back
     # as a request path).
     path: str
@@ -210,7 +210,7 @@ def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
     """
     Overwrites an existing file's content, for the panel's in-place
     editor. Refuses the protected `<programName>.sh` and any path that
-    doesn't already name a file — this isn't a way to create one.
+    doesn't already name a file: this isn't a way to create one.
     """
     if not request.path:
         raise HTTPException(status_code=400, detail="path must not be empty")
@@ -283,7 +283,7 @@ class MoveRequest(BaseModel):
 @router.post("/move", response_model=FileTreeResponse)
 def move_entry(request: MoveRequest) -> FileTreeResponse:
     """
-    Renames or moves a file/dir within homeDir — covers both "rename
+    Renames or moves a file/dir within homeDir: covers both "rename
     in place" (same parent, new name) and "reorganize into a folder"
     (new parent).
     """

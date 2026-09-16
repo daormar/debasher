@@ -17,11 +17,11 @@ PROGRAM_FILENAME = "program.json"
 def is_reserved_name(name: str) -> bool:
     """
     True for a file/directory name DeBasher itself manages inside a
-    program's home directory — the hidden .debasher metadata dir, a
+    program's home directory: the hidden .debasher metadata dir, a
     dot-prefixed engine file (.debasher_webui_run.log, .conda,
     .sched_opts, .deblib_vars_and_funcs.sh, .mod_vars_and_funcs.sh, ...),
     a __dunder__-wrapped engine directory (__exec__, __graphs__,
-    __fifos__), or command_line.sh — the one engine-written name that
+    __fifos__), or command_line.sh, the one engine-written name that
     follows neither convention.
 
     This is a rule, not a hardcoded list, so it also covers any future
@@ -53,7 +53,7 @@ def delete_stale_script(output_dir: str, new_name: str) -> None:
     """
     If a program was already saved to `output_dir` under a different
     name (the program can be renamed in the editor after being saved),
-    remove that now-orphaned <old_name>.sh before writing the new one —
+    remove that now-orphaned <old_name>.sh before writing the new one,
     otherwise renaming a program leaves a stale script sitting alongside
     the current one on every subsequent save.
 
@@ -83,7 +83,7 @@ def delete_stale_script(output_dir: str, new_name: str) -> None:
 def copy_ext_alias_files(program: Program, output_dir: str) -> None:
     """
     Copies each process's external-alias script (AdditionalSpecs.
-    externalAlias — see AdditionalSpecsEditor.tsx and
+    externalAlias, see AdditionalSpecsEditor.tsx and
     script_generation.py's _additional_specs_str, which writes it into
     the generated .sh as "ext_alias=<path>") from where `program` was
     originally imported from (program.sourceDir) into `output_dir`,
@@ -93,7 +93,7 @@ def copy_ext_alias_files(program: Program, output_dir: str) -> None:
     against the directory of the .sh that declares it (see
     debasher::_add_debasher_ext_alias_process in
     engine/debasher_lib_programs.sh), not against where it was
-    originally imported from — so without this, saving an imported
+    originally imported from, so without this, saving an imported
     program anywhere other than its original directory would produce a
     script whose ext_alias process can't find its file.
 
@@ -102,7 +102,7 @@ def copy_ext_alias_files(program: Program, output_dir: str) -> None:
     program with no recorded sourceDir (not imported), or source and
     destination resolving to the same file (saving back into the
     program's own original directory) are all silently skipped rather
-    than treated as an error — Save should never fail just because an
+    than treated as an error: Save should never fail just because an
     ext-alias file can't be located or copied.
     """
     if not program.sourceDir:

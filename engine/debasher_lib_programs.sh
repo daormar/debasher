@@ -513,7 +513,7 @@ debasher::_create_process_func_ext_alias()
 #      absolute-path warning (e.g. "external alias for process foo").
 #
 # Echoes the resolved, canonical path and returns 0. Returns 1 and
-# echoes nothing if the file doesn't exist — the caller is responsible
+# echoes nothing if the file doesn't exist, the caller is responsible
 # for reporting that failure with a message fitting its own context.
 debasher::_resolve_path_relative_to_pfile_dir()
 {

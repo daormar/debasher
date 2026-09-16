@@ -1,8 +1,8 @@
 from pathlib import Path
 
-# Applies everywhere a file's worth of text gets shown to the user —
+# Applies everywhere a file's worth of text gets shown to the user:
 # stdout, scheduler output, options, "Show inputs and outputs" > "View",
-# and the program-files panel's read-only preview — so none of them can
+# and the program-files panel's read-only preview, so none of them can
 # ship an arbitrarily large response to the browser.
 MAX_INSPECT_LINES = 10_000
 
@@ -48,7 +48,7 @@ def read_text_capped(path: Path, max_lines: int = MAX_INSPECT_LINES) -> str:
     content = "".join(lines)
     if truncated:
         content = (
-            f"Warning: file has more than {max_lines} lines — "
+            f"Warning: file has more than {max_lines} lines, "
             f"showing only the first {max_lines}.\n\n"
         ) + content
 

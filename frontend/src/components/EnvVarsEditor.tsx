@@ -19,7 +19,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
 
   const [filter, setFilter] = useState("");
 
-  // Read-only: these aren't the program's own to edit — they're every
+  // Read-only: these aren't the program's own to edit, they're every
   // variable bound while sourcing the program's current preamble (see
   // api/script_generation.py's get_all_envvars). Recomputed live every
   // time this modal opens, rather than cached, so an edit to the
@@ -43,7 +43,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
         }
       })
       .catch(() => {
-        // A convenience lookup — leave whatever was already shown.
+        // A convenience lookup: leave whatever was already shown.
       })
       .finally(() => {
         if (!cancelled) {
@@ -56,7 +56,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
     };
 
     // Only re-fetch when the modal is (re)opened, not on every keystroke
-    // while it's open — program itself only changes once Save is hit.
+    // while it's open, program itself only changes once Save is hit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -141,7 +141,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
 
         {/* Always rendered (rather than only once loaded, and only
             when there's something to filter) so this section's height
-            stays fixed — nothing above the textarea below appears or
+            stays fixed: nothing above the textarea below appears or
             disappears once the async lookup settles. */}
         <input
 
