@@ -1,0 +1,100 @@
+{% set version = "1.0" %}
+
+package:
+  name: debasher
+  version: {{ version }}
+
+source:
+  # Built with "make dist-vendored" (see the root Makefile.am), not plain
+  # "make dist": this tarball already contains a prebuilt frontend/dist/
+  # and the generated ./configure + Makefile.in files, so the build below
+  # needs neither npm nor autoconf/automake/libtool/a compiler, only make.
+  # Re-run sha256sum on whatever gets uploaded to the release and update
+  # the value below; this one is from a local test build, not a published
+  # release.
+  url: https://github.com/daormar/debasher/releases/download/v{{ version }}/debasher-{{ version }}.tar.gz
+  sha256: 455e6ddaae6e1fffe8942e20d03abe7c568c002a7b253d9bf6eb146848c99a72
+
+build:
+  number: 0
+  noarch: generic
+  # engine/*.py are plain runtime scripts, not an importable library, and
+  # conda-build's post-build .pyc compile/cleanup pass over the whole
+  # prefix errors out in this recipe (FileNotFoundError on an unrelated
+  # stdlib .pyc, seemingly independent of the python version). Not worth
+  # the bytecompile benefit for two small scripts.
+  skip_compile_pyc:
+    - "*.py"
+  run_exports:
+    - {{ pin_subpackage("debasher", max_pin="x") }}
+
+requirements:
+  build:
+    - make
+  host:
+    # Needed here, not just in run: below, so AM_PATH_PYTHON picks up the
+    # conda-provided python3 (inside $PREFIX) at configure/build time,
+    # rather than falling back to whatever python3 is on the build
+    # machine's ambient PATH. Otherwise the engine's .py scripts get
+    # byte-compiled against the wrong interpreter and conda-build's
+    # post-processing step fails looking for the resulting .pyc under
+    # $PREFIX.
+    - python >=3.10,<3.13
+  run:
+    - bash >=4.3
+    - python >=3.10,<3.13
+    - graphviz
+    - gawk
+    - coreutils
+    - findutils
+    - annotated-doc 0.0.5
+    - annotated-types 0.8.0
+    - anyio 4.14.2
+    - click 8.4.2
+    - fastapi 0.141.1
+    - h11 0.16.0
+    - httptools 0.8.0
+    - idna 3.18
+    - pydantic 2.13.4
+    - pydantic-core 2.46.4
+    - python-dotenv 1.2.2
+    - python-multipart 0.0.32
+    - pyyaml 6.0.3
+    - starlette 1.6.0
+    - typing-inspection 0.4.3
+    - typing_extensions 4.16.0
+    - uvicorn 0.52.1
+    - uvloop 0.22.1
+    - watchfiles 1.2.0
+    - websockets 17.0.1
+
+test:
+  commands:
+    # Checking printed content, not just the (0) exit code, so a broken
+    # --help that still exits 0 wouldn't pass silently.
+    - debasher_exec --help | grep -q -- "--pfile"
+    - debasher_status --help | grep -q -- "-d <string>"
+    - debasher_webui --help | grep -q -- "--host"
+    - test -f "${PREFIX}/share/debasher/web/index.html"
+    - test -f "${PREFIX}/share/debasher/programs/debasher_hello_world.sh"
+
+about:
+  home: http://daormar.github.io/debasher/
+  license: LGPL-3.0-or-later
+  license_file: COPYING.LESSER
+  summary: Flow-based-programming extension for Bash, for building and running bioinformatics workflows.
+  description: |
+    DeBasher lets you write workflows ("programs") as Bash (or Python/R/
+    Perl/Groovy) functions ("processes") with named input/output options;
+    the way options connect across processes implicitly defines the
+    program's dependency graph, which the engine schedules and executes,
+    with fifo-based streaming between processes and optional conda/docker
+    environments per process. This package installs the engine, the
+    FastAPI backend and the built React Flow visual editor
+    (`debasher_webui`).
+  doc_url: https://debasher.readthedocs.io/en/latest/
+  dev_url: https://github.com/daormar/debasher
+
+extra:
+  recipe-maintainers:
+    - daormar
