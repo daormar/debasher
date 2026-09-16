@@ -47,7 +47,7 @@ debasher::_set_debasher_scheduler()
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
             # Verify SLURM availability
-            if [ "$SBATCH" = "" ]; then
+            if ! command -v "$SBATCH" >/dev/null 2>&1; then
                 echo "Error: SLURM scheduler is not installed in your system"
                 return 1
             fi
@@ -89,9 +89,10 @@ debasher::_determine_scheduler()
     else
         # Check if scheduler was already specified
         if [ -z "${DEBASHER_SCHEDULER}" ]; then
-            # Scheduler not specified, set it based on information
-            # gathered during package configuration
-            if [ -z "${SBATCH}" ]; then
+            # Scheduler not specified: pick one based on what's actually
+            # available on this machine right now (not at package build
+            # time, see configure.ac)
+            if ! command -v "${SBATCH}" >/dev/null 2>&1; then
                 echo ${DEBASHER_BUILTIN_SCHEDULER}
             else
                 echo ${DEBASHER_SLURM_SCHEDULER}

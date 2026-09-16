@@ -35,7 +35,7 @@ debasher::_validate_jid()
 ########
 debasher::_get_slurm_version()
 {
-    if [ "$SBATCH" = "" ]; then
+    if ! command -v "$SBATCH" >/dev/null 2>&1; then
         echo "0"
     else
         "$SBATCH" --version | "$AWK" '{print $2}'

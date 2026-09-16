@@ -29,7 +29,7 @@ CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA)
 EXTRA_DIST = debasher_lib.sh debasher_lib_utils.sh			\
 debasher_lib_sched.sh debasher_lib_sched_procs.sh			\
 debasher_lib_sched_rerun.sh debasher_lib_sched_topo_sort.sh		\
-debasher_lib_sched_slurm.sh debasher_lib_sched_builtin			\
+debasher_lib_sched_slurm.sh debasher_lib_sched_builtin.sh		\
 debasher_lib_processes.sh debasher_lib_process_spec.sh			\
 debasher_lib_programs.sh debasher_lib_modules.sh debasher_lib_opts.sh	\
 debasher_lib_conda.sh debasher_lib_docker.sh				\
@@ -95,12 +95,6 @@ SUFFIXES= .sh .py .r .R
 	echo "SLEEP=\"$(SLEEP)\"" >> $@
 	echo "SEQ=\"$(SEQ)\"" >> $@
 	echo "DOCKER=\"$(DOCKER)\"" >> $@
-	echo "QSUB=\"$(QSUB)\"" >> $@
-	echo "QSUB_WORKS=\"$(QSUB_WORKS)\"" >> $@
-	echo "QSUB_TERSE_OPT=\"$(QSUB_TERSE_OPT)\"" >> $@
-	echo "QSTAT=\"$(QSTAT)\"" >> $@
-	echo "QSTAT_J_OPT=\"$(QSTAT_J_OPT)\"" >> $@
-	echo "QRLS=\"$(QRLS)\"" >> $@
 	echo "SRUN=\"$(SRUN)\"" >> $@
 	echo "SCANCEL=\"$(SCANCEL)\"" >> $@
 	echo "SBATCH=\"$(SBATCH)\"" >> $@

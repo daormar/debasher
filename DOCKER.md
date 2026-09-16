@@ -3,8 +3,8 @@
 `Dockerfile` packages the engine, API and web UI into a single container for
 demoing/evaluating DeBasher. It is not meant for production use: it has no
 conda/docker-in-docker support for processes that need their own
-environment, and job schedulers (SGE/Slurm) are disabled, since neither
-makes sense inside a container.
+environment, and the Slurm scheduler backend is disabled, since it makes
+no sense inside a container.
 
 ## Build and run
 
