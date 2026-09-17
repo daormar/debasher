@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .routers import execution, processes, program_files, programs
+from .routers import execution, fs_browse, processes, program_files, programs
 
 app = FastAPI(title="Program API")
 
@@ -14,6 +14,7 @@ app.include_router(programs.router)
 app.include_router(processes.router)
 app.include_router(execution.router)
 app.include_router(program_files.router)
+app.include_router(fs_browse.router)
 
 # Serve the built frontend if it exists. The installed `debasher_webui`
 # launcher sets DEBASHER_WEBUI_STATIC_DIR to the installed location
