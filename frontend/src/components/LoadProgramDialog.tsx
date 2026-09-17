@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Program } from "../models/program";
 import { loadProgram } from "../storage/programStorage";
+import DirectoryBrowser from "./DirectoryBrowser";
 
 interface Props {
   onLoad: (program: Program) => void;
@@ -9,7 +10,7 @@ interface Props {
 
 export default function LoadProgramDialog({ onLoad, onClose }: Props) {
 
-  const [inputDir, setInputDir] =
+  const [currentDir, setCurrentDir] =
     useState("");
 
   const [isLoading, setLoading] =
@@ -20,8 +21,8 @@ export default function LoadProgramDialog({ onLoad, onClose }: Props) {
 
   async function handleLoad() {
 
-    if (!inputDir.trim()) {
-      setError("Please enter a program directory.");
+    if (!currentDir.trim()) {
+      setError("Please browse to a program directory.");
       return;
     }
 
@@ -29,7 +30,7 @@ export default function LoadProgramDialog({ onLoad, onClose }: Props) {
     setError(null);
 
     try {
-      const program = await loadProgram(inputDir.trim());
+      const program = await loadProgram(currentDir.trim());
       onLoad(program);
     } catch (err) {
       setError(
@@ -58,7 +59,9 @@ export default function LoadProgramDialog({ onLoad, onClose }: Props) {
       <div
         style={{
           width: "60%",
-          maxWidth: 480,
+          maxWidth: 560,
+          height: "70%",
+          maxHeight: 480,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -72,35 +75,7 @@ export default function LoadProgramDialog({ onLoad, onClose }: Props) {
           Load program
         </h3>
 
-        <label style={{ fontSize: 14 }}>
-          Program directory
-        </label>
-
-        <input
-
-          type="text"
-
-          value={inputDir}
-
-          onChange={(event) =>
-            setInputDir(event.target.value)
-          }
-
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              handleLoad();
-            }
-          }}
-
-          placeholder="/path/to/program/directory"
-
-          autoFocus
-
-          style={{
-            width: "100%",
-          }}
-
-        />
+        <DirectoryBrowser initialPath="" onPathChange={setCurrentDir} />
 
         {error && (
           <div style={{ color: "#b00020", fontSize: 14 }}>
@@ -120,7 +95,7 @@ export default function LoadProgramDialog({ onLoad, onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleLoad} disabled={isLoading}>
+          <button onClick={handleLoad} disabled={isLoading || !currentDir.trim()}>
             {isLoading ? "Loading..." : "Load"}
           </button>
 
