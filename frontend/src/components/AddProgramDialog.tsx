@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Program } from "../models/program";
 import { loadProgram } from "../storage/programStorage";
+import DirectoryBrowser from "./DirectoryBrowser";
 
 interface Props {
   onAdd: (loaded: Program, sourceDir: string) => void;
@@ -9,7 +10,7 @@ interface Props {
 
 export default function AddProgramDialog({ onAdd, onClose }: Props) {
 
-  const [inputDir, setInputDir] =
+  const [currentDir, setCurrentDir] =
     useState("");
 
   const [isLoading, setLoading] =
@@ -20,8 +21,8 @@ export default function AddProgramDialog({ onAdd, onClose }: Props) {
 
   async function handleAdd() {
 
-    if (!inputDir.trim()) {
-      setError("Please enter a program directory.");
+    if (!currentDir.trim()) {
+      setError("Please browse to a program directory.");
       return;
     }
 
@@ -29,7 +30,7 @@ export default function AddProgramDialog({ onAdd, onClose }: Props) {
     setError(null);
 
     try {
-      const dir = inputDir.trim();
+      const dir = currentDir.trim();
       const loaded = await loadProgram(dir);
       onAdd(loaded, dir);
       onClose();
@@ -60,7 +61,9 @@ export default function AddProgramDialog({ onAdd, onClose }: Props) {
       <div
         style={{
           width: "60%",
-          maxWidth: 480,
+          maxWidth: 560,
+          height: "70%",
+          maxHeight: 480,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -79,35 +82,7 @@ export default function AddProgramDialog({ onAdd, onClose }: Props) {
           as a group generated via add_debasher_program.
         </p>
 
-        <label style={{ fontSize: 14 }}>
-          Program directory
-        </label>
-
-        <input
-
-          type="text"
-
-          value={inputDir}
-
-          onChange={(event) =>
-            setInputDir(event.target.value)
-          }
-
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              handleAdd();
-            }
-          }}
-
-          placeholder="/path/to/program/directory"
-
-          autoFocus
-
-          style={{
-            width: "100%",
-          }}
-
-        />
+        <DirectoryBrowser initialPath="" onPathChange={setCurrentDir} />
 
         {error && (
           <div style={{ color: "#b00020", fontSize: 14 }}>
@@ -127,7 +102,7 @@ export default function AddProgramDialog({ onAdd, onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleAdd} disabled={isLoading}>
+          <button onClick={handleAdd} disabled={isLoading || !currentDir.trim()}>
             {isLoading ? "Adding..." : "Add"}
           </button>
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useProgram } from "../store/ProgramContext";
+import DirectoryBrowser from "./DirectoryBrowser";
 
 interface Props {
   onClose: () => void;
@@ -67,7 +68,9 @@ export default function SaveDialog({ onClose }: Props) {
       <div
         style={{
           width: "60%",
-          maxWidth: 480,
+          maxWidth: 560,
+          height: "70%",
+          maxHeight: 480,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -81,35 +84,7 @@ export default function SaveDialog({ onClose }: Props) {
           Save program
         </h3>
 
-        <label style={{ fontSize: 14 }}>
-          Output directory
-        </label>
-
-        <input
-
-          type="text"
-
-          value={outputDir}
-
-          onChange={(event) =>
-            setOutputDir(event.target.value)
-          }
-
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              handleSave();
-            }
-          }}
-
-          placeholder="/path/to/output/directory"
-
-          autoFocus
-
-          style={{
-            width: "100%",
-          }}
-
-        />
+        <DirectoryBrowser initialPath={outputDir} onPathChange={setOutputDir} />
 
         {isRunInProgress && (
           <div style={{ color: "#8a6d00", fontSize: 14 }}>
@@ -149,7 +124,9 @@ export default function SaveDialog({ onClose }: Props) {
 
           <button
             onClick={handleSave}
-            disabled={isSaving || isRunInProgress || conflictsWithOutputDir}
+            disabled={
+              isSaving || isRunInProgress || conflictsWithOutputDir || !outputDir.trim()
+            }
           >
             {isSaving ? "Saving..." : "Save"}
           </button>

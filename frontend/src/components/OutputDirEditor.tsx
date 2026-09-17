@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useProgram } from "../store/ProgramContext";
+import DirectoryBrowser from "./DirectoryBrowser";
 
 interface Props {
   onClose: () => void;
@@ -52,7 +53,9 @@ export default function OutputDirEditor({ onClose }: Props) {
       <div
         style={{
           width: "60%",
-          maxWidth: 480,
+          maxWidth: 560,
+          height: "70%",
+          maxHeight: 480,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -66,31 +69,7 @@ export default function OutputDirEditor({ onClose }: Props) {
           Output directory
         </h3>
 
-        <input
-
-          type="text"
-
-          value={draft}
-
-          onChange={(event) =>
-            setDraft(event.target.value)
-          }
-
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              handleSave();
-            }
-          }}
-
-          placeholder="/path/to/output/directory"
-
-          autoFocus
-
-          style={{
-            width: "100%",
-          }}
-
-        />
+        <DirectoryBrowser initialPath={draft} onPathChange={setDraft} />
 
         {conflictsWithHomeDir && (
           <div style={{ color: "#8a6d00", fontSize: 14 }}>
@@ -126,7 +105,10 @@ export default function OutputDirEditor({ onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleSave} disabled={conflictsWithHomeDir || isRunInProgress}>
+          <button
+            onClick={handleSave}
+            disabled={conflictsWithHomeDir || isRunInProgress || !draft.trim()}
+          >
             Save
           </button>
 
