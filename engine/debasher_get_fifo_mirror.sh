@@ -30,12 +30,14 @@ print_desc()
 usage()
 {
     echo "debasher_get_fifo_mirror -d <string> -p <string> -f <string> [-t <int>]"
-    echo "                          [--help]"
+    echo "                          [--watch] [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
     echo "-p <string>               Process name owning the mirrored fifo"
     echo "-f <string>               Name of fifo (as given to define_fifo_opt)"
     echo "-t <int>                  Index of task array for process"
+    echo "--watch                   Follow the file as it grows (tail -f) instead of"
+    echo "                          printing its current contents and exiting"
     echo "--help                    Display this help and exit"
 }
 
@@ -46,6 +48,7 @@ read_pars()
     p_given=0
     f_given=0
     t_given=0
+    w_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -75,6 +78,8 @@ read_pars()
                       t_given=1
                   fi
                   ;;
+            "--watch") w_given=1
+                       ;;
         esac
         shift
     done
@@ -164,7 +169,11 @@ get_mirror()
     local mirror_fname=$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")
 
     if [ -f "${mirror_fname}" ]; then
-        cat "${mirror_fname}"
+        if [ "${w_given}" -eq 1 ]; then
+            "${TAIL}" -f "${mirror_fname}"
+        else
+            "${CAT}" "${mirror_fname}"
+        fi
     else
         echo "Error: mirror file for fifo \"${fifoname}\" of process ${process} could not be found (the fifo may not be mirrored, or the process has not run yet)!" >&2
         return 1

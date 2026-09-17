@@ -30,11 +30,13 @@ print_desc()
 usage()
 {
     echo "debasher_get_stdout       -d <string> -p <string> [-t <int>]"
-    echo "                          [--help]"
+    echo "                          [--watch] [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
     echo "-p <string>               Process name whose stdout should be displayed"
     echo "-t <int>                  Index of task array for process"
+    echo "--watch                   Follow the file as it grows (tail -f) instead of"
+    echo "                          printing its current contents and exiting"
     echo "--help                    Display this help and exit"
 }
 
@@ -44,6 +46,7 @@ read_pars()
     d_given=0
     p_given=0
     t_given=0
+    w_given=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -67,6 +70,8 @@ read_pars()
                       t_given=1
                   fi
                   ;;
+            "--watch") w_given=1
+                       ;;
         esac
         shift
     done
@@ -139,7 +144,11 @@ get_out()
     if [ "${t_given}" -eq 0 ]; then
         local stdout_fname=$(debasher::_get_process_stdout_filename "${absdirname}" ${process} 1)
         if [ -f "${stdout_fname}" ]; then
-            cat "${stdout_fname}"
+            if [ "${w_given}" -eq 1 ]; then
+                "${TAIL}" -f "${stdout_fname}"
+            else
+                "${CAT}" "${stdout_fname}"
+            fi
         else
             echo "Error: stdout file for process ${process} could not be found!" >&2
             return 1
@@ -147,7 +156,11 @@ get_out()
     else
         local stdout_fname=$(debasher::_get_process_stdout_filename "${absdirname}" ${process} 2 "${task_idx}")
         if [ -f "${stdout_fname}" ]; then
-            cat "${stdout_fname}"
+            if [ "${w_given}" -eq 1 ]; then
+                "${TAIL}" -f "${stdout_fname}"
+            else
+                "${CAT}" "${stdout_fname}"
+            fi
         else
             echo "Error: stdout file for process ${process} could not be found!" >&2
             return 1

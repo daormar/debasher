@@ -153,7 +153,10 @@ the program's output directory and the process whose standard output
 should be shown. An additional ``-t <int>`` option can be used to
 select an individual task when the process is part of a task array
 (see the description of the ``generate_opts`` method in the
-:ref:`implem` Section).
+:ref:`implem` Section). Passing ``--watch`` follows the file as it
+grows (like ``tail -f``) instead of printing its current contents and
+exiting, which is useful for monitoring a process that is still
+running.
 
 debasher_get_sched_out
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -164,7 +167,8 @@ scheduling-related information, and is therefore useful for debugging.
 It is introduced in the :ref:`quickstart_example` Section. As with
 ``debasher_get_stdout``, it takes ``-d <string>`` and ``-p <string>``,
 plus an optional ``-t <int>`` to select an individual task of a task
-array.
+array, and supports ``--watch`` to follow the file as it grows instead
+of printing its current contents and exiting.
 
 debasher_get_fifo_mirror
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -183,6 +187,8 @@ Its options are:
 * ``-f <string>``: name of the FIFO, as given to ``define_fifo_opt``.
 * ``-t <int>``: index of the task array, if the owning process is part
   of one.
+* ``--watch``: follow the file as it grows (like ``tail -f``) instead
+  of printing its current contents and exiting.
 
 Module and Process Documentation
 -----------------------------------
