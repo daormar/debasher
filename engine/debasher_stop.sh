@@ -33,7 +33,7 @@ usage()
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
-    echo "-p <string>               Process name whose status should be determined"
+    echo "-p <string>               Process name to be stopped"
     echo "--help                    Display this help and exit"
 }
 
