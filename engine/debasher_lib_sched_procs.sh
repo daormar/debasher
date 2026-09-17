@@ -341,10 +341,10 @@ debasher::_stop_process()
     local sched=$(debasher::_get_scheduler)
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER}) ## Launch using slurm
-            debasher::_slurm_stop_process ${ids_info} || return 1
+            debasher::_slurm_stop_process "${ids_info}" || return 1
             ;;
         ${DEBASHER_BUILTIN_SCHEDULER})
-            debasher::_builtin_sched_stop_process ${ids_info} || return 1
+            debasher::_builtin_sched_stop_process "${ids_info}" || return 1
             ;;
     esac
 }
