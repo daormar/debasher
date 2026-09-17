@@ -26,6 +26,7 @@ import {
   getProcessStdout,
   getProcessTasks,
   inspectPath,
+  stopProcess,
 } from "../api/executionApi";
 
 import { useProgram } from "../store/ProgramContext";
@@ -60,6 +61,7 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   ...OUTPUT_KIND_LABEL,
   io: "inputs and outputs",
   "watch-fifo": "mirrored fifo output",
+  stop: "process stop",
 };
 
 // Above this many indices, listing the family inline stops being
@@ -582,6 +584,18 @@ export default function ProgramCanvas() {
 
     try {
 
+      // debasher_stop -p has no per-task variant, it stops every task
+      // of the named process at once, so this skips the task-index
+      // flow below entirely, unlike the other actions.
+      if (action === "stop") {
+        setProcessCommandOutput({
+          title: `${process.name}: stop`,
+          output: await stopProcess(program, process.name),
+        });
+        setProcessContextMenu(null);
+        return;
+      }
+
       // A "standard" process has no per-task files at all (empty list,
       // so taskIndices[0] is undefined, the plain no-task-index
       // request) and a process that only ever ran as one task doesn't
@@ -632,6 +646,14 @@ export default function ProgramCanvas() {
         setProcessIO(await fetchProcessIO(process, taskIndex));
       } else if (kind === "watch-fifo") {
         openFifoWatch(process, taskIndex);
+      } else if (kind === "stop") {
+        // Unreachable in practice, handleProcessMenuSelect handles
+        // "stop" before ever reaching the task picker, kept here only
+        // so this switch stays exhaustive over ProcessMenuAction.
+        setProcessCommandOutput({
+          title: `${process.name}: stop`,
+          output: await stopProcess(program, process.name),
+        });
       } else {
         setProcessCommandOutput(await fetchProcessOutput(process, kind, taskIndex));
       }

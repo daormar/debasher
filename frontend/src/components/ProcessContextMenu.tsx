@@ -6,15 +6,18 @@ const MENU_ITEMS = [
   "Show scheduler output",
   "Show inputs and outputs",
   "Watch FIFO",
+  "Stop process",
 ] as const;
 
 export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 
 // "io" opens the structured "Show inputs and outputs" modal rather
-// than a plain-text CommandOutputModal — see ProgramCanvas's onSelect.
+// than a plain-text CommandOutputModal, see ProgramCanvas's onSelect.
 // "watch-fifo" opens FifoWatchModal on one of this process's mirrored
 // output fifo options (see ProgramCanvas's handleProcessMenuSelect).
-export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo";
+// "stop" calls stopProcess directly, skipping the task-index flow the
+// other actions go through, debasher_stop -p has no per-task variant.
+export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo" | "stop";
 
 const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show options": "opts",
@@ -22,7 +25,12 @@ const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show scheduler output": "sched-out",
   "Show inputs and outputs": "io",
   "Watch FIFO": "watch-fifo",
+  "Stop process": "stop",
 };
+
+// Items rendered in a "destructive action" color (currently just
+// "Stop process"), rather than adding a whole variant prop per item.
+const DESTRUCTIVE_ITEMS = new Set<(typeof MENU_ITEMS)[number]>(["Stop process"]);
 
 interface Props {
   x: number;
@@ -96,6 +104,7 @@ export default function ProcessContextMenu({
             border: "none",
             background: "none",
             cursor: "pointer",
+            color: DESTRUCTIVE_ITEMS.has(item) ? "#c0392b" : undefined,
           }}
 
         >

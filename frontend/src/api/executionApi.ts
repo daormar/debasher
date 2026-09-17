@@ -387,3 +387,20 @@ export async function stopProgram(program: Program): Promise<string> {
   const { output } = await response.json();
   return output;
 }
+
+// Stop a single process (the canvas's right-click "Stop process"
+// action), see api/routers/execution.py's /stop-process.
+export async function stopProcess(program: Program, processName: string): Promise<string> {
+  const response = await fetch("/api/execution/stop-process", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to stop process ${processName}.`));
+  }
+
+  const { output } = await response.json();
+  return output;
+}

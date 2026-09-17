@@ -667,6 +667,23 @@ def stop_program(program: Program) -> StopProgramResponse:
     return StopProgramResponse(output=output)
 
 
+class StopProcessRequest(BaseModel):
+    program: Program
+    processName: str
+
+
+@router.post("/stop-process", response_model=ProcessOutputResponse)
+def stop_process(request: StopProcessRequest) -> ProcessOutputResponse:
+    """
+    Stop a single process (debasher_stop -d <outputDir> -p <processName>),
+    for the canvas's right-click "Stop process" action.
+    """
+    output = _run_debasher_process_tool(
+        request.program, "debasher_stop", request.processName
+    )
+    return ProcessOutputResponse(output=output)
+
+
 class ResetOutputDirResponse(BaseModel):
     # False whenever a guard below made this a no-op, the caller can
     # tell the user there was nothing to reset.
