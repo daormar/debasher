@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { Program } from "../models/program";
 import { importProgram } from "../storage/programStorage";
-import DirectoryBrowserModal from "./DirectoryBrowserModal";
 import FileBrowserModal from "./FileBrowserModal";
 
 interface Props {
@@ -29,9 +28,6 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
 
   const [error, setError] =
     useState<string | null>(null);
-
-  const [dirBrowserOpen, setDirBrowserOpen] =
-    useState(false);
 
   const [fileBrowserOpen, setFileBrowserOpen] =
     useState(false);
@@ -94,54 +90,27 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
           DEBASHER_MOD_DIR (optional)
         </label>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <textarea
 
-          <input
+          value={debasherModDir}
 
-            type="text"
+          onChange={(event) =>
+            setDebasherModDir(event.target.value)
+          }
 
-            value={debasherModDir}
+          rows={8}
 
-            onChange={(event) =>
-              setDebasherModDir(event.target.value)
-            }
+          spellCheck={false}
 
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                handleImport();
-              }
-            }}
+          placeholder="/path/to/modules"
 
-            placeholder="/path/to/modules"
+          style={{
+            width: "100%",
+            fontFamily: "ui-monospace, Consolas, monospace",
+            resize: "vertical",
+          }}
 
-            autoFocus
-
-            style={{
-              flex: 1,
-            }}
-
-          />
-
-          <button
-            type="button"
-            onClick={() => setDirBrowserOpen(true)}
-            disabled={isImporting}
-          >
-            Browse...
-          </button>
-
-        </div>
-
-        {dirBrowserOpen && (
-          <DirectoryBrowserModal
-            initialPath={debasherModDir}
-            onSelect={(path) => {
-              setDebasherModDir(path);
-              setDirBrowserOpen(false);
-            }}
-            onClose={() => setDirBrowserOpen(false)}
-          />
-        )}
+        />
 
         <label style={{ fontSize: 14 }}>
           Script path (.sh)
