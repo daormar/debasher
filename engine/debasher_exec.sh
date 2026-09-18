@@ -368,16 +368,13 @@ enforce_resident_program_scheduling()
         return 1
     fi
 
-    if [ "${builtin_sched_cpus}" -ne "${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}" ]; then
-        echo "Error! a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program requires an unrestricted --builtinsched-cpus value" >&2
-        return 1
-    fi
-
-    if [ "${builtin_sched_mem}" -ne "${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}" ]; then
-        echo "Error! a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program requires an unrestricted --builtinsched-mem value" >&2
-        return 1
-    fi
-
+    # Resource limits (--builtinsched-cpus/--builtinsched-mem) are not
+    # forced to be unrestricted here: a resident program is free to use
+    # them like any other. Since oneshot mode never waits for a process
+    # to finish (see debasher_builtin_sched::execute_program_processes),
+    # it cannot correct course if not everything fits in one round --
+    # that case is instead detected there and aborted before anything
+    # gets launched, rather than silently launching only a subset.
     debasher::_set_debasher_scheduler "${DEBASHER_BUILTIN_SCHEDULER}" || return 1
     builtin_sched_oneshot_given=1
 

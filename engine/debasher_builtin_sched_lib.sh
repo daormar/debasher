@@ -1548,6 +1548,22 @@ debasher_builtin_sched::execute_program_processes()
 
         # Select processes that should be executed
         if debasher_builtin_sched::_select_processes_to_be_exec "${dirname}"; then
+            # In oneshot mode, nothing ever waits for a process to finish
+            # (see below), so a later iteration can never end up with
+            # *more* available resources than this first one has right
+            # now -- if not everything that could be selected in round 1
+            # got selected, it never will be. Check before launching
+            # anything, rather than silently launching only a subset and
+            # returning as if the whole program had started.
+            if [ ${oneshot} -eq 1 -a ${iterno} -eq 1 ]; then
+                local -a debasher_builtin_sched_selected_arr=(${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES})
+                local num_selected_processes=${#debasher_builtin_sched_selected_arr[@]}
+                if [ ${num_selected_processes} -lt ${num_exec_processes} ]; then
+                    echo "Error: --builtinsched-oneshot requires enough resources (cpus, memory) to launch every process at once (${num_selected_processes} of ${num_exec_processes} fit); it never waits for one to finish to free up resources for the rest. Increase --builtinsched-cpus/--builtinsched-mem, or remove the restriction, and try again. Aborting..." >&2
+                    return 1
+                fi
+            fi
+
             # Execute processes
             debasher_builtin_sched::_exec_processes "${cmdline}" "${dirname}"
 
