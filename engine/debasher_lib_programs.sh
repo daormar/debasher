@@ -287,6 +287,180 @@ debasher::_is_heredoc_process()
 }
 
 ########
+# Like debasher::_search_heredoc_provider, but fixed to the Python
+# heredoc forms specifically (DEBASHER_PROCESS_FUNCNAME_PYEXEC /
+# DEBASHER_PROCESS_VARNAME_PYEXEC), not any other heredoc language.
+# Echoes "<name> func" or "<name> var" and returns 0 if found; returns
+# 1 with no output otherwise (including when the process is a heredoc
+# process in a different language).
+debasher::_get_python_heredoc_provider()
+{
+    local processname=$1
+
+    debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_FUNCNAME_PYEXEC}" "${DEBASHER_PROCESS_VARNAME_PYEXEC}"
+}
+
+########
+# Echoes the raw Python source of a process's Python heredoc (function
+# or legacy variable provider). A "resident" program (see to_do_fbp.md)
+# requires every one of its processes to provide its code this way, so
+# its source can be located and analyzed without ever running it or
+# needing a real file on disk. Returns 1, with no output, if the
+# process has no Python heredoc provider at all (a regular/alias/
+# ext_alias process, or a heredoc in a different language).
+debasher::_get_resident_process_source()
+{
+    local processname=$1
+
+    local provider_info
+    provider_info=$(debasher::_get_python_heredoc_provider "${processname}") || return 1
+
+    local provider kind
+    read -r provider kind <<< "${provider_info}"
+
+    if [ "${kind}" = "func" ]; then
+        "${provider}"
+    else
+        echo "${!provider}"
+    fi
+}
+
+########
+# Echoes the source of the (small, self-contained) Python program that
+# classifies a resident process's role from its source, read from
+# stdin: prints exactly one of "supervisor", "fbpprocess" or "unknown"
+# to stdout. It looks for a top-level class definition whose bases
+# resolve -- following plain "import"/"from ... import ... as ..."
+# aliasing -- to the literal names "Supervisor" or "FBPProcess" (the
+# two base classes to_do_fbp.md defines for resident processes). This
+# is a static check: ast.parse never imports or executes the given
+# source, unlike a real "issubclass" check, which was deliberately
+# ruled out for this (see to_do_fbp.md) since it would need to run
+# inside each process's own conda/docker environment just to answer a
+# type question, before the program has even been launched.
+debasher::_resident_role_classifier_src()
+{
+    cat <<'EOF'
+import ast
+import sys
+
+BASE_ROLES = {"Supervisor": "supervisor", "FBPProcess": "fbpprocess"}
+
+
+def resolved_base_names(tree):
+    """Local name -> canonical base name, following import aliasing."""
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in BASE_ROLES:
+                    aliases[alias.asname or alias.name] = alias.name
+    return aliases
+
+
+def base_identifier(base_node):
+    if isinstance(base_node, ast.Name):
+        return base_node.id
+    if isinstance(base_node, ast.Attribute):
+        return base_node.attr
+    return None
+
+
+def classify(source):
+    tree = ast.parse(source)
+
+    aliases = resolved_base_names(tree)
+    found_role = None
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for base in node.bases:
+            name = base_identifier(base)
+            if name is None:
+                continue
+            canonical = aliases.get(name, name)
+            role = BASE_ROLES.get(canonical)
+            if role == "supervisor":
+                return "supervisor"
+            if role == "fbpprocess" and found_role is None:
+                found_role = "fbpprocess"
+    return found_role or "unknown"
+
+
+def main():
+    try:
+        print(classify(sys.stdin.read()))
+    except SyntaxError as exc:
+        print(f"Error: invalid Python source ({exc})", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+EOF
+}
+
+########
+# Classifies a resident program's process as "supervisor",
+# "fbpprocess" or "unknown" by running debasher::_resident_role_classifier_src
+# against the process's Python heredoc source (see
+# debasher::_get_resident_process_source). Returns 1, with an error on
+# stderr, if the process is not a Python heredoc process at all, or if
+# its source is not valid Python.
+debasher::_classify_resident_process_role()
+{
+    local processname=$1
+
+    local source
+    if ! source=$(debasher::_get_resident_process_source "${processname}"); then
+        echo "Error: process ${processname} does not provide its code as a Python heredoc, required for a resident program" >&2
+        return 1
+    fi
+
+    printf '%s' "${source}" | "${PYTHON}" -c "$(debasher::_resident_role_classifier_src)"
+}
+
+########
+# Validates every process of a "resident" program (see to_do_fbp.md):
+# each one must classify (via debasher::_classify_resident_process_role)
+# as either "supervisor" or "fbpprocess", and at most one process may
+# be a "supervisor" (a supervisor is optional -- like ext2/3/4
+# journaling -- but never more than one). A no-op, returning 0
+# immediately, when DEBASHER_PROGRAM_TYPE is not "resident". Exits
+# with an error message on the first violation found.
+debasher::_validate_resident_program_processes()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    local processname
+    local supervisor_processname=""
+
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local role
+        role=$(debasher::_classify_resident_process_role "${processname}") || return 1
+
+        case "${role}" in
+            supervisor)
+                if [ -n "${supervisor_processname}" ]; then
+                    echo "Error: a resident program can have at most one Supervisor process, but both ${supervisor_processname} and ${processname} are" >&2
+                    return 1
+                fi
+                supervisor_processname="${processname}"
+                ;;
+            fbpprocess)
+                :
+                ;;
+            *)
+                echo "Error: process ${processname} does not derive from FBPProcess or Supervisor, required for a resident program" >&2
+                return 1
+                ;;
+        esac
+    done
+}
+
+########
 debasher::_create_heredoc_func_body()
 {
     local processname=$1

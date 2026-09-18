@@ -23,10 +23,15 @@ setup() {
     # the built engine/ dir).
     BASENAME="$(command -v basename)"
 
+    # debasher::_classify_resident_process_role shells out to "${PYTHON}",
+    # for the same reason as BASENAME above.
+    PYTHON="$(command -v python3)"
+
     # See test/engine/lib_processes.bats for why this is needed: a bare
     # top-level "declare" in debasher_lib.sh becomes local to setup()
     # unless forced global here, and would vanish once setup() returns.
     declare -g DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    declare -gA DEBASHER_PROGRAM_PROCESSES
 }
 
 # --- debasher::program_type -------------------------------------------
@@ -67,4 +72,231 @@ setup() {
 
     debasher::_resolve_program_type "/tmp/notother.sh"
     [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_GENERAL}" ]
+}
+
+# --- debasher::_get_python_heredoc_provider / _get_resident_process_source --
+
+@test "debasher::_get_python_heredoc_provider finds the modern function-form provider" {
+    pyproc_heredoc_py()
+    {
+        cat <<'EOF'
+print("hi")
+EOF
+    }
+
+    result=$(debasher::_get_python_heredoc_provider "pyproc")
+    [ "${result}" = "pyproc_heredoc_py func" ]
+}
+
+@test "debasher::_get_python_heredoc_provider finds the legacy variable-form provider" {
+    declare -g legacyproc_py="print('hi')"
+
+    result=$(debasher::_get_python_heredoc_provider "legacyproc")
+    [ "${result}" = "legacyproc_py var" ]
+}
+
+@test "debasher::_get_python_heredoc_provider fails for a process with no heredoc at all" {
+    plainproc() { :; }
+
+    run debasher::_get_python_heredoc_provider "plainproc"
+    [ "${status}" -eq 1 ]
+}
+
+@test "debasher::_get_python_heredoc_provider fails for a process whose heredoc is a different language" {
+    perlproc_heredoc_perl()
+    {
+        cat <<'EOF'
+print "hi\n";
+EOF
+    }
+
+    run debasher::_get_python_heredoc_provider "perlproc"
+    [ "${status}" -eq 1 ]
+}
+
+@test "debasher::_get_resident_process_source returns the function-form provider's text" {
+    srcproc_heredoc_py()
+    {
+        cat <<'EOF'
+class Worker(FBPProcess):
+    pass
+EOF
+    }
+
+    result=$(debasher::_get_resident_process_source "srcproc")
+    [[ "${result}" == *"class Worker(FBPProcess):"* ]]
+}
+
+@test "debasher::_get_resident_process_source returns the legacy variable-form provider's text" {
+    declare -g legacysrcproc_py="class Worker(FBPProcess): pass"
+
+    result=$(debasher::_get_resident_process_source "legacysrcproc")
+    [ "${result}" = "class Worker(FBPProcess): pass" ]
+}
+
+@test "debasher::_get_resident_process_source fails for a process with no Python heredoc" {
+    noheredocproc() { :; }
+
+    run debasher::_get_resident_process_source "noheredocproc"
+    [ "${status}" -eq 1 ]
+}
+
+# --- debasher::_classify_resident_process_role ---------------------------
+
+@test "debasher::_classify_resident_process_role recognizes a class deriving from FBPProcess" {
+    fbpproc_heredoc_py()
+    {
+        cat <<'EOF'
+class Worker(FBPProcess):
+    pass
+EOF
+    }
+
+    result=$(debasher::_classify_resident_process_role "fbpproc")
+    [ "${result}" = "fbpprocess" ]
+}
+
+@test "debasher::_classify_resident_process_role recognizes a class deriving from Supervisor" {
+    supervisorproc_heredoc_py()
+    {
+        cat <<'EOF'
+class Watchdog(Supervisor):
+    pass
+EOF
+    }
+
+    result=$(debasher::_classify_resident_process_role "supervisorproc")
+    [ "${result}" = "supervisor" ]
+}
+
+@test "debasher::_classify_resident_process_role follows an aliased import of Supervisor" {
+    aliasedproc_heredoc_py()
+    {
+        cat <<'EOF'
+from mylib import Supervisor as Sup
+
+
+class Watchdog(Sup):
+    pass
+EOF
+    }
+
+    result=$(debasher::_classify_resident_process_role "aliasedproc")
+    [ "${result}" = "supervisor" ]
+}
+
+@test "debasher::_classify_resident_process_role returns unknown for a class deriving from neither base" {
+    unrelatedproc_heredoc_py()
+    {
+        cat <<'EOF'
+class Worker:
+    pass
+EOF
+    }
+
+    result=$(debasher::_classify_resident_process_role "unrelatedproc")
+    [ "${result}" = "unknown" ]
+}
+
+@test "debasher::_classify_resident_process_role returns unknown for source with no class at all" {
+    noclassproc_heredoc_py()
+    {
+        cat <<'EOF'
+print("just a script")
+EOF
+    }
+
+    result=$(debasher::_classify_resident_process_role "noclassproc")
+    [ "${result}" = "unknown" ]
+}
+
+@test "debasher::_classify_resident_process_role fails with an error for a non-heredoc process" {
+    regularproc() { :; }
+
+    run debasher::_classify_resident_process_role "regularproc"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process regularproc does not provide its code as a Python heredoc"* ]]
+}
+
+# --- debasher::_validate_resident_program_processes -----------------------
+
+@test "debasher::_validate_resident_program_processes is a no-op for a general program" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    DEBASHER_PROGRAM_PROCESSES["whatever"]=1
+
+    run debasher::_validate_resident_program_processes
+    [ "${status}" -eq 0 ]
+}
+
+@test "debasher::_validate_resident_program_processes accepts one supervisor and several fbpprocess" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+    DEBASHER_PROGRAM_PROCESSES=(["watchdog"]=1 ["worker_a"]=1 ["worker_b"]=1)
+
+    watchdog_heredoc_py() { cat <<'EOF'
+class Watchdog(Supervisor):
+    pass
+EOF
+    }
+    worker_a_heredoc_py() { cat <<'EOF'
+class Worker(FBPProcess):
+    pass
+EOF
+    }
+    worker_b_heredoc_py() { cat <<'EOF'
+class Worker(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_validate_resident_program_processes
+    [ "${status}" -eq 0 ]
+}
+
+@test "debasher::_validate_resident_program_processes accepts zero supervisors" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+    DEBASHER_PROGRAM_PROCESSES=(["worker_a"]=1)
+
+    worker_a_heredoc_py() { cat <<'EOF'
+class Worker(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_validate_resident_program_processes
+    [ "${status}" -eq 0 ]
+}
+
+@test "debasher::_validate_resident_program_processes rejects a second supervisor" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+    DEBASHER_PROGRAM_PROCESSES=(["watchdog_a"]=1 ["watchdog_b"]=1)
+
+    watchdog_a_heredoc_py() { cat <<'EOF'
+class Watchdog(Supervisor):
+    pass
+EOF
+    }
+    watchdog_b_heredoc_py() { cat <<'EOF'
+class Watchdog(Supervisor):
+    pass
+EOF
+    }
+
+    run debasher::_validate_resident_program_processes
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: a resident program can have at most one Supervisor process"* ]]
+}
+
+@test "debasher::_validate_resident_program_processes rejects a process classifying as unknown" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+    DEBASHER_PROGRAM_PROCESSES=(["plain_worker"]=1)
+
+    plain_worker_heredoc_py() { cat <<'EOF'
+class Worker:
+    pass
+EOF
+    }
+
+    run debasher::_validate_resident_program_processes
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process plain_worker does not derive from FBPProcess or Supervisor"* ]]
 }

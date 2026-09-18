@@ -347,6 +347,44 @@ initialize_procspec()
 }
 
 ########
+# A "resident" program (long-running, stateful processes, see
+# to_do_fbp.md) only ever runs under the built-in scheduler, in
+# oneshot mode: debasher_exec launches every process and returns
+# immediately rather than waiting for them to finish, since they are
+# not expected to ever finish on their own. This is forced here,
+# rather than left for the caller (frontend or otherwise) to remember
+# to pass --builtinsched-oneshot/--sched BUILTIN, so the behavior is
+# correct regardless of how debasher_exec is invoked.
+enforce_resident_program_scheduling()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    echo "# Program type is '${DEBASHER_PROGRAM_TYPE_RESIDENT}': forcing the built-in scheduler in oneshot mode..." >&2
+
+    if [ ${sched_given} -eq 1 ] && [ "${sched_opt}" != "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+        echo "Error! a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program only supports the built-in scheduler (requested: ${sched_opt})" >&2
+        return 1
+    fi
+
+    if [ "${builtin_sched_cpus}" -ne "${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}" ]; then
+        echo "Error! a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program requires an unrestricted --builtinsched-cpus value" >&2
+        return 1
+    fi
+
+    if [ "${builtin_sched_mem}" -ne "${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}" ]; then
+        echo "Error! a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program requires an unrestricted --builtinsched-mem value" >&2
+        return 1
+    fi
+
+    debasher::_set_debasher_scheduler "${DEBASHER_BUILTIN_SCHEDULER}" || return 1
+    builtin_sched_oneshot_given=1
+
+    echo "" >&2
+}
+
+########
 gen_final_procspec()
 {
     echo "# Generate final process specification..." >&2
@@ -1235,6 +1273,10 @@ load_module "${pfile}" || exit 1
 
 # Initialize process specification
 initialize_procspec "${pfile}" || exit 1
+
+debasher::_validate_resident_program_processes || exit 1
+
+enforce_resident_program_scheduling || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts || exit 1
