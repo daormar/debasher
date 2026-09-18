@@ -192,6 +192,19 @@ class FBPProcess:
         self._heartbeat_thread = None
         self._heartbeat_stop = threading.Event()
 
+        # Chandy-Lamport barrier round in progress, if any (None = none).
+        self._barrier_epoch = None
+        self._barrier_halt = False
+        self._barrier_pending = set()
+        self._barrier_state = None
+        self._barrier_channel_buffers = {}
+        # Highest epoch this node has ever closed; -1 means none yet, so
+        # the first round it self-initiates is epoch 0. A restored
+        # checkpoint's epoch must seed this on startup (not yet built,
+        # see the checkpoint-persistence/startup-sequence slices), or a
+        # relaunched node would start renumbering from 0 again.
+        self._last_epoch = -1
+
     def _check_declared_ports(self):
         for port in list(self.INPUT_PORTS) + list(self.OUTPUT_PORTS):
             if port not in self.opts:
@@ -299,7 +312,14 @@ class FBPProcess:
                 break
             port_name, envelope_type, payload = item
             if envelope_type == TYPE_DATA:
-                self.process_data(port_name, payload)
+                if port_name in self._barrier_pending:
+                    # A barrier round is open and this port's marker for
+                    # it hasn't arrived yet: this DATA is in transit from
+                    # before the sender's own snapshot, so it belongs to
+                    # the channel's state, not to normal processing.
+                    self._barrier_channel_buffers[port_name].append(payload)
+                else:
+                    self.process_data(port_name, payload)
             elif envelope_type == TYPE_BARRIER:
                 self._on_barrier(port_name, payload)
             elif envelope_type == TYPE_INTERACT:
@@ -335,14 +355,90 @@ class FBPProcess:
         self._outbound_queues[port_name].put(encode_interact(command, args))
 
     def _on_barrier(self, port_name, payload):
-        # Filled in by the Chandy-Lamport barrier-logic slice: capturing
-        # state on the first marker for an epoch, forwarding it on every
-        # output port, and buffering DATA on ports still pending it.
-        raise NotImplementedError
+        epoch = payload["epoch"]
+        halt = payload["halt"]
+
+        if self._barrier_epoch is None:
+            self._open_barrier_round(epoch, halt, arrived_port=port_name)
+        else:
+            if epoch != self._barrier_epoch:
+                raise ValueError(
+                    f"{type(self).__name__}: got a BARRIER for epoch {epoch!r} on port "
+                    f"{port_name!r} while epoch {self._barrier_epoch!r} is still open"
+                )
+            self._barrier_pending.discard(port_name)
+
+        if not self._barrier_pending:
+            self._close_barrier_round()
 
     def _on_interact(self, payload):
-        # Filled in by the INTERACT-dispatch slice: routing commands
-        # like "start_snapshot"/"shutdown" into the barrier logic above.
+        command = payload["command"]
+        if command == "start_snapshot":
+            self._start_barrier_round(halt=False)
+        elif command == "shutdown":
+            self._start_barrier_round(halt=True)
+        else:
+            # The command catalog is deliberately open-ended: an
+            # unrecognized command is a forward-compatibility concern,
+            # not a reason to abort an otherwise-healthy process.
+            self.log.warning("ignoring unrecognized INTERACT command: %r", command)
+
+    def _start_barrier_round(self, halt):
+        """
+        Opens a barrier round as its initiator (triggered by INTERACT,
+        not by a peer's own BARRIER arriving on some input port): no
+        input port has closed yet at this point, unlike the peer-
+        triggered case in _on_barrier, so every declared input port
+        (including this node's own, if a cycle loops back to it) starts
+        out pending -- the initiator only closes its part once the
+        marker it just sent comes back around, the same as any other
+        node would.
+        """
+        if self._barrier_epoch is not None:
+            raise ValueError(
+                f"{type(self).__name__}: asked to start a new barrier round while "
+                f"epoch {self._barrier_epoch!r} is still open"
+            )
+
+        epoch = self._last_epoch + 1
+        self._open_barrier_round(epoch, halt, arrived_port=None)
+        if not self._barrier_pending:
+            self._close_barrier_round()
+
+    def _open_barrier_round(self, epoch, halt, arrived_port):
+        self._barrier_epoch = epoch
+        self._barrier_halt = halt
+        self._barrier_state = self.capture_state()
+        for out_port in self.OUTPUT_PORTS:
+            self._send_barrier(out_port, epoch, halt=halt)
+
+        pending = set(self.INPUT_PORTS)
+        pending.discard(arrived_port)
+        self._barrier_pending = pending
+        self._barrier_channel_buffers = {port: [] for port in pending}
+
+    def _close_barrier_round(self):
+        epoch = self._barrier_epoch
+        halt = self._barrier_halt
+        state = self._barrier_state
+        channel_buffers = self._barrier_channel_buffers
+
+        self._last_epoch = max(self._last_epoch, epoch)
+        self._barrier_epoch = None
+        self._barrier_halt = False
+        self._barrier_state = None
+        self._barrier_pending = set()
+        self._barrier_channel_buffers = {}
+
+        self._on_epoch_closed(epoch, halt, state, channel_buffers)
+
+    def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+        # Filled in by the checkpoint-persistence slice (writing state +
+        # channel_buffers to disk, then notifying the supervisor) and,
+        # for halt=True, by whatever orchestrates an ordered shutdown --
+        # this runs on the brain thread itself, so it can't call
+        # stop_threads() directly (that joins the brain thread, which
+        # would deadlock joining itself).
         raise NotImplementedError
 
     # -- subclass extension points --

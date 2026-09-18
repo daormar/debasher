@@ -70,9 +70,9 @@ def test_decode_envelope_round_trips_interact():
 
 
 def test_decode_envelope_survives_an_embedded_newline_in_a_data_payload():
-    # The whole point of going through json.dumps for the wire format
-    # (point 1): a newline inside the payload must not be mistaken for
-    # the line delimiter.
+    # The whole point of going through json.dumps for the wire format:
+    # a newline inside the payload must not be mistaken for the line
+    # delimiter.
     line = lib.encode_data("first line\nsecond line")
     assert "\n" not in line
     envelope = lib.decode_envelope(line)
@@ -99,8 +99,8 @@ def test_decode_envelope_lets_malformed_json_propagate():
 def test_barrier_is_never_nested_inside_data():
     # DATA's payload is opaque to the envelope layer -- encoding a
     # BARRIER-shaped dict as DATA's own payload must decode back as
-    # DATA, not be mistaken for a real BARRIER (see point 1: a reader
-    # must be able to dispatch on the top-level "type" alone).
+    # DATA, not be mistaken for a real BARRIER: a reader must be able
+    # to dispatch on the top-level "type" alone.
     line = lib.encode_data({"type": "BARRIER", "payload": {"epoch": 1, "halt": False}})
     envelope = lib.decode_envelope(line)
     assert envelope.type == "DATA"

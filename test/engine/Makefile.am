@@ -1,5 +1,6 @@
 EXTRA_DIST = lib_utils.bats lib_processes.bats lib_programs.bats	\
-conftest.py test_envelope.py test_fbpprocess.py test_thread_topology.py
+conftest.py test_envelope.py test_fbpprocess.py test_thread_topology.py	\
+test_barrier.py
 
 check-local:
 if HAVE_BATS

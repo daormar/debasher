@@ -1,0 +1,277 @@
+import os
+import threading
+import time
+
+import pytest
+
+import debasher_runtime_lib as lib
+
+
+def _wait_until(predicate, timeout=2.0, interval=0.01):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
+class _BarrierWorker(lib.FBPProcess):
+    INPUT_PORTS = ["a", "b"]
+    OUTPUT_PORTS = ["x", "y"]
+
+    def __init__(self, *args, **kwargs):
+        self.closed_epochs = []
+        self.received = []
+        self.state_to_capture = {"marker": "initial"}
+        super().__init__(*args, **kwargs)
+
+    def capture_state(self):
+        return dict(self.state_to_capture)
+
+    def process_data(self, port_name, packet):
+        self.received.append((port_name, packet))
+
+    def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+        self.closed_epochs.append((epoch, halt, state, channel_buffers))
+
+
+_FAKE_OPTS = {"a": "/dev/null", "b": "/dev/null", "x": "/dev/null", "y": "/dev/null"}
+
+
+def _out(proc, port):
+    return proc._outbound_queues[port].get_nowait()
+
+
+class _OnePort(lib.FBPProcess):
+    INPUT_PORTS = ["a"]
+    OUTPUT_PORTS = ["x"]
+
+    def __init__(self, *a, **kw):
+        self.closed_epochs = []
+        super().__init__(*a, **kw)
+
+    def capture_state(self):
+        return {"marker": "initial"}
+
+    def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+        self.closed_epochs.append((epoch, halt, state, channel_buffers))
+
+
+class _Root(lib.FBPProcess):
+    OUTPUT_PORTS = ["x"]
+
+    def __init__(self, *a, **kw):
+        self.closed_epochs = []
+        super().__init__(*a, **kw)
+
+    def capture_state(self):
+        return {}
+
+    def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+        self.closed_epochs.append((epoch, halt, state, channel_buffers))
+
+
+# --- peer-triggered rounds (a BARRIER arriving on an input port) --------
+
+
+def test_single_pending_port_closes_as_soon_as_its_marker_arrives():
+    proc = _OnePort(opts={"a": "/dev/null", "x": "/dev/null"})
+    proc._on_barrier("a", {"epoch": 0, "halt": False})
+
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {})]
+    assert lib.decode_envelope(_out(proc, "x")) == lib.Envelope(
+        type="BARRIER", payload={"epoch": 0, "halt": False}
+    )
+
+
+def test_two_pending_ports_waits_for_the_second_marker():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    proc._on_barrier("a", {"epoch": 0, "halt": False})
+
+    assert proc._barrier_pending == {"b"}
+    assert proc.closed_epochs == []
+
+    proc._on_barrier("b", {"epoch": 0, "halt": False})
+
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"b": []})]
+
+
+def test_barrier_is_forwarded_on_every_output_port_when_a_round_opens():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    proc._on_barrier("a", {"epoch": 3, "halt": False})
+
+    assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 3, "halt": False}
+    assert lib.decode_envelope(_out(proc, "y")).payload == {"epoch": 3, "halt": False}
+
+
+def test_mismatched_epoch_while_a_round_is_open_raises():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    proc._on_barrier("a", {"epoch": 0, "halt": False})
+
+    with pytest.raises(ValueError):
+        proc._on_barrier("b", {"epoch": 99, "halt": False})
+
+
+# --- self-triggered rounds (INTERACT start_snapshot/shutdown) -----------
+
+
+def test_start_snapshot_leaves_every_input_port_pending():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+
+    assert proc._barrier_pending == {"a", "b"}
+    assert proc.closed_epochs == []
+    assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 0, "halt": False}
+
+
+def test_a_root_node_with_no_input_ports_closes_instantly():
+    proc = _Root(opts={"x": "/dev/null"})
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+
+    assert proc.closed_epochs == [(0, False, {}, {})]
+
+
+def test_shutdown_command_closes_with_halt_true():
+    proc = _Root(opts={"x": "/dev/null"})
+    proc._on_interact({"command": "shutdown", "args": {}})
+
+    assert proc.closed_epochs == [(0, True, {}, {})]
+
+
+def test_epoch_number_increments_across_successive_self_initiated_rounds():
+    proc = _Root(opts={"x": "/dev/null"})
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+
+    assert [epoch for epoch, *_ in proc.closed_epochs] == [0, 1]
+
+
+def test_starting_a_round_while_one_is_already_open_raises():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+
+    with pytest.raises(ValueError):
+        proc._on_interact({"command": "start_snapshot", "args": {}})
+
+
+def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    with caplog.at_level("WARNING", logger=proc.log.name):
+        proc._on_interact({"command": "not_a_real_command", "args": {}})
+
+    assert proc.closed_epochs == []
+    assert proc._barrier_epoch is None
+    assert "not_a_real_command" in caplog.text
+
+
+# --- integration: buffering + a real cyclic self-return, through real ----
+# --- threads and FIFOs                                                  --
+
+
+@pytest.fixture
+def fifo_pair(tmp_path):
+    a_to_b = tmp_path / "a_to_b.fifo"
+    b_to_a = tmp_path / "b_to_a.fifo"
+    os.mkfifo(a_to_b)
+    os.mkfifo(b_to_a)
+    return str(a_to_b), str(b_to_a)
+
+
+def test_data_on_a_still_pending_port_is_buffered_not_delivered(tmp_path):
+    path_a = str(tmp_path / "a.fifo")
+    path_b = str(tmp_path / "b.fifo")
+    os.mkfifo(path_a)
+    os.mkfifo(path_b)
+
+    proc = _BarrierWorker(opts={"a": path_a, "b": path_b, "x": str(tmp_path / "x.fifo"), "y": str(tmp_path / "y.fifo")})
+    os.mkfifo(proc.opts["x"])
+    os.mkfifo(proc.opts["y"])
+
+    proc.start_threads()
+    try:
+        # Something has to hold the writer thread's FIFOs open, or their
+        # writer threads stay blocked forever in open(). Reading until
+        # EOF (not just opening and closing right away) avoids a race
+        # where the writer's own write()/flush() lands after this side
+        # already hung up (a real BrokenPipeError seen while writing
+        # this test).
+        def _drain(path):
+            with open(path, "r") as f:
+                f.read()
+
+        drains = [threading.Thread(target=_drain, args=(p,)) for p in (proc.opts["x"], proc.opts["y"])]
+        for d in drains:
+            d.start()
+
+        with open(path_a, "w") as wa, open(path_b, "w") as wb:
+            wa.write(lib.encode_barrier(0) + "\n")
+            wa.flush()
+            assert _wait_until(lambda: proc._barrier_pending == {"b"})
+
+            wb.write(lib.encode_data("in transit") + "\n")
+            wb.flush()
+            # give the brain thread a chance to (mis)deliver it if buffering were broken
+            time.sleep(0.05)
+            assert proc.received == []
+
+            wb.write(lib.encode_barrier(0) + "\n")
+            wb.flush()
+            assert _wait_until(lambda: proc.closed_epochs != [])
+
+        assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"b": ["in transit"]})]
+        assert proc.received == []
+    finally:
+        # This also closes the writer threads' FIFOs, which is what lets
+        # the drain threads' blocking read() calls above return (EOF)
+        # and those threads finish on their own.
+        proc.stop_threads(timeout=2)
+        for d in drains:
+            d.join(timeout=2)
+
+
+def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair):
+    a_to_b, b_to_a = fifo_pair
+
+    class _Node(lib.FBPProcess):
+        INPUT_PORTS = ["inf"]
+        OUTPUT_PORTS = ["outf"]
+
+        def __init__(self, *a, **kw):
+            self.closed_epochs = []
+            super().__init__(*a, **kw)
+
+        def capture_state(self):
+            return {"name": self.opts.get("name")}
+
+        def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+            self.closed_epochs.append((epoch, halt, state, channel_buffers))
+
+    # A cycle of two nodes: node_a -> node_b -> node_a.
+    node_a = _Node(opts={"inf": b_to_a, "outf": a_to_b, "name": "a"})
+    node_b = _Node(opts={"inf": a_to_b, "outf": b_to_a, "name": "b"})
+
+    node_b.start_threads()
+    node_a.start_threads()
+    try:
+        node_a._on_interact({"command": "start_snapshot", "args": {}})
+        # node_a is the initiator: its own input port is pending until
+        # the marker it just sent has gone all the way around through
+        # node_b and back to it.
+        assert node_a._barrier_pending == {"inf"}
+        assert node_a.closed_epochs == []
+
+        assert _wait_until(lambda: node_a.closed_epochs != [])
+        # node_a self-initiated, so "inf" was tracked as pending for the
+        # whole round (even though nothing arrived on it before its own
+        # marker did) -- an empty list is still a real, correct channel
+        # state entry, not the same as never having tracked that port.
+        assert node_a.closed_epochs == [(0, False, {"name": "a"}, {"inf": []})]
+        assert _wait_until(lambda: node_b.closed_epochs != [])
+        # node_b instead first saw this round via the BARRIER arriving on
+        # its own (only) input port, so that port was never "pending" at
+        # all -- nothing to track.
+        assert node_b.closed_epochs == [(0, False, {"name": "b"}, {})]
+    finally:
+        node_a.stop_threads(timeout=2)
+        node_b.stop_threads(timeout=2)
