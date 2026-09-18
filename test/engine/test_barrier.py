@@ -166,8 +166,18 @@ def test_starting_a_round_while_one_is_already_open_raises():
 
 def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
     proc = _BarrierWorker(opts=_FAKE_OPTS)
-    with caplog.at_level("WARNING", logger=proc.log.name):
-        proc._on_interact({"command": "not_a_real_command", "args": {}})
+    # caplog.at_level(level, logger=name) only adjusts that logger's level;
+    # its capturing handler lives on the root logger, so it only ever sees
+    # records that propagate there. proc.log has propagate=False (by
+    # design, to avoid duplicate output through some future ancestor
+    # handler), so the handler must be attached directly here instead of
+    # relying on propagation.
+    proc.log.addHandler(caplog.handler)
+    try:
+        with caplog.at_level("WARNING", logger=proc.log.name):
+            proc._on_interact({"command": "not_a_real_command", "args": {}})
+    finally:
+        proc.log.removeHandler(caplog.handler)
 
     assert proc.closed_epochs == []
     assert proc._barrier_epoch is None
