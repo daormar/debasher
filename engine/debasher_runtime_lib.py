@@ -163,8 +163,16 @@ class FBPProcess:
     INPUT_PORTS = []
     OUTPUT_PORTS = []
 
+    # Name of the OUTPUT_PORTS entry wired to the supervisor's heartbeat
+    # channel, if any. A supervisor is optional (0 or 1 per resident
+    # program): leave this None to run without one, in which case
+    # checkpoints are still written, just never announced anywhere.
+    SUPERVISOR_PORT = None
+
     DEFAULT_LOG_LEVEL = "INFO"
     HEARTBEAT_INTERVAL_SECONDS = 5
+    CHECKPOINT_SCHEMA_VERSION = 1
+    CHECKPOINT_RETENTION = 3
 
     def __init__(self, argv=None, opts=None):
         if opts is not None:
@@ -204,6 +212,10 @@ class FBPProcess:
         # see the checkpoint-persistence/startup-sequence slices), or a
         # relaunched node would start renumbering from 0 again.
         self._last_epoch = -1
+
+        # Set once an epoch closes with halt=True; watched (not acted on
+        # here -- see _on_epoch_closed) by whatever orchestrates shutdown.
+        self._halted = threading.Event()
 
     def _check_declared_ports(self):
         for port in list(self.INPUT_PORTS) + list(self.OUTPUT_PORTS):
@@ -410,6 +422,10 @@ class FBPProcess:
         self._barrier_halt = halt
         self._barrier_state = self.capture_state()
         for out_port in self.OUTPUT_PORTS:
+            # The supervisor channel never sees a BARRIER: it doesn't
+            # take part in the barrier protocol, only in INTERACT.
+            if out_port == self.SUPERVISOR_PORT:
+                continue
             self._send_barrier(out_port, epoch, halt=halt)
 
         pending = set(self.INPUT_PORTS)
@@ -433,13 +449,68 @@ class FBPProcess:
         self._on_epoch_closed(epoch, halt, state, channel_buffers)
 
     def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
-        # Filled in by the checkpoint-persistence slice (writing state +
-        # channel_buffers to disk, then notifying the supervisor) and,
-        # for halt=True, by whatever orchestrates an ordered shutdown --
-        # this runs on the brain thread itself, so it can't call
-        # stop_threads() directly (that joins the brain thread, which
-        # would deadlock joining itself).
-        raise NotImplementedError
+        path = self._save_checkpoint(epoch, state, channel_buffers)
+        self.log.info("checkpoint saved for epoch %s at %s", epoch, path)
+
+        if self.SUPERVISOR_PORT is not None:
+            self._send_interact(
+                self.SUPERVISOR_PORT, "checkpoint_saved", {"epoch": epoch, "path": path}
+            )
+
+        if halt:
+            # Runs on the brain thread itself, so it can't call
+            # stop_threads() directly here (that joins the brain thread,
+            # which would deadlock joining itself) -- just signal, and
+            # leave actually stopping every thread to whatever orchestrates
+            # shutdown from outside the brain thread (the startup-sequence
+            # slice's run(), most likely).
+            self.log.info("epoch %s closed with halt=True, signalling for shutdown", epoch)
+            self._halted.set()
+
+    def _checkpoints_dir(self):
+        execdir = os.environ.get("DEBASHER_PROCESS_EXECDIR")
+        if not execdir:
+            raise RuntimeError(
+                f"{type(self).__name__}: DEBASHER_PROCESS_EXECDIR is not set in the "
+                "environment, cannot locate this process's checkpoints directory (only "
+                "set by the engine's builtin scheduler when it launches a process)"
+            )
+        return os.path.join(execdir, "checkpoints")
+
+    def _save_checkpoint(self, epoch, state, channel_buffers):
+        checkpoints_dir = self._checkpoints_dir()
+        os.makedirs(checkpoints_dir, exist_ok=True)
+
+        checkpoint = {
+            "schema_version": self.CHECKPOINT_SCHEMA_VERSION,
+            "epoch": epoch,
+            "state": state,
+            "channel_state": channel_buffers,
+        }
+
+        final_path = os.path.join(checkpoints_dir, f"{epoch}.json")
+        tmp_path = f"{final_path}.tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(checkpoint, f)
+        os.replace(tmp_path, final_path)
+
+        self._prune_old_checkpoints(checkpoints_dir)
+
+        return final_path
+
+    def _prune_old_checkpoints(self, checkpoints_dir):
+        epochs = []
+        for name in os.listdir(checkpoints_dir):
+            if not name.endswith(".json"):
+                continue
+            try:
+                epochs.append(int(name[: -len(".json")]))
+            except ValueError:
+                continue
+
+        epochs.sort(reverse=True)
+        for old_epoch in epochs[self.CHECKPOINT_RETENTION :]:
+            os.remove(os.path.join(checkpoints_dir, f"{old_epoch}.json"))
 
     # -- subclass extension points --
 

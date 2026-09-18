@@ -1107,6 +1107,12 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # Execute process function
 
     DEBASHER_PROCESS_STDOUT_FILENAME=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
+    # Exported (not a plain assignment) so it survives both the process's
+    # own wrapper function and whatever it execs in turn (e.g. a resident
+    # process's "python -c ..." heredoc) -- lets a process locate its own
+    # __exec__/<processname>/ directory (e.g. for checkpoints) without
+    # any option needing to be wired for it.
+    export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
     "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
 
     local funct_exit_code=${PIPESTATUS[0]}
