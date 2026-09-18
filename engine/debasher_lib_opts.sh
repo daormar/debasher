@@ -859,7 +859,7 @@ debasher::define_fifo_opt()
     debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}"
 
     # Get absolute name of FIFO
-    local abs_fifoname=$(debasher::_get_absolute_fifoname "${process_name}" "${fifoname}")
+    local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
 
     # Define option for FIFO
     debasher::define_opt "${opt}" "${abs_fifoname}" "${varname}" || return 1
@@ -924,7 +924,7 @@ debasher::define_fifo_opt_generator()
     debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}"
 
     # Get absolute name of FIFO
-    local abs_fifoname=$(debasher::_get_absolute_fifoname "${process_name}" "${fifoname}")
+    local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
 
     # Define option for FIFO
     debasher::define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
