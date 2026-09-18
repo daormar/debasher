@@ -201,13 +201,24 @@ DEBASHER_PROCESS_METHODS+=("${DEBASHER_PROCESS_FUNCNAMES[@]}" "${DEBASHER_PROCES
 DEBASHER_MODULE_METHOD_NAME_DOCUMENT="${DEBASHER_MODULE_METHOD_SEP}document"
 DEBASHER_MODULE_METHOD_NAME_SHRDIRS="${DEBASHER_MODULE_METHOD_SEP}shared_dirs"
 DEBASHER_MODULE_METHOD_NAME_PROGRAM="${DEBASHER_MODULE_METHOD_SEP}program"
+DEBASHER_MODULE_METHOD_NAME_PROGRAM_TYPE="${DEBASHER_MODULE_METHOD_SEP}program_type"
 
 # ARRAY OF ALL MODULE METHOD NAMES
 DEBASHER_MODULE_METHODS=(
     "${DEBASHER_MODULE_METHOD_NAME_DOCUMENT}"
     "${DEBASHER_MODULE_METHOD_NAME_SHRDIRS}"
     "${DEBASHER_MODULE_METHOD_NAME_PROGRAM}"
+    "${DEBASHER_MODULE_METHOD_NAME_PROGRAM_TYPE}"
 )
+
+# PROGRAM TYPES
+#
+# "general" (default, when a module declares no `_program_type` method)
+# is today's one-shot, DAG-scheduled program. "resident" is the new
+# long-running, stateful kind (see to_do_fbp.md): its processes must be
+# Python classes deriving from FBPProcess or Supervisor.
+DEBASHER_PROGRAM_TYPE_GENERAL="general"
+DEBASHER_PROGRAM_TYPE_RESIDENT="resident"
 
 # FIFO-RELATED CONSTANTS
 DEBASHER_EXTERNAL_FIFO_USER="__EXTERNAL__${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
@@ -410,6 +421,13 @@ declare DEBASHER_RESOLVED_MODNAME
 # Declare array to store a stack for the program files for each program
 # function that is invoked
 declare -a DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK
+
+# Declare variable to store the current program's type (general or
+# resident, see DEBASHER_PROGRAM_TYPE_* above); only the top-level
+# pfile's `_program_type` method (if any) is ever resolved and
+# invoked, so a composed sub-module's own `_program_type` has no
+# effect
+declare DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
 
 # Declare associative array to store processes added to a program
 declare -A DEBASHER_PROGRAM_PROCESSES

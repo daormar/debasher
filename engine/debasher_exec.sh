@@ -337,6 +337,8 @@ initialize_procspec()
 
     local pfile=$1
 
+    debasher::_resolve_program_type "${pfile}" || exit 1
+
     debasher::_exec_program_func_for_module "${pfile}" || exit 1
 
     echo "Initialization complete" >&2

@@ -1,4 +1,4 @@
-EXTRA_DIST = lib_utils.bats lib_processes.bats
+EXTRA_DIST = lib_utils.bats lib_processes.bats lib_programs.bats
 
 if HAVE_BATS
 check-local:

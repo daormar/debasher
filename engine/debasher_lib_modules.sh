@@ -61,6 +61,16 @@ debasher::_get_program_funcname()
 }
 
 ########
+debasher::_get_program_type_funcname()
+{
+    local absmodname=$1
+
+    local modname=$(debasher::_get_modname_from_absmodname "${absmodname}")
+
+    debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_PROGRAM_TYPE}"
+}
+
+########
 debasher::_get_ui_program_metadata_fname()
 {
     local dir=$1

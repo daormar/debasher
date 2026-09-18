@@ -126,6 +126,59 @@ debasher::_exec_program_func_for_module()
 }
 
 ########
+# Public: Sets the type of the program being defined ("general" or
+# "resident", see DEBASHER_PROGRAM_TYPE_* in debasher_lib.sh). Meant to
+# be called from a module's `_program_type` method.
+#
+# $1 - Program type.
+#
+# Examples
+#
+#    program_type "resident"
+debasher::program_type()
+{
+    local type=$1
+
+    if [ "${type}" != "${DEBASHER_PROGRAM_TYPE_GENERAL}" ] && [ "${type}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        echo "Error: invalid program type '${type}' (expected '${DEBASHER_PROGRAM_TYPE_GENERAL}' or '${DEBASHER_PROGRAM_TYPE_RESIDENT}'). Aborting execution..." >&2
+        exit 1
+    fi
+
+    DEBASHER_PROGRAM_TYPE="${type}"
+}
+
+########
+# Public: Sets the type of the program being defined.
+#
+# $1 - Program type.
+#
+# Examples
+#
+#    program_type "resident"
+#
+# The function does not return any value
+program_type() { debasher::program_type "$@"; }
+
+########
+# Resolves and, if defined, invokes the top-level pfile's
+# `_program_type` method, leaving DEBASHER_PROGRAM_TYPE at its default
+# ("general") when the method is absent. Only ever called for the
+# top-level pfile (see initialize_procspec in debasher_exec.sh): a
+# composed sub-module's own `_program_type`, if it has one, is never
+# resolved and so has no effect.
+debasher::_resolve_program_type()
+{
+    local pfile=$1
+
+    local program_type_funcname
+    program_type_funcname=$(debasher::_get_program_type_funcname "${pfile}")
+
+    if debasher::_func_exists "${program_type_funcname}"; then
+        ${program_type_funcname} || return 1
+    fi
+}
+
+########
 debasher::get_prg_exec_dir_given_basedir()
 {
     local dirname=$1
