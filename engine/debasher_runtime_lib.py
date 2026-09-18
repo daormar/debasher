@@ -24,6 +24,7 @@ import sys
 import re
 import os
 import json
+import logging
 from collections import namedtuple
 
 # Constants
@@ -99,3 +100,108 @@ def decode_envelope(line):
         raise ValueError(f"unknown envelope type: {envelope_type!r}")
 
     return Envelope(type=envelope_type, payload=obj["payload"])
+
+
+#####################
+# FBPProcess        #
+#####################
+#
+# Base class for a long-running, stateful "resident" process (see
+# to_do_resident.md, point 2). This slice covers only the skeleton: argv
+# parsing into self.opts, INPUT_PORTS/OUTPUT_PORTS validation, and
+# self.log. Threads, barrier logic, INTERACT dispatch and the startup
+# sequence (point 6) are later slices, layered on top of this.
+
+
+def _parse_opts(argv):
+    """
+    Parses argv into a name -> value dict, following DeBasher's own
+    "-optname value" CLI convention (see debasher_lib_opts.sh) -- one or
+    two leading dashes, both stripped, so "-inf"/"--inf" both become the
+    key "inf". `argv` is expected in the raw sys.argv shape a Python
+    heredoc receives from debasher::_create_heredoc_func_body: element 0
+    is "-c" (python's own placeholder for a "-c script" invocation),
+    followed eventually by a "--" marker and then the actual option
+    pairs; everything up to and including that marker is ignored. If no
+    "--" marker is present, element 0 alone is skipped instead (the
+    shape a plain sys.argv, or a hand-built argv missing the marker,
+    would have).
+    """
+    if "--" in argv:
+        argv = argv[argv.index("--") + 1 :]
+    else:
+        argv = argv[1:]
+
+    opts = {}
+    it = iter(argv)
+    for name in it:
+        if not name.startswith("-"):
+            raise ValueError(f"expected an option name starting with '-', got {name!r}")
+        try:
+            value = next(it)
+        except StopIteration:
+            raise ValueError(f"option {name!r} is missing its value") from None
+        opts[name.lstrip("-")] = value
+    return opts
+
+
+class FBPProcess:
+    """
+    Base class for resident processes. A subclass declares its ports via
+    the INPUT_PORTS/OUTPUT_PORTS class attributes (option names, without
+    their leading dash(es), e.g. INPUT_PORTS = ["inf"]) and overrides
+    process_data/capture_state/restore_state/initialize_runtime.
+    """
+
+    INPUT_PORTS = []
+    OUTPUT_PORTS = []
+
+    DEFAULT_LOG_LEVEL = "INFO"
+
+    def __init__(self, argv=None, opts=None):
+        if opts is not None:
+            # Direct injection, mainly for tests: skips argv parsing
+            # entirely, so a test doesn't need to build a realistic
+            # fake argv just to get a usable instance.
+            self.opts = dict(opts)
+        else:
+            self.opts = _parse_opts(list(sys.argv) if argv is None else argv)
+
+        self._check_declared_ports()
+        self.log = self._make_logger()
+
+    def _check_declared_ports(self):
+        for port in list(self.INPUT_PORTS) + list(self.OUTPUT_PORTS):
+            if port not in self.opts:
+                raise ValueError(
+                    f"{type(self).__name__}: port {port!r} is declared in "
+                    f"INPUT_PORTS/OUTPUT_PORTS but there is no -{port} "
+                    f"option (got: {sorted(self.opts)})"
+                )
+
+    def _make_logger(self):
+        level_name = self.opts.get("log-level", self.DEFAULT_LOG_LEVEL).upper()
+        logger = logging.getLogger(type(self).__name__)
+        logger.setLevel(level_name)
+        if not logger.handlers:
+            handler = logging.StreamHandler(sys.stderr)
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)-8s [%(threadName)s] %(message)s")
+            )
+            logger.addHandler(handler)
+        logger.propagate = False
+        return logger
+
+    # -- subclass extension points (points 2, 5) --
+
+    def process_data(self, port_name, packet):
+        raise NotImplementedError
+
+    def capture_state(self):
+        raise NotImplementedError
+
+    def restore_state(self, state):
+        raise NotImplementedError
+
+    def initialize_runtime(self):
+        raise NotImplementedError
