@@ -25,6 +25,8 @@ import re
 import os
 import json
 import logging
+import queue
+import threading
 from collections import namedtuple
 
 # Constants
@@ -35,11 +37,10 @@ DEBASHER_SHUTDOWN_TOKEN = "__SHUTDOWN_TOKEN__"
 #####################
 #
 # JSON Lines wire format for communication between resident processes
-# (FBPProcess/Supervisor), see to_do_resident.md point 1. Three sibling
-# envelope types, always encoded as their own single-line JSON object --
-# a BARRIER or INTERACT message is never nested inside DATA's payload,
-# so a reader can dispatch on "type" alone, without ever interpreting
-# "payload".
+# (FBPProcess/Supervisor). Three sibling envelope types, always encoded
+# as their own single-line JSON object -- a BARRIER or INTERACT message
+# is never nested inside DATA's payload, so a reader can dispatch on
+# "type" alone, without ever interpreting "payload".
 
 TYPE_DATA = "DATA"
 TYPE_BARRIER = "BARRIER"
@@ -62,7 +63,7 @@ def encode_barrier(epoch, halt=False):
     """
     Encodes a BARRIER envelope (a Chandy-Lamport marker). `epoch`
     identifies the snapshot round. `halt=True` reuses the same marker
-    for an ordered shutdown instead of a snapshot (point 8).
+    for an ordered shutdown instead of a snapshot.
     """
     return _encode(TYPE_BARRIER, {"epoch": epoch, "halt": halt})
 
@@ -71,7 +72,7 @@ def encode_interact(command, args=None):
     """
     Encodes an INTERACT envelope. `command` names the action (e.g.
     "start_snapshot", "shutdown", "heartbeat", "checkpoint_saved"); the
-    command catalog is deliberately open-ended (point 1).
+    command catalog is deliberately open-ended.
     """
     return _encode(TYPE_INTERACT, {"command": command, "args": args or {}})
 
@@ -106,11 +107,17 @@ def decode_envelope(line):
 # FBPProcess        #
 #####################
 #
-# Base class for a long-running, stateful "resident" process (see
-# to_do_resident.md, point 2). This slice covers only the skeleton: argv
-# parsing into self.opts, INPUT_PORTS/OUTPUT_PORTS validation, and
-# self.log. Threads, barrier logic, INTERACT dispatch and the startup
-# sequence (point 6) are later slices, layered on top of this.
+# Base class for a long-running, stateful "resident" process. Covers,
+# so far: the skeleton (argv parsing into self.opts, INPUT_PORTS/
+# OUTPUT_PORTS validation, self.log) and the thread topology
+# (reader/writer per port, brain, heartbeat). Barrier logic, INTERACT
+# dispatch and the checkpoint/recovery startup sequence are later
+# additions, layered on top of this -- _on_barrier/_on_interact below
+# are deliberately still stubs.
+
+# Sentinel put on a queue to tell its consumer thread to stop, rather
+# than reusing e.g. None (a legitimate DATA payload).
+_STOP = object()
 
 
 def _parse_opts(argv):
@@ -157,6 +164,7 @@ class FBPProcess:
     OUTPUT_PORTS = []
 
     DEFAULT_LOG_LEVEL = "INFO"
+    HEARTBEAT_INTERVAL_SECONDS = 5
 
     def __init__(self, argv=None, opts=None):
         if opts is not None:
@@ -169,6 +177,20 @@ class FBPProcess:
 
         self._check_declared_ports()
         self.log = self._make_logger()
+
+        # Shared inbound queue: every reader thread pushes onto this one,
+        # the brain thread is its only consumer. One outbound queue per
+        # output port instead: a slow/stalled neighbor on one port must
+        # only block that port's own writer thread, never the others or
+        # the brain.
+        self._inbound_queue = queue.Queue()
+        self._outbound_queues = {port: queue.Queue() for port in self.OUTPUT_PORTS}
+
+        self._reader_threads = {}
+        self._writer_threads = {}
+        self._brain_thread = None
+        self._heartbeat_thread = None
+        self._heartbeat_stop = threading.Event()
 
     def _check_declared_ports(self):
         for port in list(self.INPUT_PORTS) + list(self.OUTPUT_PORTS):
@@ -192,7 +214,138 @@ class FBPProcess:
         logger.propagate = False
         return logger
 
-    # -- subclass extension points (points 2, 5) --
+    # -- thread topology --
+
+    def start_threads(self):
+        """
+        Starts one reader thread per INPUT_PORTS entry, one writer
+        thread per OUTPUT_PORTS entry, the brain thread and the
+        heartbeat thread. Threads are not daemonic: this process is
+        meant to keep running until explicitly told to stop, not to be
+        silently killed when some unrelated main thread happens to
+        exit.
+        """
+        for port in self.INPUT_PORTS:
+            thread = threading.Thread(
+                target=self._reader_loop, args=(port,), name=f"reader:{port}"
+            )
+            self._reader_threads[port] = thread
+            thread.start()
+
+        for port in self.OUTPUT_PORTS:
+            thread = threading.Thread(
+                target=self._writer_loop, args=(port,), name=f"writer:{port}"
+            )
+            self._writer_threads[port] = thread
+            thread.start()
+
+        self._brain_thread = threading.Thread(target=self._brain_loop, name="brain")
+        self._brain_thread.start()
+
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
+        self._heartbeat_thread.start()
+
+    def stop_threads(self, timeout=None):
+        """
+        Signals the brain, writer and heartbeat threads to stop and
+        waits for every thread (including readers) to finish. Reader
+        threads have no sentinel of their own -- they stop on their
+        FIFO's EOF, i.e. once its writer closes it, so this only waits
+        for that to have already happened (or already be happening).
+        """
+        self._inbound_queue.put(_STOP)
+        for q in self._outbound_queues.values():
+            q.put(_STOP)
+        self._heartbeat_stop.set()
+
+        for thread in [
+            *self._reader_threads.values(),
+            *self._writer_threads.values(),
+            self._brain_thread,
+            self._heartbeat_thread,
+        ]:
+            if thread is not None:
+                thread.join(timeout)
+
+    def _reader_loop(self, port_name):
+        path = self.opts[port_name]
+        self.log.debug("reader for port %r opening %r", port_name, path)
+        with open(path, "r") as fifo:
+            for line in fifo:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                envelope = decode_envelope(line)
+                self._inbound_queue.put((port_name, envelope.type, envelope.payload))
+        self.log.debug("reader for port %r closed (EOF)", port_name)
+
+    def _writer_loop(self, port_name):
+        path = self.opts[port_name]
+        out_queue = self._outbound_queues[port_name]
+        self.log.debug("writer for port %r opening %r", port_name, path)
+        with open(path, "w") as fifo:
+            while True:
+                item = out_queue.get()
+                if item is _STOP:
+                    break
+                fifo.write(item + "\n")
+                fifo.flush()
+        self.log.debug("writer for port %r stopped", port_name)
+
+    def _brain_loop(self):
+        while True:
+            item = self._inbound_queue.get()
+            if item is _STOP:
+                break
+            port_name, envelope_type, payload = item
+            if envelope_type == TYPE_DATA:
+                self.process_data(port_name, payload)
+            elif envelope_type == TYPE_BARRIER:
+                self._on_barrier(port_name, payload)
+            elif envelope_type == TYPE_INTERACT:
+                self._on_interact(payload)
+        self.log.debug("brain thread stopped")
+
+    def _heartbeat_loop(self):
+        while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECONDS):
+            self.log.debug("heartbeat tick, healthy=%s", self._all_threads_alive())
+        self.log.debug("heartbeat thread stopped")
+
+    def _all_threads_alive(self):
+        """
+        True only if every reader, writer and the brain thread are
+        still alive. A Python thread killed by an uncaught exception
+        dies silently without crashing the process, so this passive
+        check is what actually catches that, rather than requiring
+        reader/writer threads to report anything themselves.
+        """
+        threads = [*self._reader_threads.values(), *self._writer_threads.values()]
+        if self._brain_thread is not None:
+            threads.append(self._brain_thread)
+        return all(thread.is_alive() for thread in threads)
+
+    def send_data(self, port_name, payload):
+        """Enqueues a DATA envelope for port_name's writer thread to send."""
+        self._outbound_queues[port_name].put(encode_data(payload))
+
+    def _send_barrier(self, port_name, epoch, halt=False):
+        self._outbound_queues[port_name].put(encode_barrier(epoch, halt=halt))
+
+    def _send_interact(self, port_name, command, args=None):
+        self._outbound_queues[port_name].put(encode_interact(command, args))
+
+    def _on_barrier(self, port_name, payload):
+        # Filled in by the Chandy-Lamport barrier-logic slice: capturing
+        # state on the first marker for an epoch, forwarding it on every
+        # output port, and buffering DATA on ports still pending it.
+        raise NotImplementedError
+
+    def _on_interact(self, payload):
+        # Filled in by the INTERACT-dispatch slice: routing commands
+        # like "start_snapshot"/"shutdown" into the barrier logic above.
+        raise NotImplementedError
+
+    # -- subclass extension points --
 
     def process_data(self, port_name, packet):
         raise NotImplementedError
