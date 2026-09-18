@@ -1,0 +1,128 @@
+import json
+import os
+import threading
+import time
+
+import pytest
+
+import debasher_runtime_lib as lib
+
+
+def _wait_until(predicate, timeout=2.0, interval=0.01):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
+class _Node(lib.FBPProcess):
+    def __init__(self, *a, **kw):
+        self.restored_with = None
+        self.initialize_runtime_calls = 0
+        super().__init__(*a, **kw)
+
+    def capture_state(self):
+        return {"marker": "s"}
+
+    def restore_state(self, state):
+        self.restored_with = state
+
+    def initialize_runtime(self):
+        self.initialize_runtime_calls += 1
+
+
+@pytest.fixture
+def execdir(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_EXECDIR", str(tmp_path))
+    return tmp_path
+
+
+# --- _load_latest_checkpoint --------------------------------------------
+
+
+def test_load_latest_checkpoint_returns_none_when_no_checkpoints_dir_exists(execdir):
+    proc = _Node(opts={})
+    assert proc._load_latest_checkpoint() is None
+
+
+def test_load_latest_checkpoint_returns_none_when_the_dir_is_empty(execdir):
+    proc = _Node(opts={})
+    os.makedirs(proc._checkpoints_dir())
+    assert proc._load_latest_checkpoint() is None
+
+
+def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
+    proc = _Node(opts={})
+    proc._save_checkpoint(0, {"marker": "old"}, {})
+    proc._save_checkpoint(1, {"marker": "new"}, {})
+
+    epoch, state = proc._load_latest_checkpoint()
+    assert epoch == 1
+    assert state == {"marker": "new"}
+
+
+def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
+    proc = _Node(opts={})
+    proc._save_checkpoint(0, {}, {})
+    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
+    with open(checkpoint_path) as f:
+        data = json.load(f)
+    data["schema_version"] = 999
+    with open(checkpoint_path, "w") as f:
+        json.dump(data, f)
+
+    with pytest.raises(ValueError):
+        proc._load_latest_checkpoint()
+
+
+# --- run(): the full startup sequence ------------------------------------
+
+
+def test_run_skips_restore_state_and_starts_with_defaults_when_no_checkpoint(execdir):
+    proc = _Node(opts={})
+    threading.Thread(target=proc.run, daemon=True).start()
+
+    assert _wait_until(lambda: proc.initialize_runtime_calls == 1)
+    assert proc.restored_with is None
+    assert proc._last_epoch == -1
+
+    proc._halted.set()
+    assert _wait_until(lambda: not proc._brain_thread.is_alive())
+
+
+def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdir):
+    proc = _Node(opts={})
+    proc._save_checkpoint(4, {"marker": "restored"}, {})
+
+    # A second instance is what actually "restarts": the first one
+    # above only exists here to seed the checkpoint file on disk.
+    restarted = _Node(opts={})
+    threading.Thread(target=restarted.run, daemon=True).start()
+
+    assert _wait_until(lambda: restarted.initialize_runtime_calls == 1)
+    assert restarted.restored_with == {"marker": "restored"}
+    assert restarted._last_epoch == 4
+
+    restarted._halted.set()
+    assert _wait_until(lambda: not restarted._brain_thread.is_alive())
+
+
+def test_run_stops_every_thread_once_halted_is_set(execdir):
+    proc = _Node(opts={})
+    run_thread = threading.Thread(target=proc.run, daemon=True)
+    run_thread.start()
+
+    assert _wait_until(lambda: proc._brain_thread is not None and proc._brain_thread.is_alive())
+
+    # Simulate an epoch closing with halt=True, as _on_epoch_closed would
+    # do for real -- this runs on the *test* thread, not run()'s own
+    # thread, deliberately, exactly like an external INTERACT shutdown
+    # would arrive from outside whatever thread is blocked in run().
+    proc._on_interact({"command": "shutdown", "args": {}})
+
+    assert run_thread.join(timeout=2) is None
+    assert not run_thread.is_alive()
+    assert not proc._brain_thread.is_alive()
+    assert not proc._heartbeat_thread.is_alive()

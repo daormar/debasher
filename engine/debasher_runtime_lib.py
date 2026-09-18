@@ -239,6 +239,79 @@ class FBPProcess:
         logger.propagate = False
         return logger
 
+    # -- startup sequence --
+
+    def run(self):
+        """
+        Full startup sequence: find the most recent checkpoint if any
+        -> restore_state()/defaults -> initialize_runtime() ->
+        start_threads() (opens every FIFO, starts every worker thread)
+        -> wait until told to stop (an epoch closing with halt=True) ->
+        stop every thread, from this (the calling) thread rather than
+        the brain thread that actually set the stop signal.
+
+        Log drain (replaying the message log from the checkpoint's
+        saved offset, before accepting live traffic) is not
+        implemented yet -- it depends on the message log itself,
+        which hasn't been built.
+        """
+        checkpoint = self._load_latest_checkpoint()
+        if checkpoint is not None:
+            epoch, state = checkpoint
+            self.restore_state(state)
+            self._last_epoch = epoch
+            self.log.info("restored checkpoint for epoch %s", epoch)
+        else:
+            self.log.info("no checkpoint found, starting with default values")
+
+        self.initialize_runtime()
+
+        # TODO: once the message log exists, drain it here (from the
+        # checkpoint's saved offset, invoking process_data() for each
+        # message in order) before starting the reader threads below.
+
+        self.start_threads()
+        self._halted.wait()
+        self.stop_threads()
+
+    def _load_latest_checkpoint(self):
+        """
+        Returns (epoch, state) for the highest-epoch checkpoint in this
+        process's checkpoints directory, or None if there isn't one yet
+        (a brand new process, or one that has never closed an epoch).
+        Raises ValueError if the checkpoint's schema version doesn't
+        match this class's -- a real incompatibility, not something to
+        silently paper over by falling back to an older checkpoint.
+        """
+        checkpoints_dir = self._checkpoints_dir()
+        if not os.path.isdir(checkpoints_dir):
+            return None
+
+        epochs = []
+        for name in os.listdir(checkpoints_dir):
+            if not name.endswith(".json"):
+                continue
+            try:
+                epochs.append(int(name[: -len(".json")]))
+            except ValueError:
+                continue
+
+        if not epochs:
+            return None
+
+        path = os.path.join(checkpoints_dir, f"{max(epochs)}.json")
+        with open(path) as f:
+            checkpoint = json.load(f)
+
+        if checkpoint["schema_version"] != self.CHECKPOINT_SCHEMA_VERSION:
+            raise ValueError(
+                f"{type(self).__name__}: checkpoint {path} has schema version "
+                f"{checkpoint['schema_version']!r}, expected "
+                f"{self.CHECKPOINT_SCHEMA_VERSION!r}"
+            )
+
+        return checkpoint["epoch"], checkpoint["state"]
+
     # -- thread topology --
 
     def start_threads(self):
