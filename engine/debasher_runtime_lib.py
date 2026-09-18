@@ -174,6 +174,15 @@ class FBPProcess:
     CHECKPOINT_SCHEMA_VERSION = 1
     CHECKPOINT_RETENTION = 3
 
+    # Safety cap only, never the normal pruning mechanism (that's tied to
+    # checkpoint retention -- see _prune_old_checkpoints): if a single
+    # input port's un-pruned log segments exceed this many bytes, the
+    # process never closed an epoch for long enough that pruning could
+    # keep up, which is a real problem (no periodic/triggered snapshot)
+    # to surface as a hard error, not something to paper over by
+    # silently discarding log data a future recovery might need.
+    MESSAGE_LOG_MAX_BYTES = 100 * 1024 * 1024
+
     def __init__(self, argv=None, opts=None):
         if opts is not None:
             # Direct injection, mainly for tests: skips argv parsing
@@ -244,31 +253,28 @@ class FBPProcess:
     def run(self):
         """
         Full startup sequence: find the most recent checkpoint if any
-        -> restore_state()/defaults -> initialize_runtime() ->
-        start_threads() (opens every FIFO, starts every worker thread)
-        -> wait until told to stop (an epoch closing with halt=True) ->
-        stop every thread, from this (the calling) thread rather than
-        the brain thread that actually set the stop signal.
-
-        Log drain (replaying the message log from the checkpoint's
-        saved offset, before accepting live traffic) is not
-        implemented yet -- it depends on the message log itself,
-        which hasn't been built.
+        -> restore_state()/defaults -> initialize_runtime() -> (if
+        restored) drain the message log -> start_threads() (opens
+        every FIFO, starts every worker thread) -> wait until told to
+        stop (an epoch closing with halt=True) -> stop every thread,
+        from this (the calling) thread rather than the brain thread
+        that actually set the stop signal.
         """
         checkpoint = self._load_latest_checkpoint()
+        restored_epoch = None
         if checkpoint is not None:
             epoch, state = checkpoint
             self.restore_state(state)
             self._last_epoch = epoch
+            restored_epoch = epoch
             self.log.info("restored checkpoint for epoch %s", epoch)
         else:
             self.log.info("no checkpoint found, starting with default values")
 
         self.initialize_runtime()
 
-        # TODO: once the message log exists, drain it here (from the
-        # checkpoint's saved offset, invoking process_data() for each
-        # message in order) before starting the reader threads below.
+        if restored_epoch is not None:
+            self._drain_message_log(restored_epoch)
 
         self.start_threads()
         self._halted.wait()
@@ -404,6 +410,17 @@ class FBPProcess:
                     # the channel's state, not to normal processing.
                     self._barrier_channel_buffers[port_name].append(payload)
                 else:
+                    # Logged here, on the brain thread, right before
+                    # process_data() actually runs -- not in the reader
+                    # thread that received it. self._last_epoch is only
+                    # ever advanced on this same brain thread (barrier
+                    # round closing), so reading it here is race-free by
+                    # construction; reading it from a reader thread
+                    # raced against that update in practice (found by
+                    # testing, not reasoning) and could mislabel a
+                    # message with the epoch just before it actually
+                    # closed, making a real replay gap after a crash.
+                    self._log_received_data(port_name, payload)
                     self.process_data(port_name, payload)
             elif envelope_type == TYPE_BARRIER:
                 self._on_barrier(port_name, payload)
@@ -540,15 +557,18 @@ class FBPProcess:
             self.log.info("epoch %s closed with halt=True, signalling for shutdown", epoch)
             self._halted.set()
 
-    def _checkpoints_dir(self):
+    def _execdir(self):
         execdir = os.environ.get("DEBASHER_PROCESS_EXECDIR")
         if not execdir:
             raise RuntimeError(
                 f"{type(self).__name__}: DEBASHER_PROCESS_EXECDIR is not set in the "
-                "environment, cannot locate this process's checkpoints directory (only "
-                "set by the engine's builtin scheduler when it launches a process)"
+                "environment, cannot locate this process's own directory (only set "
+                "by the engine's builtin scheduler when it launches a process)"
             )
-        return os.path.join(execdir, "checkpoints")
+        return execdir
+
+    def _checkpoints_dir(self):
+        return os.path.join(self._execdir(), "checkpoints")
 
     def _save_checkpoint(self, epoch, state, channel_buffers):
         checkpoints_dir = self._checkpoints_dir()
@@ -584,6 +604,91 @@ class FBPProcess:
         epochs.sort(reverse=True)
         for old_epoch in epochs[self.CHECKPOINT_RETENTION :]:
             os.remove(os.path.join(checkpoints_dir, f"{old_epoch}.json"))
+            self._prune_message_log_epoch(old_epoch)
+
+    # -- message log --
+    #
+    # Each input port's own log lives under this process's own directory,
+    # written by this same process's reader threads as messages arrive --
+    # never the neighbor that sent them. The process that ever needs to
+    # replay a log is always the one relaunched after a crash, i.e.
+    # itself, never its neighbor, so there is no reason for the log to
+    # live anywhere else, and no separate process/fifo tap is needed to
+    # produce it (unlike the engine's generic --mirror, which stays a
+    # purely manual debug-inspection tool, untouched by any of this).
+
+    def _log_dir(self, port_name):
+        return os.path.join(self._execdir(), "log", port_name)
+
+    def _log_segment_path(self, port_name, epoch):
+        return os.path.join(self._log_dir(port_name), f"{epoch}.log")
+
+    def _log_received_data(self, port_name, payload):
+        # Messages received while a barrier round is open (still pending
+        # on this port) are logged the same as any other: replay only
+        # ever needs "everything received since the last checkpoint",
+        # regardless of which epoch's round it happened to arrive during.
+        epoch = self._last_epoch + 1
+        log_dir = self._log_dir(port_name)
+        os.makedirs(log_dir, exist_ok=True)
+        with open(self._log_segment_path(port_name, epoch), "a") as f:
+            f.write(json.dumps(payload))
+            f.write("\n")
+
+        self._check_message_log_size(port_name, log_dir)
+
+    def _check_message_log_size(self, port_name, log_dir):
+        total = sum(
+            os.path.getsize(os.path.join(log_dir, name)) for name in os.listdir(log_dir)
+        )
+        if total > self.MESSAGE_LOG_MAX_BYTES:
+            raise RuntimeError(
+                f"{type(self).__name__}: message log for port {port_name!r} exceeds "
+                f"{self.MESSAGE_LOG_MAX_BYTES} bytes with no checkpoint pruning having "
+                "kept up -- this means an epoch is never closing (no periodic or "
+                "triggered snapshot), a real problem to fix, not something to silently "
+                "discard log data over"
+            )
+
+    def _prune_message_log_epoch(self, epoch):
+        for port_name in self.INPUT_PORTS:
+            try:
+                os.remove(self._log_segment_path(port_name, epoch))
+            except FileNotFoundError:
+                # This port simply received nothing during that epoch.
+                pass
+
+    def _drain_message_log(self, checkpoint_epoch):
+        """
+        Replays every DATA message logged after checkpoint_epoch, for
+        every input port, invoking process_data() for each in order.
+        Reads straight from disk, never from a fifo, so it can never
+        end up re-logging what it is replaying.
+        """
+        for port_name in self.INPUT_PORTS:
+            log_dir = self._log_dir(port_name)
+            if not os.path.isdir(log_dir):
+                continue
+
+            epochs = []
+            for name in os.listdir(log_dir):
+                if not name.endswith(".log"):
+                    continue
+                try:
+                    epoch = int(name[: -len(".log")])
+                except ValueError:
+                    continue
+                if epoch > checkpoint_epoch:
+                    epochs.append(epoch)
+            epochs.sort()
+
+            for epoch in epochs:
+                with open(self._log_segment_path(port_name, epoch)) as f:
+                    for line in f:
+                        line = line.rstrip("\n")
+                        if not line:
+                            continue
+                        self.process_data(port_name, json.loads(line))
 
     # -- subclass extension points --
 

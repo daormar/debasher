@@ -16,6 +16,15 @@ def _wait_until(predicate, timeout=2.0, interval=0.01):
     return predicate()
 
 
+@pytest.fixture(autouse=True)
+def execdir(tmp_path, monkeypatch):
+    # A real reader thread now logs every DATA payload it receives (the
+    # message log, see test_message_log.py), which needs this env var
+    # the same way checkpointing already does.
+    monkeypatch.setenv("DEBASHER_PROCESS_EXECDIR", str(tmp_path))
+    return tmp_path
+
+
 class _BarrierWorker(lib.FBPProcess):
     INPUT_PORTS = ["a", "b"]
     OUTPUT_PORTS = ["x", "y"]
