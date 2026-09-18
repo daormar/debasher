@@ -104,16 +104,17 @@ def decode_envelope(line):
 
 
 #####################
-# FBPProcess        #
+# _PortWorker       #
 #####################
 #
-# Base class for a long-running, stateful "resident" process. Covers,
-# so far: the skeleton (argv parsing into self.opts, INPUT_PORTS/
-# OUTPUT_PORTS validation, self.log) and the thread topology
-# (reader/writer per port, brain, heartbeat). Barrier logic, INTERACT
-# dispatch and the checkpoint/recovery startup sequence are later
-# additions, layered on top of this -- _on_barrier/_on_interact below
-# are deliberately still stubs.
+# Thread-per-port plumbing shared by FBPProcess and Supervisor: argv
+# parsing into self.opts, a logger, one reader thread per declared input
+# port pushing tagged envelopes onto a single shared inbound queue, one
+# writer thread per declared output port with its own outbound queue,
+# and start_threads()/stop_threads() to manage all of it. Carries no
+# barrier, checkpoint or message-log logic -- that is FBPProcess-
+# specific, layered on top by it alone; Supervisor does not take part in
+# the barrier protocol at all, but reuses this same base.
 
 # Sentinel put on a queue to tell its consumer thread to stop, rather
 # than reusing e.g. None (a legitimate DATA payload).
@@ -152,36 +153,17 @@ def _parse_opts(argv):
     return opts
 
 
-class FBPProcess:
+class _PortWorker:
     """
-    Base class for resident processes. A subclass declares its ports via
-    the INPUT_PORTS/OUTPUT_PORTS class attributes (option names, without
-    their leading dash(es), e.g. INPUT_PORTS = ["inf"]) and overrides
-    process_data/capture_state/restore_state/initialize_runtime.
+    A subclass supplies _input_ports()/_output_ports(), each returning a
+    dict {tag: option_name}. The tag is whatever identity the subclass's
+    own dispatch logic actually cares about: a port name for FBPProcess
+    (its barrier logic treats every input port interchangeably), a node
+    name for Supervisor (its detection/relaunch logic acts on a specific
+    supervised node, not "which port").
     """
-
-    INPUT_PORTS = []
-    OUTPUT_PORTS = []
-
-    # Name of the OUTPUT_PORTS entry wired to the supervisor's heartbeat
-    # channel, if any. A supervisor is optional (0 or 1 per resident
-    # program): leave this None to run without one, in which case
-    # checkpoints are still written, just never announced anywhere.
-    SUPERVISOR_PORT = None
 
     DEFAULT_LOG_LEVEL = "INFO"
-    HEARTBEAT_INTERVAL_SECONDS = 5
-    CHECKPOINT_SCHEMA_VERSION = 1
-    CHECKPOINT_RETENTION = 3
-
-    # Safety cap only, never the normal pruning mechanism (that's tied to
-    # checkpoint retention -- see _prune_old_checkpoints): if a single
-    # input port's un-pruned log segments exceed this many bytes, the
-    # process never closed an epoch for long enough that pruning could
-    # keep up, which is a real problem (no periodic/triggered snapshot)
-    # to surface as a hard error, not something to paper over by
-    # silently discarding log data a future recovery might need.
-    MESSAGE_LOG_MAX_BYTES = 100 * 1024 * 1024
 
     def __init__(self, argv=None, opts=None):
         if opts is not None:
@@ -201,11 +183,183 @@ class FBPProcess:
         # only block that port's own writer thread, never the others or
         # the brain.
         self._inbound_queue = queue.Queue()
-        self._outbound_queues = {port: queue.Queue() for port in self.OUTPUT_PORTS}
+        self._outbound_queues = {tag: queue.Queue() for tag in self._output_ports()}
 
         self._reader_threads = {}
         self._writer_threads = {}
         self._brain_thread = None
+
+    def _input_ports(self):
+        raise NotImplementedError
+
+    def _output_ports(self):
+        raise NotImplementedError
+
+    def _check_declared_ports(self):
+        option_names = list(self._input_ports().values()) + list(self._output_ports().values())
+        for option_name in option_names:
+            if option_name not in self.opts:
+                raise ValueError(
+                    f"{type(self).__name__}: port option {option_name!r} is declared "
+                    f"but there is no -{option_name} option (got: {sorted(self.opts)})"
+                )
+
+    def _make_logger(self):
+        level_name = self.opts.get("log-level", self.DEFAULT_LOG_LEVEL).upper()
+        logger = logging.getLogger(type(self).__name__)
+        logger.setLevel(level_name)
+        if not logger.handlers:
+            handler = logging.StreamHandler(sys.stderr)
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)-8s [%(threadName)s] %(message)s")
+            )
+            logger.addHandler(handler)
+        logger.propagate = False
+        return logger
+
+    # -- thread topology --
+
+    def start_threads(self):
+        """
+        Starts one reader thread per declared input port, one writer
+        thread per declared output port, and the brain thread. Threads
+        are not daemonic: this process is meant to keep running until
+        explicitly told to stop, not to be silently killed when some
+        unrelated main thread happens to exit.
+        """
+        for tag, option_name in self._input_ports().items():
+            thread = threading.Thread(
+                target=self._reader_loop, args=(tag, option_name), name=f"reader:{tag}"
+            )
+            self._reader_threads[tag] = thread
+            thread.start()
+
+        for tag, option_name in self._output_ports().items():
+            thread = threading.Thread(
+                target=self._writer_loop, args=(tag, option_name), name=f"writer:{tag}"
+            )
+            self._writer_threads[tag] = thread
+            thread.start()
+
+        self._brain_thread = threading.Thread(target=self._brain_loop, name="brain")
+        self._brain_thread.start()
+
+    def stop_threads(self, timeout=None):
+        """
+        Signals the brain and writer threads to stop and waits for
+        every thread (including readers) to finish. Reader threads have
+        no sentinel of their own -- they stop on their FIFO's EOF, i.e.
+        once its writer closes it, so this only waits for that to have
+        already happened (or already be happening).
+        """
+        self._inbound_queue.put(_STOP)
+        for q in self._outbound_queues.values():
+            q.put(_STOP)
+
+        for thread in [
+            *self._reader_threads.values(),
+            *self._writer_threads.values(),
+            self._brain_thread,
+        ]:
+            if thread is not None:
+                thread.join(timeout)
+
+    def _reader_loop(self, tag, option_name):
+        path = self.opts[option_name]
+        self.log.debug("reader for %r opening %r", tag, path)
+        with open(path, "r") as fifo:
+            for line in fifo:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                envelope = decode_envelope(line)
+                self._inbound_queue.put((tag, envelope.type, envelope.payload))
+        self.log.debug("reader for %r closed (EOF)", tag)
+
+    def _writer_loop(self, tag, option_name):
+        path = self.opts[option_name]
+        out_queue = self._outbound_queues[tag]
+        self.log.debug("writer for %r opening %r", tag, path)
+        with open(path, "w") as fifo:
+            while True:
+                item = out_queue.get()
+                if item is _STOP:
+                    break
+                fifo.write(item + "\n")
+                fifo.flush()
+        self.log.debug("writer for %r stopped", tag)
+
+    def _brain_loop(self):
+        raise NotImplementedError
+
+    def _all_threads_alive(self):
+        """
+        True only if every reader, writer and the brain thread are
+        still alive. A Python thread killed by an uncaught exception
+        dies silently without crashing the process, so this passive
+        check is what actually catches that, rather than requiring
+        reader/writer threads to report anything themselves.
+        """
+        threads = [*self._reader_threads.values(), *self._writer_threads.values()]
+        if self._brain_thread is not None:
+            threads.append(self._brain_thread)
+        return all(thread.is_alive() for thread in threads)
+
+    def send_data(self, tag, payload):
+        """Enqueues a DATA envelope for tag's writer thread to send."""
+        self._outbound_queues[tag].put(encode_data(payload))
+
+    def _send_barrier(self, tag, epoch, halt=False):
+        self._outbound_queues[tag].put(encode_barrier(epoch, halt=halt))
+
+    def _send_interact(self, tag, command, args=None):
+        self._outbound_queues[tag].put(encode_interact(command, args))
+
+
+#####################
+# FBPProcess        #
+#####################
+#
+# Base class for a long-running, stateful "resident" process. Adds, on
+# top of _PortWorker's generic thread-per-port plumbing: INPUT_PORTS/
+# OUTPUT_PORTS declaration, the heartbeat thread, Chandy-Lamport barrier
+# logic, INTERACT dispatch, checkpointing, the message log and the
+# checkpoint/recovery startup sequence (run()).
+
+
+class FBPProcess(_PortWorker):
+    """
+    Base class for resident processes. A subclass declares its ports via
+    the INPUT_PORTS/OUTPUT_PORTS class attributes (option names, without
+    their leading dash(es), e.g. INPUT_PORTS = ["inf"]) and overrides
+    process_data/capture_state/restore_state/initialize_runtime.
+    """
+
+    INPUT_PORTS = []
+    OUTPUT_PORTS = []
+
+    # Name of the OUTPUT_PORTS entry wired to the supervisor's heartbeat
+    # channel, if any. A supervisor is optional (0 or 1 per resident
+    # program): leave this None to run without one, in which case
+    # checkpoints are still written, just never announced anywhere.
+    SUPERVISOR_PORT = None
+
+    HEARTBEAT_INTERVAL_SECONDS = 5
+    CHECKPOINT_SCHEMA_VERSION = 1
+    CHECKPOINT_RETENTION = 3
+
+    # Safety cap only, never the normal pruning mechanism (that's tied to
+    # checkpoint retention -- see _prune_old_checkpoints): if a single
+    # input port's un-pruned log segments exceed this many bytes, the
+    # process never closed an epoch for long enough that pruning could
+    # keep up, which is a real problem (no periodic/triggered snapshot)
+    # to surface as a hard error, not something to paper over by
+    # silently discarding log data a future recovery might need.
+    MESSAGE_LOG_MAX_BYTES = 100 * 1024 * 1024
+
+    def __init__(self, argv=None, opts=None):
+        super().__init__(argv, opts)
+
         self._heartbeat_thread = None
         self._heartbeat_stop = threading.Event()
 
@@ -226,27 +380,11 @@ class FBPProcess:
         # here -- see _on_epoch_closed) by whatever orchestrates shutdown.
         self._halted = threading.Event()
 
-    def _check_declared_ports(self):
-        for port in list(self.INPUT_PORTS) + list(self.OUTPUT_PORTS):
-            if port not in self.opts:
-                raise ValueError(
-                    f"{type(self).__name__}: port {port!r} is declared in "
-                    f"INPUT_PORTS/OUTPUT_PORTS but there is no -{port} "
-                    f"option (got: {sorted(self.opts)})"
-                )
+    def _input_ports(self):
+        return {port: port for port in self.INPUT_PORTS}
 
-    def _make_logger(self):
-        level_name = self.opts.get("log-level", self.DEFAULT_LOG_LEVEL).upper()
-        logger = logging.getLogger(type(self).__name__)
-        logger.setLevel(level_name)
-        if not logger.handlers:
-            handler = logging.StreamHandler(sys.stderr)
-            handler.setFormatter(
-                logging.Formatter("%(asctime)s %(levelname)-8s [%(threadName)s] %(message)s")
-            )
-            logger.addHandler(handler)
-        logger.propagate = False
-        return logger
+    def _output_ports(self):
+        return {port: port for port in self.OUTPUT_PORTS}
 
     # -- startup sequence --
 
@@ -322,79 +460,24 @@ class FBPProcess:
 
     def start_threads(self):
         """
-        Starts one reader thread per INPUT_PORTS entry, one writer
-        thread per OUTPUT_PORTS entry, the brain thread and the
-        heartbeat thread. Threads are not daemonic: this process is
-        meant to keep running until explicitly told to stop, not to be
-        silently killed when some unrelated main thread happens to
-        exit.
+        Starts everything _PortWorker.start_threads() already does
+        (reader/writer/brain threads), plus this class's own heartbeat
+        thread.
         """
-        for port in self.INPUT_PORTS:
-            thread = threading.Thread(
-                target=self._reader_loop, args=(port,), name=f"reader:{port}"
-            )
-            self._reader_threads[port] = thread
-            thread.start()
-
-        for port in self.OUTPUT_PORTS:
-            thread = threading.Thread(
-                target=self._writer_loop, args=(port,), name=f"writer:{port}"
-            )
-            self._writer_threads[port] = thread
-            thread.start()
-
-        self._brain_thread = threading.Thread(target=self._brain_loop, name="brain")
-        self._brain_thread.start()
-
+        super().start_threads()
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
 
     def stop_threads(self, timeout=None):
         """
-        Signals the brain, writer and heartbeat threads to stop and
-        waits for every thread (including readers) to finish. Reader
-        threads have no sentinel of their own -- they stop on their
-        FIFO's EOF, i.e. once its writer closes it, so this only waits
-        for that to have already happened (or already be happening).
+        Signals the heartbeat thread to stop, then defers to
+        _PortWorker.stop_threads() for the reader/writer/brain threads,
+        then joins the heartbeat thread too.
         """
-        self._inbound_queue.put(_STOP)
-        for q in self._outbound_queues.values():
-            q.put(_STOP)
         self._heartbeat_stop.set()
-
-        for thread in [
-            *self._reader_threads.values(),
-            *self._writer_threads.values(),
-            self._brain_thread,
-            self._heartbeat_thread,
-        ]:
-            if thread is not None:
-                thread.join(timeout)
-
-    def _reader_loop(self, port_name):
-        path = self.opts[port_name]
-        self.log.debug("reader for port %r opening %r", port_name, path)
-        with open(path, "r") as fifo:
-            for line in fifo:
-                line = line.rstrip("\n")
-                if not line:
-                    continue
-                envelope = decode_envelope(line)
-                self._inbound_queue.put((port_name, envelope.type, envelope.payload))
-        self.log.debug("reader for port %r closed (EOF)", port_name)
-
-    def _writer_loop(self, port_name):
-        path = self.opts[port_name]
-        out_queue = self._outbound_queues[port_name]
-        self.log.debug("writer for port %r opening %r", port_name, path)
-        with open(path, "w") as fifo:
-            while True:
-                item = out_queue.get()
-                if item is _STOP:
-                    break
-                fifo.write(item + "\n")
-                fifo.flush()
-        self.log.debug("writer for port %r stopped", port_name)
+        super().stop_threads(timeout)
+        if self._heartbeat_thread is not None:
+            self._heartbeat_thread.join(timeout)
 
     def _brain_loop(self):
         while True:
@@ -432,29 +515,6 @@ class FBPProcess:
         while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECONDS):
             self.log.debug("heartbeat tick, healthy=%s", self._all_threads_alive())
         self.log.debug("heartbeat thread stopped")
-
-    def _all_threads_alive(self):
-        """
-        True only if every reader, writer and the brain thread are
-        still alive. A Python thread killed by an uncaught exception
-        dies silently without crashing the process, so this passive
-        check is what actually catches that, rather than requiring
-        reader/writer threads to report anything themselves.
-        """
-        threads = [*self._reader_threads.values(), *self._writer_threads.values()]
-        if self._brain_thread is not None:
-            threads.append(self._brain_thread)
-        return all(thread.is_alive() for thread in threads)
-
-    def send_data(self, port_name, payload):
-        """Enqueues a DATA envelope for port_name's writer thread to send."""
-        self._outbound_queues[port_name].put(encode_data(payload))
-
-    def _send_barrier(self, port_name, epoch, halt=False):
-        self._outbound_queues[port_name].put(encode_barrier(epoch, halt=halt))
-
-    def _send_interact(self, port_name, command, args=None):
-        self._outbound_queues[port_name].put(encode_interact(command, args))
 
     def _on_barrier(self, port_name, payload):
         epoch = payload["epoch"]
