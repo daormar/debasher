@@ -461,6 +461,22 @@ debasher::_validate_resident_program_processes()
 }
 
 ########
+# Python heredoc processes only: source prepended ahead of the
+# heredoc's own text so it can "import debasher_runtime_lib" (and
+# anything else installed alongside it) -- mirrors the
+# sys.path.append(...) lines the ".py:" suffix rule in
+# engine/Makefile.am already adds for standalone installed Python
+# tools, which a "python -c ..." heredoc invocation would otherwise
+# never get. Single-quoted Python string literals, deliberately, so
+# this can be embedded as-is inside the outer double-quoted "-c"
+# argument built by debasher::_create_heredoc_func_body below without
+# any quote-escaping gymnastics.
+debasher::_python_heredoc_sys_path_prelude()
+{
+    echo "import sys"$'\n'"sys.path.append('${debasher_pythondir}')"$'\n'"sys.path.append('${debasher_pkgpythondir}')"
+}
+
+########
 debasher::_create_heredoc_func_body()
 {
     local processname=$1
@@ -473,10 +489,21 @@ debasher::_create_heredoc_func_body()
             local provider_name=${provider% *}
             local provider_kind=${provider##* }
             printf -v escaped_interpreter '%q' "${DEBASHER_HEREDOC_INTERPRETERS[$i]}"
+
+            # $(...) strips trailing newlines, so debasher::_python_heredoc_sys_path_prelude's
+            # own trailing newline (if any) can't be relied on to separate it from the heredoc
+            # text that follows -- prelude_sep supplies that separator explicitly instead,
+            # and stays empty (no stray blank line) for every other heredoc language.
+            local prelude="" prelude_sep=""
+            if [ "${DEBASHER_HEREDOC_LANGUAGES[$i]}" = "python" ]; then
+                prelude=$(debasher::_python_heredoc_sys_path_prelude)
+                prelude_sep=$'\n'
+            fi
+
             if [ "${provider_kind}" = "func" ]; then
-                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\$(${provider_name})\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"${prelude}${prelude_sep}\$(${provider_name})\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
             else
-                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\${${provider_name}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"${prelude}${prelude_sep}\${${provider_name}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
             fi
             return 0
         fi

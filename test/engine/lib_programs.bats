@@ -10,7 +10,6 @@
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
     debasher_pkglibdir="${ENGINE_BUILDDIR}"
-    source "${ENGINE_BUILDDIR}/debasher_lib.sh"
 
     # debasher::_get_modname_from_absmodname (exercised below via
     # debasher::_resolve_program_type) calls out to "${BASENAME}",
@@ -20,12 +19,23 @@ setup() {
     # the plain .sh source directly (its own preamble bakes in the
     # configured install prefix as debasher_pkglibdir, which would
     # override the one just set above and break sourcing the rest of
-    # the built engine/ dir).
+    # the built engine/ dir). Set *before* sourcing, not after: unlike
+    # a live "${BASENAME}"/"${PYTHON}" read, debasher_lib.sh's own
+    # DEBASHER_HEREDOC_INTERPRETERS=("${PYTHON}" ...) array literal is
+    # evaluated once, right when it is sourced, exactly like the real
+    # preamble (which writes these vars before appending the .sh
+    # source) -- setting them afterwards would silently capture empty
+    # values into that array.
     BASENAME="$(command -v basename)"
 
-    # debasher::_classify_resident_process_role shells out to "${PYTHON}",
-    # for the same reason as BASENAME above.
+    # debasher::_classify_resident_process_role shells out to "${PYTHON}".
     PYTHON="$(command -v python3)"
+
+    # debasher::_python_heredoc_sys_path_prelude reads these two.
+    debasher_pythondir="/fake/pythondir"
+    debasher_pkgpythondir="/fake/pkgpythondir"
+
+    source "${ENGINE_BUILDDIR}/debasher_lib.sh"
 
     # See test/engine/lib_processes.bats for why this is needed: a bare
     # top-level "declare" in debasher_lib.sh becomes local to setup()
@@ -299,4 +309,49 @@ EOF
     run debasher::_validate_resident_program_processes
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: process plain_worker does not derive from FBPProcess or Supervisor"* ]]
+}
+
+# --- debasher::_python_heredoc_sys_path_prelude / _create_heredoc_func_body --
+
+@test "debasher::_python_heredoc_sys_path_prelude emits sys.path.append lines for both directories" {
+    result=$(debasher::_python_heredoc_sys_path_prelude)
+    [[ "${result}" == *"import sys"* ]]
+    [[ "${result}" == *"sys.path.append('/fake/pythondir')"* ]]
+    [[ "${result}" == *"sys.path.append('/fake/pkgpythondir')"* ]]
+}
+
+@test "debasher::_create_heredoc_func_body includes the sys.path prelude for a Python heredoc process" {
+    pyprelproc_heredoc_py() { cat <<'EOF'
+print("hi")
+EOF
+    }
+
+    result=$(debasher::_create_heredoc_func_body "pyprelproc")
+    [[ "${result}" == *"sys.path.append('/fake/pythondir')"* ]]
+    [[ "${result}" == *"sys.path.append('/fake/pkgpythondir')"* ]]
+}
+
+@test "debasher::_create_heredoc_func_body does not add a sys.path prelude for a non-Python heredoc process" {
+    perlprelproc_heredoc_perl() { cat <<'EOF'
+print "hi\n";
+EOF
+    }
+
+    result=$(debasher::_create_heredoc_func_body "perlprelproc")
+    [[ "${result}" != *"sys.path.append"* ]]
+}
+
+@test "a generated Python heredoc process function actually has the fake dirs on sys.path at run time" {
+    realpyproc_heredoc_py() { cat <<'EOF'
+import sys
+print('/fake/pythondir' in sys.path)
+print('/fake/pkgpythondir' in sys.path)
+EOF
+    }
+
+    debasher::_create_process_func_heredoc "realpyproc"
+    run realpyproc
+    [ "${status}" -eq 0 ]
+    [ "${lines[0]}" = "True" ]
+    [ "${lines[1]}" = "True" ]
 }

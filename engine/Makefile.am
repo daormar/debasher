@@ -62,6 +62,7 @@ SUFFIXES= .sh .py .r .R
 	echo "debasher_datadir=\"$(datadir)/$(PACKAGE_NAME)\"" >> $@
 	echo "debasher_pkglibdir=\"$(libdir)/$(PACKAGE_NAME)\"" >> $@
 	echo "debasher_pkgpythondir=\"$(pkgpythondir)\"" >> $@
+	echo "debasher_pythondir=\"$(pythondir)\"" >> $@
 	echo "BASH=\"$(BASH)\"" >> $@
 	echo "ECHO=\"$(ECHO)\"" >> $@
 	echo "AWK=\"$(AWK)\"" >> $@
