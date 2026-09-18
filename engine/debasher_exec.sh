@@ -58,6 +58,7 @@ usage()
 {
     echo "debasher_exec             --pfile <string> --outdir <string> [--sched <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
+    echo "                          [--builtinsched-oneshot]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--rerun-outdated-procs] [--conda-support]"
     echo "                          [--docker-support] [--gen-proc-graph]"
@@ -74,6 +75,11 @@ usage()
     echo "                          A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} means unlimited CPUs"
     echo "--builtinsched-mem <int>  Available memory in MB for built-in scheduler"
     echo "                          (${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} by default). A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} means unlimited memory"
+    echo "--builtinsched-oneshot    Launch all processes in a single scheduling iteration and"
+    echo "                          return immediately, without waiting for them to finish."
+    echo "                          Only valid with the built-in scheduler, unrestricted cpus"
+    echo "                          and memory, and a program whose processes have no explicit"
+    echo "                          dependencies between them (pure FIFO-based programs)"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the program"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--rerun-outdated-procs    Rerun those processes with outdated code"
@@ -101,6 +107,7 @@ read_pars()
     builtin_sched_cpus=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
     builtin_sched_mem_given=0
     builtin_sched_mem=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    builtin_sched_oneshot_given=0
     dflt_nodes_given=0
     dflt_throttle_given=0
     rerun_outdated_processes_given=0
@@ -157,6 +164,11 @@ read_pars()
                           return 1
                       fi
                       builtin_sched_mem_given=1
+                  fi
+                  ;;
+            "--builtinsched-oneshot")
+                  if [ $# -ne 0 ]; then
+                      builtin_sched_oneshot_given=1
                   fi
                   ;;
             "--dflt-nodes") shift
@@ -244,6 +256,17 @@ check_pars()
     if [ ${check_proc_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
         echo "Error! --check-proc-opts and --debug options cannot be given simultaneously"
         exit 1
+    fi
+
+    if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
+        if [ ${builtin_sched_cpus} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} ]; then
+            echo "Error! --builtinsched-oneshot cannot be used together with a restricted --builtinsched-cpus value" >&2
+            exit 1
+        fi
+        if [ ${builtin_sched_mem} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} ]; then
+            echo "Error! --builtinsched-oneshot cannot be used together with a restricted --builtinsched-mem value" >&2
+            exit 1
+        fi
     fi
 }
 
@@ -346,6 +369,86 @@ topologically_sort_processes()
     debasher::_topo_sort_processes
 
     echo "Sorting complete" >&2
+
+    echo "" >&2
+}
+
+########
+check_oneshot_precondition()
+{
+    # Dependencies of type "after" only require the depended-on process to
+    # have started (not finished), so they are compatible with
+    # --builtinsched-oneshot: the builtin scheduler resolves them without
+    # waiting, by repeatedly launching newly-startable processes until none
+    # are left, all within the same call and without sleeping. Dependencies
+    # of type afterok/afternotok/afterany/aftercorr require a process to
+    # have actually finished (or failed), which cannot be guaranteed without
+    # waiting, so they are incompatible with this mode.
+
+    is_blocking_deptype()
+    {
+        local deptype=$1
+
+        case ${deptype} in
+            "${DEBASHER_AFTER_PROCESSDEP_TYPE}"|"${DEBASHER_NONE_PROCESSDEP_TYPE}")
+                return 1
+                ;;
+            *)
+                return 0
+                ;;
+        esac
+    }
+
+    get_first_blocking_deptype()
+    {
+        local processdeps_spec=$1
+
+        local separator=$(debasher::_get_processdeps_separator ${processdeps_spec})
+        local processdeps_spec_blanks
+        if [ "${separator}" = "" ]; then
+            processdeps_spec_blanks=${processdeps_spec}
+        else
+            processdeps_spec_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec})
+        fi
+
+        local dep_spec
+        for dep_spec in ${processdeps_spec_blanks}; do
+            local deptype=$(debasher::_get_deptype_part_in_dep ${dep_spec})
+            if is_blocking_deptype "${deptype}"; then
+                echo "${deptype}"
+                return 0
+            fi
+        done
+
+        return 1
+    }
+
+    check_process_oneshot_deps()
+    {
+        local processname=$1
+        local process_spec=$2
+
+        local processdeps_spec=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
+
+        if [ -z "${processdeps_spec}" -o "${processdeps_spec}" = "none" -o "${processdeps_spec}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+            return 0
+        fi
+
+        local blocking_deptype
+        if blocking_deptype=$(get_first_blocking_deptype "${processdeps_spec}"); then
+            echo "Error! --builtinsched-oneshot requires a pure FIFO-based program with no completion-based dependencies between processes (afterok/afternotok/afterany/aftercorr), but process \"${processname}\" has a \"${blocking_deptype}\" dependency (in: ${processdeps_spec})" >&2
+            return 1
+        fi
+    }
+
+    echo "# Checking program is compatible with --builtinsched-oneshot..." >&2
+
+    local processname
+    for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
+        check_process_oneshot_deps "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || exit 1
+    done
+
+    echo "Check complete" >&2
 
     echo "" >&2
 }
@@ -1175,6 +1278,10 @@ gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
 
 topologically_sort_processes || exit 1
 
+if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
+    check_oneshot_precondition || exit 1
+fi
+
 # Generate graphs
 if [ "${gen_proc_graph_given}" -eq 1 ]; then
     gen_process_graph "${prg_file_pref}" "${procgraph_file_prefix}" || exit 1
@@ -1210,9 +1317,17 @@ if [ ${debug} -eq 1 ]; then
     restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
 else
     sched=$(debasher::_determine_scheduler)
+    if [ ${builtin_sched_oneshot_given} -eq 1 -a ${sched} != ${DEBASHER_BUILTIN_SCHEDULER} ]; then
+        echo "Error! --builtinsched-oneshot can only be used with the built-in scheduler" >&2
+        exit 1
+    fi
     if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
-        debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || exit 1
-        print_post_exec_wait_help
+        debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" "${builtin_sched_oneshot_given}" || exit 1
+        if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
+            print_post_exec_nowait_help
+        else
+            print_post_exec_wait_help
+        fi
     else
         revise_rerun_proc_status "${outd}" || return 1
         prepare_files_and_dirs_for_processes "${outd}"

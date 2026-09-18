@@ -1505,6 +1505,7 @@ debasher_builtin_sched::execute_program_processes()
     local procspec_file=$3
     local builtin_sched_cpus=$4
     local builtin_sched_mem=$5
+    local oneshot=${6:-0}
     local iterno=1
 
     echo "* Configuring scheduler..." >&2
@@ -1544,12 +1545,24 @@ debasher_builtin_sched::execute_program_processes()
             # Execute processes
             debasher_builtin_sched::_exec_processes "${cmdline}" "${dirname}"
 
-            # Wait before starting a new loop
-            debasher_builtin_sched::_sleep
+            # In oneshot mode there is no need to sleep: the only
+            # dependencies that can hold up a process ("after") are already
+            # satisfied by a process being launched (not finished), so the
+            # next iteration can immediately pick up anything that just
+            # became startable
+            if [ ${oneshot} -ne 1 ]; then
+                # Wait before starting a new loop
+                debasher_builtin_sched::_sleep
+            fi
         else
             # There are no processes to be executed
 
-            if debasher_builtin_sched::_inprogress_processes_pending; then
+            if [ ${oneshot} -eq 1 ]; then
+                # Nothing more can be launched without waiting for
+                # in-progress processes to finish: return immediately
+                # instead of monitoring them to completion
+                end=1
+            elif debasher_builtin_sched::_inprogress_processes_pending; then
                 # Wait for in-progress processes to finish
                 debasher_builtin_sched::_sleep
             else
