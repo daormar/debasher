@@ -1278,9 +1278,7 @@ debasher_builtin_sched::_launch()
     debasher_builtin_sched::_wait_until_file_exists "${pid_file}" ${max_num_iters} || return 1
 
     # Unset variables
-    if [ ${task_idx} != ${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        unset "${task_varname}"
-    fi
+    unset BUILTIN_ARRAY_TASK_ID
     unset BUILTIN_SCHED_PID_FILENAME
 }
 
