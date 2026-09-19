@@ -1258,6 +1258,21 @@ debasher_builtin_sched::_launch()
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
+    # Remove any stale PID file left by a previous launch of this same
+    # process/task (a relaunch after a crash). The wait below only checks
+    # that the file exists, so it must not exist yet: otherwise it would
+    # return immediately with the old process's PID still inside, which
+    # debasher_stop would then try to kill.
+    "${RM}" -f "${pid_file}"
+
+    # Tell the launched process where the installed helper tools live.
+    # debasher_libexecdir is deliberately not among the variables dumped
+    # into generated scripts (see debasher_get_deblib_vars_and_funcs), so
+    # a running process (e.g. a Supervisor relaunching a node through
+    # debasher_launch_process) cannot learn it any other way. Being a
+    # constant, unlike the two variables above, it needs no unset.
+    export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
+
     # Execute file, with job control enabled just for this one launch
     # so it becomes its own process group (pgid == pid). The launched
     # script always forks at least one child of its own (the stdout-
