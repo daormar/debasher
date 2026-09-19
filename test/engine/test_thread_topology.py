@@ -134,6 +134,69 @@ def test_all_threads_alive_is_true_with_no_declared_ports():
     assert proc._all_threads_alive() is True
 
 
+# --- heartbeat thread sends to SUPERVISOR_PORT, if set -------------------
+
+
+class _Supervised(lib.FBPProcess):
+    OUTPUT_PORTS = ["out"]
+    SUPERVISOR_PORT = "out"
+    HEARTBEAT_INTERVAL_SECONDS = 0.05
+
+
+def test_heartbeat_thread_sends_to_supervisor_port_when_healthy(fifo_path):
+    proc = _Supervised(opts={"out": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "r") as r:
+            line = r.readline().rstrip("\n")
+            assert lib.decode_envelope(line) == lib.Envelope(
+                type="INTERACT", payload={"command": "heartbeat", "args": {}}
+            )
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+def test_heartbeat_thread_sends_nothing_without_a_supervisor_port(fifo_path):
+    class _Unsupervised(lib.FBPProcess):
+        OUTPUT_PORTS = ["out"]
+        HEARTBEAT_INTERVAL_SECONDS = 0.05
+
+    proc = _Unsupervised(opts={"out": fifo_path})
+    proc.start_threads()
+
+    # The writer thread's open() blocks until something opens "out" for
+    # reading -- pair it with one here (draining nothing in particular)
+    # so it isn't left blocked forever regardless of what this test
+    # asserts, matching test_stop_threads_joins_everything_cleanly's own
+    # _drain_writer_fifo pattern.
+    reader_holder = threading.Thread(target=lambda: open(fifo_path, "r").close())
+    reader_holder.start()
+    try:
+        time.sleep(0.2)
+        assert proc._outbound_queues["out"].empty()
+    finally:
+        reader_holder.join(timeout=2)
+        proc.stop_threads(timeout=2)
+
+
+def test_heartbeat_thread_stops_sending_once_a_thread_has_died():
+    # Pure Python-level check of the health gate itself, with no real
+    # FIFOs involved (real FIFO/writer-thread timing is exercised
+    # separately, by the two tests above): run only the heartbeat loop
+    # directly, with _all_threads_alive() forced False, and confirm
+    # nothing gets enqueued for the writer thread to ever send.
+    proc = _Supervised(opts={"out": "/dev/null"})
+    proc._all_threads_alive = lambda: False
+
+    thread = threading.Thread(target=proc._heartbeat_loop, name="heartbeat")
+    thread.start()
+    time.sleep(0.2)
+    proc._heartbeat_stop.set()
+    thread.join(timeout=2)
+
+    assert proc._outbound_queues["out"].empty()
+
+
 def test_stop_threads_joins_everything_cleanly(fifo_path):
     proc = _RecordingWorker(opts={"inf": fifo_path, "outf": fifo_path + ".out"})
     os.mkfifo(proc.opts["outf"])
