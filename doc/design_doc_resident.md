@@ -153,7 +153,7 @@ Each one was verified by running the real classes, not only by reading the code.
 
 - **G2 was violated, fixed on 2026-09-20.** `DATA` arriving on a port that was still pending in an open barrier round was stored in `channel_state` but never reached `process_data` (sending 5 and then 7 through a fan-in node delivered only 7, with no crash involved), which contradicts G2 and classic Chandy-Lamport, which records the message and also keeps processing it. Only nodes whose round stays open across messages were affected (several input ports, or an initiator in a cycle). Now such a message is processed at once and a deep copy goes to `channel_state`; checked with a real `debasher_exec` run (5 and 7 through a fan-in node with a round open: it processes both, total 12, where the previous code ended at 7).
 - **G3 and G6 violated.** A message processed after the snapshot (the state is captured when the round opens) but before the round closes is logged in the segment of the round's own epoch, which recovery, and also resumption after a halt, skip: live total 100, recovered total 0. Fix decided (2026-09-20, point 3): the checkpoint stores a position in the input log, not the epoch of a log segment.
-- **G3 is also violated when the node has no checkpoint yet (found 2026-09-20).** `run()` replays the log only if a checkpoint was restored, so a node that crashes before closing its first epoch loses everything it had received: checked with the real class, 3 messages in the log and no checkpoint, and the relaunched node processed 0. Fix proposed, not yet confirmed: with no checkpoint, recovery starts from the default state and replays the whole log (nothing is pruned before the first checkpoint).
+- **G3 is also violated when the node has no checkpoint yet (found 2026-09-20).** `run()` replays the log only if a checkpoint was restored, so a node that crashes before closing its first epoch loses everything it had received: checked with the real class, 3 messages in the log and no checkpoint, and the relaunched node processed 0. Fix decided (2026-09-20, point 3): with no checkpoint, recovery starts from the default state and replays the whole log (nothing is pruned before the first checkpoint).
 - **G4 violated.** The log is one file per port and drain replays port by port, so the order across ports is lost (processed `A1 B2 A3 B4`, replayed `A1 A3 B2 B4`). Fix decided (2026-09-20, point 3): one input log per node, in queue order.
 - **G5 not implemented.** Replay after a crash re-emits the outputs the node had already sent, and a running neighbor receives them again (verified with a real run). Mechanism decided (2026-09-20, point 3).
 - **G7 partly violated.** A `FBPProcess` whose input writer sends `CLOSE` ends that reader thread and then stops sending heartbeats, so a healthy consumer whose producer finished on purpose would be declared down (a crash of the producer no longer does it: the reader stays, which the real run confirmed). To fix in step 4. The `Supervisor.run()` hang with a `MANUAL_TRIGGER_PORT` was fixed on 2026-09-20 (step 2), with a regression test.
@@ -438,6 +438,39 @@ Contract's conformance status).
   limit, and files are created at the first append, so there are no empty segments. Nothing rotates when a
   round captures the state: that would couple the brain thread to the readers to save, at most, one
   segment of disk.
+- **Startup, counters, pruning and cap (decided 2026-09-20).**
+  - *Counters.* `next_pos = max(last complete record, processed_upto) + 1`, found by reading only the last
+    segment that has a complete record. A segment with no complete record (only a torn fragment) is
+    deleted at startup: the next record reuses its position, so a new segment would collide with its
+    name, and the fragment holds nothing.
+  - *Startup order in `run()`:* load the latest checkpoint, `restore_state`, `initialize_runtime`, recover
+    the log, replay the `DATA` records with `pos > processed_upto`, start the threads. With no checkpoint
+    the state is the default one and `processed_upto` is 0, so the whole log is replayed.
+  - *What replay checks.* It starts at the last segment whose name is at most `processed_upto + 1` and
+    fails loudly if the log starts above `processed_upto + 1`, if the positions from there on are not
+    consecutive, if a segment does not start where the previous one ended, or if a line that ends in a
+    newline does not parse. A log with no records is not an error, because it cannot be told from a log
+    that was lost (the sequence numbers of G5 detect that later). A log whose last record is below
+    `processed_upto` is not an error either, since everything in it is already in the checkpoint: the
+    numbering then continues after `processed_upto`.
+  - *Cap.* `INPUT_LOG_MAX_BYTES` (renamed from `MESSAGE_LOG_MAX_BYTES`, 100 MiB by default) is per node
+    and kept in memory, so checking it costs nothing (before, every message listed the directory and
+    called `stat` on every file). Exceeding it raises in the reader thread before anything is written,
+    like any other death of a thread. `INPUT_LOG_SEGMENT_BYTES` (4 MiB by default) is the size at which
+    a segment is closed.
+  - *Pruning.* After each checkpoint is saved, whole segments other than the last one are deleted when
+    the next segment starts at or below the `processed_upto` of the oldest retained checkpoint plus one.
+    That value is read from the JSON of the oldest retained checkpoint on every round: measured cost 12
+    ms for 0.9 MB, 115 ms for 9.3 MB and 1.16 s for 95 MB, about a quarter of the cost of writing it (63
+    ms, 477 ms, 4.9 s), so no state is kept in memory for it. A checkpoint that cannot be read aborts
+    the prune with an error. Pruning runs on the brain thread under the same lock as the appends.
+  - *A failed write poisons the log.* After any failed append the log refuses more appends until the
+    process restarts. Measured with a real short write (`RLIMIT_FSIZE`): the third record wrote 50 bytes
+    and raised `EFBIG`, the fourth failed too, and a fragment of 50 bytes stayed at the tail. With a
+    transient error (a full disk, not reproduced here) another reader thread could otherwise append
+    behind the fragment and bury it in the middle of the file, where replay rejects it. With the
+    rule, the fragment stays the torn tail of its segment, every reader thread dies with the same error,
+    the heartbeat stops and the `Supervisor` relaunches the node.
 - **`CLOSE`**: the reader ends its loop on it and hands it to the brain thread like any other item, so
   it is logged, the port leaves the barrier's pending set, and the heartbeat does not count a reader
   that ended on `CLOSE` as dead. This replaces the marker file proposed before.
@@ -472,7 +505,22 @@ Contract's conformance status).
      has 152 tests (the new ones fail on the previous code where they can) and was repeated 15 times
      without a failure; the real run is the one described in point 5.
   3. The input log written at arrival, positions, recovery, pruning and the checkpoint schema (G3, G4,
-     G6).
+     G6). Split into three pieces (agreed 2026-09-20):
+     - 3.1 The log as a component, `_InputLog`, not used by `FBPProcess` yet. **Done 2026-09-20**:
+       segments named by their first position, records, torn tails, rotation, recovery of the next
+       position, replay with its checks, pruning by position, byte accounting with the cap, and the
+       refusal of appends after a failed write. 40 tests, among them a real `kill -9` of a child
+       process that appends (12 incarnations per run, about 5% of the kills left a torn tail, and none
+       lost a record whose append had returned). Checked with a real `debasher_exec` run too: a
+       process that appends to its log, killed by process group and relaunched three times with the
+       engine's own launcher, left 32930 records, consecutive from 1 with intact payloads, and the
+       next position was the right one.
+     - 3.2 Positioned arrival: the reader threads assign the position and enqueue under one lock, the
+       brain thread remembers the position of the item it processes, and the checkpoint gets schema
+       version 2 with `processed_upto`. The old log still works.
+     - 3.3 The switch: the log is written at arrival, the brain thread stops logging, replay is by
+       position (also with no checkpoint), pruning and the cap are wired in, and the old per-port code
+       and its tests are replaced by tests in the words of the guarantees.
   4. `CLOSE` handling: `closed_ports`, the barrier's pending set, the heartbeat.
   5. G5: sequence numbers, deduplication and detection of gaps.
   6. The chaos test of the Contract.

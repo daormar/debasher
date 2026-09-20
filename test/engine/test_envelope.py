@@ -122,3 +122,23 @@ def test_barrier_is_never_nested_inside_data():
     envelope = lib.decode_envelope(line)
     assert envelope.type == "DATA"
     assert envelope.payload == {"type": "BARRIER", "payload": {"epoch": 1, "halt": False}}
+
+
+def test_decode_envelope_rejects_a_json_value_that_is_not_an_object():
+    for line in ("[1, 2]", '"DATA"', "7", "null"):
+        with pytest.raises(ValueError):
+            lib.decode_envelope(line)
+
+
+def test_envelope_from_obj_accepts_an_already_decoded_envelope():
+    envelope = lib._envelope_from_obj({"type": "DATA", "payload": [1, 2]}, "somewhere")
+    assert envelope == lib.Envelope(type="DATA", payload=[1, 2])
+
+
+def test_envelope_from_obj_rejects_what_decode_envelope_rejects_and_names_the_source():
+    with pytest.raises(ValueError, match="somewhere"):
+        lib._envelope_from_obj({"payload": 1}, "somewhere")
+    with pytest.raises(ValueError, match="somewhere"):
+        lib._envelope_from_obj(["DATA", 1], "somewhere")
+    with pytest.raises(ValueError):
+        lib._envelope_from_obj({"type": "BOGUS", "payload": 1}, "somewhere")
