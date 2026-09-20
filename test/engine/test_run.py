@@ -55,17 +55,17 @@ def test_load_latest_checkpoint_returns_none_when_the_dir_is_empty(execdir):
 
 def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {"marker": "old"}, {}, 0)
-    proc._save_checkpoint(1, {"marker": "new"}, {}, 0)
+    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [])
+    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [])
 
-    epoch, node_state, processed_upto = proc._load_latest_checkpoint()
+    epoch, node_state, processed_upto, closed_ports = proc._load_latest_checkpoint()
     assert epoch == 1
     assert node_state == {"marker": "new"}
 
 
 def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0)
+    proc._save_checkpoint(0, {}, {}, 0, [])
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -74,6 +74,20 @@ def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
         json.dump(data, f)
 
     with pytest.raises(ValueError):
+        proc._load_latest_checkpoint()
+
+
+def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_closed_ports(execdir):
+    proc = _Node(opts={})
+    proc._save_checkpoint(0, {}, {}, 0, [])
+    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
+    with open(checkpoint_path) as f:
+        data = json.load(f)
+    del data["closed_ports"]
+    with open(checkpoint_path, "w") as f:
+        json.dump(data, f)
+
+    with pytest.raises(KeyError, match="closed_ports"):
         proc._load_latest_checkpoint()
 
 
@@ -94,7 +108,7 @@ def test_run_skips_restore_state_and_starts_with_defaults_when_no_checkpoint(exe
 
 def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(4, {"marker": "restored"}, {}, 0)
+    proc._save_checkpoint(4, {"marker": "restored"}, {}, 0, [])
 
     # A second instance is what actually "restarts": the first one
     # above only exists here to seed the checkpoint file on disk.

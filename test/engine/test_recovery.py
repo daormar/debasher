@@ -1,6 +1,7 @@
 import errno
 import json
 import os
+import shutil
 import threading
 import time
 
@@ -95,8 +96,8 @@ def _crash(proc):
     proc._input_log.close()
 
 
-def _relaunch(tmp_path, cls=_Fanin):
-    node = cls(opts=_opts(tmp_path))
+def _relaunch(tmp_path, cls=_Fanin, ports=("a", "b")):
+    node = cls(opts=_opts(tmp_path, ports))
     node._halted.set()
     node.run()
     return node
@@ -313,13 +314,13 @@ def test_a_retained_checkpoint_that_cannot_be_read_aborts_the_prune_with_an_erro
 
     node = _Keeping(opts=_opts(tmp_path))
     node._open_input_log(0)
-    node._save_checkpoint(0, {"seen": []}, {}, 0)
-    node._save_checkpoint(1, {"seen": []}, {}, 0)
+    node._save_checkpoint(0, {"seen": []}, {}, 0, [])
+    node._save_checkpoint(1, {"seen": []}, {}, 0, [])
     # Saving epoch 2 keeps epochs 2 and 1, so epoch 1 is the oldest one kept.
     (tmp_path / "node" / "checkpoints" / "1.json").write_text("not json")
 
     with pytest.raises(RuntimeError, match="cannot read"):
-        node._save_checkpoint(2, {"seen": []}, {}, 0)
+        node._save_checkpoint(2, {"seen": []}, {}, 0, [])
     # The checkpoint that was being saved is on disk all the same.
     assert (tmp_path / "node" / "checkpoints" / "2.json").exists()
 
@@ -405,3 +406,129 @@ def test_a_node_driven_without_run_gets_its_log_opened_by_start_threads(tmp_path
         assert [r.pos for r in node._input_log.replay(0)] == [1]
     finally:
         node.stop_threads(timeout=2)
+
+
+# --- the ports whose writer has said CLOSE ------------------------------------
+#
+# Three input ports. The items below are the ones of a node whose round opens at
+# the marker on b (position 4). Port a closed before it (position 3) and port c
+# after it (position 6), with a message of c in between (position 5).
+
+
+class _Three(_Fanin):
+    INPUT_PORTS = ["a", "b", "c"]
+
+
+_THREE = ("a", "b", "c")
+
+
+def _close(port):
+    return (port, lib.TYPE_CLOSE, {})
+
+
+def _marker(port, epoch=0):
+    return (port, lib.TYPE_BARRIER, _round(epoch))
+
+
+_A_ROUND_OPENING_BETWEEN_TWO_CLOSES = [
+    _data("a", 1),
+    _data("b", 10),
+    _close("a"),
+    _marker("b"),
+    _data("c", 100),
+    _close("c"),
+    _data("b", 20),
+]
+
+
+def _read_checkpoint(node, epoch):
+    with open(os.path.join(node._checkpoints_dir(), f"{epoch}.json")) as f:
+        return json.load(f)
+
+
+def test_a_checkpoint_holds_the_ports_whose_close_the_node_had_processed_when_the_round_opened(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    # Every item is in the log before the brain thread starts, so the reader threads have
+    # already seen the CLOSE of c when the round opens; the node has not got to it yet.
+    _process(live, _A_ROUND_OPENING_BETWEEN_TWO_CLOSES)
+    assert live._closed_ports == {"a", "c"}
+    live._close_barrier_round()
+
+    checkpoint = _read_checkpoint(live, 0)
+    assert checkpoint["processed_upto"] == 4
+    assert checkpoint["closed_ports"] == ["a"]
+
+
+def test_a_relaunched_node_knows_again_which_ports_had_closed(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    _process(live, _A_ROUND_OPENING_BETWEEN_TWO_CLOSES)
+    live._close_barrier_round()
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path, _Three, _THREE)
+    # a comes from the checkpoint, c from the CLOSE that the log holds after it.
+    assert relaunched._closed_ports == {"a", "c"}
+    assert relaunched.capture_node_state() == live.capture_node_state()
+
+
+def test_a_port_closed_long_ago_is_still_closed_once_the_log_that_recorded_its_close_is_gone(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    _process(live, [_data("a", 1), _close("a"), _marker("b")])
+    live._close_barrier_round()
+    _crash(live)
+    # What pruning does to every segment that ends at or below the checkpoint's position.
+    shutil.rmtree(os.path.join(os.environ["DEBASHER_PROCESS_EXECDIR"], "log"))
+
+    relaunched = _relaunch(tmp_path, _Three, _THREE)
+    assert relaunched._closed_ports == {"a"}
+
+
+def test_a_replay_that_finds_a_message_after_the_close_of_its_port_fails_loudly(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _close("a"), _data("a", 2)])
+    _crash(live)
+
+    with pytest.raises(ValueError, match="already received CLOSE"):
+        _relaunch(tmp_path)
+
+
+def test_a_message_after_a_close_that_the_checkpoint_recorded_also_fails_loudly(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _close("a"), _marker("b")])
+    live._close_barrier_round()
+    _arrive(live, "a", lib.TYPE_DATA, 2)
+    _crash(live)
+
+    with pytest.raises(ValueError, match="already received CLOSE"):
+        _relaunch(tmp_path)
+
+
+def test_after_a_relaunch_the_readers_of_closed_ports_drop_what_their_writers_send(tmp_path):
+    opts = _opts(tmp_path)
+    live = _Fanin(opts=opts)
+    _process(live, [_data("a", 1), _close("a")])
+    _crash(live)
+
+    node = _Fanin(opts=opts)
+    runner = threading.Thread(target=node.run, daemon=True)
+    runner.start()
+    try:
+        assert _wait_until(lambda: len(node._reader_threads) == 2)
+        # The writer of a is relaunched and says more; the writer of b has never said CLOSE.
+        with open(opts["a"], "w") as w:
+            w.write("\n" + lib.encode_hello() + "\n" + lib.encode_data(2) + "\n")
+        with open(opts["b"], "w") as w:
+            w.write(lib.encode_data(3) + "\n")
+        assert _wait_until(lambda: ("b", 3) in node.seen)
+        time.sleep(0.3)  # what the reader of a was sent has been read by now
+
+        assert node.seen == [("a", 1), ("b", 3)]
+        assert [(r.port, r.envelope.type) for r in node._input_log.replay(0)] == [
+            ("a", "DATA"),
+            ("a", "CLOSE"),
+            ("b", "DATA"),
+        ]
+        assert node._reader_threads["a"].is_alive()
+    finally:
+        node._halted.set()
+        runner.join(5)

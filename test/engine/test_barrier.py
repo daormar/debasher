@@ -42,7 +42,7 @@ class _BarrierWorker(lib.FBPProcess):
     def process_data(self, port_name, packet):
         self.received.append((port_name, packet))
 
-    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto, closed_ports):
         self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
 
@@ -64,7 +64,7 @@ class _OnePort(lib.FBPProcess):
     def capture_node_state(self):
         return {"marker": "initial"}
 
-    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto, closed_ports):
         self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
 
@@ -78,7 +78,7 @@ class _Root(lib.FBPProcess):
     def capture_node_state(self):
         return {}
 
-    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto, closed_ports):
         self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
 
@@ -365,7 +365,7 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
             # and so a log, which real nodes never do.
             return self.opts["execdir"]
 
-        def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+        def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto, closed_ports):
             self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
     # A cycle of two nodes: node_a -> node_b -> node_a.

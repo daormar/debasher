@@ -342,6 +342,16 @@ class _PortWorker:
         """
         return True
 
+    def _closed_at_start(self, tag):
+        """
+        Whether the reader of `tag` starts already past a CLOSE, that is,
+        in the mode in which it drops what its writer sends (see
+        _drops_after_close). A node relaunched after its writer had said
+        CLOSE knows it from what it recovered, and asks for it here. It has
+        no effect on a class that delivers what follows a CLOSE.
+        """
+        return False
+
     def _on_arrival(self, tag, envelope, line):
         """
         Called by a reader thread with every envelope that the transport
@@ -375,7 +385,7 @@ class _PortWorker:
             # corrupt line can stop it. The first line warns, since a writer
             # that says something after CLOSE is either a new incarnation of
             # it or at fault.
-            closed = False
+            closed = self._closed_at_start(tag) and self._drops_after_close(tag)
             warned = False
             for line in fifo:
                 if self._stopping.is_set():

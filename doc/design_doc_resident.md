@@ -38,7 +38,7 @@ The precise meaning of the words this document uses, in the order in which they 
 - **`DATA`**: the business traffic. It is the only type that reaches `process_data` and the only one that is replayed.
 - **`BARRIER`, marker** (marcador): the envelope that carries a round's `epoch` and its `halt` flag. Each node forwards it on its output ports, along the same channels as `DATA`, and never to the `Supervisor`.
 - **`INTERACT`**: a control command, with `command` and `args` (`start_snapshot`, `shutdown`, `heartbeat`, `checkpoint_saved`, and any that are added later: the catalog is open). It travels on its own channels, not on business channels.
-- **`CLOSE`**: the last envelope of a writer that has finished for good: it will never write again. It means "finished for good", not "finished successfully": a process that exits with an error sends none and counts as crashed. A halt is not a finish for good, since the node is resumed later, so an ordered halt sends none (decided and done on 2026-09-20, see point 3). The reader hands it to the brain thread in order and then keeps reading, but drops everything that follows it (decided and done on 2026-09-20; the `Supervisor`'s readers deliver it, since a node that closed its channel may be relaunched and must be heard). `closed_ports` will be the checkpoint field that lists the input ports that had received one.
+- **`CLOSE`**: the last envelope of a writer that has finished for good: it will never write again. It means "finished for good", not "finished successfully": a process that exits with an error sends none and counts as crashed. A halt is not a finish for good, since the node is resumed later, so an ordered halt sends none (decided and done on 2026-09-20, see point 3). The reader hands it to the brain thread in order and then keeps reading, but drops everything that follows it (decided and done on 2026-09-20; the `Supervisor`'s readers deliver it, since a node that closed its channel may be relaunched and must be heard). `closed_ports` is the checkpoint field that lists the input ports whose `CLOSE` the brain thread had processed when the round captured the node state.
 - **`HELLO`, resync line** (línea de resincronización): the first thing every incarnation of a writer sends, in one write together with a leading newline. The newline ends any fragment that the previous incarnation left when it was killed in the middle of a message, and the `HELLO` tells the reader that such a fragment can be dropped. It also tells the reader that its peer (re)connected.
 - **ghost connection** (conexión fantasma): each endpoint of a channel holds both ends of the FIFO, the real one and a ghost of the opposite direction. The reader never sees EOF and the writer never gets `EPIPE`; a dead peer is only backpressure, and a channel outlives the crash of either process. It relies on Linux behavior.
 
@@ -315,8 +315,8 @@ implemented**). The reader still never looks at `payload`.
 - Schema version: `CHECKPOINT_SCHEMA_VERSION` class constant, checked in `_load_latest_checkpoint`
   before `restore_node_state()`; a mismatch raises `ValueError`, a real incompatibility to fail on
   loudly, not something to silently paper over by trying an older checkpoint.
-- **Since the input-log redesign of point 3**: the checkpoint also stores `processed_upto` (done);
-  `closed_ports`, `out_seq` and `last_seq` will join it with `CLOSE` handling and the sequence numbers.
+- **Since the input-log redesign of point 3**: the checkpoint also stores `processed_upto` and `closed_ports` (done);
+  `out_seq` and `last_seq` will join it with the sequence numbers.
   `channel_state` is a copy of what arrived on pending ports, which is also processed.
 
 ### Startup sequence: `run()`
@@ -427,16 +427,17 @@ conformance status). What follows is the design as built.
 - **The checkpoint stores positions, not the epoch of a log segment.** Besides `node_state` and
   `channel_state` it holds `processed_upto` (the `pos` of the item whose processing captured the node state:
   a peer's first marker, or the `INTERACT` that started the round), and the schema version is 2.
-  **Done on 2026-09-20.** `closed_ports` (the input ports that had received `CLOSE` at that point),
-  `out_seq` (the sender counter of each output port, see below) and `last_seq` (the last sender number
-  accepted on each input port) join it in the steps that need them, in the same version. Every capture
+  **Done on 2026-09-20.** `closed_ports` (the input ports whose `CLOSE` the brain thread had processed at that point, also done on
+  2026-09-20, see the item on `closed_ports` below), `out_seq` (the sender counter of each output port, see below) and
+  `last_seq` (the last sender number accepted on each input port) join it in the step that needs them, in the same version. Every capture
   happens on the brain thread (the periodic snapshot timer does not exist yet), so `processed_upto` is
   always well defined.
 - **Recovery** is the startup sequence of point 2: restore the latest checkpoint, then replay, in
   order, every `DATA` record of the log with `pos` greater than `processed_upto`, all of them when there
   is no checkpoint, since the node state is then the default one. That covers what had been processed before
   the crash and what had arrived but not yet been processed, with no distinction between the two. A
-  `CLOSE` record after `processed_upto` will only update `closed_ports`. The counter `pos` is rebuilt
+  `CLOSE` record after `processed_upto` only adds its port to `closed_ports`, which the checkpoint restored as it was
+  at the capture. The counter `pos` is rebuilt
   from the checkpoint and the log, and `out_seq` and `last_seq` will be. Replay writes nothing to the
   log. **Done on 2026-09-20.**
 - **Pruning** is by position: the log is split into segment files named by their first `pos`, and those
@@ -511,7 +512,7 @@ conformance status). What follows is the design as built.
     always defined; 0 means that nothing had been processed.
   - *Checkpoint schema.* Version 2 adds `processed_upto`: the position of the item whose processing
     captured the node state (a peer's first marker, or the `INTERACT` that started the round), taken
-    when the round opens and not when it closes. `closed_ports`, `out_seq` and `last_seq` join the
+    when the round opens and not when it closes. `closed_ports` joined it later the same day, and `out_seq` and `last_seq` will join the
     same version in their own steps, since the branch is not released. A node restored from a
     checkpoint numbers after its `processed_upto` (from the last piece on, after the larger of that
     and the last record of its log). A checkpoint of version 1 is refused.
@@ -532,9 +533,29 @@ conformance status). What follows is the design as built.
   writer, which was alive and looked healthy, so the program never ended); dropped instead, all of them are
   delivered. What it sends after a `CLOSE` can only repeat what it delivered before, or be its own fault, so
   the consumer's state must not change. The `Supervisor`'s readers deliver what follows, since a node that
-  closed its channel may be relaunched and must be heard. Still to build: the port leaves the barrier's
-  pending set, and a relaunched node starts the readers of the ports that had already closed in this mode
-  (both need `closed_ports`). This replaces the marker file proposed before.
+  closed its channel may be relaunched and must be heard. A relaunched node starts the readers of the ports that had already closed in this mode
+  (done on 2026-09-20, with `closed_ports`). Still to build: the port leaves the barrier's pending set. This replaces
+  the marker file proposed before.
+- **`closed_ports`** (decided and done on 2026-09-20) lists the input ports whose `CLOSE` the brain thread had
+  processed at the capture, that is, those with a `CLOSE` record at a position at or below `processed_upto`. It is taken
+  at the same moment and on the same thread as the node state and `processed_upto`, so the three describe one instant, and
+  by the order in which the brain thread processes the items, not by what the reader threads have read, since they run
+  ahead of it. Two other definitions were rejected, with a node of three ports: a closes before the round opens, and c
+  closes after it, with a message of c in between. The set that the reader threads had logged by then says a and c, and
+  using it to leave c out of the pending ports, as the barrier will do, closes the round at once and drops the message
+  of c from the channel state, although it was in transit at the cut. The set when the round closes also says a and c.
+  Both leave a checkpoint that says that c is closed while its message lies after `processed_upto` and is still to be
+  replayed. The exact definition is what lets the replay check that no `DATA` record follows the `CLOSE` of its port,
+  which is an error (the log or the checkpoint is corrupt) and can be demanded because nothing after a `CLOSE` is
+  logged. The set is saved sorted in the checkpoint (schema 2; the field is required, so an older checkpoint fails to
+  load with a `KeyError`), because pruning deletes the segments below `processed_upto` and the `CLOSE` of a port closed
+  long ago goes with them. Recovery restores it and adds the port of each `CLOSE` record after `processed_upto`, and the
+  readers of the ports that are then closed start in the mode that drops what their writers send, so that a relaunched
+  node behaves like the incarnation that read the `CLOSE`. A `CLOSE` that arrives between the capture and the close of the
+  round is not stored in the checkpoint file: like the `DATA` that arrives then it is history of the channel after the
+  cut, and recovery finds it in the log. Only a global rollback, or an audit of the cut, would need it in `channel_state`.
+  What a module sees does not change: `capture_node_state()` and `restore_node_state()` handle the node state and nothing
+  else, and no hook tells the module about a `CLOSE`.
 - **Sequence numbers (G5).** The sender numbers the `DATA` of each output channel 1, 2, 3, and stores
   its counters in its checkpoint. The receiver drops a `DATA` whose number is not above the last one it
   accepted from that channel (a duplicate produced by a replay) and treats a jump as a lost message
@@ -616,8 +637,22 @@ conformance status). What follows is the design as built.
        finishes on its own and is relaunched, and a consumer that reports its health: with the earlier code the
        reader died 4 s in, the health stayed false to the end and the relaunched producer left 351 of 400
        messages blocked; now the health stays true and none is left.
-     - 4.3 `closed_ports` in the checkpoint and its replay.
-     - 4.4 The barrier's pending set.
+     - 4.3 `closed_ports` in the checkpoint and its replay. **Done 2026-09-20**: the brain thread records each `CLOSE`
+       it processes, the round copies the set when it opens, the checkpoint stores it, recovery restores it and adds the
+       `CLOSE` records after `processed_upto`, replay fails on a `DATA` record after the `CLOSE` of its port, and after a
+       relaunch the readers of closed ports start in the dropping mode. Eight new tests in the words of the guarantees (the
+       checkpoint holds the ports whose `CLOSE` the node had processed when the round opened; a relaunched node knows again
+       which ports had closed; a port closed long ago stays closed once the log that recorded its `CLOSE` is gone; a message
+       after a `CLOSE` fails loudly, both when the `CLOSE` is in the log and when the checkpoint recorded it; the readers of
+       closed ports drop what their writers send after a relaunch; the file lists the ports in order; a checkpoint without
+       the field is refused), checked against eight mutants (the set as the reader threads saw it, the set at the close of
+       the round, no restore, replay without the `CLOSE` records, no check, readers that start open, a brain that does not
+       record the `CLOSE`, an unsorted file). Checked with a real `debasher_exec` run of a producer that finishes on its own
+       and a consumer killed with `kill -9` after it read the `CLOSE`, then relaunched, and the producer relaunched sending
+       400 KB: with the earlier code the consumer processed all 403 messages; now it knows that the port had closed (from the
+       `CLOSE` record of its log, there was no checkpoint), its reader drops what the producer sends, it stays at 3 messages
+       and 4 records, and the producer is never blocked.
+     - 4.4 The barrier's pending set, and the channel state entries of the ports that are closed at the capture.
   5. G5: sequence numbers, deduplication and detection of gaps.
   6. The chaos test of the Contract.
 
@@ -1144,3 +1179,8 @@ under `debasher_exec`, and the chaos test of the Contract.
   a machine crash, to its last consistent snapshot. Second step: `fsync` of the input log every few
   messages (group commit), which also protects the work since that snapshot, at a cost in throughput.
   Neither is designed nor built.
+- **A hook for the module to learn that a port closed.** Today only the engine records a `CLOSE`: the barrier will use it
+  and it is stored in `closed_ports`, but `capture_node_state()` and `restore_node_state()` never see it, so a module cannot
+  react to the end of a channel, for example to emit a final result. A hook would have to be called in the order of the input
+  log, and replayed, like `process_data`, so that the state a module builds from it is the one it would have had without a
+  crash. Not designed.
