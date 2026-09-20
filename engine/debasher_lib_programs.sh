@@ -81,6 +81,35 @@ debasher::_get_sched_from_command_line_file()
 }
 
 ########
+# Adds "--sched <sched>" to a command line serialized with
+# debasher::_serialize_args, unless it already carries a --sched option,
+# and echoes the result. debasher_exec uses it to save, in the command
+# line file of the output directory, the scheduler the program actually
+# runs with: the tools that operate on that directory later
+# (debasher_status, debasher_stop, ...) learn the scheduler from that
+# file, and what they would otherwise work out for themselves (the
+# machine's default, which depends on the environment they run in, or a
+# scheduler that debasher_exec forced for the program type) can differ
+# from it.
+#
+# $1 - Serialized command line.
+# $2 - Scheduler to add if the command line does not give one.
+debasher::_add_sched_to_serialized_cmdline()
+{
+    local serialized_cmdline=$1
+    local sched=$2
+
+    # Whole-argument match: the separator on both sides keeps "--sched"
+    # from matching inside another argument.
+    local wrapped="${DEBASHER_ARG_SEP}${serialized_cmdline}${DEBASHER_ARG_SEP}"
+    if [[ "${wrapped}" == *"${DEBASHER_ARG_SEP}--sched${DEBASHER_ARG_SEP}"* ]]; then
+        echo "${serialized_cmdline}"
+    else
+        echo "${serialized_cmdline}${DEBASHER_ARG_SEP}--sched${DEBASHER_ARG_SEP}${sched}"
+    fi
+}
+
+########
 debasher::_get_abspfile_from_command_line_file()
 {
     # Initialize variables

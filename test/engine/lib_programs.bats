@@ -355,3 +355,63 @@ EOF
     [ "${lines[0]}" = "True" ]
     [ "${lines[1]}" = "True" ]
 }
+
+# --- debasher::_add_sched_to_serialized_cmdline ----------------------------
+#
+# debasher_exec saves the scheduler the program really runs with in the
+# command line file of the output directory, because the tools that operate
+# on that directory later read it from there.
+
+@test "debasher::_add_sched_to_serialized_cmdline appends --sched when the command line has none" {
+    local serialized expected result
+    serialized=$(debasher::_serialize_args "debasher_exec" "--pfile" "prog.sh" "--outdir" "out")
+    expected=$(debasher::_serialize_args "debasher_exec" "--pfile" "prog.sh" "--outdir" "out" "--sched" "BUILTIN")
+
+    result=$(debasher::_add_sched_to_serialized_cmdline "${serialized}" "BUILTIN")
+
+    [ "${result}" = "${expected}" ]
+}
+
+@test "debasher::_add_sched_to_serialized_cmdline leaves a command line that already gives --sched untouched, whatever its value" {
+    local serialized result
+    serialized=$(debasher::_serialize_args "debasher_exec" "--sched" "SLURM" "--pfile" "prog.sh")
+
+    result=$(debasher::_add_sched_to_serialized_cmdline "${serialized}" "BUILTIN")
+
+    [ "${result}" = "${serialized}" ]
+}
+
+@test "debasher::_add_sched_to_serialized_cmdline does not mistake an argument that merely contains --sched for the option" {
+    local serialized expected result
+    serialized=$(debasher::_serialize_args "debasher_exec" "--pfile" "a--sched.sh" "--schedule" "x")
+    expected=$(debasher::_serialize_args "debasher_exec" "--pfile" "a--sched.sh" "--schedule" "x" "--sched" "BUILTIN")
+
+    result=$(debasher::_add_sched_to_serialized_cmdline "${serialized}" "BUILTIN")
+
+    [ "${result}" = "${expected}" ]
+}
+
+@test "debasher::_add_sched_to_serialized_cmdline works on a command line with no options at all" {
+    local serialized expected result
+    serialized=$(debasher::_serialize_args "debasher_exec")
+    expected=$(debasher::_serialize_args "debasher_exec" "--sched" "SLURM")
+
+    result=$(debasher::_add_sched_to_serialized_cmdline "${serialized}" "SLURM")
+
+    [ "${result}" = "${expected}" ]
+}
+
+@test "debasher::_add_sched_to_serialized_cmdline adds the option the tools read back, keeping the other arguments intact" {
+    local serialized result qcmdline
+    serialized=$(debasher::_serialize_args "debasher_exec" "--pfile" "with space.sh" "--outdir" "out")
+
+    result=$(debasher::_add_sched_to_serialized_cmdline "${serialized}" "BUILTIN")
+    qcmdline=$(debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${result}")
+
+    run debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--sched"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "BUILTIN" ]
+
+    run debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--pfile"
+    [ "${output}" = "with space.sh" ]
+}

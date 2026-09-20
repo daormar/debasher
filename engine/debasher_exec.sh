@@ -382,6 +382,25 @@ enforce_resident_program_scheduling()
 }
 
 ########
+# The command line saved in the output directory (see print_command_line)
+# is where the tools that operate on it later (debasher_status,
+# debasher_stop, debasher_stats, ...) learn which scheduler the program
+# runs with. When --sched was not given, the scheduler in use was chosen
+# here (the default of the machine, or the one forced for the program
+# type), so it is added to the saved command line: otherwise those tools
+# would have to work it out again, and would not necessarily get the same
+# answer.
+record_effective_scheduler_in_command_line()
+{
+    local sched=$(debasher::_get_scheduler)
+    if [ -z "${sched}" ]; then
+        return 0
+    fi
+
+    command_line=$(debasher::_add_sched_to_serialized_cmdline "${command_line}" "${sched}")
+}
+
+########
 gen_final_procspec()
 {
     echo "# Generate final process specification..." >&2
@@ -1274,6 +1293,8 @@ initialize_procspec "${pfile}" || exit 1
 debasher::_validate_resident_program_processes || exit 1
 
 enforce_resident_program_scheduling || exit 1
+
+record_effective_scheduler_in_command_line || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts || exit 1
