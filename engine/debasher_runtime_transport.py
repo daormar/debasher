@@ -326,13 +326,19 @@ class _PortWorker:
                     except OSError:
                         pass
 
-    def _ends_on_close(self, tag):
+    def _drops_after_close(self, tag):
         """
-        Whether the reader of `tag` ends its loop when the writer sends
-        CLOSE (the default), or keeps listening after it. Supervisor
-        overrides it: a node that closes its channel and is later
-        relaunched must still be heard, and it decides whether a node
-        finished for good from the node's own .finished file instead.
+        Whether the reader of `tag`, once its writer has sent CLOSE, goes on
+        reading but drops everything that follows (the default), or delivers
+        it as usual. CLOSE says that the writer has finished for good, so
+        what a later incarnation of it sends can only repeat what was already
+        delivered, or be a fault of its own: it must not reach the node. The
+        reader keeps reading instead of ending so that such an incarnation
+        never blocks on a full pipe, and so that its thread stays alive,
+        which is what the heartbeat checks. Supervisor overrides it: a node
+        that closes its channel and is later relaunched must still be heard,
+        and it decides whether a node finished for good from the node's own
+        .finished file instead.
         """
         return True
 
@@ -363,11 +369,31 @@ class _PortWorker:
             # in the middle of a message (see encode_hello). Anything else
             # is a corrupt stream, never skipped silently.
             fragment = None
+            # Set once the writer has sent CLOSE and this class drops what
+            # follows it (see _drops_after_close). From then on the loop only
+            # reads: nothing is decoded, logged or queued, so not even a
+            # corrupt line can stop it. The first line warns, since a writer
+            # that says something after CLOSE is either a new incarnation of
+            # it or at fault.
+            closed = False
+            warned = False
             for line in fifo:
                 if self._stopping.is_set():
                     break
                 line = line.rstrip("\n")
                 if not line:
+                    continue
+
+                if closed:
+                    if not warned:
+                        self.log.warning(
+                            "reader for %r: its writer sent something after CLOSE (a new "
+                            "incarnation of it?), dropping everything that follows",
+                            tag,
+                        )
+                        warned = True
+                    else:
+                        self.log.debug("reader for %r dropped a line sent after CLOSE", tag)
                     continue
 
                 try:
@@ -399,8 +425,8 @@ class _PortWorker:
                     )
 
                 self._on_arrival(tag, envelope, line)
-                if envelope.type == TYPE_CLOSE and self._ends_on_close(tag):
-                    break
+                if envelope.type == TYPE_CLOSE and self._drops_after_close(tag):
+                    closed = True
 
         self.log.debug("reader for %r stopped", tag)
 

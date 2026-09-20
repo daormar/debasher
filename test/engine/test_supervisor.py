@@ -571,15 +571,15 @@ class _OneNodeSup(lib.Supervisor):
     NODE_PORTS = {"a": "hb_a"}
 
 
-def test_no_supervisor_reader_ends_on_close():
+def test_no_supervisor_reader_drops_what_follows_a_close():
     class Sup(lib.Supervisor):
         NODE_PORTS = {"a": "hb_a"}
         MANUAL_TRIGGER_PORT = "manual"
 
     proc = Sup(opts={"hb_a": "/tmp/hb_a", "manual": "/tmp/manual"})
 
-    assert proc._ends_on_close("a") is False
-    assert proc._ends_on_close(lib._MANUAL_TRIGGER_TAG) is False
+    assert proc._drops_after_close("a") is False
+    assert proc._drops_after_close(lib._MANUAL_TRIGGER_TAG) is False
 
 
 def test_stop_threads_passes_the_choice_of_saying_close_to_the_supervisors_writers(tmp_path):

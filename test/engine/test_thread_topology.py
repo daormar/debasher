@@ -1,4 +1,7 @@
+import array
+import fcntl
 import os
+import termios
 import threading
 import time
 
@@ -57,6 +60,17 @@ def fifo_path(tmp_path):
     path = tmp_path / "test.fifo"
     os.mkfifo(path)
     return str(path)
+
+
+def _unread_bytes(fifo_path):
+    """How many bytes are waiting in the pipe, whoever holds it open."""
+    fd = os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        count = array.array("i", [0])
+        fcntl.ioctl(fd, termios.FIONREAD, count, True)
+        return count[0]
+    finally:
+        os.close(fd)
 
 
 def _read_envelopes(fifo, count):
@@ -124,7 +138,7 @@ def test_reader_thread_survives_its_writer_closing_and_hears_the_next_one(fifo_p
         proc.stop_threads(timeout=2)
 
 
-def test_reader_thread_ends_on_close_and_hands_it_to_the_brain(fifo_path):
+def test_reader_thread_hands_close_to_the_brain_and_stays_alive(fifo_path):
     proc = _BrainRecorder(opts={"inf": fifo_path})
     proc.start_threads()
     try:
@@ -132,17 +146,98 @@ def test_reader_thread_ends_on_close_and_hands_it_to_the_brain(fifo_path):
             w.write(lib.encode_data(1) + "\n")
             w.write(lib.encode_close() + "\n")
 
-        assert _wait_until(lambda: not proc._reader_threads["inf"].is_alive())
         assert _wait_until(lambda: len(proc.items) == 2)
         # Every queued item carries its position, from 1, ahead of the port.
         assert proc.items == [(1, "inf", "DATA", 1), (2, "inf", "CLOSE", {})]
+        assert proc._reader_threads["inf"].is_alive()
     finally:
         proc.stop_threads(timeout=2)
 
 
-def test_reader_thread_keeps_listening_after_close_when_its_class_says_so(fifo_path):
+def test_what_a_writer_sends_after_its_close_never_reaches_the_node(fifo_path):
+    proc = _BrainRecorder(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "w") as w:
+            w.write(lib.encode_data(1) + "\n")
+            w.write(lib.encode_close() + "\n")
+        assert _wait_until(lambda: len(proc.items) == 2)
+
+        # What a relaunched incarnation of the writer would say, and a corrupt line.
+        with open(fifo_path, "w") as w:
+            w.write("\n" + lib.encode_hello() + "\n")
+            w.write(lib.encode_data(2) + "\n")
+            w.write(lib.encode_barrier(0) + "\n")
+            w.write("this is not an envelope\n")
+            w.write(lib.encode_data(3) + "\n")
+        assert _wait_until(lambda: _unread_bytes(fifo_path) == 0)
+        time.sleep(0.2)  # the reader may still be going through what it read
+
+        assert proc.items == [(1, "inf", "DATA", 1), (2, "inf", "CLOSE", {})]
+        assert [r.envelope.type for r in proc._input_log.replay(0)] == ["DATA", "CLOSE"]
+        assert proc._reader_threads["inf"].is_alive()
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+class _SlowReader(_ReaderOnly):
+    def process_data(self, port_name, packet):
+        time.sleep(0.05)
+        super().process_data(port_name, packet)
+
+
+def test_a_consumer_whose_producer_finished_keeps_saying_it_is_healthy(fifo_path):
+    proc = _SlowReader(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "w") as w:
+            for n in range(10):
+                w.write(lib.encode_data(n) + "\n")
+            w.write(lib.encode_close() + "\n")
+
+        # The CLOSE is in the log already, and the brain still has most of the messages to go.
+        assert _wait_until(lambda: proc._input_log.next_pos == 12)
+        assert len(proc.received) < 10
+        assert proc._all_threads_alive()
+
+        assert _wait_until(lambda: len(proc.received) == 10, timeout=5)
+        assert proc._all_threads_alive()
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+def test_a_new_incarnation_of_a_finished_writer_never_blocks_on_a_full_pipe(
+    fifo_path, tmp_path, monkeypatch
+):
+    receiver = _ReaderOnly(opts={"inf": fifo_path})
+    receiver.start_threads()
+    try:
+        monkeypatch.setenv("DEBASHER_PROCESS_EXECDIR", str(tmp_path / "first"))
+        first = _WriterOnly(opts={"outf": fifo_path})
+        first.start_threads()
+        first.send_data("outf", 1)
+        first.stop_threads(timeout=2)  # says CLOSE: this incarnation has finished for good
+        assert _wait_until(lambda: receiver.received == [("inf", 1)])
+
+        # The node is relaunched after its CLOSE and sends far more than a pipe holds.
+        monkeypatch.setenv("DEBASHER_PROCESS_EXECDIR", str(tmp_path / "again"))
+        again = _WriterOnly(opts={"outf": fifo_path})
+        again.start_threads()
+        try:
+            for _ in range(400):
+                again.send_data("outf", "x" * 1000)
+            assert _wait_until(lambda: again._outbound_queues["outf"].empty(), timeout=5)
+        finally:
+            again.stop_threads(timeout=2)
+
+        assert receiver.received == [("inf", 1)]
+    finally:
+        receiver.stop_threads(timeout=2)
+
+
+def test_reader_thread_delivers_what_follows_a_close_when_its_class_says_so(fifo_path):
     class _KeepsListening(_BrainRecorder):
-        def _ends_on_close(self, tag):
+        def _drops_after_close(self, tag):
             return False
 
     proc = _KeepsListening(opts={"inf": fifo_path})

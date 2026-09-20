@@ -381,10 +381,10 @@ class Supervisor(_PortWorker):
             return True
         return True
 
-    def _ends_on_close(self, tag):
+    def _drops_after_close(self, tag):
         """
-        A Supervisor reader never ends on CLOSE. A node that closed its
-        channel may crash later or be relaunched, and must still be heard;
+        A Supervisor reader delivers what follows a CLOSE. A node that closed
+        its channel may crash later or be relaunched, and must still be heard;
         whether a node is done for good is decided from its own .finished
         file (see _check_node), and the manual trigger channel is written
         by an external actor that opens, writes and closes per message.

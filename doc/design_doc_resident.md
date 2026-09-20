@@ -18,7 +18,7 @@ The Contract below says precisely what these goals do and do not promise. After 
 
 ## Glossary (Glosario)
 
-The precise meaning of the words this document uses, in the order in which they build on each other; the Spanish equivalent is in parentheses. In Spanish "registro" can mean both the log and one of its entries, so here the log is the "log" and a record is an "entrada del log". Identifiers in backticks are names that exist in the code or that have been decided. Earlier text called the input log the "message log" and its replay "drain"; both names are gone from the code. The vocabulary of the guarantees (deterministic, idempotent, chaos test, durability level) is defined in the Contract, where it is used.
+The precise meaning of the words this document uses, in the order in which they build on each other; the Spanish equivalent is in parentheses. In Spanish "registro" can mean both the log and one of its entries, so here the log is the "log" and a record is an "entrada del log". Identifiers in backticks are names that exist in the code or that have been decided. Earlier text called the input log the "message log" and its replay "drain"; both names are gone from the code. The vocabulary of the guarantees (deterministic, idempotent, chaos test, mutation check, durability level) is defined in the Contract, where it is used.
 
 ### Program and topology
 
@@ -38,7 +38,7 @@ The precise meaning of the words this document uses, in the order in which they 
 - **`DATA`**: the business traffic. It is the only type that reaches `process_data` and the only one that is replayed.
 - **`BARRIER`, marker** (marcador): the envelope that carries a round's `epoch` and its `halt` flag. Each node forwards it on its output ports, along the same channels as `DATA`, and never to the `Supervisor`.
 - **`INTERACT`**: a control command, with `command` and `args` (`start_snapshot`, `shutdown`, `heartbeat`, `checkpoint_saved`, and any that are added later: the catalog is open). It travels on its own channels, not on business channels.
-- **`CLOSE`**: the last envelope of a writer that has finished for good: it will never write again. It means "finished for good", not "finished successfully": a process that exits with an error sends none and counts as crashed. A halt is not a finish for good, since the node is resumed later, so an ordered halt sends none (decided and done on 2026-09-20, see point 3). The reader ends its loop on it (the `Supervisor`'s readers do not) and hands it to the brain thread in order. `closed_ports` will be the checkpoint field that lists the input ports that had received one.
+- **`CLOSE`**: the last envelope of a writer that has finished for good: it will never write again. It means "finished for good", not "finished successfully": a process that exits with an error sends none and counts as crashed. A halt is not a finish for good, since the node is resumed later, so an ordered halt sends none (decided and done on 2026-09-20, see point 3). The reader hands it to the brain thread in order and then keeps reading, but drops everything that follows it (decided and done on 2026-09-20; the `Supervisor`'s readers deliver it, since a node that closed its channel may be relaunched and must be heard). `closed_ports` will be the checkpoint field that lists the input ports that had received one.
 - **`HELLO`, resync line** (línea de resincronización): the first thing every incarnation of a writer sends, in one write together with a leading newline. The newline ends any fragment that the previous incarnation left when it was killed in the middle of a message, and the `HELLO` tells the reader that such a fragment can be dropped. It also tells the reader that its peer (re)connected.
 - **ghost connection** (conexión fantasma): each endpoint of a channel holds both ends of the FIFO, the real one and a ghost of the opposite direction. The reader never sees EOF and the writer never gets `EPIPE`; a dead peer is only backpressure, and a channel outlives the crash of either process. It relies on Linux behavior.
 
@@ -68,7 +68,7 @@ The precise meaning of the words this document uses, in the order in which they 
 
 ### Threads of a node
 
-- **reader thread** (hilo lector): one per input port. It reads and decodes lines, consumes `HELLO`, and hands everything else to the inbound queue (with the input-log redesign, after appending the record to the log).
+- **reader thread** (hilo lector): one per input port. It reads and decodes lines, consumes `HELLO`, and hands everything else to the inbound queue (with the input-log redesign, after appending the record to the log). After a `CLOSE` it goes on reading but drops everything that follows; only `stop_threads()` ends it.
 - **writer thread** (hilo escritor): one per output port, with its own outbound queue. It sends `HELLO` first and, when its node has finished for good (not at a halt), `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so it is a daemon thread and `stop_threads()` gives up on it after a bounded wait.
 - **brain thread** (hilo cerebro): the only consumer of the **inbound queue** (cola de entrada) and the only thread that touches the node's state: it runs `process_data`, the barrier logic and the writing of checkpoints.
 - **heartbeat thread** (hilo de latido): checks on a timer that every other thread is alive and, if so, sends the `Supervisor` an `INTERACT` `heartbeat`. An unhealthy node simply stops sending.
@@ -147,6 +147,8 @@ Reliability is claimed only for what passes a **chaos test**: a reference reside
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through a fan-in node while a round is open: `process_data` receives both").
 
+Every piece of the implementation also gets a **mutation check**, because a test that passes on the correct code does not show that it would fail on broken code. On a scratch copy of the code, never in the repository, one specific fault that the new tests are meant to catch is put back on purpose (the reader ends at `CLOSE` again, a flag is ignored, a condition is inverted) and the suite is run: at least one test must fail, and the faulty copy, the mutant, is then said to be killed. If the suite still passes, the mutant survived: either the tests do not really protect that behavior, or the mutant was not the fault it was meant to be, and whichever it is gets fixed before the piece counts as done. It is done by hand, with a handful of mutants per piece chosen among the ways the code could plausibly be wrong; it is not an automated mutation-testing tool and it does not measure coverage.
+
 ### Conformance status today: gaps between this contract and the code (2026-09-19)
 
 Each one was verified by running the real classes, not only by reading the code. The ones marked fixed were fixed on 2026-09-20; the others are to be fixed before any guarantee is relied on.
@@ -157,7 +159,7 @@ Each one was verified by running the real classes, not only by reading the code.
 - **G3 was also violated when the node had no checkpoint yet, fixed on 2026-09-20 (found the same day).** `run()` replayed the log only if a checkpoint was restored, so a node that crashed before closing its first epoch lost everything it had received: checked with the real class, 3 messages in the log and no checkpoint, and the relaunched node processed 0. Now, with no checkpoint, recovery starts from the default state and replays the whole log (nothing is pruned before the first checkpoint).
 - **G4 was violated, fixed on 2026-09-20.** The log was one file per port and the drain replayed port by port, so the order across ports was lost (processed `A1 B2 A3 B4`, replayed `A1 A3 B2 B4`). Now there is one input log per node, in queue order, and replay follows it.
 - **G5 not implemented.** Replay after a crash re-emits the outputs the node had already sent, and a running neighbor receives them again (verified with a real run). Mechanism decided (2026-09-20, point 3).
-- **G7 partly violated.** A `FBPProcess` whose input writer sends `CLOSE` ends that reader thread and then stops sending heartbeats, so a healthy consumer whose producer finished on purpose would be declared down (a crash of the producer no longer does it: the reader stays, which the real run confirmed). To fix in step 4. The `Supervisor.run()` hang with a `MANUAL_TRIGGER_PORT` was fixed on 2026-09-20 (step 2), with a regression test.
+- **G7 was partly violated, fixed on 2026-09-20 (step 4).** A `FBPProcess` whose input writer sent `CLOSE` ended that reader thread and then stopped sending heartbeats, so a healthy consumer whose producer finished for good would have been declared down (measured with real runs: from the `CLOSE` on, the health check that the heartbeat sends on never said healthy again, and with a slow brain the gap opened while the brain still had a backlog before the `CLOSE`). Now the reader keeps reading after a `CLOSE`, so the heartbeat needs no special case (checked with a real `debasher_exec` run: the health check stayed true until the end of the run, 26 s after the `CLOSE`). A crash of the producer never did it: the reader stays, which the real run confirmed. The `Supervisor.run()` hang with a `MANUAL_TRIGGER_PORT` was fixed on 2026-09-20 (step 2), with a regression test.
 - **Peer reconnection** (point 5): designed there, nothing implemented; it is the mechanism behind G3 and G5 across a peer's crash.
 
 ## 1. Control envelope
@@ -191,8 +193,8 @@ the reader thread can dispatch by looking only at `type`, without interpreting `
 **Changes decided on 2026-09-20.** Two more control types, both with an empty payload: `CLOSE`, sent by a
 writer when it has finished for good (a halt sends none), and `HELLO`, sent as the first line of every incarnation of a writer (the
 transport decision of point 5). **Both are implemented** (step 2 of point 3): the reader thread consumes
-`HELLO`; `CLOSE` ends the reader's loop, except for `Supervisor`, and is also handed to the brain thread,
-in order. `DATA` will gain a sequence number per channel, assigned by the sender, as a sibling of `type`
+`HELLO`; `CLOSE` is handed to the brain thread, in order, and the reader then drops whatever follows it
+(a `Supervisor` reader delivers it). `DATA` will gain a sequence number per channel, assigned by the sender, as a sibling of `type`
 and `payload`: `{"type": "DATA", "seq": <int>, "payload": <any>}` (G5 in the Contract, point 3; **not yet
 implemented**). The reader still never looks at `payload`.
 
@@ -515,10 +517,20 @@ conformance status). What follows is the design as built.
   halts, and in 0 of 40 when the producer's checkpoint was slow, because the consumer had stopped reading by
   then. Whether a halt left a `CLOSE` in the log was a race between the two nodes, and the rule that a
   `CLOSE` after `processed_upto` closes the port when the log is replayed would have closed, at a resume,
-  the ports of producers that were coming back. For a writer that has finished: the reader ends its loop on
-  it and hands it to the brain thread like any other item, so it is logged, the port leaves the barrier's
-  pending set, and the heartbeat does not count a reader that ended on `CLOSE` as dead. This replaces the
-  marker file proposed before.
+  the ports of producers that were coming back. For a writer that has finished, the reader hands the
+  `CLOSE` to the brain thread like any other item, so it is logged, and **then keeps reading but drops
+  everything that follows (decided and done on 2026-09-20)**: nothing after it is decoded, logged or
+  queued, and the first line warns, once per port, that the writer said something after its `CLOSE`. The
+  reader does not end, for two reasons measured with real runs. A reader that ended left the consumer's
+  heartbeat unhealthy for good, a special case for the heartbeat to carry and, with a slow brain, a window
+  as long as the brain's backlog. And a node that sent `CLOSE` and then failed is relaunched, and its new
+  incarnation, with nobody reading, filled the pipe (351 of 400 messages of 1 KB stayed blocked in its
+  writer, which was alive and looked healthy, so the program never ended); dropped instead, all of them are
+  delivered. What it sends after a `CLOSE` can only repeat what it delivered before, or be its own fault, so
+  the consumer's state must not change. The `Supervisor`'s readers deliver what follows, since a node that
+  closed its channel may be relaunched and must be heard. Still to build: the port leaves the barrier's
+  pending set, and a relaunched node starts the readers of the ports that had already closed in this mode
+  (both need `closed_ports`). This replaces the marker file proposed before.
 - **Sequence numbers (G5).** The sender numbers the `DATA` of each output channel 1, 2, 3, and stores
   its counters in its checkpoint. The receiver drops a `DATA` whose number is not above the last one it
   accepted from that channel (a duplicate produced by a replay) and treats a jump as a lost message
@@ -531,7 +543,7 @@ conformance status). What follows is the design as built.
   a log at the sender with acknowledgements (coordination and deletion between two processes); a second
   log with the order of processing (needed only if something reorders, and nothing does now); accepting
   the loss (it happens exactly when the node is busy).
-- **Order of implementation (agreed 2026-09-20)**, one step at a time, each with tests and a real
+- **Order of implementation (agreed 2026-09-20)**, one step at a time, each with tests, a mutation check (see Acceptance) and a real
   `debasher_exec` smoke test:
   1. The barrier processes and records a copy (G2). **Done 2026-09-20**: `_brain_loop` processes every
      `DATA` and keeps a deep copy of the ones on a pending port; five new tests state the guarantee
@@ -540,8 +552,8 @@ conformance status). What follows is the design as built.
   2. The envelope types `CLOSE` and `HELLO`, and the transport with ghost connections in `_PortWorker`,
      including the `Supervisor` adaptation, a regression test for `Supervisor.run()` and a smoke test
      of crash and relaunch between two nodes. **Done 2026-09-20**: `start_threads()` opens every fifo
-     without waiting for a peer, readers end only on `CLOSE` (never on EOF; not at all for `Supervisor`)
-     or on `stop_threads()`, which wakes them through their own ghost write end; writers send a resync
+     without waiting for a peer, readers ended on `CLOSE` (never on EOF; not at all for `Supervisor`;
+     a `CLOSE` no longer ends them, see 4.2 below) or on `stop_threads()`, which wakes them through their own ghost write end; writers send a resync
      line first and `CLOSE` last, are daemons, and are abandoned after a bounded wait if their peer is
      down and the pipe is full; the reopen-after-EOF machinery of `Supervisor` is gone. The engine suite
      has 152 tests (the new ones fail on the previous code where they can) and was repeated 15 times
@@ -589,9 +601,19 @@ conformance status). What follows is the design as built.
        resumed by relaunching both: with the earlier code the sink's log held a `CLOSE` after `processed_upto`
        in 2 of 2 runs, with the new code in none, and after the resume the sink went on receiving (total 4950
        over 100 messages, from the checkpoint of the halt).
-     - 4.2 `closed_ports` in the checkpoint and its replay.
-     - 4.3 The barrier's pending set.
-     - 4.4 The reader after `CLOSE` and the heartbeat.
+     - 4.2 The reader after `CLOSE` and the heartbeat. **Done 2026-09-20**, before `closed_ports` because what
+       that records and replays assumes that nothing after a `CLOSE` is ever logged. `_ends_on_close` became
+       `_drops_after_close`: the reader keeps reading after a `CLOSE` and drops what follows, with one warning
+       per port, and the `Supervisor` keeps delivering. Three new tests in the words of the guarantees (what a
+       writer sends after its `CLOSE` never reaches the node, a consumer whose producer finished keeps saying
+       it is healthy, a new incarnation of a finished writer never blocks on a full pipe) and one rewritten,
+       checked against six mutants (the first version of one of them survived because it was not the fault it
+       meant to be, and the faithful one was killed). Checked with a real `debasher_exec` run of a producer that
+       finishes on its own and is relaunched, and a consumer that reports its health: with the earlier code the
+       reader died 4 s in, the health stayed false to the end and the relaunched producer left 351 of 400
+       messages blocked; now the health stays true and none is left.
+     - 4.3 `closed_ports` in the checkpoint and its replay.
+     - 4.4 The barrier's pending set.
   5. G5: sequence numbers, deduplication and detection of gaps.
   6. The chaos test of the Contract.
 
@@ -879,7 +901,7 @@ optional, and for a manual relaunch), and it is the signal a `FBPProcess` peer l
    Confirmed on 2026-09-20.
 2. Writer: on a stop that means the node has finished for good, send `CLOSE` last (after whatever is already
    queued), then close; a halt sends none (point 3).
-3. Reader: ends only on `CLOSE` or on a stop request. With ghost connections (transport decision
+3. Reader: ends only on a stop request (after a `CLOSE` it keeps reading and drops what follows, see point 3). With ghost connections (transport decision
    below) it never sees EOF, so there is nothing to reopen. A truncated line left by a writer that
    died mid-write can no longer be delimited by EOF (today it kills the reader with a
    `JSONDecodeError`): handled by the resync line, see below.
@@ -887,8 +909,8 @@ optional, and for a manual relaunch), and it is the signal a `FBPProcess` peer l
    woken by writing a blank line to its own ghost write end (checked: 600 of 600 rounds, at most
    0.2 ms). `Supervisor` no longer needs daemon reader threads.
 5. A process exiting with an error (exception, non-zero exit) sends no `CLOSE` and is treated as a
-   crash, consistent with the Supervisor design. A `CLOSE` followed by a later failure would leave
-   peers that stopped reading blocked on the relaunch: unlikely, but to keep in mind.
+   crash, consistent with the Supervisor design. A `CLOSE` followed by a later failure is harmless:
+   the peers keep reading and drop what the relaunched node sends (point 3).
 
 **What it does not cover (the reader-dies direction):**
 - A writer whose reader died gets `BrokenPipeError` on its next write, and its thread dies. It
@@ -958,7 +980,7 @@ holding a ghost write end, 210 of 210 rounds without a hang or an `EPIPE`; reade
 with the writer holding a ghost read end, 40 of 40 rounds, the writer never dies and nothing is lost
 inside the pipe (the only hole, at most 44 lines, is what the killed reader had already consumed).
 
-- The reader never sees EOF and ends only on `CLOSE` or on a stop request. To stop it,
+- The reader never sees EOF and ends only on a stop request (a `CLOSE` does not end it, see point 3). To stop it,
   `stop_threads()` writes a blank line to the reader's own ghost write end (checked: 600 of 600
   rounds, at most 0.2 ms, also when the stop precedes the read).
 - The writer never sees `EPIPE`. A dead peer means backpressure: the writer blocks once the pipe
@@ -993,7 +1015,7 @@ inside the pipe (the only hole, at most 44 lines, is what the killed reader had 
 
 **Also decided (2026-09-20)**: (B) the `CLOSE` envelope, sent by the writer when it has finished for good and handed by
 the reader to the brain thread in order, so that it is logged (point 3); (C) a closed port leaves the
-barrier's pending set, the heartbeat does not count a reader that ended on `CLOSE` as dead, and the "peer
+barrier's pending set, the reader of a closed port keeps reading and drops what follows (so the heartbeat needs no special case), and the "peer
 finished" fact is durable through the input log and the checkpoint's `closed_ports` (point 3), which
 replaces the marker file proposed before. The writer side of the reader-dies direction is moot (the writer
 never sees `EPIPE`); G5 and the messages already read but not yet logged are
