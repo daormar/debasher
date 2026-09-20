@@ -48,10 +48,22 @@ def test_encode_interact_with_args():
     }
 
 
+def test_encode_close_has_an_empty_payload():
+    line = lib.encode_close()
+    assert json.loads(line) == {"type": "CLOSE", "payload": {}}
+
+
+def test_encode_hello_has_an_empty_payload():
+    line = lib.encode_hello()
+    assert json.loads(line) == {"type": "HELLO", "payload": {}}
+
+
 def test_encode_never_adds_a_trailing_newline():
     assert not lib.encode_data(1).endswith("\n")
     assert not lib.encode_barrier(1).endswith("\n")
     assert not lib.encode_interact("x").endswith("\n")
+    assert not lib.encode_close().endswith("\n")
+    assert not lib.encode_hello().endswith("\n")
 
 
 def test_decode_envelope_round_trips_data():
@@ -67,6 +79,11 @@ def test_decode_envelope_round_trips_barrier():
 def test_decode_envelope_round_trips_interact():
     envelope = lib.decode_envelope(lib.encode_interact("shutdown"))
     assert envelope == lib.Envelope(type="INTERACT", payload={"command": "shutdown", "args": {}})
+
+
+def test_decode_envelope_round_trips_close_and_hello():
+    assert lib.decode_envelope(lib.encode_close()) == lib.Envelope(type="CLOSE", payload={})
+    assert lib.decode_envelope(lib.encode_hello()) == lib.Envelope(type="HELLO", payload={})
 
 
 def test_decode_envelope_survives_an_embedded_newline_in_a_data_payload():

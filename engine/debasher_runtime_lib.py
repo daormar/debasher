@@ -40,16 +40,22 @@ DEBASHER_SHUTDOWN_TOKEN = "__SHUTDOWN_TOKEN__"
 #####################
 #
 # JSON Lines wire format for communication between resident processes
-# (FBPProcess/Supervisor). Three sibling envelope types, always encoded
-# as their own single-line JSON object -- a BARRIER or INTERACT message
-# is never nested inside DATA's payload, so a reader can dispatch on
-# "type" alone, without ever interpreting "payload".
+# (FBPProcess/Supervisor). Sibling envelope types, always encoded as their
+# own single-line JSON object: a BARRIER or INTERACT message is never
+# nested inside DATA's payload, so a reader can dispatch on "type" alone,
+# without ever interpreting "payload". DATA, BARRIER and INTERACT carry
+# the messages themselves. CLOSE and HELLO belong to the transport: a
+# writer sends HELLO as the first line of every incarnation of itself (so
+# its reader can discard a fragment left by the previous one) and CLOSE
+# when it stops on purpose.
 
 TYPE_DATA = "DATA"
 TYPE_BARRIER = "BARRIER"
 TYPE_INTERACT = "INTERACT"
+TYPE_CLOSE = "CLOSE"
+TYPE_HELLO = "HELLO"
 
-_VALID_TYPES = (TYPE_DATA, TYPE_BARRIER, TYPE_INTERACT)
+_VALID_TYPES = (TYPE_DATA, TYPE_BARRIER, TYPE_INTERACT, TYPE_CLOSE, TYPE_HELLO)
 
 Envelope = namedtuple("Envelope", ["type", "payload"])
 
@@ -80,6 +86,30 @@ def encode_interact(command, args=None):
     return _encode(TYPE_INTERACT, {"command": command, "args": args or {}})
 
 
+def encode_close():
+    """
+    Encodes a CLOSE envelope: sent by a writer, as its very last line,
+    when it stops on purpose. A reader that sees it knows nothing more
+    will ever come through that channel from that writer. Without it,
+    silence means either that the writer finished or that it crashed and
+    will be relaunched, and nothing in the fifo tells the two apart.
+    """
+    return _encode(TYPE_CLOSE, {})
+
+
+def encode_hello():
+    """
+    Encodes a HELLO envelope. A writer sends it as the first thing it does
+    every time it starts, in one write together with a leading newline
+    (see _PortWorker._writer_loop). If the previous incarnation of the
+    writer died in the middle of a message, what it left in the fifo is an
+    unterminated fragment: the newline turns it into a line of its own,
+    and the reader, which tolerates one unparsable line only when a HELLO
+    follows it, drops it.
+    """
+    return _encode(TYPE_HELLO, {})
+
+
 def _encode(envelope_type, payload):
     # No trailing newline: writing one (one write per line to the FIFO)
     # is the caller's job, keeping this symmetric with json.dumps itself.
@@ -89,10 +119,10 @@ def _encode(envelope_type, payload):
 def decode_envelope(line):
     """
     Decodes one JSON-line envelope (as produced by encode_data/
-    encode_barrier/encode_interact) into an Envelope(type, payload)
-    namedtuple. Raises json.JSONDecodeError on malformed JSON, ValueError
-    if "type"/"payload" is missing or "type" is not one of
-    DATA/BARRIER/INTERACT.
+    encode_barrier/encode_interact/encode_close/encode_hello) into an
+    Envelope(type, payload) namedtuple. Raises json.JSONDecodeError on
+    malformed JSON, ValueError if "type"/"payload" is missing or "type"
+    is not one of the valid envelope types.
     """
     obj = json.loads(line)
 
@@ -156,6 +186,57 @@ def _parse_opts(argv):
     return opts
 
 
+def _open_fifo_reader(path):
+    """
+    Opens a fifo for the process that reads it and returns (real read end,
+    ghost write end). Holding a write end of its own means the reader never
+    sees EOF, whether its peer finished or crashed: a fifo delivers no
+    signal that tells the two apart, so any such event would be ambiguous,
+    and the peer's liveness is decided elsewhere (heartbeats, CLOSE). The
+    ghost end is non-blocking and is only ever used to wake the reader
+    (see _PortWorker.stop_threads).
+
+    The order never blocks, whatever the state of the peer: a read-only
+    open with O_NONBLOCK returns at once even with no writer around, and
+    the write-only open that follows finds the reader just opened. O_RDWR
+    is not used because POSIX leaves it undefined for fifos.
+    """
+    rfd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        gfd = os.open(path, os.O_WRONLY)
+    except BaseException:
+        os.close(rfd)
+        raise
+    os.set_blocking(rfd, True)
+    os.set_blocking(gfd, False)
+    return rfd, gfd
+
+
+def _open_fifo_writer(path):
+    """
+    Opens a fifo for the process that writes it and returns (real write end,
+    ghost read end). Holding a read end of its own means the writer never
+    gets EPIPE: while its peer is down, what it writes waits in the pipe
+    (which the ghost end keeps alive, unread data included) and the writer
+    only blocks once the pipe is full, until a reader comes back. Same
+    non-blocking open order as _open_fifo_reader.
+    """
+    gfd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        wfd = os.open(path, os.O_WRONLY)
+    except BaseException:
+        os.close(gfd)
+        raise
+    return wfd, gfd
+
+
+def _write_all(fd, text):
+    """Writes the whole text to a blocking fd, coping with partial writes."""
+    data = text.encode("utf-8")
+    while data:
+        data = data[os.write(fd, data) :]
+
+
 class _PortWorker:
     """
     A subclass supplies _input_ports()/_output_ports(), each returning a
@@ -192,6 +273,13 @@ class _PortWorker:
         self._writer_threads = {}
         self._brain_thread = None
 
+        # The fifo file descriptors of every port, opened by start_threads()
+        # and closed by stop_threads() once the thread using them is gone:
+        # tag -> (real end, ghost end).
+        self._reader_fds = {}
+        self._writer_fds = {}
+        self._stopping = threading.Event()
+
     def _input_ports(self):
         raise NotImplementedError
 
@@ -222,42 +310,46 @@ class _PortWorker:
 
     # -- thread topology --
 
-    # Whether this class's reader threads may reopen their FIFO after
-    # EOF (see _should_reopen_after_eof) instead of treating EOF as
-    # final. FBPProcess's readers never reopen (still False, its exact
-    # existing behavior); Supervisor's do, since a node whose FIFO
-    # closed only because it crashed is expected to reconnect once
-    # relaunched. A reopening reader can end up permanently blocked in
-    # open(), waiting for a writer that never arrives (a node given up
-    # on for good) -- daemon, so that possibility can never block this
-    # process's own exit. A non-reopening reader has no such risk
-    # (single open() call, done for good on its own first EOF), so it
-    # stays non-daemon, preserving today's exact join/wait behavior in
-    # stop_threads().
-    _READER_THREADS_ARE_DAEMON = False
+    # How long stop_threads() waits for each writer thread when it is not
+    # given a timeout of its own. A writer only fails to finish in time when
+    # its peer is down and the fifo is full, since a write then blocks until a
+    # reader comes back; writer threads are daemons, so abandoning one never
+    # keeps the process alive.
+    WRITER_STOP_TIMEOUT_SECS = 5
 
     def start_threads(self):
         """
-        Starts one reader thread per declared input port, one writer
-        thread per declared output port, and the brain thread. Writer/
-        brain threads are never daemonic: this process is meant to keep
-        running until explicitly told to stop, not to be silently
-        killed when some unrelated main thread happens to exit. See
-        _READER_THREADS_ARE_DAEMON for reader threads specifically.
+        Opens every fifo, then starts one reader thread per declared input
+        port, one writer thread per declared output port, and the brain
+        thread. Nothing here waits for a peer: every endpoint holds both
+        ends of its fifo (see _open_fifo_reader and _open_fifo_writer), so
+        the channel outlives the crash of either process and the processes
+        can start in any order.
+
+        Brain and reader threads are not daemons: this process is meant to
+        keep running until explicitly told to stop, and stop_threads() can
+        always wake and join them. Writer threads are daemons, because one
+        can stay blocked in a write while its peer is down and must never
+        keep the process alive.
         """
         for tag, option_name in self._input_ports().items():
+            self._reader_fds[tag] = _open_fifo_reader(self.opts[option_name])
+        for tag, option_name in self._output_ports().items():
+            self._writer_fds[tag] = _open_fifo_writer(self.opts[option_name])
+
+        for tag, option_name in self._input_ports().items():
             thread = threading.Thread(
-                target=self._reader_loop,
-                args=(tag, option_name),
-                name=f"reader:{tag}",
-                daemon=self._READER_THREADS_ARE_DAEMON,
+                target=self._reader_loop, args=(tag, option_name), name=f"reader:{tag}"
             )
             self._reader_threads[tag] = thread
             thread.start()
 
         for tag, option_name in self._output_ports().items():
             thread = threading.Thread(
-                target=self._writer_loop, args=(tag, option_name), name=f"writer:{tag}"
+                target=self._writer_loop,
+                args=(tag, option_name),
+                name=f"writer:{tag}",
+                daemon=True,
             )
             self._writer_threads[tag] = thread
             thread.start()
@@ -267,64 +359,141 @@ class _PortWorker:
 
     def stop_threads(self, timeout=None):
         """
-        Signals the brain and writer threads to stop and waits for
-        every thread (including readers) to finish. Reader threads have
-        no sentinel of their own -- they stop on their FIFO's EOF, i.e.
-        once its writer closes it, so this only waits for that to have
-        already happened (or already be happening).
+        Signals every thread to stop and waits for them. A reader blocked
+        in read() is woken by a blank line written through its own ghost
+        write end (that write is non-blocking, so a full pipe cannot hold
+        this up: a reader with a full pipe in front of it is not blocked).
+        A writer sends what is already queued, then CLOSE, and ends; one
+        that cannot finish because its peer is down and the pipe is full is
+        abandoned after `timeout` (WRITER_STOP_TIMEOUT_SECS if none is
+        given), and its descriptors are left open for it.
         """
+        self._stopping.set()
         self._inbound_queue.put(_STOP)
         for q in self._outbound_queues.values():
             q.put(_STOP)
 
-        for thread in [
-            *self._reader_threads.values(),
-            *self._writer_threads.values(),
-            self._brain_thread,
-        ]:
+        for _, ghost_fd in self._reader_fds.values():
+            try:
+                os.write(ghost_fd, b"\n")
+            except OSError:
+                pass
+
+        for thread in [*self._reader_threads.values(), self._brain_thread]:
             if thread is not None:
                 thread.join(timeout)
 
-    def _reader_loop(self, tag, option_name):
-        path = self.opts[option_name]
-        while True:
-            self.log.debug("reader for %r opening %r", tag, path)
-            with open(path, "r") as fifo:
-                for line in fifo:
-                    line = line.rstrip("\n")
-                    if not line:
-                        continue
-                    envelope = decode_envelope(line)
-                    self._inbound_queue.put((tag, envelope.type, envelope.payload))
-            self.log.debug("reader for %r saw EOF", tag)
-            if not self._should_reopen_after_eof(tag):
-                break
-        self.log.debug("reader for %r closed for good", tag)
+        writer_timeout = self.WRITER_STOP_TIMEOUT_SECS if timeout is None else timeout
+        for tag, thread in self._writer_threads.items():
+            thread.join(writer_timeout)
+            if thread.is_alive():
+                self.log.warning(
+                    "writer for %r did not finish within %s s (its peer is probably "
+                    "down and the fifo is full), abandoning it",
+                    tag,
+                    writer_timeout,
+                )
 
-    def _should_reopen_after_eof(self, tag):
+        self._close_finished_fifos()
+
+    def _close_finished_fifos(self):
+        """Closes the descriptors of every port whose thread has ended."""
+        for threads, fds in (
+            (self._reader_threads, self._reader_fds),
+            (self._writer_threads, self._writer_fds),
+        ):
+            for tag in list(fds):
+                thread = threads.get(tag)
+                if thread is not None and thread.is_alive():
+                    continue
+                for fd in fds.pop(tag):
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+
+    def _ends_on_close(self, tag):
         """
-        Whether the reader for `tag` should reopen its FIFO and keep
-        listening after EOF, instead of treating EOF as this channel
-        being done for good (the default -- matches every reader's
-        existing, tested behavior; a writer that closes on purpose,
-        forever, looks identical to one that just crashed, and nothing
-        here has enough information to tell them apart). Overridden by
-        Supervisor, which does have that information for its own
-        NODE_PORTS (a node's own done/given-up state).
+        Whether the reader of `tag` ends its loop when the writer sends
+        CLOSE (the default), or keeps listening after it. Supervisor
+        overrides it: a node that closes its channel and is later
+        relaunched must still be heard, and it decides whether a node
+        finished for good from the node's own .finished file instead.
         """
-        return False
+        return True
+
+    def _reader_loop(self, tag, option_name):
+        rfd, _ = self._reader_fds[tag]
+        self.log.debug("reader for %r reading %r", tag, self.opts[option_name])
+
+        # The descriptor stays open when this file object closes: it belongs
+        # to start_threads()/stop_threads().
+        with os.fdopen(
+            rfd, "r", encoding="utf-8", errors="replace", newline="\n", closefd=False
+        ) as fifo:
+            # An unparsable line is tolerated once, provided the next line
+            # is a HELLO: it is then the fragment left by a writer that died
+            # in the middle of a message (see encode_hello). Anything else
+            # is a corrupt stream, never skipped silently.
+            fragment = None
+            for line in fifo:
+                if self._stopping.is_set():
+                    break
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+
+                try:
+                    envelope = decode_envelope(line)
+                except json.JSONDecodeError:
+                    if fragment is not None:
+                        raise ValueError(
+                            f"{type(self).__name__}: two unparsable lines in a row on "
+                            f"{tag!r}: {fragment[:60]!r} and {line[:60]!r}"
+                        ) from None
+                    fragment = line
+                    continue
+
+                if envelope.type == TYPE_HELLO:
+                    if fragment is not None:
+                        self.log.warning(
+                            "reader for %r dropped %d bytes left by a writer that died "
+                            "in the middle of a message",
+                            tag,
+                            len(fragment),
+                        )
+                        fragment = None
+                    continue
+
+                if fragment is not None:
+                    raise ValueError(
+                        f"{type(self).__name__}: unparsable line on {tag!r} not followed "
+                        f"by HELLO: {fragment[:60]!r}"
+                    )
+
+                self._inbound_queue.put((tag, envelope.type, envelope.payload))
+                if envelope.type == TYPE_CLOSE and self._ends_on_close(tag):
+                    break
+
+        self.log.debug("reader for %r stopped", tag)
 
     def _writer_loop(self, tag, option_name):
-        path = self.opts[option_name]
+        wfd, _ = self._writer_fds[tag]
         out_queue = self._outbound_queues[tag]
-        self.log.debug("writer for %r opening %r", tag, path)
-        with open(path, "w") as fifo:
-            while True:
-                item = out_queue.get()
-                if item is _STOP:
-                    break
-                fifo.write(item + "\n")
-                fifo.flush()
+        self.log.debug("writer for %r writing %r", tag, self.opts[option_name])
+
+        # The first thing every incarnation of a writer sends, in one write
+        # so that it is atomic: a newline, which ends any unterminated
+        # fragment a previous incarnation may have left in the fifo, and a
+        # HELLO line, which tells the reader that such a leftover is an
+        # artifact of a crash and can be dropped (see encode_hello).
+        _write_all(wfd, "\n" + encode_hello() + "\n")
+        while True:
+            item = out_queue.get()
+            if item is _STOP:
+                _write_all(wfd, encode_close() + "\n")
+                break
+            _write_all(wfd, item + "\n")
         self.log.debug("writer for %r stopped", tag)
 
     def _brain_loop(self):
@@ -563,6 +732,8 @@ class FBPProcess(_PortWorker):
                 self._on_barrier(port_name, payload)
             elif envelope_type == TYPE_INTERACT:
                 self._on_interact(payload)
+            elif envelope_type == TYPE_CLOSE:
+                self.log.debug("port %r was closed by its writer", port_name)
         self.log.debug("brain thread stopped")
 
     def _heartbeat_loop(self):
@@ -861,22 +1032,6 @@ class Supervisor(_PortWorker):
     MAX_RELAUNCH_ATTEMPTS = 3
     FORCE_STOP_TIMEOUT_SECS = 60
 
-    # How long a node's reader may wait, polling directly for its
-    # .finished file right after seeing EOF, before concluding this was
-    # a crash (not a clean stop) worth reopening for. Needed because
-    # .finished is written by the wrapping shell script strictly AFTER
-    # this fifo's write end already closed (the node's own process must
-    # exit first) -- so it can genuinely not exist yet at the exact
-    # instant EOF is seen, even for a real, permanent, clean stop.
-    EOF_FINISHED_GRACE_SECS = 2
-    _EOF_POLL_INTERVAL_SECS = 0.2
-
-    # Supervisor's own NODE_PORTS readers may reopen after EOF (see
-    # _should_reopen_after_eof), which risks ending up permanently
-    # blocked in open() for a node given up on for good -- daemon, so
-    # that can never block this process's own exit.
-    _READER_THREADS_ARE_DAEMON = True
-
     def __init__(self, argv=None, opts=None):
         self._check_node_names()
         super().__init__(argv, opts)
@@ -961,6 +1116,9 @@ class Supervisor(_PortWorker):
             if item is _STOP:
                 break
             tag, envelope_type, payload = item
+            if envelope_type == TYPE_CLOSE:
+                self.log.debug("%r closed its channel", tag)
+                continue
             if envelope_type != TYPE_INTERACT:
                 # Every Supervisor channel (node heartbeat or manual
                 # trigger) only ever carries INTERACT by design (point 1's
@@ -1183,35 +1341,15 @@ class Supervisor(_PortWorker):
             return True
         return True
 
-    def _should_reopen_after_eof(self, tag):
+    def _ends_on_close(self, tag):
         """
-        The manual trigger channel always reopens (an external actor is
-        expected to open-write-close per message, like the frontend's
-        Talk-to-FIFOs, so every single message needs a fresh reopen, not
-        just the first). A node's own channel reopens unless it is
-        already resolved (done or given up): polls directly for its
-        .finished file for up to EOF_FINISHED_GRACE_SECS first (see that
-        attribute's own docstring for why this can't just check the
-        already-known state), so a real clean stop is recognized here
-        without waiting on the checker thread's own next tick.
+        A Supervisor reader never ends on CLOSE. A node that closed its
+        channel may crash later or be relaunched, and must still be heard;
+        whether a node is done for good is decided from its own .finished
+        file (see _check_node), and the manual trigger channel is written
+        by an external actor that opens, writes and closes per message.
         """
-        if tag == _MANUAL_TRIGGER_TAG:
-            return True
-
-        deadline = time.monotonic() + self.EOF_FINISHED_GRACE_SECS
-        while True:
-            if os.path.exists(self._node_finished_file(tag)):
-                with self._lock:
-                    self._done.add(tag)
-                    self._down.discard(tag)
-                self._maybe_resolve()
-                return False
-            with self._lock:
-                if tag in self._given_up:
-                    return False
-            if time.monotonic() >= deadline:
-                return True
-            time.sleep(self._EOF_POLL_INTERVAL_SECS)
+        return False
 
     # -- subclass extension points --
 

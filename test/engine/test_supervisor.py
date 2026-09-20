@@ -564,111 +564,94 @@ def test_real_heartbeat_over_a_real_fifo_updates_last_seen(tmp_path):
         proc.stop_threads(timeout=2)
 
 
-# --- _should_reopen_after_eof / reader threads reopening on EOF --------
+# --- reader threads: no EOF, nothing to reopen ---------------------------
 
 
-class _FastGraceSup(lib.Supervisor):
+class _OneNodeSup(lib.Supervisor):
     NODE_PORTS = {"a": "hb_a"}
-    EOF_FINISHED_GRACE_SECS = 0.3
-    _EOF_POLL_INTERVAL_SECS = 0.02
 
 
-def test_reader_threads_are_daemon():
-    proc = _FastGraceSup(opts=_FAKE_OPTS)
-    assert proc._READER_THREADS_ARE_DAEMON is True
-
-
-def test_should_reopen_after_eof_true_for_the_manual_trigger_tag():
+def test_no_supervisor_reader_ends_on_close():
     class Sup(lib.Supervisor):
-        NODE_PORTS = {}
+        NODE_PORTS = {"a": "hb_a"}
         MANUAL_TRIGGER_PORT = "manual"
 
-    proc = Sup(opts={"manual": "/tmp/manual"})
-    assert proc._should_reopen_after_eof(lib._MANUAL_TRIGGER_TAG) is True
+    proc = Sup(opts={"hb_a": "/tmp/hb_a", "manual": "/tmp/manual"})
+
+    assert proc._ends_on_close("a") is False
+    assert proc._ends_on_close(lib._MANUAL_TRIGGER_TAG) is False
 
 
-def test_should_reopen_after_eof_false_once_given_up():
-    proc = _FastGraceSup(opts=_FAKE_OPTS)
-    proc._given_up.add("a")
-    assert proc._should_reopen_after_eof("a") is False
-
-
-def test_should_reopen_after_eof_false_and_marks_done_when_finished_appears(execdir):
-    _node_dir(execdir, "a").joinpath("a.finished").write_text("ok")
-    proc = _FastGraceSup(opts=_FAKE_OPTS)
-    proc._down.add("a")
-
-    assert proc._should_reopen_after_eof("a") is False
-    assert "a" in proc._done
-    assert "a" not in proc._down
-
-
-def test_should_reopen_after_eof_true_after_the_grace_period_with_no_finished_file(execdir):
-    proc = _FastGraceSup(opts=_FAKE_OPTS)
-    started = time.monotonic()
-    assert proc._should_reopen_after_eof("a") is True
-    # Actually waited out the grace period, not an instant False-negative.
-    assert time.monotonic() - started >= _FastGraceSup.EOF_FINISHED_GRACE_SECS
-
-
-def test_should_reopen_after_eof_detects_finished_appearing_mid_grace_period(execdir):
-    proc = _FastGraceSup(opts=_FAKE_OPTS)
-    proc.EOF_FINISHED_GRACE_SECS = 5
-
-    def _write_finished_soon():
-        time.sleep(0.15)
-        _node_dir(execdir, "a").joinpath("a.finished").write_text("ok")
-
-    threading.Thread(target=_write_finished_soon).start()
-    started = time.monotonic()
-
-    assert proc._should_reopen_after_eof("a") is False
-    # Caught well before the (deliberately long) grace deadline.
-    assert time.monotonic() - started < 2
-
-
-def test_real_reader_reopens_after_eof_and_receives_a_relaunched_writer(tmp_path):
+def test_real_reader_hears_a_relaunched_writer(tmp_path):
     """
-    End-to-end reproduction of the actual crash+relaunch scenario at the
-    Python level: a first writer opens the fifo, sends one heartbeat and
-    closes (simulating a node dying); Supervisor's reader must not die
-    on that EOF, and a second, independent writer (simulating the
-    relaunched node reopening the very same fifo path) must still be
-    able to connect and be heard.
+    The crash and relaunch scenario at the Python level: a first writer
+    connects, sends one heartbeat and goes away (a node dying); the
+    Supervisor's reader never sees EOF, so it neither dies nor has anything
+    to reopen, and a second, independent writer (the relaunched node) is
+    heard on the very same fifo path.
     """
     fifo_path = tmp_path / "hb.fifo"
     os.mkfifo(fifo_path)
 
-    class Sup(lib.Supervisor):
-        NODE_PORTS = {"a": "hb_a"}
-        EOF_FINISHED_GRACE_SECS = 0.2
-        _EOF_POLL_INTERVAL_SECS = 0.02
-
-    proc = Sup(opts={"hb_a": str(fifo_path)})
+    proc = _OneNodeSup(opts={"hb_a": str(fifo_path)})
     proc.start_threads()
     try:
+        proc._last_heartbeat["a"] = 0
         with open(fifo_path, "w") as w:
             w.write(lib.encode_interact("heartbeat") + "\n")
-        assert _wait_until(lambda: proc._reader_threads["a"].is_alive())
+        assert _wait_until(lambda: proc._last_heartbeat["a"] > 0)
+        assert proc._reader_threads["a"].is_alive()
 
-        # First writer closed above; nothing has written .finished, so
-        # the reader is expected to reopen rather than give up for good.
-        second_write_done = threading.Event()
-
-        def _second_writer():
-            with open(fifo_path, "w") as w:
-                w.write(lib.encode_interact("heartbeat") + "\n")
-            second_write_done.set()
-
-        writer_thread = threading.Thread(target=_second_writer)
-        writer_thread.start()
-
-        assert second_write_done.wait(timeout=5)
-        writer_thread.join(timeout=2)
-        assert not writer_thread.is_alive()
+        proc._last_heartbeat["a"] = 0
+        with open(fifo_path, "w") as w:
+            w.write("\n" + lib.encode_hello() + "\n")
+            w.write(lib.encode_interact("heartbeat") + "\n")
+        assert _wait_until(lambda: proc._last_heartbeat["a"] > 0)
+        assert proc._reader_threads["a"].is_alive()
     finally:
-        # The reader may well be back to waiting on a third writer that
-        # never comes at this point -- exactly why its thread is a
-        # daemon (_READER_THREADS_ARE_DAEMON), so a bounded-timeout
-        # stop_threads() here is safe even if it can't actually join it.
-        proc.stop_threads(timeout=1)
+        proc.stop_threads(timeout=2)
+
+
+def test_reader_keeps_listening_after_a_node_sends_close(tmp_path):
+    fifo_path = tmp_path / "hb.fifo"
+    os.mkfifo(fifo_path)
+
+    proc = _OneNodeSup(opts={"hb_a": str(fifo_path)})
+    proc.start_threads()
+    try:
+        # A node that closes its channel may still crash or be relaunched
+        # later, and must be heard again when it comes back.
+        with open(fifo_path, "w") as w:
+            w.write(lib.encode_close() + "\n")
+        time.sleep(0.1)
+        assert proc._reader_threads["a"].is_alive()
+
+        proc._last_heartbeat["a"] = 0
+        with open(fifo_path, "w") as w:
+            w.write(lib.encode_interact("heartbeat") + "\n")
+        assert _wait_until(lambda: proc._last_heartbeat["a"] > 0)
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+def test_run_returns_once_every_node_is_resolved_even_with_a_manual_trigger_port(execdir, tmp_path):
+    # Regression: the manual trigger reader always sits waiting for the next
+    # external write, and stop_threads() used to join it forever.
+    hb = tmp_path / "hb_a.fifo"
+    manual = tmp_path / "manual.fifo"
+    os.mkfifo(hb)
+    os.mkfifo(manual)
+
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {"a": "hb_a"}
+        MANUAL_TRIGGER_PORT = "manual"
+        HEARTBEAT_CHECK_INTERVAL_SECS = 0.05
+
+    _node_dir(execdir, "a").joinpath("a.finished").write_text("ok")
+    proc = Sup(opts={"hb_a": str(hb), "manual": str(manual)})
+
+    runner = threading.Thread(target=proc.run, daemon=True)
+    runner.start()
+    runner.join(timeout=5)
+
+    assert not runner.is_alive()

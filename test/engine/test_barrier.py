@@ -319,20 +319,6 @@ def test_data_on_a_still_pending_port_is_delivered_and_recorded_through_real_fif
 
     proc.start_threads()
     try:
-        # Something has to hold the writer thread's FIFOs open, or their
-        # writer threads stay blocked forever in open(). Reading until
-        # EOF (not just opening and closing right away) avoids a race
-        # where the writer's own write()/flush() lands after this side
-        # already hung up (a real BrokenPipeError seen while writing
-        # this test).
-        def _drain(path):
-            with open(path, "r") as f:
-                f.read()
-
-        drains = [threading.Thread(target=_drain, args=(p,)) for p in (proc.opts["x"], proc.opts["y"])]
-        for d in drains:
-            d.start()
-
         with open(path_a, "w") as wa, open(path_b, "w") as wb:
             wa.write(lib.encode_barrier(0) + "\n")
             wa.flush()
@@ -351,12 +337,7 @@ def test_data_on_a_still_pending_port_is_delivered_and_recorded_through_real_fif
         assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"b": ["in transit"]})]
         assert proc.received == [("b", "in transit")]
     finally:
-        # This also closes the writer threads' FIFOs, which is what lets
-        # the drain threads' blocking read() calls above return (EOF)
-        # and those threads finish on their own.
         proc.stop_threads(timeout=2)
-        for d in drains:
-            d.join(timeout=2)
 
 
 def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair):
