@@ -285,8 +285,7 @@ class FBPProcess(_PortWorker):
             elif envelope_type == TYPE_INTERACT:
                 self._on_interact(payload)
             elif envelope_type == TYPE_CLOSE:
-                self._closed_ports.add(port_name)
-                self.log.debug("port %r was closed by its writer", port_name)
+                self._on_close(port_name)
         self.log.debug("brain thread stopped")
 
     def _heartbeat_loop(self):
@@ -318,6 +317,22 @@ class FBPProcess(_PortWorker):
 
         if not self._barrier_pending:
             self._close_barrier_round()
+
+    def _on_close(self, port_name):
+        """
+        The writer of `port_name` has finished for good, so no marker will
+        ever come from it. If a round is open and this port was still
+        pending, it stops being so, and the round closes if it was the last
+        one; what was already recorded for the port stays in the round's
+        channel state. Ports that are closed when a round opens are left
+        out of it altogether (see _open_barrier_round).
+        """
+        self._closed_ports.add(port_name)
+        self.log.debug("port %r was closed by its writer", port_name)
+        if port_name in self._barrier_pending:
+            self._barrier_pending.discard(port_name)
+            if not self._barrier_pending:
+                self._close_barrier_round()
 
     def _on_interact(self, payload):
         command = payload["command"]
@@ -366,8 +381,13 @@ class FBPProcess(_PortWorker):
                 continue
             self._send_barrier(out_port, epoch, halt=halt)
 
+        # A port whose writer has finished sends no marker, so the round does
+        # not wait for it. The brain thread's own set decides, in the order of
+        # the input log: a CLOSE that the reader threads have already logged
+        # but that comes after this item does not count yet.
         pending = set(self.INPUT_PORTS)
         pending.discard(arrived_port)
+        pending -= self._closed_ports
         self._barrier_pending = pending
         self._barrier_channel_buffers = {port: [] for port in pending}
 

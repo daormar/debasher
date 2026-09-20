@@ -396,3 +396,98 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
     finally:
         node_a.stop_threads(timeout=2)
         node_b.stop_threads(timeout=2)
+
+
+# --- ports whose writer has finished (CLOSE) ------------------------------------------------
+
+
+class _ThreePorts(_BarrierWorker):
+    INPUT_PORTS = ["a", "b", "c"]
+
+
+_THREE_OPTS = {**_FAKE_OPTS, "c": "/dev/null"}
+
+
+def _close(port):
+    return (port, lib.TYPE_CLOSE, {})
+
+
+def test_a_round_does_not_wait_for_a_port_whose_writer_finishes_while_it_is_open():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("a", lib.TYPE_BARRIER, _ROUND),  # the round opens, b is pending
+            ("b", lib.TYPE_DATA, 5),  # in transit at the cut
+            _close("b"),  # no marker will ever come from b
+        ],
+    )
+
+    # The message of b stays in the channel state; the round closes with the CLOSE.
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"b": [5]})]
+
+
+def test_a_close_after_the_marker_of_its_port_changes_nothing():
+    proc = _ThreePorts(opts=_THREE_OPTS)
+    _run_brain(proc, [("a", lib.TYPE_BARRIER, _ROUND), _close("a")])
+
+    assert proc.closed_epochs == []
+    assert proc._barrier_pending == {"b", "c"}
+
+
+def test_a_round_that_opens_after_a_port_closed_does_not_wait_for_it():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_close("a"), ("b", lib.TYPE_BARRIER, _ROUND)])
+
+    # It closes as its own marker arrives, and keeps no channel state for the closed port.
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {})]
+
+
+def test_the_marker_is_still_forwarded_when_a_round_opens_with_closed_ports():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_close("a"), ("b", lib.TYPE_BARRIER, _ROUND)])
+
+    for port in ("x", "y"):
+        assert lib.decode_envelope(_out(proc, port)) == lib.Envelope(
+            type="BARRIER", payload={"epoch": 0, "halt": False}
+        )
+
+
+def test_a_node_whose_inputs_have_all_closed_starts_and_closes_a_round_like_a_source():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            _close("a"),
+            _close("b"),
+            ("trigger", lib.TYPE_INTERACT, {"command": "start_snapshot", "args": {}}),
+        ],
+    )
+
+    assert [epoch for epoch, *_ in proc.closed_epochs] == [0]
+    for port in ("x", "y"):
+        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False}
+
+
+def test_a_later_round_after_two_ports_closed_opens_and_closes_without_ending_the_brain_thread():
+    proc = _ThreePorts(opts=_THREE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("a", lib.TYPE_DATA, 1),
+            ("b", lib.TYPE_DATA, 10),
+            _close("a"),
+            ("b", lib.TYPE_BARRIER, {"epoch": 0, "halt": False}),  # the round opens
+            ("c", lib.TYPE_DATA, 100),  # in transit at the cut
+            _close("c"),  # while the round is open
+            ("b", lib.TYPE_DATA, 20),
+            ("b", lib.TYPE_BARRIER, {"epoch": 1, "halt": False}),  # nothing left to wait for
+        ],
+    )
+
+    # The CLOSE of c was in the log when the first round opened, but the brain thread had not
+    # reached it: c was still pending, and its message is kept in the channel state.
+    assert proc.closed_epochs == [
+        (0, False, {"marker": "initial"}, {"c": [100]}),
+        (1, False, {"marker": "initial"}, {}),
+    ]

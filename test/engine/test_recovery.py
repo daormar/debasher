@@ -452,7 +452,6 @@ def test_a_checkpoint_holds_the_ports_whose_close_the_node_had_processed_when_th
     # already seen the CLOSE of c when the round opens; the node has not got to it yet.
     _process(live, _A_ROUND_OPENING_BETWEEN_TWO_CLOSES)
     assert live._closed_ports == {"a", "c"}
-    live._close_barrier_round()
 
     checkpoint = _read_checkpoint(live, 0)
     assert checkpoint["processed_upto"] == 4
@@ -462,7 +461,6 @@ def test_a_checkpoint_holds_the_ports_whose_close_the_node_had_processed_when_th
 def test_a_relaunched_node_knows_again_which_ports_had_closed(tmp_path):
     live = _Three(opts=_opts(tmp_path, _THREE))
     _process(live, _A_ROUND_OPENING_BETWEEN_TWO_CLOSES)
-    live._close_barrier_round()
     _crash(live)
 
     relaunched = _relaunch(tmp_path, _Three, _THREE)
@@ -473,8 +471,7 @@ def test_a_relaunched_node_knows_again_which_ports_had_closed(tmp_path):
 
 def test_a_port_closed_long_ago_is_still_closed_once_the_log_that_recorded_its_close_is_gone(tmp_path):
     live = _Three(opts=_opts(tmp_path, _THREE))
-    _process(live, [_data("a", 1), _close("a"), _marker("b")])
-    live._close_barrier_round()
+    _process(live, [_data("a", 1), _close("a"), _marker("b"), _marker("c")])
     _crash(live)
     # What pruning does to every segment that ends at or below the checkpoint's position.
     shutil.rmtree(os.path.join(os.environ["DEBASHER_PROCESS_EXECDIR"], "log"))
@@ -495,7 +492,6 @@ def test_a_replay_that_finds_a_message_after_the_close_of_its_port_fails_loudly(
 def test_a_message_after_a_close_that_the_checkpoint_recorded_also_fails_loudly(tmp_path):
     live = _Fanin(opts=_opts(tmp_path))
     _process(live, [_data("a", 1), _close("a"), _marker("b")])
-    live._close_barrier_round()
     _arrive(live, "a", lib.TYPE_DATA, 2)
     _crash(live)
 
@@ -532,3 +528,31 @@ def test_after_a_relaunch_the_readers_of_closed_ports_drop_what_their_writers_se
     finally:
         node._halted.set()
         runner.join(5)
+
+
+_TWO_ROUNDS_AROUND_TWO_CLOSES = _A_ROUND_OPENING_BETWEEN_TWO_CLOSES + [_marker("b", 1)]
+
+
+def test_a_round_that_a_close_completes_writes_the_checkpoint_of_the_cut(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    _process(live, _TWO_ROUNDS_AROUND_TWO_CLOSES)
+
+    first = _read_checkpoint(live, 0)
+    assert first["processed_upto"] == 4
+    assert first["closed_ports"] == ["a"]
+    assert first["node_state"] == {"seen": [["a", 1], ["b", 10]]}
+    assert first["channel_state"] == {"c": [100]}
+
+    # a and c had both closed when the second round opened, so it had nothing to wait for.
+    second = _read_checkpoint(live, 1)
+    assert second["processed_upto"] == 8
+    assert second["closed_ports"] == ["a", "c"]
+    assert second["channel_state"] == {}
+
+
+def test_a_halt_completes_when_the_last_port_it_waits_for_closes(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [("a", lib.TYPE_BARRIER, _round(0, halt=True)), _close("b")])
+
+    assert live._halted.is_set()
+    assert _read_checkpoint(live, 0)["channel_state"] == {"b": []}
