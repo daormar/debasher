@@ -35,7 +35,8 @@ from collections import namedtuple
 # the messages themselves. CLOSE and HELLO belong to the transport: a
 # writer sends HELLO as the first line of every incarnation of itself (so
 # its reader can discard a fragment left by the previous one) and CLOSE
-# when it stops on purpose.
+# when it has finished for good. A halt is not that, since the node is
+# resumed later, so a halt sends no CLOSE.
 
 TYPE_DATA = "DATA"
 TYPE_BARRIER = "BARRIER"
@@ -77,10 +78,11 @@ def encode_interact(command, args=None):
 def encode_close():
     """
     Encodes a CLOSE envelope: sent by a writer, as its very last line,
-    when it stops on purpose. A reader that sees it knows nothing more
-    will ever come through that channel from that writer. Without it,
-    silence means either that the writer finished or that it crashed and
-    will be relaunched, and nothing in the fifo tells the two apart.
+    when it has finished for good. A reader that sees it knows nothing
+    more will ever come through that channel from that writer. Without
+    it, silence means either that the writer finished or that it stopped
+    and will be relaunched (after a crash, or after a halt), and nothing
+    in the fifo tells the two apart. That is why a halt sends none.
     """
     return _encode(TYPE_CLOSE, {})
 

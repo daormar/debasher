@@ -126,3 +126,33 @@ def test_run_stops_every_thread_once_halted_is_set(execdir):
     assert not run_thread.is_alive()
     assert not proc._brain_thread.is_alive()
     assert not proc._heartbeat_thread.is_alive()
+
+
+class _Emitter(_Node):
+    OUTPUT_PORTS = ["outf"]
+
+
+def test_an_ordered_halt_says_nothing_after_the_marker(execdir):
+    # A halt is not the end of a node, which is resumed later: what it leaves
+    # on its channels ends with the round's marker, so that a node downstream
+    # never takes it for one that finished for good.
+    fifo = execdir / "out.fifo"
+    os.mkfifo(fifo)
+    # A read end held here keeps what the node wrote in the pipe once it is gone.
+    rfd = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        proc = _Emitter(opts={"outf": str(fifo)})
+        run_thread = threading.Thread(target=proc.run, daemon=True)
+        run_thread.start()
+        assert _wait_until(lambda: proc._brain_thread is not None and proc._brain_thread.is_alive())
+
+        proc.send_data("outf", 1)
+        proc._on_interact({"command": "shutdown", "args": {}})
+        run_thread.join(timeout=5)
+        assert not run_thread.is_alive()
+
+        sent = os.read(rfd, 1 << 16).decode().split("\n")
+    finally:
+        os.close(rfd)
+
+    assert [lib.decode_envelope(line).type for line in sent if line] == ["HELLO", "DATA", "BARRIER"]

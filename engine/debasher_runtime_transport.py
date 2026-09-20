@@ -184,6 +184,8 @@ class _PortWorker:
         self._reader_fds = {}
         self._writer_fds = {}
         self._stopping = threading.Event()
+        # Whether the writers say CLOSE when they stop, decided by stop_threads().
+        self._close_on_stop = True
 
     def _input_ports(self):
         raise NotImplementedError
@@ -262,7 +264,7 @@ class _PortWorker:
         self._brain_thread = threading.Thread(target=self._brain_loop, name="brain")
         self._brain_thread.start()
 
-    def stop_threads(self, timeout=None):
+    def stop_threads(self, timeout=None, close=True):
         """
         Signals every thread to stop and waits for them. A reader blocked
         in read() is woken by a blank line written through its own ghost
@@ -272,7 +274,14 @@ class _PortWorker:
         that cannot finish because its peer is down and the pipe is full is
         abandoned after `timeout` (WRITER_STOP_TIMEOUT_SECS if none is
         given), and its descriptors are left open for it.
+
+        CLOSE tells the peer that this writer has finished for good, so a
+        caller that stops for any other reason passes close=False and the
+        writers send nothing after what is queued. A halt is such a reason:
+        the node is resumed later, and a peer that had read a CLOSE would
+        take it for a finished one.
         """
+        self._close_on_stop = close
         self._stopping.set()
         self._inbound_queue.put(_STOP)
         for q in self._outbound_queues.values():
@@ -409,7 +418,8 @@ class _PortWorker:
         while True:
             item = out_queue.get()
             if item is _STOP:
-                _write_all(wfd, encode_close() + "\n")
+                if self._close_on_stop:
+                    _write_all(wfd, encode_close() + "\n")
                 break
             _write_all(wfd, item + "\n")
         self.log.debug("writer for %r stopped", tag)

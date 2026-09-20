@@ -296,6 +296,18 @@ def test_writer_thread_sends_close_last_when_it_is_stopped(fifo_path):
     assert [e.type for e in envelopes] == ["HELLO", "DATA", "DATA", "CLOSE"]
 
 
+def test_a_stop_that_is_not_a_finish_sends_what_is_queued_and_no_close(fifo_path):
+    proc = _WriterOnly(opts={"outf": fifo_path})
+    proc.start_threads()
+    with open(fifo_path, "r") as r:
+        proc.send_data("outf", 1)
+        proc.send_data("outf", 2)
+        proc.stop_threads(timeout=2, close=False)
+        envelopes = [lib.decode_envelope(line) for line in r.read().splitlines() if line]
+
+    assert [e.type for e in envelopes] == ["HELLO", "DATA", "DATA"]
+
+
 def test_writer_thread_survives_its_reader_going_away_and_a_new_reader_gets_the_backlog(fifo_path):
     sender = _WriterOnly(opts={"outf": fifo_path})
     receiver = _ReaderOnly(opts={"inf": fifo_path})

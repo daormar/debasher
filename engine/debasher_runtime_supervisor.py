@@ -142,9 +142,9 @@ class Supervisor(_PortWorker):
         self._checker_thread = threading.Thread(target=self._check_loop, name="checker")
         self._checker_thread.start()
 
-    def stop_threads(self, timeout=None):
+    def stop_threads(self, timeout=None, close=True):
         self._checker_stop.set()
-        super().stop_threads(timeout)
+        super().stop_threads(timeout, close)
         if self._checker_thread is not None:
             self._checker_thread.join(timeout)
 

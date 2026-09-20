@@ -147,7 +147,11 @@ class FBPProcess(_PortWorker):
 
         self.start_threads()
         self._halted.wait()
-        self.stop_threads()
+        # A halt is an orderly stop that the whole program is resumed from
+        # later, not the end of this node. CLOSE is what a writer says when
+        # it has finished for good, and a peer that read one at a halt would
+        # take this node for a finished one when it comes back.
+        self.stop_threads(close=False)
 
     def _load_latest_checkpoint(self):
         """
@@ -204,14 +208,14 @@ class FBPProcess(_PortWorker):
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
 
-    def stop_threads(self, timeout=None):
+    def stop_threads(self, timeout=None, close=True):
         """
         Signals the heartbeat thread to stop, then defers to
         _PortWorker.stop_threads() for the reader/writer/brain threads,
         then joins the heartbeat thread too.
         """
         self._heartbeat_stop.set()
-        super().stop_threads(timeout)
+        super().stop_threads(timeout, close)
         if self._heartbeat_thread is not None:
             self._heartbeat_thread.join(timeout)
         if self._input_log is not None:

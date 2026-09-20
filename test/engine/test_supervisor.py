@@ -582,6 +582,23 @@ def test_no_supervisor_reader_ends_on_close():
     assert proc._ends_on_close(lib._MANUAL_TRIGGER_TAG) is False
 
 
+def test_stop_threads_passes_the_choice_of_saying_close_to_the_supervisors_writers(tmp_path):
+    fifo_path = tmp_path / "init.fifo"
+    os.mkfifo(fifo_path)
+
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {}
+        TRIGGER_PORT = ["init_a"]
+
+    for close, expected in ((True, ["HELLO", "CLOSE"]), (False, ["HELLO"])):
+        proc = Sup(opts={"init_a": str(fifo_path)})
+        proc.start_threads()
+        with open(fifo_path, "r") as r:
+            proc.stop_threads(timeout=2, close=close)
+            envelopes = [lib.decode_envelope(line) for line in r.read().splitlines() if line]
+        assert [e.type for e in envelopes] == expected
+
+
 def test_real_reader_hears_a_relaunched_writer(tmp_path):
     """
     The crash and relaunch scenario at the Python level: a first writer

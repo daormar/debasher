@@ -38,7 +38,7 @@ The precise meaning of the words this document uses, in the order in which they 
 - **`DATA`**: the business traffic. It is the only type that reaches `process_data` and the only one that is replayed.
 - **`BARRIER`, marker** (marcador): the envelope that carries a round's `epoch` and its `halt` flag. Each node forwards it on its output ports, along the same channels as `DATA`, and never to the `Supervisor`.
 - **`INTERACT`**: a control command, with `command` and `args` (`start_snapshot`, `shutdown`, `heartbeat`, `checkpoint_saved`, and any that are added later: the catalog is open). It travels on its own channels, not on business channels.
-- **`CLOSE`**: the last envelope of a writer that stops on purpose. It means "finished on purpose", not "finished successfully": a process that exits with an error sends none and counts as crashed. The reader ends its loop on it (the `Supervisor`'s readers do not) and hands it to the brain thread in order. `closed_ports` will be the checkpoint field that lists the input ports that had received one.
+- **`CLOSE`**: the last envelope of a writer that has finished for good: it will never write again. It means "finished for good", not "finished successfully": a process that exits with an error sends none and counts as crashed. A halt is not a finish for good, since the node is resumed later, so an ordered halt sends none (decided and done on 2026-09-20, see point 3). The reader ends its loop on it (the `Supervisor`'s readers do not) and hands it to the brain thread in order. `closed_ports` will be the checkpoint field that lists the input ports that had received one.
 - **`HELLO`, resync line** (línea de resincronización): the first thing every incarnation of a writer sends, in one write together with a leading newline. The newline ends any fragment that the previous incarnation left when it was killed in the middle of a message, and the `HELLO` tells the reader that such a fragment can be dropped. It also tells the reader that its peer (re)connected.
 - **ghost connection** (conexión fantasma): each endpoint of a channel holds both ends of the FIFO, the real one and a ghost of the opposite direction. The reader never sees EOF and the writer never gets `EPIPE`; a dead peer is only backpressure, and a channel outlives the crash of either process. It relies on Linux behavior.
 
@@ -69,13 +69,13 @@ The precise meaning of the words this document uses, in the order in which they 
 ### Threads of a node
 
 - **reader thread** (hilo lector): one per input port. It reads and decodes lines, consumes `HELLO`, and hands everything else to the inbound queue (with the input-log redesign, after appending the record to the log).
-- **writer thread** (hilo escritor): one per output port, with its own outbound queue. It sends `HELLO` first and `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so it is a daemon thread and `stop_threads()` gives up on it after a bounded wait.
+- **writer thread** (hilo escritor): one per output port, with its own outbound queue. It sends `HELLO` first and, when its node has finished for good (not at a halt), `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so it is a daemon thread and `stop_threads()` gives up on it after a bounded wait.
 - **brain thread** (hilo cerebro): the only consumer of the **inbound queue** (cola de entrada) and the only thread that touches the node's state: it runs `process_data`, the barrier logic and the writing of checkpoints.
 - **heartbeat thread** (hilo de latido): checks on a timer that every other thread is alive and, if so, sends the `Supervisor` an `INTERACT` `heartbeat`. An unhealthy node simply stops sending.
 
 ### Failure and recovery
 
-- **crash** (caída): the death of a node's process without `CLOSE`: `SIGKILL`, an uncaught exception, an out-of-memory kill, or a non-zero exit. A deliberate error exit and a crash are treated the same.
+- **crash** (caída): the death of a node's process that is neither a halt nor a finish for good: `SIGKILL`, an uncaught exception, an out-of-memory kill, or a non-zero exit. A deliberate error exit and a crash are treated the same.
 - **relaunch** (relanzamiento): starting a new incarnation of a node, by the `Supervisor` (through `debasher_launch_process`) or by hand. It is the same operation as the first launch: there is no recovery mode.
 - **recovery** (recuperación): what a relaunched node does at startup: load its latest checkpoint, `restore_state`, `initialize_runtime`, replay the input log after `processed_upto`, then start its threads. Localized recovery is the policy: only the downed node is relaunched. A **global rollback** (vuelta atrás global) would instead rewind every node to the last consistent cut; it is future work.
 - **heartbeat** (latido): the `INTERACT` command that a healthy node sends the `Supervisor` every `HEARTBEAT_INTERVAL_SECONDS`. The `Supervisor` declares a node down when they stop for `HEARTBEAT_TIMEOUT_SECS`, or at once if the node's PID is gone and its `.finished` file is absent.
@@ -189,7 +189,7 @@ the reader thread can dispatch by looking only at `type`, without interpreting `
   in-memory internal queue, not in the wire format.
 
 **Changes decided on 2026-09-20.** Two more control types, both with an empty payload: `CLOSE`, sent by a
-writer when it stops on purpose, and `HELLO`, sent as the first line of every incarnation of a writer (the
+writer when it has finished for good (a halt sends none), and `HELLO`, sent as the first line of every incarnation of a writer (the
 transport decision of point 5). **Both are implemented** (step 2 of point 3): the reader thread consumes
 `HELLO`; `CLOSE` ends the reader's loop, except for `Supervisor`, and is also handed to the brain thread,
 in order. `DATA` will gain a sequence number per channel, assigned by the sender, as a sibling of `type`
@@ -368,6 +368,11 @@ whole system from scratch; noted here as a real gap, not yet written (see point 
 - A node finishes its execution only after closing its epoch (marker received on every one of its
   input ports), never before. Done: `halt=True` sets `self._halted`, and `run()` blocks on it
   before calling `stop_threads()`.
+- A halt sends no `CLOSE`. Done on 2026-09-20: `run()` stops its threads with `stop_threads(close=False)`,
+  so each writer sends what is already queued and stops. `CLOSE` says that a writer has finished for good, and
+  a halted node is resumed later: had it sent one, the reader at the other end could keep it in its input log
+  after its `processed_upto` (measured, see point 3), and a resume would take the node for a finished one. A
+  node that ends on its own calls `stop_threads()`, whose default does send `CLOSE`.
 - Resumption: relaunch every process. It is the ordinary Startup sequence above, with no special
   case for a halt: each node loads the checkpoint that the halt closed and replays its input log
   after that checkpoint's `processed_upto`. What is replayed is what the node processed between
@@ -504,9 +509,16 @@ conformance status). What follows is the design as built.
     same version in their own steps, since the branch is not released. A node restored from a
     checkpoint numbers after its `processed_upto` (from the last piece on, after the larger of that
     and the last record of its log). A checkpoint of version 1 is refused.
-- **`CLOSE`**: the reader ends its loop on it and hands it to the brain thread like any other item, so
-  it is logged, the port leaves the barrier's pending set, and the heartbeat does not count a reader
-  that ended on `CLOSE` as dead. This replaces the marker file proposed before.
+- **`CLOSE`** means that the writer has finished for good, and only that. **A halt sends none (decided and
+  done on 2026-09-20).** Measured with real runs of a producer and a consumer that halt, with the earlier
+  behavior: the producer's `CLOSE` reached the consumer's input log after its `processed_upto` in 38 of 40
+  halts, and in 0 of 40 when the producer's checkpoint was slow, because the consumer had stopped reading by
+  then. Whether a halt left a `CLOSE` in the log was a race between the two nodes, and the rule that a
+  `CLOSE` after `processed_upto` closes the port when the log is replayed would have closed, at a resume,
+  the ports of producers that were coming back. For a writer that has finished: the reader ends its loop on
+  it and hands it to the brain thread like any other item, so it is logged, the port leaves the barrier's
+  pending set, and the heartbeat does not count a reader that ended on `CLOSE` as dead. This replaces the
+  marker file proposed before.
 - **Sequence numbers (G5).** The sender numbers the `DATA` of each output channel 1, 2, 3, and stores
   its counters in its checkpoint. The receiver drops a `DATA` whose number is not above the last one it
   accepted from that channel (a duplicate produced by a replay) and treats a jump as a lost message
@@ -568,7 +580,18 @@ conformance status). What follows is the design as built.
        it: the three incarnations processed all 800 messages exactly once, and from each kept
        checkpoint plus the log the state of the last checkpoint is reproduced, order-sensitive hash
        included. The first segment of the log had been pruned by then, as it should.
-  4. `CLOSE` handling: `closed_ports`, the barrier's pending set, the heartbeat.
+  4. `CLOSE` handling, in four pieces (proposed 2026-09-20; the details of each are settled before it is built):
+     - 4.1 A halt sends no `CLOSE`. **Done 2026-09-20**: `stop_threads` takes `close`, and `run()` stops with
+       `close=False` after a halt; a stop that is a finish for good keeps the default. Three new tests in the
+       words of the guarantee (an ordered halt leaves a channel that ends with the marker, a stop without
+       `CLOSE` sends what is queued and nothing more, the `Supervisor` passes the choice on), checked against
+       five mutations. Checked with a real `debasher_exec` run of a source and a sink that halt and are then
+       resumed by relaunching both: with the earlier code the sink's log held a `CLOSE` after `processed_upto`
+       in 2 of 2 runs, with the new code in none, and after the resume the sink went on receiving (total 4950
+       over 100 messages, from the checkpoint of the halt).
+     - 4.2 `closed_ports` in the checkpoint and its replay.
+     - 4.3 The barrier's pending set.
+     - 4.4 The reader after `CLOSE` and the heartbeat.
   5. G5: sequence numbers, deduplication and detection of gaps.
   6. The chaos test of the Contract.
 
@@ -854,7 +877,8 @@ optional, and for a manual relaunch), and it is the signal a `FBPProcess` peer l
    dispatches on `type` alone (point 1) and, besides ending its own loop, hands `CLOSE` to the brain
    thread in order, so that it is logged and the port can leave the barrier's pending set (point 3).
    Confirmed on 2026-09-20.
-2. Writer: on `_STOP`, send `CLOSE` last (after whatever is already queued), then close.
+2. Writer: on a stop that means the node has finished for good, send `CLOSE` last (after whatever is already
+   queued), then close; a halt sends none (point 3).
 3. Reader: ends only on `CLOSE` or on a stop request. With ghost connections (transport decision
    below) it never sees EOF, so there is nothing to reopen. A truncated line left by a writer that
    died mid-write can no longer be delimited by EOF (today it kills the reader with a
@@ -967,7 +991,7 @@ inside the pipe (the only hole, at most 44 lines, is what the killed reader had 
   external writer must send complete lines, and a fragment from one shows up as an error. `HELLO`
   also tells the reader that its peer (re)connected.
 
-**Also decided (2026-09-20)**: (B) the `CLOSE` envelope, sent by the writer when it stops and handed by
+**Also decided (2026-09-20)**: (B) the `CLOSE` envelope, sent by the writer when it has finished for good and handed by
 the reader to the brain thread in order, so that it is logged (point 3); (C) a closed port leaves the
 barrier's pending set, the heartbeat does not count a reader that ended on `CLOSE` as dead, and the "peer
 finished" fact is durable through the input log and the checkpoint's `closed_ports` (point 3), which
