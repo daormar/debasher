@@ -152,7 +152,7 @@ def _envelope_from_obj(obj, what):
 # port pushing tagged envelopes onto a single shared inbound queue, one
 # writer thread per declared output port with its own outbound queue,
 # and start_threads()/stop_threads() to manage all of it. Carries no
-# barrier, checkpoint or message-log logic -- that is FBPProcess-
+# barrier, checkpoint or input-log logic: that is FBPProcess-
 # specific, layered on top by it alone; Supervisor does not take part in
 # the barrier protocol at all, but reuses this same base.
 
@@ -856,7 +856,7 @@ class _InputLog:
 # Base class for a long-running, stateful "resident" process. Adds, on
 # top of _PortWorker's generic thread-per-port plumbing: INPUT_PORTS/
 # OUTPUT_PORTS declaration, the heartbeat thread, Chandy-Lamport barrier
-# logic, INTERACT dispatch, checkpointing, the message log and the
+# logic, INTERACT dispatch, checkpointing, the input log and the
 # checkpoint/recovery startup sequence (run()).
 
 
@@ -881,14 +881,16 @@ class FBPProcess(_PortWorker):
     CHECKPOINT_SCHEMA_VERSION = 2
     CHECKPOINT_RETENTION = 3
 
-    # Safety cap only, never the normal pruning mechanism (that's tied to
-    # checkpoint retention -- see _prune_old_checkpoints): if a single
-    # input port's un-pruned log segments exceed this many bytes, the
-    # process never closed an epoch for long enough that pruning could
-    # keep up, which is a real problem (no periodic/triggered snapshot)
-    # to surface as a hard error, not something to paper over by
-    # silently discarding log data a future recovery might need.
-    MESSAGE_LOG_MAX_BYTES = 100 * 1024 * 1024
+    # Size limits of the input log (see _InputLog). The cap on all its
+    # segments together is a safety net, never the normal way old history
+    # goes away (that is pruning by position after each checkpoint): if it is
+    # reached, the node has gone so long without closing an epoch that pruning
+    # could not keep up (no periodic or triggered snapshot), a real problem to
+    # surface as an error, not something to paper over by discarding history
+    # that a recovery may need. A segment is closed, and a new one started,
+    # when it reaches the second size.
+    INPUT_LOG_MAX_BYTES = 100 * 1024 * 1024
+    INPUT_LOG_SEGMENT_BYTES = 4 * 1024 * 1024
 
     def __init__(self, argv=None, opts=None):
         super().__init__(argv, opts)
@@ -912,13 +914,15 @@ class FBPProcess(_PortWorker):
         # relaunched node would start renumbering from 0 again.
         self._last_epoch = -1
 
-        # Every item that a reader thread queues gets a position: a counter
-        # of this node across all its input ports, starting at 1. The lock
-        # makes taking the position and queuing the item a single step, so
-        # that the order of the positions is the order in which the brain
-        # thread sees the items.
+        # Every item that a reader thread queues gets a position and a record
+        # in the input log before the brain thread can see it. The lock makes
+        # taking the position, writing the record and queuing the item a
+        # single step, so that the order of the positions, of the log and of
+        # the queue is one and the same. It also keeps pruning from running
+        # while a record is being appended. The log is opened by run(), or by
+        # start_threads() when the node is driven without run().
         self._arrival_lock = threading.Lock()
-        self._next_pos = 1
+        self._input_log = None
         # Position of the item that the brain thread is processing, 0 before
         # the first one. Only the brain thread reads or writes it.
         self._current_pos = 0
@@ -938,31 +942,28 @@ class FBPProcess(_PortWorker):
     def run(self):
         """
         Full startup sequence: find the most recent checkpoint if any
-        -> restore_state()/defaults -> initialize_runtime() -> (if
-        restored) drain the message log -> start_threads() (opens
-        every FIFO, starts every worker thread) -> wait until told to
-        stop (an epoch closing with halt=True) -> stop every thread,
-        from this (the calling) thread rather than the brain thread
-        that actually set the stop signal.
+        -> restore_state()/defaults -> initialize_runtime() -> open the
+        input log and replay what it holds after the checkpoint (all of
+        it if there is no checkpoint, since the state is then the
+        default one) -> start_threads() (opens every FIFO, starts every
+        worker thread) -> wait until told to stop (an epoch closing with
+        halt=True) -> stop every thread, from this (the calling) thread
+        rather than the brain thread that actually set the stop signal.
         """
         checkpoint = self._load_latest_checkpoint()
-        restored_epoch = None
+        processed_upto = 0
         if checkpoint is not None:
             epoch, state, processed_upto = checkpoint
             self.restore_state(state)
             self._last_epoch = epoch
-            # Positions go on after the one that the checkpoint reflects, so
-            # that a relaunched node never hands out a position twice.
-            self._next_pos = processed_upto + 1
-            restored_epoch = epoch
             self.log.info("restored checkpoint for epoch %s", epoch)
         else:
             self.log.info("no checkpoint found, starting with default values")
 
         self.initialize_runtime()
 
-        if restored_epoch is not None:
-            self._drain_message_log(restored_epoch)
+        self._open_input_log(processed_upto)
+        self._replay_input_log(processed_upto)
 
         self.start_threads()
         self._halted.wait()
@@ -1012,8 +1013,13 @@ class FBPProcess(_PortWorker):
         """
         Starts everything _PortWorker.start_threads() already does
         (reader/writer/brain threads), plus this class's own heartbeat
-        thread.
+        thread. The input log has to be open before any reader thread
+        runs: run() opens it after recovering a checkpoint, and a node
+        that is driven without run() gets it opened here, empty of any
+        checkpoint.
         """
+        if self._input_log is None:
+            self._open_input_log(0)
         super().start_threads()
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
@@ -1028,11 +1034,20 @@ class FBPProcess(_PortWorker):
         super().stop_threads(timeout)
         if self._heartbeat_thread is not None:
             self._heartbeat_thread.join(timeout)
+        if self._input_log is not None:
+            self._input_log.close()
 
     def _on_arrival(self, tag, envelope, line):
         with self._arrival_lock:
-            pos = self._next_pos
-            self._next_pos += 1
+            if self._input_log is None:
+                raise RuntimeError(
+                    f"{type(self).__name__}: an item arrived before the input log was opened"
+                )
+            # The record is in the file, in one write, before the brain thread
+            # can see the item. If this raises (the size cap, or a failed
+            # write), the exception ends the reader thread, which is how the
+            # heartbeat notices: the item that was being read is not queued.
+            pos = self._input_log.append(tag, line)
             self._inbound_queue.put((pos, tag, envelope.type, envelope.payload))
 
     def _brain_loop(self):
@@ -1056,17 +1071,6 @@ class FBPProcess(_PortWorker):
                     self._barrier_channel_buffers[port_name].append(
                         copy.deepcopy(payload)
                     )
-                # Logged here, on the brain thread, right before
-                # process_data() actually runs, not in the reader
-                # thread that received it. self._last_epoch is only
-                # ever advanced on this same brain thread (barrier
-                # round closing), so reading it here is race-free by
-                # construction; reading it from a reader thread
-                # raced against that update in practice (found by
-                # testing, not reasoning) and could mislabel a
-                # message with the epoch just before it actually
-                # closed, making a real replay gap after a crash.
-                self._log_received_data(port_name, payload)
                 self.process_data(port_name, payload)
             elif envelope_type == TYPE_BARRIER:
                 self._on_barrier(port_name, payload)
@@ -1231,91 +1235,76 @@ class FBPProcess(_PortWorker):
         epochs.sort(reverse=True)
         for old_epoch in epochs[self.CHECKPOINT_RETENTION :]:
             os.remove(os.path.join(checkpoints_dir, f"{old_epoch}.json"))
-            self._prune_message_log_epoch(old_epoch)
 
-    # -- message log --
+        self._prune_input_log(checkpoints_dir, epochs[: self.CHECKPOINT_RETENTION])
+
+    # -- input log --
     #
-    # Each input port's own log lives under this process's own directory,
-    # written by this same process's reader threads as messages arrive --
-    # never the neighbor that sent them. The process that ever needs to
-    # replay a log is always the one relaunched after a crash, i.e.
-    # itself, never its neighbor, so there is no reason for the log to
-    # live anywhere else, and no separate process/fifo tap is needed to
-    # produce it (unlike the engine's generic --mirror, which stays a
-    # purely manual debug-inspection tool, untouched by any of this).
+    # The log lives in this process's own directory and is written by its own
+    # reader threads as items arrive, never by the neighbor that sent them:
+    # the process that ever needs to replay it is the one relaunched after a
+    # crash, itself, so there is no reason for it to live anywhere else. See
+    # _InputLog for the format.
 
-    def _log_dir(self, port_name):
-        return os.path.join(self._execdir(), "log", port_name)
-
-    def _log_segment_path(self, port_name, epoch):
-        return os.path.join(self._log_dir(port_name), f"{epoch}.log")
-
-    def _log_received_data(self, port_name, payload):
-        # Messages received while a barrier round is open (still pending
-        # on this port) are logged the same as any other: replay only
-        # ever needs "everything received since the last checkpoint",
-        # regardless of which epoch's round it happened to arrive during.
-        epoch = self._last_epoch + 1
-        log_dir = self._log_dir(port_name)
-        os.makedirs(log_dir, exist_ok=True)
-        with open(self._log_segment_path(port_name, epoch), "a") as f:
-            f.write(json.dumps(payload))
-            f.write("\n")
-
-        self._check_message_log_size(port_name, log_dir)
-
-    def _check_message_log_size(self, port_name, log_dir):
-        total = sum(
-            os.path.getsize(os.path.join(log_dir, name)) for name in os.listdir(log_dir)
+    def _open_input_log(self, processed_upto):
+        """
+        Opens the input log and recovers what earlier incarnations left in it.
+        `processed_upto` is the position that the restored checkpoint reflects
+        (0 if there is none), so that numbering goes on after it.
+        """
+        log = _InputLog(
+            os.path.join(self._execdir(), "log"),
+            self.INPUT_LOG_MAX_BYTES,
+            self.INPUT_LOG_SEGMENT_BYTES,
         )
-        if total > self.MESSAGE_LOG_MAX_BYTES:
-            raise RuntimeError(
-                f"{type(self).__name__}: message log for port {port_name!r} exceeds "
-                f"{self.MESSAGE_LOG_MAX_BYTES} bytes with no checkpoint pruning having "
-                "kept up -- this means an epoch is never closing (no periodic or "
-                "triggered snapshot), a real problem to fix, not something to silently "
-                "discard log data over"
+        log.recover(processed_upto)
+        self._input_log = log
+
+    def _replay_input_log(self, processed_upto):
+        """
+        Re-executes process_data() on every DATA record of the input log with
+        a position above `processed_upto`, in log order: what the node had
+        received and processed, or had received and was still to process,
+        since the state its checkpoint holds. That order is the one in which
+        the brain thread processed them before, so a node that is sensitive
+        to how messages from different ports interleave ends where it was.
+        The other kinds of item are not replayed. This reads from disk and
+        never writes to the log.
+        """
+        replayed = 0
+        for record in self._input_log.replay(processed_upto):
+            if record.envelope.type != TYPE_DATA:
+                continue
+            self._current_pos = record.pos
+            self.process_data(record.port, record.envelope.payload)
+            replayed += 1
+        if replayed:
+            self.log.info(
+                "replayed %d records of the input log after position %s", replayed, processed_upto
             )
 
-    def _prune_message_log_epoch(self, epoch):
-        for port_name in self.INPUT_PORTS:
-            try:
-                os.remove(self._log_segment_path(port_name, epoch))
-            except FileNotFoundError:
-                # This port simply received nothing during that epoch.
-                pass
-
-    def _drain_message_log(self, checkpoint_epoch):
+    def _prune_input_log(self, checkpoints_dir, kept_epochs):
         """
-        Replays every DATA message logged after checkpoint_epoch, for
-        every input port, invoking process_data() for each in order.
-        Reads straight from disk, never from a fifo, so it can never
-        end up re-logging what it is replaying.
+        Deletes the segments of the input log that no kept checkpoint needs:
+        those whose records all lie at or below the processed_upto of the
+        oldest kept checkpoint. That value is read from the checkpoint's file
+        on every call, which costs about a quarter of what writing it did. A
+        checkpoint that cannot be read aborts the prune with an error.
+        Without an open log there is nothing to prune.
         """
-        for port_name in self.INPUT_PORTS:
-            log_dir = self._log_dir(port_name)
-            if not os.path.isdir(log_dir):
-                continue
-
-            epochs = []
-            for name in os.listdir(log_dir):
-                if not name.endswith(".log"):
-                    continue
-                try:
-                    epoch = int(name[: -len(".log")])
-                except ValueError:
-                    continue
-                if epoch > checkpoint_epoch:
-                    epochs.append(epoch)
-            epochs.sort()
-
-            for epoch in epochs:
-                with open(self._log_segment_path(port_name, epoch)) as f:
-                    for line in f:
-                        line = line.rstrip("\n")
-                        if not line:
-                            continue
-                        self.process_data(port_name, json.loads(line))
+        if self._input_log is None or not kept_epochs:
+            return
+        path = os.path.join(checkpoints_dir, f"{min(kept_epochs)}.json")
+        try:
+            with open(path) as f:
+                processed_upto = json.load(f)["processed_upto"]
+        except (OSError, ValueError, KeyError) as exc:
+            raise RuntimeError(
+                f"{type(self).__name__}: cannot read {path} to learn how far the input log "
+                f"can be pruned: {exc!r}"
+            ) from exc
+        with self._arrival_lock:
+            self._input_log.prune(processed_upto)
 
     # -- subclass extension points --
 
@@ -1339,7 +1328,7 @@ class FBPProcess(_PortWorker):
 # A class of its own, distinct from FBPProcess: it does not take part in
 # the barrier protocol as a business node, so it shares only
 # _PortWorker's generic thread-per-port plumbing, none of FBPProcess's
-# barrier/checkpoint/message-log logic. Watches a fixed set of nodes
+# barrier/checkpoint/input-log logic. Watches a fixed set of nodes
 # (NODE_PORTS) for heartbeat/checkpoint_saved INTERACT traffic, detects
 # failure (heartbeat timeout, or a dead PID as a faster, certain
 # shortcut -- a live PID is never, by itself, evidence of health),

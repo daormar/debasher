@@ -18,7 +18,7 @@ The Contract below says precisely what these goals do and do not promise. After 
 
 ## Glossary (Glosario)
 
-The precise meaning of the words this document uses, in the order in which they build on each other; the Spanish equivalent is in parentheses. In Spanish "registro" can mean both the log and one of its entries, so here the log is the "log" and a record is an "entrada del log". Identifiers in backticks are names that exist in the code or that have been decided. The terms of the "Input log" group describe the redesign decided on 2026-09-20: until the input-log step of the order of implementation closes, the code still has the older log, one file per port and epoch, which earlier text calls the "message log". The vocabulary of the guarantees (deterministic, idempotent, chaos test, durability level) is defined in the Contract, where it is used.
+The precise meaning of the words this document uses, in the order in which they build on each other; the Spanish equivalent is in parentheses. In Spanish "registro" can mean both the log and one of its entries, so here the log is the "log" and a record is an "entrada del log". Identifiers in backticks are names that exist in the code or that have been decided. Earlier text called the input log the "message log" and its replay "drain"; both names are gone from the code. The vocabulary of the guarantees (deterministic, idempotent, chaos test, durability level) is defined in the Contract, where it is used.
 
 ### Program and topology
 
@@ -90,8 +90,8 @@ The purpose of this section is that "reliable" has a precise meaning here: withi
 
 ### Failure model
 
-- **Tolerated**: the crash of any process of a `resident` program (SIGKILL, uncaught exception, out-of-memory kill) and its relaunch, by the `Supervisor` or by hand. Any number of nodes may crash at any time, including while other nodes are recovering, with the exceptions listed under "Limits and non-goals". There is deliberately no bound on how many nodes fail simultaneously: each node recovers from its own checkpoint and message log, on stable storage, independently of the others, so correctness does not depend on how many failed at once. (A bound on simultaneous failures only buys something in designs whose redundancy lives in other nodes' volatile memory, such as logging at the sender or replication with quorums; this design has neither.)
-- **Assumed to keep working**: the machine and its operating system, and the filesystem under the program's outdir (it keeps what was written: checkpoints, message logs, markers). Resident programs run on a single machine (BUILTIN scheduler only), so network partitions do not apply.
+- **Tolerated**: the crash of any process of a `resident` program (SIGKILL, uncaught exception, out-of-memory kill) and its relaunch, by the `Supervisor` or by hand. Any number of nodes may crash at any time, including while other nodes are recovering, with the exceptions listed under "Limits and non-goals". There is deliberately no bound on how many nodes fail simultaneously: each node recovers from its own checkpoint and input log, on stable storage, independently of the others, so correctness does not depend on how many failed at once. (A bound on simultaneous failures only buys something in designs whose redundancy lives in other nodes' volatile memory, such as logging at the sender or replication with quorums; this design has neither.)
+- **Assumed to keep working**: the machine and its operating system, and the filesystem under the program's outdir (it keeps what was written: checkpoints, input logs, markers). Resident programs run on a single machine (BUILTIN scheduler only), so network partitions do not apply.
 - **Durability level (decided 2026-09-20): process crashes only.** Nothing is `fsync`ed anywhere, so logs and checkpoints survive the crash of a process but not the crash or power loss of the machine; see the note below on what `fsync` is and what it would cost.
 - **Not tolerated**: machine crash or power loss (see above), disk corruption, and processes that misbehave instead of crashing (Byzantine faults).
 - **The `Supervisor` is not itself supervised.** If it dies, the nodes keep running with their state, but nobody relaunches a crashed node until the `Supervisor` is relaunched by hand. Decided on 2026-09-20: this is simply documented, and no mechanism is added for now.
@@ -125,11 +125,11 @@ Numbered so that this document can cite them; tests and code comments state the 
 - **G1, channel order**: on every channel, messages are delivered in the order they were sent.
 - **G2, no silent loss without failures**: with no failure, every `DATA` message sent on a channel is handed exactly once to the receiver's `process_data`, also while a snapshot or shutdown round is open.
 - **G3, node recovery**: after a crash, a relaunched node ends in the state it would have had without the crash: its latest checkpoint plus the replay of everything it had received since, in the order it processed it (given the obligations above).
-- **G4, faithful replay**: the message log is one log per node, written when each message arrives, in the order in which the messages are queued and hence processed by the brain thread, across all its input ports, so that replay reproduces that order exactly. A node with several input ports does not have to be insensitive to how their messages interleave.
+- **G4, faithful replay**: the input log is one log per node, written when each message arrives, in the order in which the messages are queued and hence processed by the brain thread, across all its input ports, so that replay reproduces that order exactly. A node with several input ports does not have to be insensitive to how their messages interleave.
 - **G5, no duplicates and no silent loss across a crash**: a neighbor that keeps running observes each message of a relaunched node once, not twice, and in order; and if a message is lost anyway, the receiver notices. Mechanism (decided 2026-09-20): each `DATA` carries a sequence number per channel, assigned by the sender; the sender's counters are stored in its checkpoint, so that replay regenerates the same numbers; the receiver drops any `DATA` whose number is not above the last one it accepted from that channel (a duplicate), and treats a jump as a lost message, an error in the sense of G8. The receiver's last numbers are rebuilt from its checkpoint and its log. It relies on determinism: a replay that produced different outputs would reuse numbers for different messages.
 - **G6, consistent snapshots and orderly halt**: while no node crashes during a round, the checkpoints closed by that round form a consistent cut, and after a halt every node resumes in the state it had when it stopped: it loads its checkpoint and replays from its input log only what it processed after capturing it. A crash during a round aborts it (mechanism not designed yet, see Loose ends).
 - **G7, bounded detection**: a crashed node is noticed within `HEARTBEAT_CHECK_INTERVAL_SECS` when its PID is verifiably gone, and within `HEARTBEAT_TIMEOUT_SECS` when it is alive but unhealthy (one of its reader, writer or brain threads died). It is then relaunched up to `MAX_RELAUNCH_ATTEMPTS` times before the escalation of point 4.
-- **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a channel's sequence numbers, a checkpoint with another schema version, a message log over its size cap, an exhausted relaunch budget), the node or the `Supervisor` raises an error that stops the affected part, instead of continuing with silently wrong state. What happens after that stop is manual today; the planned fallback is a coordinated global rollback to the last consistent cut, **not built** (see Future work, point 7).
+- **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a channel's sequence numbers, a checkpoint with another schema version, an input log over its size cap, an exhausted relaunch budget), the node or the `Supervisor` raises an error that stops the affected part, instead of continuing with silently wrong state. What happens after that stop is manual today; the planned fallback is a coordinated global rollback to the last consistent cut, **not built** (see Future work, point 7).
 
 ### Limits and non-goals
 
@@ -138,7 +138,7 @@ Numbered so that this document can cite them; tests and code comments state the 
 - **Messages read from a FIFO but not yet written to the input log** when a node crashes. The reader thread writes each message to the log when it arrives, so this window is only the few microseconds between taking a block from the FIFO and appending it (today it is the whole time a message waits in the inbound queue). A message lost in that window is not recovered, since its sender considers it delivered, but the sequence numbers of G5 make the hole detectable (G8).
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite loop, deadlock) is not detected today: the heartbeat proves that its threads are alive, not that they make progress. Not a goal for now; an extension would be a progress counter in the heartbeat.
 - **Not covered**: non-deterministic `process_data`, effects on external systems beyond "idempotent if repeated", Slurm, machine failure.
-- **`--mirror`** (the debugging tap of a fifo, behind the frontend's "Watch FIFO") is not available in resident programs: declaring it aborts the load of the program, before anything is launched (decided and done on 2026-09-20). Resident processes keep their own message log.
+- **`--mirror`** (the debugging tap of a fifo, behind the frontend's "Watch FIFO") is not available in resident programs: declaring it aborts the load of the program, before anything is launched (decided and done on 2026-09-20). Resident processes keep their own input log.
 - **A node that crashes again right after every relaunch** is not retried forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and the escalation of point 4 applies.
 
 ### Acceptance: how reliability is shown
@@ -149,12 +149,13 @@ Besides it, each guarantee gets its own focused end-to-end test, written in the 
 
 ### Conformance status today: gaps between this contract and the code (2026-09-19)
 
-Each one was verified by running the real classes, not only by reading the code. None is fixed yet; they are to be fixed before any guarantee is relied on.
+Each one was verified by running the real classes, not only by reading the code. The ones marked fixed were fixed on 2026-09-20; the others are to be fixed before any guarantee is relied on.
 
 - **G2 was violated, fixed on 2026-09-20.** `DATA` arriving on a port that was still pending in an open barrier round was stored in `channel_state` but never reached `process_data` (sending 5 and then 7 through a fan-in node delivered only 7, with no crash involved), which contradicts G2 and classic Chandy-Lamport, which records the message and also keeps processing it. Only nodes whose round stays open across messages were affected (several input ports, or an initiator in a cycle). Now such a message is processed at once and a deep copy goes to `channel_state`; checked with a real `debasher_exec` run (5 and 7 through a fan-in node with a round open: it processes both, total 12, where the previous code ended at 7).
-- **G3 and G6 violated.** A message processed after the snapshot (the state is captured when the round opens) but before the round closes is logged in the segment of the round's own epoch, which recovery, and also resumption after a halt, skip: live total 100, recovered total 0. Fix decided (2026-09-20, point 3): the checkpoint stores a position in the input log, not the epoch of a log segment.
-- **G3 is also violated when the node has no checkpoint yet (found 2026-09-20).** `run()` replays the log only if a checkpoint was restored, so a node that crashes before closing its first epoch loses everything it had received: checked with the real class, 3 messages in the log and no checkpoint, and the relaunched node processed 0. Fix decided (2026-09-20, point 3): with no checkpoint, recovery starts from the default state and replays the whole log (nothing is pruned before the first checkpoint).
-- **G4 violated.** The log is one file per port and drain replays port by port, so the order across ports is lost (processed `A1 B2 A3 B4`, replayed `A1 A3 B2 B4`). Fix decided (2026-09-20, point 3): one input log per node, in queue order.
+- **G3 and G6 were violated, fixed on 2026-09-20.** A message processed after the snapshot (the state is captured when the round opens) but before the round closes was logged in the segment of the round's own epoch, which recovery, and also resumption after a halt, skipped: live total 100, recovered total 0. Now the checkpoint stores a position in the input log, not the epoch of a log segment, and recovery replays every `DATA` record after it. Checked with tests in the words of the guarantees and with a real `debasher_exec` run in which a slow fan-in node was killed twice.
+- **G3 was also violated for what was still waiting in the queue, fixed on 2026-09-20.** A message was logged only when the brain thread reached it, so everything waiting in the inbound queue (which has no limit) was lost if the node crashed. Now every item is written to the log when it arrives, before the brain thread can see it.
+- **G3 was also violated when the node had no checkpoint yet, fixed on 2026-09-20 (found the same day).** `run()` replayed the log only if a checkpoint was restored, so a node that crashed before closing its first epoch lost everything it had received: checked with the real class, 3 messages in the log and no checkpoint, and the relaunched node processed 0. Now, with no checkpoint, recovery starts from the default state and replays the whole log (nothing is pruned before the first checkpoint).
+- **G4 was violated, fixed on 2026-09-20.** The log was one file per port and the drain replayed port by port, so the order across ports was lost (processed `A1 B2 A3 B4`, replayed `A1 A3 B2 B4`). Now there is one input log per node, in queue order, and replay follows it.
 - **G5 not implemented.** Replay after a crash re-emits the outputs the node had already sent, and a running neighbor receives them again (verified with a real run). Mechanism decided (2026-09-20, point 3).
 - **G7 partly violated.** A `FBPProcess` whose input writer sends `CLOSE` ends that reader thread and then stops sending heartbeats, so a healthy consumer whose producer finished on purpose would be declared down (a crash of the producer no longer does it: the reader stays, which the real run confirmed). To fix in step 4. The `Supervisor.run()` hang with a `MANUAL_TRIGGER_PORT` was fixed on 2026-09-20 (step 2), with a regression test.
 - **Peer reconnection** (point 5): designed there, nothing implemented; it is the mechanism behind G3 and G5 across a peer's crash.
@@ -276,7 +277,7 @@ implemented**). The reader still never looks at `payload`.
   no new engine mechanism, it is just another entry in `self.opts`; a sensible default applies
   if the module does not declare it.
 - **Periodic self-triggered snapshots (opt-in)**: nothing otherwise ever closes an epoch on its
-  own; without this, the message log's safety cap (point 3) becomes the normal failure mode
+  own; without this, the input log's safety cap (point 3) becomes the normal failure mode
   instead of an actual safety net for any `resident` program with no external actor triggering
   `start_snapshot` periodically, `Supervisor` or not. A timer thread, gated by a
   `SNAPSHOT_INTERVAL_SECS` class attribute/option (`None`, disabled, by default), that calls the
@@ -301,9 +302,9 @@ implemented**). The reader still never looks at `payload`.
 - Schema version: `CHECKPOINT_SCHEMA_VERSION` class constant, checked in `_load_latest_checkpoint`
   before `restore_state()`; a mismatch raises `ValueError`, a real incompatibility to fail on
   loudly, not something to silently paper over by trying an older checkpoint.
-- **Changed by the redesign decided in point 3 (not yet implemented)**: the checkpoint also stores
-  `processed_upto`, `closed_ports`, `out_seq` and `last_seq`, and `channel_state` becomes a copy of
-  what arrived on pending ports, which is also processed.
+- **Since the input-log redesign of point 3**: the checkpoint also stores `processed_upto` (done);
+  `closed_ports`, `out_seq` and `last_seq` will join it with `CLOSE` handling and the sequence numbers.
+  `channel_state` is a copy of what arrived on pending ports, which is also processed.
 
 ### Startup sequence: `run()`
 
@@ -314,8 +315,8 @@ files exist or not, not by a decision the process itself makes.
 
 Single sequence, implemented exactly this way in `run()`: look for the most recent checkpoint ->
 (if found) `restore_state()`, otherwise default values -> `initialize_runtime()` (always invoked,
-same code whether or not state was restored) -> (if restored) drain the message log (point 3) ->
-`start_threads()` (opens every FIFO by known name and starts every worker thread) -> wait until
+same code whether or not state was restored) -> open the input log and replay it after the
+checkpoint's `processed_upto`, all of it if there was no checkpoint (point 3) -> `start_threads()` (opens every FIFO by known name and starts every worker thread) -> wait until
 told to stop -> stop every thread.
 
 **Important consequence**: launching a process for the first time and relaunching it after a
@@ -324,7 +325,7 @@ it is starting the topology or recovering a downed node; in both cases it simply
 process script, and it is the process itself that decides what to do depending on whether it finds
 a checkpoint in its folder or not. This also simplifies point 5 (recovery): no special "recovery
 mode" logic is needed in the supervisor, only failure detection and running the script; the rest
-(looking for a checkpoint, restoring it or not, draining the log or not) is resolved by the process
+(looking for a checkpoint, restoring it or not, how much of the log to replay) is resolved by the process
 itself, exactly as on any startup.
 
 **Resetting checkpoints as an external operation, not yet built**: to force a clean start, it
@@ -383,17 +384,16 @@ whole system from scratch; noted here as a real gap, not yet written (see point 
 - The process always looks for the most recent checkpoint on startup; it does not distinguish
   "first time" from "recovery" by itself. Done, see the Startup sequence above.
 
-## 3. Message log: implemented; redesign decided on 2026-09-20, not yet implemented (`engine/debasher_runtime_lib.py`)
+## 3. Input log: DONE, implemented and tested (`engine/debasher_runtime_lib.py`)
 
-**Redesign decided (2026-09-20), not yet implemented. The rest of this point describes what is built
-today, which this block replaces.**
-
-Why: what is built today logs a message only when the brain thread reaches it, so everything waiting in
-the inbound queue (which has no limit) is lost if the node crashes; a barrier round diverts the `DATA` of
-a pending port so that it never reaches `process_data`; and the log is one file per port and epoch, so
-the order across ports is lost on replay, and a message processed after the snapshot but before the round
-closes is logged in a segment that recovery skips. All four were verified with the real classes (see the
-Contract's conformance status).
+The input log replaces an earlier design that logged a message only when the brain thread reached it.
+That design had four verified faults: everything waiting in the inbound queue (which has no limit) was
+lost if the node crashed; a barrier round diverted the `DATA` of a pending port so that it never reached
+`process_data`; the log was one file per port and epoch, so the order across ports was lost on replay; and
+a message processed after the snapshot but before the round closed was logged in a segment that recovery
+skipped. A fifth was found while implementing it: a node that crashed before closing its first epoch
+replayed nothing. All five were verified with the real classes and are fixed (see the Contract's
+conformance status). What follows is the design as built.
 
 - **One ordered input log per node.** The reader threads write each message to it when it arrives, in the
   same critical section (one lock) that puts the message on the inbound queue. The brain thread consumes
@@ -407,18 +407,20 @@ Contract's conformance status).
   diverted, so nothing is reordered and no separate journal of the processing order is needed. **Done on
   2026-09-20**, see the order of implementation below.
 - **The checkpoint stores positions, not the epoch of a log segment.** Besides `state` and
-  `channel_state` it holds: `processed_upto` (the `pos` of the item whose processing captured the state:
-  a peer's first marker, or the `INTERACT` that started the round), `closed_ports` (the input ports that
-  had received `CLOSE` at that point), `out_seq` (the sender counter of each output port, see below) and
-  `last_seq` (the last sender number accepted on each input port). `CHECKPOINT_SCHEMA_VERSION` goes up.
-  Today every capture happens on the brain thread (the periodic snapshot timer does not exist yet), so
-  `processed_upto` is always well defined.
-- **Recovery** is the startup sequence of point 2 with a different drain: restore the latest checkpoint,
-  then replay, in order, every `DATA` record of the log with `pos` greater than `processed_upto`. That
-  covers what had been processed before the crash and what had arrived but not yet been processed, with
-  no distinction between the two. A `CLOSE` record after `processed_upto` only updates `closed_ports`. The
-  counters `pos`, `out_seq` and `last_seq` are rebuilt from the checkpoint and the log. Replay writes
-  nothing to the log.
+  `channel_state` it holds `processed_upto` (the `pos` of the item whose processing captured the state:
+  a peer's first marker, or the `INTERACT` that started the round), and the schema version is 2.
+  **Done on 2026-09-20.** `closed_ports` (the input ports that had received `CLOSE` at that point),
+  `out_seq` (the sender counter of each output port, see below) and `last_seq` (the last sender number
+  accepted on each input port) join it in the steps that need them, in the same version. Every capture
+  happens on the brain thread (the periodic snapshot timer does not exist yet), so `processed_upto` is
+  always well defined.
+- **Recovery** is the startup sequence of point 2: restore the latest checkpoint, then replay, in
+  order, every `DATA` record of the log with `pos` greater than `processed_upto`, all of them when there
+  is no checkpoint, since the state is then the default one. That covers what had been processed before
+  the crash and what had arrived but not yet been processed, with no distinction between the two. A
+  `CLOSE` record after `processed_upto` will only update `closed_ports`. The counter `pos` is rebuilt
+  from the checkpoint and the log, and `out_seq` and `last_seq` will be. Replay writes nothing to the
+  log. **Done on 2026-09-20.**
 - **Pruning** is by position: the log is split into segment files named by their first `pos`, and those
   that end below the `processed_upto` of the oldest retained checkpoint are deleted; the active segment is
   never touched.
@@ -459,7 +461,8 @@ Contract's conformance status).
   - *Cap.* `INPUT_LOG_MAX_BYTES` (renamed from `MESSAGE_LOG_MAX_BYTES`, 100 MiB by default) is per node
     and kept in memory, so checking it costs nothing (before, every message listed the directory and
     called `stat` on every file). Exceeding it raises in the reader thread before anything is written,
-    like any other death of a thread. `INPUT_LOG_SEGMENT_BYTES` (4 MiB by default) is the size at which
+    like any other death of a thread. It should never trip in ordinary operation: it would mean that no
+    epoch is closing, which the periodic snapshots of point 2 are there to prevent. `INPUT_LOG_SEGMENT_BYTES` (4 MiB by default) is the size at which
     a segment is closed.
   - *Pruning.* After each checkpoint is saved, whole segments other than the last one are deleted when
     the next segment starts at or below the `processed_upto` of the oldest retained checkpoint plus one.
@@ -502,16 +505,13 @@ Contract's conformance status).
   accepted from that channel (a duplicate produced by a replay) and treats a jump as a lost message
   (G8). The check happens in the reader thread, before the record is written, so a duplicate is never
   logged or processed.
-- **What is left.** The window between the reader taking a block from the FIFO and appending it (a few
-  microseconds; today it is the whole time in the queue). A message lost there is not recovered, but the
-  jump in the sequence numbers detects it.
+- **What is left.** The window between the reader thread taking a block from the FIFO and appending
+  each of its messages. A message lost there is not recovered, since its sender considers it delivered,
+  but the jump in the sequence numbers detects it.
 - **Rejected**: a bounded inbound queue (the reader still consumes blocks of up to 64 KiB from the FIFO);
   a log at the sender with acknowledgements (coordination and deletion between two processes); a second
   log with the order of processing (needed only if something reorders, and nothing does now); accepting
   the loss (it happens exactly when the node is busy).
-- **To rewrite**: `_log_received_data`, `_drain_message_log`, `_prune_message_log_epoch`, the
-  checkpoint schema and the 15 tests of `test_message_log.py` (the diversion in `_brain_loop` and the
-  barrier tests that assumed it are done, see the first step below).
 - **Order of implementation (agreed 2026-09-20)**, one step at a time, each with tests and a real
   `debasher_exec` smoke test:
   1. The barrier processes and records a copy (G2). **Done 2026-09-20**: `_brain_loop` processes every
@@ -528,7 +528,7 @@ Contract's conformance status).
      has 152 tests (the new ones fail on the previous code where they can) and was repeated 15 times
      without a failure; the real run is the one described in point 5.
   3. The input log written at arrival, positions, recovery, pruning and the checkpoint schema (G3, G4,
-     G6). Split into three pieces (agreed 2026-09-20):
+     G6). **Done 2026-09-20.** Split into three pieces (agreed 2026-09-20):
      - 3.1 The log as a component, `_InputLog`, not used by `FBPProcess` yet. **Done 2026-09-20**:
        segments named by their first position, records, torn tails, rotation, recovery of the next
        position, replay with its checks, pruning by position, byte accounting with the cap, and the
@@ -548,15 +548,25 @@ Contract's conformance status).
        and a fan-in sink with two snapshots and a halt: all 800 messages were processed, the
        positions were strictly increasing, and in all three checkpoints the saved total equals the
        sum of what the sink had processed up to `processed_upto`.
-     - 3.3 The switch: the log is written at arrival, the brain thread stops logging, replay is by
-       position (also with no checkpoint), pruning and the cap are wired in, and the old per-port code
-       and its tests are replaced by tests in the words of the guarantees.
+     - 3.3 The switch. **Done 2026-09-20**: the reader threads append the record and queue the item
+       under one lock, and the brain thread no longer logs; a node opens the log after restoring its
+       checkpoint and replays the `DATA` records after `processed_upto` (all of them when there is no
+       checkpoint); pruning by position runs after each checkpoint is saved, reading the oldest one
+       kept; the cap and the refusal after a failed write are in place; and the code and the 15 tests
+       of the per-port log are gone. 17 new tests in the words of the guarantees, checked against
+       three mutations (replaying only when a checkpoint exists fails 7 of them, replaying from
+       position 0 fails 4, pruning by the newest checkpoint fails 2). Checked with a real
+       `debasher_exec` run of two sources and a slow fan-in sink whose state depends on the order
+       across ports, with the sink killed by `kill -9` twice, before its first checkpoint and after
+       it: the three incarnations processed all 800 messages exactly once, and from each kept
+       checkpoint plus the log the state of the last checkpoint is reproduced, order-sensitive hash
+       included. The first segment of the log had been pruned by then, as it should.
   4. `CLOSE` handling: `closed_ports`, the barrier's pending set, the heartbeat.
   5. G5: sequence numbers, deduplication and detection of gaps.
   6. The chaos test of the Contract.
 
 (Placed right after `FBPProcess` rather than near checkpointing/recovery, and before the
-`Supervisor` class: `FBPProcess` itself already needs this to drain its own log on restart, and
+`Supervisor` class: `FBPProcess` itself already needs this to replay its own log on restart, and
 `Supervisor`'s design, next, can build on it too.)
 
 **Implemented entirely inside `FBPProcess` itself, in Python, not on top of the engine's `--mirror`
@@ -579,48 +589,6 @@ is loaded (`debasher::_check_fifo_mirror_allowed`, called by `define_fifo_opt` a
   `DEBASHER_PROCESS_EXECDIR`, not the writer's. This removes any need to reach into a neighbor's
   directory, and removes the tap/shim mechanism from this feature entirely: no separate process,
   no fifo-open/close races, nothing to force on via `--mirror`.
-- **Where it hooks in**: `_brain_loop` (point 2's thread topology), right before
-  `process_data(port_name, payload)` is actually called, logging using the exact
-  `self._last_epoch` value the brain thread itself is about to act with. **Not** the reader
-  thread that received the message: it was tried there first, and a real `debasher_exec` smoke test
-  (not a unit test) caught a genuine race: `self._last_epoch` only ever advances on the brain
-  thread (a barrier round closing), so a reader thread reading it concurrently could log a message
-  under the epoch just before it closed, even though that same message's `process_data()` call,
-  serialized on the brain thread, correctly ran *after* the round closed, silently dropping that
-  message from replay after a real crash, since drain only replays epochs after the checkpoint's
-  own. Logging from the brain thread itself, at the same point and using the same variable the
-  epoch-closing code also touches, is race-free by construction: only one thread ever reads or
-  writes `self._last_epoch` at all. A crash between logging and `process_data()` running (now a
-  single thread, back-to-back, not two racing ones) still replays correctly (`process_data()` is
-  assumed idempotent when replayed in the same order, an existing assumption of the whole
-  log-replay design, not new here); a crash before logging (the message still sitting in
-  `_inbound_queue`, not yet dequeued) means it was never durably received at all. Only `DATA`
-  payloads are logged, every one that reaches `process_data` (since 2026-09-20 that includes the ones
-  arriving on a still-pending port during a barrier round, which used to be diverted and never
-  processed); `BARRIER`/`INTERACT` are never logged either, since rotation is driven
-  directly by the epoch-closing code already in `_on_barrier`/`_on_epoch_closed`, not by scanning
-  logged content for a marker.
-- **One segment file per input port per epoch**: `<DEBASHER_PROCESS_EXECDIR>/log/<port_name>/
-  <epoch>.log`, one JSON payload per line; mirrors the `<epoch>.json` checkpoint convention
-  (point 2's Checkpoint persistence subsection), and, since `_barrier_epoch`/`_last_epoch` are
-  already tracked in-process, rotation is a plain method call at the same point a checkpoint gets
-  saved, not something inferred from log content. No explicit per-line sequence number needed: a
-  single reader thread appends in strict receipt order, so file position already gives that for
-  free.
-- **Pruning is tied to checkpoint retention, never file size**, extending `_prune_old_checkpoints`
-  itself (same process, same function, no cross-language coordination needed any more): when a
-  checkpoint epoch is dropped, every input port's log segment for that epoch is deleted outright.
-  No truncation or rewrite of a live file, ever.
-- **Independent safety cap**: a configurable max total size across a port's log segments (generous
-  default). If reached with no checkpoint pruning having happened yet, this is a hard error, not a
-  silent truncation: it means the process never closes an epoch (no periodic/triggered snapshot),
-  a real problem to surface, not paper over by discarding log data a future recovery might need.
-  In ordinary operation this cap should never actually trip: see point 2's periodic self-triggered
-  snapshots, which is what keeps epochs closing regardless of whether a `Supervisor` exists.
-- **Log drain**: for each `INPUT_PORTS` entry, after `restore_state()` and before starting reader
-  threads, read every segment file for that port with epoch greater than the restored checkpoint's
-  epoch (sorted numerically), and call `process_data(port_name, payload)` for each line in order;
-  this reads from disk, not the fifo, so it can never re-log a replayed message.
 
 ## 4. `Supervisor` class: DONE, implemented and tested (`engine/debasher_runtime_lib.py`)
 
@@ -652,7 +620,7 @@ in the barrier as a business node.)
 - **`FBPProcess` and `Supervisor` both inherit from a new `_PortWorker` base class**, factored out
   of `FBPProcess`'s existing thread topology (point 2, slice 3): generic `start_threads()`/
   `stop_threads()`, the shared inbound queue, one outbound queue per output port. None of the
-  barrier/checkpoint/message-log logic moves into it, that stays in `FBPProcess` itself;
+  barrier/checkpoint/input-log logic moves into it, that stays in `FBPProcess` itself;
   `Supervisor` gets the same mechanical thread-per-port plumbing without inheriting anything about
   barriers, since it is not a barrier participant.
 
@@ -832,7 +800,7 @@ failed`'s default implementation escalates in two phases, reusing what already e
    `dirname(dirname(DEBASHER_PROCESS_EXECDIR))` (confirmed against
    `debasher::get_prg_exec_dir_given_basedir`, `<dirname>/__exec__/<processname>`).
 
-This deliberately accepts an asymmetry: phase 1 preserves every checkpoint/message-log consistency
+This deliberately accepts an asymmetry: phase 1 preserves every checkpoint/input-log consistency
 guarantee already built; phase 2 is explicitly a "just end it" backstop, expected to only ever fire
 in the pathological case of a graph broken by a permanent node failure, and is allowed to lose
 in-flight state for whatever it kills.
@@ -895,7 +863,8 @@ optional, and for a manual relaunch), and it is the signal a `FBPProcess` peer l
 - A writer whose reader died gets `BrokenPipeError` on its next write, and its thread dies. It
   should reopen (wait for the relaunched reader) and resend the message that failed.
 - Data already in the FIFO buffer and not yet read is probably lost when the reader dies. The
-  message log only covers what the brain thread already received. What exactly happens to unread
+  log then in place only covered what the brain thread had already received (the input log now
+  records each message when it arrives). What exactly happens to unread
   FIFO data when the reader closes and another reopens **has not been tested** (do it with a
   race-provoking repro, per the project rule). If it is lost, the sender needs to retain messages,
   which opens the delivery-semantics question (at least once, and idempotence of `process_data`).
@@ -1090,21 +1059,21 @@ under `debasher_exec`, and the chaos test of the Contract.
   most once).
 
   Like resetting checkpoints (previous item), it can be done from outside, by manipulating files, with
-  no special mode in the startup sequence (which always loads the highest epoch and drains the log): an
+  no special mode in the startup sequence (which always loads the highest epoch and replays the log): an
   auxiliary script run while the program is stopped. Points to settle when designing it:
   - The target epoch is the highest one present in the checkpoint folder of every node (the minimum of
     their latest epochs, if contiguous). Every node deletes, or moves aside, the checkpoints above it,
     which belong to a round that not everybody completed. The target has to lie inside every node's
     retained window (`CHECKPOINT_RETENTION`), so the interval between snapshots bounds how far back a
     rollback can go.
-  - The log segments above the target epoch must be discarded too: the startup drains every segment
-    after the loaded checkpoint, so leaving them would turn the rollback into a mass local recovery,
-    with the duplicates between nodes that this implies.
+  - The log records above the position that the target checkpoint reflects must be discarded too: the
+    startup replays every record after the loaded checkpoint, so leaving them would turn the rollback
+    into a mass local recovery, with the duplicates between nodes that this implies.
   - `channel_state` is needed here, unlike in localized recovery: the messages in transit at the cut
     were sent by nodes that, once restored, will not send them again, so they have to be redelivered.
     This answers the open question about `channel_state` in point 6. A way to do it with no new logic:
-    the script writes them as the next log segment of the receiving node, which the unchanged startup
-    already drains.
+    the script appends them to the log of the receiving node as records after the target position,
+    which the unchanged startup already replays.
   - An epoch number must identify a single round. Today the initiator derives it from its own last
     epoch, which can go back when the initiator restarts, and after an aborted round two nodes could
     hold a checkpoint with the same number that comes from different rounds, so "the highest common

@@ -193,6 +193,8 @@ def _run_brain(proc, items):
     # Feeds the items through the arrival hook, as a reader thread would, and
     # runs the brain loop to completion on its own thread: the order in which
     # the brain sees them is then exactly the order given here.
+    if proc._input_log is None:
+        proc._open_input_log(0)
     for port, envelope_type, payload in items:
         line = json.dumps({"type": envelope_type, "payload": payload})
         proc._on_arrival(port, lib.Envelope(envelope_type, payload), line)
@@ -287,12 +289,15 @@ def test_data_on_a_still_pending_port_is_logged_like_any_other():
         ],
     )
 
-    log_dir = proc._log_dir("b")
-    logged = []
-    for name in sorted(os.listdir(log_dir), key=lambda n: int(n[: -len(".log")])):
-        with open(os.path.join(log_dir, name)) as f:
-            logged.extend(json.loads(line) for line in f if line.strip())
-    assert logged == [5, 7]
+    # Every item is in the input log, with its position, and the DATA ones are the two that were sent.
+    records = list(proc._input_log.replay(0))
+    assert [(r.pos, r.port, r.envelope.type) for r in records] == [
+        (1, "a", "BARRIER"),
+        (2, "b", "DATA"),
+        (3, "b", "BARRIER"),
+        (4, "b", "DATA"),
+    ]
+    assert [r.envelope.payload for r in records if r.envelope.type == "DATA"] == [5, 7]
 
 
 # --- integration: a real cyclic self-return and a real pending port, ----
@@ -341,7 +346,7 @@ def test_data_on_a_still_pending_port_is_delivered_and_recorded_through_real_fif
         proc.stop_threads(timeout=2)
 
 
-def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair):
+def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_path):
     a_to_b, b_to_a = fifo_pair
 
     class _Node(lib.FBPProcess):
@@ -355,12 +360,17 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair):
         def capture_state(self):
             return {"name": self.opts.get("name")}
 
+        def _execdir(self):
+            # Two nodes in one test process would otherwise share a directory,
+            # and so a log, which real nodes never do.
+            return self.opts["execdir"]
+
         def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
             self.closed_epochs.append((epoch, halt, state, channel_buffers))
 
     # A cycle of two nodes: node_a -> node_b -> node_a.
-    node_a = _Node(opts={"inf": b_to_a, "outf": a_to_b, "name": "a"})
-    node_b = _Node(opts={"inf": a_to_b, "outf": b_to_a, "name": "b"})
+    node_a = _Node(opts={"inf": b_to_a, "outf": a_to_b, "name": "a", "execdir": str(tmp_path / "a")})
+    node_b = _Node(opts={"inf": a_to_b, "outf": b_to_a, "name": "b", "execdir": str(tmp_path / "b")})
 
     node_b.start_threads()
     node_a.start_threads()

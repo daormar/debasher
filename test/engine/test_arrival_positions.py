@@ -17,7 +17,7 @@ def _wait_until(predicate, timeout=10.0, interval=0.01):
     return predicate()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def execdir(tmp_path, monkeypatch):
     monkeypatch.setenv("DEBASHER_PROCESS_EXECDIR", str(tmp_path))
     return tmp_path
@@ -51,7 +51,9 @@ _OPTS = {"a": "/dev/null", "b": "/dev/null"}
 
 
 def _arrive(proc, port, envelope_type, payload):
-    """Delivers one item the way a reader thread does."""
+    """Delivers one item the way a reader thread does, once the node has its log open."""
+    if proc._input_log is None:
+        proc._open_input_log(0)
     line = json.dumps({"type": envelope_type, "payload": payload})
     proc._on_arrival(port, lib.Envelope(envelope_type, payload), line)
 
@@ -271,7 +273,7 @@ def test_a_restored_checkpoint_makes_the_positions_go_on_after_its_own(execdir):
     proc = _NoPorts(opts={})
     proc._halted.set()
     proc.run()
-    assert proc._next_pos == 41
+    assert proc._input_log.next_pos == 41
 
     _arrive(proc, "a", lib.TYPE_DATA, "next")
     assert _drain(proc) == [(41, "a", lib.TYPE_DATA, "next")]
@@ -281,7 +283,7 @@ def test_a_node_with_no_checkpoint_numbers_from_one(execdir):
     proc = _NoPorts(opts={})
     proc._halted.set()
     proc.run()
-    assert proc._next_pos == 1
+    assert proc._input_log.next_pos == 1
 
 
 def _drain(proc):
