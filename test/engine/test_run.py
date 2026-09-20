@@ -23,11 +23,11 @@ class _Node(lib.FBPProcess):
         self.initialize_runtime_calls = 0
         super().__init__(*a, **kw)
 
-    def capture_state(self):
+    def capture_node_state(self):
         return {"marker": "s"}
 
-    def restore_state(self, state):
-        self.restored_with = state
+    def restore_node_state(self, node_state):
+        self.restored_with = node_state
 
     def initialize_runtime(self):
         self.initialize_runtime_calls += 1
@@ -58,9 +58,9 @@ def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
     proc._save_checkpoint(0, {"marker": "old"}, {}, 0)
     proc._save_checkpoint(1, {"marker": "new"}, {}, 0)
 
-    epoch, state, processed_upto = proc._load_latest_checkpoint()
+    epoch, node_state, processed_upto = proc._load_latest_checkpoint()
     assert epoch == 1
-    assert state == {"marker": "new"}
+    assert node_state == {"marker": "new"}
 
 
 def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):

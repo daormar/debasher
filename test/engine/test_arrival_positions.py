@@ -37,11 +37,11 @@ class _Node(lib.FBPProcess):
         self.seen.append(packet)
         self.processed.append((self._current_pos, port_name, packet))
 
-    def capture_state(self):
+    def capture_node_state(self):
         return {"seen": list(self.seen)}
 
-    def restore_state(self, state):
-        self.seen = list(state["seen"])
+    def restore_node_state(self, node_state):
+        self.seen = list(node_state["seen"])
 
     def initialize_runtime(self):
         pass
@@ -181,7 +181,7 @@ def test_a_round_opened_by_a_peers_marker_records_the_position_of_that_marker(ex
     assert checkpoint["processed_upto"] == 3
     # The state is exactly what had been processed up to that position, no more,
     # while what arrived in transit is kept as the channel state as well as processed.
-    assert checkpoint["state"] == {"seen": [1, 2]}
+    assert checkpoint["node_state"] == {"seen": [1, 2]}
     assert checkpoint["channel_state"] == {"b": [5]}
     assert proc.seen == [1, 2, 5]
 
@@ -203,7 +203,7 @@ def test_a_round_started_by_interact_records_the_position_of_that_interact(execd
 
     checkpoint = _checkpoint(execdir, 0)
     assert checkpoint["processed_upto"] == 2
-    assert checkpoint["state"] == {"seen": [1]}
+    assert checkpoint["node_state"] == {"seen": [1]}
 
 
 def test_the_position_is_taken_when_the_round_opens_not_when_it_closes(execdir):

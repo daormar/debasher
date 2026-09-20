@@ -13,7 +13,7 @@ class _Node(lib.FBPProcess):
         self.state_to_capture = {"marker": "s"}
         super().__init__(*a, **kw)
 
-    def capture_state(self):
+    def capture_node_state(self):
         return dict(self.state_to_capture)
 
 
@@ -53,7 +53,7 @@ def test_save_checkpoint_writes_the_expected_json_structure(execdir):
         "schema_version": lib.FBPProcess.CHECKPOINT_SCHEMA_VERSION,
         "epoch": 3,
         "processed_upto": 17,
-        "state": {"marker": "s"},
+        "node_state": {"marker": "s"},
         "channel_state": {"a": [1, 2]},
     }
 
@@ -94,7 +94,7 @@ def test_on_epoch_closed_writes_a_checkpoint(execdir):
     assert os.path.exists(checkpoint_path)
     with open(checkpoint_path) as f:
         data = json.load(f)
-    assert data["state"] == {"marker": "s"}
+    assert data["node_state"] == {"marker": "s"}
 
 
 def test_on_epoch_closed_notifies_the_supervisor_port_if_set(execdir):

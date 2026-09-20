@@ -44,11 +44,11 @@ class _Fanin(lib.FBPProcess):
         self.seen.append((port_name, packet))
         self.positions.append(self._current_pos)
 
-    def capture_state(self):
+    def capture_node_state(self):
         return {"seen": [list(item) for item in self.seen]}
 
-    def restore_state(self, state):
-        self.seen = [tuple(item) for item in state["seen"]]
+    def restore_node_state(self, node_state):
+        self.seen = [tuple(item) for item in node_state["seen"]]
 
     def initialize_runtime(self):
         pass
@@ -116,7 +116,7 @@ def test_a_node_that_crashes_before_its_first_checkpoint_recovers_everything_it_
 
     relaunched = _relaunch(tmp_path)
     assert relaunched.seen == [("a", 1), ("b", 2), ("a", 3)]
-    assert relaunched.capture_state() == live.capture_state()
+    assert relaunched.capture_node_state() == live.capture_node_state()
 
 
 def test_recovery_reproduces_the_order_across_ports_not_port_by_port(tmp_path):

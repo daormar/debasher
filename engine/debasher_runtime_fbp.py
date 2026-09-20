@@ -45,7 +45,7 @@ class FBPProcess(_PortWorker):
     Base class for resident processes. A subclass declares its ports via
     the INPUT_PORTS/OUTPUT_PORTS class attributes (option names, without
     their leading dash(es), e.g. INPUT_PORTS = ["inf"]) and overrides
-    process_data/capture_state/restore_state/initialize_runtime.
+    process_data/capture_node_state/restore_node_state/initialize_runtime.
     """
 
     INPUT_PORTS = []
@@ -82,9 +82,9 @@ class FBPProcess(_PortWorker):
         self._barrier_epoch = None
         self._barrier_halt = False
         self._barrier_pending = set()
-        self._barrier_state = None
+        self._barrier_node_state = None
         self._barrier_channel_buffers = {}
-        # Position of the item whose processing captured the state of the
+        # Position of the item whose processing captured the node state of the
         # round in progress (see _current_pos).
         self._barrier_processed_upto = 0
         # Highest epoch this node has ever closed; -1 means none yet, so
@@ -122,9 +122,9 @@ class FBPProcess(_PortWorker):
     def run(self):
         """
         Full startup sequence: find the most recent checkpoint if any
-        -> restore_state()/defaults -> initialize_runtime() -> open the
+        -> restore_node_state()/defaults -> initialize_runtime() -> open the
         input log and replay what it holds after the checkpoint (all of
-        it if there is no checkpoint, since the state is then the
+        it if there is no checkpoint, since the node state is then the
         default one) -> start_threads() (opens every FIFO, starts every
         worker thread) -> wait until told to stop (an epoch closing with
         halt=True) -> stop every thread, from this (the calling) thread
@@ -133,8 +133,8 @@ class FBPProcess(_PortWorker):
         checkpoint = self._load_latest_checkpoint()
         processed_upto = 0
         if checkpoint is not None:
-            epoch, state, processed_upto = checkpoint
-            self.restore_state(state)
+            epoch, node_state, processed_upto = checkpoint
+            self.restore_node_state(node_state)
             self._last_epoch = epoch
             self.log.info("restored checkpoint for epoch %s", epoch)
         else:
@@ -155,7 +155,7 @@ class FBPProcess(_PortWorker):
 
     def _load_latest_checkpoint(self):
         """
-        Returns (epoch, state, processed_upto) for the highest-epoch
+        Returns (epoch, node_state, processed_upto) for the highest-epoch
         checkpoint in this process's checkpoints directory, or None if there isn't one yet
         (a brand new process, or one that has never closed an epoch).
         Raises ValueError if the checkpoint's schema version doesn't
@@ -189,7 +189,7 @@ class FBPProcess(_PortWorker):
                 f"{self.CHECKPOINT_SCHEMA_VERSION!r}"
             )
 
-        return checkpoint["epoch"], checkpoint["state"], checkpoint["processed_upto"]
+        return checkpoint["epoch"], checkpoint["node_state"], checkpoint["processed_upto"]
 
     # -- thread topology --
 
@@ -331,7 +331,7 @@ class FBPProcess(_PortWorker):
     def _open_barrier_round(self, epoch, halt, arrived_port):
         self._barrier_epoch = epoch
         self._barrier_halt = halt
-        self._barrier_state = self.capture_state()
+        self._barrier_node_state = self.capture_node_state()
         self._barrier_processed_upto = self._current_pos
         for out_port in self.OUTPUT_PORTS:
             # The supervisor channel never sees a BARRIER: it doesn't
@@ -348,22 +348,22 @@ class FBPProcess(_PortWorker):
     def _close_barrier_round(self):
         epoch = self._barrier_epoch
         halt = self._barrier_halt
-        state = self._barrier_state
+        node_state = self._barrier_node_state
         channel_buffers = self._barrier_channel_buffers
         processed_upto = self._barrier_processed_upto
 
         self._last_epoch = max(self._last_epoch, epoch)
         self._barrier_epoch = None
         self._barrier_halt = False
-        self._barrier_state = None
+        self._barrier_node_state = None
         self._barrier_pending = set()
         self._barrier_channel_buffers = {}
         self._barrier_processed_upto = 0
 
-        self._on_epoch_closed(epoch, halt, state, channel_buffers, processed_upto)
+        self._on_epoch_closed(epoch, halt, node_state, channel_buffers, processed_upto)
 
-    def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
-        path = self._save_checkpoint(epoch, state, channel_buffers, processed_upto)
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+        path = self._save_checkpoint(epoch, node_state, channel_buffers, processed_upto)
         self.log.info("checkpoint saved for epoch %s at %s", epoch, path)
 
         if self.SUPERVISOR_PORT is not None:
@@ -384,7 +384,7 @@ class FBPProcess(_PortWorker):
     def _checkpoints_dir(self):
         return os.path.join(self._execdir(), "checkpoints")
 
-    def _save_checkpoint(self, epoch, state, channel_buffers, processed_upto):
+    def _save_checkpoint(self, epoch, node_state, channel_buffers, processed_upto):
         checkpoints_dir = self._checkpoints_dir()
         os.makedirs(checkpoints_dir, exist_ok=True)
 
@@ -392,7 +392,7 @@ class FBPProcess(_PortWorker):
             "schema_version": self.CHECKPOINT_SCHEMA_VERSION,
             "epoch": epoch,
             "processed_upto": processed_upto,
-            "state": state,
+            "node_state": node_state,
             "channel_state": channel_buffers,
         }
 
@@ -449,7 +449,7 @@ class FBPProcess(_PortWorker):
         Re-executes process_data() on every DATA record of the input log with
         a position above `processed_upto`, in log order: what the node had
         received and processed, or had received and was still to process,
-        since the state its checkpoint holds. That order is the one in which
+        since the node state its checkpoint holds. That order is the one in which
         the brain thread processed them before, so a node that is sensitive
         to how messages from different ports interleave ends where it was.
         The other kinds of item are not replayed. This reads from disk and
@@ -495,10 +495,10 @@ class FBPProcess(_PortWorker):
     def process_data(self, port_name, packet):
         raise NotImplementedError
 
-    def capture_state(self):
+    def capture_node_state(self):
         raise NotImplementedError
 
-    def restore_state(self, state):
+    def restore_node_state(self, node_state):
         raise NotImplementedError
 
     def initialize_runtime(self):

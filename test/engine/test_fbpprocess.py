@@ -111,8 +111,23 @@ def test_fbpprocess_extension_points_are_not_implemented_by_default():
     with pytest.raises(NotImplementedError):
         proc.process_data("some_port", {"x": 1})
     with pytest.raises(NotImplementedError):
-        proc.capture_state()
+        proc.capture_node_state()
     with pytest.raises(NotImplementedError):
-        proc.restore_state({})
+        proc.restore_node_state({})
     with pytest.raises(NotImplementedError):
         proc.initialize_runtime()
+
+
+def test_a_module_that_still_defines_the_old_hooks_fails_at_its_first_round():
+    # capture_state and restore_state became capture_node_state and restore_node_state:
+    # a module written for the old names has to fail loudly, not run without any state saved.
+    class _OldHooks(lib.FBPProcess):
+        def capture_state(self):
+            return {}
+
+        def restore_state(self, state):
+            pass
+
+    proc = _OldHooks(opts={})
+    with pytest.raises(NotImplementedError):
+        proc._on_interact({"command": "start_snapshot", "args": {}})

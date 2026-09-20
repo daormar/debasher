@@ -36,14 +36,14 @@ class _BarrierWorker(lib.FBPProcess):
         self.state_to_capture = {"marker": "initial"}
         super().__init__(*args, **kwargs)
 
-    def capture_state(self):
+    def capture_node_state(self):
         return dict(self.state_to_capture)
 
     def process_data(self, port_name, packet):
         self.received.append((port_name, packet))
 
-    def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
-        self.closed_epochs.append((epoch, halt, state, channel_buffers))
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+        self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
 
 _FAKE_OPTS = {"a": "/dev/null", "b": "/dev/null", "x": "/dev/null", "y": "/dev/null"}
@@ -61,11 +61,11 @@ class _OnePort(lib.FBPProcess):
         self.closed_epochs = []
         super().__init__(*a, **kw)
 
-    def capture_state(self):
+    def capture_node_state(self):
         return {"marker": "initial"}
 
-    def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
-        self.closed_epochs.append((epoch, halt, state, channel_buffers))
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+        self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
 
 class _Root(lib.FBPProcess):
@@ -75,11 +75,11 @@ class _Root(lib.FBPProcess):
         self.closed_epochs = []
         super().__init__(*a, **kw)
 
-    def capture_state(self):
+    def capture_node_state(self):
         return {}
 
-    def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
-        self.closed_epochs.append((epoch, halt, state, channel_buffers))
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+        self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
 
 # --- peer-triggered rounds (a BARRIER arriving on an input port) --------
@@ -357,7 +357,7 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
             self.closed_epochs = []
             super().__init__(*a, **kw)
 
-        def capture_state(self):
+        def capture_node_state(self):
             return {"name": self.opts.get("name")}
 
         def _execdir(self):
@@ -365,8 +365,8 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
             # and so a log, which real nodes never do.
             return self.opts["execdir"]
 
-        def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
-            self.closed_epochs.append((epoch, halt, state, channel_buffers))
+        def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto):
+            self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
     # A cycle of two nodes: node_a -> node_b -> node_a.
     node_a = _Node(opts={"inf": b_to_a, "outf": a_to_b, "name": "a", "execdir": str(tmp_path / "a")})
