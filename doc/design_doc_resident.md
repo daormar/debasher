@@ -28,6 +28,10 @@ The precise meaning of the words this document uses, in the order in which they 
 - **channel** (canal): the one-way connection from an output port of one node to an input port of another, made of a FIFO (a named pipe created by the engine). It delivers envelopes in the order in which they were sent. Business channels carry `DATA` and `BARRIER`; the channels to and from the `Supervisor` carry only `INTERACT`.
 - **`Supervisor`**: the optional process (0 or 1 per program) that receives heartbeats, relaunches downed nodes and can start rounds. It is not itself supervised.
 - **initiator** (iniciador): the node at which a round starts, because it receives an `INTERACT` `start_snapshot` or `shutdown` (or, if enabled, because of its own snapshot timer). It has to be able to reach every other node through the channels; a program made of independent subgraphs needs one initiator per subgraph.
+- **trigger** (disparo): the `INTERACT` command, `start_snapshot` or `shutdown`, that makes a node start a round. It reaches an initiator from the `Supervisor`, from an actor outside the program that writes it into a FIFO of the initiator, or, as an in-process call and not as a message, from the initiator's own snapshot timer.
+- **trigger port** (puerto de disparo): an output port of the `Supervisor`, an entry of its `TRIGGER_PORT` list, wired to an initiator; the `Supervisor` sends the triggers through it.
+- **manual trigger port** (puerto de disparo manual): the input port of the `Supervisor`, `MANUAL_TRIGGER_PORT`, where an actor outside the program writes a trigger, which the `Supervisor` relays to every trigger port.
+- **control port** (puerto de control): an input port of a node, listed in `CONTROL_PORTS`, that carries only `INTERACT` commands, such as the one on which an initiator receives its triggers. It never carries a marker, so it takes no part in any round, and a `CLOSE` on it does not close it, because its writer (the `Supervisor`, or whoever writes commands) may come back.
 - **incarnation** (encarnación): one running instance of a node's process. Relaunching a node after a crash starts a new incarnation of the same node, which reuses its FIFOs, its directory and its checkpoints.
 - **execdir**: the node's own directory, `__exec__/<process_name>/` under the program's output directory, exported to the process as `DEBASHER_PROCESS_EXECDIR`. Its checkpoints and its input log live there.
 
@@ -162,6 +166,7 @@ Each one was verified by running the real classes, not only by reading the code.
 - **G5 not implemented.** Replay after a crash re-emits the outputs the node had already sent, and a running neighbor receives them again (verified with a real run). Mechanism decided (2026-09-20, point 3).
 - **G7 was partly violated, fixed on 2026-09-20 (step 4).** A `FBPProcess` whose input writer sent `CLOSE` ended that reader thread and then stopped sending heartbeats, so a healthy consumer whose producer finished for good would have been declared down (measured with real runs: from the `CLOSE` on, the health check that the heartbeat sends on never said healthy again, and with a slow brain the gap opened while the brain still had a backlog before the `CLOSE`). Now the reader keeps reading after a `CLOSE`, so the heartbeat needs no special case (checked with a real `debasher_exec` run: the health check stayed true until the end of the run, 26 s after the `CLOSE`). A crash of the producer never did it: the reader stays, which the real run confirmed. The `Supervisor.run()` hang with a `MANUAL_TRIGGER_PORT` was fixed on 2026-09-20 (step 2), with a regression test.
 - **G6 was violated when a writer had finished for good, fixed on 2026-09-20 (step 4).** A round waited for the marker of a port whose writer had said `CLOSE`, which never comes, and the marker of the next round ended the brain thread with a `ValueError`. Measured with the real class on a node of three ports: round 0 open for good waiting for a and c, the brain thread dead at the marker of epoch 1, no checkpoint written. Now a closed port is not pending (point 3), and a real `debasher_exec` run of two producers that finish at different moments and a consumer that is killed and relaunched closes its rounds and recovers.
+- **A trigger from the `Supervisor` did not close the initiator's round, fixed on 2026-09-20 (step 4.5).** The channel from the `Supervisor` was read as a data port, so the initiator waited for a marker that never comes, and the `CLOSE` that a stopping `Supervisor` sends closed the channel for good, dropping the triggers of one relaunched by hand. Both checked with real fifos and then with a real `Supervisor`. Now the initiator lists that channel in `CONTROL_PORTS` (point 2).
 - **Peer reconnection** (point 5): designed there, nothing implemented; it is the mechanism behind G3 and G5 across a peer's crash.
 
 ## 1. Control envelope
@@ -244,7 +249,8 @@ implemented**). The reader still never looks at `payload`.
   `argv` generically into a `self.opts` name -> value dict (the engine's existing `-optname value`
   CLI convention, untouched); `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those entries are FIFO
   paths to open reader/writer threads on. Any other option (e.g. a plain `-threshold` value) stays
-  available in `self.opts` with no special handling.
+  available in `self.opts` with no special handling. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
+  commands (see control port in the Glossary); a name that is not an input port is refused when the node is built.
 - **Threads**: one reader thread per `INPUT_PORTS` entry, each running a blocking `readline()` loop
   over its FIFO and pushing every deserialized envelope onto a **shared inbound queue** as
   `(port_name, type, payload)`; one writer thread per `OUTPUT_PORTS` entry, each with **its own
@@ -270,8 +276,9 @@ implemented**). The reader still never looks at `payload`.
   pending port was only buffered and never processed, which lost it. Once every input port's marker
   has arrived, or its writer has said `CLOSE`, the node's part of the snapshot is complete.
 - **`INTERACT` logic**: the initiator's inbound connection from the supervisor is not a special
-  port concept; it is just one more `INPUT_PORTS` entry, handled by the same generic
-  port-agnostic, type-based dispatch as everything else. `command: "start_snapshot"` enters the
+  kind of port for reading; it is one more `INPUT_PORTS` entry, handled by the same generic
+  port-agnostic, type-based dispatch as everything else, but it is also listed in `CONTROL_PORTS`, which is
+  what keeps the barrier from waiting for a marker that it will never carry. `command: "start_snapshot"` enters the
   exact same generic barrier logic above (capture state, forward markers, track own input ports as
   pending, including the node's own port in a cycle) as receiving a peer's `BARRIER` would, just
   triggered by `INTERACT` instead; `command: "shutdown"` is identical but forwards with
@@ -364,6 +371,12 @@ whole system from scratch; noted here as a real gap, not yet written (see point 
   (`test_initiator_in_a_cycle_waits_for_its_own_marker_to_return`).
 - Without cycles: the initiator must be a root/source; if it has no input ports, it closes its
   part instantly. Done, tested (`test_a_root_node_with_no_input_ports_closes_instantly`).
+- Control ports are left out of every round, whoever opens it: a command is not the marker of the port that
+  carries it (a round opened by a command starts with no port counted as arrived), the `Supervisor` takes no part
+  in the barrier and never sends one, and a node with a control port must also close the rounds that a peer starts.
+  Done on 2026-09-20 (step 4.5); before it, an initiator whose only input was the channel of the `Supervisor` opened
+  its round, forwarded the marker and waited for ever, and a node with a data port and a command port never closed
+  a round that started elsewhere.
 - **Not yet done**: checking that the node chosen as initiator can actually reach every other node
   (the graph is strongly connected from that node) before it is ever allowed to be used as one:
   no validation code exists for this today; a module author enabling `SNAPSHOT_INTERVAL_SECS` or
@@ -537,7 +550,8 @@ conformance status). What follows is the design as built.
   delivered. What it sends after a `CLOSE` can only repeat what it delivered before, or be its own fault, so
   the consumer's state must not change. The `Supervisor`'s readers deliver what follows, since a node that
   closed its channel may be relaunched and must be heard. A relaunched node starts the readers of the ports that had already closed in this mode
-  (done on 2026-09-20, with `closed_ports`). The port leaves the barrier's pending set (done on 2026-09-20, 4.4). This replaces
+  (done on 2026-09-20, with `closed_ports`). The port leaves the barrier's pending set (done on 2026-09-20, 4.4). Control ports are the exception: their reader
+  delivers what follows a `CLOSE`, and the `CLOSE` is neither recorded nor restored (4.5). This replaces
   the marker file proposed before.
 - **`closed_ports`** (decided and done on 2026-09-20) lists the input ports whose `CLOSE` the brain thread had
   processed at the capture, that is, those with a `CLOSE` record at a position at or below `processed_upto`. It is taken
@@ -634,7 +648,7 @@ conformance status). What follows is the design as built.
        it: the three incarnations processed all 800 messages exactly once, and from each kept
        checkpoint plus the log the state of the last checkpoint is reproduced, order-sensitive hash
        included. The first segment of the log had been pruned by then, as it should.
-  4. `CLOSE` handling, in four pieces (proposed 2026-09-20; the details of each are settled before it is built):
+  4. `CLOSE` handling, in five pieces (four proposed on 2026-09-20 and a fifth found while doing the fourth; the details of each are settled before it is built):
      - 4.1 A halt sends no `CLOSE`. **Done 2026-09-20**: `stop_threads` takes `close`, and `run()` stops with
        `close=False` after a halt; a stop that is a finish for good keeps the default. Three new tests in the
        words of the guarantee (an ordered halt leaves a channel that ends with the marker, a stop without
@@ -687,6 +701,22 @@ conformance status). What follows is the design as built.
        `{in2: [60, 70]}`); the relaunched consumer restores it, finds `in2` closed from the log, and its second
        round closes as it opens (checkpoint 1, both ports closed). That run also checks the checkpoint route of
        `closed_ports` end to end, which the run of 4.3 could not.
+     - 4.5 Control ports, found with a real run while doing 4.4 and agreed on 2026-09-20. **Done 2026-09-20**:
+       `CONTROL_PORTS` names the input ports that carry only commands. They are left out of the pending ports in
+       every round, their reader delivers what follows a `CLOSE`, the `CLOSE` is not recorded in `closed_ports` and
+       replay does not restore it, and a name that is not an input port is refused. Eight new tests in the words of the
+       guarantees (an initiator whose only input is a control port closes its round when it is triggered; a control
+       port takes no part in a round that a peer starts; an initiator with a data port and a control port waits only
+       for the data port; a `CLOSE` on a control port changes nothing; the port keeps delivering after a `CLOSE`; it is
+       not restored as closed after a crash; the trigger of a `Supervisor` relaunched after a recovery still arrives;
+       the declaration is validated), checked against seven mutants, one of them the alternative of leaving the port
+       out only of the rounds that a command opens, and one that needs two defects together. Checked with a real
+       `debasher_exec` run of a real `Supervisor`, an initiator and a consumer: a person writes `start_snapshot` into the
+       manual trigger port, and the initiator writes its checkpoint at once (before, only the consumer did, and the
+       initiator's round closed only when the `Supervisor` stopped and said `CLOSE`); then the `Supervisor` stops,
+       is relaunched by hand, and the `shutdown` that a person writes now reaches the initiator, which halts with the
+       consumer, each with checkpoints 0 and 1 (before, the `shutdown` was dropped and the program never halted). It
+       was the first real run of the trigger path of the `Supervisor`.
   5. G5: sequence numbers, deduplication and detection of gaps.
   6. The chaos test of the Contract.
 
@@ -758,6 +788,11 @@ in the barrier as a business node.)
   `start_snapshot`/`shutdown` to every configured initiator when triggered (manually, or by
   `on_node_permanently_failed`, see below). Empty by default: a `Supervisor` doing pure monitoring +
   relaunch, with no snapshot/shutdown-triggering capability at all, is a valid configuration.
+- An initiator that receives its triggers through a trigger port lists the port on which it reads them in
+  `CONTROL_PORTS`. Without it the channel is treated as a data port: the round opens, the marker goes downstream
+  and the initiator waits for ever for a marker from the `Supervisor` (checked with a real `Supervisor`). It is also
+  what keeps the `CLOSE` that a `Supervisor` sends when it stops from closing the channel for good, so that the
+  triggers of one relaunched by hand still arrive.
 - This is a convenience, not the only way to trigger a round: `FBPProcess`'s own opt-in periodic
   self-triggered snapshot (`SNAPSHOT_INTERVAL_SECS`, point 2) and a direct external `INTERACT`
   write into an initiator's own FIFO (e.g. via Talk-to-FIFOs) both remain independent of whether a
@@ -1098,14 +1133,13 @@ under `debasher_exec`, and the chaos test of the Contract.
 
 - The Contract's "Conformance status" lists the verified gaps between the code and its guarantees;
   they come before anything else in this list.
-- **A channel from the `Supervisor` to an initiator, when the initiator declares it as an input port, is
-  treated as a data port.** Found and verified on 2026-09-20 with real fifos: an initiator whose only input is
-  that channel opens its round on `start_snapshot`, forwards the marker downstream and then waits for a marker
-  from the channel for good (it carries only `INTERACT`), so no checkpoint is written. Besides, a `CLOSE` from the
-  `Supervisor` when it stops closes that port for good (its reader drops what follows and a relaunched node
-  restores it as closed), so the triggers of a `Supervisor` relaunched by hand would be dropped. Both point to
-  control ports as a kind of port of their own: not part of the barrier and not closed by a `CLOSE`. To be
-  designed after step 4.
+- **A trigger, `start_snapshot` or `shutdown`, that reaches a node while a round is already open raises a
+  `ValueError` on its brain thread and ends it.** Seen on 2026-09-20 in the code and in an existing test
+  (`test_starting_a_round_while_one_is_already_open_raises`), not yet checked end to end. Now that a `Supervisor`'s
+  triggers reach an initiator, it can happen: for example the `shutdown` of an escalation arriving while a
+  snapshot round is still open, or two periodic triggers close together. What a node should do with a trigger
+  that arrives during a round (queue it, refuse it with a warning, or start the halt when the round closes) is
+  not designed.
 - **`debasher_stop`, `debasher_status` and `debasher_stats` did not see a resident program launched
   without `--sched BUILTIN`: fixed on 2026-09-20, for every program.** Found with real runs:
   `debasher_exec` forced the built-in scheduler for a resident program only in its own memory, while the

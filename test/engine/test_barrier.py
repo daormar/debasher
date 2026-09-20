@@ -491,3 +491,64 @@ def test_a_later_round_after_two_ports_closed_opens_and_closes_without_ending_th
         (0, False, {"marker": "initial"}, {"c": [100]}),
         (1, False, {"marker": "initial"}, {}),
     ]
+
+
+# --- control ports: input ports that carry only commands -------------------------------------
+
+
+class _WithCommands(_BarrierWorker):
+    INPUT_PORTS = ["inf", "commands"]
+    CONTROL_PORTS = ["commands"]
+
+
+class _OnlyCommands(_BarrierWorker):
+    INPUT_PORTS = ["commands"]
+    CONTROL_PORTS = ["commands"]
+
+
+_COMMANDS_OPTS = {"inf": "/dev/null", "commands": "/dev/null", "x": "/dev/null", "y": "/dev/null"}
+_START = {"command": "start_snapshot", "args": {}}
+
+
+def test_an_initiator_whose_only_input_is_a_control_port_closes_its_round_when_it_is_triggered():
+    proc = _OnlyCommands(opts=_COMMANDS_OPTS)
+    _run_brain(proc, [("commands", lib.TYPE_INTERACT, _START)])
+
+    assert [epoch for epoch, *_ in proc.closed_epochs] == [0]
+    for port in ("x", "y"):
+        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False}
+
+
+def test_a_control_port_takes_no_part_in_a_round_that_a_peer_starts():
+    proc = _WithCommands(opts=_COMMANDS_OPTS)
+    # No command has been sent: the round starts elsewhere and reaches this node as a marker.
+    _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
+
+    # It closes with that marker, and keeps no channel state for the control port.
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {})]
+
+
+def test_an_initiator_with_a_data_port_and_a_control_port_waits_only_for_the_data_port():
+    proc = _WithCommands(opts=_COMMANDS_OPTS)
+    _run_brain(proc, [("commands", lib.TYPE_INTERACT, _START)])
+    assert proc._barrier_pending == {"inf"}
+    assert proc.closed_epochs == []
+
+    _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"inf": []})]
+
+
+def test_a_close_on_a_control_port_changes_nothing():
+    proc = _WithCommands(opts=_COMMANDS_OPTS)
+    _run_brain(proc, [_close("commands"), ("inf", lib.TYPE_BARRIER, _ROUND)])
+
+    assert proc._closed_ports == set()
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {})]
+
+
+def test_control_ports_have_to_be_input_ports():
+    class _Bad(_BarrierWorker):
+        CONTROL_PORTS = ["z"]
+
+    with pytest.raises(ValueError, match="CONTROL_PORTS"):
+        _Bad(opts=_FAKE_OPTS)

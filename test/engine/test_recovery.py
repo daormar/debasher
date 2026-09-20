@@ -556,3 +556,45 @@ def test_a_halt_completes_when_the_last_port_it_waits_for_closes(tmp_path):
 
     assert live._halted.is_set()
     assert _read_checkpoint(live, 0)["channel_state"] == {"b": []}
+
+
+class _Commanded(_Fanin):
+    INPUT_PORTS = ["a", "commands"]
+    CONTROL_PORTS = ["commands"]
+
+
+class _OnlyCommands(_Fanin):
+    INPUT_PORTS = ["commands"]
+    CONTROL_PORTS = ["commands"]
+
+
+def test_a_control_port_that_said_close_is_not_restored_as_closed(tmp_path):
+    ports = ("a", "commands")
+    live = _Commanded(opts=_opts(tmp_path, ports))
+    # One Supervisor stopped before the round and another one after it.
+    _process(live, [_close("commands"), _marker("a"), _close("commands")])
+    assert _read_checkpoint(live, 0)["closed_ports"] == []
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path, _Commanded, ports)
+    assert relaunched._closed_ports == set()
+
+
+def test_the_trigger_of_a_supervisor_relaunched_after_a_recovery_still_reaches_the_node(tmp_path):
+    opts = _opts(tmp_path, ("commands",))
+    live = _OnlyCommands(opts=opts)
+    _process(live, [_close("commands")])
+    _crash(live)
+
+    node = _OnlyCommands(opts=opts)
+    runner = threading.Thread(target=node.run, daemon=True)
+    runner.start()
+    try:
+        assert _wait_until(lambda: len(node._reader_threads) == 1)
+        with open(opts["commands"], "w") as w:
+            w.write("\n" + lib.encode_hello() + "\n" + lib.encode_interact("start_snapshot") + "\n")
+        # The round opens and, with nothing else to wait for, closes: its checkpoint is written.
+        assert _wait_until(lambda: os.path.exists(os.path.join(node._checkpoints_dir(), "0.json")))
+    finally:
+        node._halted.set()
+        runner.join(5)

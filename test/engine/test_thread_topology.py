@@ -235,6 +235,25 @@ def test_a_new_incarnation_of_a_finished_writer_never_blocks_on_a_full_pipe(
         receiver.stop_threads(timeout=2)
 
 
+def test_a_control_port_keeps_delivering_after_its_writer_says_close(fifo_path):
+    class _Commanded(_BrainRecorder):
+        CONTROL_PORTS = ["inf"]
+
+    proc = _Commanded(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "w") as w:  # a Supervisor that stopped
+            w.write(lib.encode_close() + "\n")
+        with open(fifo_path, "w") as w:  # and the one that was relaunched by hand
+            w.write("\n" + lib.encode_hello() + "\n" + lib.encode_interact("start_snapshot") + "\n")
+
+        assert _wait_until(lambda: len(proc.items) == 2)
+        assert [item[2] for item in proc.items] == ["CLOSE", "INTERACT"]
+        assert proc._reader_threads["inf"].is_alive()
+    finally:
+        proc.stop_threads(timeout=2)
+
+
 def test_reader_thread_delivers_what_follows_a_close_when_its_class_says_so(fifo_path):
     class _KeepsListening(_BrainRecorder):
         def _drops_after_close(self, tag):

@@ -51,6 +51,13 @@ class FBPProcess(_PortWorker):
     INPUT_PORTS = []
     OUTPUT_PORTS = []
 
+    # The INPUT_PORTS entries that carry only INTERACT commands (from the
+    # Supervisor, or from whoever writes commands into a fifo of this node).
+    # They are read like any other, but take no part in the barrier, in any
+    # round, and a CLOSE on them does not close them: their writer may come
+    # back.
+    CONTROL_PORTS = []
+
     # Name of the OUTPUT_PORTS entry wired to the supervisor's heartbeat
     # channel, if any. A supervisor is optional (0 or 1 per resident
     # program): leave this None to run without one, in which case
@@ -127,6 +134,15 @@ class FBPProcess(_PortWorker):
 
     def _input_ports(self):
         return {port: port for port in self.INPUT_PORTS}
+
+    def _check_declared_ports(self):
+        super()._check_declared_ports()
+        unknown = [port for port in self.CONTROL_PORTS if port not in self.INPUT_PORTS]
+        if unknown:
+            raise ValueError(
+                f"{type(self).__name__}: CONTROL_PORTS names {unknown}, which are not in INPUT_PORTS "
+                f"(got: {list(self.INPUT_PORTS)})"
+            )
 
     def _output_ports(self):
         return {port: port for port in self.OUTPUT_PORTS}
@@ -245,6 +261,11 @@ class FBPProcess(_PortWorker):
     def _closed_at_start(self, tag):
         return tag in self._closed_at_start_ports
 
+    def _drops_after_close(self, tag):
+        # The writer of a control port may come back after saying CLOSE, and
+        # what it sends then must be heard.
+        return tag not in self.CONTROL_PORTS
+
     def _on_arrival(self, tag, envelope, line):
         with self._arrival_lock:
             if self._input_log is None:
@@ -327,6 +348,9 @@ class FBPProcess(_PortWorker):
         channel state. Ports that are closed when a round opens are left
         out of it altogether (see _open_barrier_round).
         """
+        if port_name in self.CONTROL_PORTS:
+            self.log.debug("the writer of control port %r said CLOSE, which changes nothing", port_name)
+            return
         self._closed_ports.add(port_name)
         self.log.debug("port %r was closed by its writer", port_name)
         if port_name in self._barrier_pending:
@@ -381,11 +405,11 @@ class FBPProcess(_PortWorker):
                 continue
             self._send_barrier(out_port, epoch, halt=halt)
 
-        # A port whose writer has finished sends no marker, so the round does
-        # not wait for it. The brain thread's own set decides, in the order of
+        # A control port carries no markers, and a port whose writer has
+        # finished sends no more, so the round does not wait for either. The brain thread's own set decides, in the order of
         # the input log: a CLOSE that the reader threads have already logged
         # but that comes after this item does not count yet.
-        pending = set(self.INPUT_PORTS)
+        pending = set(self.INPUT_PORTS) - set(self.CONTROL_PORTS)
         pending.discard(arrived_port)
         pending -= self._closed_ports
         self._barrier_pending = pending
@@ -502,7 +526,8 @@ class FBPProcess(_PortWorker):
         the brain thread processed them before, so a node that is sensitive
         to how messages from different ports interleave ends where it was.
         A CLOSE record only adds its port to the closed ports, which the
-        checkpoint restored as they were when it captured the node state.
+        checkpoint restored as they were when it captured the node state
+        (a control port is never added, since it is never closed).
         Nothing is logged after a CLOSE, so a DATA record on a port that is
         already closed means that the log or the checkpoint is corrupt, and
         it is an error. The other kinds of item are not replayed. This reads
@@ -511,7 +536,8 @@ class FBPProcess(_PortWorker):
         replayed = 0
         for record in self._input_log.replay(processed_upto):
             if record.envelope.type == TYPE_CLOSE:
-                self._closed_ports.add(record.port)
+                if record.port not in self.CONTROL_PORTS:
+                    self._closed_ports.add(record.port)
                 continue
             if record.envelope.type != TYPE_DATA:
                 continue
