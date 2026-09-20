@@ -8,7 +8,7 @@ The goal is to extend the FBP engine with state (processes with their own lifecy
 
 - **Tolerate the crash of one or more processes without losing work or corrupting the rest of the graph**: a node that goes down is relaunched (by the `Supervisor` or by hand) and returns to the state it would have had without the crash: its latest checkpoint plus a faithful replay of everything it had received since, in the order it processed it. The other nodes keep running, affected only by a brief wait (what exactly they may observe across a peer's crash is specified in the Contract).
 - **Capture consistent snapshots of the whole system on demand**: be able to obtain, at any moment, a coherent picture of the state of every process and of the messages in transit between them, useful both for recovery and for inspecting or auditing what was happening at a given instant.
-- **Shut down and resume a whole workflow in an orderly way**: stop every process of a run in progress and, later, resume from the checkpoints that the shutdown closed, without reprocessing anything.
+- **Shut down and resume a whole workflow in an orderly way**: stop every process of a run in progress and, later, resume from the checkpoints that the shutdown closed, each node returning to the state it had when it stopped.
 - **Detect failures actively, within a bounded time**, without depending on a human noticing that something stopped responding, and without false positives when a process is simply busy with a long operation.
 - **Reconstruct the communication history between processes**: every node keeps a durable log of what it received since its last checkpoint, in the exact order it processed it, so that a relaunched node re-processes what it had already received, in the same order, and then continues with whatever arrived while it was down.
 - **Do all of this without imposing a single language on the graph's processes**, and without requiring additional external infrastructure (databases, coordination services) beyond what the engine and the filesystem already offer.
@@ -127,7 +127,7 @@ Numbered so that this document can cite them; tests and code comments state the 
 - **G3, node recovery**: after a crash, a relaunched node ends in the state it would have had without the crash: its latest checkpoint plus the replay of everything it had received since, in the order it processed it (given the obligations above).
 - **G4, faithful replay**: the message log is one log per node, written when each message arrives, in the order in which the messages are queued and hence processed by the brain thread, across all its input ports, so that replay reproduces that order exactly. A node with several input ports does not have to be insensitive to how their messages interleave.
 - **G5, no duplicates and no silent loss across a crash**: a neighbor that keeps running observes each message of a relaunched node once, not twice, and in order; and if a message is lost anyway, the receiver notices. Mechanism (decided 2026-09-20): each `DATA` carries a sequence number per channel, assigned by the sender; the sender's counters are stored in its checkpoint, so that replay regenerates the same numbers; the receiver drops any `DATA` whose number is not above the last one it accepted from that channel (a duplicate), and treats a jump as a lost message, an error in the sense of G8. The receiver's last numbers are rebuilt from its checkpoint and its log. It relies on determinism: a replay that produced different outputs would reuse numbers for different messages.
-- **G6, consistent snapshots and orderly halt**: while no node crashes during a round, the checkpoints closed by that round form a consistent cut, and after a halt every node resumes from its checkpoint without reprocessing anything. A crash during a round aborts it (mechanism not designed yet, see Loose ends).
+- **G6, consistent snapshots and orderly halt**: while no node crashes during a round, the checkpoints closed by that round form a consistent cut, and after a halt every node resumes in the state it had when it stopped: it loads its checkpoint and replays from its input log only what it processed after capturing it. A crash during a round aborts it (mechanism not designed yet, see Loose ends).
 - **G7, bounded detection**: a crashed node is noticed within `HEARTBEAT_CHECK_INTERVAL_SECS` when its PID is verifiably gone, and within `HEARTBEAT_TIMEOUT_SECS` when it is alive but unhealthy (one of its reader, writer or brain threads died). It is then relaunched up to `MAX_RELAUNCH_ATTEMPTS` times before the escalation of point 4.
 - **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a channel's sequence numbers, a checkpoint with another schema version, a message log over its size cap, an exhausted relaunch budget), the node or the `Supervisor` raises an error that stops the affected part, instead of continuing with silently wrong state. What happens after that stop is manual today; the planned fallback is a coordinated global rollback to the last consistent cut, **not built** (see Future work, point 7).
 
@@ -360,10 +360,13 @@ whole system from scratch; noted here as a real gap, not yet written (see point 
 - A node finishes its execution only after closing its epoch (marker received on every one of its
   input ports), never before. Done: `halt=True` sets `self._halted`, and `run()` blocks on it
   before calling `stop_threads()`.
-- Resumption: relaunch every process with `restore_state()` from that epoch, with no need to
-  replay the log. True by construction, not by a special case: the Startup sequence above always
-  drains the log unconditionally, but for a cleanly halted process there is nothing to replay
-  (nothing arrived on any port after the process stopped reading), so drain is simply a no-op.
+- Resumption: relaunch every process. It is the ordinary Startup sequence above, with no special
+  case for a halt: each node loads the checkpoint that the halt closed and replays its input log
+  after that checkpoint's `processed_upto`. What is replayed is what the node processed between
+  capturing its state and closing the round (the messages that were in transit at the cut, which
+  its checkpoint also holds as `channel_state`) and anything that reached its log after that. The
+  node ends in the state it had when it stopped, and re-executing those messages is deterministic,
+  like any other replay.
 
 ### Checkpoint persistence
 
@@ -471,6 +474,26 @@ Contract's conformance status).
     behind the fragment and bury it in the middle of the file, where replay rejects it. With the
     rule, the fragment stays the torn tail of its segment, every reader thread dies with the same error,
     the heartbeat stops and the `Supervisor` relaunches the node.
+- **Arrival, positions and checkpoint schema (decided 2026-09-20).**
+  - *Arrival hook and lock.* A reader thread no longer puts what it reads on the inbound queue: it
+    calls `_on_arrival(tag, envelope, line)`, with the text exactly as it arrived. The base class
+    puts `(tag, type, payload)` on the queue, so the `Supervisor` does not change. `FBPProcess`
+    overrides it: under one lock it takes the next position and puts `(pos, port, type, payload)`
+    on the queue (from the last piece on it also appends the record to the input log there, before
+    the put), so that position order is processing order. Checked with six reader threads on real
+    fifos and 1500 messages: the positions that the brain thread saw were exactly 1 to 1500 in
+    order, and the test fails when the lock is removed. The brain thread does not take the lock,
+    except to prune.
+  - *What gets a position.* Every queued item (`DATA`, `BARRIER`, `INTERACT`, `CLOSE`), starting at
+    1; only `DATA` is replayed. `HELLO` never reaches the queue. Anything that starts a round from
+    inside the node, such as a snapshot timer, goes through the same hook, so `processed_upto` is
+    always defined; 0 means that nothing had been processed.
+  - *Checkpoint schema.* Version 2 adds `processed_upto`: the position of the item whose processing
+    captured the state (a peer's first marker, or the `INTERACT` that started the round), taken
+    when the round opens and not when it closes. `closed_ports`, `out_seq` and `last_seq` join the
+    same version in their own steps, since the branch is not released. A node restored from a
+    checkpoint numbers after its `processed_upto` (from the last piece on, after the larger of that
+    and the last record of its log). A checkpoint of version 1 is refused.
 - **`CLOSE`**: the reader ends its loop on it and hands it to the brain thread like any other item, so
   it is logged, the port leaves the barrier's pending set, and the heartbeat does not count a reader
   that ended on `CLOSE` as dead. This replaces the marker file proposed before.
@@ -515,9 +538,16 @@ Contract's conformance status).
        process that appends to its log, killed by process group and relaunched three times with the
        engine's own launcher, left 32930 records, consecutive from 1 with intact payloads, and the
        next position was the right one.
-     - 3.2 Positioned arrival: the reader threads assign the position and enqueue under one lock, the
-       brain thread remembers the position of the item it processes, and the checkpoint gets schema
-       version 2 with `processed_upto`. The old log still works.
+     - 3.2 Positioned arrival. **Done 2026-09-20**: the reader threads take the position and queue
+       under one lock, through an arrival hook that the `Supervisor` leaves as it was; the brain
+       thread remembers the position of the item it processes; the checkpoint has schema version 2
+       with `processed_upto`, taken when the round opens; and a restored checkpoint makes the
+       numbering go on after it. The old log still works. 13 new tests, checked against two
+       mutations (without the lock the order of the positions breaks, and taking the position when
+       the round closes fails four of them). Checked with a real `debasher_exec` run of two sources
+       and a fan-in sink with two snapshots and a halt: all 800 messages were processed, the
+       positions were strictly increasing, and in all three checkpoints the saved total equals the
+       sum of what the sink had processed up to `processed_upto`.
      - 3.3 The switch: the log is written at arrival, the brain thread stops logging, replay is by
        position (also with no checkpoint), pruning and the cap are wired in, and the old per-port code
        and its tests are replaced by tests in the words of the guarantees.

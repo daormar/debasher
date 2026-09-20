@@ -42,7 +42,7 @@ class _BarrierWorker(lib.FBPProcess):
     def process_data(self, port_name, packet):
         self.received.append((port_name, packet))
 
-    def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+    def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
         self.closed_epochs.append((epoch, halt, state, channel_buffers))
 
 
@@ -64,7 +64,7 @@ class _OnePort(lib.FBPProcess):
     def capture_state(self):
         return {"marker": "initial"}
 
-    def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+    def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
         self.closed_epochs.append((epoch, halt, state, channel_buffers))
 
 
@@ -78,7 +78,7 @@ class _Root(lib.FBPProcess):
     def capture_state(self):
         return {}
 
-    def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+    def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
         self.closed_epochs.append((epoch, halt, state, channel_buffers))
 
 
@@ -190,11 +190,12 @@ def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
 
 
 def _run_brain(proc, items):
-    # Feeds the items straight into the inbound queue and runs the brain
-    # loop to completion on its own thread: the order in which the brain
-    # sees them is then exactly the order given here.
-    for item in items:
-        proc._inbound_queue.put(item)
+    # Feeds the items through the arrival hook, as a reader thread would, and
+    # runs the brain loop to completion on its own thread: the order in which
+    # the brain sees them is then exactly the order given here.
+    for port, envelope_type, payload in items:
+        line = json.dumps({"type": envelope_type, "payload": payload})
+        proc._on_arrival(port, lib.Envelope(envelope_type, payload), line)
     proc._inbound_queue.put(lib._STOP)
     brain = threading.Thread(target=proc._brain_loop)
     brain.start()
@@ -354,7 +355,7 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair):
         def capture_state(self):
             return {"name": self.opts.get("name")}
 
-        def _on_epoch_closed(self, epoch, halt, state, channel_buffers):
+        def _on_epoch_closed(self, epoch, halt, state, channel_buffers, processed_upto):
             self.closed_epochs.append((epoch, halt, state, channel_buffers))
 
     # A cycle of two nodes: node_a -> node_b -> node_a.

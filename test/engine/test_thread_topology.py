@@ -134,7 +134,8 @@ def test_reader_thread_ends_on_close_and_hands_it_to_the_brain(fifo_path):
 
         assert _wait_until(lambda: not proc._reader_threads["inf"].is_alive())
         assert _wait_until(lambda: len(proc.items) == 2)
-        assert proc.items == [("inf", "DATA", 1), ("inf", "CLOSE", {})]
+        # Every queued item carries its position, from 1, ahead of the port.
+        assert proc.items == [(1, "inf", "DATA", 1), (2, "inf", "CLOSE", {})]
     finally:
         proc.stop_threads(timeout=2)
 
@@ -166,7 +167,7 @@ def test_reader_thread_consumes_blank_lines_and_hello_itself(fifo_path):
             w.write(lib.encode_data(1) + "\n")
 
         assert _wait_until(lambda: len(proc.items) == 1)
-        assert proc.items == [("inf", "DATA", 1)]
+        assert proc.items == [(1, "inf", "DATA", 1)]
     finally:
         proc.stop_threads(timeout=2)
 

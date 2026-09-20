@@ -127,7 +127,7 @@ def test_save_checkpoint_prunes_log_segments_for_dropped_epochs(execdir):
     for epoch in range(4):
         proc._last_epoch = epoch - 1
         proc._log_received_data("inf", f"epoch-{epoch}")
-        proc._save_checkpoint(epoch, {}, {})
+        proc._save_checkpoint(epoch, {}, {}, 0)
 
     remaining = sorted(os.listdir(proc._log_dir("inf")))
     assert remaining == ["2.log", "3.log"]
@@ -207,7 +207,7 @@ def test_message_arriving_after_a_checkpoint_is_logged_under_the_next_epoch(exec
             super().process_data(port_name, packet)
             if packet == "checkpoint":
                 epoch = self._last_epoch + 1
-                self._save_checkpoint(epoch, {}, {})
+                self._save_checkpoint(epoch, {}, {}, 0)
                 self._last_epoch = epoch
 
     fifo_path = str(tmp_path / "in.fifo")
@@ -243,7 +243,7 @@ def test_run_drains_the_message_log_before_starting_threads(execdir):
 
     proc = _Recover(opts={"inf": "/dev/null"})
     proc._last_epoch = -1
-    proc._save_checkpoint(0, {}, {})
+    proc._save_checkpoint(0, {}, {}, 0)
     # Received (and logged) after the checkpoint but before the crash --
     # exactly what a real restart needs to replay.
     proc._last_epoch = 0
