@@ -12,7 +12,10 @@ debasher_list_deblib_pub_funcs debasher_list_proc_names		\
 debasher_get_proc_info debasher_get_verbatim_func_source		\
 debasher_launch_process
 
-python_PYTHON= debasher_runtime_lib.py debasher_prg_lib.py
+python_PYTHON= debasher_runtime_lib.py debasher_runtime_envelope.py	\
+debasher_runtime_transport.py debasher_runtime_inputlog.py		\
+debasher_runtime_fbp.py debasher_runtime_supervisor.py			\
+debasher_prg_lib.py
 
 pkgpython_PYTHON= debasher_knapsack_ga.py
 

@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+import debasher_runtime_inputlog as inputlog
 import debasher_runtime_lib as lib
 
 
@@ -361,18 +362,18 @@ def test_after_a_failed_write_no_reader_thread_can_append_behind_the_fragment(tm
         _send(opts["a"], lib.encode_data("first"))
         assert _wait_until(lambda: node.seen == [("a", "first")])
 
-        real_write_all = lib._write_all
+        real_write_all = inputlog._write_all
 
         def failing_write_all(fd, data):
             os.write(fd, data[: len(data) // 2])
             raise OSError(errno.ENOSPC, "No space left on device")
 
-        monkeypatch.setattr(lib, "_write_all", failing_write_all)
+        monkeypatch.setattr(inputlog, "_write_all", failing_write_all)
         _send(opts["a"], lib.encode_data("torn"))
         assert _wait_until(lambda: not node._reader_threads["a"].is_alive())
 
         # The fault is gone, but the other port's reader is refused as well.
-        monkeypatch.setattr(lib, "_write_all", real_write_all)
+        monkeypatch.setattr(inputlog, "_write_all", real_write_all)
         _send(opts["b"], lib.encode_data("behind the fragment"))
         assert _wait_until(lambda: not node._reader_threads["b"].is_alive())
     finally:

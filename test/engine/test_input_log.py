@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+import debasher_runtime_inputlog as inputlog
 import debasher_runtime_lib as lib
 
 ENGINE_DIR = str(Path(__file__).resolve().parents[2] / "engine")
@@ -510,19 +511,19 @@ def test_a_failed_write_refuses_every_later_append_and_leaves_a_torn_tail(tmp_pa
     log = _new_log(tmp_path)
     _fill(log, 3)
 
-    real_write_all = lib._write_all
+    real_write_all = inputlog._write_all
 
     def failing_write_all(fd, data):
         os.write(fd, data[: len(data) // 2])
         raise OSError(errno.ENOSPC, "No space left on device")
 
-    monkeypatch.setattr(lib, "_write_all", failing_write_all)
+    monkeypatch.setattr(inputlog, "_write_all", failing_write_all)
     with pytest.raises(OSError):
         log.append("inf", _data("lost"))
 
     # Whatever the cause was, it is gone now: the log still refuses, so nothing can
     # land behind the fragment.
-    monkeypatch.setattr(lib, "_write_all", real_write_all)
+    monkeypatch.setattr(inputlog, "_write_all", real_write_all)
     with pytest.raises(RuntimeError, match="no more records"):
         log.append("inf", _data("refused"))
     assert not (tmp_path / "log" / "1.log").read_bytes().endswith(b"\n")

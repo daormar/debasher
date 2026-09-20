@@ -64,12 +64,12 @@ debasher::_get_fifo_mirror_filename()
 ########
 # Refuses a fifo declared with --mirror when the program is a resident
 # one. Resident processes exchange messages through their own runtime
-# (engine/debasher_runtime_lib.py), which keeps its own message log and
-# expects to talk to its neighbors directly; a mirror tap between a
-# writer and the real fifo is not part of that design (it re-frames the
-# traffic line by line and holds the real fifo's write end itself), so it
-# is refused when the program is loaded instead of being left to
-# misbehave while the program runs.
+# (engine/debasher_runtime_lib.py and the modules behind it), which keeps
+# its own input log and expects to talk to its neighbors directly; a
+# mirror tap between a writer and the real fifo is not part of that
+# design (it re-frames the traffic line by line and holds the real
+# fifo's write end itself), so it is refused when the program is loaded
+# instead of being left to misbehave while the program runs.
 #
 # $1 - Name of the public function that received --mirror, for the error
 #      message.

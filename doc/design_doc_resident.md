@@ -211,16 +211,23 @@ implemented**). The reader still never looks at `payload`.
 - The supervisor never sees a `BARRIER`: it does not take part in the barrier protocol (point 2), it
   only speaks `INTERACT`.
 
-## 2. Base class `FBPProcess`: DONE, implemented and tested (`engine/debasher_runtime_lib.py`)
+## 2. Base class `FBPProcess`: DONE, implemented and tested (`engine/debasher_runtime_fbp.py`)
 
-- **Where the code lives**: `engine/debasher_runtime_lib.py` (already `python_PYTHON`-installed
-  per `engine/Makefile.am`, already the intended home for this: today it only holds
-  `DEBASHER_SHUTDOWN_TOKEN`, a Python mirror of the Bash constant, because the advanced
-  inter-process communication layer it was meant for, the envelope and everything built on it,
-  hadn't been designed yet). `FBPProcess`, `Supervisor` and the envelope helpers (point 1) all go
-  there, one single library file, not a separate one. A resident process's heredoc does
-  `from debasher_runtime_lib import FBPProcess` (or `Supervisor`) directly, no source gets
-  prepended into the heredoc itself.
+- **Where the code lives**: `engine/debasher_runtime_lib.py` is the module that a resident
+  process's heredoc imports (`from debasher_runtime_lib import FBPProcess`, or `Supervisor`), and no
+  source gets prepended into the heredoc itself. It began as the one file that held all of the code,
+  and on 2026-09-20 the code was split (a pure move, checked line by line, with no change of
+  behavior) into modules of their own, one layer each, where every module imports only from the ones
+  before it: `debasher_runtime_envelope.py` (the wire format of point 1),
+  `debasher_runtime_transport.py` (argv parsing, the fifo endpoints and `_PortWorker`),
+  `debasher_runtime_inputlog.py` (`_InputLog`, point 3), `debasher_runtime_fbp.py` (`FBPProcess`) and
+  `debasher_runtime_supervisor.py` (`Supervisor`, point 4). `debasher_runtime_lib.py` keeps
+  `DEBASHER_SHUTDOWN_TOKEN`, a Python mirror of the Bash constant, and re-exports every name that it
+  offered before, so nothing that imports it depends on the layout. All of them are
+  `python_PYTHON`-installed per `engine/Makefile.am`, in the same directory, which is the one that the
+  heredoc's `sys.path` line (see below) already adds. A test that patches a name has to patch the
+  module that looks it up (for example `_write_all` in `debasher_runtime_inputlog`), since a patch on
+  the re-exporting module changes nothing for the code that was moved.
   - **Known gap, fixed**: `import debasher_runtime_lib` used to only work from a Python file built
     through `engine/Makefile.am`'s `.py:` suffix rule, which prepends
     `sys.path.append("$(pythondir)")`/`sys.path.append("$(pkgpythondir)")`. A heredoc runs as
@@ -384,7 +391,7 @@ whole system from scratch; noted here as a real gap, not yet written (see point 
 - The process always looks for the most recent checkpoint on startup; it does not distinguish
   "first time" from "recovery" by itself. Done, see the Startup sequence above.
 
-## 3. Input log: DONE, implemented and tested (`engine/debasher_runtime_lib.py`)
+## 3. Input log: DONE, implemented and tested (`engine/debasher_runtime_inputlog.py` and `engine/debasher_runtime_fbp.py`)
 
 The input log replaces an earlier design that logged a message only when the brain thread reached it.
 That design had four verified faults: everything waiting in the inbound queue (which has no limit) was
@@ -590,7 +597,7 @@ is loaded (`debasher::_check_fifo_mirror_allowed`, called by `define_fifo_opt` a
   directory, and removes the tap/shim mechanism from this feature entirely: no separate process,
   no fifo-open/close races, nothing to force on via `--mirror`.
 
-## 4. `Supervisor` class: DONE, implemented and tested (`engine/debasher_runtime_lib.py`)
+## 4. `Supervisor` class: DONE, implemented and tested (`engine/debasher_runtime_supervisor.py`)
 
 (Reuses `FBPProcess`'s thread-per-port pattern via a shared base, point 2, but does not take part
 in the barrier as a business node.)
