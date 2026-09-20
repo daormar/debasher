@@ -1233,6 +1233,39 @@ under `debasher_exec`, and the chaos test of the Contract.
   studied how to combine it with checkpointing, and for Python processes the mechanism could be
   entirely different. Noted here so it is not forgotten and can be tackled later, so that
   `resident` programs have as much expressiveness as possible.
+- **Fan-out and fan-in sized from the command line (the `ith` convention of general programs).**
+  General programs can already write a process whose number of connections comes from an option of the
+  command line, and `data/programs/debasher_dynamic_fanout_fifos.sh` is the reference for the fifo
+  version. `dispatch` documents its output family once, as `-outfith`, and defines `-outf0` to
+  `-outf<w-1>` in a loop over its `-w` option (fan-out). `worker` is an array process of `w` tasks, and
+  task `i` reads `-outf<i>` of `dispatch`. `aggregate` documents `-indith` and defines `-ind0` to
+  `-ind<w-1>` from the tasks of `worker` (fan-in). The engine's check of option names recognizes the
+  family (`debasher::_actual_opt_is_ith_instance`), and the API and the frontend model it
+  (`countSourceOptionId`, `_is_fanout_label`, `isFanoutOption`). The goal is that a resident node can have
+  as many input or output ports as a command-line option says (`-w`, for example), written the same way.
+  The topology stays fixed and is known before the run starts: every process and every connection is
+  defined up front, and the engine schedules them as in any other program. Only how many there are comes
+  from the option. That is what sets it apart from the item above, where processes are launched while the
+  program is running. What follows is reasoned from the code, nothing of it is built or tried:
+  - Ports. `INPUT_PORTS` and `OUTPUT_PORTS` are class constants, so a node with a family would compute
+    its port lists from its options when it is built (`_input_ports()` and `_output_ports()` are methods
+    already, and the `Supervisor` builds its own from `NODE_PORTS`). The names must be the same in every
+    incarnation, because `closed_ports` and the sequence numbers of G5 in the checkpoint are keyed by
+    port name: a relaunch that finds another set of ports should fail loudly.
+  - The barrier, `CLOSE` and the input log do not depend on how many ports there are, since they already
+    loop over the declared lists: a fan-in node is the case of several pending ports that the tests
+    cover, and a fan-out node already forwards the marker on every output port.
+  - Routing is part of `process_data`. Which output port a fan-out node picks for a packet has to be
+    deterministic (a function of the packet, or of a counter kept in the node state), or a replay would
+    send a message to another worker than the first time and the numbers of that channel would label
+    different messages. The dispatcher of the general example does it that way (the block index modulo
+    `w`, in `dynamic_fanout_dispatcher.py`); a choice by worker load would break the guarantees.
+  - Array processes. The `w` workers are `w` nodes, `(process_name, task_idx)`, each with its own
+    directory, checkpoints and input log, and the `Supervisor` already accepts such names in `NODE_PORTS`.
+    Not known: whether `define_opt_from_proc_task_out` works for the fifos of resident nodes, how the
+    script generation and the frontend would express it for resident processes, and how the chaos test
+    would cover it (a fan-out to several workers and a fan-in from them are two more shapes for its
+    reference program).
 - **Auxiliary script to reset checkpoints across a whole topology**: deleting (or moving) every
   node's checkpoint folder before launching forces a clean start with no special-case code needed
   anywhere (point 2's Startup sequence subsection); the script itself is not written yet.
