@@ -598,3 +598,19 @@ def test_the_trigger_of_a_supervisor_relaunched_after_a_recovery_still_reaches_t
     finally:
         node._halted.set()
         runner.join(5)
+
+
+def test_a_node_that_has_halted_starts_no_more_rounds(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(
+        live,
+        [
+            ("a", lib.TYPE_BARRIER, _round(0, halt=True)),
+            ("b", lib.TYPE_BARRIER, _round(0, halt=True)),  # the halt closes here
+            ("trigger", lib.TYPE_INTERACT, {"command": "start_snapshot", "args": {}}),
+        ],
+    )
+
+    assert live._halted.is_set()
+    assert live._barrier_epoch is None
+    assert not os.path.exists(os.path.join(live._checkpoints_dir(), "1.json"))

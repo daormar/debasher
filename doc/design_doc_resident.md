@@ -49,8 +49,9 @@ The precise meaning of the words this document uses, in the order in which they 
 ### Rounds and checkpoints
 
 - **node state** (estado del nodo): what `capture_node_state()` returns and `restore_node_state()` takes back: the serializable logical state of a node, complete enough for `restore_node_state()` to rebuild it exactly. Runtime resources (connections, file handles) are not part of it; `initialize_runtime()` rebuilds them. In the checkpoint it is the field `node_state`, which sits beside the `channel_state` and beside the engine's own bookkeeping (`processed_upto`, `closed_ports` and the sequence numbers). It was called `state` until 2026-09-20, and its hooks were `capture_state()` and `restore_state()`.
-- **round** (ronda): one run of the barrier protocol (Chandy-Lamport) over the whole program. At a node it opens when the node captures its state, on the first marker of the round or on the `INTERACT` that starts it, and it closes when the marker has arrived on every input port. An input port whose marker has not yet arrived is **pending** (pendiente). A port whose writer has said `CLOSE` is never pending: a finished writer sends no more markers, so the round does not wait for it.
-- **epoch** (época): the number that identifies a round. Markers carry it, and it names the checkpoint file (`<epoch>.json`). An initiator numbers a new round as the last epoch it closed plus one.
+- **round** (ronda): one run of the barrier protocol (Chandy-Lamport) over the whole program. At a node it opens when the node captures its state, on the first marker of the round or on the `INTERACT` that starts it, and it closes when the marker has arrived on every input port. An input port whose marker has not yet arrived is **pending** (pendiente). A port whose writer has said `CLOSE` is never pending: a finished writer sends no more markers, so the round does not wait for it. Rounds do not overlap at a node: a newer round that reaches it replaces an older one that is open (see abandoned round).
+- **epoch** (época): the number that identifies a round. Markers carry it, and it names the checkpoint file (`<epoch>.json`). An initiator numbers a new round as the last epoch it closed or abandoned plus one.
+- **abandoned round** (ronda abandonada): a round that a node drops, without writing a checkpoint for its epoch, because a newer round reached it while it was open. The nodes that had already closed it keep their checkpoint, so that epoch has no complete cut; the round that replaced it is the one that completes.
 - **capture** (captura): the moment at which a node calls `capture_node_state()` because a round opens. The node state that goes into the checkpoint is the one at that moment, not the one at the close of the round.
 - **snapshot** (instantánea): a round with `halt` false: every node saves a checkpoint and keeps running (the name of the operation, as in `start_snapshot`). In the literature the word also names what such a round records, the node states together with the channel states; here that result is the consistent cut. A **halt** (parada ordenada) is a round with `halt` true: each node stops after saving its checkpoint, and the program is resumed later by relaunching every node, which loads it.
 - **in transit** (en tránsito): a `DATA` message sent before its sender captured its state and received after its receiver captured its own.
@@ -144,6 +145,7 @@ Numbered so that this document can cite them; tests and code comments state the 
 - **Not covered**: non-deterministic `process_data`, effects on external systems beyond "idempotent if repeated", Slurm, machine failure.
 - **`--mirror`** (the debugging tap of a fifo, behind the frontend's "Watch FIFO") is not available in resident programs: declaring it aborts the load of the program, before anything is launched (decided and done on 2026-09-20). Resident processes keep their own input log.
 - **A node that has finished for good** takes no part in later rounds, so the consistent cut of an epoch that starts after it finished has no checkpoint of that node: its channel to the others is empty and its last state is its final one. Localized recovery does not need it; a global rollback would have to treat it (see Future work, point 7).
+- **A round that a newer one replaces** leaves the nodes that had not closed it without a checkpoint for its epoch, so that epoch has no complete cut. The round that replaced it does complete, at every node it reaches, and that is the cut that counts; localized recovery never uses a cut. It holds if the initiators start the same epoch (see Loose ends). Rounds started closer together than they take to complete keep replacing each other, and none completes until they stop, so the period of periodic snapshots has to be longer than a round.
 - **A node that crashes again right after every relaunch** is not retried forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and the escalation of point 4 applies.
 
 ### Acceptance: how reliability is shown
@@ -167,6 +169,7 @@ Each one was verified by running the real classes, not only by reading the code.
 - **G7 was partly violated, fixed on 2026-09-20 (step 4).** A `FBPProcess` whose input writer sent `CLOSE` ended that reader thread and then stopped sending heartbeats, so a healthy consumer whose producer finished for good would have been declared down (measured with real runs: from the `CLOSE` on, the health check that the heartbeat sends on never said healthy again, and with a slow brain the gap opened while the brain still had a backlog before the `CLOSE`). Now the reader keeps reading after a `CLOSE`, so the heartbeat needs no special case (checked with a real `debasher_exec` run: the health check stayed true until the end of the run, 26 s after the `CLOSE`). A crash of the producer never did it: the reader stays, which the real run confirmed. The `Supervisor.run()` hang with a `MANUAL_TRIGGER_PORT` was fixed on 2026-09-20 (step 2), with a regression test.
 - **G6 was violated when a writer had finished for good, fixed on 2026-09-20 (step 4).** A round waited for the marker of a port whose writer had said `CLOSE`, which never comes, and the marker of the next round ended the brain thread with a `ValueError`. Measured with the real class on a node of three ports: round 0 open for good waiting for a and c, the brain thread dead at the marker of epoch 1, no checkpoint written. Now a closed port is not pending (point 3), and a real `debasher_exec` run of two producers that finish at different moments and a consumer that is killed and relaunched closes its rounds and recovers.
 - **A trigger from the `Supervisor` did not close the initiator's round, fixed on 2026-09-20 (step 4.5).** The channel from the `Supervisor` was read as a data port, so the initiator waited for a marker that never comes, and the `CLOSE` that a stopping `Supervisor` sends closed the channel for good, dropping the triggers of one relaunched by hand. Both checked with real fifos and then with a real `Supervisor`. Now the initiator lists that channel in `CONTROL_PORTS` (point 2).
+- **A trigger, or a marker of another epoch, that reached a node with a round open ended its brain thread, fixed on 2026-09-20 (step 4.6).** Both raised a `ValueError` that nothing caught. Measured with real processes: an initiator that is a source accepts two `start_snapshot` in a row, since each of its rounds closes at once, and the node downstream, with its round 0 still open, died on the marker of round 1 and never wrote a checkpoint. Now a newer round replaces the older one (point 2).
 - **Peer reconnection** (point 5): designed there, nothing implemented; it is the mechanism behind G3 and G5 across a peer's crash.
 
 ## 1. Control envelope
@@ -377,6 +380,15 @@ whole system from scratch; noted here as a real gap, not yet written (see point 
   Done on 2026-09-20 (step 4.5); before it, an initiator whose only input was the channel of the `Supervisor` opened
   its round, forwarded the marker and waited for ever, and a node with a data port and a command port never closed
   a round that started elsewhere.
+- Rounds do not overlap at a node (done on 2026-09-20, step 4.6). A marker of a newer epoch that reaches a node while
+  an older round is open replaces it: the older round is abandoned, and the node captures again at the newer marker
+  (a later capture would include messages that the sender had sent after its own, and holding back the port would
+  break the order of the input log) and forwards the newer marker. A halt is never replaced by a snapshot, and a
+  marker of an older epoch, or of a round that is over, is ignored. A trigger that finds a round open does not start
+  another: a `start_snapshot` is ignored, since the round in progress takes the snapshot; a `shutdown` replaces an
+  open snapshot and starts the halt at once; a `shutdown` that finds a halt open, and any trigger once the node has
+  halted, are ignored. Before this, both a marker of another epoch and a trigger raised a `ValueError` that nothing
+  caught, which ended the brain thread.
 - **Not yet done**: checking that the node chosen as initiator can actually reach every other node
   (the graph is strongly connected from that node) before it is ever allowed to be used as one:
   no validation code exists for this today; a module author enabling `SNAPSHOT_INTERVAL_SECS` or
@@ -648,7 +660,7 @@ conformance status). What follows is the design as built.
        it: the three incarnations processed all 800 messages exactly once, and from each kept
        checkpoint plus the log the state of the last checkpoint is reproduced, order-sensitive hash
        included. The first segment of the log had been pruned by then, as it should.
-  4. `CLOSE` handling, in five pieces (four proposed on 2026-09-20 and a fifth found while doing the fourth; the details of each are settled before it is built):
+  4. `CLOSE` handling, in six pieces (four proposed on 2026-09-20, a fifth found while doing the fourth and a sixth while doing the fifth; the details of each are settled before it is built):
      - 4.1 A halt sends no `CLOSE`. **Done 2026-09-20**: `stop_threads` takes `close`, and `run()` stops with
        `close=False` after a halt; a stop that is a finish for good keeps the default. Three new tests in the
        words of the guarantee (an ordered halt leaves a channel that ends with the marker, a stop without
@@ -717,6 +729,18 @@ conformance status). What follows is the design as built.
        is relaunched by hand, and the `shutdown` that a person writes now reaches the initiator, which halts with the
        consumer, each with checkpoints 0 and 1 (before, the `shutdown` was dropped and the program never halted). It
        was the first real run of the trigger path of the `Supervisor`.
+     - 4.6 Rounds that overlap, found while doing 4.5 and agreed on 2026-09-20. **Done 2026-09-20**: a round that finds
+       another open no longer raises. A marker of a newer epoch replaces the open round, which is abandoned, and the node
+       captures at that marker; a halt is not replaced by a snapshot; a marker of an older epoch, or of a round that is over,
+       is ignored; a `start_snapshot` that finds a round open is ignored, a `shutdown` replaces an open snapshot and is
+       ignored if a halt is open, and a node that has halted starts no rounds. Eight new tests in the words of the
+       guarantees, replacing the two that demanded the `ValueError`, checked against ten mutants. Checked with a real
+       `debasher_exec` run of a real `Supervisor`, two initiators, a slow path and a node with two inputs: a person writes two
+       `start_snapshot` half a second apart, and the node with two inputs had round 0 open, waiting for the slow path, when
+       the marker of round 1 from the fast one arrived. Before, its brain thread died with the `ValueError`, it wrote no
+       checkpoint and the program never halted (the other three nodes did). Now it abandons round 0 with a warning, ignores
+       the late marker of round 0, closes round 1 when the slow path's marker arrives (checkpoint 1) and completes the halt
+       (checkpoint 2), and the four nodes finish; the last snapshot has a checkpoint at every node.
   5. G5: sequence numbers, deduplication and detection of gaps.
   6. The chaos test of the Contract.
 
@@ -1133,13 +1157,15 @@ under `debasher_exec`, and the chaos test of the Contract.
 
 - The Contract's "Conformance status" lists the verified gaps between the code and its guarantees;
   they come before anything else in this list.
-- **A trigger, `start_snapshot` or `shutdown`, that reaches a node while a round is already open raises a
-  `ValueError` on its brain thread and ends it.** Seen on 2026-09-20 in the code and in an existing test
-  (`test_starting_a_round_while_one_is_already_open_raises`), not yet checked end to end. Now that a `Supervisor`'s
-  triggers reach an initiator, it can happen: for example the `shutdown` of an escalation arriving while a
-  snapshot round is still open, or two periodic triggers close together. What a node should do with a trigger
-  that arrives during a round (queue it, refuse it with a warning, or start the halt when the round closes) is
-  not designed.
+- **Initiators number their rounds independently.** Each initiator numbers its next round as the last epoch it closed
+  or abandoned plus one, so two initiators whose counters differ (one was down during a round, say) start different
+  epochs for what a person means as one round. A node with inputs from both replaces the lower round with the higher
+  one and then waits for a marker of the higher epoch that the other initiator will not send, so its rounds stay
+  incomplete, with warnings in the log (before the replacement rule the node ended instead). Reasoned from the code,
+  not run. Numbering the rounds from outside, with the epoch in the trigger, would fix it (see Future work, point 7).
+- **A crash during a round** aborts it, and the mechanism is not designed. What exists: a node that comes back has no
+  round open, and the next round of a newer epoch replaces a round that another node was left with open (point 2).
+  A real crash during a round has not been tried.
 - **`debasher_stop`, `debasher_status` and `debasher_stats` did not see a resident program launched
   without `--sched BUILTIN`: fixed on 2026-09-20, for every program.** Found with real runs:
   `debasher_exec` forced the built-in scheduler for a resident program only in its own memory, while the
@@ -1259,3 +1285,13 @@ under `debasher_exec`, and the chaos test of the Contract.
   react to the end of a channel, for example to emit a final result. A hook would have to be called in the order of the input
   log, and replayed, like `process_data`, so that the state a module builds from it is the one it would have had without a
   crash. Not designed.
+- **A `Supervisor` that serializes rounds** (perhaps never done). It would track which nodes have reported
+  `checkpoint_saved` for an epoch (today it only logs it), leave out the nodes that finished, and relay a trigger only
+  when the previous round is complete or a time limit has passed; it could also put the epoch in the trigger, so that
+  all the initiators number a round the same. It would avoid rounds that replace each other and would tell which epochs
+  are complete cuts. It would not replace the rule that a newer round replaces an older one at a node, which holds
+  whatever the source of the trigger (a person writing into the fifo of an initiator, a timer, a `Supervisor`
+  relaunched by hand, a node relaunched in the middle of a round). It is doubtful because a manual trigger reaches the
+  `Supervisor` as a command that it relays without interpreting, and serializing means interpreting `start_snapshot`
+  and `shutdown`: how to add that for the triggers that a person writes is not clear, and it would only cover the nodes
+  that report to the `Supervisor`. Not designed.

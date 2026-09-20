@@ -97,11 +97,10 @@ class FBPProcess(_PortWorker):
         # Position of the item whose processing captured the node state of the
         # round in progress (see _current_pos).
         self._barrier_processed_upto = 0
-        # Highest epoch this node has ever closed; -1 means none yet, so
-        # the first round it self-initiates is epoch 0. A restored
-        # checkpoint's epoch must seed this on startup (not yet built,
-        # see the checkpoint-persistence/startup-sequence slices), or a
-        # relaunched node would start renumbering from 0 again.
+        # Highest epoch this node has closed or abandoned; -1 means none
+        # yet, so the first round it self-initiates is epoch 0. run() seeds
+        # it from the restored checkpoint, or a relaunched node would start
+        # renumbering from 0 again.
         self._last_epoch = -1
 
         # The input ports whose writer has said CLOSE, as far as the brain
@@ -323,17 +322,45 @@ class FBPProcess(_PortWorker):
         self.log.debug("heartbeat thread stopped")
 
     def _on_barrier(self, port_name, payload):
+        """
+        A marker settles its port in the round it belongs to. Rounds do not
+        overlap on a node: when a marker of a newer epoch arrives while an
+        older round is open, the newer round replaces it (see
+        _abandon_barrier_round), unless the older one is a halt and the newer
+        one is not, since a halt is never given up for a snapshot. A marker
+        of an older epoch, or of one that this node has closed or abandoned,
+        is stale and is ignored.
+        """
         epoch = payload["epoch"]
         halt = payload["halt"]
 
         if self._barrier_epoch is None:
+            if epoch <= self._last_epoch:
+                self.log.warning(
+                    "ignoring the marker of round %s on port %r: that round is over", epoch, port_name
+                )
+                return
+            self._open_barrier_round(epoch, halt, arrived_port=port_name)
+        elif epoch < self._barrier_epoch:
+            self.log.warning(
+                "ignoring the marker of round %s on port %r: round %s replaced it",
+                epoch,
+                port_name,
+                self._barrier_epoch,
+            )
+            return
+        elif epoch > self._barrier_epoch:
+            if self._barrier_halt and not halt:
+                self.log.warning(
+                    "ignoring the marker of round %s on port %r: the halt of round %s is open",
+                    epoch,
+                    port_name,
+                    self._barrier_epoch,
+                )
+                return
+            self._abandon_barrier_round(replaced_by=epoch)
             self._open_barrier_round(epoch, halt, arrived_port=port_name)
         else:
-            if epoch != self._barrier_epoch:
-                raise ValueError(
-                    f"{type(self).__name__}: got a BARRIER for epoch {epoch!r} on port "
-                    f"{port_name!r} while epoch {self._barrier_epoch!r} is still open"
-                )
             self._barrier_pending.discard(port_name)
 
         if not self._barrier_pending:
@@ -377,15 +404,24 @@ class FBPProcess(_PortWorker):
         input port has closed yet at this point, unlike the peer-
         triggered case in _on_barrier, so every declared input port
         (including this node's own, if a cycle loops back to it) starts
-        out pending -- the initiator only closes its part once the
+        out pending, and the initiator only closes its part once the
         marker it just sent comes back around, the same as any other
         node would.
+
+        A trigger that finds a round open does not start another one. A
+        snapshot is ignored, since the round in progress takes it. A
+        shutdown replaces an open snapshot and starts the halt at once, and
+        is ignored if a halt is already open. A node that has halted starts
+        no more rounds.
         """
+        if self._halted.is_set():
+            self.log.warning("ignoring a trigger: this node has already halted")
+            return
         if self._barrier_epoch is not None:
-            raise ValueError(
-                f"{type(self).__name__}: asked to start a new barrier round while "
-                f"epoch {self._barrier_epoch!r} is still open"
-            )
+            if not halt or self._barrier_halt:
+                self.log.warning("ignoring a trigger: round %s is already open", self._barrier_epoch)
+                return
+            self._abandon_barrier_round(replaced_by=self._barrier_epoch + 1)
 
         epoch = self._last_epoch + 1
         self._open_barrier_round(epoch, halt, arrived_port=None)
@@ -415,6 +451,31 @@ class FBPProcess(_PortWorker):
         self._barrier_pending = pending
         self._barrier_channel_buffers = {port: [] for port in pending}
 
+    def _abandon_barrier_round(self, replaced_by):
+        """
+        Drops the round in progress because a newer one reached this node:
+        what it had captured is discarded and no checkpoint is written for
+        its epoch, which this node will not use again. The markers that it
+        already sent stay sent; the nodes downstream drop the round the same
+        way when the newer marker reaches them.
+        """
+        self.log.warning(
+            "abandoning round %s: round %s reached this node while it was open",
+            self._barrier_epoch,
+            replaced_by,
+        )
+        self._last_epoch = max(self._last_epoch, self._barrier_epoch)
+        self._reset_barrier_round()
+
+    def _reset_barrier_round(self):
+        self._barrier_epoch = None
+        self._barrier_halt = False
+        self._barrier_node_state = None
+        self._barrier_pending = set()
+        self._barrier_channel_buffers = {}
+        self._barrier_processed_upto = 0
+        self._barrier_closed_ports = frozenset()
+
     def _close_barrier_round(self):
         epoch = self._barrier_epoch
         halt = self._barrier_halt
@@ -424,13 +485,7 @@ class FBPProcess(_PortWorker):
         closed_ports = self._barrier_closed_ports
 
         self._last_epoch = max(self._last_epoch, epoch)
-        self._barrier_epoch = None
-        self._barrier_halt = False
-        self._barrier_node_state = None
-        self._barrier_pending = set()
-        self._barrier_channel_buffers = {}
-        self._barrier_processed_upto = 0
-        self._barrier_closed_ports = frozenset()
+        self._reset_barrier_round()
 
         self._on_epoch_closed(epoch, halt, node_state, channel_buffers, processed_upto, closed_ports)
 

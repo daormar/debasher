@@ -115,14 +115,6 @@ def test_barrier_is_forwarded_on_every_output_port_when_a_round_opens():
     assert lib.decode_envelope(_out(proc, "y")).payload == {"epoch": 3, "halt": False}
 
 
-def test_mismatched_epoch_while_a_round_is_open_raises():
-    proc = _BarrierWorker(opts=_FAKE_OPTS)
-    proc._on_barrier("a", {"epoch": 0, "halt": False})
-
-    with pytest.raises(ValueError):
-        proc._on_barrier("b", {"epoch": 99, "halt": False})
-
-
 # --- self-triggered rounds (INTERACT start_snapshot/shutdown) -----------
 
 
@@ -156,13 +148,6 @@ def test_epoch_number_increments_across_successive_self_initiated_rounds():
 
     assert [epoch for epoch, *_ in proc.closed_epochs] == [0, 1]
 
-
-def test_starting_a_round_while_one_is_already_open_raises():
-    proc = _BarrierWorker(opts=_FAKE_OPTS)
-    proc._on_interact({"command": "start_snapshot", "args": {}})
-
-    with pytest.raises(ValueError):
-        proc._on_interact({"command": "start_snapshot", "args": {}})
 
 
 def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
@@ -552,3 +537,102 @@ def test_control_ports_have_to_be_input_ports():
 
     with pytest.raises(ValueError, match="CONTROL_PORTS"):
         _Bad(opts=_FAKE_OPTS)
+
+
+# --- rounds that overlap: the newer one replaces the older -------------------------------------
+
+
+class _Counting(_BarrierWorker):
+    """Its node state is how many messages it had processed when it was captured."""
+
+    def capture_node_state(self):
+        return {"n": len(self.received)}
+
+
+def _marker(port, epoch, halt=False):
+    return (port, lib.TYPE_BARRIER, {"epoch": epoch, "halt": halt})
+
+
+def _trigger(command):
+    return ("trigger", lib.TYPE_INTERACT, {"command": command, "args": {}})
+
+
+def test_a_marker_of_a_newer_round_replaces_the_open_one_and_captures_when_it_arrives():
+    proc = _Counting(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("b", lib.TYPE_DATA, 1),
+            _marker("a", 0),  # round 0 opens (one message processed), b is pending
+            ("b", lib.TYPE_DATA, 2),
+            _marker("a", 1),  # round 1 reaches the node: it replaces round 0
+            ("b", lib.TYPE_DATA, 3),
+            _marker("b", 1),
+        ],
+    )
+
+    # Round 0 left nothing behind: the state is the one at the marker of round 1 (two messages),
+    # and only what arrived after that marker is channel state.
+    assert proc.closed_epochs == [(1, False, {"n": 2}, {"b": [3]})]
+    # The marker of round 0 had already gone out, and the one of round 1 follows it.
+    assert [lib.decode_envelope(_out(proc, "x")).payload["epoch"] for _ in range(2)] == [0, 1]
+
+
+def test_a_marker_of_a_newer_snapshot_does_not_replace_an_open_halt():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 0, halt=True), _marker("a", 1)])
+    assert (proc._barrier_epoch, proc._barrier_halt) == (0, True)
+
+    _run_brain(proc, [_marker("b", 0, halt=True)])
+    assert proc.closed_epochs == [(0, True, {"marker": "initial"}, {"b": []})]
+
+
+def test_a_marker_of_a_newer_halt_replaces_an_open_snapshot():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 0), _marker("a", 1, halt=True), _marker("b", 1, halt=True)])
+
+    assert proc.closed_epochs == [(1, True, {"marker": "initial"}, {"b": []})]
+
+
+def test_a_marker_of_a_round_that_was_replaced_or_is_over_is_ignored():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    # b is slow: its marker for round 0 arrives after round 1 has replaced it, and settles nothing.
+    _run_brain(proc, [_marker("a", 0), _marker("a", 1), _marker("b", 0)])
+    assert proc._barrier_epoch == 1
+    assert proc._barrier_pending == {"b"}
+
+    # Round 1 closes with the marker of b. Later markers of rounds 1 and 0 open nothing.
+    _run_brain(proc, [_marker("b", 1), _marker("a", 1), _marker("b", 0)])
+    assert [epoch for epoch, *_ in proc.closed_epochs] == [1]
+    assert proc._barrier_epoch is None
+
+
+def test_a_snapshot_trigger_that_finds_a_round_open_changes_nothing_and_does_not_end_the_node():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 0), _trigger("start_snapshot"), ("b", lib.TYPE_DATA, 5)])
+
+    assert (proc._barrier_epoch, proc._barrier_pending) == (0, {"b"})
+    assert proc.received == [("b", 5)]  # the node went on processing
+    assert lib.decode_envelope(_out(proc, "x")).payload["epoch"] == 0
+    assert proc._outbound_queues["x"].empty()  # and no marker of a second round went out
+
+
+def test_a_shutdown_trigger_that_finds_a_snapshot_open_replaces_it_with_the_halt():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 0), _trigger("shutdown")])
+
+    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (1, True, {"a", "b"})
+    assert [lib.decode_envelope(_out(proc, "x")).payload for _ in range(2)] == [
+        {"epoch": 0, "halt": False},
+        {"epoch": 1, "halt": True},
+    ]
+    _run_brain(proc, [_marker("a", 1, halt=True), _marker("b", 1, halt=True)])
+    assert [(epoch, halt) for epoch, halt, *_ in proc.closed_epochs] == [(1, True)]
+
+
+def test_a_shutdown_trigger_that_finds_a_halt_open_changes_nothing():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 0, halt=True), _trigger("shutdown")])
+
+    assert (proc._barrier_epoch, proc._barrier_pending) == (0, {"b"})
+    assert proc._outbound_queues["x"].qsize() == 1
