@@ -821,7 +821,8 @@ debasher::_define_fifo_task_idx()
 # $4 - (optional) "--mirror": also duplicate everything this process
 #      writes to the fifo into a separate, non-destructively readable
 #      mirror log file (see debasher::_start_fifo_mirror_taps_for_process).
-#      Only meaningful on the process that WRITES to the fifo.
+#      Only meaningful on the process that WRITES to the fifo. Not
+#      allowed in a resident program (the program aborts when loaded).
 #
 # This function should only be defined in one of the processes connected
 # by the FIFO. More specifically, in the process defining an output option.
@@ -839,6 +840,7 @@ debasher::define_fifo_opt()
     local varname=$3
     local mirrored=0
     if [ "$4" = "--mirror" ]; then
+        debasher::_check_fifo_mirror_allowed "define_fifo_opt" || exit 1
         mirrored=1
     fi
 
@@ -907,6 +909,7 @@ debasher::define_fifo_opt_generator()
     local varname=$4
     local mirrored=0
     if [ "$5" = "--mirror" ]; then
+        debasher::_check_fifo_mirror_allowed "define_fifo_opt_generator" || exit 1
         mirrored=1
     fi
 

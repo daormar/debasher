@@ -20,11 +20,14 @@
 #
 # A mirrored fifo (declared with define_fifo_opt/define_fifo_opt_generator's
 # --mirror flag, engine/debasher_lib_opts.sh) lets a fifo's traffic be
-# observed -- or, for a resident program's message log, replayed after a
-# crash -- without stealing data from its real reader: the owning process's
+# observed without stealing data from its real reader: the owning process's
 # own writer argument is transparently redirected to a shim fifo, and the
 # background tap below bridges every line from that shim into both the real
 # fifo (so the real reader is unaffected) and a mirror log file on disk.
+#
+# It is a debugging aid for general programs. Resident programs keep their
+# own message log inside their processes and do not use it: declaring
+# --mirror in one is refused (see debasher::_check_fifo_mirror_allowed).
 #
 # The `--mirror` flag itself, and the DEBASHER_FIFO_MIRRORED bookkeeping it
 # populates, stay defined in debasher_lib_opts.sh (woven into fifo option
@@ -56,6 +59,33 @@ debasher::_get_fifo_mirror_filename()
     local augm_fifoname=$1
 
     echo "$(debasher::_get_fifo_mirror_dir)/${augm_fifoname}.log"
+}
+
+########
+# Refuses a fifo declared with --mirror when the program is a resident
+# one. Resident processes exchange messages through their own runtime
+# (engine/debasher_runtime_lib.py), which keeps its own message log and
+# expects to talk to its neighbors directly; a mirror tap between a
+# writer and the real fifo is not part of that design (it re-frames the
+# traffic line by line and holds the real fifo's write end itself), so it
+# is refused when the program is loaded instead of being left to
+# misbehave while the program runs.
+#
+# $1 - Name of the public function that received --mirror, for the error
+#      message.
+#
+# Returns 0 if mirroring is allowed; otherwise prints an error and
+# returns 1.
+debasher::_check_fifo_mirror_allowed()
+{
+    local funcname=$1
+
+    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        echo "${funcname}: Error, --mirror cannot be used in a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 ########

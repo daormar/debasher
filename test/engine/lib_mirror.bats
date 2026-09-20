@@ -175,3 +175,45 @@ write_to_shim() {
     run cat "${readerout}"
     [ "${output}" = "only" ]
 }
+
+# --- resident programs refuse --mirror -------------------------------------
+#
+# The check happens as soon as the flag is seen, before define_fifo_opt
+# needs any of the process-definition state a real module call provides,
+# so these tests can exercise it directly.
+
+@test "debasher::_check_fifo_mirror_allowed accepts --mirror in a general program" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+
+    run debasher::_check_fifo_mirror_allowed "define_fifo_opt"
+
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_fifo_mirror_allowed rejects --mirror in a resident program and names the caller" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+
+    run debasher::_check_fifo_mirror_allowed "define_fifo_opt"
+
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"define_fifo_opt: Error, --mirror cannot be used in a 'resident' program"* ]]
+}
+
+@test "debasher::define_fifo_opt aborts on --mirror in a resident program" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+
+    run debasher::define_fifo_opt "-outf" "somefifo" optlist --mirror
+
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"define_fifo_opt: Error, --mirror cannot be used in a 'resident' program"* ]]
+}
+
+@test "debasher::define_fifo_opt_generator aborts on --mirror in a resident program" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+
+    run debasher::define_fifo_opt_generator "-outf" "somefifo" 0 optlist --mirror
+
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"define_fifo_opt_generator: Error, --mirror cannot be used in a 'resident' program"* ]]
+}
