@@ -23,6 +23,7 @@ import io
 import sys
 import re
 import os
+import copy
 import json
 import logging
 import queue
@@ -535,23 +536,29 @@ class FBPProcess(_PortWorker):
             if envelope_type == TYPE_DATA:
                 if port_name in self._barrier_pending:
                     # A barrier round is open and this port's marker for
-                    # it hasn't arrived yet: this DATA is in transit from
-                    # before the sender's own snapshot, so it belongs to
-                    # the channel's state, not to normal processing.
-                    self._barrier_channel_buffers[port_name].append(payload)
-                else:
-                    # Logged here, on the brain thread, right before
-                    # process_data() actually runs -- not in the reader
-                    # thread that received it. self._last_epoch is only
-                    # ever advanced on this same brain thread (barrier
-                    # round closing), so reading it here is race-free by
-                    # construction; reading it from a reader thread
-                    # raced against that update in practice (found by
-                    # testing, not reasoning) and could mislabel a
-                    # message with the epoch just before it actually
-                    # closed, making a real replay gap after a crash.
-                    self._log_received_data(port_name, payload)
-                    self.process_data(port_name, payload)
+                    # it hasn't arrived yet: this DATA was sent before
+                    # its sender's own snapshot and arrives after this
+                    # node's, so it is in transit at the cut and part of
+                    # the round's channel state. Only a copy is recorded
+                    # here (taken now, so that process_data() cannot
+                    # alter it through the packet it is handed): the
+                    # message itself is still processed right below,
+                    # like any other and in arrival order.
+                    self._barrier_channel_buffers[port_name].append(
+                        copy.deepcopy(payload)
+                    )
+                # Logged here, on the brain thread, right before
+                # process_data() actually runs, not in the reader
+                # thread that received it. self._last_epoch is only
+                # ever advanced on this same brain thread (barrier
+                # round closing), so reading it here is race-free by
+                # construction; reading it from a reader thread
+                # raced against that update in practice (found by
+                # testing, not reasoning) and could mislabel a
+                # message with the epoch just before it actually
+                # closed, making a real replay gap after a crash.
+                self._log_received_data(port_name, payload)
+                self.process_data(port_name, payload)
             elif envelope_type == TYPE_BARRIER:
                 self._on_barrier(port_name, payload)
             elif envelope_type == TYPE_INTERACT:

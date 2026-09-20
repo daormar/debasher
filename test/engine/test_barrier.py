@@ -1,3 +1,4 @@
+import json
 import os
 import threading
 import time
@@ -184,8 +185,117 @@ def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
     assert "not_a_real_command" in caplog.text
 
 
-# --- integration: buffering + a real cyclic self-return, through real ----
-# --- threads and FIFOs                                                  --
+# --- DATA on a still pending port: processed, and also recorded ---------
+# --- (the brain loop driven directly, no FIFOs or reader threads)   ------
+
+
+def _run_brain(proc, items):
+    # Feeds the items straight into the inbound queue and runs the brain
+    # loop to completion on its own thread: the order in which the brain
+    # sees them is then exactly the order given here.
+    for item in items:
+        proc._inbound_queue.put(item)
+    proc._inbound_queue.put(lib._STOP)
+    brain = threading.Thread(target=proc._brain_loop)
+    brain.start()
+    brain.join(5)
+    assert not brain.is_alive()
+
+
+_ROUND = {"epoch": 0, "halt": False}
+
+
+def test_data_on_a_still_pending_port_reaches_process_data_while_a_round_is_open():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("a", lib.TYPE_BARRIER, _ROUND),  # the round opens, "b" is pending
+            ("b", lib.TYPE_DATA, 5),  # in transit at the cut
+            ("b", lib.TYPE_BARRIER, _ROUND),  # the round closes
+            ("b", lib.TYPE_DATA, 7),
+        ],
+    )
+
+    assert proc.received == [("b", 5), ("b", 7)]
+
+
+def test_data_on_a_still_pending_port_is_also_recorded_as_channel_state():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("a", lib.TYPE_BARRIER, _ROUND),
+            ("b", lib.TYPE_DATA, 5),
+            ("b", lib.TYPE_BARRIER, _ROUND),
+            ("b", lib.TYPE_DATA, 7),  # after the round: not part of it
+        ],
+    )
+
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"b": [5]})]
+
+
+def test_messages_are_processed_in_arrival_order_across_pending_and_settled_ports():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("a", lib.TYPE_BARRIER, _ROUND),  # "a" settles, "b" stays pending
+            ("b", lib.TYPE_DATA, "b1"),
+            ("a", lib.TYPE_DATA, "a1"),
+            ("b", lib.TYPE_DATA, "b2"),
+            ("b", lib.TYPE_BARRIER, _ROUND),
+        ],
+    )
+
+    assert proc.received == [("b", "b1"), ("a", "a1"), ("b", "b2")]
+    # Only what arrived on the pending port is channel state: "a1" came
+    # after "a"'s own marker, so it belongs to the next round.
+    assert proc.closed_epochs[0][3] == {"b": ["b1", "b2"]}
+
+
+def test_process_data_cannot_alter_the_recorded_channel_state():
+    class _Mutating(_BarrierWorker):
+        def process_data(self, port_name, packet):
+            super().process_data(port_name, packet)
+            packet["touched"] = True
+
+    proc = _Mutating(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("a", lib.TYPE_BARRIER, _ROUND),
+            ("b", lib.TYPE_DATA, {"n": 1}),
+            ("b", lib.TYPE_BARRIER, _ROUND),
+        ],
+    )
+
+    assert proc.received == [("b", {"n": 1, "touched": True})]
+    assert proc.closed_epochs[0][3] == {"b": [{"n": 1}]}
+
+
+def test_data_on_a_still_pending_port_is_logged_like_any_other():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [
+            ("a", lib.TYPE_BARRIER, _ROUND),
+            ("b", lib.TYPE_DATA, 5),
+            ("b", lib.TYPE_BARRIER, _ROUND),
+            ("b", lib.TYPE_DATA, 7),
+        ],
+    )
+
+    log_dir = proc._log_dir("b")
+    logged = []
+    for name in sorted(os.listdir(log_dir), key=lambda n: int(n[: -len(".log")])):
+        with open(os.path.join(log_dir, name)) as f:
+            logged.extend(json.loads(line) for line in f if line.strip())
+    assert logged == [5, 7]
+
+
+# --- integration: a real cyclic self-return and a real pending port, ----
+# --- through real threads and FIFOs                                   ---
 
 
 @pytest.fixture
@@ -197,7 +307,7 @@ def fifo_pair(tmp_path):
     return str(a_to_b), str(b_to_a)
 
 
-def test_data_on_a_still_pending_port_is_buffered_not_delivered(tmp_path):
+def test_data_on_a_still_pending_port_is_delivered_and_recorded_through_real_fifos(tmp_path):
     path_a = str(tmp_path / "a.fifo")
     path_b = str(tmp_path / "b.fifo")
     os.mkfifo(path_a)
@@ -230,16 +340,16 @@ def test_data_on_a_still_pending_port_is_buffered_not_delivered(tmp_path):
 
             wb.write(lib.encode_data("in transit") + "\n")
             wb.flush()
-            # give the brain thread a chance to (mis)deliver it if buffering were broken
-            time.sleep(0.05)
-            assert proc.received == []
+            # delivered right away, while "b"'s own marker has still not arrived
+            assert _wait_until(lambda: proc.received == [("b", "in transit")])
+            assert proc._barrier_pending == {"b"}
 
             wb.write(lib.encode_barrier(0) + "\n")
             wb.flush()
             assert _wait_until(lambda: proc.closed_epochs != [])
 
         assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"b": ["in transit"]})]
-        assert proc.received == []
+        assert proc.received == [("b", "in transit")]
     finally:
         # This also closes the writer threads' FIFOs, which is what lets
         # the drain threads' blocking read() calls above return (EOF)
