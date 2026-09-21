@@ -1952,6 +1952,25 @@ crash-and-relaunch smoke test between two `FBPProcess` nodes under
   ended instead). Reasoned from the code, not run. Numbering the rounds from
   outside, with the epoch in the trigger, would fix it (see Future work, section
   7).
+- **A port that only a source writes to never carries a marker.** A round waits
+  for the marker of every input port that is not a control port, and a source is
+  outside the program, so it sends none: the round never closes, the node writes
+  no checkpoint and its input log is not pruned until it reaches
+  `INPUT_LOG_MAX_BYTES`, which is an error. Found on 2026-09-21 and checked with
+  a real run: a node with a data port written from outside and a control port, a
+  `start_snapshot` on the control port, and no checkpoint after 3 s. Declaring
+  the data port in `CONTROL_PORTS` makes the round close, but that is only a
+  workaround, since that list is for ports that carry commands. Two ways are
+  open, not decided, to be discussed: (a) declare such ports apart (a proposed
+  `EXTERNAL_PORTS`, exempt from rounds), so that a round never depends on the
+  outside; (b) require the source to write the marker, which works (checked with
+  a real run: with the source writing the `BARRIER` of epoch 0 into the port,
+  the round closes and the checkpoint is written) but makes rounds depend on the
+  outside: a person writing by hand, or a program that ignores the protocol,
+  leaves the round open, and the source must write the epoch that the initiator
+  chose (see the previous item). They combine: under (a), a marker that a source
+  which knows the protocol writes into an exempt port would be accepted like any
+  other (reasoned from `_on_barrier`, not run).
 - **A crash during a round** aborts it, and the mechanism is not designed. What
   exists: a node that comes back has no round open, and the next round of a
   newer epoch replaces a round that another node was left with open (section 2).
