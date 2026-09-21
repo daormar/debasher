@@ -52,7 +52,7 @@ def test_save_checkpoint_writes_the_expected_json_structure(execdir):
     assert data == {
         "schema_version": lib.FBPProcess.CHECKPOINT_SCHEMA_VERSION,
         "epoch": 3,
-        "processed_upto": 17,
+        "capture_pos": 17,
         "closed_ports": [],
         "node_state": {"marker": "s"},
         "channel_state": {"a": [1, 2]},

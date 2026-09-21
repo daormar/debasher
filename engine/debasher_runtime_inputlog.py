@@ -141,10 +141,10 @@ class _InputLog:
             raise ValueError(f"input log record at {where} lacks pos, port or env: {raw[:80]!r}")
         return pos, obj["port"], _envelope_from_obj(obj["env"], where)
 
-    def recover(self, processed_upto=0):
+    def recover(self, capture_pos=0):
         """
         Reads what earlier incarnations left in the directory and prepares
-        this one to append after it. `processed_upto` is the position that the
+        this one to append after it. `capture_pos` is the position that the
         node's latest checkpoint already reflects (0 if there is none): the
         next position is never at or below it, even if the log holds less, so
         the numbering stays consistent with the checkpoint.
@@ -176,7 +176,7 @@ class _InputLog:
 
         self._segments = [[first_pos, os.path.getsize(path)] for first_pos, path in segments]
         self._total_bytes = sum(size for _, size in self._segments)
-        self._next_pos = max(last_pos, processed_upto) + 1
+        self._next_pos = max(last_pos, capture_pos) + 1
 
     def append(self, port, line):
         """

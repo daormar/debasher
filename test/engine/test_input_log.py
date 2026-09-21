@@ -24,9 +24,9 @@ def _data(payload):
     return lib.encode_data(payload)
 
 
-def _new_log(tmp_path, max_bytes=BIG, segment_bytes=BIG, processed_upto=0):
+def _new_log(tmp_path, max_bytes=BIG, segment_bytes=BIG, capture_pos=0):
     log = lib._InputLog(str(tmp_path / "log"), max_bytes, segment_bytes)
-    log.recover(processed_upto)
+    log.recover(capture_pos)
     return log
 
 
@@ -181,17 +181,17 @@ def test_recover_continues_after_the_last_complete_record(tmp_path):
 
 
 def test_recover_never_numbers_at_or_below_the_position_a_checkpoint_reflects(tmp_path):
-    empty = _new_log(tmp_path, processed_upto=50)
+    empty = _new_log(tmp_path, capture_pos=50)
     assert empty.next_pos == 51
     _fill(empty, 1)
     assert _segments(tmp_path) == ["51.log"]
     empty.close()
 
     # A log that holds less than the checkpoint reflects: numbering goes on after the checkpoint.
-    behind = _new_log(tmp_path, processed_upto=80)
+    behind = _new_log(tmp_path, capture_pos=80)
     assert behind.next_pos == 81
     # A log that holds more: numbering goes on after the log.
-    assert _new_log(tmp_path, processed_upto=10).next_pos == 52
+    assert _new_log(tmp_path, capture_pos=10).next_pos == 52
 
 
 def test_recover_can_only_run_once_and_before_any_append(tmp_path):
@@ -379,7 +379,7 @@ def test_a_log_that_ends_below_the_given_position_is_not_an_error(tmp_path):
 
     assert _positions(tmp_path, 10) == []
 
-    later = _new_log(tmp_path, processed_upto=10)
+    later = _new_log(tmp_path, capture_pos=10)
     assert later.next_pos == 11
     _fill(later, 2)
     assert _positions(tmp_path, 10) == [11, 12]

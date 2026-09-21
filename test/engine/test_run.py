@@ -58,7 +58,7 @@ def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
     proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [])
     proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [])
 
-    epoch, node_state, processed_upto, closed_ports = proc._load_latest_checkpoint()
+    epoch, node_state, capture_pos, closed_ports = proc._load_latest_checkpoint()
     assert epoch == 1
     assert node_state == {"marker": "new"}
 

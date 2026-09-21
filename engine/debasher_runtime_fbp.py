@@ -96,7 +96,7 @@ class FBPProcess(_PortWorker):
         self._barrier_closed_ports = frozenset()
         # Position of the item whose processing captured the node state of the
         # round in progress (see _current_pos).
-        self._barrier_processed_upto = 0
+        self._barrier_capture_pos = 0
         # Highest epoch this node has closed or abandoned; -1 means none
         # yet, so the first round it self-initiates is epoch 0. run() seeds
         # it from the restored checkpoint, or a relaunched node would start
@@ -167,9 +167,9 @@ class FBPProcess(_PortWorker):
         self._open_fifos()
 
         checkpoint = self._load_latest_checkpoint()
-        processed_upto = 0
+        capture_pos = 0
         if checkpoint is not None:
-            epoch, node_state, processed_upto, closed_ports = checkpoint
+            epoch, node_state, capture_pos, closed_ports = checkpoint
             self.restore_node_state(node_state)
             self._last_epoch = epoch
             self._closed_ports = set(closed_ports)
@@ -179,8 +179,8 @@ class FBPProcess(_PortWorker):
 
         self.initialize_runtime()
 
-        self._open_input_log(processed_upto)
-        self._replay_input_log(processed_upto)
+        self._open_input_log(capture_pos)
+        self._replay_input_log(capture_pos)
 
         self.start_threads()
         self._halted.wait()
@@ -192,7 +192,7 @@ class FBPProcess(_PortWorker):
 
     def _load_latest_checkpoint(self):
         """
-        Returns (epoch, node_state, processed_upto, closed_ports) for the highest-epoch
+        Returns (epoch, node_state, capture_pos, closed_ports) for the highest-epoch
         checkpoint in this process's checkpoints directory, or None if there isn't one yet
         (a brand new process, or one that has never closed an epoch).
         Raises ValueError if the checkpoint's schema version doesn't
@@ -229,7 +229,7 @@ class FBPProcess(_PortWorker):
         return (
             checkpoint["epoch"],
             checkpoint["node_state"],
-            checkpoint["processed_upto"],
+            checkpoint["capture_pos"],
             checkpoint["closed_ports"],
         )
 
@@ -439,7 +439,7 @@ class FBPProcess(_PortWorker):
         self._barrier_epoch = epoch
         self._barrier_halt = halt
         self._barrier_node_state = self.capture_node_state()
-        self._barrier_processed_upto = self._current_pos
+        self._barrier_capture_pos = self._current_pos
         self._barrier_closed_ports = frozenset(self._closed_ports)
         for out_port in self.OUTPUT_PORTS:
             # The supervisor channel never sees a BARRIER: it doesn't
@@ -480,7 +480,7 @@ class FBPProcess(_PortWorker):
         self._barrier_node_state = None
         self._barrier_pending = set()
         self._barrier_channel_buffers = {}
-        self._barrier_processed_upto = 0
+        self._barrier_capture_pos = 0
         self._barrier_closed_ports = frozenset()
 
     def _close_barrier_round(self):
@@ -488,16 +488,16 @@ class FBPProcess(_PortWorker):
         halt = self._barrier_halt
         node_state = self._barrier_node_state
         channel_buffers = self._barrier_channel_buffers
-        processed_upto = self._barrier_processed_upto
+        capture_pos = self._barrier_capture_pos
         closed_ports = self._barrier_closed_ports
 
         self._last_epoch = max(self._last_epoch, epoch)
         self._reset_barrier_round()
 
-        self._on_epoch_closed(epoch, halt, node_state, channel_buffers, processed_upto, closed_ports)
+        self._on_epoch_closed(epoch, halt, node_state, channel_buffers, capture_pos, closed_ports)
 
-    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, processed_upto, closed_ports):
-        path = self._save_checkpoint(epoch, node_state, channel_buffers, processed_upto, closed_ports)
+    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports):
+        path = self._save_checkpoint(epoch, node_state, channel_buffers, capture_pos, closed_ports)
         self.log.info("checkpoint saved for epoch %s at %s", epoch, path)
 
         if self.SUPERVISOR_PORT is not None:
@@ -518,14 +518,14 @@ class FBPProcess(_PortWorker):
     def _checkpoints_dir(self):
         return os.path.join(self._execdir(), "checkpoints")
 
-    def _save_checkpoint(self, epoch, node_state, channel_buffers, processed_upto, closed_ports):
+    def _save_checkpoint(self, epoch, node_state, channel_buffers, capture_pos, closed_ports):
         checkpoints_dir = self._checkpoints_dir()
         os.makedirs(checkpoints_dir, exist_ok=True)
 
         checkpoint = {
             "schema_version": self.CHECKPOINT_SCHEMA_VERSION,
             "epoch": epoch,
-            "processed_upto": processed_upto,
+            "capture_pos": capture_pos,
             "closed_ports": sorted(closed_ports),
             "node_state": node_state,
             "channel_state": channel_buffers,
@@ -565,10 +565,10 @@ class FBPProcess(_PortWorker):
     # crash, itself, so there is no reason for it to live anywhere else. See
     # _InputLog for the format.
 
-    def _open_input_log(self, processed_upto):
+    def _open_input_log(self, capture_pos):
         """
         Opens the input log and recovers what earlier incarnations left in it.
-        `processed_upto` is the position that the restored checkpoint reflects
+        `capture_pos` is the position that the restored checkpoint reflects
         (0 if there is none), so that numbering goes on after it.
         """
         log = _InputLog(
@@ -576,13 +576,13 @@ class FBPProcess(_PortWorker):
             self.INPUT_LOG_MAX_BYTES,
             self.INPUT_LOG_SEGMENT_BYTES,
         )
-        log.recover(processed_upto)
+        log.recover(capture_pos)
         self._input_log = log
 
-    def _replay_input_log(self, processed_upto):
+    def _replay_input_log(self, capture_pos):
         """
         Re-executes process_data() on every DATA record of the input log with
-        a position above `processed_upto`, in log order: what the node had
+        a position above `capture_pos`, in log order: what the node had
         received and processed, or had received and was still to process,
         since the node state its checkpoint holds. That order is the one in which
         the brain thread processed them before, so a node that is sensitive
@@ -596,7 +596,7 @@ class FBPProcess(_PortWorker):
         from disk and never writes to the log.
         """
         replayed = 0
-        for record in self._input_log.replay(processed_upto):
+        for record in self._input_log.replay(capture_pos):
             if record.envelope.type == TYPE_CLOSE:
                 if record.port not in self.CONTROL_PORTS:
                     self._closed_ports.add(record.port)
@@ -614,7 +614,7 @@ class FBPProcess(_PortWorker):
             replayed += 1
         if replayed:
             self.log.info(
-                "replayed %d records of the input log after position %s", replayed, processed_upto
+                "replayed %d records of the input log after position %s", replayed, capture_pos
             )
         if self._closed_ports:
             self.log.info("input ports closed by their writers: %s", sorted(self._closed_ports))
@@ -622,7 +622,7 @@ class FBPProcess(_PortWorker):
     def _prune_input_log(self, checkpoints_dir, kept_epochs):
         """
         Deletes the segments of the input log that no kept checkpoint needs:
-        those whose records all lie at or below the processed_upto of the
+        those whose records all lie at or below the capture_pos of the
         oldest kept checkpoint. That value is read from the checkpoint's file
         on every call, which costs about a quarter of what writing it did. A
         checkpoint that cannot be read aborts the prune with an error.
@@ -633,14 +633,14 @@ class FBPProcess(_PortWorker):
         path = os.path.join(checkpoints_dir, f"{min(kept_epochs)}.json")
         try:
             with open(path) as f:
-                processed_upto = json.load(f)["processed_upto"]
+                capture_pos = json.load(f)["capture_pos"]
         except (OSError, ValueError, KeyError) as exc:
             raise RuntimeError(
                 f"{type(self).__name__}: cannot read {path} to learn how far the input log "
                 f"can be pruned: {exc!r}"
             ) from exc
         with self._arrival_lock:
-            self._input_log.prune(processed_upto)
+            self._input_log.prune(capture_pos)
 
     # -- subclass extension points --
 

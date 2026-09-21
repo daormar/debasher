@@ -181,7 +181,7 @@ mutation check, durability level) is defined in the Contract, where it is used.
   resources (connections, file handles) are not part of it;
   `initialize_runtime()` rebuilds them. In the checkpoint it is the field
   `node_state`, which sits beside the `channel_state` and beside the engine's
-  own bookkeeping (`processed_upto`, `closed_ports` and the sequence numbers).
+  own bookkeeping (`capture_pos`, `closed_ports` and the sequence numbers).
   It was called `state` until 2026-09-20, and its hooks were `capture_state()`
   and `restore_state()`.
 - **round** (ronda): one run of the barrier protocol (Chandy-Lamport) over the
@@ -225,7 +225,7 @@ mutation check, durability level) is defined in the Contract, where it is used.
 - **checkpoint** (punto de control): the file `<epoch>.json` that a node writes
   atomically in `<execdir>/checkpoints/` when a round closes. It holds a schema
   version, the epoch, the `node_state` and the `channel_state` and, with the
-  input-log redesign, the engine's own bookkeeping: `processed_upto`,
+  input-log redesign, the engine's own bookkeeping: `capture_pos`,
   `closed_ports`, `out_seq` and `last_seq`. Only the last `CHECKPOINT_RETENTION`
   are kept.
 
@@ -248,20 +248,24 @@ mutation check, durability level) is defined in the Contract, where it is used.
   named by the position of its first record (`<first pos>.log`). A new one
   starts with every incarnation and when the active one reaches a size limit;
   only whole segments that are not the active one are deleted.
-- **`processed_upto`**: the position of the item whose processing captured the
-  node state. Everything up to it is reflected in the checkpoint's node state;
-  recovery replays what comes after it.
+- **capture position, `capture_pos`** (posición de captura): the position of
+  the item during whose handling the node captured its state: a marker, or a
+  command that opens a round, never a `DATA`. Every `DATA` before it is
+  reflected in the checkpoint's node state; recovery replays what comes after
+  it. It was called `processed_upto` until 2026-09-21: that name suggested that
+  everything up to the position was completely processed, when the item at it is
+  the one being handled at the capture.
 - **torn tail** (cola partida): an unterminated last line that a process killed
   in the middle of a write leaves in a file. It can happen at any record size
   (measured, see the input-log redesign). A record counts only if its line ends
   in a newline and parses as JSON, so a torn tail is ignored on replay, and no
   incarnation ever appends to an existing segment.
 - **replay** (reproducción): re-executing `process_data` on the `DATA` records
-  after `processed_upto`, in log order, when a node starts. It reads from disk
+  after `capture_pos`, in log order, when a node starts. It reads from disk
   and writes nothing to the log. Earlier text calls it "drain".
 - **prune** (poda): deleting what no retained checkpoint needs: the checkpoints
   beyond `CHECKPOINT_RETENTION` and, in the input log, the whole segments that
-  end at or before the `processed_upto` of the oldest retained checkpoint.
+  end at or before the `capture_pos` of the oldest retained checkpoint.
 - **sequence number, `seq`** (número de secuencia): the counter, per channel,
   that the sender puts in each `DATA` so that the receiver can drop a duplicate
   produced by a replay and detect a gap. `out_seq` (the counter of each output
@@ -298,7 +302,7 @@ mutation check, durability level) is defined in the Contract, where it is used.
   operation as the first launch: there is no recovery mode.
 - **recovery** (recuperación): what a relaunched node does at startup: open its
   FIFOs, load its latest checkpoint, `restore_node_state`, `initialize_runtime`,
-  replay the input log after `processed_upto`, then start its threads. Localized
+  replay the input log after `capture_pos`, then start its threads. Localized
   recovery is the policy: only the downed node is relaunched. A **global
   rollback** (vuelta atrás global) would instead rewind every node to the last
   consistent cut; it is future work.
@@ -465,7 +469,7 @@ guarantee in words and never cite these numbers, which may change.
   60 records replayed), all 50 are delivered, where before the FIFOs were opened
   first thing in the recovery none was. Whether the loss is repaired depends on
   where the destroyed messages came from. A relaunched writer restores its
-  latest checkpoint and replays its input log after `processed_upto`, so it
+  latest checkpoint and replays its input log after `capture_pos`, so it
   sends again, with the same sequence numbers, everything it produced from that
   point on: the destroyed messages among those reach the reader after all, and
   it cannot tell (checked with a real relay that had a checkpoint after 10
@@ -823,7 +827,7 @@ channel):
 - Channel state: a copy of the `DATA` that arrives on a still-pending port
   during an open barrier round (the generic barrier logic above) is saved as the
   checkpoint's own `channel_state` field
-  (`_save_checkpoint(epoch, node_state, channel_buffers, processed_upto)`).
+  (`_save_checkpoint(epoch, node_state, channel_buffers, capture_pos)`).
   **Not currently read back by anything**: on restore, only `node_state` is
   passed to `restore_node_state()`; whether `channel_state` is meant purely for
   external inspection/audit of a consistent global snapshot (per the
@@ -841,7 +845,7 @@ channel):
   `ValueError`, a real incompatibility to fail on loudly, not something to
   silently paper over by trying an older checkpoint.
 - **Since the input-log redesign of section 3**: the checkpoint also stores
-  `processed_upto` and `closed_ports` (done); `out_seq` and `last_seq` will join
+  `capture_pos` and `closed_ports` (done); `out_seq` and `last_seq` will join
   it with the sequence numbers. `channel_state` is a copy of what arrived on
   pending ports, which is also processed.
 
@@ -857,7 +861,7 @@ Single sequence, implemented exactly this way in `run()`: open every FIFO by
 known name -> look for the most recent checkpoint -> (if found)
 `restore_node_state()`, otherwise default values -> `initialize_runtime()`
 (always invoked, same code whether or not state was restored) -> open the input
-log and replay it after the checkpoint's `processed_upto`, all of it if there
+log and replay it after the checkpoint's `capture_pos`, all of it if there
 was no checkpoint (section 3) -> `start_threads()` (starts every worker thread)
 -> wait until told to stop -> stop every thread. The FIFOs come first because a
 node holds a FIFO only from the moment it opens it, and restoring and replaying
@@ -941,12 +945,12 @@ section 7, Future work).
   `stop_threads(close=False)`, so each writer sends what is already queued and
   stops. `CLOSE` says that a writer has finished for good, and a halted node is
   resumed later: had it sent one, the reader at the other end could keep it in
-  its input log after its `processed_upto` (measured, see section 3), and a
+  its input log after its `capture_pos` (measured, see section 3), and a
   resume would take the node for a finished one. A node that ends on its own
   calls `stop_threads()`, whose default does send `CLOSE`.
 - Resumption: relaunch every process. It is the ordinary Startup sequence above,
   with no special case for a halt: each node loads the checkpoint that the halt
-  closed and replays its input log after that checkpoint's `processed_upto`.
+  closed and replays its input log after that checkpoint's `capture_pos`.
   What is replayed is what the node processed between capturing its state and
   closing the round (the messages that were in transit at the cut, which its
   checkpoint also holds as `channel_state`) and anything that reached its log
@@ -1000,7 +1004,7 @@ replayed nothing. All five were verified with the real classes and are fixed
   is reordered and no separate journal of the processing order is needed. **Done
   on 2026-09-20**, see the order of implementation below.
 - **The checkpoint stores positions, not the epoch of a log segment.** Besides
-  `node_state` and `channel_state` it holds `processed_upto` (the `pos` of the
+  `node_state` and `channel_state` it holds `capture_pos` (the `pos` of the
   item whose processing captured the node state: a peer's first marker, or the
   `INTERACT` that started the round), and the schema version is 2. **Done on
   2026-09-20.** `closed_ports` (the input ports whose `CLOSE` the brain thread
@@ -1009,19 +1013,19 @@ replayed nothing. All five were verified with the real classes and are fixed
   below) and `last_seq` (the last sender number accepted on each input port)
   join it in the step that needs them, in the same version. Every capture
   happens on the brain thread (the periodic snapshot timer does not exist yet),
-  so `processed_upto` is always well defined.
+  so `capture_pos` is always well defined.
 - **Recovery** is the startup sequence of section 2: restore the latest
   checkpoint, then replay, in order, every `DATA` record of the log with `pos`
-  greater than `processed_upto`, all of them when there is no checkpoint, since
+  greater than `capture_pos`, all of them when there is no checkpoint, since
   the node state is then the default one. That covers what had been processed
   before the crash and what had arrived but not yet been processed, with no
-  distinction between the two. A `CLOSE` record after `processed_upto` only adds
+  distinction between the two. A `CLOSE` record after `capture_pos` only adds
   its port to `closed_ports`, which the checkpoint restored as it was at the
   capture. The counter `pos` is rebuilt from the checkpoint and the log, and
   `out_seq` and `last_seq` will be. Replay writes nothing to the log. **Done on
   2026-09-20.**
 - **Pruning** is by position: the log is split into segment files named by their
-  first `pos`, and those that end below the `processed_upto` of the oldest
+  first `pos`, and those that end below the `capture_pos` of the oldest
   retained checkpoint are deleted; the active segment is never touched.
 - **Record format and files (decided 2026-09-20).** The log is one directory,
   `<execdir>/log/`, not one per port, holding segments named `<first pos>.log`
@@ -1049,25 +1053,25 @@ replayed nothing. All five were verified with the real classes and are fixed
   segments. Nothing rotates when a round captures the node state: that would
   couple the brain thread to the readers to save, at most, one segment of disk.
 - **Startup, counters, pruning and cap (decided 2026-09-20).**
-  - *Counters.* `next_pos = max(last complete record, processed_upto) + 1`,
+  - *Counters.* `next_pos = max(last complete record, capture_pos) + 1`,
     found by reading only the last segment that has a complete record. A segment
     with no complete record (only a torn fragment) is deleted at startup: the
     next record reuses its position, so a new segment would collide with its
     name, and the fragment holds nothing.
   - *Startup order in `run()`:* open the FIFOs, load the latest checkpoint,
     `restore_node_state`, `initialize_runtime`, recover the log, replay the
-    `DATA` records with `pos > processed_upto`, start the threads. With no
-    checkpoint the node state is the default one and `processed_upto` is 0, so
+    `DATA` records with `pos > capture_pos`, start the threads. With no
+    checkpoint the node state is the default one and `capture_pos` is 0, so
     the whole log is replayed.
   - *What replay checks.* It starts at the last segment whose name is at most
-    `processed_upto + 1` and fails loudly if the log starts above
-    `processed_upto + 1`, if the positions from there on are not consecutive, if
+    `capture_pos + 1` and fails loudly if the log starts above
+    `capture_pos + 1`, if the positions from there on are not consecutive, if
     a segment does not start where the previous one ended, or if a line that
     ends in a newline does not parse. A log with no records is not an error,
     because it cannot be told from a log that was lost (the sequence numbers of
-    G5 detect that later). A log whose last record is below `processed_upto` is
+    G5 detect that later). A log whose last record is below `capture_pos` is
     not an error either, since everything in it is already in the checkpoint:
-    the numbering then continues after `processed_upto`.
+    the numbering then continues after `capture_pos`.
   - *Cap.* `INPUT_LOG_MAX_BYTES` (renamed from `MESSAGE_LOG_MAX_BYTES`, 100 MiB
     by default) is per node and kept in memory, so checking it costs nothing
     (before, every message listed the directory and called `stat` on every
@@ -1078,7 +1082,7 @@ replayed nothing. All five were verified with the real classes and are fixed
     MiB by default) is the size at which a segment is closed.
   - *Pruning.* After each checkpoint is saved, whole segments other than the
     last one are deleted when the next segment starts at or below the
-    `processed_upto` of the oldest retained checkpoint plus one. That value is
+    `capture_pos` of the oldest retained checkpoint plus one. That value is
     read from the JSON of the oldest retained checkpoint on every round:
     measured cost 12 ms for 0.9 MB, 115 ms for 9.3 MB and 1.16 s for 95 MB,
     about a quarter of the cost of writing it (63 ms, 477 ms, 4.9 s), so no
@@ -1109,24 +1113,24 @@ replayed nothing. All five were verified with the real classes and are fixed
   - *What gets a position.* Every queued item (`DATA`, `BARRIER`, `INTERACT`,
     `CLOSE`), starting at 1; only `DATA` is replayed. `HELLO` never reaches the
     queue. Anything that starts a round from inside the node, such as a snapshot
-    timer, goes through the same hook, so `processed_upto` is always defined; 0
+    timer, goes through the same hook, so `capture_pos` is always defined; 0
     means that nothing had been processed.
-  - *Checkpoint schema.* Version 2 adds `processed_upto`: the position of the
+  - *Checkpoint schema.* Version 2 adds `capture_pos`: the position of the
     item whose processing captured the node state (a peer's first marker, or the
     `INTERACT` that started the round), taken when the round opens and not when
     it closes. `closed_ports` joined it later the same day, and `out_seq` and
     `last_seq` will join the same version in their own steps, since the branch
     is not released. A node restored from a checkpoint numbers after its
-    `processed_upto` (from the last piece on, after the larger of that and the
+    `capture_pos` (from the last piece on, after the larger of that and the
     last record of its log). A checkpoint of version 1 is refused.
 - **`CLOSE`** means that the writer has finished for good, and only that. **A
   halt sends none (decided and done on 2026-09-20).** Measured with real runs of
   a producer and a consumer that halt, with the earlier behavior: the producer's
-  `CLOSE` reached the consumer's input log after its `processed_upto` in 38 of
+  `CLOSE` reached the consumer's input log after its `capture_pos` in 38 of
   40 halts, and in 0 of 40 when the producer's checkpoint was slow, because the
   consumer had stopped reading by then. Whether a halt left a `CLOSE` in the log
   was a race between the two nodes, and the rule that a `CLOSE` after
-  `processed_upto` closes the port when the log is replayed would have closed,
+  `capture_pos` closes the port when the log is replayed would have closed,
   at a resume, the ports of producers that were coming back. For a writer that
   has finished, the reader hands the `CLOSE` to the brain thread like any other
   item, so it is logged, and **then keeps reading but drops everything that
@@ -1150,9 +1154,9 @@ replayed nothing. All five were verified with the real classes and are fixed
   restored (4.5). This replaces the marker file proposed before.
 - **`closed_ports`** (decided and done on 2026-09-20) lists the input ports
   whose `CLOSE` the brain thread had processed at the capture, that is, those
-  with a `CLOSE` record at a position at or below `processed_upto`. It is taken
+  with a `CLOSE` record at a position at or below `capture_pos`. It is taken
   at the same moment and on the same thread as the node state and
-  `processed_upto`, so the three describe one instant, and by the order in which
+  `capture_pos`, so the three describe one instant, and by the order in which
   the brain thread processes the items, not by what the reader threads have
   read, since they run ahead of it. Two other definitions were rejected, with a
   node of three ports: a closes before the round opens, and c closes after it,
@@ -1161,15 +1165,15 @@ replayed nothing. All five were verified with the real classes and are fixed
   barrier does, closes the round at once and drops the message of c from the
   channel state, although it was in transit at the cut. The set when the round
   closes also says a and c. Both leave a checkpoint that says that c is closed
-  while its message lies after `processed_upto` and is still to be replayed. The
+  while its message lies after `capture_pos` and is still to be replayed. The
   exact definition is what lets the replay check that no `DATA` record follows
   the `CLOSE` of its port, which is an error (the log or the checkpoint is
   corrupt) and can be demanded because nothing after a `CLOSE` is logged. The
   set is saved sorted in the checkpoint (schema 2; the field is required, so an
   older checkpoint fails to load with a `KeyError`), because pruning deletes the
-  segments below `processed_upto` and the `CLOSE` of a port closed long ago goes
+  segments below `capture_pos` and the `CLOSE` of a port closed long ago goes
   with them. Recovery restores it and adds the port of each `CLOSE` record after
-  `processed_upto`, and the readers of the ports that are then closed start in
+  `capture_pos`, and the readers of the ports that are then closed start in
   the mode that drops what their writers send, so that a relaunched node behaves
   like the incarnation that read the `CLOSE`. A `CLOSE` that arrives between the
   capture and the close of the round is not stored in the checkpoint file: like
@@ -1254,7 +1258,7 @@ replayed nothing. All five were verified with the real classes and are fixed
        position and queue under one lock, through an arrival hook that the
        `Supervisor` leaves as it was; the brain thread remembers the position of
        the item it processes; the checkpoint has schema version 2 with
-       `processed_upto`, taken when the round opens; and a restored checkpoint
+       `capture_pos`, taken when the round opens; and a restored checkpoint
        makes the numbering go on after it. The old log still works. 13 new
        tests, checked against two mutations (without the lock the order of the
        positions breaks, and taking the position when the round closes fails
@@ -1262,11 +1266,11 @@ replayed nothing. All five were verified with the real classes and are fixed
        a fan-in sink with two snapshots and a halt: all 800 messages were
        processed, the positions were strictly increasing, and in all three
        checkpoints the saved total equals the sum of what the sink had processed
-       up to `processed_upto`.
+       up to `capture_pos`.
      - 3.3 The switch. **Done 2026-09-20**: the reader threads append the record
        and queue the item under one lock, and the brain thread no longer logs; a
        node opens the log after restoring its checkpoint and replays the `DATA`
-       records after `processed_upto` (all of them when there is no checkpoint);
+       records after `capture_pos` (all of them when there is no checkpoint);
        pruning by position runs after each checkpoint is saved, reading the
        oldest one kept; the cap and the refusal after a failed write are in
        place; and the code and the 15 tests of the per-port log are gone. 17 new
@@ -1291,7 +1295,7 @@ replayed nothing. All five were verified with the real classes and are fixed
        `Supervisor` passes the choice on), checked against five mutations.
        Checked with a real `debasher_exec` run of a source and a sink that halt
        and are then resumed by relaunching both: with the earlier code the
-       sink's log held a `CLOSE` after `processed_upto` in 2 of 2 runs, with the
+       sink's log held a `CLOSE` after `capture_pos` in 2 of 2 runs, with the
        new code in none, and after the resume the sink went on receiving (total
        4950 over 100 messages, from the checkpoint of the halt).
      - 4.2 The reader after `CLOSE` and the heartbeat. **Done 2026-09-20**,
@@ -1313,7 +1317,7 @@ replayed nothing. All five were verified with the real classes and are fixed
      - 4.3 `closed_ports` in the checkpoint and its replay. **Done 2026-09-20**:
        the brain thread records each `CLOSE` it processes, the round copies the
        set when it opens, the checkpoint stores it, recovery restores it and
-       adds the `CLOSE` records after `processed_upto`, replay fails on a `DATA`
+       adds the `CLOSE` records after `capture_pos`, replay fails on a `DATA`
        record after the `CLOSE` of its port, and after a relaunch the readers of
        closed ports start in the dropping mode. Eight new tests in the words of
        the guarantees (the checkpoint holds the ports whose `CLOSE` the node had
@@ -2165,7 +2169,7 @@ crash-and-relaunch smoke test between two `FBPProcess` nodes under
   and only what the writer produces again after its latest checkpoint comes back
   (see the Contract's limits). Ways to widen that, none designed or tried:
   - The writer restores an older retained checkpoint and replays from there. The
-    input log is kept back to the `processed_upto` of the oldest retained
+    input log is kept back to the `capture_pos` of the oldest retained
     checkpoint, the numbers are regenerated the same, and the readers drop what
     they already have as duplicates, so everything sent since that checkpoint is
     repaired, at the price of re-executing that stretch at every recovery. It

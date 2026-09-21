@@ -178,7 +178,7 @@ def test_a_round_opened_by_a_peers_marker_records_the_position_of_that_marker(ex
     )
 
     checkpoint = _checkpoint(execdir, 0)
-    assert checkpoint["processed_upto"] == 3
+    assert checkpoint["capture_pos"] == 3
     # The state is exactly what had been processed up to that position, no more,
     # while what arrived in transit is kept as the channel state as well as processed.
     assert checkpoint["node_state"] == {"seen": [1, 2]}
@@ -202,7 +202,7 @@ def test_a_round_started_by_interact_records_the_position_of_that_interact(execd
     )
 
     checkpoint = _checkpoint(execdir, 0)
-    assert checkpoint["processed_upto"] == 2
+    assert checkpoint["capture_pos"] == 2
     assert checkpoint["node_state"] == {"seen": [1]}
 
 
@@ -217,7 +217,7 @@ def test_the_position_is_taken_when_the_round_opens_not_when_it_closes(execdir):
             ("b", lib.TYPE_BARRIER, {"epoch": 0, "halt": False}),  # position 4
         ],
     )
-    assert _checkpoint(execdir, 0)["processed_upto"] == 1
+    assert _checkpoint(execdir, 0)["capture_pos"] == 1
 
 
 def test_a_position_belongs_to_one_round_only(execdir):
@@ -232,8 +232,8 @@ def test_a_position_belongs_to_one_round_only(execdir):
             ("a", lib.TYPE_BARRIER, {"epoch": 1, "halt": False}),
         ],
     )
-    assert _checkpoint(execdir, 0)["processed_upto"] == 1
-    assert _checkpoint(execdir, 1)["processed_upto"] == 4
+    assert _checkpoint(execdir, 0)["capture_pos"] == 1
+    assert _checkpoint(execdir, 1)["capture_pos"] == 4
 
 
 def test_a_root_node_that_starts_a_round_before_processing_anything_records_zero(execdir):
@@ -242,7 +242,7 @@ def test_a_root_node_that_starts_a_round_before_processing_anything_records_zero
 
     proc = _Root(opts={})
     proc._on_interact({"command": "start_snapshot", "args": {}})
-    assert _checkpoint(execdir, 0)["processed_upto"] == 0
+    assert _checkpoint(execdir, 0)["capture_pos"] == 0
 
 
 # --- the schema and the restart -----------------------------------------

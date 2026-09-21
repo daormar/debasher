@@ -303,8 +303,8 @@ def test_the_log_is_pruned_after_checkpoints_and_recovery_still_works(tmp_path):
     # everything after the position that each one reflects, not only the newest.
     for name in checkpoints:
         with open(tmp_path / "node" / "checkpoints" / name) as f:
-            processed_upto = json.load(f)["processed_upto"]
-        assert list(lib._InputLog(str(tmp_path / "node" / "log"), 10**9, 10**9).replay(processed_upto))
+            capture_pos = json.load(f)["capture_pos"]
+        assert list(lib._InputLog(str(tmp_path / "node" / "log"), 10**9, 10**9).replay(capture_pos))
 
     relaunched = _relaunch(tmp_path, _Pruning)
     assert relaunched.seen == live.seen
@@ -456,7 +456,7 @@ def test_a_checkpoint_holds_the_ports_whose_close_the_node_had_processed_when_th
     assert live._closed_ports == {"a", "c"}
 
     checkpoint = _read_checkpoint(live, 0)
-    assert checkpoint["processed_upto"] == 4
+    assert checkpoint["capture_pos"] == 4
     assert checkpoint["closed_ports"] == ["a"]
 
 
@@ -540,14 +540,14 @@ def test_a_round_that_a_close_completes_writes_the_checkpoint_of_the_cut(tmp_pat
     _process(live, _TWO_ROUNDS_AROUND_TWO_CLOSES)
 
     first = _read_checkpoint(live, 0)
-    assert first["processed_upto"] == 4
+    assert first["capture_pos"] == 4
     assert first["closed_ports"] == ["a"]
     assert first["node_state"] == {"seen": [["a", 1], ["b", 10]]}
     assert first["channel_state"] == {"c": [100]}
 
     # a and c had both closed when the second round opened, so it had nothing to wait for.
     second = _read_checkpoint(live, 1)
-    assert second["processed_upto"] == 8
+    assert second["capture_pos"] == 8
     assert second["closed_ports"] == ["a", "c"]
     assert second["channel_state"] == {}
 
