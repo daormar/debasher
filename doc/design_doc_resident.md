@@ -14,7 +14,7 @@ The goal is to extend the FBP engine with state (processes with their own lifecy
 - **Do all of this without imposing a single language on the graph's processes**, and without requiring additional external infrastructure (databases, coordination services) beyond what the engine and the filesystem already offer.
 - **Fail loudly, never silently**: whenever a guarantee cannot be kept (for example, a message lost because two connected nodes crashed at the same time), the violation is detected and reported, instead of the program carrying on with silently wrong state.
 
-The Contract below says precisely what these goals do and do not promise. After it comes the breakdown of the work needed to achieve them.
+The Contract below says precisely what these goals do and do not promise. After it comes the breakdown of the work needed to achieve them. That breakdown is in seven numbered sections, cited in the text by their number (section 3 is the input log, section 5 the recovery from a node failure), and the order in which the work was done is the numbered list of steps under "Order of implementation" in section 3.
 
 ## Glossary (Glosario)
 
@@ -42,7 +42,7 @@ The precise meaning of the words this document uses, in the order in which they 
 - **`DATA`**: the business traffic. It is the only type that reaches `process_data` and the only one that is replayed.
 - **`BARRIER`, marker** (marcador): the envelope that carries a round's `epoch` and its `halt` flag. Each node forwards it on its output ports, along the same channels as `DATA`, and never to the `Supervisor`.
 - **`INTERACT`**: a control command, with `command` and `args` (`start_snapshot`, `shutdown`, `heartbeat`, `checkpoint_saved`, and any that are added later: the catalog is open). It travels on its own channels, not on business channels.
-- **`CLOSE`**: the last envelope of a writer that has finished for good: it will never write again. It means "finished for good", not "finished successfully": a process that exits with an error sends none and counts as crashed. A halt is not a finish for good, since the node is resumed later, so an ordered halt sends none (decided and done on 2026-09-20, see point 3). The reader hands it to the brain thread in order and then keeps reading, but drops everything that follows it (decided and done on 2026-09-20; the `Supervisor`'s readers deliver it, since a node that closed its channel may be relaunched and must be heard). `closed_ports` is the checkpoint field that lists the input ports whose `CLOSE` the brain thread had processed when the round captured the node state.
+- **`CLOSE`**: the last envelope of a writer that has finished for good: it will never write again. It means "finished for good", not "finished successfully": a process that exits with an error sends none and counts as crashed. A halt is not a finish for good, since the node is resumed later, so an ordered halt sends none (decided and done on 2026-09-20). The reader hands it to the brain thread in order and then keeps reading, but drops everything that follows it (decided and done on 2026-09-20; the `Supervisor`'s readers deliver it, since a node that closed its channel may be relaunched and must be heard). `closed_ports` is the checkpoint field that lists the input ports whose `CLOSE` the brain thread had processed when the round captured the node state.
 - **`HELLO`, resync line** (línea de resincronización): the first thing every incarnation of a writer sends, in one write together with a leading newline. The newline ends any fragment that the previous incarnation left when it was killed in the middle of a message, and the `HELLO` tells the reader that such a fragment can be dropped. It also tells the reader that its peer (re)connected.
 - **ghost connection** (conexión fantasma): each endpoint of a channel holds both ends of the FIFO, the real one and a ghost of the opposite direction. The reader never sees EOF and the writer never gets `EPIPE`; a dead peer is only backpressure, and a channel outlives the crash of either process. It relies on Linux behavior.
 
@@ -89,7 +89,7 @@ The precise meaning of the words this document uses, in the order in which they 
 
 ## Contract: assumptions, guarantees and non-goals
 
-**Status: draft written on 2026-09-19.** Every open item was settled on 2026-09-20 and none remains open; the mechanisms are designed in the numbered points after this section. It applies to programs whose `_program_type` is `resident`; general programs keep today's behavior.
+**Status: draft written on 2026-09-19.** Every open item was settled on 2026-09-20 and none remains open; the mechanisms are designed in the numbered sections after this one. It applies to programs whose `_program_type` is `resident`; general programs keep today's behavior.
 
 The purpose of this section is that "reliable" has a precise meaning here: within the stated assumptions, either the guarantees hold, or the violation is detected and reported. Never "it usually works". Every guarantee must be backed by at least one end-to-end test that states it in the same words (see "Acceptance").
 
@@ -112,7 +112,7 @@ renamed into place but is empty. Surviving that has a price, measured on the dev
 ext4): an append to the log takes 0.8 microseconds without `fsync`, 13 with an `fsync` every 100 appends
 and about 1050 with one after every append (roughly 950 messages per second); saving a checkpoint takes 39
 microseconds without it and 1.9 ms with `fsync` of the file and of its directory. Hence it is left out for
-now, and the cheap first step is noted in Future work (point 7).
+now, and the cheap first step is noted in Future work.
 
 ### Obligations of module authors
 
@@ -121,7 +121,7 @@ The guarantees hold only if the module code keeps its side of the bargain. The f
 - **`process_data` is deterministic**: given the same starting state and the same sequence of received messages, it produces the same new state and the same outputs. It must not depend on wall-clock time, randomness, thread timing, or external reads, unless whatever it reads is part of the captured state or of the message stream. Recovery re-executes it, so a non-deterministic `process_data` silently diverges from what it did before the crash.
 - **`capture_node_state()` is complete and `restore_node_state()` exact**: everything that influences future behavior round-trips through them.
 - **Effects outside the graph are idempotent**: replay re-executes `process_data`, so anything it does outside the FIFOs (writing a file elsewhere, calling a service) can happen more than once.
-- **Messages are JSON-serializable, of any size.** A message larger than `PIPE_BUF` (4096 bytes on Linux) being written when its sender crashes can leave a truncated fragment in the FIFO (checked with real writers killed mid-write: 0 of 100 rounds at 4000 bytes, 53 of 100 at 5000 bytes). The reader drops it thanks to the resync line that every writer incarnation sends first (point 5), and the sender's replay regenerates the message. Only the framework writes to these channels; an external writer must send complete lines.
+- **Messages are JSON-serializable, of any size.** A message larger than `PIPE_BUF` (4096 bytes on Linux) being written when its sender crashes can leave a truncated fragment in the FIFO (checked with real writers killed mid-write: 0 of 100 rounds at 4000 bytes, 53 of 100 at 5000 bytes). The reader drops it thanks to the resync line (see the Glossary) that every writer incarnation sends first, and the sender's replay regenerates the message. Only the framework writes to these channels; an external writer must send complete lines.
 
 ### Guarantees
 
@@ -133,20 +133,20 @@ Numbered so that this document can cite them; tests and code comments state the 
 - **G4, faithful replay**: the input log is one log per node, written when each message arrives, in the order in which the messages are queued and hence processed by the brain thread, across all its input ports, so that replay reproduces that order exactly. A node with several input ports does not have to be insensitive to how their messages interleave.
 - **G5, no duplicates and no silent loss across a crash**: a neighbor that keeps running observes each message of a relaunched node once, not twice, and in order; and if a message is lost anyway, the receiver notices. Mechanism (decided 2026-09-20): each `DATA` carries a sequence number per channel, assigned by the sender; the sender's counters are stored in its checkpoint, so that replay regenerates the same numbers; the receiver drops any `DATA` whose number is not above the last one it accepted from that channel (a duplicate), and treats a jump as a lost message, an error in the sense of G8. The receiver's last numbers are rebuilt from its checkpoint and its log. It relies on determinism: a replay that produced different outputs would reuse numbers for different messages.
 - **G6, consistent snapshots and orderly halt**: while no node crashes during a round, the checkpoints closed by that round form a consistent cut, and after a halt every node resumes in the state it had when it stopped: it loads its checkpoint and replays from its input log only what it processed after capturing it. A crash during a round aborts it (mechanism not designed yet, see Loose ends).
-- **G7, bounded detection**: a crashed node is noticed within `HEARTBEAT_CHECK_INTERVAL_SECS` when its PID is verifiably gone, and within `HEARTBEAT_TIMEOUT_SECS` when it is alive but unhealthy (one of its reader, writer or brain threads died). It is then relaunched up to `MAX_RELAUNCH_ATTEMPTS` times before the escalation of point 4.
-- **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a channel's sequence numbers, a checkpoint with another schema version, an input log over its size cap, an exhausted relaunch budget), the node or the `Supervisor` raises an error that stops the affected part, instead of continuing with silently wrong state. What happens after that stop is manual today; the planned fallback is a coordinated global rollback to the last consistent cut, **not built** (see Future work, point 7).
+- **G7, bounded detection**: a crashed node is noticed within `HEARTBEAT_CHECK_INTERVAL_SECS` when its PID is verifiably gone, and within `HEARTBEAT_TIMEOUT_SECS` when it is alive but unhealthy (one of its reader, writer or brain threads died). It is then relaunched up to `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
+- **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a channel's sequence numbers, a checkpoint with another schema version, an input log over its size cap, an exhausted relaunch budget), the node or the `Supervisor` raises an error that stops the affected part, instead of continuing with silently wrong state. What happens after that stop is manual today; the planned fallback is a coordinated global rollback to the last consistent cut, **not built** (see Future work).
 
 ### Limits and non-goals
 
 - **Both endpoints of a channel crashed before either reopened the FIFO.** When one endpoint of a channel crashes, nothing is lost: the other holds the FIFO open, and what the writer had sent and the reader had not yet read waits in it. A relaunched node holds its FIFOs from the first step of its recovery, before it restores its checkpoint or replays its input log, until it dies. So only if the second endpoint crashes before the first has been relaunched and has reopened the FIFO, which takes the time to notice the crash and start the new process, or if both crash together, is there a moment at which neither holds the FIFO, and what it held is destroyed, at most what a pipe holds (64 KiB). Checked with real `kill -9` on 50 unread lines: all survive if only one endpoint dies, and none survives if both do, together or half a second apart with no relaunch in between. The recovery is not part of that window: with the writer killed while the relaunched reader was still replaying its log (19 of 60 records replayed), all 50 are delivered, where before the FIFOs were opened first thing in the recovery none was. Whether the loss is repaired depends on where the destroyed messages came from. A relaunched writer restores its latest checkpoint and replays its input log after `processed_upto`, so it sends again, with the same sequence numbers, everything it produced from that point on: the destroyed messages among those reach the reader after all, and it cannot tell (checked with a real relay that had a checkpoint after 10 messages, received 5 more and was killed: the relaunched one sent exactly those 5). What it had sent before that checkpoint is inside the node state that it restores and is not sent again: if some of it was still unread in the FIFO, it is lost, and the reader finds the hole in the sequence numbers when the next message arrives (G8). Ways to repair more are listed in Future work, none designed. Non-adjacent nodes may crash together with no such problem.
 - **External inputs.** What enters the graph from outside it (a manual write to a FIFO, an external program) cannot be regenerated by any node, so at that boundary delivery is at most once; inside the graph, the guarantees start from the first message a node logs.
-- **Messages read from a FIFO but not yet written to the input log** when a node crashes. The reader thread writes each message to the log when it arrives, so this window is only the few microseconds between taking a block from the FIFO and appending it (today it is the whole time a message waits in the inbound queue). A message lost in that window is not recovered, since its sender considers it delivered, but the sequence numbers of G5 make the hole detectable (G8).
+- **Messages read from a FIFO but not yet written to the input log** when a node crashes. The reader thread writes each message to the log when it arrives, so this window is only the time between taking a block from the FIFO and appending each of its messages. A message lost in that window is not recovered, since its sender considers it delivered, but the sequence numbers of G5 make the hole detectable (G8).
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite loop, deadlock) is not detected today: the heartbeat proves that its threads are alive, not that they make progress. Not a goal for now; an extension would be a progress counter in the heartbeat.
 - **Not covered**: non-deterministic `process_data`, effects on external systems beyond "idempotent if repeated", Slurm, machine failure.
 - **`--mirror`** (the debugging tap of a fifo, behind the frontend's "Watch FIFO") is not available in resident programs: declaring it aborts the load of the program, before anything is launched (decided and done on 2026-09-20). Resident processes keep their own input log.
-- **A node that has finished for good** takes no part in later rounds, so the consistent cut of an epoch that starts after it finished has no checkpoint of that node: its channel to the others is empty and its last state is its final one. Localized recovery does not need it; a global rollback would have to treat it (see Future work, point 7).
+- **A node that has finished for good** takes no part in later rounds, so the consistent cut of an epoch that starts after it finished has no checkpoint of that node: its channel to the others is empty and its last state is its final one. Localized recovery does not need it; a global rollback would have to treat it (see Future work).
 - **A round that a newer one replaces** leaves the nodes that had not closed it without a checkpoint for its epoch, so that epoch has no complete cut. The round that replaced it does complete, at every node it reaches, and that is the cut that counts; localized recovery never uses a cut. It holds if the initiators start the same epoch (see Loose ends). Rounds started closer together than they take to complete keep replacing each other, and none completes until they stop, so the period of periodic snapshots has to be longer than a round.
-- **A node that crashes again right after every relaunch** is not retried forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and the escalation of point 4 applies.
+- **A node that crashes again right after every relaunch** is not retried forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and the escalation applies.
 
 ### Acceptance: how reliability is shown
 
@@ -170,7 +170,7 @@ Each one was verified by running the real classes, not only by reading the code.
 - **G6 was violated when a writer had finished for good, fixed on 2026-09-20.** A round waited for the marker of a port whose writer had said `CLOSE`, which never comes, and the marker of the next round ended the brain thread with a `ValueError`. Measured with the real class on a node of three ports: round 0 open for good waiting for a and c, the brain thread dead at the marker of epoch 1, no checkpoint written. Now a closed port is not pending, and a real `debasher_exec` run of two producers that finish at different moments and a consumer that is killed and relaunched closes its rounds and recovers.
 - **A trigger from the `Supervisor` did not close the initiator's round, fixed on 2026-09-20.** The channel from the `Supervisor` was read as a data port, so the initiator waited for a marker that never comes, and the `CLOSE` that a stopping `Supervisor` sends closed the channel for good, dropping the triggers of one relaunched by hand. Both checked with real fifos and then with a real `Supervisor`. Now the initiator lists that channel in `CONTROL_PORTS`.
 - **A trigger, or a marker of another epoch, that reached a node with a round open ended its brain thread, fixed on 2026-09-20.** Both raised a `ValueError` that nothing caught. Measured with real processes: an initiator that is a source accepts two `start_snapshot` in a row, since each of its rounds closes at once, and the node downstream, with its round 0 still open, died on the marker of round 1 and never wrote a checkpoint. Now a newer round replaces the older one.
-- **Peer reconnection**: designed, nothing implemented; it is the mechanism behind G3 and G5 across a peer's crash.
+- **A relaunched node did not reconnect to its neighbors, fixed on 2026-09-20.** A reader ended at the first EOF and a writer whose reader had died got `EPIPE` and died, so a node that crashed and was relaunched was cut off from every neighbor and blocked forever in `open()`. Now every endpoint holds both ends of its FIFO, so a channel outlives the crash of either of its nodes, and every incarnation of a writer starts with a resync line that lets the reader drop the fragment that a killed writer may have left. Checked with a real `debasher_exec` run of a numbered source, a consumer and a `Supervisor`, killing with `kill -9` first the writer node and later the reader node: the `Supervisor` relaunched each, the other node was never touched, and across the reader's outage the consumer logged 630 consecutive messages, none missing and none duplicated. What a running neighbor still receives twice after a writer's crash is what G5 removes.
 
 ## 1. Control envelope
 
@@ -188,24 +188,24 @@ the reader thread can dispatch by looking only at `type`, without interpreting `
 ```
 
 - `DATA.payload`: free-form, whatever the business logic wants; `process_data(port_name, packet)`
-  (point 2) receives it already deserialized.
-- `BARRIER.payload.epoch`: identifies the snapshot round; enough for the initiator (point 2's
+  (section 2) receives it already deserialized.
+- `BARRIER.payload.epoch`: identifies the snapshot round; enough for the initiator (section 2's
   Chandy-Lamport subsection) to recognize, in a cycle, that the marker coming back through its own
   input port is its own (no need to carry the initiator's identity).
-- `BARRIER.payload.halt`: reuses the same `BARRIER` as an ordered shutdown (point 2's Ordered
+- `BARRIER.payload.halt`: reuses the same `BARRIER` as an ordered shutdown (section 2's Ordered
   shutdown subsection) instead of a snapshot.
-- `INTERACT.payload.command`/`args`: an open catalog, extended as needed by whichever points
+- `INTERACT.payload.command`/`args`: an open catalog, extended as needed by whichever sections
   trigger it (`start_snapshot`, `shutdown`, `heartbeat`, `checkpoint_saved`, ...).
-- No `port_name` field: each reader thread (point 2) already knows which port a message came from
+- No `port_name` field: each reader thread (section 2) already knows which port a message came from
   by construction (it is dedicated to that FIFO); it gets attached once the message enters the
   in-memory internal queue, not in the wire format.
 
 **Changes decided on 2026-09-20.** Two more control types, both with an empty payload: `CLOSE`, sent by a
 writer when it has finished for good (a halt sends none), and `HELLO`, sent as the first line of every incarnation of a writer (the
-transport decision of point 5). **Both are implemented** (step 2 of point 3): the reader thread consumes
+transport decision of section 5). **Both are implemented** (step 2 of section 3): the reader thread consumes
 `HELLO`; `CLOSE` is handed to the brain thread, in order, and the reader then drops whatever follows it
 (a `Supervisor` reader delivers it). `DATA` will gain a sequence number per channel, assigned by the sender, as a sibling of `type`
-and `payload`: `{"type": "DATA", "seq": <int>, "payload": <any>}` (G5 in the Contract, point 3; **not yet
+and `payload`: `{"type": "DATA", "seq": <int>, "payload": <any>}` (G5 in the Contract, section 3; **not yet
 implemented**). The reader still never looks at `payload`.
 
 **Channel topology** (important: `DATA`/`BARRIER` and `INTERACT` do NOT share a channel):
@@ -216,11 +216,11 @@ implemented**). The reader still never looks at `payload`.
   same ones it uses for `DATA`, never "upward" to anywhere else.
 - Between each node and the supervisor, a separate channel (heartbeat) that only carries
   `INTERACT`: a single input port per node (not two), multiplexing `{"command": "heartbeat"}` and
-  `{"command": "checkpoint_saved", "args": {"epoch": ..., "path": ...}}` (point 2's Checkpoint
+  `{"command": "checkpoint_saved", "args": {"epoch": ..., "path": ...}}` (section 2's Checkpoint
   persistence subsection) on the same channel; there is no real contention between the two
   (lightweight, infrequent messages), and separate ports would only double the supervisor's manual
   wiring for no benefit.
-- The supervisor never sees a `BARRIER`: it does not take part in the barrier protocol (point 2), it
+- The supervisor never sees a `BARRIER`: it does not take part in the barrier protocol (section 2), it
   only speaks `INTERACT`.
 
 ## 2. Base class `FBPProcess`: DONE, implemented and tested (`engine/debasher_runtime_fbp.py`)
@@ -230,10 +230,10 @@ implemented**). The reader still never looks at `payload`.
   source gets prepended into the heredoc itself. It began as the one file that held all of the code,
   and on 2026-09-20 the code was split (a pure move, checked line by line, with no change of
   behavior) into modules of their own, one layer each, where every module imports only from the ones
-  before it: `debasher_runtime_envelope.py` (the wire format of point 1),
+  before it: `debasher_runtime_envelope.py` (the wire format of section 1),
   `debasher_runtime_transport.py` (argv parsing, the fifo endpoints and `_PortWorker`),
-  `debasher_runtime_inputlog.py` (`_InputLog`, point 3), `debasher_runtime_fbp.py` (`FBPProcess`) and
-  `debasher_runtime_supervisor.py` (`Supervisor`, point 4). `debasher_runtime_lib.py` keeps
+  `debasher_runtime_inputlog.py` (`_InputLog`, section 3), `debasher_runtime_fbp.py` (`FBPProcess`) and
+  `debasher_runtime_supervisor.py` (`Supervisor`, section 4). `debasher_runtime_lib.py` keeps
   `DEBASHER_SHUTDOWN_TOKEN`, a Python mirror of the Bash constant, and re-exports every name that it
   offered before, so nothing that imports it depends on the layout. All of them are
   `python_PYTHON`-installed per `engine/Makefile.am`, in the same directory, which is the one that the
@@ -286,7 +286,7 @@ implemented**). The reader still never looks at `payload`.
   pending, including the node's own port in a cycle) as receiving a peer's `BARRIER` would, just
   triggered by `INTERACT` instead; `command: "shutdown"` is identical but forwards with
   `halt=True`. An unrecognized `command` logs a warning and is ignored, it never aborts the
-  process (the command catalog, point 1, is deliberately open-ended).
+  process (the command catalog, section 1, is deliberately open-ended).
 - **Logging**: `FBPProcess` exposes a preconfigured `self.log` (Python's stdlib `logging`), same
   pattern as the existing `dispatch` process in `data/programs/dynamic_fanout_dispatcher.py`
   (stderr output, format including thread name, useful here since the process is inherently
@@ -298,7 +298,7 @@ implemented**). The reader still never looks at `payload`.
   no new engine mechanism, it is just another entry in `self.opts`; a sensible default applies
   if the module does not declare it.
 - **Periodic self-triggered snapshots (opt-in)**: nothing otherwise ever closes an epoch on its
-  own; without this, the input log's safety cap (point 3) becomes the normal failure mode
+  own; without this, the input log's safety cap (section 3) becomes the normal failure mode
   instead of an actual safety net for any `resident` program with no external actor triggering
   `start_snapshot` periodically, `Supervisor` or not. A timer thread, gated by a
   `SNAPSHOT_INTERVAL_SECS` class attribute/option (`None`, disabled, by default), that calls the
@@ -319,7 +319,7 @@ implemented**). The reader still never looks at `payload`.
   (`_save_checkpoint(epoch, node_state, channel_buffers, processed_upto)`). **Not currently read back by anything**: on
   restore, only `node_state` is passed to `restore_node_state()`; whether `channel_state` is meant purely for
   external inspection/audit of a consistent global snapshot (per the introduction's second goal) or
-  is a real gap is flagged in the Loose ends point below, not resolved here.
+  is a real gap is flagged in the Loose ends section below, not resolved here.
 - The node state is stored under `node_state` (renamed from `state` on 2026-09-20, to tell it from `channel_state`; the
   hooks `capture_state()` and `restore_state()` became `capture_node_state()` and `restore_node_state()`, since they handle
   nothing else). A checkpoint written under the old key fails to load with a `KeyError`, and a module that still defines the
@@ -327,7 +327,7 @@ implemented**). The reader still never looks at `payload`.
 - Schema version: `CHECKPOINT_SCHEMA_VERSION` class constant, checked in `_load_latest_checkpoint`
   before `restore_node_state()`; a mismatch raises `ValueError`, a real incompatibility to fail on
   loudly, not something to silently paper over by trying an older checkpoint.
-- **Since the input-log redesign of point 3**: the checkpoint also stores `processed_upto` and `closed_ports` (done);
+- **Since the input-log redesign of section 3**: the checkpoint also stores `processed_upto` and `closed_ports` (done);
   `out_seq` and `last_seq` will join it with the sequence numbers.
   `channel_state` is a copy of what arrived on pending ports, which is also processed.
 
@@ -341,7 +341,7 @@ files exist or not, not by a decision the process itself makes.
 Single sequence, implemented exactly this way in `run()`: open every FIFO by known name -> look for the
 most recent checkpoint -> (if found) `restore_node_state()`, otherwise default values ->
 `initialize_runtime()` (always invoked, same code whether or not state was restored) -> open the input
-log and replay it after the checkpoint's `processed_upto`, all of it if there was no checkpoint (point 3)
+log and replay it after the checkpoint's `processed_upto`, all of it if there was no checkpoint (section 3)
 -> `start_threads()` (starts every worker thread) -> wait until told to stop -> stop every thread. The
 FIFOs come first because a node holds a FIFO only from the moment it opens it, and restoring and
 replaying can take a while: if a neighbor that was the only holder of a FIFO crashed during that time,
@@ -351,7 +351,7 @@ what it had sent would be destroyed with it.
 failure are the same operation, with no distinction. The supervisor does not need to know whether
 it is starting the topology or recovering a downed node; in both cases it simply runs the same
 process script, and it is the process itself that decides what to do depending on whether it finds
-a checkpoint in its folder or not. This also simplifies point 5 (recovery): no special "recovery
+a checkpoint in its folder or not. This also simplifies section 5 (recovery): no special "recovery
 mode" logic is needed in the supervisor, only failure detection and running the script; the rest
 (looking for a checkpoint, restoring it or not, how much of the log to replay) is resolved by the process
 itself, exactly as on any startup.
@@ -360,11 +360,11 @@ itself, exactly as on any startup.
 should be enough to delete (or move) the node's checkpoint folder before launching it; no flag or
 special logic needed inside either the process or the supervisor to distinguish the case. A simple
 auxiliary script (deleting checkpoints for every node of the topology) would cover restarting the
-whole system from scratch; noted here as a real gap, not yet written (see point 7, Future work).
+whole system from scratch; noted here as a real gap, not yet written (see section 7, Future work).
 
 ### Chandy-Lamport barrier propagation
 
-- **Done on 2026-09-20 (first step of the redesign decided in point 3)**: a `DATA` arriving on a port
+- **Done on 2026-09-20 (first step of the redesign decided in section 3)**: a `DATA` arriving on a port
   whose marker has not arrived is processed at once, as any other, and a deep copy goes to the round's
   `channel_state`; before, it was diverted and never processed. A port whose writer has said
   `CLOSE` leaves the round's pending set, or is left out of it if it had closed when the round opened (done on
@@ -408,7 +408,7 @@ whole system from scratch; noted here as a real gap, not yet written (see point 
 - A halt sends no `CLOSE`. Done on 2026-09-20: `run()` stops its threads with `stop_threads(close=False)`,
   so each writer sends what is already queued and stops. `CLOSE` says that a writer has finished for good, and
   a halted node is resumed later: had it sent one, the reader at the other end could keep it in its input log
-  after its `processed_upto` (measured, see point 3), and a resume would take the node for a finished one. A
+  after its `processed_upto` (measured, see section 3), and a resume would take the node for a finished one. A
   node that ends on its own calls `stop_threads()`, whose default does send `CLOSE`.
 - Resumption: relaunch every process. It is the ordinary Startup sequence above, with no special
   case for a halt: each node loads the checkpoint that the halt closed and replays its input log
@@ -463,7 +463,7 @@ conformance status). What follows is the design as built.
   `last_seq` (the last sender number accepted on each input port) join it in the step that needs them, in the same version. Every capture
   happens on the brain thread (the periodic snapshot timer does not exist yet), so `processed_upto` is
   always well defined.
-- **Recovery** is the startup sequence of point 2: restore the latest checkpoint, then replay, in
+- **Recovery** is the startup sequence of section 2: restore the latest checkpoint, then replay, in
   order, every `DATA` record of the log with `pos` greater than `processed_upto`, all of them when there
   is no checkpoint, since the node state is then the default one. That covers what had been processed before
   the crash and what had arrived but not yet been processed, with no distinction between the two. A
@@ -513,7 +513,7 @@ conformance status). What follows is the design as built.
     and kept in memory, so checking it costs nothing (before, every message listed the directory and
     called `stat` on every file). Exceeding it raises in the reader thread before anything is written,
     like any other death of a thread. It should never trip in ordinary operation: it would mean that no
-    epoch is closing, which the periodic snapshots of point 2 are there to prevent. `INPUT_LOG_SEGMENT_BYTES` (4 MiB by default) is the size at which
+    epoch is closing, which the periodic snapshots of section 2 are there to prevent. `INPUT_LOG_SEGMENT_BYTES` (4 MiB by default) is the size at which
     a segment is closed.
   - *Pruning.* After each checkpoint is saved, whole segments other than the last one are deleted when
     the next segment starts at or below the `processed_upto` of the oldest retained checkpoint plus one.
@@ -629,7 +629,7 @@ conformance status). What follows is the design as built.
      line first and `CLOSE` last, are daemons, and are abandoned after a bounded wait if their peer is
      down and the pipe is full; the reopen-after-EOF machinery of `Supervisor` is gone. The engine suite
      has 152 tests (the new ones fail on the previous code where they can) and was repeated 15 times
-     without a failure; the real run is the one described in point 5.
+     without a failure; the real run is the one described in section 5.
   3. The input log written at arrival, positions, recovery, pruning and the checkpoint schema (G3, G4,
      G6). **Done 2026-09-20.** Split into three pieces (agreed 2026-09-20):
      - 3.1 The log as a component, `_InputLog`, not used by `FBPProcess` yet. **Done 2026-09-20**:
@@ -753,7 +753,7 @@ conformance status). What follows is the design as built.
 `Supervisor`'s design, next, can build on it too.)
 
 **Implemented entirely inside `FBPProcess` itself, in Python, not on top of the engine's `--mirror`
-fifo tap.** An earlier draft of this point routed the message log through `--mirror`, forced on for
+fifo tap.** An earlier draft of this section routed the message log through `--mirror`, forced on for
 every resident data fifo, with resident-specific sequence numbering and epoch-segment rotation
 layered onto the mirror tap. That was abandoned once it became clear it was subjecting a mechanism
 only ever meant for occasional manual debug inspection (the frontend's "Watch FIFO",
@@ -775,7 +775,7 @@ is loaded (`debasher::_check_fifo_mirror_allowed`, called by `define_fifo_opt` a
 
 ## 4. `Supervisor` class: DONE, implemented and tested (`engine/debasher_runtime_supervisor.py`)
 
-(Reuses `FBPProcess`'s thread-per-port pattern via a shared base, point 2, but does not take part
+(Reuses `FBPProcess`'s thread-per-port pattern via a shared base, section 2, but does not take part
 in the barrier as a business node.)
 
 ### Port declaration and node identity
@@ -801,7 +801,7 @@ in the barrier as a business node.)
 ### Class relationship: shared `_PortWorker` base
 
 - **`FBPProcess` and `Supervisor` both inherit from a new `_PortWorker` base class**, factored out
-  of `FBPProcess`'s existing thread topology (point 2, slice 3): generic `start_threads()`/
+  of `FBPProcess`'s existing thread topology (section 2, slice 3): generic `start_threads()`/
   `stop_threads()`, the shared inbound queue, one outbound queue per output port. None of the
   barrier/checkpoint/input-log logic moves into it, that stays in `FBPProcess` itself;
   `Supervisor` gets the same mechanical thread-per-port plumbing without inheriting anything about
@@ -822,7 +822,7 @@ in the barrier as a business node.)
   what keeps the `CLOSE` that a `Supervisor` sends when it stops from closing the channel for good, so that the
   triggers of one relaunched by hand still arrive.
 - This is a convenience, not the only way to trigger a round: `FBPProcess`'s own opt-in periodic
-  self-triggered snapshot (`SNAPSHOT_INTERVAL_SECS`, point 2) and a direct external `INTERACT`
+  self-triggered snapshot (`SNAPSHOT_INTERVAL_SECS`, section 2) and a direct external `INTERACT`
   write into an initiator's own FIFO (e.g. via Talk-to-FIFOs) both remain independent of whether a
   `Supervisor` exists at all or how it is configured.
 
@@ -832,14 +832,14 @@ in the barrier as a business node.)
   (carries no per-node identity, it is an external control channel, not a supervised node's
   heartbeat). Any `INTERACT` envelope arriving there is relayed verbatim to every configured
   `TRIGGER_PORT` initiator. `Supervisor` does not validate or interpret `command`, matching the
-  deliberately open-ended `INTERACT` catalog convention used everywhere else in this design (point
+  deliberately open-ended `INTERACT` catalog convention used everywhere else in this design (section
   1). Whatever ends up unrecognized is still handled safely at the far end, by the initiator's own
   existing `_on_interact` (logs a warning and ignores it, never aborts).
 
 ### Reading a node's channel across a crash: reopen after EOF
 
-**Replaced on 2026-09-20 (step 2 of the order of implementation in point 3): ghost connections, see
-point 5.** No reader sees EOF any more, so the reopening described below, its `.finished` polling and
+**Replaced on 2026-09-20 (step 2 of the order of implementation in section 3): ghost connections, see
+section 5.** No reader sees EOF any more, so the reopening described below, its `.finished` polling and
 the daemon reader threads no longer exist, and `Supervisor` learns that a node finished from its
 `.finished` file in the checker alone. What follows is what was built before, kept as a record.
 
@@ -861,7 +861,7 @@ the daemon reader threads no longer exist, and `Supervisor` learns that a node f
   `Supervisor`'s reader threads are daemon threads (`_READER_THREADS_ARE_DAEMON`); `FBPProcess`'s
   stay non-daemon, exactly as before.
 - `FBPProcess`'s heartbeat thread now actually sends `INTERACT heartbeat` to `SUPERVISOR_PORT` when
-  every thread is alive (it used to only log; left open in point 2).
+  every thread is alive (it used to only log; left open in section 2).
 
 ### Failure detection
 
@@ -874,7 +874,7 @@ the daemon reader threads no longer exist, and `Supervisor` learns that a node f
 - **State per node**: `_last_heartbeat[node]` (timestamp of the last real heartbeat, updated only by
   the brain thread when it dispatches an `INTERACT{"command":"heartbeat"}`), guarded by a lock:
   read by the checker thread, written by the brain thread, the same class of cross-thread hazard as
-  the `_last_epoch` race found in point 3, this time resolved with an explicit lock since, unlike
+  the `_last_epoch` race found in section 3, this time resolved with an explicit lock since, unlike
   that case, two threads legitimately need to touch this state.
 - **`HEARTBEAT_TIMEOUT_SECS` / `HEARTBEAT_CHECK_INTERVAL_SECS`**: the checker thread wakes every
   `HEARTBEAT_CHECK_INTERVAL_SECS` and, for each node not yet resolved (see below), compares
@@ -925,7 +925,7 @@ the daemon reader threads no longer exist, and `Supervisor` learns that a node f
   the built-in scheduler's own `debasher_builtin_sched::_launch`. The tool takes the program's
   output directory (not the process's) and, for an array task, the index; without `-t` it passes
   `NO_ARRAY_TASK`. Relaunching is therefore the same code path as the original launch (matches
-  point 2's "first launch and recovery are the same operation").
+  section 2's "first launch and recovery are the same operation").
 - **Why not simply re-execute `__exec__/<node>/<node>`** (the first design, implemented and
   discarded after a real `debasher_exec` smoke test): that generated script does not carry the
   per-launch state. `BUILTIN_SCHED_PID_FILENAME` (which `.id` file to write) and
@@ -967,7 +967,7 @@ the daemon reader threads no longer exist, and `Supervisor` learns that a node f
 
 A node given up on for good can, in the worst case, have been the only path (in the business-data
 graph) to some other node(s); if so, no ordered shutdown can ever reach them through the graph
-itself, since the barrier marker only ever propagates along the same edges as `DATA` (point 1's
+itself, since the barrier marker only ever propagates along the same edges as `DATA` (section 1's
 channel topology). Rather than build a second, parallel broadcast mechanism (a direct connection
 from `Supervisor` to every node, bypassing the graph, with a new barrier-skipping command), which
 would mean N extra FIFOs to wire per program, and would put every ordinary shutdown at risk of
@@ -997,16 +997,16 @@ in-flight state for whatever it kills.
 
 - Policy: localized recovery (only the downed node is relaunched), not a global rollback. A global
   rollback is kept as a possible future fallback for the cases the Contract leaves out (see Future
-  work, point 7).
-- The supervisor detects it by the absence of a heartbeat (or, faster, a dead PID, point 4) and
+  work, section 7).
+- The supervisor detects it by the absence of a heartbeat (or, faster, a dead PID, section 4) and
   relaunches the node through `debasher_launch_process`, i.e. the built-in scheduler's own launch,
-  the same operation as an initial launch (point 2's Startup sequence), with no special "recovery
-  mode" logic. Done and verified with a real `debasher_exec` run (point 4).
+  the same operation as an initial launch (section 2's Startup sequence), with no special "recovery
+  mode" logic. Done and verified with a real `debasher_exec` run (section 4).
 - The relaunched node reconnects to the Supervisor: the Supervisor's readers reopen their FIFO after
-  EOF while the node is not resolved (point 4, "Reading a node's channel across a crash").
+  EOF while the node is not resolved (section 4, "Reading a node's channel across a crash").
 - **Not done: a relaunched node does not reconnect to its business peers.** The earlier claim here
   ("the kernel resolves the reconnection with the blocked neighbor, with no additional mechanism")
-  only held for restarting the *whole program*: point 2's and point 3's smoke tests relaunched with a
+  only held for restarting the *whole program*: section 2's and section 3's smoke tests relaunched with a
   new `debasher_exec` against the same outdir, which recreates every FIFO. For one node crashing
   while its neighbors keep running, a `FBPProcess` reader (single `open()` plus `for line in fifo`)
   dies at the first EOF and never reopens, and a writer whose reader died gets `BrokenPipeError`
@@ -1032,12 +1032,12 @@ optional, and for a manual relaunch), and it is the signal a `FBPProcess` peer l
 
 **What the writer-dies direction needs:**
 1. A fourth envelope type, `CLOSE` (empty payload), rather than an `INTERACT` command. The reader
-   dispatches on `type` alone (point 1) and, besides ending its own loop, hands `CLOSE` to the brain
-   thread in order, so that it is logged and the port can leave the barrier's pending set (point 3).
+   dispatches on `type` alone (section 1) and, besides ending its own loop, hands `CLOSE` to the brain
+   thread in order, so that it is logged and the port can leave the barrier's pending set (section 3).
    Confirmed on 2026-09-20.
 2. Writer: on a stop that means the node has finished for good, send `CLOSE` last (after whatever is already
-   queued), then close; a halt sends none (point 3).
-3. Reader: ends only on a stop request (after a `CLOSE` it keeps reading and drops what follows, see point 3). With ghost connections (transport decision
+   queued), then close; a halt sends none (section 3).
+3. Reader: ends only on a stop request (after a `CLOSE` it keeps reading and drops what follows, see section 3). With ghost connections (transport decision
    below) it never sees EOF, so there is nothing to reopen. A truncated line left by a writer that
    died mid-write can no longer be delimited by EOF (today it kills the reader with a
    `JSONDecodeError`): handled by the resync line, see below.
@@ -1046,7 +1046,7 @@ optional, and for a manual relaunch), and it is the signal a `FBPProcess` peer l
    0.2 ms). `Supervisor` no longer needs daemon reader threads.
 5. A process exiting with an error (exception, non-zero exit) sends no `CLOSE` and is treated as a
    crash, consistent with the Supervisor design. A `CLOSE` followed by a later failure is harmless:
-   the peers keep reading and drop what the relaunched node sends (point 3).
+   the peers keep reading and drop what the relaunched node sends (section 3).
 
 **What it does not cover (the reader-dies direction):**
 - A writer whose reader died gets `BrokenPipeError` on its next write, and its thread dies. It
@@ -1060,7 +1060,7 @@ optional, and for a manual relaunch), and it is the signal a `FBPProcess` peer l
 - The symmetric ambiguity on the writer side: a reader that closed on purpose versus one that died.
 
 **Related consequence, done in step 4.4:** an input port closed with `CLOSE` will never send a marker
-again, so a barrier round does not wait for it (point 3).
+again, so a barrier round does not wait for it (section 3).
 
 **Supervisor:** does not need `CLOSE`. Its channels keep using the node's `.finished` file, since
 `CLOSE` does not prove the node succeeded, and a node that closed and then failed must still be heard
@@ -1115,7 +1115,7 @@ holding a ghost write end, 210 of 210 rounds without a hang or an `EPIPE`; reade
 with the writer holding a ghost read end, 40 of 40 rounds, the writer never dies and nothing is lost
 inside the pipe (the only hole, at most 44 lines, is what the killed reader had already consumed).
 
-- The reader never sees EOF and ends only on a stop request (a `CLOSE` does not end it, see point 3). To stop it,
+- The reader never sees EOF and ends only on a stop request (a `CLOSE` does not end it, see section 3). To stop it,
   `stop_threads()` writes a blank line to the reader's own ghost write end (checked: 600 of 600
   rounds, at most 0.2 ms, also when the stop precedes the read).
 - The writer never sees `EPIPE`. A dead peer means backpressure: the writer blocks once the pipe
@@ -1146,7 +1146,7 @@ inside the pipe (the only hole, at most 44 lines, is what the killed reader had 
   no longer opening what is not open; the last one is killed by a hang, since a writer thread then dies).
   What remains of the window is the time to notice the crash (`HEARTBEAT_CHECK_INTERVAL_SECS` when the
   process is gone) and to start the new process.
-- Implemented in step 2 of the order in point 3, and checked with a real `debasher_exec` run of a numbered
+- Implemented in step 2 of the order in section 3, and checked with a real `debasher_exec` run of a numbered
   message source, a consumer that logs what it receives and a `Supervisor`, twice: `kill -9` of the writer
   node's process group and, later, of the reader node's. The `Supervisor` relaunched each one, the other
   node was never touched (and never stopped heartbeating), and across the reader's outage and relaunch the
@@ -1165,12 +1165,12 @@ inside the pipe (the only hole, at most 44 lines, is what the killed reader had 
   also tells the reader that its peer (re)connected.
 
 **Also decided (2026-09-20)**: (B) the `CLOSE` envelope, sent by the writer when it has finished for good and handed by
-the reader to the brain thread in order, so that it is logged (point 3); (C) a closed port leaves the
+the reader to the brain thread in order, so that it is logged (section 3); (C) a closed port leaves the
 barrier's pending set, the reader of a closed port keeps reading and drops what follows (so the heartbeat needs no special case), and the "peer
-finished" fact is durable through the input log and the checkpoint's `closed_ports` (point 3), which
+finished" fact is durable through the input log and the checkpoint's `closed_ports` (section 3), which
 replaces the marker file proposed before. The writer side of the reader-dies direction is moot (the writer
 never sees `EPIPE`); G5 and the messages already read but not yet logged are
-settled by point 3. What remains is a real crash-and-relaunch smoke test between two `FBPProcess` nodes
+settled by section 3. What remains is a real crash-and-relaunch smoke test between two `FBPProcess` nodes
 under `debasher_exec`, and the chaos test of the Contract.
 
 ## 6. Loose ends to check before considering the design closed
@@ -1182,9 +1182,9 @@ under `debasher_exec`, and the chaos test of the Contract.
   epochs for what a person means as one round. A node with inputs from both replaces the lower round with the higher
   one and then waits for a marker of the higher epoch that the other initiator will not send, so its rounds stay
   incomplete, with warnings in the log (before the replacement rule the node ended instead). Reasoned from the code,
-  not run. Numbering the rounds from outside, with the epoch in the trigger, would fix it (see Future work, point 7).
+  not run. Numbering the rounds from outside, with the epoch in the trigger, would fix it (see Future work, section 7).
 - **A crash during a round** aborts it, and the mechanism is not designed. What exists: a node that comes back has no
-  round open, and the next round of a newer epoch replaces a round that another node was left with open (point 2).
+  round open, and the next round of a newer epoch replaces a round that another node was left with open (section 2).
   A real crash during a round has not been tried.
 - **`debasher_stop`, `debasher_status` and `debasher_stats` did not see a resident program launched
   without `--sched BUILTIN`: fixed on 2026-09-20, for every program.** Found with real runs:
@@ -1206,21 +1206,21 @@ under `debasher_exec`, and the chaos test of the Contract.
   program that ran under Slurm, opened on a machine without Slurm, now makes the tools report that Slurm is
   not installed, exactly as it already did when `--sched SLURM` had been typed, where before the tools
   silently used the built-in scheduler.
-- Maximum packet size relative to `PIPE_BUF`: checked (see the findings in point 5). Truncation only
-  happens above 4096 bytes and is handled by the resync line (point 5), so there is no size limit.
-- Whether checkpoints' `channel_state` (point 2's State capture subsection) needs to actually be
+- Maximum packet size relative to `PIPE_BUF`: checked (see the findings in section 5). Truncation only
+  happens above 4096 bytes and is handled by the resync line (section 5), so there is no size limit.
+- Whether checkpoints' `channel_state` (section 2's State capture subsection) needs to actually be
   fed back into `process_data` somehow on restore, or is genuinely only for external
   inspection/audit of a consistent global snapshot as the introduction's second goal describes:
   today it is captured and persisted but never read back by anything, which is either correct as
   designed or a real gap; not resolved yet. Partly answered: localized recovery does not need it (it
-  uses the log), a global rollback would (see Future work, point 7).
+  uses the log), a global rollback would (see Future work, section 7).
 - Verifying that a valid `BARRIER` initiator can actually reach every other node in the graph
-  (point 2's Chandy-Lamport subsection): no validation exists yet. Point 4's `TRIGGER_PORT` list
+  (section 2's Chandy-Lamport subsection): no validation exists yet. Section 4's `TRIGGER_PORT` list
   (one initiator per genuinely independent subgraph) covers the *known-at-design-time* version of
   this, but does not validate that each configured initiator can really reach everything in its own
   intended subgraph: that check still does not exist. A graph that becomes disconnected only at
   *runtime* (a node dying permanently mid-execution) is a separate case, not a validation problem at
-  all, and is instead handled by point 4's `debasher_stop` escalation.
+  all, and is instead handled by section 4's `debasher_stop` escalation.
 - **A relaunched node that dies before its first heartbeat is never noticed again.** After
   `_declare_down` a node stays in `_down` until a real heartbeat arrives, and `_check_node` skips
   nodes in `_down`. If the relaunch itself fails (a startup crash), nothing re-detects it,
@@ -1288,15 +1288,15 @@ under `debasher_exec`, and the chaos test of the Contract.
     reference program).
 - **Auxiliary script to reset checkpoints across a whole topology**: deleting (or moving) every
   node's checkpoint folder before launching forces a clean start with no special-case code needed
-  anywhere (point 2's Startup sequence subsection); the script itself is not written yet.
+  anywhere (section 2's Startup sequence subsection); the script itself is not written yet.
 - **Global (coordinated) rollback, as a fallback to localized recovery**: noted here, not designed
-  and not built. Localized recovery (point 5) remains the policy for the ordinary crash of a node. A
+  and not built. Localized recovery (section 5) remains the policy for the ordinary crash of a node. A
   global rollback would be the safe harbor for the cases the Contract leaves outside its guarantees,
   so that those cases need no heavy mechanism (a process holding every FIFO open, logging at the
   sender): detect the violation, stop, rewind every node to the last consistent cut, resume. Cases
   where it would be used: a guarantee that cannot be kept is detected (a hole in a channel's sequence
   numbers, a missing or corrupt checkpoint or log, an incompatible schema version); a node fails
-  permanently (today the escalation of point 4 ends in `debasher_stop`; with a rollback it becomes
+  permanently (today the escalation of section 4 ends in `debasher_stop`; with a rollback it becomes
   "stop, fix, rewind, resume"); several connected nodes, or all of them, crash together with inputs
   that cannot be regenerated (the contents of the FIFOs are gone); a crash during a snapshot round, if
   aborting rounds turns out to be harder than falling back to the last complete epoch; a deliberate
@@ -1317,7 +1317,7 @@ under `debasher_exec`, and the chaos test of the Contract.
     into a mass local recovery, with the duplicates between nodes that this implies.
   - `channel_state` is needed here, unlike in localized recovery: the messages in transit at the cut
     were sent by nodes that, once restored, will not send them again, so they have to be redelivered.
-    This answers the open question about `channel_state` in point 6. A way to do it with no new logic:
+    This answers the open question about `channel_state` in section 6. A way to do it with no new logic:
     the script appends them to the log of the receiving node as records after the target position,
     which the unchanged startup already replays.
   - An epoch number must identify a single round. Today the initiator derives it from its own last
@@ -1337,7 +1337,7 @@ under `debasher_exec`, and the chaos test of the Contract.
     general: a channel is one-way, so the writer does not know how far its reader got and cannot tell how
     far back is enough. It also has to keep the epoch numbering of the latest checkpoint, because a node
     numbers its next round from the epoch of the one it restores. (Reasoned from the code, not tried.)
-  - A log at the sender with acknowledgements, the alternative rejected in point 3: the writer keeps what
+  - A log at the sender with acknowledgements, the alternative rejected in section 3: the writer keeps what
     it sent until the reader has it in a checkpoint. It would repair everything, but it needs a way back
     from the reader and coordination to delete.
   - Auxiliary ghost connections: holders of a channel's FIFO other than its two endpoints, placed somewhere

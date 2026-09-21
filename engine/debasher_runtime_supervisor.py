@@ -161,9 +161,9 @@ class Supervisor(_PortWorker):
                 continue
             if envelope_type != TYPE_INTERACT:
                 # Every Supervisor channel (node heartbeat or manual
-                # trigger) only ever carries INTERACT by design (point 1's
-                # channel topology) -- a DATA/BARRIER here is a protocol
-                # violation, not something to crash the process over.
+                # trigger) only ever carries INTERACT by design, so a
+                # DATA/BARRIER here is a protocol violation, not something
+                # to crash the process over.
                 self.log.warning(
                     "ignoring unexpected %r envelope on %r (Supervisor channels "
                     "only ever carry INTERACT)",
