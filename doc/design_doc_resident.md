@@ -2213,6 +2213,27 @@ crash-and-relaunch smoke test between two `FBPProcess` nodes under
   result. A hook would have to be called in the order of the input log, and
   replayed, like `process_data`, so that the state a module builds from it is
   the one it would have had without a crash. Not designed.
+- **Outputs that leave `process_data` as a result, not as calls to
+  `send_data`.** Today a module calls `send_data` from inside `process_data`, at
+  any moment of the call and any number of times. The alternative is that
+  `process_data` hands its outputs to the framework as a result: returned as a
+  list, yielded one by one (which keeps the outputs of a long call streaming),
+  or sent through a parameter that exists only during the call. Then
+  `send_data` is no longer a method of the node, so a send outside a handler is
+  impossible by construction, where the rule that a node acts only inside
+  `process_data` (see "source" in the Glossary) needs a check. The framework
+  would also receive the outputs of an input at one predictable point, which
+  would let it number them as a group (the input at position 5 produced the
+  numbers 12 to 14); check that a replay regenerates the outputs that the first
+  execution produced, and raise an error (G8) if it does not, so that the
+  determinism that a module owes (see "Obligations of module authors") is
+  checked and not only assumed; leave out of a replay the outputs already
+  delivered; and decide when each output reaches the writer thread. It would not
+  make an output durable or slow a sender down: an output stays in memory until
+  the writer thread writes it, and the outbound queue has no limit. The cost is
+  the model that a module author writes against, and every test that calls
+  `send_data` from outside a handler. Raised on 2026-09-21 as the way to have
+  the flow of outputs under the control of the framework. Reasoned, not tried.
 - **A `Supervisor` that serializes rounds** (perhaps never done). It would track
   which nodes have reported `checkpoint_saved` for an epoch (today it only logs
   it), leave out the nodes that finished, and relay a trigger only when the
