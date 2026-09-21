@@ -84,6 +84,24 @@ mutation check, durability level) is defined in the Contract, where it is used.
   It delivers envelopes in the order in which they were sent. Business channels
   carry `DATA` and `BARRIER`; the channels to and from the `Supervisor` carry
   only `INTERACT`.
+- **source** (fuente): whatever puts `DATA` into an input port of a node without
+  being a node of the program: a person writing into a FIFO, an external
+  program, a test harness. A node acts only inside `process_data`, in reaction
+  to what it receives, and never sends on its own initiative (decided
+  2026-09-21, not yet enforced by the code), so a source is always outside the
+  graph of nodes, and what enters through it is an external input (see "Limits
+  and non-goals"). The real runs reported here before that date used, as
+  sources, processes written for the run that only sent messages.
+- **root** (raíz): a node that no other node sends `DATA` to. Its input ports,
+  if it has any, are control ports or are written from outside the program, by a
+  source. It can start a round, and its part of a round closes as soon as it
+  opens, since it has no pending port.
+- **relay** (relé): a node with one input port and one output port whose
+  `process_data` sends on the output what it received on the input, one message
+  out for each message in. It is the simplest node that has both an input log
+  and outputs, so tests and measurements use it as the node in the middle; a
+  real node would transform the data, or send zero or several messages per
+  input.
 - **`Supervisor`**: the optional process (0 or 1 per program) that receives
   heartbeats, relaunches downed nodes and can start rounds. It is not itself
   supervised.
@@ -607,7 +625,7 @@ before any guarantee is relied on.
 - **A trigger, or a marker of another epoch, that reached a node with a round
   open ended its brain thread, fixed on 2026-09-20.** Both raised a `ValueError`
   that nothing caught. Measured with real processes: an initiator that is a
-  source accepts two `start_snapshot` in a row, since each of its rounds closes
+  root accepts two `start_snapshot` in a row, since each of its rounds closes
   at once, and the node downstream, with its round 0 still open, died on the
   marker of round 1 and never wrote a checkpoint. Now a newer round replaces the
   older one.
@@ -880,7 +898,7 @@ section 7, Future work).
   input port before closing its part of the snapshot. Done, tested end-to-end
   with a real 2-node cycle
   (`test_initiator_in_a_cycle_waits_for_its_own_marker_to_return`).
-- Without cycles: the initiator must be a root/source; if it has no input ports,
+- Without cycles: the initiator must be a root; if it has no input ports,
   it closes its part instantly. Done, tested
   (`test_a_root_node_with_no_input_ports_closes_instantly`).
 - Control ports are left out of every round, whoever opens it: a command is not
@@ -1169,7 +1187,7 @@ replayed nothing. All five were verified with the real classes and are fixed
   already arrived, nothing changes. A round that opens later starts with the
   input ports, minus the one whose marker opened it, minus the closed ports, and
   forwards its marker on the outputs as always; a node whose inputs have all
-  closed behaves as a source. A port that is closed at the capture has no entry
+  closed behaves as a root. A port that is closed at the capture has no entry
   in the channel state, and one that closes during the round keeps the entry
   that it had. A node that has finished takes no part in later rounds: the cut
   stays consistent because everything it sent precedes its `CLOSE` in the
@@ -1325,7 +1343,7 @@ replayed nothing. All five were verified with the real classes and are fixed
        changes nothing; a round that opens after a port closed does not wait for
        it and keeps no channel state for it; the marker is still forwarded; a
        node whose inputs have all closed starts and closes a round like a
-       source; a later round after two ports closed opens and closes without
+       root; a later round after two ports closed opens and closes without
        ending the brain thread; the checkpoint of the cut that a `CLOSE`
        completes; a halt completes when the last port it waits for closes), and
        four tests of 4.3 that closed a round by hand now let it close by itself.
