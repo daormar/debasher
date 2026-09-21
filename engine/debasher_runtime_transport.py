@@ -224,14 +224,32 @@ class _PortWorker:
     # keeps the process alive.
     WRITER_STOP_TIMEOUT_SECS = 5
 
+    def _open_fifos(self):
+        """
+        Opens the fifo of every declared port that is not open yet, so that
+        calling it again does nothing. A fifo keeps what was written to it
+        and not yet read only while some process holds it open, and a node
+        holds it from the moment it opens it: a class whose startup takes a
+        while before its threads can run (FBPProcess restores a checkpoint
+        and replays a log) opens its fifos first, so that its neighbors'
+        messages wait for it in the fifos even if the neighbors crash
+        meanwhile.
+        """
+        for tag, option_name in self._input_ports().items():
+            if tag not in self._reader_fds:
+                self._reader_fds[tag] = _open_fifo_reader(self.opts[option_name])
+        for tag, option_name in self._output_ports().items():
+            if tag not in self._writer_fds:
+                self._writer_fds[tag] = _open_fifo_writer(self.opts[option_name])
+
     def start_threads(self):
         """
-        Opens every fifo, then starts one reader thread per declared input
-        port, one writer thread per declared output port, and the brain
-        thread. Nothing here waits for a peer: every endpoint holds both
-        ends of its fifo (see _open_fifo_reader and _open_fifo_writer), so
-        the channel outlives the crash of either process and the processes
-        can start in any order.
+        Opens every fifo that is not open yet (see _open_fifos), then starts
+        one reader thread per declared input port, one writer thread per
+        declared output port, and the brain thread. Nothing here waits for a
+        peer: every endpoint holds both ends of its fifo (see
+        _open_fifo_reader and _open_fifo_writer), so the channel outlives the
+        crash of either process and the processes can start in any order.
 
         Brain and reader threads are not daemons: this process is meant to
         keep running until explicitly told to stop, and stop_threads() can
@@ -239,10 +257,7 @@ class _PortWorker:
         can stay blocked in a write while its peer is down and must never
         keep the process alive.
         """
-        for tag, option_name in self._input_ports().items():
-            self._reader_fds[tag] = _open_fifo_reader(self.opts[option_name])
-        for tag, option_name in self._output_ports().items():
-            self._writer_fds[tag] = _open_fifo_writer(self.opts[option_name])
+        self._open_fifos()
 
         for tag, option_name in self._input_ports().items():
             thread = threading.Thread(

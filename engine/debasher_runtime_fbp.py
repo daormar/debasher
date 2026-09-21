@@ -150,15 +150,22 @@ class FBPProcess(_PortWorker):
 
     def run(self):
         """
-        Full startup sequence: find the most recent checkpoint if any
-        -> restore_node_state()/defaults -> initialize_runtime() -> open the
-        input log and replay what it holds after the checkpoint (all of
-        it if there is no checkpoint, since the node state is then the
-        default one) -> start_threads() (opens every FIFO, starts every
+        Full startup sequence: open every FIFO -> find the most recent
+        checkpoint if any -> restore_node_state()/defaults ->
+        initialize_runtime() -> open the input log and replay what it holds
+        after the checkpoint (all of it if there is no checkpoint, since the
+        node state is then the default one) -> start_threads() (starts every
         worker thread) -> wait until told to stop (an epoch closing with
         halt=True) -> stop every thread, from this (the calling) thread
         rather than the brain thread that actually set the stop signal.
         """
+        # The FIFOs are held from the very first moment of the recovery, not
+        # from the moment the threads start. Restoring and replaying can take
+        # a while, and a FIFO keeps what its neighbors sent only while some
+        # process holds it open, which during that time may be the neighbor
+        # alone: if it crashed too, everything it had sent would be destroyed.
+        self._open_fifos()
+
         checkpoint = self._load_latest_checkpoint()
         processed_upto = 0
         if checkpoint is not None:

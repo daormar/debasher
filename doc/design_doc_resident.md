@@ -82,7 +82,7 @@ The precise meaning of the words this document uses, in the order in which they 
 
 - **crash** (caída): the death of a node's process that is neither a halt nor a finish for good: `SIGKILL`, an uncaught exception, an out-of-memory kill, or a non-zero exit. A deliberate error exit and a crash are treated the same.
 - **relaunch** (relanzamiento): starting a new incarnation of a node, by the `Supervisor` (through `debasher_launch_process`) or by hand. It is the same operation as the first launch: there is no recovery mode.
-- **recovery** (recuperación): what a relaunched node does at startup: load its latest checkpoint, `restore_node_state`, `initialize_runtime`, replay the input log after `processed_upto`, then start its threads. Localized recovery is the policy: only the downed node is relaunched. A **global rollback** (vuelta atrás global) would instead rewind every node to the last consistent cut; it is future work.
+- **recovery** (recuperación): what a relaunched node does at startup: open its FIFOs, load its latest checkpoint, `restore_node_state`, `initialize_runtime`, replay the input log after `processed_upto`, then start its threads. Localized recovery is the policy: only the downed node is relaunched. A **global rollback** (vuelta atrás global) would instead rewind every node to the last consistent cut; it is future work.
 - **heartbeat** (latido): the `INTERACT` command that a healthy node sends the `Supervisor` every `HEARTBEAT_INTERVAL_SECONDS`. The `Supervisor` declares a node down when they stop for `HEARTBEAT_TIMEOUT_SECS`, or at once if the node's PID is gone and its `.finished` file is absent.
 - **down, done, given up** (caído, terminado, abandonado): the states of a node in the `Supervisor`. Down: declared down and relaunched. Done: its `.finished` file appeared (it exited cleanly with code 0), so it is never checked again. Given up: it exhausted `MAX_RELAUNCH_ATTEMPTS`, which triggers the escalation.
 - **escalation** (escalada): what the `Supervisor` does when a node is given up: an ordered shutdown through the initiators and, if some node has not finished after `FORCE_STOP_TIMEOUT_SECS`, `debasher_stop` on the whole program.
@@ -138,7 +138,7 @@ Numbered so that this document can cite them; tests and code comments state the 
 
 ### Limits and non-goals
 
-- **Both endpoints of a channel crashed before either finished recovering.** When one endpoint of a channel crashes, nothing is lost: the other holds the FIFO open, and what the writer had sent and the reader had not yet read waits in it. A node holds its FIFOs only from the last step of its recovery (starting its threads, after restoring its checkpoint and replaying its input log) until it dies. So if the second endpoint crashes before the first has finished recovering, or both crash together, there is a moment at which neither holds the FIFO, and what it held is destroyed, at most what a pipe holds (64 KiB). Checked with real `kill -9` on 50 unread lines: all survive if only one endpoint dies, and none survives if both do, together, half a second apart, or the writer while the relaunched reader was still replaying its log (a control without that kill delivers all 50). Whether the loss is repaired depends on where the destroyed messages came from. A relaunched writer restores its latest checkpoint and replays its input log after `processed_upto`, so it sends again, with the same sequence numbers, everything it produced from that point on: the destroyed messages among those reach the reader after all, and it cannot tell (checked with a real relay that had a checkpoint after 10 messages, received 5 more and was killed: the relaunched one sent exactly those 5). What it had sent before that checkpoint is inside the node state that it restores and is not sent again: if some of it was still unread in the FIFO, it is lost, and the reader finds the hole in the sequence numbers when the next message arrives (G8). Ways to repair more are listed in Future work, none designed. Non-adjacent nodes may crash together with no such problem.
+- **Both endpoints of a channel crashed before either reopened the FIFO.** When one endpoint of a channel crashes, nothing is lost: the other holds the FIFO open, and what the writer had sent and the reader had not yet read waits in it. A relaunched node holds its FIFOs from the first step of its recovery, before it restores its checkpoint or replays its input log, until it dies. So only if the second endpoint crashes before the first has been relaunched and has reopened the FIFO, which takes the time to notice the crash and start the new process, or if both crash together, is there a moment at which neither holds the FIFO, and what it held is destroyed, at most what a pipe holds (64 KiB). Checked with real `kill -9` on 50 unread lines: all survive if only one endpoint dies, and none survives if both do, together or half a second apart with no relaunch in between. The recovery is not part of that window: with the writer killed while the relaunched reader was still replaying its log (19 of 60 records replayed), all 50 are delivered, where before the FIFOs were opened first thing in the recovery none was. Whether the loss is repaired depends on where the destroyed messages came from. A relaunched writer restores its latest checkpoint and replays its input log after `processed_upto`, so it sends again, with the same sequence numbers, everything it produced from that point on: the destroyed messages among those reach the reader after all, and it cannot tell (checked with a real relay that had a checkpoint after 10 messages, received 5 more and was killed: the relaunched one sent exactly those 5). What it had sent before that checkpoint is inside the node state that it restores and is not sent again: if some of it was still unread in the FIFO, it is lost, and the reader finds the hole in the sequence numbers when the next message arrives (G8). Ways to repair more are listed in Future work, none designed. Non-adjacent nodes may crash together with no such problem.
 - **External inputs.** What enters the graph from outside it (a manual write to a FIFO, an external program) cannot be regenerated by any node, so at that boundary delivery is at most once; inside the graph, the guarantees start from the first message a node logs.
 - **Messages read from a FIFO but not yet written to the input log** when a node crashes. The reader thread writes each message to the log when it arrives, so this window is only the few microseconds between taking a block from the FIFO and appending it (today it is the whole time a message waits in the inbound queue). A message lost in that window is not recovered, since its sender considers it delivered, but the sequence numbers of G5 make the hole detectable (G8).
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite loop, deadlock) is not detected today: the heartbeat proves that its threads are alive, not that they make progress. Not a goal for now; an extension would be a progress counter in the heartbeat.
@@ -150,7 +150,7 @@ Numbered so that this document can cite them; tests and code comments state the 
 
 ### Acceptance: how reliability is shown
 
-Reliability is claimed only for what passes a **chaos test**: a reference resident program with the shapes that matter (a fan-in node with more than one input port whose `process_data` is sensitive to the order across ports, a cycle, a source and a sink), run once with no failures and then repeatedly under `kill -9` of random nodes at random moments (including several at once, adjacent pairs, and moments in which a snapshot round is open), with the `Supervisor` relaunching them. Pass criterion: the final state and output equal those of the failure-free run, with no duplicated and no missing message. The exception follows from two limits of the Contract, after which a message can be lost beyond repair: both endpoints of a channel crashed before either finished recovering, and a node killed with a message that it has read from a FIFO but not yet written to its input log. A run that hits either passes if it ends with an error of G8 that names the channel and the numbers of the missing messages, in place of the reference result. What always fails is a different result with no error (a message duplicated, lost or altered that nobody reported) and a run that never ends and reports nothing. The harness records when it kills each node and when that node finishes recovering, so it knows which runs hit the first limit. The second cannot be seen from outside, so a G8 error in a run that did not hit the first one is examined, and it has to be shown to come from it and not from a fault of the replay. The chaos test runs against real `debasher_exec` runs, not mocks.
+Reliability is claimed only for what passes a **chaos test**: a reference resident program with the shapes that matter (a fan-in node with more than one input port whose `process_data` is sensitive to the order across ports, a cycle, a source and a sink), run once with no failures and then repeatedly under `kill -9` of random nodes at random moments (including several at once, adjacent pairs, and moments in which a snapshot round is open), with the `Supervisor` relaunching them. Pass criterion: the final state and output equal those of the failure-free run, with no duplicated and no missing message. The exception follows from two limits of the Contract, after which a message can be lost beyond repair: both endpoints of a channel crashed before either reopened the FIFO, and a node killed with a message that it has read from a FIFO but not yet written to its input log. A run that hits either passes if it ends with an error of G8 that names the channel and the numbers of the missing messages, in place of the reference result. What always fails is a different result with no error (a message duplicated, lost or altered that nobody reported) and a run that never ends and reports nothing. The harness records when it kills each node and when that node has been relaunched, so it knows which runs hit the first limit. The second cannot be seen from outside, so a G8 error in a run that did not hit the first one is examined, and it has to be shown to come from it and not from a fault of the replay. The chaos test runs against real `debasher_exec` runs, not mocks.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through a fan-in node while a round is open: `process_data` receives both").
 
@@ -338,11 +338,14 @@ looks for the most recent available checkpoint; if there is none, it starts with
 The distinction between "first time" and "recovery" is determined externally by whether checkpoint
 files exist or not, not by a decision the process itself makes.
 
-Single sequence, implemented exactly this way in `run()`: look for the most recent checkpoint ->
-(if found) `restore_node_state()`, otherwise default values -> `initialize_runtime()` (always invoked,
-same code whether or not state was restored) -> open the input log and replay it after the
-checkpoint's `processed_upto`, all of it if there was no checkpoint (point 3) -> `start_threads()` (opens every FIFO by known name and starts every worker thread) -> wait until
-told to stop -> stop every thread.
+Single sequence, implemented exactly this way in `run()`: open every FIFO by known name -> look for the
+most recent checkpoint -> (if found) `restore_node_state()`, otherwise default values ->
+`initialize_runtime()` (always invoked, same code whether or not state was restored) -> open the input
+log and replay it after the checkpoint's `processed_upto`, all of it if there was no checkpoint (point 3)
+-> `start_threads()` (starts every worker thread) -> wait until told to stop -> stop every thread. The
+FIFOs come first because a node holds a FIFO only from the moment it opens it, and restoring and
+replaying can take a while: if a neighbor that was the only holder of a FIFO crashed during that time,
+what it had sent would be destroyed with it.
 
 **Important consequence**: launching a process for the first time and relaunching it after a
 failure are the same operation, with no distinction. The supervisor does not need to know whether
@@ -495,9 +498,10 @@ conformance status). What follows is the design as built.
     segment that has a complete record. A segment with no complete record (only a torn fragment) is
     deleted at startup: the next record reuses its position, so a new segment would collide with its
     name, and the fragment holds nothing.
-  - *Startup order in `run()`:* load the latest checkpoint, `restore_node_state`, `initialize_runtime`, recover
-    the log, replay the `DATA` records with `pos > processed_upto`, start the threads. With no checkpoint
-    the node state is the default one and `processed_upto` is 0, so the whole log is replayed.
+  - *Startup order in `run()`:* open the FIFOs, load the latest checkpoint, `restore_node_state`,
+    `initialize_runtime`, recover the log, replay the `DATA` records with `pos > processed_upto`, start the
+    threads. With no checkpoint the node state is the default one and `processed_upto` is 0, so the whole
+    log is replayed.
   - *What replay checks.* It starts at the last segment whose name is at most `processed_upto + 1` and
     fails loudly if the log starts above `processed_upto + 1`, if the positions from there on are not
     consecutive, if a segment does not start where the previous one ended, or if a line that ends in a
@@ -1018,8 +1022,8 @@ in-flight state for whatever it kills.
 Nothing of this is implemented. State of the discussion:
 
 **Proposal: a process always sends a closing message before closing its FIFO.**
-The FIFO is open for the whole life of a process (reader/writer threads open it in
-`start_threads()` and hold it until `_STOP`), so EOF on a reader means only two things: the writer
+The FIFO is open for the whole life of a process (it opens it as it starts and holds it until
+`_STOP`), so EOF on a reader means only two things: the writer
 closed on purpose, or it died. A closing message sent in band tells them apart: EOF after it means
 "finished, do not wait", EOF without it means "crashed, reopen and wait for the relaunched writer".
 Same idea as FIN versus RST in TCP. It is decentralized (works without a Supervisor, which is
@@ -1123,9 +1127,25 @@ inside the pipe (the only hole, at most 44 lines, is what the killed reader had 
   the `Supervisor.run()` hang goes away by construction. Tests to rewrite: the six on the reopen
   hook, `test_real_reader_reopens_after_eof_and_receives_a_relaunched_writer`,
   `test_reader_thread_exits_on_fifo_eof`, and those that close a test-side end to finish a reader.
-- Not covered: both endpoints of a channel dying together (the ghost ends die with their processes,
-  so the unread messages are destroyed; a third process holding the FIFO would keep them, checked,
-  not adopted, see the Contract's limits and Future work).
+- Not covered: both endpoints of a channel dying together, before either has reopened the FIFO (the
+  ghost ends die with their processes, so the unread messages are destroyed; a third process holding the
+  FIFO would keep them, checked, not adopted, see the Contract's limits and Future work).
+- **The FIFOs are opened first thing in the recovery (decided and done on 2026-09-21).** A relaunched node used
+  to open its FIFOs in `start_threads()`, after restoring its checkpoint and replaying its input log, so the
+  time it spent recovering lay inside the window in which the crash of a neighbor could destroy what the
+  neighbor had sent it. Measured with a real `debasher_exec` run of a source and a sink whose replay took 6 s
+  (the sink killed after 60 messages, the source sending 50 more and killed 2 s into the sink's replay): the
+  sink received 0 of the 50 (three runs), and all 50 when the source was left alone. Now `run()` opens the FIFOs
+  before anything else (`_open_fifos()`, which `start_threads()` still calls for the ports that are not open
+  yet, so a node driven without `run()` is unchanged), and the same run delivers 50 of 50 (three runs). Seven
+  new tests in the words of the guarantee (what a writer sent to a relaunched reader, and what a relaunched
+  writer had in its FIFO, survives the crash of the neighbor while the node restores its checkpoint,
+  initializes and replays, and starting the threads does not open again what is already open), checked against
+  eight mutants (no early open, opened after the restore, after `initialize_runtime`, after the replay, opened
+  again by `start_threads()`, only the input FIFOs early, only the output FIFOs early, and `start_threads()`
+  no longer opening what is not open; the last one is killed by a hang, since a writer thread then dies).
+  What remains of the window is the time to notice the crash (`HEARTBEAT_CHECK_INTERVAL_SECS` when the
+  process is gone) and to start the new process.
 - Implemented in step 2 of the order in point 3, and checked with a real `debasher_exec` run of a numbered
   message source, a consumer that logs what it receives and a `Supervisor`, twice: `kill -9` of the writer
   node's process group and, later, of the reader node's. The `Supervisor` relaunched each one, the other
@@ -1308,7 +1328,7 @@ under `debasher_exec`, and the chaos test of the Contract.
   - How `debasher_exec` relaunches a program some of whose nodes are already `finished` (to be checked
     against the rerun logic). A new run recreates the FIFOs, which is what a rollback needs.
 - **Repairing messages destroyed with a FIFO.** When both endpoints of a channel crash before either has
-  finished recovering, what the FIFO held is destroyed, and only what the writer produces again after its
+  reopened the FIFO, what the FIFO held is destroyed, and only what the writer produces again after its
   latest checkpoint comes back (see the Contract's limits). Ways to widen that, none designed or tried:
   - The writer restores an older retained checkpoint and replays from there. The input log is kept back
     to the `processed_upto` of the oldest retained checkpoint, the numbers are regenerated the same, and
@@ -1320,9 +1340,18 @@ under `debasher_exec`, and the chaos test of the Contract.
   - A log at the sender with acknowledgements, the alternative rejected in point 3: the writer keeps what
     it sent until the reader has it in a checkpoint. It would repair everything, but it needs a way back
     from the reader and coordination to delete.
-  - A process that holds every FIFO of the program open. It keeps the unread messages while both nodes are
-    gone (checked with real `kill -9`: 50 of 50 survive, see also point 5), but it is one more process that
-    has to stay alive, and the `Supervisor`, the obvious candidate, is not supervised. Not adopted.
+  - Auxiliary ghost connections: holders of a channel's FIFO other than its two endpoints, placed somewhere
+    else in the program, so that the unread messages survive while both endpoints are gone. A read end
+    opened without blocking is enough to keep what a pipe holds (checked with real `kill -9`: 50 of 50 survive
+    with a third process holding one). The simplest holder is a single process for the whole program, the
+    `Supervisor` or one of its own, but if it dies together with both endpoints the loss is back, and the
+    `Supervisor` is not supervised. A series of holders spreads that risk: for example every node also holds
+    an auxiliary read end of the channels of its neighbors, so that a channel loses its contents only if its
+    two endpoints and all its auxiliary holders are gone within one recovery, which is far less likely when
+    the crashes are independent (reasoned, not measured). Open questions: who holds which channel, how a
+    holder learns the paths of FIFOs that are not its own (a node knows only its own options today), whether
+    a relaunched holder reopens its auxiliary ends first thing, as it does with its own, and what becomes of
+    the auxiliary ends of a node that has finished for good. Not designed.
   - The global rollback above, which rewinds both nodes to the last consistent cut and redelivers from
     `channel_state` the messages that were in transit at the cut.
 - **Durability against machine failure (`fsync`)**: see the note in the Contract's failure model. First

@@ -1,6 +1,7 @@
 import errno
 import json
 import os
+import select
 import shutil
 import threading
 import time
@@ -9,6 +10,7 @@ import pytest
 
 import debasher_runtime_inputlog as inputlog
 import debasher_runtime_lib as lib
+import debasher_runtime_transport as transport
 
 
 def _wait_until(predicate, timeout=5.0, interval=0.01):
@@ -614,3 +616,172 @@ def test_a_node_that_has_halted_starts_no_more_rounds(tmp_path):
     assert live._halted.is_set()
     assert live._barrier_epoch is None
     assert not os.path.exists(os.path.join(live._checkpoints_dir(), "1.json"))
+
+
+# --- a relaunched node holds its fifos while it recovers ---------------------
+#
+# A fifo keeps what was written to it and not yet read only while some process holds it
+# open. A relaunched node takes a while before its threads run (it restores its
+# checkpoint, initializes and replays its log), and during that time its neighbor may be
+# the only process that holds the fifo: if the neighbor crashes too, what it had sent
+# would be destroyed. The tests hold the recovery still at one step, crash the neighbor
+# there, and check that nothing it had sent is lost.
+
+
+_RECOVERY_STEPS = ["restore", "initialize", "replay"]
+
+
+class _HeldRecovery(lib.FBPProcess):
+    """
+    A node whose recovery can be held still at one of its steps, so that a test can do
+    something to its neighbors while the recovery is going on. Its state is what it saw.
+    """
+
+    INPUT_PORTS = ["inf"]
+
+    def __init__(self, *args, **kwargs):
+        self.seen = []
+        self.hold_at = None
+        self.recovering = True
+        self.held = threading.Event()
+        self.release = threading.Event()
+        super().__init__(*args, **kwargs)
+
+    def _hold(self, step):
+        if self.hold_at == step:
+            self.held.set()
+            assert self.release.wait(10), "the test never released the recovery"
+
+    def restore_node_state(self, node_state):
+        self._hold("restore")
+        self.seen = list(node_state["seen"])
+
+    def initialize_runtime(self):
+        self._hold("initialize")
+
+    def process_data(self, port_name, packet):
+        if self.recovering:  # the replay runs before the threads start
+            self._hold("replay")
+        self.seen.append(packet)
+
+    def capture_node_state(self):
+        return {"seen": list(self.seen)}
+
+    def start_threads(self):
+        self.recovering = False
+        super().start_threads()
+
+
+class _HeldRelay(_HeldRecovery):
+    OUTPUT_PORTS = ["outf"]
+
+    def process_data(self, port_name, packet):
+        super().process_data(port_name, packet)
+        self.send_data("outf", packet)
+
+
+def _drain_data(path, expected, timeout=5.0):
+    """Opens a reader on the fifo and returns the DATA payloads it finds, until `expected` are there."""
+    rfd, ghost_fd = transport._open_fifo_reader(path)
+    try:
+        os.set_blocking(rfd, False)
+        buffered, payloads = b"", []
+        deadline = time.monotonic() + timeout
+        while len(payloads) < expected and time.monotonic() < deadline:
+            if select.select([rfd], [], [], 0.05)[0]:
+                buffered += os.read(rfd, 65536)
+                while b"\n" in buffered:
+                    line, buffered = buffered.split(b"\n", 1)
+                    if line.strip():
+                        envelope = lib.decode_envelope(line.decode())
+                        if envelope.type == lib.TYPE_DATA:
+                            payloads.append(envelope.payload)
+        return payloads
+    finally:
+        os.close(rfd)
+        os.close(ghost_fd)
+
+
+def _recover_held(node, step, while_held):
+    """Runs the node's recovery, holds it at `step`, calls `while_held()` there, and lets it finish."""
+    node.hold_at = step
+    runner = threading.Thread(target=node.run)
+    runner.start()
+    try:
+        assert node.held.wait(5), "the recovery never reached the step"
+        while_held()
+        node.release.set()
+    finally:
+        node.release.set()
+    return runner
+
+
+@pytest.mark.parametrize("step", _RECOVERY_STEPS)
+def test_what_a_writer_sent_to_a_relaunched_reader_survives_the_writer_crashing_while_it_recovers(tmp_path, step):
+    opts = _opts(tmp_path, ("inf",))
+    live = _HeldRecovery(opts=opts)
+    _process(live, [_data("inf", 1), ("inf", lib.TYPE_BARRIER, _ROUND), _data("inf", 3)])
+    _crash(live)
+
+    # The reader is down and the writer is alive and holds the fifo, so what it sends waits.
+    writer = transport._open_fifo_writer(opts["inf"])
+    for value in (10, 20, 30):
+        transport._write_all(writer[0], lib.encode_data(value) + "\n")
+
+    relaunched = _HeldRecovery(opts=opts)
+
+    def the_writer_crashes():
+        for fd in writer:
+            os.close(fd)
+
+    runner = _recover_held(relaunched, step, the_writer_crashes)
+    try:
+        assert _wait_until(lambda: relaunched.seen[-3:] == [10, 20, 30])
+        assert relaunched.seen == [1, 3, 10, 20, 30]
+    finally:
+        relaunched._halted.set()
+        runner.join(10)
+
+
+@pytest.mark.parametrize("step", _RECOVERY_STEPS)
+def test_what_a_relaunched_writer_had_in_its_fifo_survives_its_reader_crashing_while_it_recovers(tmp_path, step):
+    opts = _opts(tmp_path, ("inf", "outf"))
+    live = _HeldRelay(opts=opts)
+    _process(live, [_data("inf", 1), ("inf", lib.TYPE_BARRIER, _ROUND), _data("inf", 3)])
+    _crash(live)
+
+    # The reader is alive and holds the fifo. The writer that crashed had sent it three
+    # messages that it has not read.
+    reader = transport._open_fifo_reader(opts["outf"])
+    dead_writer = transport._open_fifo_writer(opts["outf"])
+    for value in (10, 20, 30):
+        transport._write_all(dead_writer[0], lib.encode_data(value) + "\n")
+    for fd in dead_writer:
+        os.close(fd)
+
+    relaunched = _HeldRelay(opts=opts)
+
+    def the_reader_crashes():
+        for fd in reader:
+            os.close(fd)
+
+    runner = _recover_held(relaunched, step, the_reader_crashes)
+    try:
+        # What the crashed writer had sent, and then what the recovery sends again.
+        assert _drain_data(opts["outf"], 4) == [10, 20, 30, 3]
+    finally:
+        relaunched._halted.set()
+        runner.join(10)
+
+
+def test_a_node_that_opened_its_fifos_before_starting_its_threads_does_not_open_them_again(tmp_path):
+    proc = _Fanin(opts=_opts(tmp_path))
+    proc._open_fifos()
+    readers = dict(proc._reader_fds)
+    assert set(readers) == {"a", "b"}
+
+    proc.start_threads()
+    try:
+        assert proc._reader_fds == readers
+    finally:
+        proc.stop_threads()
