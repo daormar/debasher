@@ -2806,11 +2806,12 @@ designed.
 - **Global (coordinated) rollback, as a fallback to localized recovery**: noted
   here, not designed and not built. Localized recovery (section 5) remains the
   policy for the ordinary crash of a node. A global rollback would be the safe
-  harbor for the cases the Contract leaves outside its guarantees, so that those
-  cases need no heavy mechanism (a process holding every FIFO open, logging at
-  the sender): detect the violation, stop, rewind every node to the last
-  consistent cut, resume. Cases where it would be used: a guarantee that cannot
-  be kept is detected (a hole in a channel's sequence numbers, a missing or
+  harbor for the cases the Contract leaves outside its guarantees, an
+  alternative to the narrower, targeted repairs "Repairing messages destroyed
+  with a FIFO" below lists for one of them specifically: detect the
+  violation, stop, rewind every node to the last consistent cut, resume.
+  Cases where it would be used: a guarantee that cannot be kept is detected
+  (a hole in a channel's sequence numbers, a missing or
   corrupt checkpoint or log, an incompatible schema version); a node fails
   permanently (today the escalation of section 4 ends in `debasher_stop`; with a
   rollback it becomes "stop, fix, rewind, resume"); several connected nodes, or
@@ -2873,19 +2874,47 @@ designed.
     endpoints, placed somewhere else in the program, so that the unread messages
     survive while both endpoints are gone. A read end opened without blocking is
     enough to keep what a pipe holds (checked with real `kill -9`: 50 of 50
-    survive with a third process holding one). The simplest holder is a single
-    process for the whole program, the `Supervisor` or one of its own, but if it
-    dies together with both endpoints the loss is back, and the `Supervisor` is
-    not supervised. A series of holders spreads that risk: for example every
-    node also holds an auxiliary read end of the channels of its neighbors, so
-    that a channel loses its contents only if its two endpoints and all its
-    auxiliary holders are gone within one recovery, which is far less likely
-    when the crashes are independent (reasoned, not measured). Open questions:
-    who holds which channel, how a holder learns the paths of FIFOs that are not
-    its own (a node knows only its own options today), whether a relaunched
-    holder reopens its auxiliary ends first thing, as it does with its own, and
-    what becomes of the auxiliary ends of a node that has finished for good. Not
-    designed.
+    survive with a third process holding one). This closes the "both endpoints
+    of a channel crashed" limit itself (see the Contract's Limits and
+    non-goals), not just widens it: the writer's relaunch still replays its
+    input log deterministically and resends, with the same numbers, everything
+    after its checkpoint's `capture_pos` (G5), so whatever the auxiliary holder
+    kept alive simply arrives ahead of that resend and the reader's own
+    existing dedup (`_on_arrival`'s "a number not above the last one accepted
+    is a duplicate", see section 1) drops the resend without any new logic on
+    the reading side. Nothing about G5 or replay would need to change; the
+    only new part is the holder itself. It does not touch the Contract's
+    other limit, "a message read from a FIFO but not yet written to the input
+    log" (a window internal to one process, between its own `read()` and its
+    own log `write()`, that no outside fd can protect), which is narrow
+    (microseconds) and not, on its own, worth chasing further.
+
+    The simplest holder is a single process for the whole program, the
+    `Supervisor` or one of its own, but if it dies together with both
+    endpoints the loss is back. Giving it its own heartbeat channel to the
+    `Supervisor`, like any business node's (it would carry no business logic
+    at all: open every channel's auxiliary end and do nothing else, so it
+    should be far less likely to crash than a node that also processes data),
+    narrows that from "if it ever dies" to "if it dies at the exact moment
+    both real endpoints of some channel are also down", since the `Supervisor`
+    would otherwise detect and relaunch it like any other node; the launch
+    mechanism's own "kill the stale PID first" step
+    (`debasher_builtin_sched::_launch`) still leaves a brief window, of
+    however long its own relaunch takes, where nobody holds that channel, so
+    this narrows the risk rather than closing it outright. It does not
+    answer who supervises the `Supervisor` itself, a separate, already-open
+    question elsewhere in this document. A series of holders spreads the
+    same risk further without needing this supervision at all: for example
+    every node also holds an auxiliary read end of the channels of its
+    neighbors (each already a supervised node in its own right), so that a
+    channel loses its contents only if its two endpoints and all its
+    auxiliary holders are gone within one recovery, which is far less
+    likely when the crashes are independent (reasoned, not measured). Open
+    questions for either shape: who holds which channel, how a holder
+    learns the paths of FIFOs that are not its own (a node knows only its
+    own options today), whether a relaunched holder reopens its auxiliary
+    ends first thing, as it does with its own, and what becomes of the
+    auxiliary ends of a node that has finished for good. Not designed.
   - The global rollback above, which rewinds both nodes to the last consistent
     cut and redelivers from `channel_state` the messages that were in transit at
     the cut.
