@@ -271,7 +271,12 @@ mutation check, durability level) is defined in the Contract, where it is used.
   produced by a replay and detect a gap. `out_seq` (the counter of each output
   port) and `last_seq` (the last number accepted on each input port) are stored
   in the checkpoint. Not the same as `pos`: `seq` is per channel and assigned by
-  the sender, `pos` is per node and assigned by the receiver.
+  the sender, `pos` is per node and assigned by the receiver. On the receiver
+  side `last_seq` is the brain's own view, so the drop itself cannot use it
+  directly: a reader thread keeps a second counter of its own, `_accepted_seq`,
+  ahead of the brain, which the check actually consults; restored at startup
+  from the checkpoint's `last_seq` plus the log after `capture_pos`, it is
+  never itself written to a checkpoint (see "State variables, at a glance").
 
 ### Threads of a node
 
