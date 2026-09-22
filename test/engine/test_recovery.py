@@ -100,7 +100,7 @@ def _crash(proc):
 
 def _relaunch(tmp_path, cls=_Fanin, ports=("a", "b")):
     node = cls(opts=_opts(tmp_path, ports))
-    node._halted.set()
+    node._stop_requested.set()
     node.run()
     return node
 
@@ -272,7 +272,7 @@ def test_recovery_fails_loudly_when_the_log_has_a_hole(tmp_path):
     os.remove(tmp_path / "node" / "log" / names[1])
 
     node = _Small(opts=_opts(tmp_path))
-    node._halted.set()
+    node._stop_requested.set()
     with pytest.raises(ValueError, match="missing"):
         node.run()
 
@@ -528,7 +528,7 @@ def test_after_a_relaunch_the_readers_of_closed_ports_drop_what_their_writers_se
         ]
         assert node._reader_threads["a"].is_alive()
     finally:
-        node._halted.set()
+        node._stop_requested.set()
         runner.join(5)
 
 
@@ -598,7 +598,7 @@ def test_the_trigger_of_a_supervisor_relaunched_after_a_recovery_still_reaches_t
         # The round opens and, with nothing else to wait for, closes: its checkpoint is written.
         assert _wait_until(lambda: os.path.exists(os.path.join(node._checkpoints_dir(), "0.json")))
     finally:
-        node._halted.set()
+        node._stop_requested.set()
         runner.join(5)
 
 
@@ -739,7 +739,7 @@ def test_what_a_writer_sent_to_a_relaunched_reader_survives_the_writer_crashing_
         assert _wait_until(lambda: relaunched.seen[-3:] == [10, 20, 30])
         assert relaunched.seen == [1, 3, 10, 20, 30]
     finally:
-        relaunched._halted.set()
+        relaunched._stop_requested.set()
         runner.join(10)
 
 
@@ -778,7 +778,7 @@ def test_what_a_relaunched_writer_had_in_its_fifo_survives_its_reader_crashing_w
         # log sends again (3).
         assert _drain_data(opts["outf"], 5) == [10, 20, 30, 1, 3]
     finally:
-        relaunched._halted.set()
+        relaunched._stop_requested.set()
         runner.join(10)
 
 

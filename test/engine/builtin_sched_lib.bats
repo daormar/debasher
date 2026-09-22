@@ -163,3 +163,48 @@ EOF
     [ -z "${BUILTIN_ARRAY_TASK_ID+x}" ]
     [ -z "${BUILTIN_SCHED_PID_FILENAME+x}" ]
 }
+
+@test "_print_script_trap emits a trap that ignores TERM" {
+    [ "$(debasher_builtin_sched::_print_script_trap)" = "trap '' TERM" ]
+}
+
+@test "a launched script survives SIGTERM to its own process group, unlike one without the trap" {
+    # _create_script puts _print_script_trap's line first, before anything
+    # else runs (see debasher_builtin_sched::_create_script): a graceful
+    # stop signals the whole group (the same group debasher_stop already
+    # reaches with SIGKILL, see debasher::_stop_pid), not a lone PID, so it
+    # reaches a resident process's own Python interpreter wherever it sits
+    # in the fork tree; without this, that broadcast would kill the
+    # process-group leader itself before it ever gets to write .finished.
+    cat > "${SCRIPT}" <<EOF
+#!/bin/bash
+$(debasher_builtin_sched::_print_script_trap)
+echo \$\$ > "\${BUILTIN_SCHED_PID_FILENAME}"
+sleep 5 &
+child=\$!
+wait "\${child}"
+echo "pid=\$\$" > "$(dirname "${SCRIPT}")/seen.tmp"
+mv "$(dirname "${SCRIPT}")/seen.tmp" "$(dirname "${SCRIPT}")/seen.txt"
+EOF
+    chmod +x "${SCRIPT}"
+
+    debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    local pid
+    for i in $(seq 1 100); do
+        [ -f "${EXECDIR}/proc.id" ] && { pid=$(cat "${EXECDIR}/proc.id"); break; }
+        sleep 0.05
+    done
+    [ -n "${pid}" ]
+
+    kill -TERM -- "-${pid}"
+
+    # If the trap had not protected it, this signal would have killed the
+    # wrapper itself at once, and it would never reach the line that
+    # writes seen.txt: its own child dying from the same broadcast (no
+    # trap of its own) is what lets "wait" return and the script go on,
+    # the same way a resident process's Python interpreter exiting
+    # cleanly (see FBPProcess's own SIGTERM handler) lets the real script
+    # go on to _signal_process_completion and write .finished.
+    wait_for_report
+    [ "$(grep '^pid=' "${EXECDIR}/seen.txt" | cut -d= -f2)" = "${pid}" ]
+}

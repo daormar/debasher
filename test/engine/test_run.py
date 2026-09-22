@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 import threading
 import time
 
@@ -146,7 +147,7 @@ def test_run_skips_restore_state_and_starts_with_defaults_when_no_checkpoint(exe
     assert proc.restored_with is None
     assert proc._last_epoch == -1
 
-    proc._halted.set()
+    proc._stop_requested.set()
     assert _wait_until(lambda: not proc._brain_thread.is_alive())
 
 
@@ -171,11 +172,14 @@ def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdi
     assert restarted._last_seq == {"inf": 2}
     assert restarted._accepted_seq == {"inf": 2}
 
-    restarted._halted.set()
+    restarted._stop_requested.set()
     assert _wait_until(lambda: not restarted._brain_thread.is_alive())
 
 
-def test_run_stops_every_thread_once_halted_is_set(execdir):
+def test_run_keeps_every_thread_alive_after_a_halt_closes_its_own_round(execdir):
+    # A halt is not the end of run()'s wait any more: closing its round
+    # behaves like an ordinary snapshot, and every thread stays up until an
+    # external stop signal arrives (see the two tests below).
     proc = _Node(opts={})
     run_thread = threading.Thread(target=proc.run, daemon=True)
     run_thread.start()
@@ -188,10 +192,101 @@ def test_run_stops_every_thread_once_halted_is_set(execdir):
     # would arrive from outside whatever thread is blocked in run().
     proc._on_interact({"command": "shutdown", "args": {}})
 
+    assert _wait_until(lambda: proc._halted.is_set())
+    assert run_thread.join(timeout=0.2) is None
+    assert run_thread.is_alive()
+    assert proc._brain_thread.is_alive()
+    assert proc._heartbeat_thread.is_alive()
+
+    proc._stop_requested.set()
+    assert _wait_until(lambda: not run_thread.is_alive())
+
+
+def test_run_stops_every_thread_once_a_stop_is_requested_even_without_a_halt(execdir):
+    proc = _Node(opts={})
+    run_thread = threading.Thread(target=proc.run, daemon=True)
+    run_thread.start()
+
+    assert _wait_until(lambda: proc._brain_thread is not None and proc._brain_thread.is_alive())
+    assert not proc._halted.is_set()
+
+    proc._stop_requested.set()
+
     assert run_thread.join(timeout=2) is None
     assert not run_thread.is_alive()
     assert not proc._brain_thread.is_alive()
     assert not proc._heartbeat_thread.is_alive()
+
+
+def test_on_stop_signal_sets_stop_requested(execdir):
+    proc = _Node(opts={})
+    assert not proc._stop_requested.is_set()
+
+    proc._on_stop_signal(signal.SIGTERM, None)
+
+    assert proc._stop_requested.is_set()
+
+
+@pytest.fixture
+def _sigterm_handler_guard():
+    # signal.signal() changes process-global state, not anything scoped to
+    # a single proc instance: a test that installs a handler bound to its
+    # own (about to be garbage-collected) proc must put back whatever was
+    # there before, or a later, unrelated SIGTERM in this same test process
+    # would call a dead test's bound method.
+    original = signal.getsignal(signal.SIGTERM)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, original)
+
+
+def test_run_installs_a_sigterm_handler_when_called_on_the_main_thread(execdir, _sigterm_handler_guard):
+    proc = _Node(opts={})
+    proc._stop_requested.set()  # so run() returns at once, on this (the main) thread
+
+    proc.run()
+
+    assert signal.getsignal(signal.SIGTERM) == proc._on_stop_signal
+
+
+def test_run_does_not_touch_the_signal_handler_off_the_main_thread(execdir, _sigterm_handler_guard):
+    # Every other test in this file drives run() on a background thread,
+    # deliberately, to keep the test itself free to poke at the node
+    # meanwhile: signal.signal() would raise there (only the main thread of
+    # the main interpreter may call it), so run() must skip installing it,
+    # the same way it skips nothing else about the rest of its sequence.
+    before = signal.getsignal(signal.SIGTERM)
+    proc = _Node(opts={})
+    run_thread = threading.Thread(target=proc.run, daemon=True)
+    run_thread.start()
+
+    assert _wait_until(lambda: proc._brain_thread is not None and proc._brain_thread.is_alive())
+    assert signal.getsignal(signal.SIGTERM) == before
+
+    proc._stop_requested.set()
+    assert _wait_until(lambda: not run_thread.is_alive())
+
+
+def test_a_real_sigterm_stops_run_from_outside_the_process(execdir, _sigterm_handler_guard):
+    # The actual mechanism end to end, within one process: run() itself on
+    # the main thread (so it really installs the handler), a helper thread
+    # sends this same process a real SIGTERM once run() is up. A signal is
+    # always delivered to the main thread regardless of which thread raised
+    # it, which is what this is really checking.
+    proc = _Node(opts={})
+
+    def _send_sigterm_once_running():
+        assert _wait_until(lambda: proc._brain_thread is not None and proc._brain_thread.is_alive())
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    sender = threading.Thread(target=_send_sigterm_once_running, daemon=True)
+    sender.start()
+
+    proc.run()  # blocks here, on the main thread, until the signal arrives
+
+    sender.join(timeout=2)
+    assert not proc._brain_thread.is_alive()
 
 
 class _Relay(_Node):
@@ -235,7 +330,7 @@ def test_run_restores_the_outbound_backlog_and_it_reaches_a_neighbor(execdir):
         run_thread.start()
 
         assert _wait_until(lambda: restarted._brain_thread is not None and restarted._brain_thread.is_alive())
-        restarted._halted.set()
+        restarted._stop_requested.set()
         assert _wait_until(lambda: not restarted._brain_thread.is_alive())
 
         sent = os.read(rfd, 1 << 16).decode().split("\n")
@@ -272,6 +367,13 @@ def test_an_ordered_halt_says_nothing_after_the_marker(execdir):
             os.write(wfd, (lib.encode_barrier(0, halt=True) + "\n").encode())
         finally:
             os.close(wfd)
+
+        # Closing the round no longer stops the node by itself (see
+        # test_run_keeps_every_thread_alive_after_a_halt_closes_its_own_round):
+        # what this test checks is what the round left on the channel by the
+        # time an external stop signal actually ends it.
+        assert _wait_until(lambda: proc._halted.is_set())
+        proc._stop_requested.set()
         run_thread.join(timeout=5)
         assert not run_thread.is_alive()
 
@@ -280,3 +382,38 @@ def test_an_ordered_halt_says_nothing_after_the_marker(execdir):
         os.close(rfd)
 
     assert [lib.decode_envelope(line).type for line in sent if line] == ["HELLO", "DATA", "BARRIER"]
+
+
+# --- control ports file ---------------------------------------------------
+
+
+class _Initiator(_Node):
+    INPUT_PORTS = ["trigger"]
+    CONTROL_PORTS = ["trigger"]
+
+
+def test_write_control_ports_file_lists_each_ones_fifo_path(execdir):
+    proc = _Initiator(opts={"trigger": "/some/fifo/path"})
+
+    proc._write_control_ports_file()
+
+    with open(proc._control_ports_path()) as f:
+        assert f.read() == "/some/fifo/path\n"
+
+
+def test_write_control_ports_file_is_empty_when_there_are_none(execdir):
+    proc = _Node(opts={})
+
+    proc._write_control_ports_file()
+
+    with open(proc._control_ports_path()) as f:
+        assert f.read() == ""
+
+
+def test_start_threads_writes_the_control_ports_file(execdir):
+    proc = _Node(opts={})
+    try:
+        proc.start_threads()
+        assert os.path.exists(proc._control_ports_path())
+    finally:
+        proc.stop_threads(close=False)

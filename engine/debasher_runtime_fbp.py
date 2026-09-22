@@ -22,6 +22,7 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 import os
 import copy
 import json
+import signal
 import threading
 
 from debasher_runtime_envelope import (
@@ -205,9 +206,18 @@ class FBPProcess(_PortWorker):
         # between calls (see send_data).
         self._handler_thread = None
 
-        # Set once an epoch closes with halt=True; watched (not acted on
-        # here -- see _on_epoch_closed) by whatever orchestrates shutdown.
+        # Set once an epoch closes with halt=True: blocks _start_barrier_round
+        # from opening any further round (see _on_epoch_closed), which keeps
+        # this incarnation's halted marker file (see _write_halted_marker)
+        # pointing at its final epoch. Never itself stops a thread.
         self._halted = threading.Event()
+        # Set only by the SIGTERM handler run() installs (see
+        # _on_stop_signal): the actual "stop now" signal that run() waits
+        # on, decided entirely outside this node, typically by an external
+        # tool once every node's halted marker exists (see the Contract's
+        # Conformance status, "G2 is violated during an ordered shutdown",
+        # third candidate).
+        self._stop_requested = threading.Event()
 
     def _input_ports(self):
         return {port: port for port in self.INPUT_PORTS}
@@ -234,16 +244,29 @@ class FBPProcess(_PortWorker):
 
     def run(self):
         """
-        Full startup sequence: open every FIFO -> find the most recent
-        checkpoint if any -> restore_node_state()/defaults, and the sender
-        counters with it (see _out_seq) -> initialize_runtime() -> open the
-        input log and replay what it holds
-        after the checkpoint (all of it if there is no checkpoint, since the
-        node state is then the default one) -> start_threads() (starts every
-        worker thread) -> wait until told to stop (an epoch closing with
-        halt=True) -> stop every thread, from this (the calling) thread
-        rather than the brain thread that actually set the stop signal.
+        Full startup sequence: install the SIGTERM handler -> open every
+        FIFO -> find the most recent checkpoint if any ->
+        restore_node_state()/defaults, and the sender counters with it (see
+        _out_seq) -> initialize_runtime() -> open the input log and replay
+        what it holds after the checkpoint (all of it if there is no
+        checkpoint, since the node state is then the default one) ->
+        start_threads() (starts every worker thread) -> wait until told to
+        stop (SIGTERM, from outside this process; see _on_stop_signal and
+        _stop_requested) -> stop every thread, from this (the calling)
+        thread rather than the one that actually delivered the signal. A
+        halt closing its epoch is not part of this wait any more (see
+        _on_epoch_closed): it behaves like an ordinary snapshot, and this
+        node keeps running until told to stop by signal, whether or not it
+        ever halted.
         """
+        # A signal handler can only be installed from the main thread; a
+        # node driven by run() on a background thread (every test that does
+        # this) has no real SIGTERM to catch anyway, and simulates the stop
+        # request by setting _stop_requested directly, the same way other
+        # tests simulate an external INTERACT arriving.
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, self._on_stop_signal)
+
         # The FIFOs are held from the very first moment of the recovery, not
         # from the moment the threads start. Restoring and replaying can take
         # a while, and a FIFO keeps what its neighbors sent only while some
@@ -278,12 +301,27 @@ class FBPProcess(_PortWorker):
         self._replay_input_log(capture_pos)
 
         self.start_threads()
-        self._halted.wait()
+        self._stop_requested.wait()
         # A halt is an orderly stop that the whole program is resumed from
         # later, not the end of this node. CLOSE is what a writer says when
         # it has finished for good, and a peer that read one at a halt would
-        # take this node for a finished one when it comes back.
+        # take this node for a finished one when it comes back. This is why
+        # close=False here does not depend on whether this node ever
+        # halted: the only way run() ever gets past the wait above is an
+        # external stop signal, which carries the same "come back later"
+        # meaning regardless.
         self.stop_threads(close=False)
+
+    def _on_stop_signal(self, signum, frame):
+        """
+        The SIGTERM handler run() installs. Deliberately minimal (a signal
+        handler runs on the main thread, interrupting whatever bytecode was
+        executing there, so it must not touch a lock some other code might
+        already hold): only sets the event run() is waiting on. Actually
+        stopping every thread happens on run()'s own thread, after its wait
+        returns, same as it always has.
+        """
+        self._stop_requested.set()
 
     def _load_latest_checkpoint(self):
         """
@@ -343,14 +381,40 @@ class FBPProcess(_PortWorker):
         thread. The input log has to be open before any reader thread
         runs: run() opens it after recovering a checkpoint, and a node
         that is driven without run() gets it opened here, empty of any
-        checkpoint.
+        checkpoint. Also writes this incarnation's control ports file (see
+        _write_control_ports_file), since self.opts is enough for that on
+        its own, with no need to wait for any of the above.
         """
+        self._write_control_ports_file()
         if self._input_log is None:
             self._open_input_log(0)
         self._closed_at_start_ports = frozenset(self._closed_ports)
         super().start_threads()
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
+
+    def _control_ports_path(self):
+        return os.path.join(self._execdir(), "control_ports")
+
+    def _write_control_ports_file(self):
+        """
+        Writes, one per line, the fifo path of every one of this node's
+        CONTROL_PORTS: how an external tool with no other knowledge of this
+        program finds where to write a trigger for it, the same way it
+        already finds a node's PID from its `.id` file (see debasher_stop).
+        Written even when there are none (an empty file), so that its mere
+        absence still means "this incarnation hasn't started yet". Atomic
+        (temp file + rename), the same pattern _save_checkpoint uses,
+        though nothing here changes after this first write of an
+        incarnation.
+        """
+        os.makedirs(self._execdir(), exist_ok=True)
+        path = self._control_ports_path()
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w") as f:
+            for port in self.CONTROL_PORTS:
+                f.write(self.opts[port] + "\n")
+        os.replace(tmp_path, path)
 
     def stop_threads(self, timeout=None, close=True):
         """
@@ -806,17 +870,44 @@ class FBPProcess(_PortWorker):
                 )
 
         if halt:
-            # Runs on the brain thread itself, so it can't call
-            # stop_threads() directly here (that joins the brain thread,
-            # which would deadlock joining itself) -- just signal, and
-            # leave actually stopping every thread to whatever orchestrates
-            # shutdown from outside the brain thread (the startup-sequence
-            # slice's run(), most likely).
-            self.log.info("epoch %s closed with halt=True, signalling for shutdown", epoch)
+            # A halt round closing has no effect of its own any more: this
+            # node keeps running, exactly like after any other round (see
+            # run()). _halted only blocks _start_barrier_round from opening
+            # a further one, which is what keeps the marker this writes
+            # pointing at this incarnation's final epoch; actually stopping
+            # is entirely up to whoever sends this process a SIGTERM later.
             self._halted.set()
+            self._write_halted_marker(epoch)
+            self.log.info(
+                "epoch %s closed with halt=True, no more rounds will open; "
+                "waiting for an external stop signal",
+                epoch,
+            )
 
     def _checkpoints_dir(self):
         return os.path.join(self._execdir(), "checkpoints")
+
+    def _halted_marker_path(self):
+        return os.path.join(self._execdir(), "halted")
+
+    def _write_halted_marker(self, epoch):
+        """
+        Marks this incarnation as having closed a halt round, for an
+        external tool to notice with no other knowledge of this node's
+        state: its content is the epoch, so that a tool that recorded the
+        epoch on disk before it triggered a round can tell this apart from
+        a marker left over from an earlier halt this node has since been
+        resumed from (never cleared: nothing here ever reads it back).
+        Atomic (temp file + rename), same as a checkpoint; unlike one, it
+        is not schema-versioned or pruned, since only its latest content
+        is ever meaningful.
+        """
+        os.makedirs(self._execdir(), exist_ok=True)
+        path = self._halted_marker_path()
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w") as f:
+            f.write(str(epoch))
+        os.replace(tmp_path, path)
 
     def _save_checkpoint(
         self,

@@ -126,6 +126,13 @@ mutation check, durability level) is defined in the Contract, where it is used.
   which an initiator receives its triggers. It never carries a marker, so it
   takes no part in any round, and a `CLOSE` on it does not close it, because its
   writer (the `Supervisor`, or whoever writes commands) may come back.
+- **control ports file**: the file `control_ports` that a node writes in its
+  own `execdir` when it starts (one fifo path per line, from `self.opts`, one
+  per entry of `CONTROL_PORTS`; empty, not absent, if it has none), so that an
+  external actor can find where to write a trigger for an initiator with no
+  other knowledge of this program: `CONTROL_PORTS` is a Python class
+  attribute, invisible to a tool outside the process (see
+  `_write_control_ports_file`).
 - **external port** (puerto externo): an input port of a node, listed in
   `EXTERNAL_PORTS`, fed only from outside the program (a source, or a person
   writing by hand), which therefore does not carry a marker of its own: a round
@@ -220,9 +227,30 @@ mutation check, durability level) is defined in the Contract, where it is used.
   checkpoint and keeps running (the name of the operation, as in
   `start_snapshot`). In the literature the word also names what such a round
   records, the node states together with the channel states; here that result is
-  the consistent cut. A **halt** (parada ordenada) is a round with `halt` true:
-  each node stops after saving its checkpoint, and the program is resumed later
-  by relaunching every node, which loads it.
+  the consistent cut. A **halt** (parada ordenada) is a round with `halt` true;
+  since 2026-09-22 it behaves exactly like a snapshot at the node itself (the
+  node keeps running after saving its checkpoint), and only writes its own
+  **halted marker** on top of that (see below). What actually stops the node,
+  and later resumes the program by relaunching every node, is a **stop signal**
+  (see below), decided entirely outside the barrier protocol. Before that date
+  a halt stopped the node itself as soon as its round closed, which is what the
+  Contract's G2 gap (see "Conformance status") was about.
+- **halted marker** (marca de halted): the file `halted` that a node writes in
+  its own `execdir` (atomically, like a checkpoint, but never schema-versioned
+  or pruned) when a halt round closes, holding that round's epoch as plain
+  text. Read by nothing inside the node itself (in memory, `_halted` already
+  keeps the same incarnation from opening another round, see "State variables,
+  at a glance"); it exists only for an external actor with no other view of
+  the node's state, such as the tool a stop signal comes from, to notice that
+  this incarnation has nothing further to send and it is safe to stop it.
+- **stop signal**: `SIGTERM`, sent to a node's whole process group (the same
+  group `debasher_stop` already reaches with `SIGKILL`, see
+  `debasher::_stop_pid`), which is what actually ends a node's `run()`
+  (`_stop_requested`, set by the handler `run()` installs, `_on_stop_signal`).
+  Unlike a halt closing its round, receiving one is not conditional on
+  anything: a node that never halted stops on one just the same. Nothing in
+  `FBPProcess` decides when to send it: that is external, by design (see
+  "Conformance status"), typically once every node's halted marker exists.
 - **in transit** (en tránsito): a `DATA` message sent before its sender captured
   its state and received after its receiver captured its own.
 - **channel state** (estado de canal): `channel_state`, the copy that a node
@@ -961,8 +989,12 @@ any guarantee is relied on.
   none duplicated. What a running neighbor still receives twice after a writer's
   crash is what G5 removes.
 - **G2 is violated during an ordered shutdown when a downstream node has only
-  one pending port: found on 2026-09-22 by the chaos test (see "Acceptance"),
-  not fixed.** `_open_barrier_round` sends the halt `BARRIER` on every output
+  one pending port: found on 2026-09-22 by the chaos test (see "Acceptance").
+  The third candidate below, which removes the mechanism this bug depends on,
+  is implemented and verified with two real runs (2026-09-22); the external
+  tool that would drive it end to end in an actual program is not built yet
+  (see below), so this entry stays open until it is.** `_open_barrier_round`
+  sends the halt `BARRIER` on every output
   port as soon as a round opens, not when it closes, so an initiator whose own
   round stays open (waiting for a port that has not settled yet) has already
   forwarded the halt to every neighbor before it is done. A neighbor with no
@@ -993,30 +1025,59 @@ any guarantee is relied on.
   `BARRIER` alone does not say "and nothing more is coming on this channel
   either").
 
-  A third candidate, worked out in more detail (2026-09-22) but still not
-  designed as code: treat a halt exactly like an ordinary snapshot at every
-  node (take the checkpoint, keep running, keep reading), and move "when is
-  it actually safe to stop" entirely outside the message protocol. A node
-  already reports every checkpoint it saves to the `Supervisor` as an
-  `INTERACT` (`checkpoint_saved`, today only logged, never aggregated); the
-  same fact is also a plain file on disk, so nothing here strictly needs a
-  `Supervisor` to exist. An external actor, the same kind of tool as
-  `debasher_stop` (which already reads every node's `.id` file from the
-  outdir, needing no `Supervisor` either), can wait until every node's
-  checkpoint for the halt's epoch exists, then tell each node to actually
-  stop by signal, not by a message on any business channel: `debasher_stop`
-  already does the equivalent for an immediate kill (`kill -9` on each
-  node's process group, see `debasher::_stop_pid`), so the missing piece is
-  a graceful counterpart a node would catch and react to by calling
-  `stop_threads()` itself, which does not exist today. This sidesteps a
-  `Supervisor` dependency and a new per-channel signal alike, at the cost of
-  a new external tool and a new signal handler in `FBPProcess`/`Supervisor`.
-  One gap by itself does not close: a checkpoint file existing does not by
+  A third candidate, designed and implemented 2026-09-22 (`FBPProcess`,
+  `engine/debasher_runtime_fbp.py`; see section 2's "Ordered shutdown" for
+  the mechanism in full and the Glossary for "halted marker" and "stop
+  signal"): treat a halt exactly like an ordinary snapshot at every node
+  (take the checkpoint, keep running, keep reading), and move "when is it
+  actually safe to stop" entirely outside the message protocol, to a stop
+  signal an external actor sends whenever it decides to. Verified with two
+  real `debasher_exec` runs
+  (`test/engine/test_chaos.py::test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it`,
+  against the chaos test's own reference program, which has a `Supervisor`;
+  `test/engine/test_halt_ref.py`, against a new, minimal reference program
+  with none): in both, every node
+  stays alive and keeps its heartbeat (where it has one) well after its own
+  halted marker appears, and only exits, cleanly (`.finished` appears),
+  once sent a real `SIGTERM`. Getting the stop signal to actually work
+  surfaced a second, unrelated bug (found and fixed the same day, see
+  section 2's "Ordered shutdown"): a single-pid signal never reached a
+  resident process's own Python interpreter at all, only the wrapper script
+  around it, which had no handler for `SIGTERM` of its own.
+
+  What this closes: the specific self-stop-too-early mechanism the bug
+  above depends on, since a node no longer decides on its own, from its own
+  round closing, that it is done. What does not exist yet: the external
+  tool itself (the graceful equivalent of `debasher_stop`) that would
+  actually watch every node's halted marker and send the stop signal in a
+  real program, without a person doing it by hand; until it does, nothing
+  drives a whole program's ordered shutdown to completion on its own, and
+  this entry stays open. As a direct consequence, `Supervisor`'s own
+  `_escalate_shutdown` (`engine/debasher_runtime_supervisor.py`), which
+  sends `shutdown` straight to the `TRIGGER_PORT` initiators, no longer
+  makes the reachable part of the graph actually stop: every escalation now
+  waits out the full `FORCE_STOP_TIMEOUT_SECS` and falls back to
+  `debasher_stop`'s hard kill every time, not just when something is
+  actually stuck. Not fixed: planned as `_escalate_shutdown` calling the
+  same external tool once it exists, instead of sending `shutdown` and
+  waiting on `.finished` itself.
+
+  Two things that external tool still has to get right, neither designed
+  yet. First, the same caveat as before, now about its own polling rather
+  than about the mechanism it polls: a halted marker existing does not by
   itself prove the writer thread had already flushed everything it owed to
-  the real fifo at capture time, since that is exactly what the checkpoint's
-  own `out_backlog` (G5) is for, so this still needs the writer thread's own
-  drain folded into what counts as "this node's round is really done", not
-  only the file appearing.
+  the real fifo at capture time, since that is exactly what the
+  checkpoint's own `out_backlog` (G5) is for, so the tool still needs the
+  writer thread's own drain folded into what counts as "this node is
+  really done", not only the marker appearing. Second, it must wait for
+  every node's marker before sending the stop signal to any of them, not
+  signal each as its own marker appears: signalling early would race an
+  upstream peer that has not finished sending yet, reproducing this same
+  bug's shape one level out. Even waiting for everyone, a peer can still
+  process and forward a little more between its own marker and actually
+  receiving the signal, a narrower residual window that reduces to the
+  Contract's own "both endpoints of a channel crashed" limit (see "Limits
+  and non-goals"), not a new one.
 
 - **The `Supervisor`'s own resolution after a node gives up may not
   complete: found on 2026-09-22 by the chaos test's engineered-gap piece,
@@ -1397,24 +1458,60 @@ section 7, Future work).
 
 - Same `BARRIER`, with the `halt=True` flag. Done, see the generic barrier logic
   above and `_on_epoch_closed`'s `halt` handling.
-- A node finishes its execution only after closing its epoch (marker received on
-  every one of its input ports), never before. Done: `halt=True` sets
-  `self._halted`, and `run()` blocks on it before calling `stop_threads()`.
-- A halt sends no `CLOSE`. Done on 2026-09-20: `run()` stops its threads with
-  `stop_threads(close=False)`, so each writer sends what is already queued and
-  stops. `CLOSE` says that a writer has finished for good, and a halted node is
-  resumed later: had it sent one, the reader at the other end could keep it in
-  its input log after its `capture_pos` (measured, see section 3), and a
-  resume would take the node for a finished one. A node that ends on its own
-  calls `stop_threads()`, whose default does send `CLOSE`.
+- Closing a halt's epoch has no effect of its own (changed 2026-09-22, see the
+  Glossary's "halt" and "Conformance status"'s G2 entry): the node keeps
+  running, exactly like after any other round. `_on_epoch_closed` only sets
+  `self._halted` (blocks `_start_barrier_round` from opening a further one,
+  keeping the checkpoint sequence frozen at this epoch for the rest of this
+  incarnation) and writes the halted marker (`_write_halted_marker`).
+- What actually ends `run()` is a stop signal, not a round closing. Done:
+  `run()` installs a `SIGTERM` handler (`_on_stop_signal`) on the main thread
+  only (a background-thread caller, every test that drives `run()` this way,
+  has no real signal to install one for, and `signal.signal()` raises off the
+  main thread; those tests set `_stop_requested` directly instead, the same
+  way other tests simulate an external `INTERACT` arriving), then waits on
+  `_stop_requested` before calling `stop_threads()`. Deciding when to send
+  that signal is external to `FBPProcess` by design (see "Conformance
+  status"'s third candidate): typically once every node's halted marker
+  exists, but nothing here enforces that, or requires a halt to have
+  happened at all.
+- A halt sends no `CLOSE`, and neither does any other stop signal. Done:
+  `run()` always calls `stop_threads(close=False)`, unconditionally, once its
+  wait on `_stop_requested` returns. `CLOSE` says that a writer has finished
+  for good, and a node that got a stop signal, whether or not it ever
+  halted, may be resumed later: had it sent `CLOSE`, the reader at the other
+  end could keep it in its input log after its `capture_pos` (measured, see
+  section 3), and a resume would take the node for a finished one. A node
+  that ends some other way (not through `run()`) still gets `stop_threads()`'s
+  own default, which does send `CLOSE`.
+- The signal has to reach the node's own process, not just the process group
+  leader `debasher_stop` and `.id` already agree on: found 2026-09-22, not
+  something `FBPProcess` can fix on its own. `debasher_builtin_sched::_launch`
+  backgrounds a generated script as its own process group leader (`pgid ==
+  pid`, the pid in `.id`), and that script's own pipeline
+  (`debasher_builtin_sched::_execute_funct_plus_postfunct`) forks at least one
+  subshell of its own to run the process function, so a resident process's
+  own Python interpreter sits below the pid in `.id`, not at it. A plain,
+  single-pid `SIGTERM` there only reaches the wrapper script (which has no
+  handler and dies at once, never reaching the line that writes `.finished`),
+  orphaning the Python interpreter, which never receives anything and keeps
+  running. Fixed the same day: a stop signal has to target the whole process
+  group (`os.killpg`, the same group `debasher_stop` already reaches with
+  `SIGKILL`, see `debasher::_stop_pid`), and the wrapper script itself has to
+  survive that same broadcast to still write `.finished` once its own child
+  actually exits, which is what `debasher_builtin_sched::_print_script_trap`
+  (`trap '' TERM`, the first thing `_create_script` writes into the generated
+  file) is for. A hard kill (`SIGKILL`) cannot be trapped and is unaffected.
 - Resumption: relaunch every process. It is the ordinary Startup sequence above,
-  with no special case for a halt: each node loads the checkpoint that the halt
-  closed and replays its input log after that checkpoint's `capture_pos`.
-  What is replayed is what the node processed between capturing its state and
-  closing the round (the messages that were in transit at the cut, which its
-  checkpoint also holds as `channel_state`) and anything that reached its log
-  after that. The node ends in the state it had when it stopped, and
-  re-executing those messages is deterministic, like any other replay.
+  with no special case for a halt: each node loads its latest checkpoint (the
+  one the halt closed, in the ordinary case where nothing else ran in this
+  incarnation after it) and replays its input log after that checkpoint's
+  `capture_pos`. What is replayed is what the node processed between
+  capturing its state and closing the round (the messages that were in
+  transit at the cut, which its checkpoint also holds as `channel_state`) and
+  anything that reached its log after that. The node ends in the state it had
+  when it stopped, and re-executing those messages is deterministic, like any
+  other replay.
 
 ### Checkpoint persistence
 

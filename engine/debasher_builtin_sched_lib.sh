@@ -1041,6 +1041,24 @@ debasher_builtin_sched::_print_pid_to_file()
 }
 
 ########
+debasher_builtin_sched::_print_script_trap()
+{
+    # Ignored, not left at bash's default (terminate): a graceful stop
+    # (see FBPProcess's own SIGTERM handler, engine/debasher_runtime_fbp.py)
+    # signals this whole process group, not a lone PID, so that it reaches
+    # a resident process's own Python interpreter wherever it actually
+    # sits in the fork tree (the pipeline in
+    # debasher_builtin_sched::_execute_funct_plus_postfunct forks at least
+    # one subshell of its own). This script, the process group's leader
+    # and the one named in .id, has to survive that same broadcast, or it
+    # would die right here instead of going on to run
+    # _signal_process_completion once its own child actually exits, and
+    # .finished would never appear. A hard kill (SIGKILL, used by
+    # debasher_stop) cannot be trapped and is unaffected by this.
+    echo "trap '' TERM"
+}
+
+########
 debasher_builtin_sched::_print_script_header()
 {
     local fname=$1
@@ -1198,6 +1216,10 @@ debasher_builtin_sched::_create_script()
     # Write bash shebang
     local BASH_SHEBANG=$(debasher::_init_bash_shebang_var)
     echo ${BASH_SHEBANG} > "${fname}" || return 1
+
+    # Ignore a graceful-stop SIGTERM at this (the process group leader's)
+    # level, before anything else runs (see _print_script_trap).
+    debasher_builtin_sched::_print_script_trap >> "${fname}" || return 1
 
     # Write environment variables
     debasher_builtin_sched::_write_env_vars_and_funcs "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1

@@ -178,9 +178,10 @@ def test_over_the_cap_the_checkpoint_is_not_written(caplog):
     assert "OUT_BACKLOG_MAX_BYTES" in caplog.text
 
 
-def test_a_halt_over_the_cap_still_signals_shutdown():
-    # A skipped checkpoint must not also skip the halt: the node still has to
-    # stop, and be resumed later from whatever its last real checkpoint was.
+def test_a_halt_over_the_cap_still_marks_the_node_halted():
+    # A skipped checkpoint must not also skip marking this node halted: it
+    # is still discoverable as such from outside, and resumed later from
+    # whatever its last real checkpoint was.
     class _SmallCap(_Relay):
         OUT_BACKLOG_MAX_BYTES = 10
 
@@ -192,6 +193,8 @@ def test_a_halt_over_the_cap_still_signals_shutdown():
 
     assert not os.path.exists(os.path.join(proc._checkpoints_dir(), "0.json"))
     assert proc._halted.is_set()
+    with open(proc._halted_marker_path()) as f:
+        assert f.read() == "0"
 
 
 def test_load_latest_checkpoint_returns_out_backlog():

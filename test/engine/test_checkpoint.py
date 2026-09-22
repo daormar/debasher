@@ -137,6 +137,26 @@ def test_on_epoch_closed_sets_halted_event_only_when_halt_is_true(execdir):
     assert proc2._halted.is_set()
 
 
+def test_on_epoch_closed_writes_the_halted_marker_only_when_halt_is_true(execdir):
+    proc = _Node(opts={"x": "/dev/null"})
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+    assert not os.path.exists(proc._halted_marker_path())
+
+    proc2 = _Node(opts={"x": "/dev/null"})
+    proc2._on_interact({"command": "shutdown", "args": {}})
+    with open(proc2._halted_marker_path()) as f:
+        assert f.read() == "0"
+
+
+def test_the_halted_marker_names_the_epoch_of_the_round_that_wrote_it(execdir):
+    proc = _Node(opts={"x": "/dev/null"})
+    proc._last_epoch = 4
+    proc._on_interact({"command": "shutdown", "args": {}})
+
+    with open(proc._halted_marker_path()) as f:
+        assert f.read() == "5"
+
+
 def test_save_checkpoint_lists_the_closed_ports_in_order(execdir):
     proc = _Node(opts={"x": "/dev/null"})
     path = proc._save_checkpoint(0, {}, {}, 0, {"c", "a", "b"}, {}, {}, {})

@@ -406,6 +406,33 @@ def _launch(outdir):
         pytest.fail(Path(log_path).read_text())
 
 
+def _halt_and_wait_for_finished(outdir, manual_fifo, timeout=30.0):
+    """
+    Sends shutdown through the manual trigger, then does by hand what the
+    tool the design doc's third G2 candidate still needs (Conformance
+    status: not built yet) would do for real: wait for every node's halted
+    marker, then send each a real SIGTERM, to its whole process group (see
+    debasher_builtin_sched::_print_script_trap), not a lone pid (see
+    test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it
+    for why that matters). Closing a halt round no longer stops a node by
+    itself (2026-09-22), so plain shutdown, alone, does not end a program
+    any more, which is what this replaces in every test here that used to
+    just wait for sup.finished after it.
+    """
+    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
+
+    for name in _KILLABLE_NODES:
+        halted = os.path.join(outdir, "__exec__", name, "halted")
+        assert _wait_for(halted, timeout=timeout), f"{name} never marked itself halted"
+
+    for name in _KILLABLE_NODES:
+        pid = _read_pid(_id_file(outdir, name))
+        if pid is not None:
+            os.killpg(int(pid), signal.SIGTERM)
+
+    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=timeout)
+
+
 def _assert_trace_matches(records, k, context=""):
     """
     The reformulated Acceptance criterion: each port's own sequence,
@@ -491,9 +518,7 @@ def test_a_clean_run_produces_the_exact_trace_at_sink(outdir):
         manual_fifo, {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}}
     )
     time.sleep(0.5)
-    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
-
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"))
+    _halt_and_wait_for_finished(outdir, manual_fifo)
     tailer.stop_and_join()
     if tailer.error is not None:
         raise tailer.error
@@ -552,8 +577,7 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     stop_snapshots.set()
     snapshots.join(timeout=5)
 
-    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -620,8 +644,7 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     stop_snapshots.set()
     snapshots.join(timeout=5)
 
-    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -870,8 +893,7 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     # ordered-shutdown G2 gap, not what this test is about.
     time.sleep(1.0)
 
-    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -959,8 +981,7 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     # ordered-shutdown G2 gap, not what this test is about.
     time.sleep(1.0)
 
-    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -970,3 +991,77 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
         f"{open_round_delay:.2f}s into its open round)"
     )
     _assert_trace_matches(tailer.records, k, context)
+
+
+def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdir):
+    """
+    G2's third fix candidate (design doc, Conformance status): a halt now
+    behaves exactly like an ordinary snapshot at every node, and only an
+    external actor decides when it is actually safe to stop, by a real
+    SIGTERM once every node's halted marker exists. This checks exactly
+    what this piece alone is responsible for (the tool that would normally
+    send that SIGTERM is separate, later work): fanin's control port is
+    discoverable from its own execdir (no Supervisor involved in finding
+    it), every node marks itself halted once its own round closes, every
+    node is still alive at that point (this is the actual G2 fix: the old
+    code exited the instant its own round closed, which is what lost
+    messages), and a real SIGTERM then stops each one cleanly.
+    """
+    _launch(outdir)
+
+    control_ports = {}
+    for name in _KILLABLE_NODES:
+        path = os.path.join(outdir, "__exec__", name, "control_ports")
+        assert _wait_for(path), f"{name} never wrote its control_ports file"
+        with open(path) as f:
+            control_ports[name] = f.read().splitlines()
+
+    assert control_ports["fanin"] == [_find_fifo(outdir, "sup_trig_fanin")]
+    assert control_ports["loop"] == []
+    assert control_ports["sink"] == []
+
+    # Trigger the halt directly on fanin's own control port, the way the
+    # tool this piece is a prerequisite for would (not through the
+    # Supervisor's manual trigger, which is a separate path entirely).
+    _write_line(
+        control_ports["fanin"][0], {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}}
+    )
+
+    halted_paths = {name: os.path.join(outdir, "__exec__", name, "halted") for name in _KILLABLE_NODES}
+    for name, path in halted_paths.items():
+        assert _wait_for(path, timeout=15.0), f"{name} never marked itself halted"
+
+    # The guarantee this piece exists for: closing the round does not stop
+    # anyone by itself, unlike before.
+    pids = {}
+    for name in _KILLABLE_NODES:
+        pid = _read_pid(_id_file(outdir, name))
+        assert pid is not None, f"{name} has no pid"
+        os.kill(int(pid), 0)  # raises ProcessLookupError if it is not alive
+        pids[name] = int(pid)
+    time.sleep(1.0)
+    for name, pid in pids.items():
+        os.kill(pid, 0)  # still alive a moment later, not a race with a self-stop that never happens
+
+    for name, pid in pids.items():
+        # The whole process group, not the lone pid: the pid in .id is the
+        # process-group leader (the script _launch backgrounds), and a
+        # resident process's own Python interpreter sits at least one
+        # pipeline subshell below it (see
+        # debasher_builtin_sched::_execute_funct_plus_postfunct); a plain
+        # single-pid SIGTERM never reaches it at all (found 2026-09-22: it
+        # only kills the wrapper, orphaning a Python process that then
+        # never receives anything and runs forever, and the now-dead
+        # wrapper never gets to write .finished either). The wrapper
+        # itself survives this same broadcast (see
+        # debasher_builtin_sched::_print_script_trap) so it can still do
+        # so once its own child actually exits.
+        os.killpg(pid, signal.SIGTERM)
+
+    for name in _KILLABLE_NODES:
+        finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")
+        assert _wait_for(finished, timeout=15.0), f"{name} never exited cleanly after SIGTERM"
+
+    # Nothing about how the Supervisor notices a clean finish had to change
+    # for this: .finished is already checked unconditionally, every tick.
+    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=15.0)

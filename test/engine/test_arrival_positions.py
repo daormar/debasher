@@ -271,7 +271,7 @@ def test_a_restored_checkpoint_makes_the_positions_go_on_after_its_own(execdir):
     _NoPorts(opts={})._save_checkpoint(4, {"seen": []}, {}, 40, [], {}, {}, {})
 
     proc = _NoPorts(opts={})
-    proc._halted.set()
+    proc._stop_requested.set()
     proc.run()
     assert proc._input_log.next_pos == 41
 
@@ -281,7 +281,7 @@ def test_a_restored_checkpoint_makes_the_positions_go_on_after_its_own(execdir):
 
 def test_a_node_with_no_checkpoint_numbers_from_one(execdir):
     proc = _NoPorts(opts={})
-    proc._halted.set()
+    proc._stop_requested.set()
     proc.run()
     assert proc._input_log.next_pos == 1
 
