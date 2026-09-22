@@ -87,11 +87,11 @@ mutation check, durability level) is defined in the Contract, where it is used.
 - **source** (fuente): whatever puts `DATA` into an input port of a node without
   being a node of the program: a person writing into a FIFO, an external
   program, a test harness. A node acts only inside `process_data`, in reaction
-  to what it receives, and never sends on its own initiative (decided
-  2026-09-21, not yet enforced by the code), so a source is always outside the
-  graph of nodes, and what enters through it is an external input (see "Limits
-  and non-goals"). The real runs reported here before that date used, as
-  sources, processes written for the run that only sent messages.
+  to what it receives, and never sends on its own initiative (decided and
+  enforced on 2026-09-21: `send_data` raises anywhere else), so a source is
+  always outside the graph of nodes, and what enters through it is an external
+  input (see "Limits and non-goals"). The real runs reported here before that
+  date used, as sources, processes written for the run that only sent messages.
 - **root** (raíz): a node that no other node sends `DATA` to. Its input ports,
   if it has any, are control ports or are written from outside the program, by a
   source. It can start a round, and its part of a round closes as soon as it
@@ -318,6 +318,33 @@ mutation check, durability level) is defined in the Contract, where it is used.
   an ordered shutdown through the initiators and, if some node has not finished
   after `FORCE_STOP_TIMEOUT_SECS`, `debasher_stop` on the whole program.
 
+### State variables, at a glance
+
+Several pieces of a node's bookkeeping go through the same three stages: a
+live value that the brain thread keeps up to date as it processes each item, a
+copy taken at the capture and held only while a round is open (see "capture"
+above), and the checkpoint field the copy is written to when the round closes.
+The table names the three for each concept, which this glossary already
+defines: it is not redefined here. It lists what the code holds today: as
+step 5 adds `last_seq` (5.3) and the outbound backlog (5.4), rows join it.
+`Supervisor`'s own bookkeeping (which nodes are down, how many times each has
+been relaunched) is a separate concern, covered in section 4.
+
+| Concept              | Live            | Held during an open round  | Checkpoint field |
+| -------------------- | --------------- | -------------------------- | ---------------- |
+| capture position     | `_current_pos`  | `_barrier_capture_pos`     | `capture_pos`    |
+| closed input ports   | `_closed_ports` | `_barrier_closed_ports`    | `closed_ports`   |
+| sender counters (G5) | `_out_seq`      | `_barrier_out_seq`         | `out_seq`        |
+| node state           | module's own    | `_barrier_node_state`      | `node_state`     |
+| channel state        | round open only | `_barrier_channel_buffers` | `channel_state`  |
+
+Bookkeeping that never enters a checkpoint, because it only means something
+while its own thread or round is live: `_handler_thread` (the identity of the
+thread currently inside `process_data`, checked by `send_data`),
+`_barrier_pending` (the input ports an open round still waits on) and
+`_closed_at_start_ports` (what a relaunched node's readers of closed ports
+start out knowing, taken from `_closed_ports` once, when the threads start).
+
 ## Contract: assumptions, guarantees and non-goals
 
 **Status: draft written on 2026-09-19.** Every open item was settled on
@@ -388,6 +415,12 @@ exposes a violation.
   state or of the message stream. Recovery re-executes it, so a
   non-deterministic `process_data` silently diverges from what it did before the
   crash.
+- **A node sends only inside `process_data`**, in reaction to a message that it
+  receives. Unlike the others, the framework enforces this one: `send_data`
+  raises when it is called anywhere else, or from a thread other than the one
+  running `process_data` (decided and done on 2026-09-21). What starts the
+  activity of a program is written into an input port from outside (see
+  "source" in the Glossary).
 - **`capture_node_state()` is complete and `restore_node_state()` exact**:
   everything that influences future behavior round-trips through them.
 - **Effects outside the graph are idempotent**: replay re-executes
@@ -742,8 +775,9 @@ channel):
     same `sys.path.append(...)` ahead of a Python heredoc's own text.
 - **Port declaration**: a subclass declares its ports as class attributes,
   `INPUT_PORTS`/ `OUTPUT_PORTS` (lists of option names, e.g.
-  `INPUT_PORTS = ["inf"]`). `FBPProcess.run()` parses `argv` generically into a
-  `self.opts` name -> value dict (the engine's existing `-optname value` CLI
+  `INPUT_PORTS = ["inf"]`). `FBPProcess` parses `argv` generically when it is
+  built, into a `self.opts` name -> value dict (the engine's existing
+  `-optname value` CLI
   convention, untouched); `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those
   entries are FIFO paths to open reader/writer threads on. Any other option
   (e.g. a plain `-threshold` value) stays available in `self.opts` with no
@@ -818,6 +852,38 @@ channel):
   the Chandy-Lamport subsection below). Works identically whether or not a
   `Supervisor` is present; a `Supervisor`, if present, can still trigger
   `start_snapshot` on demand independently; the two are not mutually exclusive.
+
+### Defining a node
+
+A node is written as a class that derives from `FBPProcess`, in the Python
+heredoc of a process of a resident program. The engine only checks, without
+importing anything, that the heredoc has a top-level class deriving from
+`FBPProcess` or `Supervisor` (`debasher::_classify_resident_process_role`). It
+never instantiates it: the heredoc itself creates the object, which parses the
+options of the process from `argv`, and calls `run()` (read from the engine's
+code, and checked with a real `debasher_exec` run on 2026-09-21).
+
+The class declares its ports (`INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`)
+and redefines four hooks. Each runs on a known thread, which is what lets the
+framework keep the state that a node captures in step with what it has sent:
+
+- `process_data(port_name, packet)` runs on the brain thread, once for each
+  `DATA`, in the order of the input log, and on the thread that called `run()`
+  while the node replays that log. It is the only place from which a node sends,
+  with `send_data(port_name, payload)`, which raises anywhere else.
+- `capture_node_state()` runs on the brain thread, when a round opens.
+- `restore_node_state(node_state)` and `initialize_runtime()` run on the thread
+  that called `run()`, before any other thread starts. They cannot send.
+
+No hook runs when nothing arrives: a node acts only in reaction to what it
+receives (see "source" in the Glossary), so whatever starts the activity of a
+program is written from outside into an input port. A module that needs several
+inputs together keeps what it has received in its node state and decides in
+`process_data` when it has enough, because the framework delivers each message
+as it arrives, with no join across ports.
+
+How a node finishes for good is not defined yet: `run()` returns only after a
+halt, and a halt sends no `CLOSE`.
 
 ### State capture and checkpoint schema
 
@@ -1408,7 +1474,56 @@ replayed nothing. All five were verified with the real classes and are fixed
        ignores the late marker of round 0, closes round 1 when the slow path's
        marker arrives (checkpoint 1) and completes the halt (checkpoint 2), and
        the four nodes finish; the last snapshot has a checkpoint at every node.
-  5. G5: sequence numbers, deduplication and detection of gaps.
+  5. G5: sequence numbers, deduplication and detection of gaps, in six pieces
+     (agreed 2026-09-21; the outbound backlog was added on that date, and the
+     first piece before them because the numbering relies on it):
+     - 5.1 A node sends only inside `process_data`. **Done 2026-09-21**:
+       `FBPProcess.send_data` raises unless it is called on the thread that is
+       running `process_data`, the brain thread or the one that replays the
+       input log, and the mark is cleared when `process_data` returns or fails.
+       Six new tests in the words of the guarantee (a node cannot send outside
+       `process_data`; what it sends inside it, on the brain thread, reaches its
+       writer; a thread of the module cannot send while `process_data` runs; it
+       cannot once `process_data` has returned or failed; it can while the node
+       replays its input log), checked against six mutants (no check, any thread
+       accepted while a handler runs, the replay or the brain thread not marked,
+       the mark never cleared, an inverted check). The tests of the writer
+       thread, which used a node with no inputs that sent from the test's own
+       thread, now use a bare `_PortWorker`, and the test of the halt uses a
+       relay fed through its input FIFO. Checked with a real `debasher_exec` run
+       of a relay and a sink, where the relay also starts a thread of its own
+       that sends: before, the sink received `ROGUE 1 2 3 4 5`; now the thread's
+       call is refused with a `RuntimeError`, the sink receives `1 2 3 4 5` and
+       the relay forwards what it receives as before.
+     - 5.2 The sender numbers its `DATA`, and its counters go in the checkpoint.
+       **Done 2026-09-22**: `Envelope` gains a third field, `seq` (a sibling
+       of `type` and `payload`, absent when the sender is not one that
+       numbers, such as a plain `_PortWorker` or an outside source);
+       `FBPProcess.send_data` numbers each channel from 1 with its own
+       counter, `_out_seq`, read and bumped inside the thread check that 5.1
+       already enforces, so numbering needs no lock of its own. A round's
+       capture takes a copy of the counters, never the live dict, at the same
+       instant as `capture_pos` and `closed_ports`; the checkpoint's `out_seq`
+       is restored before `initialize_runtime()`, so replay renumbers exactly
+       as the crashed incarnation had. 15 new or updated tests in the words of
+       the guarantee, checked against 8 mutants (numbering unused, the counter
+       not stored back, one counter shared across every port instead of one
+       per port, the checkpoint never writing it, a capture that aliases the
+       live counters instead of copying them, `run()` never restoring them;
+       the last two survived at first, for lack of a test that sends while a
+       round stays open and one that restores through the real `run()`).
+       Checked with a real `debasher_exec` run of a relay fed from outside and
+       a sink that records what it receives, envelope included, in its own
+       input log: `1, 2, 3` sent, a snapshot (`out_seq` `{outf: 3}` in the
+       checkpoint), `4, 5` sent and not covered by it, the relay killed and
+       relaunched: the sink's log holds `1, 2, 3, 4, 5, 4, 5`, the replay
+       regenerating exactly the numbers the crashed incarnation had used.
+       Dropping the duplicate is 5.3, not built yet.
+     - 5.3 The receiver drops the `DATA` that it has already accepted.
+     - 5.4 The checkpoint carries the outputs that the writer thread had not yet
+       written, and recovery sends them again before the replay.
+     - 5.5 A gap in the numbers of a channel is an error.
+     - 5.6 `CLOSE` carries the last number.
   6. The chaos test of the Contract.
 
 (Placed right after `FBPProcess` rather than near checkpointing/recovery, and
@@ -1978,7 +2093,43 @@ crash-and-relaunch smoke test between two `FBPProcess` nodes under
 - **A crash during a round** aborts it, and the mechanism is not designed. What
   exists: a node that comes back has no round open, and the next round of a
   newer epoch replaces a round that another node was left with open (section 2).
-  A real crash during a round has not been tried.
+  A real crash during a round has not been tried. What else it can cause, found
+  on 2026-09-21 by reading the code (measured only where it says so):
+  - A marker that is lost keeps the round of its receiver open. A node that
+    crashes after it has captured its state and enqueued its marker, and before
+    its writer thread has written it, leaves the next node waiting for it. At a
+    node that is not an initiator, a marker of a newer epoch replaces the open
+    round. At an initiator nothing replaces it: a `start_snapshot` that finds a
+    round open is ignored. So an initiator in a cycle whose marker never comes
+    back keeps its round open, with the port of the cycle pending, and takes no
+    further snapshot. No node of the cycle writes another checkpoint, and their
+    input logs, which only a new checkpoint prunes, grow until
+    `INPUT_LOG_MAX_BYTES` is reached, which is an error. Only a `shutdown`
+    replaces the open round. Measured with the real class, in one process and
+    with the marker never delivered: four `start_snapshot` leave the round open
+    and write no checkpoint, and a `shutdown` opens the next epoch as a halt.
+    That a crash loses the marker is reasoned. So is the rest: the same happens
+    whatever loses a marker, be it a message read from a FIFO and not yet
+    written to the input log, or a FIFO destroyed with both its endpoints down
+    (see the Contract's limits).
+  - A node that crashes between capturing and closing a round forgets it. On
+    coming back it has no round open, and the markers that arrive later open it
+    again, capture at another position and forward another marker. A repeated
+    marker is harmless downstream, but the two captures are not the same
+    instant, so the checkpoints of that epoch do not form a consistent cut,
+    which matters for a global rollback and not for localized recovery.
+    Reasoned, not run.
+  - A crash during a halt can leave the program half halted. The nodes that
+    saved their checkpoint for the halt finish with code 0 and count as done for
+    the `Supervisor`; the node that came back runs on from an earlier checkpoint
+    with no round open, and nobody sends it another `shutdown`. Reasoned, not
+    run.
+
+  Candidate mechanisms, none designed: a time limit at the initiators after
+  which an open round is abandoned (it heals the loss of a marker whatever its
+  cause), re-sending on recovery the marker of the epoch that the node restores
+  (a marker of a round that is already over is ignored), and a rule for the
+  halt.
 - **`debasher_stop`, `debasher_status` and `debasher_stats` did not see a
   resident program launched without `--sched BUILTIN`: fixed on 2026-09-20, for
   every program.** Found with real runs: `debasher_exec` forced the built-in
@@ -2217,6 +2368,17 @@ crash-and-relaunch smoke test between two `FBPProcess` nodes under
   result. A hook would have to be called in the order of the input log, and
   replayed, like `process_data`, so that the state a module builds from it is
   the one it would have had without a crash. Not designed.
+- **Nodes that emit on their own.** Today a node acts only in reaction to what
+  it receives, and what starts the activity of a program, the first message of a
+  cycle or a tick of a clock, is written into an input port from outside by a
+  source (see "source" in the Glossary). Whether a node should also be able to
+  emit by itself, for example a source inside the program, is left to be
+  assessed. It would need a hook that the brain thread calls when nothing
+  arrives, so that the state a node captures stays in step with what it has
+  sent; a pace for it, since the outbound queue has no limit; a way to finish
+  for good; and, for a node that also has inputs, a record in the input log of
+  where each call fell, so that a replay reproduces it. Reasoned, not tried.
+  Decided on 2026-09-21 to keep sources outside the program for now.
 - **Outputs that leave `process_data` as a result, not as calls to
   `send_data`.** Today a module calls `send_data` from inside `process_data`, at
   any moment of the call and any number of times. The alternative is that
