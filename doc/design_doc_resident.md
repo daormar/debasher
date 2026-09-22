@@ -2330,6 +2330,23 @@ designed.
 - Dedicated concurrency test for the fan-in case with more than one input port
   pending on the barrier. Done,
   `test_two_pending_ports_waits_for_the_second_marker`.
+- **A writer whose peer finished for good can grow its own backlog forever,
+  with nothing to stop it and no error raised.** Section 5's "The reader-dies
+  direction" already covers why a writer cannot tell a reader gone for good
+  from one that merely crashed or halted, and why it does not need to: in all
+  three cases it blocks on backpressure, which is correct and loses nothing.
+  What that leaves open: if the reader is in fact gone for good and nothing
+  ever reopens that end again, nothing ever relieves the backpressure either,
+  and `send_data` keeps accepting more regardless. `_outbound_queues` is an
+  unbounded `queue.Queue()` (`engine/debasher_runtime_transport.py`), and
+  `send_data` appends unconditionally to `_unwritten`, the checkpoint's
+  outbound backlog for G5 (`engine/debasher_runtime_fbp.py`), so both grow
+  without limit for as long as the node keeps calling `send_data` on that
+  port. `OUT_BACKLOG_MAX_BYTES` only makes `_save_checkpoint` skip a
+  checkpoint that has grown too big; it does not slow or stop the growth
+  itself, nor raise an error. No guarantee is broken (G1 to G8): nothing is
+  lost or duplicated, the node just keeps using more memory, unbounded and
+  unnoticed. Found on 2026-09-22, reasoned from the code, not run.
 
 ## 7. Future work
 
