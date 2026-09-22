@@ -21,6 +21,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PFILE = Path(__file__).resolve().parent / "debasher_halt_ref.sh"
 _DEBASHER_EXEC = _REPO_ROOT / "bin" / "debasher_exec"
 _DEBASHER_STOP = _REPO_ROOT / "bin" / "debasher_stop"
+_DEBASHER_STOP_RESIDENT = _REPO_ROOT / "bin" / "debasher_stop_resident"
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DEBASHER_RUN_CHAOS_TEST"),
@@ -108,3 +109,23 @@ def test_a_lone_node_with_no_supervisor_stays_up_after_halting_and_stops_cleanly
 
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
+
+
+def test_debasher_stop_resident_stops_a_supervisor_less_program(outdir):
+    """
+    debasher_stop_resident (pieza 2) against the same lone-node,
+    no-Supervisor program: confirms the tool itself does not need one
+    either (stop_supervisor_if_any is a no-op when there is none).
+    """
+    _launch(outdir)
+
+    result = subprocess.run(
+        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "forcing debasher_stop" not in result.stderr, result.stderr
+
+    finished_path = os.path.join(outdir, "__exec__", "solo", "solo.finished")
+    assert os.path.exists(finished_path)

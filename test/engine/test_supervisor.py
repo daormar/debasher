@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -718,3 +719,78 @@ def test_run_returns_once_every_node_is_resolved_even_with_a_manual_trigger_port
     runner.join(timeout=5)
 
     assert not runner.is_alive()
+
+
+# --- stopping by signal, same mechanism as FBPProcess -----------------
+
+
+def test_on_stop_signal_sets_all_resolved():
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert not proc._all_resolved.is_set()
+
+    proc._on_stop_signal(signal.SIGTERM, None)
+
+    assert proc._all_resolved.is_set()
+
+
+@pytest.fixture
+def _sigterm_handler_guard():
+    original = signal.getsignal(signal.SIGTERM)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, original)
+
+
+@pytest.fixture
+def _real_opts(tmp_path):
+    # run() calls start_threads(), which opens every declared port's fifo
+    # for real: _FAKE_OPTS's paths do not exist and only work for tests
+    # that never go through run()/start_threads() at all.
+    hb_a = tmp_path / "hb_a.fifo"
+    hb_b = tmp_path / "hb_b.fifo"
+    os.mkfifo(hb_a)
+    os.mkfifo(hb_b)
+    return {"hb_a": str(hb_a), "hb_b": str(hb_b)}
+
+
+def test_run_installs_a_sigterm_handler_when_called_on_the_main_thread(_sigterm_handler_guard, _real_opts):
+    proc = _Sup(opts=_real_opts)
+    proc._all_resolved.set()  # so run() returns at once, on this (the main) thread
+
+    proc.run()
+
+    assert signal.getsignal(signal.SIGTERM) == proc._on_stop_signal
+
+
+def test_run_does_not_touch_the_signal_handler_off_the_main_thread(_sigterm_handler_guard, _real_opts):
+    before = signal.getsignal(signal.SIGTERM)
+    proc = _Sup(opts=_real_opts)
+    runner = threading.Thread(target=proc.run, daemon=True)
+    runner.start()
+
+    assert _wait_until(lambda: proc._checker_thread is not None and proc._checker_thread.is_alive())
+    assert signal.getsignal(signal.SIGTERM) == before
+
+    proc._all_resolved.set()
+    assert _wait_until(lambda: not runner.is_alive())
+
+
+def test_a_real_sigterm_stops_run_before_every_node_is_resolved(_sigterm_handler_guard, _real_opts):
+    # The actual guarantee this piece is for: a graceful-stop tool that
+    # finds a Supervisor can end it by signal even while nodes it watches
+    # are still unresolved, so it cannot relaunch one out from under the
+    # tool's own subsequent halt-and-signal sequence.
+    proc = _Sup(opts=_real_opts)
+
+    def _send_sigterm_once_running():
+        assert _wait_until(lambda: proc._checker_thread is not None and proc._checker_thread.is_alive())
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    sender = threading.Thread(target=_send_sigterm_once_running, daemon=True)
+    sender.start()
+
+    proc.run()  # blocks here, on the main thread, until the signal arrives
+
+    sender.join(timeout=2)
+    assert not proc._checker_thread.is_alive()

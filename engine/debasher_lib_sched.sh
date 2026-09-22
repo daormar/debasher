@@ -280,6 +280,26 @@ debasher::_stop_pid()
 }
 
 ########
+debasher::_stop_pid_gracefully()
+{
+    local pid=$1
+
+    # SIGTERM, not SIGKILL, and still the whole process group, for the
+    # same reason as _stop_pid: without it, a single-pid SIGTERM only
+    # reaches this process's own wrapper script (see
+    # debasher_builtin_sched::_print_script_trap), never a resident
+    # process's own Python interpreter, which sits below it in the fork
+    # tree. The wrapper survives this same broadcast (that trap again) so
+    # it can still finish its own post-processing once whatever it is
+    # running actually exits (FBPProcess and Supervisor both install a
+    # SIGTERM handler of their own for exactly this, see
+    # engine/debasher_runtime_fbp.py and engine/debasher_runtime_supervisor.py).
+    kill -TERM -- "-$pid" > /dev/null 2>&1 || return 1
+
+    return 0
+}
+
+########
 debasher::_id_exists()
 {
     local id=$1

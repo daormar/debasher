@@ -23,6 +23,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PFILE = Path(__file__).resolve().parent / "debasher_chaos_ref.sh"
 _DEBASHER_EXEC = _REPO_ROOT / "bin" / "debasher_exec"
 _DEBASHER_STOP = _REPO_ROOT / "bin" / "debasher_stop"
+_DEBASHER_STOP_RESIDENT = _REPO_ROOT / "bin" / "debasher_stop_resident"
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("DEBASHER_RUN_CHAOS_TEST"),
@@ -406,29 +407,26 @@ def _launch(outdir):
         pytest.fail(Path(log_path).read_text())
 
 
-def _halt_and_wait_for_finished(outdir, manual_fifo, timeout=30.0):
+def _halt_and_wait_for_finished(outdir, timeout=30.0):
     """
-    Sends shutdown through the manual trigger, then does by hand what the
-    tool the design doc's third G2 candidate still needs (Conformance
-    status: not built yet) would do for real: wait for every node's halted
-    marker, then send each a real SIGTERM, to its whole process group (see
-    debasher_builtin_sched::_print_script_trap), not a lone pid (see
-    test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it
-    for why that matters). Closing a halt round no longer stops a node by
-    itself (2026-09-22), so plain shutdown, alone, does not end a program
-    any more, which is what this replaces in every test here that used to
-    just wait for sup.finished after it.
+    The design doc's third G2 candidate's own tool
+    (debasher_stop_resident), exercised for real, not hand-rolled: it
+    finds fanin's own control port by itself (no Supervisor involved in
+    that part), waits for every node's halted marker, stops the
+    Supervisor first the same graceful way, signals every node (whole
+    process group, see debasher_builtin_sched::_print_script_trap), and
+    falls back to debasher_stop if it cannot finish within timeout. See
+    test_debasher_stop_resident_stops_the_whole_program_cleanly for a
+    dedicated check of the tool itself; every test here only uses this to
+    end a run cleanly enough to look at its trace afterward.
     """
-    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
-
-    for name in _KILLABLE_NODES:
-        halted = os.path.join(outdir, "__exec__", name, "halted")
-        assert _wait_for(halted, timeout=timeout), f"{name} never marked itself halted"
-
-    for name in _KILLABLE_NODES:
-        pid = _read_pid(_id_file(outdir, name))
-        if pid is not None:
-            os.killpg(int(pid), signal.SIGTERM)
+    result = subprocess.run(
+        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", str(int(timeout))],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"debasher_stop_resident failed:\n{result.stdout}\n{result.stderr}"
+    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=timeout)
 
     assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=timeout)
 
@@ -518,7 +516,7 @@ def test_a_clean_run_produces_the_exact_trace_at_sink(outdir):
         manual_fifo, {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}}
     )
     time.sleep(0.5)
-    _halt_and_wait_for_finished(outdir, manual_fifo)
+    _halt_and_wait_for_finished(outdir)
     tailer.stop_and_join()
     if tailer.error is not None:
         raise tailer.error
@@ -577,7 +575,7 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     stop_snapshots.set()
     snapshots.join(timeout=5)
 
-    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
+    _halt_and_wait_for_finished(outdir, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -644,7 +642,7 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     stop_snapshots.set()
     snapshots.join(timeout=5)
 
-    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
+    _halt_and_wait_for_finished(outdir, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -893,7 +891,7 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     # ordered-shutdown G2 gap, not what this test is about.
     time.sleep(1.0)
 
-    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
+    _halt_and_wait_for_finished(outdir, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -981,7 +979,7 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     # ordered-shutdown G2 gap, not what this test is about.
     time.sleep(1.0)
 
-    _halt_and_wait_for_finished(outdir, manual_fifo, timeout=60)
+    _halt_and_wait_for_finished(outdir, timeout=60)
 
     tailer.stop_and_join()
     if tailer.error is not None:
@@ -1065,3 +1063,62 @@ def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdi
     # Nothing about how the Supervisor notices a clean finish had to change
     # for this: .finished is already checked unconditionally, every tick.
     assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=15.0)
+
+
+def test_debasher_stop_resident_stops_the_whole_program_cleanly(outdir):
+    """
+    debasher_stop_resident itself (pieza 2 of the design doc's G2 third
+    candidate): stops the Supervisor first, by the same graceful signal
+    (its own new SIGTERM handler, engine/debasher_runtime_supervisor.py),
+    so it cannot relaunch a node while the rest of this runs, then halts
+    and signals every business node. Every process, sup included, must
+    exit cleanly (.finished), and quickly: this is the plain, no-failure
+    case, nothing here should ever need the hard fallback to debasher_stop.
+    """
+    _launch(outdir)
+    time.sleep(1.0)  # let every node send at least one heartbeat first
+
+    start = time.monotonic()
+    result = subprocess.run(
+        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
+        capture_output=True,
+        text=True,
+    )
+    elapsed = time.monotonic() - start
+
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "forcing debasher_stop" not in result.stderr, result.stderr
+    assert elapsed < 10.0, f"took {elapsed:.1f}s, the hard fallback must not have been needed"
+
+    for name in (*_KILLABLE_NODES, "sup"):
+        finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")
+        assert os.path.exists(finished), f"{name} never wrote .finished"
+
+
+def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
+    """
+    The -x flag (design doc, Conformance status' G2 entry): a node named
+    there is not waited for and not signalled, for pieza 3's own future
+    use (Supervisor._escalate_shutdown excluding a node it already gave
+    up on). Excludes sink, still healthy here (nothing has failed): every
+    other node, sup included, must still stop cleanly, and sink must
+    still be running afterward, completely untouched.
+    """
+    _launch(outdir)
+    time.sleep(1.0)
+
+    sink_pid = int(_read_pid(_id_file(outdir, "sink")))
+
+    result = subprocess.run(
+        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "-x", "sink", "--timeout", "30"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+    for name in ("fanin", "loop", "sup"):
+        finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")
+        assert os.path.exists(finished), f"{name} never wrote .finished"
+
+    assert not os.path.exists(os.path.join(outdir, "__exec__", "sink", "sink.finished"))
+    os.kill(sink_pid, 0)  # raises ProcessLookupError if sink was touched

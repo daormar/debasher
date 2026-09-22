@@ -20,6 +20,7 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 
 # import modules
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -93,7 +94,10 @@ class Supervisor(_PortWorker):
         # Set once every node is resolved (done, or given up on) and no
         # shutdown escalation is still in flight -- watched by run(),
         # not acted on by the checker thread itself (which would deadlock
-        # joining its own thread from inside stop_threads()).
+        # joining its own thread from inside stop_threads()). Also set
+        # directly by a SIGTERM handler (see run() and _on_stop_signal):
+        # unlike FBPProcess, nothing else here needs to tell "resolved
+        # naturally" apart from "told to stop", so one event covers both.
         self._all_resolved = threading.Event()
 
     def _check_node_names(self):
@@ -131,11 +135,25 @@ class Supervisor(_PortWorker):
         Supervisor carries no state of its own to restore -- it always
         starts fresh. Runs until every supervised node is resolved
         (cleanly done, or given up on after exhausting its relaunch
-        budget) and no shutdown escalation is still in flight.
+        budget) and no shutdown escalation is still in flight, or until
+        told to stop by signal (see _on_stop_signal): a graceful-stop tool
+        that finds a Supervisor stops it first, before touching any node
+        it watches, precisely so it cannot relaunch one out from under it.
         """
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, self._on_stop_signal)
+
         self.start_threads()
         self._all_resolved.wait()
         self.stop_threads()
+
+    def _on_stop_signal(self, signum, frame):
+        """
+        The SIGTERM handler run() installs (see FBPProcess's own, same
+        reasoning: minimal, no lock touched here, actually stopping
+        happens on run()'s own thread once its wait returns).
+        """
+        self._all_resolved.set()
 
     def start_threads(self):
         super().start_threads()
@@ -427,7 +445,25 @@ class Supervisor(_PortWorker):
         # returns as soon as the relaunched process has written its PID
         # file, not when that process ends) to reap it and report a
         # failure to launch.
-        proc = subprocess.Popen(command, stdin=subprocess.DEVNULL)
+        #
+        # stdout/stderr also go to DEVNULL, not just stdin: left alone,
+        # Popen has them inherit this Supervisor's own (this process's
+        # own launch script pipes them into tee, see
+        # debasher_builtin_sched::_execute_funct_plus_postfunct), so the
+        # relaunch command, and in turn the resident process it
+        # backgrounds, would hold that pipe's write end open for as long
+        # as the relaunched node keeps running, long after the
+        # Supervisor's own process has actually exited. Found 2026-09-22
+        # by a real debasher_exec run: a graceful stop signal (see
+        # _on_stop_signal) made the Supervisor's own Python interpreter
+        # exit cleanly, but its wrapper script never got past its own
+        # `wait` for that pipeline, since tee never saw EOF on a pipe a
+        # relaunched node was still holding open; debasher_stop's hard
+        # kill never surfaced this, since it always kills the relaunched
+        # node too, which closes the leaked fd as a side effect.
+        proc = subprocess.Popen(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         threading.Thread(
             target=self._reap_launcher,
             args=(node_name, proc),

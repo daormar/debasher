@@ -251,6 +251,14 @@ mutation check, durability level) is defined in the Contract, where it is used.
   anything: a node that never halted stops on one just the same. Nothing in
   `FBPProcess` decides when to send it: that is external, by design (see
   "Conformance status"), typically once every node's halted marker exists.
+  `Supervisor` stops on one too (section 4's own "Clean-completion
+  detection" subsection).
+- **`debasher_stop_resident`**: the tool that actually sends the stop signal
+  in a real program, the graceful counterpart to `debasher_stop` (section
+  4's own subsection of the same name has the full sequence). Waits for
+  every node's halted marker, then signals each; stops a `Supervisor`, if
+  the program has one, before touching any node it watches; falls back to
+  `debasher_stop`'s hard kill past its own `--timeout`.
 - **in transit** (en tránsito): a `DATA` message sent before its sender captured
   its state and received after its receiver captured its own.
 - **channel state** (estado de canal): `channel_state`, the copy that a node
@@ -989,12 +997,10 @@ any guarantee is relied on.
   none duplicated. What a running neighbor still receives twice after a writer's
   crash is what G5 removes.
 - **G2 is violated during an ordered shutdown when a downstream node has only
-  one pending port: found on 2026-09-22 by the chaos test (see "Acceptance").
-  The third candidate below, which removes the mechanism this bug depends on,
-  is implemented and verified with two real runs (2026-09-22); the external
-  tool that would drive it end to end in an actual program is not built yet
-  (see below), so this entry stays open until it is.** `_open_barrier_round`
-  sends the halt `BARRIER` on every output
+  one pending port: found on 2026-09-22 by the chaos test (see "Acceptance"),
+  fixed and verified with real `debasher_exec` runs the same day (the third
+  candidate below, and its own `debasher_stop_resident` tool, section 4).**
+  `_open_barrier_round` sends the halt `BARRIER` on every output
   port as soon as a round opens, not when it closes, so an initiator whose own
   round stays open (waiting for a port that has not settled yet) has already
   forwarded the halt to every neighbor before it is done. A neighbor with no
@@ -1047,37 +1053,41 @@ any guarantee is relied on.
 
   What this closes: the specific self-stop-too-early mechanism the bug
   above depends on, since a node no longer decides on its own, from its own
-  round closing, that it is done. What does not exist yet: the external
-  tool itself (the graceful equivalent of `debasher_stop`) that would
-  actually watch every node's halted marker and send the stop signal in a
-  real program, without a person doing it by hand; until it does, nothing
-  drives a whole program's ordered shutdown to completion on its own, and
-  this entry stays open. As a direct consequence, `Supervisor`'s own
-  `_escalate_shutdown` (`engine/debasher_runtime_supervisor.py`), which
-  sends `shutdown` straight to the `TRIGGER_PORT` initiators, no longer
-  makes the reachable part of the graph actually stop: every escalation now
-  waits out the full `FORCE_STOP_TIMEOUT_SECS` and falls back to
-  `debasher_stop`'s hard kill every time, not just when something is
-  actually stuck. Not fixed: planned as `_escalate_shutdown` calling the
-  same external tool once it exists, instead of sending `shutdown` and
-  waiting on `.finished` itself.
+  round closing, that it is done, and the external tool that actually
+  drives a real program's ordered shutdown to completion now exists and is
+  verified (`debasher_stop_resident`, section 4). Getting the tool itself
+  working against a real program (not just against `FBPProcess` in
+  isolation) surfaced one further, unrelated bug, also found and fixed the
+  same day: a leaked `stdout`/`stderr` file descriptor that kept a
+  `Supervisor`'s own wrapper script from ever finishing after it relaunched
+  a node (section 4's "Relaunching a downed node"). Kept open on its own,
+  deliberately separate from this entry (its own paragraph, section 4's
+  "Escalation on a permanent node failure"): `Supervisor`'s own escalation
+  after a permanent node failure does not call this tool yet, and until it
+  does, degrades to always falling back to a hard kill.
 
-  Two things that external tool still has to get right, neither designed
-  yet. First, the same caveat as before, now about its own polling rather
-  than about the mechanism it polls: a halted marker existing does not by
-  itself prove the writer thread had already flushed everything it owed to
-  the real fifo at capture time, since that is exactly what the
-  checkpoint's own `out_backlog` (G5) is for, so the tool still needs the
-  writer thread's own drain folded into what counts as "this node is
-  really done", not only the marker appearing. Second, it must wait for
-  every node's marker before sending the stop signal to any of them, not
-  signal each as its own marker appears: signalling early would race an
-  upstream peer that has not finished sending yet, reproducing this same
-  bug's shape one level out. Even waiting for everyone, a peer can still
-  process and forward a little more between its own marker and actually
-  receiving the signal, a narrower residual window that reduces to the
-  Contract's own "both endpoints of a channel crashed" limit (see "Limits
-  and non-goals"), not a new one.
+  Two things the tool had to get right, both now done, not just designed.
+  First, it waits for every node's marker before sending the stop signal to
+  any of them, not per node as its own marker appears: signalling early
+  would race an upstream peer that has not finished sending yet,
+  reproducing this same bug's shape one level out
+  (`wait_for_every_halted_marker`, then
+  `stop_every_node_and_wait_for_finished`, two separate passes over every
+  node, `engine/debasher_stop_resident.sh`). A narrower
+  residual window remains even so: a peer can still process and forward a
+  little between its own marker and actually receiving the signal, which
+  reduces to the Contract's own "both endpoints of a channel crashed" limit
+  (see "Limits and non-goals"), not a new one. Second, the `out_backlog`
+  caveat reasoned about above (a halted marker existing does not by itself
+  prove the writer thread had already flushed everything to the real fifo):
+  real runs, including several that kill and relaunch a node mid-flight and
+  check the exact resulting trace afterward (`test/engine/test_chaos.py`'s
+  already-committed kill/relaunch pieces, now ending through this same
+  tool), have not surfaced this as an actual defect, consistent with G5's
+  own replay-on-recovery already covering it regardless of the writer
+  thread's state at the moment the stop signal arrives. Reasoned, not
+  measured in isolation: nothing here specifically stress-tests this one
+  interaction on its own.
 
 - **The `Supervisor`'s own resolution after a node gives up may not
   complete: found on 2026-09-22 by the chaos test's engineered-gap piece,
@@ -1127,10 +1137,17 @@ any guarantee is relied on.
   This is the same class of problem as the G2 ordered-shutdown gap above,
   and the third candidate noted there (treating a halt exactly like an
   ordinary snapshot, with an external tool deciding when it is safe to
-  stop by signal, outside the message protocol) would very likely fix
-  this too, for the same reason: a node crashing mid-halt would then fall
-  into the already-recoverable "crash during an ordinary round" case
-  instead of losing a one-time message nothing ever resends.
+  stop by signal, outside the message protocol), now built (section 4's
+  `debasher_stop_resident`), structurally keeps this from hanging the
+  program forever even so: the tool's own `--timeout` bounds the wait for
+  every halted marker regardless of why one never appears, and falls back
+  to `debasher_stop`'s hard kill. What it does not do is retry: `fanin`
+  crashing mid-halt still falls into the already-recoverable "crash
+  during an ordinary round" case (the relaunched incarnation simply
+  forgets the open round), but nothing here resends the one-time
+  `shutdown` trigger the tool already sent once, so this specific case
+  still ends in the hard-kill fallback rather than a graceful close.
+  Not re-confirmed with a real run under the new mechanism.
 
 ## 1. Control envelope
 
@@ -1472,9 +1489,10 @@ section 7, Future work).
   way other tests simulate an external `INTERACT` arriving), then waits on
   `_stop_requested` before calling `stop_threads()`. Deciding when to send
   that signal is external to `FBPProcess` by design (see "Conformance
-  status"'s third candidate): typically once every node's halted marker
-  exists, but nothing here enforces that, or requires a halt to have
-  happened at all.
+  status"'s third candidate, and section 4's own `debasher_stop_resident`
+  subsection for the tool that actually does): typically once every node's
+  halted marker exists, but nothing here enforces that, or requires a halt
+  to have happened at all.
 - A halt sends no `CLOSE`, and neither does any other stop signal. Done:
   `run()` always calls `stop_threads(close=False)`, unconditionally, once its
   wait on `_stop_requested` returns. `CLOSE` says that a writer has finished
@@ -2321,6 +2339,18 @@ kept as a record.
   threads and exits.** This answers "who tells the `Supervisor` to stop":
   nothing external needs to signal it explicitly, it infers whole-program
   completion from the same state it already tracks for every other purpose.
+- **`Supervisor` also stops on a stop signal, since 2026-09-22 (`FBPProcess`'s
+  own mechanism, section 2's "Ordered shutdown"): `run()` installs a
+  `SIGTERM` handler on the main thread (same reasoning, and same
+  off-main-thread exception for tests driving `run()` on a background
+  thread), whose handler just sets `_all_resolved` directly; unlike
+  `FBPProcess`, nothing else here needs to tell "resolved naturally" apart
+  from "told to stop", so the one event already `run()`'s own
+  `_all_resolved.wait()` waits on covers both, with no new attribute
+  needed.** This exists specifically so a graceful-stop tool that finds a
+  `Supervisor` present can end it first, deliberately, before touching any
+  node it watches, so it cannot relaunch one out from under the rest of
+  what that tool does (see the `debasher_stop_resident` subsection below).
 
 ### Relaunching a downed node
 
@@ -2384,6 +2414,25 @@ kept as a record.
 - Exceeding the limit calls **`on_node_permanently_failed(node_name)`** instead
   of relaunching again; that node moves to its own terminal "given up" state
   (distinct from "done"), never automatically retried again.
+- **The relaunch subprocess also has to leave `stdout`/`stderr` alone, not
+  just `stdin`: found 2026-09-22, fixed the same day.** `on_node_down`'s
+  `subprocess.Popen` only redirected `stdin`; left alone, `stdout`/`stderr`
+  are inherited from the Supervisor's own process, which its own launch
+  script pipes into `tee` (`debasher_builtin_sched::
+  _execute_funct_plus_postfunct`). `debasher_launch_process`, and in turn
+  the resident process it backgrounds, inherited that same pipe, and held
+  its write end open for as long as the relaunched node kept running, long
+  after the Supervisor's own Python interpreter had actually exited: `tee`
+  never saw `EOF`, so the Supervisor's own wrapper script never got past
+  its own `wait` for that pipeline, and `sup.finished` never appeared.
+  `debasher_stop`'s hard kill never surfaced this (it always kills the
+  relaunched node too, which closes the leaked fd as a side effect); a
+  graceful stop signal (see the `debasher_stop_resident` subsection below)
+  does not, and was how this was found: confirmed with a real
+  `debasher_exec` run, kill one node, let the `Supervisor` relaunch it,
+  then send the `Supervisor` a `SIGTERM` on its own, nothing else touched.
+  Fixed by also redirecting `stdout`/`stderr` to `DEVNULL` in that same
+  `Popen` call.
 
 ### Escalation on a permanent node failure
 
@@ -2421,6 +2470,94 @@ checkpoint/input-log consistency guarantee already built; phase 2 is explicitly
 a "just end it" backstop, expected to only ever fire in the pathological case of
 a graph broken by a permanent node failure, and is allowed to lose in-flight
 state for whatever it kills.
+
+**Phase 1 no longer resolves anything by itself, since 2026-09-22 (see
+"Conformance status"'s G2 entry): plain `shutdown` stops nothing now, a
+node only stops on a stop signal (see section 2's "Ordered shutdown"),
+which nothing here sends.** Every escalation today waits out the full
+`FORCE_STOP_TIMEOUT_SECS` and falls through to phase 2 regardless, not
+just in the pathological case. Not fixed: the planned repair is
+`on_node_permanently_failed` calling `debasher_stop_resident` (this
+section, below) in place of phase 1's `shutdown`, so the reachable part of
+the graph is actually, gracefully stopped again, but that is not built
+yet.
+
+### `debasher_stop_resident`: the graceful stop tool: DONE, implemented and tested (`engine/debasher_stop_resident.sh`, `bin/debasher_stop_resident` once built)
+
+The external tool the third G2 candidate needed (see "Conformance status" and
+section 2's "Ordered shutdown"): the graceful counterpart to `debasher_stop`,
+for a resident program specifically. Built 2026-09-22, alongside the
+`Supervisor` changes above, which it depends on.
+
+- **Usage: `debasher_stop_resident -d <outdir> [-x <name>[,<name>...]]
+  [--timeout <secs>]`.** `-d` is the program's own output directory, same as
+  every other engine tool that operates on one. `-x` names process(es) to
+  leave alone entirely (not waited for, not signalled): for
+  `on_node_permanently_failed`'s planned use (escalation section above),
+  which must not wait forever on a node it has already given up on.
+  `--timeout` (default 60, the same default `FORCE_STOP_TIMEOUT_SECS` already
+  used) bounds the whole graceful attempt; past it, falls back to
+  `debasher_stop -d <outdir>` (a hard kill of the entire program), so this
+  always ends the program one way or another, never hangs indefinitely by
+  itself.
+- **Finds the program's nodes and its `Supervisor` (if any) the same way
+  `debasher::_validate_resident_program_processes` already does**: loads the
+  module, iterates `DEBASHER_PROGRAM_PROCESSES`, and classifies each with the
+  existing `debasher::_classify_resident_process_role` (no new classifier
+  written for this).
+- **Sequence:**
+  1. If the program has a `Supervisor`, stop it first (a stop signal to its
+     whole process group, see below) and wait for its own `.finished`,
+     before touching any node it watches: this is exactly why `Supervisor`
+     itself needed a stop signal of its own (subsection above), and it is
+     what keeps this tool from racing a relaunch it did not ask for.
+  2. Record each node's halted marker as it stands right now (its content,
+     or `-1` if absent): the baseline a fresh one has to beat.
+  3. Write `shutdown` into every node's own control ports (the design doc's
+     "control ports file", most nodes have none; the round reaches them from
+     elsewhere in the graph).
+  4. Wait for every node's halted marker to go past its own baseline (never
+     "exists": a node halted from a previous, already-resumed cycle would
+     already show one that means nothing about this run).
+  5. Re-read every node's `.id` (not reusing what step 1 or discovery
+     already saw) and send each a stop signal.
+  6. Wait for every node's own `.finished`.
+- **A stop signal is `SIGTERM` to the whole process group (`kill -TERM --
+  "-$pid"`, a new `debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of
+  `debasher::_stop_pid`'s existing `SIGKILL`), never a lone pid.** Found
+  2026-09-22, the same day: `debasher_builtin_sched::_launch` backgrounds a
+  generated script as its own process group leader (the pid in `.id`), but
+  that script's own pipeline
+  (`debasher_builtin_sched::_execute_funct_plus_postfunct`) forks at least
+  one subshell to run the process function, so a resident process's own
+  Python interpreter sits below that pid, not at it. A single-pid `SIGTERM`
+  only reached the wrapper script, which had no handler of its own and died
+  at once, orphaning the interpreter, which never received anything and ran
+  forever; `debasher_stop_resident` then waited out its own timeout for a
+  `.finished` that could never come. Fixed the same way at both ends: the
+  signal now always targets the whole group, and the wrapper script itself
+  now ignores `SIGTERM` at its own top level
+  (`debasher_builtin_sched::_print_script_trap`, `trap '' TERM`, the first
+  thing `_create_script` writes into the generated file) so it survives
+  that same broadcast long enough to still write `.finished` once its own
+  child (the Python interpreter, or a stopped `Supervisor`) actually exits.
+  `SIGKILL`, used by `debasher_stop`'s hard kill, cannot be trapped and is
+  unaffected by any of this.
+- **Verified with real `debasher_exec` runs**, not just reasoned: a clean,
+  no-failure run of the chaos test's own reference program (`Supervisor`
+  present) and of a new, minimal, `Supervisor`-less reference program
+  (`test/engine/debasher_halt_ref.sh`, `test/engine/test_halt_ref.py`);
+  the `-x` flag, excluding a healthy node from an otherwise-normal run and
+  confirming it is untouched while every other node, `Supervisor` included,
+  stops cleanly; and, separately, the ten already-committed chaos-test
+  pieces that kill and relaunch nodes mid-run, now ending each run through
+  this tool instead of a hand-rolled wait (`test/engine/test_chaos.py`'s
+  `_halt_and_wait_for_finished`). The kill-and-relaunch runs are what found
+  two of the three bugs on this page dated 2026-09-22 (the wrong-pid signal
+  and the leaked `stdout`/`stderr` fd): a plain, no-failure run never
+  relaunches anything, so neither had ever been exercised by any run before
+  this tool existed and something started actually waiting for a graceful,
+  confirmed stop rather than a hard kill.
 
 ## 5. Recovery from a node failure: the writer-dies direction done, the reader-dies direction still open (`engine/debasher_runtime_fbp.py`, `engine/debasher_runtime_transport.py`)
 
