@@ -633,9 +633,10 @@ cover), or checking each port's own sequence directly, which needs no
 pacing and no frozen reference run at all. The second is what is described
 above.
 
-**Status (2026-09-22): the reference program, the no-failure baseline and a
-single-node-kill driver are built and tested; several nodes at once, adjacent
-pairs, killing during an open round, and the G8-error exception are not.**
+**Status (2026-09-22): the reference program, the no-failure baseline, a
+single-node-kill driver and a channel-safe two-node-kill driver are built and
+tested; adjacent pairs, killing during an open round, and the G8-error
+exception are not.**
 `test/engine/debasher_chaos_ref.sh` is the reference program: `fanin` (the
 fan-in node) reads `ext`, fed from outside the program (`EXTERNAL_PORTS`),
 and `loop_in`, fed by `loop`, which simply echoes back to `fanin` whatever
@@ -650,7 +651,7 @@ from outside.
 
 `test/engine/test_chaos.py` (skipped unless `DEBASHER_RUN_CHAOS_TEST` is set,
 since it is slow and disruptive on purpose: real `debasher_exec`, no mocks)
-has two pieces so far. The "run once with no failures" step: 20 messages
+has three pieces so far. The "run once with no failures" step: 20 messages
 through `ext`, a `start_snapshot` and a `shutdown` in the middle of the run,
 the resulting trace checked against the criterion above. And a first
 kill/relaunch piece, ten repeats of killing exactly one of `fanin`, `loop` or
@@ -685,10 +686,24 @@ pipeline to settle before asking for a `shutdown`, to keep validating what
 they are actually meant to validate (recovery from a kill) without also
 tripping that separate, already-recorded bug.
 
-Not built yet: killing several nodes at once, an adjacent pair specifically
-(the only pairs that can touch the "both endpoints of a channel crashed"
-limit), killing during an open round, the bookkeeping of when each node was
-killed and relaunched, and recognizing the G8-error exception.
+A second kill/relaunch piece kills `loop` and `sink` together, ten repeats,
+each at its own independently chosen random moment (some seeds land the two
+kills close to simultaneous, others stagger them across most of the run):
+the only pair of killable nodes with no direct channel between them, `fanin`
+being the other endpoint of every channel that touches either one, so this
+still cannot touch the "both endpoints of a channel crashed" limit, the same
+reasoning as the single-node-kill piece, and every repeat's trace must match
+the criterion exactly, with no G8 exception expected here either. Its own
+mutation check reused the single-node-kill piece's dedup fault (G5's
+`envelope.seq <= accepted` loosened to `<`, on a scratch copy, never in the
+repository) to confirm the criterion still catches an exact duplicate
+reliably once two crash-replays are running close together in time, not
+just one: the mutant was killed on all 10 repeats.
+
+Not built yet: an adjacent pair specifically (the only pairs that can touch
+the "both endpoints of a channel crashed" limit: `fanin` with `loop`, or
+`fanin` with `sink`), killing during an open round, the bookkeeping of when
+each node was killed and relaunched, and recognizing the G8-error exception.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
 guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through

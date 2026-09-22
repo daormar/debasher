@@ -383,3 +383,74 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
         raise tailer.error
     context = f" (killed {target}, pid {old_pid} -> {new_pid}, at +{kill_delay:.2f}s)"
     _assert_trace_matches(tailer.records, k, context)
+
+
+@pytest.mark.parametrize("run_index", range(10))
+def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(outdir, run_index):
+    """
+    "run... repeatedly under kill -9 of random nodes at random moments,
+    including several at once" (Acceptance), extended here to killing loop
+    and sink together, each at its own independently chosen moment (some
+    seeds land the two kills close to simultaneous, others stagger them
+    across most of the run). loop and sink are the only pair of killable
+    nodes with no direct channel between them: fanin is the other endpoint
+    of every channel that touches either one, so this still cannot touch
+    the Contract's "both endpoints of a channel crashed" limit, the same
+    reasoning as the single-node-kill driver above. No G8-error exception
+    is expected here either; every run's trace must match the criterion
+    exactly.
+    """
+    k = 60
+    interval = 0.03
+    rng = random.Random(run_index)
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+
+    ext_fifo = _find_fifo(outdir, "fanin_ext")
+    manual_fifo = _find_fifo(outdir, "sup_manual")
+
+    feeder = _ExtFeeder(ext_fifo, k, interval)
+    stop_snapshots = threading.Event()
+    snapshots = _SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
+    feeder.start()
+    snapshots.start()
+
+    window = max(0.25, k * interval - 0.2)
+    kills = sorted((("loop", rng.uniform(0.2, window)), ("sink", rng.uniform(0.2, window))), key=lambda kv: kv[1])
+    old_pids = {}
+    elapsed = 0.0
+    for name, delay in kills:
+        time.sleep(max(0.0, delay - elapsed))
+        old_pids[name] = _kill_node(outdir, name)
+        elapsed = delay
+
+    new_pids = {}
+    for name, old_pid in old_pids.items():
+        new_pids[name] = _wait_for_relaunch(outdir, name, old_pid)
+        assert new_pids[name] is not None, f"{name} (pid {old_pid}) was never relaunched"
+
+    feeder.join(timeout=60)
+    assert not feeder.is_alive(), "feeder did not finish sending"
+    if feeder.error is not None:
+        raise feeder.error
+
+    # Same deliberate grace period as the single-node-kill driver above,
+    # and for the same reason: the separate, already-recorded ordered-
+    # shutdown G2 gap, not what this test is about.
+    time.sleep(1.0)
+
+    stop_snapshots.set()
+    snapshots.join(timeout=5)
+
+    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
+    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    context = " (" + ", ".join(
+        f"killed {name} pid {old_pids[name]} -> {new_pids[name]} at +{delay:.2f}s"
+        for name, delay in kills
+    ) + ")"
+    _assert_trace_matches(tailer.records, k, context)
