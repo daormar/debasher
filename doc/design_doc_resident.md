@@ -843,6 +843,31 @@ any guarantee is relied on.
   `BARRIER` alone does not say "and nothing more is coming on this channel
   either").
 
+  A third candidate, worked out in more detail (2026-09-22) but still not
+  designed as code: treat a halt exactly like an ordinary snapshot at every
+  node (take the checkpoint, keep running, keep reading), and move "when is
+  it actually safe to stop" entirely outside the message protocol. A node
+  already reports every checkpoint it saves to the `Supervisor` as an
+  `INTERACT` (`checkpoint_saved`, today only logged, never aggregated); the
+  same fact is also a plain file on disk, so nothing here strictly needs a
+  `Supervisor` to exist. An external actor, the same kind of tool as
+  `debasher_stop` (which already reads every node's `.id` file from the
+  outdir, needing no `Supervisor` either), can wait until every node's
+  checkpoint for the halt's epoch exists, then tell each node to actually
+  stop by signal, not by a message on any business channel: `debasher_stop`
+  already does the equivalent for an immediate kill (`kill -9` on each
+  node's process group, see `debasher::_stop_pid`), so the missing piece is
+  a graceful counterpart a node would catch and react to by calling
+  `stop_threads()` itself, which does not exist today. This sidesteps a
+  `Supervisor` dependency and a new per-channel signal alike, at the cost of
+  a new external tool and a new signal handler in `FBPProcess`/`Supervisor`.
+  One gap by itself does not close: a checkpoint file existing does not by
+  itself prove the writer thread had already flushed everything it owed to
+  the real fifo at capture time, since that is exactly what the checkpoint's
+  own `out_backlog` (G5) is for, so this still needs the writer thread's own
+  drain folded into what counts as "this node's round is really done", not
+  only the file appearing.
+
 ## 1. Control envelope
 
 Wire format: JSON Lines (one JSON object per line, `\n` as delimiter). Always
