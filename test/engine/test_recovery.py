@@ -316,13 +316,13 @@ def test_a_retained_checkpoint_that_cannot_be_read_aborts_the_prune_with_an_erro
 
     node = _Keeping(opts=_opts(tmp_path))
     node._open_input_log(0)
-    node._save_checkpoint(0, {"seen": []}, {}, 0, [])
-    node._save_checkpoint(1, {"seen": []}, {}, 0, [])
+    node._save_checkpoint(0, {"seen": []}, {}, 0, [], {})
+    node._save_checkpoint(1, {"seen": []}, {}, 0, [], {})
     # Saving epoch 2 keeps epochs 2 and 1, so epoch 1 is the oldest one kept.
     (tmp_path / "node" / "checkpoints" / "1.json").write_text("not json")
 
     with pytest.raises(RuntimeError, match="cannot read"):
-        node._save_checkpoint(2, {"seen": []}, {}, 0, [])
+        node._save_checkpoint(2, {"seen": []}, {}, 0, [], {})
     # The checkpoint that was being saved is on disk all the same.
     assert (tmp_path / "node" / "checkpoints" / "2.json").exists()
 

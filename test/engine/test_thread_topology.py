@@ -8,6 +8,7 @@ import time
 import pytest
 
 import debasher_runtime_lib as lib
+import debasher_runtime_transport as transport
 
 
 def _wait_until(predicate, timeout=2.0, interval=0.01):
@@ -51,8 +52,23 @@ class _ReaderOnly(lib.FBPProcess):
         self.received.append((port_name, packet))
 
 
-class _WriterOnly(lib.FBPProcess):
-    OUTPUT_PORTS = ["outf"]
+class _WriterOnly(transport._PortWorker):
+    """
+    The writer half of the transport with nothing on top of it: one output
+    port and no business logic. A business node may send only from inside
+    process_data, so the tests of the writer thread drive it through the
+    transport's own send_data instead.
+    """
+
+    def _input_ports(self):
+        return {}
+
+    def _output_ports(self):
+        return {"outf": "outf"}
+
+    def _brain_loop(self):
+        while self._inbound_queue.get() is not transport._STOP:
+            pass
 
 
 @pytest.fixture

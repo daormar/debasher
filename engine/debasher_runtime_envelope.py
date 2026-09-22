@@ -32,7 +32,10 @@ from collections import namedtuple
 # own single-line JSON object: a BARRIER or INTERACT message is never
 # nested inside DATA's payload, so a reader can dispatch on "type" alone,
 # without ever interpreting "payload". DATA, BARRIER and INTERACT carry
-# the messages themselves. CLOSE and HELLO belong to the transport: a
+# the messages themselves. A DATA also carries a "seq", the sender's
+# per-channel counter (see FBPProcess.send_data), unless it comes from a
+# plain _PortWorker or from outside the program, neither of which numbers
+# what it sends. CLOSE and HELLO belong to the transport: a
 # writer sends HELLO as the first line of every incarnation of itself (so
 # its reader can discard a fragment left by the previous one) and CLOSE
 # when it has finished for good. A halt is not that, since the node is
@@ -46,15 +49,21 @@ TYPE_HELLO = "HELLO"
 
 _VALID_TYPES = (TYPE_DATA, TYPE_BARRIER, TYPE_INTERACT, TYPE_CLOSE, TYPE_HELLO)
 
-Envelope = namedtuple("Envelope", ["type", "payload"])
+Envelope = namedtuple("Envelope", ["type", "payload", "seq"], defaults=[None])
 
 
-def encode_data(payload):
+def encode_data(payload, seq=None):
     """
     Encodes a DATA envelope. `payload` is free-form, whatever the
-    business logic wants to send; must be JSON-serializable.
+    business logic wants to send; must be JSON-serializable. `seq` is the
+    sender's per-channel counter for this message; omitted (not even the
+    key) when the sender is not one that numbers what it sends.
     """
-    return _encode(TYPE_DATA, payload)
+    obj = {"type": TYPE_DATA}
+    if seq is not None:
+        obj["seq"] = seq
+    obj["payload"] = payload
+    return json.dumps(obj)
 
 
 def encode_barrier(epoch, halt=False):
@@ -110,9 +119,10 @@ def decode_envelope(line):
     """
     Decodes one JSON-line envelope (as produced by encode_data/
     encode_barrier/encode_interact/encode_close/encode_hello) into an
-    Envelope(type, payload) namedtuple. Raises json.JSONDecodeError on
-    malformed JSON, ValueError if "type"/"payload" is missing or "type"
-    is not one of the valid envelope types.
+    Envelope(type, payload, seq) namedtuple ("seq" is None unless the line
+    carries one, which only a numbered DATA does). Raises
+    json.JSONDecodeError on malformed JSON, ValueError if "type"/"payload"
+    is missing or "type" is not one of the valid envelope types.
     """
     return _envelope_from_obj(json.loads(line), line)
 
@@ -120,8 +130,9 @@ def decode_envelope(line):
 def _envelope_from_obj(obj, what):
     """
     Validates an envelope that is already a decoded JSON value and returns
-    it as an Envelope(type, payload). `what` says where it came from (the
-    line, or a place in a file) and is only used in the error messages.
+    it as an Envelope(type, payload, seq). `what` says where it came from
+    (the line, or a place in a file) and is only used in the error
+    messages.
     """
     if not isinstance(obj, dict) or "type" not in obj or "payload" not in obj:
         raise ValueError(f"envelope missing 'type' or 'payload': {what!r}")
@@ -130,4 +141,4 @@ def _envelope_from_obj(obj, what):
     if envelope_type not in _VALID_TYPES:
         raise ValueError(f"unknown envelope type: {envelope_type!r}")
 
-    return Envelope(type=envelope_type, payload=obj["payload"])
+    return Envelope(type=envelope_type, payload=obj["payload"], seq=obj.get("seq"))

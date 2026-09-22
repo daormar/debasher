@@ -501,9 +501,14 @@ class _PortWorker:
             )
         return execdir
 
-    def send_data(self, tag, payload):
-        """Enqueues a DATA envelope for tag's writer thread to send."""
-        self._outbound_queues[tag].put(encode_data(payload))
+    def send_data(self, tag, payload, seq=None):
+        """
+        Enqueues a DATA envelope for tag's writer thread to send. `seq` is
+        the sender's per-channel counter (see FBPProcess.send_data, which
+        is where it is actually assigned); a plain _PortWorker has no
+        counter of its own and leaves it out.
+        """
+        self._outbound_queues[tag].put(encode_data(payload, seq=seq))
 
     def _send_barrier(self, tag, epoch, halt=False):
         self._outbound_queues[tag].put(encode_barrier(epoch, halt=halt))

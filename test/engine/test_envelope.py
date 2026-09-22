@@ -16,6 +16,19 @@ def test_encode_data_accepts_any_json_value():
         assert json.loads(line) == {"type": "DATA", "payload": payload}
 
 
+def test_encode_data_with_a_seq_adds_it_as_a_sibling_of_type_and_payload():
+    line = lib.encode_data({"a": 1}, seq=5)
+    assert json.loads(line) == {"type": "DATA", "seq": 5, "payload": {"a": 1}}
+
+
+def test_encode_data_with_no_seq_leaves_the_key_out():
+    # Not the same as seq=0: a message that is not numbered at all (from a
+    # plain _PortWorker, or from outside the program) carries no "seq" key,
+    # so the receiver can tell it apart from one that is (decision 6, G5).
+    line = lib.encode_data(1)
+    assert "seq" not in json.loads(line)
+
+
 def test_encode_barrier_default_halt_is_false():
     line = lib.encode_barrier(epoch=3)
     assert json.loads(line) == {
@@ -69,6 +82,17 @@ def test_encode_never_adds_a_trailing_newline():
 def test_decode_envelope_round_trips_data():
     envelope = lib.decode_envelope(lib.encode_data({"x": 1}))
     assert envelope == lib.Envelope(type="DATA", payload={"x": 1})
+
+
+def test_decode_envelope_round_trips_a_numbered_data():
+    envelope = lib.decode_envelope(lib.encode_data({"x": 1}, seq=5))
+    assert envelope == lib.Envelope(type="DATA", payload={"x": 1}, seq=5)
+    assert envelope.seq == 5
+
+
+def test_decode_envelope_defaults_seq_to_none_when_the_line_carries_none():
+    envelope = lib.decode_envelope(lib.encode_data(1))
+    assert envelope.seq is None
 
 
 def test_decode_envelope_round_trips_barrier():

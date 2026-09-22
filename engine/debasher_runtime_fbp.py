@@ -97,6 +97,9 @@ class FBPProcess(_PortWorker):
         # Position of the item whose processing captured the node state of the
         # round in progress (see _current_pos).
         self._barrier_capture_pos = 0
+        # The sender counters (see _out_seq) as they stood when the round in
+        # progress captured the node state.
+        self._barrier_out_seq = {}
         # Highest epoch this node has closed or abandoned; -1 means none
         # yet, so the first round it self-initiates is epoch 0. run() seeds
         # it from the restored checkpoint, or a relaunched node would start
@@ -114,6 +117,14 @@ class FBPProcess(_PortWorker):
         # ports start out knowing (see _closed_at_start).
         self._closed_at_start_ports = frozenset()
 
+        # The sender's own counter of each output port: the number of the
+        # last DATA that send_data numbered on it, 0 before the first one.
+        # Restored from the checkpoint (before initialize_runtime(), see
+        # run()) so that a replay regenerates the same numbers a crashed
+        # incarnation had already used. Only the thread inside process_data()
+        # ever calls send_data (see it below), so this needs no lock.
+        self._out_seq = {}
+
         # Every item that a reader thread queues gets a position and a record
         # in the input log before the brain thread can see it. The lock makes
         # taking the position, writing the record and queuing the item a
@@ -126,6 +137,9 @@ class FBPProcess(_PortWorker):
         # Position of the item that the brain thread is processing, 0 before
         # the first one. Only the brain thread reads or writes it.
         self._current_pos = 0
+        # Identity of the thread that is inside process_data() right now, None
+        # between calls (see send_data).
+        self._handler_thread = None
 
         # Set once an epoch closes with halt=True; watched (not acted on
         # here -- see _on_epoch_closed) by whatever orchestrates shutdown.
@@ -151,8 +165,9 @@ class FBPProcess(_PortWorker):
     def run(self):
         """
         Full startup sequence: open every FIFO -> find the most recent
-        checkpoint if any -> restore_node_state()/defaults ->
-        initialize_runtime() -> open the input log and replay what it holds
+        checkpoint if any -> restore_node_state()/defaults, and the sender
+        counters with it (see _out_seq) -> initialize_runtime() -> open the
+        input log and replay what it holds
         after the checkpoint (all of it if there is no checkpoint, since the
         node state is then the default one) -> start_threads() (starts every
         worker thread) -> wait until told to stop (an epoch closing with
@@ -169,10 +184,11 @@ class FBPProcess(_PortWorker):
         checkpoint = self._load_latest_checkpoint()
         capture_pos = 0
         if checkpoint is not None:
-            epoch, node_state, capture_pos, closed_ports = checkpoint
+            epoch, node_state, capture_pos, closed_ports, out_seq = checkpoint
             self.restore_node_state(node_state)
             self._last_epoch = epoch
             self._closed_ports = set(closed_ports)
+            self._out_seq = dict(out_seq)
             self.log.info("restored checkpoint for epoch %s", epoch)
         else:
             self.log.info("no checkpoint found, starting with default values")
@@ -192,12 +208,14 @@ class FBPProcess(_PortWorker):
 
     def _load_latest_checkpoint(self):
         """
-        Returns (epoch, node_state, capture_pos, closed_ports) for the highest-epoch
-        checkpoint in this process's checkpoints directory, or None if there isn't one yet
-        (a brand new process, or one that has never closed an epoch).
-        Raises ValueError if the checkpoint's schema version doesn't
-        match this class's -- a real incompatibility, not something to
-        silently paper over by falling back to an older checkpoint.
+        Returns (epoch, node_state, capture_pos, closed_ports, out_seq) for
+        the highest-epoch checkpoint in this process's checkpoints directory,
+        or None if there isn't one yet (a brand new process, or one that has
+        never closed an epoch). Raises ValueError if the checkpoint's schema
+        version doesn't match this class's, or KeyError if a field this
+        class now requires is missing (an older checkpoint, from before that
+        field existed): a real incompatibility, not something to silently
+        paper over by falling back to an older checkpoint or a default value.
         """
         checkpoints_dir = self._checkpoints_dir()
         if not os.path.isdir(checkpoints_dir):
@@ -231,6 +249,7 @@ class FBPProcess(_PortWorker):
             checkpoint["node_state"],
             checkpoint["capture_pos"],
             checkpoint["closed_ports"],
+            checkpoint["out_seq"],
         )
 
     # -- thread topology --
@@ -306,7 +325,7 @@ class FBPProcess(_PortWorker):
                     self._barrier_channel_buffers[port_name].append(
                         copy.deepcopy(payload)
                     )
-                self.process_data(port_name, payload)
+                self._run_process_data(port_name, payload)
             elif envelope_type == TYPE_BARRIER:
                 self._on_barrier(port_name, payload)
             elif envelope_type == TYPE_INTERACT:
@@ -314,6 +333,42 @@ class FBPProcess(_PortWorker):
             elif envelope_type == TYPE_CLOSE:
                 self._on_close(port_name)
         self.log.debug("brain thread stopped")
+
+    def _run_process_data(self, port_name, packet):
+        """
+        Calls process_data() for one message, on the calling thread, and marks
+        that thread as the one that may send while the call lasts (see
+        send_data). Both the brain thread and the thread that replays the
+        input log go through here.
+        """
+        self._handler_thread = threading.get_ident()
+        try:
+            self.process_data(port_name, packet)
+        finally:
+            self._handler_thread = None
+
+    def send_data(self, tag, payload):
+        """
+        Sends a DATA message on the output port `tag`, numbered with this
+        channel's next sequence number (see _out_seq and G5 in the
+        Contract). A node acts only in reaction to what it receives, so
+        this is allowed only inside process_data(), on the thread that is
+        running it: the brain thread, or the thread that called run() while
+        it replays the input log. From anywhere else it raises, and nothing
+        is sent or numbered. That keeps the messages a node sends, and the
+        state it captures, in the order in which it processed what it
+        received, which is what a replay reproduces: restored from the same
+        checkpoint, it renumbers what it sends again exactly the same way.
+        """
+        if self._handler_thread != threading.get_ident():
+            raise RuntimeError(
+                f"{type(self).__name__}: send_data() called outside process_data(), "
+                "or from a thread other than the one running it: a node sends only "
+                "in reaction to a message that it receives"
+            )
+        seq = self._out_seq.get(tag, 0) + 1
+        self._out_seq[tag] = seq
+        super().send_data(tag, payload, seq=seq)
 
     def _heartbeat_loop(self):
         while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECONDS):
@@ -441,6 +496,7 @@ class FBPProcess(_PortWorker):
         self._barrier_node_state = self.capture_node_state()
         self._barrier_capture_pos = self._current_pos
         self._barrier_closed_ports = frozenset(self._closed_ports)
+        self._barrier_out_seq = dict(self._out_seq)
         for out_port in self.OUTPUT_PORTS:
             # The supervisor channel never sees a BARRIER: it doesn't
             # take part in the barrier protocol, only in INTERACT.
@@ -482,6 +538,7 @@ class FBPProcess(_PortWorker):
         self._barrier_channel_buffers = {}
         self._barrier_capture_pos = 0
         self._barrier_closed_ports = frozenset()
+        self._barrier_out_seq = {}
 
     def _close_barrier_round(self):
         epoch = self._barrier_epoch
@@ -490,14 +547,21 @@ class FBPProcess(_PortWorker):
         channel_buffers = self._barrier_channel_buffers
         capture_pos = self._barrier_capture_pos
         closed_ports = self._barrier_closed_ports
+        out_seq = self._barrier_out_seq
 
         self._last_epoch = max(self._last_epoch, epoch)
         self._reset_barrier_round()
 
-        self._on_epoch_closed(epoch, halt, node_state, channel_buffers, capture_pos, closed_ports)
+        self._on_epoch_closed(
+            epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq
+        )
 
-    def _on_epoch_closed(self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports):
-        path = self._save_checkpoint(epoch, node_state, channel_buffers, capture_pos, closed_ports)
+    def _on_epoch_closed(
+        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq
+    ):
+        path = self._save_checkpoint(
+            epoch, node_state, channel_buffers, capture_pos, closed_ports, out_seq
+        )
         self.log.info("checkpoint saved for epoch %s at %s", epoch, path)
 
         if self.SUPERVISOR_PORT is not None:
@@ -518,7 +582,7 @@ class FBPProcess(_PortWorker):
     def _checkpoints_dir(self):
         return os.path.join(self._execdir(), "checkpoints")
 
-    def _save_checkpoint(self, epoch, node_state, channel_buffers, capture_pos, closed_ports):
+    def _save_checkpoint(self, epoch, node_state, channel_buffers, capture_pos, closed_ports, out_seq):
         checkpoints_dir = self._checkpoints_dir()
         os.makedirs(checkpoints_dir, exist_ok=True)
 
@@ -527,6 +591,7 @@ class FBPProcess(_PortWorker):
             "epoch": epoch,
             "capture_pos": capture_pos,
             "closed_ports": sorted(closed_ports),
+            "out_seq": dict(out_seq),
             "node_state": node_state,
             "channel_state": channel_buffers,
         }
@@ -610,7 +675,7 @@ class FBPProcess(_PortWorker):
                     "nothing is logged after a CLOSE, so the log or the checkpoint is corrupt"
                 )
             self._current_pos = record.pos
-            self.process_data(record.port, record.envelope.payload)
+            self._run_process_data(record.port, record.envelope.payload)
             replayed += 1
         if replayed:
             self.log.info(
