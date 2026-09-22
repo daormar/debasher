@@ -634,9 +634,10 @@ pacing and no frozen reference run at all. The second is what is described
 above.
 
 **Status (2026-09-22): the reference program, the no-failure baseline, a
-single-node-kill driver and a channel-safe two-node-kill driver are built and
-tested; adjacent pairs, killing during an open round, and the G8-error
-exception are not.**
+single-node-kill driver, a channel-safe two-node-kill driver and an
+engineered-gap driver for one adjacent pair are built and tested; the other
+adjacent pair, killing during an open round, and the kill/relaunch
+bookkeeping are not.**
 `test/engine/debasher_chaos_ref.sh` is the reference program: `fanin` (the
 fan-in node) reads `ext`, fed from outside the program (`EXTERNAL_PORTS`),
 and `loop_in`, fed by `loop`, which simply echoes back to `fanin` whatever
@@ -651,7 +652,7 @@ from outside.
 
 `test/engine/test_chaos.py` (skipped unless `DEBASHER_RUN_CHAOS_TEST` is set,
 since it is slow and disruptive on purpose: real `debasher_exec`, no mocks)
-has three pieces so far. The "run once with no failures" step: 20 messages
+has four pieces so far. The "run once with no failures" step: 20 messages
 through `ext`, a `start_snapshot` and a `shutdown` in the middle of the run,
 the resulting trace checked against the criterion above. And a first
 kill/relaunch piece, ten repeats of killing exactly one of `fanin`, `loop` or
@@ -700,10 +701,63 @@ repository) to confirm the criterion still catches an exact duplicate
 reliably once two crash-replays are running close together in time, not
 just one: the mutant was killed on all 10 repeats.
 
-Not built yet: an adjacent pair specifically (the only pairs that can touch
-the "both endpoints of a channel crashed" limit: `fanin` with `loop`, or
-`fanin` with `sink`), killing during an open round, the bookkeeping of when
-each node was killed and relaunched, and recognizing the G8-error exception.
+A third piece covers one of the two adjacent pairs that can touch the "both
+endpoints of a channel crashed" limit: `fanin` and `sink`, which share
+exactly one, one-way channel. Left to random timing this reference
+program's nodes are fast enough that a real loss essentially never happens
+(the limit's own mechanism only destroys what a relaunched writer's
+checkpoint already counts as sent and was still unread in the fifo when
+both crashed, and that backlog just does not build up on its own here), so
+this piece engineers the loss on purpose instead of hoping for it:
+`SIGSTOP` on `sink` freezes its reader without destroying anything yet, so
+the fifo genuinely fills while `fanin` keeps writing to it; a `start_snapshot`
+closes a checkpoint on `fanin` once that backlog exists, so it now counts as
+"already sent" as far as `fanin`'s own recovery is concerned; `SIGKILL` on
+both, back to back, destroys it for good before either relaunches. Ten
+repeats, each varying only how long the backlog is left to build.
+
+Every repeat ends in one of two shapes a real G8 violation is seen to take
+in practice, both naming the channel: a clean one, raised the moment the
+reader notices the jump itself, naming the exact missing sequence numbers;
+and a numberless one, raised when a freshly relaunched reader reattaches to
+a fifo whose writer never itself died (so no fresh `HELLO` ever excuses the
+fragment) mid-message, at whatever byte offset the shared pipe's read
+cursor already stood at. Once the gap opens, `sink`'s reader for that
+channel dies on it identically on every subsequent relaunch (the same
+durable hole is still there to rediscover each time), so it never gets
+past it before giving up for good: the surviving trace is not "everything
+except a hole in the middle", it is an exact, gapless prefix of the
+channel's own sequence numbers, ending exactly where the gap begins,
+confirmed against the numbers the error itself named when it named any.
+Since detecting the gap at all depends on a live message actually arriving
+to reveal it (G8's own mechanism, nothing raises on silence alone), the
+driver keeps feeding well past the whole crash-loop-to-give-up window
+instead of a fixed count, and, since the `Supervisor`'s own escalation
+shuts `fanin` down the moment `sink` gives up, without waiting for the feed
+to finish, the driver stops feeding at that point and checks the trace
+against how much it actually got to send, not against the nominal amount.
+
+A separate, incidental consequence of this same `SIGSTOP` technique,
+observed occasionally (about 1 run in 10): the backpressure of `fanin`'s
+own brain thread blocking on a write to the now-frozen `sink` can also
+back up `fanin`'s OWN reader for `loop_in` long enough that `fanin`'s own
+`kill -9` loses something it had already pulled off that fifo but not yet
+logged, which is the other documented limit ("Messages read from a FIFO
+but not yet written to the input log"), not the one this piece targets,
+since `loop` itself is never touched. The driver accepts either outcome for
+`fanin`, requiring only that this one, too, end in a detected G8, not a
+silent one.
+
+Built and run this way, the driver also turned up a new, real gap, not yet
+investigated: see the new Conformance status entry above, "The
+`Supervisor`'s own resolution after a node gives up may not complete".
+Worked around the same way as the ordered-shutdown gap above: the driver
+does not wait for `sup.finished` once `sink` has given up, only for the
+reachable part of the graph to log as finished.
+
+Not built yet: the other adjacent pair (`fanin` with `loop`, which shares
+two channels, the cycle, instead of one), killing during an open round,
+and the bookkeeping of when each node was killed and relaunched.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
 guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through
@@ -882,6 +936,32 @@ any guarantee is relied on.
   own `out_backlog` (G5) is for, so this still needs the writer thread's own
   drain folded into what counts as "this node's round is really done", not
   only the file appearing.
+
+- **The `Supervisor`'s own resolution after a node gives up may not
+  complete: found on 2026-09-22 by the chaos test's engineered-gap piece,
+  not investigated.** After `sink` exhausts `MAX_RELAUNCH_ATTEMPTS` and is
+  given up on, its escalation (`on_node_permanently_failed`) sends
+  `shutdown` to every `TRIGGER_PORT` initiator as designed, and the still-
+  reachable part of the graph does resolve: `fanin` and `loop` both log
+  "finished cleanly" in the `Supervisor`'s own record. But `sup.finished`
+  (the marker the surrounding launch script writes once `Sup().run()`
+  itself returns) was not seen to appear afterward, even 20+ seconds
+  later, in two separate reproductions with a real `debasher_exec` run
+  (once relying only on the automatic escalation, once also sending an
+  explicit manual `shutdown` right after the give-up was logged).
+  Reasoned from the code, not confirmed: `_maybe_resolve` requires both
+  `len(done)+len(given_up)==len(NODE_PORTS)` and `_active_escalations==0`,
+  and the escalation thread's own 1 s poll loop should see the first
+  condition become true shortly after `fanin`/`loop` finish and decrement
+  `_active_escalations` in its `finally` block, which should let `run()`'s
+  `_all_resolved.wait()` return; whether that chain actually completes, or
+  `stop_threads()`'s own unconditional `thread.join(None)` (no timeout) on
+  a `Supervisor` reader thread instead blocks indefinitely, is not yet
+  traced through a real run. Worked around in the chaos test's own
+  engineered-gap driver (see "Acceptance"): it does not wait for
+  `sup.finished` once a node has been given up on, only for the reachable
+  part of the graph to log as finished, and leaves teardown to
+  `debasher_stop`.
 
 ## 1. Control envelope
 
