@@ -780,3 +780,104 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     )
     context = f" (run {run_index}, reported range {reported})"
     _assert_engineered_gap_trace(tailer.records, k, reported, context)
+
+
+@pytest.mark.parametrize("run_index", range(10))
+def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(outdir, run_index):
+    """
+    "run... repeatedly under kill -9 of random nodes at random moments...
+    [including] adjacent pairs" (Acceptance): fanin and loop are the other
+    pair that shares a channel (two, in fact: they are this program's only
+    cycle) and so, in principle, could touch the "both endpoints of a
+    channel crashed" limit the way fanin+sink does (see the engineered-gap
+    piece above). Unlike that pair, though, this one cannot touch it, not
+    by luck but structurally: closing any round on either of their shared
+    channels needs BOTH to be alive and responsive (each is the other's
+    peer in the same cycle), so any backlog built while one of them is
+    down can never be covered by a checkpoint that has actually closed,
+    since closing itself needs the down one's cooperation. On relaunch the
+    sender therefore always replays from an older, already-drained
+    checkpoint and resends that backlog, self-healing every time.
+
+    Confirmed by trying, first, the same construction the engineered-gap
+    piece uses (freeze one side with SIGSTOP, close a checkpoint on the
+    other, kill both): freezing loop just left fanin's own round pending
+    indefinitely, never closing, until the Supervisor's own heartbeat-
+    timeout relaunched loop on its own well past HEARTBEAT_TIMEOUT_SECS,
+    at which point fanin's checkpoint closed over a position loop had, by
+    construction, already fully drained: no backlog was ever behind it.
+
+    So this piece uses independent random timing instead, the same style
+    as the loop+sink piece: every repeat's trace must still match the
+    criterion exactly, with no G8 exception expected, because the
+    topology itself rules the limit out here, not because timing happened
+    to avoid it.
+    """
+    k = 60
+    interval = 0.03
+    rng = random.Random(run_index)
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+
+    ext_fifo = _find_fifo(outdir, "fanin_ext")
+    manual_fifo = _find_fifo(outdir, "sup_manual")
+
+    feeder = _ExtFeeder(ext_fifo, k, interval)
+    stop_snapshots = threading.Event()
+    snapshots = _SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
+    feeder.start()
+    snapshots.start()
+
+    window = max(0.25, k * interval - 0.2)
+    kills = sorted(
+        (("fanin", rng.uniform(0.2, window)), ("loop", rng.uniform(0.2, window))),
+        key=lambda kv: kv[1],
+    )
+    old_pids = {}
+    elapsed = 0.0
+    for name, delay in kills:
+        time.sleep(max(0.0, delay - elapsed))
+        old_pids[name] = _kill_node(outdir, name)
+        elapsed = delay
+
+    new_pids = {}
+    for name, old_pid in old_pids.items():
+        new_pids[name] = _wait_for_relaunch(outdir, name, old_pid)
+        assert new_pids[name] is not None, f"{name} (pid {old_pid}) was never relaunched"
+
+    # Stopped here, right after both relaunches, not after the settle
+    # period below like the other kill/relaunch pieces: fanin is this
+    # program's only initiator, so a snapshot the pacer fires while
+    # fanin's own relaunch is still catching up on earlier rounds can
+    # pile epoch after epoch faster than the cycle (fanin and loop,
+    # relaunching independently too) can close any of them, observed
+    # once (rare, ~3% of repeats) to still be unsettled by the time the
+    # final shutdown's own halt round was requested, which then took
+    # over a minute to close. Giving the quiet period below, and the
+    # feeder's own drain, no more new rounds to compete with removes the
+    # pile-up rather than just waiting longer for it to resolve.
+    stop_snapshots.set()
+    snapshots.join(timeout=5)
+
+    feeder.join(timeout=60)
+    assert not feeder.is_alive(), "feeder did not finish sending"
+    if feeder.error is not None:
+        raise feeder.error
+
+    # Same deliberate grace period as the other kill/relaunch pieces
+    # above, and for the same reason: the separate, already-recorded
+    # ordered-shutdown G2 gap, not what this test is about.
+    time.sleep(1.0)
+
+    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
+    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    context = " (" + ", ".join(
+        f"killed {name} pid {old_pids[name]} -> {new_pids[name]} at +{delay:.2f}s"
+        for name, delay in kills
+    ) + ")"
+    _assert_trace_matches(tailer.records, k, context)

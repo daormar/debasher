@@ -634,10 +634,10 @@ pacing and no frozen reference run at all. The second is what is described
 above.
 
 **Status (2026-09-22): the reference program, the no-failure baseline, a
-single-node-kill driver, a channel-safe two-node-kill driver and an
-engineered-gap driver for one adjacent pair are built and tested; the other
-adjacent pair, killing during an open round, and the kill/relaunch
-bookkeeping are not.**
+single-node-kill driver, a channel-safe two-node-kill driver, an
+engineered-gap driver for one adjacent pair and a random-timing driver for
+the other adjacent pair are built and tested; killing during an open round
+and the kill/relaunch bookkeeping are not.**
 `test/engine/debasher_chaos_ref.sh` is the reference program: `fanin` (the
 fan-in node) reads `ext`, fed from outside the program (`EXTERNAL_PORTS`),
 and `loop_in`, fed by `loop`, which simply echoes back to `fanin` whatever
@@ -652,7 +652,7 @@ from outside.
 
 `test/engine/test_chaos.py` (skipped unless `DEBASHER_RUN_CHAOS_TEST` is set,
 since it is slow and disruptive on purpose: real `debasher_exec`, no mocks)
-has four pieces so far. The "run once with no failures" step: 20 messages
+has five pieces so far. The "run once with no failures" step: 20 messages
 through `ext`, a `start_snapshot` and a `shutdown` in the middle of the run,
 the resulting trace checked against the criterion above. And a first
 kill/relaunch piece, ten repeats of killing exactly one of `fanin`, `loop` or
@@ -755,9 +755,43 @@ Worked around the same way as the ordered-shutdown gap above: the driver
 does not wait for `sup.finished` once `sink` has given up, only for the
 reachable part of the graph to log as finished.
 
-Not built yet: the other adjacent pair (`fanin` with `loop`, which shares
-two channels, the cycle, instead of one), killing during an open round,
-and the bookkeeping of when each node was killed and relaunched.
+A fourth kill/relaunch piece covers `fanin` and `loop`, the other pair
+sharing a channel (two, in fact: they are this program's only cycle), so
+in principle also able to touch the "both endpoints of a channel crashed"
+limit. Trying the engineered-gap piece's own construction on it first
+(freeze one side, close a checkpoint on the other, kill both) showed the
+limit is not reachable here, structurally, not just by bad luck: closing
+any round on either of their shared channels needs both to be alive and
+responsive, since each is the other's peer in the same cycle, so any
+backlog built while one of them is down can never be covered by a
+checkpoint that has actually closed (closing itself needs the down one's
+cooperation), and on relaunch the sender always replays from an older,
+already-drained checkpoint and resends that backlog, self-healing every
+time. Confirmed with a real `debasher_exec` run: freezing `loop` left
+`fanin`'s own round pending indefinitely, closing only once the
+`Supervisor`'s own heartbeat-timeout relaunched `loop` on its own, well
+past `HEARTBEAT_TIMEOUT_SECS`, over `fanin`'s own deliberate kill, at
+which point `fanin`'s checkpoint closed over a position `loop` had, by
+construction, already fully drained.
+
+So this piece uses independent random timing instead, the same style as
+the `loop`+`sink` piece: ten repeats, `fanin` and `loop` each killed at
+their own independently chosen moment, and every repeat's trace must
+still match the criterion exactly, with no G8 exception expected, because
+the topology rules the limit out here, not chance. One rare failure (1 in
+30 repeats, not reproducible on the same seed run again) showed `fanin`,
+this program's only initiator, piling up several snapshot rounds faster
+than it and a concurrently relaunching `loop` could close any of them,
+each replacing the last, right as the periodic `start_snapshot` this
+driver already sends kept firing through the relaunch; the run's final
+`shutdown` then took over a minute to resolve. Not investigated further:
+the driver now stops the periodic snapshots as soon as both nodes have
+relaunched, instead of only right before the `shutdown`, so no more
+rounds compete with whatever is still catching up; 30 repeats since, in
+three separate runs, all clean.
+
+Not built yet: killing during an open round, and the bookkeeping of when
+each node was killed and relaunched.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
 guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through
@@ -2592,6 +2626,20 @@ designed.
   itself, nor raise an error. No guarantee is broken (G1 to G8): nothing is
   lost or duplicated, the node just keeps using more memory, unbounded and
   unnoticed. Found on 2026-09-22, reasoned from the code, not run.
+- **An unexplained `sup.finished` timeout, seen so far only when running
+  the whole chaos test file together.** Twice on 2026-09-22, in two
+  separate full runs of `test_chaos.py` (36 repeats across every piece,
+  back to back), one single repeat's `shutdown` never resolved within
+  60 s: once in the single-node-kill piece, once in the `loop`+`sink`
+  piece, both already-passing pieces unmodified that day, in neither case
+  a repeat whose own design should ever need a node to give up (a lone
+  kill, or a kill of a pair sharing no channel, both always recover on
+  their first relaunch). Never seen running either piece by itself,
+  repeatedly, in isolation. Not investigated: most likely just system
+  load from dozens of real `debasher_exec` launches already run in the
+  same process pushing one recovery past the 60 s wait, but recorded here
+  rather than assumed, since the same symptom is also the confirmed,
+  structural one right above it, in a different piece, for a real reason.
 
 ## 7. Future work
 
