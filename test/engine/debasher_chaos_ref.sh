@@ -62,6 +62,7 @@ class Fanin(FBPProcess):
     CONTROL_PORTS = ["trigger"]
     EXTERNAL_PORTS = ["ext"]
     SUPERVISOR_PORT = "hb"
+    HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
         self.send_data("to_sink", {"port": port_name, "value": packet})
@@ -119,6 +120,7 @@ class Loop(FBPProcess):
     INPUT_PORTS = ["from_fanin"]
     OUTPUT_PORTS = ["to_fanin", "hb"]
     SUPERVISOR_PORT = "hb"
+    HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
         self.send_data("to_fanin", packet)
@@ -172,6 +174,7 @@ class Sink(FBPProcess):
     INPUT_PORTS = ["from_fanin"]
     OUTPUT_PORTS = ["hb"]
     SUPERVISOR_PORT = "hb"
+    HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
         pass
@@ -231,8 +234,19 @@ class Sup(Supervisor):
     NODE_PORTS = {"fanin": "hb_fanin", "loop": "hb_loop", "sink": "hb_sink"}
     TRIGGER_PORT = ["trig_fanin"]
     MANUAL_TRIGGER_PORT = "manual"
-    HEARTBEAT_CHECK_INTERVAL_SECS = 1
-    HEARTBEAT_TIMEOUT_SECS = 5
+    HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
+    # Comfortably above HEARTBEAT_INTERVAL_SECONDS (0.2s on every node),
+    # not equal to it: a relaunched node's heartbeat thread only sends
+    # its first heartbeat after waiting one full interval from
+    # start_threads(), on top of its own real startup and replay time,
+    # so a timeout with no margin over that interval falsely declares a
+    # healthy, freshly relaunched node down again before it ever gets
+    # the chance to prove itself (reproduced with a real debasher_exec
+    # run: HEARTBEAT_TIMEOUT_SECS == HEARTBEAT_INTERVAL_SECONDS made a
+    # perfectly healthy relaunched sink loop through "down, relaunching"
+    # until it exceeded MAX_RELAUNCH_ATTEMPTS, and the Supervisor never
+    # resolved).
+    HEARTBEAT_TIMEOUT_SECS = 3
 
 
 Sup().run()

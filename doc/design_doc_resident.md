@@ -633,27 +633,61 @@ cover), or checking each port's own sequence directly, which needs no
 pacing and no frozen reference run at all. The second is what is described
 above.
 
-**Status (2026-09-22): the reference program and its no-failure baseline are
-built and tested; the kill/relaunch driver is not.**
+**Status (2026-09-22): the reference program, the no-failure baseline and a
+single-node-kill driver are built and tested; several nodes at once, adjacent
+pairs, killing during an open round, and the G8-error exception are not.**
 `test/engine/debasher_chaos_ref.sh` is the reference program: `fanin` (the
 fan-in node) reads `ext`, fed from outside the program (`EXTERNAL_PORTS`),
-and `loop_in`,
-fed by `loop`, which simply echoes back to `fanin` whatever `fanin` sends it
-on `to_loop`, closing a 2-node cycle; on every message, from either port,
-`fanin` forwards a copy to `sink`, tagged with the port it arrived on, which
-is what makes `sink`'s own input log double as the run's trace: G5's dedup
-already happens before a record is ever logged, so reading that log directly
-gives the exact, ordered, once-only sequence the criterion above needs,
-without any bookkeeping of its own. `fanin` is the program's only initiator,
-triggered through the `Supervisor`'s manual trigger channel, fed from
-outside. `test/engine/test_chaos.py` (skipped unless
-`DEBASHER_RUN_CHAOS_TEST` is set, since it is slow and, once the driver
-below exists, disruptive on purpose: real `debasher_exec`, no mocks) has one
-test so far, the "run once with no failures" step: 20 messages through
-`ext`, a `start_snapshot` and a `shutdown` in the middle of the run, and the
-resulting trace checked against the criterion above. Not built yet: killing
-random nodes at random moments (including several at once, adjacent pairs,
-and moments in which a round is open), the bookkeeping of when each node was
+and `loop_in`, fed by `loop`, which simply echoes back to `fanin` whatever
+`fanin` sends it on `to_loop`, closing a 2-node cycle; on every message, from
+either port, `fanin` forwards a copy to `sink`, tagged with the port it
+arrived on, which is what makes `sink`'s own input log double as the run's
+trace: G5's dedup already happens before a record is ever logged, so reading
+that log gives the exact, ordered, once-only sequence the criterion above
+needs, without any bookkeeping of its own. `fanin` is the program's only
+initiator, triggered through the `Supervisor`'s manual trigger channel, fed
+from outside.
+
+`test/engine/test_chaos.py` (skipped unless `DEBASHER_RUN_CHAOS_TEST` is set,
+since it is slow and disruptive on purpose: real `debasher_exec`, no mocks)
+has two pieces so far. The "run once with no failures" step: 20 messages
+through `ext`, a `start_snapshot` and a `shutdown` in the middle of the run,
+the resulting trace checked against the criterion above. And a first
+kill/relaunch piece, ten repeats of killing exactly one of `fanin`, `loop` or
+`sink` at one random moment while 60 messages flow through `ext` on a steady
+beat, alongside a periodic `start_snapshot`: the only shape that cannot touch
+the Contract's "both endpoints of a channel crashed" limit, since a lone
+kill always leaves every channel's other endpoint alive to hold it open, so
+every repeat's trace must match the criterion exactly, with no G8 exception
+expected. `sink`'s own trace is read by tailing its input log continuously
+from before anything is sent, not by reading the log directory once after
+the run: a checkpoint `sink`'s own relaunched incarnation takes right after
+replaying its pre-crash log already covers everything in it, so pruning (see
+"Log structure and record format") deletes that pre-crash segment no matter
+how high `CHECKPOINT_RETENTION` is set, since retention counts an
+incarnation's own epochs, not history from before a crash it never
+checkpointed itself; tailing from the start captures every record in memory
+well before any later pruning could remove it from disk. An external writer
+across a crash of `fanin` needs the same kind of care for a different reason:
+verified with a standalone fifo, not assumed, that a write attempted while
+the reader is down always fails at once with no partial write (every payload
+here is far under `PIPE_BUF`) and succeeds cleanly once retried on that same,
+still-open fd after the reader comes back, but a value already buffered,
+unread, when the reader dies is only safe for as long as some fd, anyone's,
+stays open on that fifo: closing and reopening a fresh one per message loses
+it the instant the fifo has zero open fds, even for a moment.
+
+Killing this way also turned up a real, unrelated engine gap during ordinary
+shutdown, with no crash involved: see the new Conformance status entry above,
+"G2 is violated during an ordered shutdown when a downstream node has only
+one pending port". Not fixed yet, so the kill/relaunch tests wait for the
+pipeline to settle before asking for a `shutdown`, to keep validating what
+they are actually meant to validate (recovery from a kill) without also
+tripping that separate, already-recorded bug.
+
+Not built yet: killing several nodes at once, an adjacent pair specifically
+(the only pairs that can touch the "both endpoints of a channel crashed"
+limit), killing during an open round, the bookkeeping of when each node was
 killed and relaunched, and recognizing the G8-error exception.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
@@ -776,6 +810,38 @@ any guarantee is relied on.
   reader's outage the consumer logged 630 consecutive messages, none missing and
   none duplicated. What a running neighbor still receives twice after a writer's
   crash is what G5 removes.
+- **G2 is violated during an ordered shutdown when a downstream node has only
+  one pending port: found on 2026-09-22 by the chaos test (see "Acceptance"),
+  not fixed.** `_open_barrier_round` sends the halt `BARRIER` on every output
+  port as soon as a round opens, not when it closes, so an initiator whose own
+  round stays open (waiting for a port that has not settled yet) has already
+  forwarded the halt to every neighbor before it is done. A neighbor with no
+  other pending port closes on that same `BARRIER` at once and halts, which
+  stops its reader thread before the initiator finishes sending it whatever it
+  still owes on that channel: nothing else is pending for the initiator, so it
+  keeps processing and forwarding normally, exactly as G2 asks ("also while a
+  snapshot or shutdown round is open"), but the neighbor is no longer there to
+  receive it. No crash and no `kill -9` anywhere in this: a plain, no-failure
+  ordered shutdown. Found with a real `debasher_exec` run of the chaos test's
+  reference program (`test/engine/debasher_chaos_ref.sh`): `loop` was killed
+  and relaunched shortly before the run's end, delaying the values it still
+  had to echo back to `fanin` through the cycle; `shutdown` was requested once
+  every value had been accepted into `ext`. Checked against the real input
+  logs of all three nodes: `fanin`'s own log shows `loop_in` 52 to 60 arriving,
+  in order, before the halt `BARRIER`, and forwards every one of them to
+  `sink` (confirmed by `send_data` being called from `process_data` for
+  each); `sink`'s own log has the halt `BARRIER` but not those 9 forwards,
+  since they reached `to_sink` only after `sink` had already stopped reading
+  it. Not specific to `EXTERNAL_PORTS` or to the cycle: any node whose only
+  pending port settles while an upstream peer is still finishing a different
+  branch through the same channel can lose whatever that peer sends
+  afterward. Not designed: candidates include not closing a node's own round
+  until every channel it will still write to during this round has actually
+  drained (which needs the initiator itself to know when that is), or having
+  a downstream node keep its reader open a little longer past its own halt to
+  drain what is already in flight (which needs a second signal, since a
+  `BARRIER` alone does not say "and nothing more is coming on this channel
+  either").
 
 ## 1. Control envelope
 
