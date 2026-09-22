@@ -1620,7 +1620,27 @@ replayed nothing. All five were verified with the real classes and are fixed
        `1` to `8`, none missing, none duplicated, closing the gap that 1c
        found (a real relay under the same conditions had delivered `1, 2, 3,
        4` only, silently losing `5` to `8`, before this piece existed).
-     - 5.5 A gap in the numbers of a channel is an error.
+     - 5.5 A gap in the numbers of a channel is an error. **Done 2026-09-22**:
+       right after the dedup check in `_on_arrival`, a numbered `DATA` whose
+       `seq` is more than one above the last one accepted is a message this
+       channel will never see again, so it raises there, before anything is
+       logged or queued, the same as a duplicate is dropped before either;
+       the error names the channel and the missing numbers. The counter is
+       left exactly where it was, not advanced to the arriving number, so a
+       relaunch still sees the gap as open. Raising inside `_on_arrival`
+       kills that reader thread the same way a size-cap or a failed write
+       already did (G7's heartbeat is what notices from there). 4 new tests
+       in the words of the guarantee (the error names the channel and the
+       missing numbers; a single missing number is named without a range;
+       nothing is logged or queued and the counter does not move; a real
+       reader thread dies from it, the process staying alive), checked
+       against 3 mutants (the check removed, an off-by-one that misses a
+       single-message gap, the counter updated before the raise instead of
+       never), all killed. Checked with a real `debasher_exec` run of a node
+       fed from outside: `1`, `2`, then `5` (`3` and `4` never sent), its own
+       scheduler log holding the exact error (`expected 3, got 5, missing 3
+       to 4`), the process itself still alive (`debasher_status` reporting
+       `IN-PROGRESS`) with only its reader thread gone.
      - 5.6 `CLOSE` carries the last number.
   6. The chaos test of the Contract.
 

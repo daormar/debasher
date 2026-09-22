@@ -95,11 +95,12 @@ def test_a_duplicate_is_dropped_before_it_is_logged_or_queued():
 
 def test_a_number_not_above_the_last_accepted_one_is_also_a_duplicate():
     proc = _Recorder(opts=_OPTS)
-    _arrive(proc, "inf", "a", seq=5)
-    _arrive(proc, "inf", "b", seq=3)  # below 5: also a duplicate
+    _arrive(proc, "inf", "a", seq=1)
+    _arrive(proc, "inf", "a2", seq=2)
+    _arrive(proc, "inf", "b", seq=2)  # not above 2: also a duplicate
 
     _run_brain(proc)
-    assert proc.received == ["a"]
+    assert proc.received == ["a", "a2"]
 
 
 def test_a_higher_number_is_accepted_and_moves_the_counters():
@@ -113,28 +114,69 @@ def test_a_higher_number_is_accepted_and_moves_the_counters():
     assert proc._last_seq == {"inf": 2}
 
 
-def test_a_gap_is_accepted_here_a_gap_becoming_an_error_is_a_later_piece():
+def test_a_gap_is_a_g8_error_naming_the_channel_and_the_missing_numbers():
     proc = _Recorder(opts=_OPTS)
     _arrive(proc, "inf", "a", seq=1)
-    _arrive(proc, "inf", "b", seq=5)  # jumps from 1 to 5, not a duplicate
 
-    _run_brain(proc)
-    assert proc.received == ["a", "b"]
-    assert proc._accepted_seq == {"inf": 5}
+    with pytest.raises(ValueError, match=r"'inf'.*missing 2 to 4") as excinfo:
+        _arrive(proc, "inf", "b", seq=5)  # jumps from 1 to 5: 2, 3 and 4 are lost
+    assert "inf" in str(excinfo.value)
+
+
+def test_a_single_missing_number_is_named_without_a_range():
+    proc = _Recorder(opts=_OPTS)
+    _arrive(proc, "inf", "a", seq=1)
+
+    with pytest.raises(ValueError, match=r"missing 2$"):
+        _arrive(proc, "inf", "b", seq=3)  # only 2 is lost, not "2 to 2"
+
+
+def test_a_gap_is_raised_before_anything_is_logged_or_queued():
+    proc = _Recorder(opts=_OPTS)
+    _arrive(proc, "inf", "a", seq=1)
+
+    with pytest.raises(ValueError):
+        _arrive(proc, "inf", "b", seq=5)
+
+    assert [r.envelope.payload for r in _log_records(proc)] == ["a"]
+    assert proc._inbound_queue.qsize() == 1
+    # The counter stays at the last one genuinely accepted, not at what
+    # merely arrived: a relaunch must still see the gap as open.
+    assert proc._accepted_seq == {"inf": 1}
+
+
+def test_a_gap_kills_the_reader_thread_which_is_how_the_heartbeat_notices(fifo_path):
+    # The reader thread dying from an uncaught exception is expected here
+    # (same passive health-reporting design as elsewhere): pytest reports it
+    # as a PytestUnhandledThreadExceptionWarning at its own next check, not
+    # synchronously, so this only asserts on the resulting, observable state.
+    proc = _Recorder(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "w") as w:
+            w.write(lib.encode_data("a", seq=1) + "\n")
+            w.write(lib.encode_data("b", seq=5) + "\n")
+            w.flush()
+
+        reader = proc._reader_threads["inf"]
+        assert _wait_until(lambda: not reader.is_alive())
+        assert not proc._all_threads_alive()
+    finally:
+        proc.stop_threads(timeout=2)
 
 
 def test_a_data_with_no_number_is_always_accepted_and_never_moves_the_counters():
     # decision 6: unnumbered DATA, from a source or a plain _PortWorker, is
     # not part of the numbering, so it never counts towards a duplicate.
     proc = _Recorder(opts=_OPTS)
-    _arrive(proc, "inf", "a", seq=3)
+    _arrive(proc, "inf", "a", seq=1)
     _arrive(proc, "inf", "from outside")  # no seq
-    _arrive(proc, "inf", "b", seq=3)  # still a duplicate of "a", unaffected
+    _arrive(proc, "inf", "b", seq=1)  # still a duplicate of "a", unaffected
 
     _run_brain(proc)
     assert proc.received == ["a", "from outside"]
-    assert proc._accepted_seq == {"inf": 3}
-    assert proc._last_seq == {"inf": 3}
+    assert proc._accepted_seq == {"inf": 1}
+    assert proc._last_seq == {"inf": 1}
 
 
 def test_each_input_port_is_deduplicated_on_its_own():
@@ -164,10 +206,10 @@ def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has
     # "b" arrives and is processed while the round stays open (G2): the
     # reader's own counter moves at once, but the brain's own mirror, and
     # the round's already-taken copy, must not.
-    _arrive(proc, "b", "b1", seq=9)
-    assert proc._accepted_seq == {"a": 1, "b": 9}
+    _arrive(proc, "b", "b1", seq=1)
+    assert proc._accepted_seq == {"a": 1, "b": 1}
     _run_brain(proc)
-    assert proc._last_seq == {"a": 1, "b": 9}
+    assert proc._last_seq == {"a": 1, "b": 1}
     assert proc._barrier_last_seq == {"a": 1}
 
     proc._close_barrier_round()

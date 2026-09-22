@@ -364,10 +364,14 @@ class FBPProcess(_PortWorker):
             # G5: a DATA that carries a number not above the last one this
             # channel's reader has already accepted is a duplicate, produced
             # by a replay on the sender's side, and is dropped here, before it
-            # is ever logged or queued, so that it is never processed twice. A
-            # DATA with no number (from a source, or a plain _PortWorker) is
-            # not part of the numbering and is always accepted; only DATA is
-            # sequenced (BARRIER/INTERACT/CLOSE carry none).
+            # is ever logged or queued, so that it is never processed twice.
+            # One that skips over a number is a message this channel will
+            # never see: a real loss, not a duplicate, so it is never silent
+            # (G8) -- raised here, before anything is logged or queued, same
+            # as a duplicate is dropped before either. A DATA with no number
+            # (from a source, or a plain _PortWorker) is not part of the
+            # numbering and is always accepted; only DATA is sequenced
+            # (BARRIER/INTERACT/CLOSE carry none).
             if envelope.type == TYPE_DATA and envelope.seq is not None:
                 accepted = self._accepted_seq.get(tag, 0)
                 if envelope.seq <= accepted:
@@ -379,6 +383,16 @@ class FBPProcess(_PortWorker):
                         accepted,
                     )
                     return
+                if envelope.seq > accepted + 1:
+                    missing = (
+                        f"{accepted + 1}"
+                        if envelope.seq == accepted + 2
+                        else f"{accepted + 1} to {envelope.seq - 1}"
+                    )
+                    raise ValueError(
+                        f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
+                        f"expected {accepted + 1}, got {envelope.seq}, missing {missing}"
+                    )
                 self._accepted_seq[tag] = envelope.seq
             # The record is in the file, in one write, before the brain thread
             # can see the item. If this raises (the size cap, or a failed
