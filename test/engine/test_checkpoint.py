@@ -44,7 +44,7 @@ def test_checkpoints_dir_is_a_checkpoints_subdir_of_the_execdir(execdir):
 
 def test_save_checkpoint_writes_the_expected_json_structure(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    path = proc._save_checkpoint(3, {"marker": "s"}, {"a": [1, 2]}, 17, [], {"outf": 4})
+    path = proc._save_checkpoint(3, {"marker": "s"}, {"a": [1, 2]}, 17, [], {"outf": 4}, {"inf": 2})
 
     with open(path) as f:
         data = json.load(f)
@@ -55,6 +55,7 @@ def test_save_checkpoint_writes_the_expected_json_structure(execdir):
         "capture_pos": 17,
         "closed_ports": [],
         "out_seq": {"outf": 4},
+        "last_seq": {"inf": 2},
         "node_state": {"marker": "s"},
         "channel_state": {"a": [1, 2]},
     }
@@ -62,7 +63,7 @@ def test_save_checkpoint_writes_the_expected_json_structure(execdir):
 
 def test_save_checkpoint_leaves_no_temp_file_behind(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    proc._save_checkpoint(0, {}, {}, 0, [], {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
 
     names = os.listdir(proc._checkpoints_dir())
     assert names == ["0.json"]
@@ -70,7 +71,7 @@ def test_save_checkpoint_leaves_no_temp_file_behind(execdir):
 
 def test_save_checkpoint_is_named_after_the_epoch(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    path = proc._save_checkpoint(7, {}, {}, 0, [], {})
+    path = proc._save_checkpoint(7, {}, {}, 0, [], {}, {})
     assert os.path.basename(path) == "7.json"
 
 
@@ -79,7 +80,7 @@ def test_save_checkpoint_prunes_older_epochs_beyond_retention(execdir):
     proc.CHECKPOINT_RETENTION = 2
 
     for epoch in range(5):
-        proc._save_checkpoint(epoch, {}, {}, 0, [], {})
+        proc._save_checkpoint(epoch, {}, {}, 0, [], {}, {})
 
     names = sorted(os.listdir(proc._checkpoints_dir()))
     assert names == ["3.json", "4.json"]
@@ -135,7 +136,7 @@ def test_on_epoch_closed_sets_halted_event_only_when_halt_is_true(execdir):
 
 def test_save_checkpoint_lists_the_closed_ports_in_order(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    path = proc._save_checkpoint(0, {}, {}, 0, {"c", "a", "b"}, {})
+    path = proc._save_checkpoint(0, {}, {}, 0, {"c", "a", "b"}, {}, {})
 
     with open(path) as f:
         assert json.load(f)["closed_ports"] == ["a", "b", "c"]

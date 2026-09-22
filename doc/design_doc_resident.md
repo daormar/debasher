@@ -326,24 +326,29 @@ copy taken at the capture and held only while a round is open (see "capture"
 above), and the checkpoint field the copy is written to when the round closes.
 The table names the three for each concept, which this glossary already
 defines: it is not redefined here. It lists what the code holds today: as
-step 5 adds `last_seq` (5.3) and the outbound backlog (5.4), rows join it.
-`Supervisor`'s own bookkeeping (which nodes are down, how many times each has
-been relaunched) is a separate concern, covered in section 4.
+step 5 adds the outbound backlog (5.4), a row joins it. `Supervisor`'s own
+bookkeeping (which nodes are down, how many times each has been relaunched)
+is a separate concern, covered in section 4.
 
-| Concept              | Live            | Held during an open round  | Checkpoint field |
-| -------------------- | --------------- | -------------------------- | ---------------- |
-| capture position     | `_current_pos`  | `_barrier_capture_pos`     | `capture_pos`    |
-| closed input ports   | `_closed_ports` | `_barrier_closed_ports`    | `closed_ports`   |
-| sender counters (G5) | `_out_seq`      | `_barrier_out_seq`         | `out_seq`        |
-| node state           | module's own    | `_barrier_node_state`      | `node_state`     |
-| channel state        | round open only | `_barrier_channel_buffers` | `channel_state`  |
+| Concept                | Live            | Held during an open round  | Checkpoint field |
+| ---------------------- | --------------- | -------------------------- | ---------------- |
+| capture position       | `_current_pos`  | `_barrier_capture_pos`     | `capture_pos`    |
+| closed input ports     | `_closed_ports` | `_barrier_closed_ports`    | `closed_ports`   |
+| sender counters (G5)   | `_out_seq`      | `_barrier_out_seq`         | `out_seq`        |
+| receiver counters (G5) | `_last_seq`     | `_barrier_last_seq`        | `last_seq`       |
+| node state             | module's own    | `_barrier_node_state`      | `node_state`     |
+| channel state          | round open only | `_barrier_channel_buffers` | `channel_state`  |
 
 Bookkeeping that never enters a checkpoint, because it only means something
 while its own thread or round is live: `_handler_thread` (the identity of the
 thread currently inside `process_data`, checked by `send_data`),
-`_barrier_pending` (the input ports an open round still waits on) and
+`_barrier_pending` (the input ports an open round still waits on),
 `_closed_at_start_ports` (what a relaunched node's readers of closed ports
-start out knowing, taken from `_closed_ports` once, when the threads start).
+start out knowing, taken from `_closed_ports` once, when the threads start)
+and `_accepted_seq` (the reader threads' own live view of `_last_seq`, ahead
+of it, which the dedup check of G5 actually consults; restored at startup
+from the checkpoint's `last_seq` plus the log after `capture_pos`, never
+itself written to one).
 
 ## Contract: assumptions, guarantees and non-goals
 
@@ -1520,6 +1525,41 @@ replayed nothing. All five were verified with the real classes and are fixed
        regenerating exactly the numbers the crashed incarnation had used.
        Dropping the duplicate is 5.3, not built yet.
      - 5.3 The receiver drops the `DATA` that it has already accepted.
+       **Done 2026-09-22**: the check runs in the reader thread, in
+       `_on_arrival`, before a record is written or queued, exactly as
+       decided; a `DATA` whose `seq` is not above the last one already
+       accepted on that channel is dropped, one with no `seq` (an unnumbered
+       source) is always accepted and never moves the counters, and only
+       `DATA` is checked. It needs two distinct counters: `_last_seq`, the
+       brain's own view, bumped when it dispatches a numbered `DATA` (mirrors
+       `_current_pos`, feeds `_barrier_last_seq` and the checkpoint's
+       `last_seq`, same isolation as `out_seq`, a capture must not see what a
+       reader thread accepted on another, still-pending port after the
+       capture); and `_accepted_seq`, the reader threads' own live counter
+       that the check itself uses, ahead of the brain, restored from the
+       checkpoint's `last_seq` and then advanced by `_replay_input_log`
+       scanning the numbered `DATA` after `capture_pos`, so that a relaunched
+       node recognizes as a duplicate what its own log had already accepted
+       before the crash, whether the brain had processed it yet or not.
+       The inbound queue item gains `seq` as a fifth element, so the brain
+       can maintain `_last_seq`. 10 new tests in the words of the guarantee
+       (a duplicate is dropped before it is logged or queued; a number not
+       above the last one is also a duplicate; a higher number is accepted
+       and moves the counters; a gap is accepted here, becoming an error is
+       5.5; an unnumbered `DATA` is always accepted and never moves the
+       counters; each input port is deduplicated on its own; a capture
+       reflects the brain's view, not what a reader thread has raced ahead
+       to accept; a restored node drops what its own log already covers; a
+       dropped fragment never moves the counter), checked against 8 mutants
+       (no check, an off-by-one that lets an exact duplicate through,
+       `_accepted_seq` not updated on accept, the brain never updating
+       `_last_seq`, `_barrier_last_seq` aliasing instead of copying, replay
+       never advancing the counters, the checkpoint never writing `last_seq`,
+       `run()` never restoring it), all killed. Checked with a real
+       `debasher_exec` run, the same relay and sink as 5.2's: before, after a
+       kill and a relaunch, the sink's log held `1, 2, 3, 4, 5, 4, 5`; now it
+       holds `1, 2, 3, 4, 5`, the relaunched relay's replay regenerating `4`
+       and `5` and the sink correctly recognizing them as duplicates.
      - 5.4 The checkpoint carries the outputs that the writer thread had not yet
        written, and recovery sends them again before the replay.
      - 5.5 A gap in the numbers of a channel is an error.

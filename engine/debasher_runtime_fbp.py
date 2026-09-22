@@ -100,6 +100,9 @@ class FBPProcess(_PortWorker):
         # The sender counters (see _out_seq) as they stood when the round in
         # progress captured the node state.
         self._barrier_out_seq = {}
+        # The receiver counters (see _last_seq) as they stood when the round
+        # in progress captured the node state.
+        self._barrier_last_seq = {}
         # Highest epoch this node has closed or abandoned; -1 means none
         # yet, so the first round it self-initiates is epoch 0. run() seeds
         # it from the restored checkpoint, or a relaunched node would start
@@ -124,6 +127,21 @@ class FBPProcess(_PortWorker):
         # incarnation had already used. Only the thread inside process_data()
         # ever calls send_data (see it below), so this needs no lock.
         self._out_seq = {}
+        # The receiver's own view of the last DATA number it has processed on
+        # each input port, updated by the brain thread as it dispatches each
+        # one (mirrors _current_pos, but per channel): what a round's capture
+        # takes for the checkpoint (G5), which is why it lags behind
+        # _accepted_seq below. Restored from the checkpoint before
+        # initialize_runtime(), like _out_seq.
+        self._last_seq = {}
+        # The reader threads' own view of the same thing, ahead of _last_seq:
+        # updated at arrival, under _arrival_lock, before a DATA is logged or
+        # queued, so that a duplicate produced by a replay is dropped before
+        # either happens (G5). Restored at startup from the checkpoint's
+        # last_seq plus whatever the input log holds after capture_pos (see
+        # _replay_input_log), since that is what the reader threads had
+        # already accepted, whether the brain had processed it or not.
+        self._accepted_seq = {}
 
         # Every item that a reader thread queues gets a position and a record
         # in the input log before the brain thread can see it. The lock makes
@@ -184,11 +202,17 @@ class FBPProcess(_PortWorker):
         checkpoint = self._load_latest_checkpoint()
         capture_pos = 0
         if checkpoint is not None:
-            epoch, node_state, capture_pos, closed_ports, out_seq = checkpoint
+            epoch, node_state, capture_pos, closed_ports, out_seq, last_seq = checkpoint
             self.restore_node_state(node_state)
             self._last_epoch = epoch
             self._closed_ports = set(closed_ports)
             self._out_seq = dict(out_seq)
+            self._last_seq = dict(last_seq)
+            # The reader threads' own counters start at the same point; if the
+            # log holds DATA after capture_pos, _replay_input_log advances them
+            # past it, to what the reader threads had already accepted before
+            # the crash, whether the brain had processed it or not.
+            self._accepted_seq = dict(last_seq)
             self.log.info("restored checkpoint for epoch %s", epoch)
         else:
             self.log.info("no checkpoint found, starting with default values")
@@ -208,8 +232,9 @@ class FBPProcess(_PortWorker):
 
     def _load_latest_checkpoint(self):
         """
-        Returns (epoch, node_state, capture_pos, closed_ports, out_seq) for
-        the highest-epoch checkpoint in this process's checkpoints directory,
+        Returns (epoch, node_state, capture_pos, closed_ports, out_seq,
+        last_seq) for the highest-epoch checkpoint in this process's
+        checkpoints directory,
         or None if there isn't one yet (a brand new process, or one that has
         never closed an epoch). Raises ValueError if the checkpoint's schema
         version doesn't match this class's, or KeyError if a field this
@@ -250,6 +275,7 @@ class FBPProcess(_PortWorker):
             checkpoint["capture_pos"],
             checkpoint["closed_ports"],
             checkpoint["out_seq"],
+            checkpoint["last_seq"],
         )
 
     # -- thread topology --
@@ -297,21 +323,42 @@ class FBPProcess(_PortWorker):
                 raise RuntimeError(
                     f"{type(self).__name__}: an item arrived before the input log was opened"
                 )
+            # G5: a DATA that carries a number not above the last one this
+            # channel's reader has already accepted is a duplicate, produced
+            # by a replay on the sender's side, and is dropped here, before it
+            # is ever logged or queued, so that it is never processed twice. A
+            # DATA with no number (from a source, or a plain _PortWorker) is
+            # not part of the numbering and is always accepted; only DATA is
+            # sequenced (BARRIER/INTERACT/CLOSE carry none).
+            if envelope.type == TYPE_DATA and envelope.seq is not None:
+                accepted = self._accepted_seq.get(tag, 0)
+                if envelope.seq <= accepted:
+                    self.log.debug(
+                        "reader for %r dropped a duplicate: seq %s is not above %s "
+                        "already accepted",
+                        tag,
+                        envelope.seq,
+                        accepted,
+                    )
+                    return
+                self._accepted_seq[tag] = envelope.seq
             # The record is in the file, in one write, before the brain thread
             # can see the item. If this raises (the size cap, or a failed
             # write), the exception ends the reader thread, which is how the
             # heartbeat notices: the item that was being read is not queued.
             pos = self._input_log.append(tag, line)
-            self._inbound_queue.put((pos, tag, envelope.type, envelope.payload))
+            self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
 
     def _brain_loop(self):
         while True:
             item = self._inbound_queue.get()
             if item is _STOP:
                 break
-            pos, port_name, envelope_type, payload = item
+            pos, port_name, envelope_type, payload, seq = item
             self._current_pos = pos
             if envelope_type == TYPE_DATA:
+                if seq is not None:
+                    self._last_seq[port_name] = seq
                 if port_name in self._barrier_pending:
                     # A barrier round is open and this port's marker for
                     # it hasn't arrived yet: this DATA was sent before
@@ -497,6 +544,7 @@ class FBPProcess(_PortWorker):
         self._barrier_capture_pos = self._current_pos
         self._barrier_closed_ports = frozenset(self._closed_ports)
         self._barrier_out_seq = dict(self._out_seq)
+        self._barrier_last_seq = dict(self._last_seq)
         for out_port in self.OUTPUT_PORTS:
             # The supervisor channel never sees a BARRIER: it doesn't
             # take part in the barrier protocol, only in INTERACT.
@@ -539,6 +587,7 @@ class FBPProcess(_PortWorker):
         self._barrier_capture_pos = 0
         self._barrier_closed_ports = frozenset()
         self._barrier_out_seq = {}
+        self._barrier_last_seq = {}
 
     def _close_barrier_round(self):
         epoch = self._barrier_epoch
@@ -548,19 +597,20 @@ class FBPProcess(_PortWorker):
         capture_pos = self._barrier_capture_pos
         closed_ports = self._barrier_closed_ports
         out_seq = self._barrier_out_seq
+        last_seq = self._barrier_last_seq
 
         self._last_epoch = max(self._last_epoch, epoch)
         self._reset_barrier_round()
 
         self._on_epoch_closed(
-            epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq
+            epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
         )
 
     def _on_epoch_closed(
-        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq
+        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
     ):
         path = self._save_checkpoint(
-            epoch, node_state, channel_buffers, capture_pos, closed_ports, out_seq
+            epoch, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
         )
         self.log.info("checkpoint saved for epoch %s at %s", epoch, path)
 
@@ -582,7 +632,9 @@ class FBPProcess(_PortWorker):
     def _checkpoints_dir(self):
         return os.path.join(self._execdir(), "checkpoints")
 
-    def _save_checkpoint(self, epoch, node_state, channel_buffers, capture_pos, closed_ports, out_seq):
+    def _save_checkpoint(
+        self, epoch, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
+    ):
         checkpoints_dir = self._checkpoints_dir()
         os.makedirs(checkpoints_dir, exist_ok=True)
 
@@ -592,6 +644,7 @@ class FBPProcess(_PortWorker):
             "capture_pos": capture_pos,
             "closed_ports": sorted(closed_ports),
             "out_seq": dict(out_seq),
+            "last_seq": dict(last_seq),
             "node_state": node_state,
             "channel_state": channel_buffers,
         }
@@ -657,7 +710,11 @@ class FBPProcess(_PortWorker):
         (a control port is never added, since it is never closed).
         Nothing is logged after a CLOSE, so a DATA record on a port that is
         already closed means that the log or the checkpoint is corrupt, and
-        it is an error. The other kinds of item are not replayed. This reads
+        it is an error. The other kinds of item are not replayed. A numbered
+        DATA record also advances _last_seq and _accepted_seq (G5) for its
+        port, to what they already were before the crash: records only ever
+        reach the log in accepted order (see _on_arrival), so this is a
+        plain overwrite, the same as _current_pos, never a max(). This reads
         from disk and never writes to the log.
         """
         replayed = 0
@@ -675,6 +732,9 @@ class FBPProcess(_PortWorker):
                     "nothing is logged after a CLOSE, so the log or the checkpoint is corrupt"
                 )
             self._current_pos = record.pos
+            if record.envelope.seq is not None:
+                self._last_seq[record.port] = record.envelope.seq
+                self._accepted_seq[record.port] = record.envelope.seq
             self._run_process_data(record.port, record.envelope.payload)
             replayed += 1
         if replayed:

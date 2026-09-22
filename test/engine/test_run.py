@@ -55,17 +55,17 @@ def test_load_latest_checkpoint_returns_none_when_the_dir_is_empty(execdir):
 
 def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [], {})
-    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [], {})
+    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [], {}, {})
+    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [], {}, {})
 
-    epoch, node_state, capture_pos, closed_ports, out_seq = proc._load_latest_checkpoint()
+    epoch, node_state, capture_pos, closed_ports, out_seq, last_seq = proc._load_latest_checkpoint()
     assert epoch == 1
     assert node_state == {"marker": "new"}
 
 
 def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -79,7 +79,7 @@ def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
 
 def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_closed_ports(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -93,7 +93,7 @@ def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_closed_ports(ex
 
 def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_seq(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -102,6 +102,20 @@ def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_seq(execdir
         json.dump(data, f)
 
     with pytest.raises(KeyError, match="out_seq"):
+        proc._load_latest_checkpoint()
+
+
+def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_last_seq(execdir):
+    proc = _Node(opts={})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
+    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
+    with open(checkpoint_path) as f:
+        data = json.load(f)
+    del data["last_seq"]
+    with open(checkpoint_path, "w") as f:
+        json.dump(data, f)
+
+    with pytest.raises(KeyError, match="last_seq"):
         proc._load_latest_checkpoint()
 
 
@@ -122,7 +136,7 @@ def test_run_skips_restore_state_and_starts_with_defaults_when_no_checkpoint(exe
 
 def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(4, {"marker": "restored"}, {}, 0, [], {"outf": 3})
+    proc._save_checkpoint(4, {"marker": "restored"}, {}, 0, [], {"outf": 3}, {"inf": 2})
 
     # A second instance is what actually "restarts": the first one
     # above only exists here to seed the checkpoint file on disk.
@@ -135,6 +149,11 @@ def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdi
     # Restored before initialize_runtime() is even called, so that a replay
     # numbers what it sends exactly as the crashed incarnation had (G5).
     assert restarted._out_seq == {"outf": 3}
+    # Both the brain's own view (G5) and the reader threads' live dedup
+    # counter start from the same restored value; with nothing left to
+    # replay here, they stay equal.
+    assert restarted._last_seq == {"inf": 2}
+    assert restarted._accepted_seq == {"inf": 2}
 
     restarted._halted.set()
     assert _wait_until(lambda: not restarted._brain_thread.is_alive())

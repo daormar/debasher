@@ -113,7 +113,7 @@ def _run_brain(proc, items):
 def _process_on_the_brain_thread(proc, *packets):
     """Runs the brain loop, on a thread of its own, over the given packets, and waits for it to end."""
     for pos, packet in enumerate(packets, start=1):
-        proc._inbound_queue.put((pos, "inf", "DATA", packet))
+        proc._inbound_queue.put((pos, "inf", "DATA", packet, None))
     proc._inbound_queue.put(transport._STOP)
     brain = threading.Thread(target=proc._brain_loop)
     brain.start()
@@ -262,13 +262,15 @@ def test_the_checkpoint_reflects_the_counters_at_capture_not_what_is_sent_while_
 
 def test_a_restored_checkpoint_makes_the_numbering_go_on_after_it(execdir):
     live = _Relay(opts=_OPTS)
-    live._save_checkpoint(0, {}, {}, 0, set(), {"outf": 3})
+    live._save_checkpoint(0, {}, {}, 0, set(), {"outf": 3}, {})
 
     relaunched = _Relay(opts=_OPTS)
-    _, node_state, capture_pos, closed_ports, out_seq = relaunched._load_latest_checkpoint()
+    _, node_state, capture_pos, closed_ports, out_seq, last_seq = relaunched._load_latest_checkpoint()
     relaunched.restore_node_state(node_state)
     relaunched._closed_ports = set(closed_ports)
     relaunched._out_seq = dict(out_seq)
+    relaunched._last_seq = dict(last_seq)
+    relaunched._accepted_seq = dict(last_seq)
 
     _run_brain(relaunched, [("inf", "d"), ("inf", "e")])
 
@@ -284,7 +286,9 @@ def test_replay_regenerates_the_same_numbers_a_crashed_incarnation_had_used(exec
     # received those messages the first time recognizes them as duplicates.
     live = _Relay(opts=_OPTS)
     _run_brain(live, [("inf", 1), ("inf", 2), ("inf", 3)])
-    live._save_checkpoint(0, live.capture_node_state(), {}, live._current_pos, set(), dict(live._out_seq))
+    live._save_checkpoint(
+        0, live.capture_node_state(), {}, live._current_pos, set(), dict(live._out_seq), {}
+    )
     while not live._outbound_queues["outf"].empty():  # drain what the checkpoint already covers
         live._outbound_queues["outf"].get_nowait()
 
@@ -296,10 +300,12 @@ def test_replay_regenerates_the_same_numbers_a_crashed_incarnation_had_used(exec
     assert [e.seq for e in _queued_envelopes(live)] == [4, 5]
 
     relaunched = _Relay(opts=_OPTS)
-    _, node_state, capture_pos, closed_ports, out_seq = relaunched._load_latest_checkpoint()
+    _, node_state, capture_pos, closed_ports, out_seq, last_seq = relaunched._load_latest_checkpoint()
     relaunched.restore_node_state(node_state)
     relaunched._closed_ports = set(closed_ports)
     relaunched._out_seq = dict(out_seq)
+    relaunched._last_seq = dict(last_seq)
+    relaunched._accepted_seq = dict(last_seq)
     relaunched._open_input_log(capture_pos)
     relaunched._replay_input_log(capture_pos)
 

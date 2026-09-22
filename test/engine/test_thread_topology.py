@@ -164,7 +164,7 @@ def test_reader_thread_hands_close_to_the_brain_and_stays_alive(fifo_path):
 
         assert _wait_until(lambda: len(proc.items) == 2)
         # Every queued item carries its position, from 1, ahead of the port.
-        assert proc.items == [(1, "inf", "DATA", 1), (2, "inf", "CLOSE", {})]
+        assert proc.items == [(1, "inf", "DATA", 1, None), (2, "inf", "CLOSE", {}, None)]
         assert proc._reader_threads["inf"].is_alive()
     finally:
         proc.stop_threads(timeout=2)
@@ -189,7 +189,7 @@ def test_what_a_writer_sends_after_its_close_never_reaches_the_node(fifo_path):
         assert _wait_until(lambda: _unread_bytes(fifo_path) == 0)
         time.sleep(0.2)  # the reader may still be going through what it read
 
-        assert proc.items == [(1, "inf", "DATA", 1), (2, "inf", "CLOSE", {})]
+        assert proc.items == [(1, "inf", "DATA", 1, None), (2, "inf", "CLOSE", {}, None)]
         assert [r.envelope.type for r in proc._input_log.replay(0)] == ["DATA", "CLOSE"]
         assert proc._reader_threads["inf"].is_alive()
     finally:
@@ -297,7 +297,7 @@ def test_reader_thread_consumes_blank_lines_and_hello_itself(fifo_path):
             w.write(lib.encode_data(1) + "\n")
 
         assert _wait_until(lambda: len(proc.items) == 1)
-        assert proc.items == [(1, "inf", "DATA", 1)]
+        assert proc.items == [(1, "inf", "DATA", 1, None)]
     finally:
         proc.stop_threads(timeout=2)
 
