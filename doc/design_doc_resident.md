@@ -597,21 +597,64 @@ input port whose `process_data` is sensitive to the order across ports, a cycle,
 a source and a sink), run once with no failures and then repeatedly under
 `kill -9` of random nodes at random moments (including several at once, adjacent
 pairs, and moments in which a snapshot round is open), with the `Supervisor`
-relaunching them. Pass criterion: the final state and output equal those of the
-failure-free run, with no duplicated and no missing message. The exception
-follows from two limits of the Contract, after which a message can be lost
-beyond repair: both endpoints of a channel crashed before either reopened the
-FIFO, and a node killed with a message that it has read from a FIFO but not yet
-written to its input log. A run that hits either passes if it ends with an error
-of G8 that names the channel and the numbers of the missing messages, in place
-of the reference result. What always fails is a different result with no error
-(a message duplicated, lost or altered that nobody reported) and a run that
-never ends and reports nothing. The harness records when it kills each node and
-when that node has been relaunched, so it knows which runs hit the first limit.
-The second cannot be seen from outside, so a G8 error in a run that did not hit
-the first one is examined, and it has to be shown to come from it and not from a
-fault of the replay. The chaos test runs against real `debasher_exec` runs, not
-mocks.
+relaunching them. Pass criterion (reformulated on 2026-09-22: see below):
+for each port the fan-in node reads, the messages it is seen to have
+processed on that port, in a run's own trace, form exactly the sequence that
+port's writer actually sent, in the order it sent them, with no duplicate and
+no missing message. The run's full trace only has to be some interleaving of
+those per-port sequences, never a byte-for-byte match against one frozen
+reference run: which interleaving comes out, even with no failure at all, is
+itself a race between independent writers that a single run does not pin
+down uniquely, so comparing against one no longer means what it used to. The
+exception follows from two limits of the Contract, after which a message can
+be lost beyond repair: both endpoints of a channel crashed before either
+reopened the FIFO, and a node killed with a message that it has read from a
+FIFO but not yet written to its input log. A run that hits either passes if
+it ends with an error of G8 that names the channel and the numbers of the
+missing messages, in place of the reference result. What always fails is a
+different result with no error (a message duplicated, lost or altered that
+nobody reported) and a run that never ends and reports nothing. The harness
+records when it kills each node and when that node has been relaunched, so
+it knows which runs hit the first limit. The second cannot be seen from
+outside, so a G8 error in a run that did not hit the first one is examined,
+and it has to be shown to come from it and not from a fault of the replay.
+The chaos test runs against real `debasher_exec` runs, not mocks.
+
+**Why the criterion changed.** The original wording assumed the failure-free
+run has a unique result, which the fan-in shape itself rules out: it is
+"sensitive to the order across ports" on purpose, precisely to stress that a
+crash's replay never reorders anything already accepted (G4), and that same
+sensitivity means two clean runs, with no crash at all, can legitimately
+interleave differently. Two ways to restore a well-defined pass criterion
+were weighed: pacing the reference program's own writers so only one
+interleaving could ever happen (rejected: it would stop stressing the real
+race at the moment a node crashes, one of the highest-value timings to
+cover), or checking each port's own sequence directly, which needs no
+pacing and no frozen reference run at all. The second is what is described
+above.
+
+**Status (2026-09-22): the reference program and its no-failure baseline are
+built and tested; the kill/relaunch driver is not.**
+`test/engine/debasher_chaos_ref.sh` is the reference program: `fanin` (the
+fan-in node) reads `ext`, fed from outside the program (`EXTERNAL_PORTS`),
+and `loop_in`,
+fed by `loop`, which simply echoes back to `fanin` whatever `fanin` sends it
+on `to_loop`, closing a 2-node cycle; on every message, from either port,
+`fanin` forwards a copy to `sink`, tagged with the port it arrived on, which
+is what makes `sink`'s own input log double as the run's trace: G5's dedup
+already happens before a record is ever logged, so reading that log directly
+gives the exact, ordered, once-only sequence the criterion above needs,
+without any bookkeeping of its own. `fanin` is the program's only initiator,
+triggered through the `Supervisor`'s manual trigger channel, fed from
+outside. `test/engine/test_chaos.py` (skipped unless
+`DEBASHER_RUN_CHAOS_TEST` is set, since it is slow and, once the driver
+below exists, disruptive on purpose: real `debasher_exec`, no mocks) has one
+test so far, the "run once with no failures" step: 20 messages through
+`ext`, a `start_snapshot` and a `shutdown` in the middle of the run, and the
+resulting trace checked against the criterion above. Not built yet: killing
+random nodes at random moments (including several at once, adjacent pairs,
+and moments in which a round is open), the bookkeeping of when each node was
+killed and relaunched, and recognizing the G8-error exception.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
 guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through
@@ -1684,7 +1727,8 @@ Agreed on 2026-09-20: one step at a time, each with tests, a mutation check
        only 2 was ever accepted here, missing 3 to 4`), `CLOSE` itself found
        durably recorded in the node's own input log, the process still
        alive with only its reader thread gone.
-  6. The chaos test of the Contract.
+  6. The chaos test of the Contract: in progress, see "Acceptance" for the
+     reference program and where it stands.
 
 ### Why not built on `--mirror`, and locality
 
