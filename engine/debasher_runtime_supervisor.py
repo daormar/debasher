@@ -243,19 +243,26 @@ class Supervisor(_PortWorker):
 
         with self._lock:
             already_down = node_name in self._down
+            last_seen = self._last_heartbeat[node_name]
         if already_down:
             # Already declared down and (by default) already being
-            # relaunched -- don't call on_node_down again for the same
-            # outage every tick; only a real heartbeat (_on_heartbeat)
-            # clears this.
+            # relaunched: don't call on_node_down again for the same
+            # outage every tick, only once HEARTBEAT_TIMEOUT_SECS has
+            # passed with still no real heartbeat (_on_heartbeat resets
+            # last_seen the same way a genuine one would). Without this,
+            # a relaunch that itself dies before its first heartbeat
+            # would stay "down" forever, never re-declared and never
+            # counted against MAX_RELAUNCH_ATTEMPTS.
+            if time.time() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
+                with self._lock:
+                    self._down.discard(node_name)
+                self._declare_down(node_name)
             return
 
         if not self._node_pid_alive(node_name):
             self._declare_down(node_name)
             return
 
-        with self._lock:
-            last_seen = self._last_heartbeat[node_name]
         if time.time() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
             self._declare_down(node_name)
 
@@ -266,6 +273,13 @@ class Supervisor(_PortWorker):
             self._down.add(node_name)
             self._relaunch_attempts[node_name] += 1
             attempts = self._relaunch_attempts[node_name]
+            # A fresh grace period starts now, the same reasoning as
+            # __init__'s own seeding: the incarnation on_node_down is
+            # about to start has HEARTBEAT_TIMEOUT_SECS to send its
+            # first heartbeat before _check_node treats it as down
+            # again, instead of being stuck "down" forever if it never
+            # does.
+            self._last_heartbeat[node_name] = time.time()
 
         if attempts > self.MAX_RELAUNCH_ATTEMPTS:
             with self._lock:

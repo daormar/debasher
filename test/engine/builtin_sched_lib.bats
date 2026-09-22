@@ -18,6 +18,7 @@ setup() {
     BASENAME="$(command -v basename)"
     PYTHON="$(command -v python3)"
     RM="$(command -v rm)"
+    CAT="$(command -v cat)"
     debasher_pythondir="/fake/pythondir"
     debasher_pkgpythondir="/fake/pkgpythondir"
     debasher_libexecdir="/fake/libexecdir"
@@ -73,6 +74,43 @@ wait_for_report() {
     # exists) and the old PID would still be there.
     [ "$(cat "${EXECDIR}/proc.id")" != "999999" ]
     wait_for_report
+}
+
+@test "_launch kills the previous incarnation named by a stale but still-alive .id file" {
+    # A relaunch triggered by a missed heartbeat does not prove the old
+    # incarnation is actually gone: leave a real, still-running process
+    # behind it, in its own process group (as a real launch would).
+    cat > "${SCRIPT}" <<'EOF'
+#!/bin/bash
+echo $$ > "${BUILTIN_SCHED_PID_FILENAME}"
+sleep 100
+EOF
+    chmod +x "${SCRIPT}"
+    debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    local i
+    for i in $(seq 1 100); do
+        [ -s "${EXECDIR}/proc.id" ] && break
+        sleep 0.05
+    done
+    OLD_PID="$(cat "${EXECDIR}/proc.id")"
+    kill -0 "${OLD_PID}"
+
+    cat > "${SCRIPT}" <<'EOF'
+#!/bin/bash
+sleep 0.02
+echo $$ > "${BUILTIN_SCHED_PID_FILENAME}"
+{
+    echo "pid=$$"
+} > "$(dirname "$0")/seen.tmp"
+mv "$(dirname "$0")/seen.tmp" "$(dirname "$0")/seen.txt"
+EOF
+    chmod +x "${SCRIPT}"
+
+    debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    wait_for_report
+
+    run kill -0 "${OLD_PID}"
+    [ "$status" -ne 0 ]
 }
 
 @test "_launch writes the launched process's own .id even if the caller already exports a foreign BUILTIN_SCHED_PID_FILENAME" {

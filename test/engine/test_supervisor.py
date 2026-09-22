@@ -290,6 +290,42 @@ def test_check_node_does_not_repeat_on_node_down_while_still_down(execdir):
     assert calls == ["a"]
 
 
+def test_check_node_declares_down_again_once_a_relaunch_never_heartbeats(execdir):
+    # The relaunched incarnation itself dies before ever sending a
+    # heartbeat: with no grace period this node would stay "down"
+    # forever, since only a real heartbeat used to clear it.
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(_dead_pid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_TIMEOUT_SECS = 0
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    proc._check_node("a")
+    proc._check_node("a")
+
+    assert calls == ["a", "a"]
+    assert proc._relaunch_attempts["a"] == 2
+
+
+def test_repeated_relaunches_that_never_heartbeat_eventually_escalate(execdir):
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(_dead_pid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_TIMEOUT_SECS = 0
+    proc.MAX_RELAUNCH_ATTEMPTS = 2
+    down_calls = []
+    failed_calls = []
+    proc.on_node_down = lambda node: down_calls.append(node)
+    proc.on_node_permanently_failed = lambda node: failed_calls.append(node)
+
+    proc._check_node("a")
+    proc._check_node("a")
+    proc._check_node("a")
+
+    assert down_calls == ["a", "a"]
+    assert failed_calls == ["a"]
+    assert "a" in proc._given_up
+
+
 # --- _declare_down / relaunch budget -------------------------------------
 
 
@@ -325,6 +361,16 @@ def test_declare_down_gives_up_after_exceeding_the_budget():
     assert down_calls == ["a", "a"]
     assert failed_calls == ["a"]
     assert "a" in proc._given_up
+
+
+def test_declare_down_resets_last_heartbeat_to_start_a_fresh_grace_period():
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc._last_heartbeat["a"] = 0
+    proc.on_node_down = lambda node: None
+
+    proc._declare_down("a")
+
+    assert proc._last_heartbeat["a"] > 0
 
 
 def test_recovering_between_outages_resets_the_budget():

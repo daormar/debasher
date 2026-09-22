@@ -1258,6 +1258,20 @@ debasher_builtin_sched::_launch()
         export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
+    # If a previous incarnation of this same process/task left its PID
+    # behind, kill its whole process group before starting a new one:
+    # a relaunch triggered by a missed heartbeat does not prove the old
+    # one is actually gone (see debasher::_stop_pid), and launching a
+    # second copy while the first still holds its FIFOs would leave two
+    # live incarnations of the same node running at once. A no-op if it
+    # is already gone.
+    if [ -f "${pid_file}" ]; then
+        local old_pid=$("${CAT}" "${pid_file}" 2>/dev/null)
+        if [ -n "${old_pid}" ]; then
+            debasher::_stop_pid "${old_pid}" || true
+        fi
+    fi
+
     # Remove any stale PID file left by a previous launch of this same
     # process/task (a relaunch after a crash). The wait below only checks
     # that the file exists, so it must not exist yet: otherwise it would

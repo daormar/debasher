@@ -2308,18 +2308,33 @@ designed.
   separate case, not a validation problem at all, and is instead handled by
   section 4's `debasher_stop` escalation.
 - **A relaunched node that dies before its first heartbeat is never noticed
-  again.** After `_declare_down` a node stays in `_down` until a real heartbeat
-  arrives, and `_check_node` skips nodes in `_down`. If the relaunch itself
-  fails (a startup crash), nothing re-detects it, `_relaunch_attempts` never
-  grows past 1, `MAX_RELAUNCH_ATTEMPTS` never trips and the Supervisor never
-  resolves. Needs a grace period after a relaunch (no heartbeat within
-  `HEARTBEAT_TIMEOUT_SECS` means declare it down again).
-- **Relaunching while the old process is still alive.** The heartbeat-timeout
-  path also fires for a live but stuck process (PID alive, no heartbeat).
-  `on_node_down` then starts a second copy while the first still holds its
-  FIFOs, and `_launch` removes the old `.id`, so the old process is no longer
-  reachable by `debasher_stop` either. The old process group should be killed
-  first.
+  again: fixed on 2026-09-22.** After `_declare_down` a node used to stay in
+  `_down` until a real heartbeat arrived, and `_check_node` skipped nodes in
+  `_down` unconditionally. If the relaunch itself failed (a startup crash),
+  nothing re-detected it, `_relaunch_attempts` never grew past 1,
+  `MAX_RELAUNCH_ATTEMPTS` never tripped and the Supervisor never resolved. Now
+  `_declare_down` resets `_last_heartbeat` to the moment it triggers a
+  relaunch, the same grace period `__init__` already gives a brand new node,
+  and `_check_node` treats an already-`_down` node the same way once that
+  grace period elapses with still no real heartbeat: declared down again,
+  counted against the same budget, able to escalate like any other outage.
+  Checked with the real class: two `_check_node` calls with
+  `HEARTBEAT_TIMEOUT_SECS` set to 0 and a dead PID call `on_node_down` twice,
+  where before only once, and repeating it past `MAX_RELAUNCH_ATTEMPTS`
+  reaches `on_node_permanently_failed`.
+- **Relaunching while the old process is still alive: fixed on 2026-09-22.**
+  The heartbeat-timeout path also fires for a live but stuck process (PID
+  alive, no heartbeat). `on_node_down` then started a second copy while the
+  first still held its FIFOs, and `_launch` removed the old `.id`, so the old
+  process was no longer reachable by `debasher_stop` either. Now
+  `debasher_builtin_sched::_launch` reads the old `.id` file, if there is one,
+  before removing it, and kills that process group with the same
+  `debasher::_stop_pid` a manual `debasher_stop` already uses (a no-op if it
+  is already gone): one code path for an initial launch and every relaunch,
+  with no need to tell a genuine crash apart from a stuck but live process.
+  Checked with a real, still-running process left behind by one launch: a
+  second launch of the same process/task kills it before starting the new
+  one.
 - **`debasher_builtin_sched::_wait_until_file_exists` is an iteration count, not
   a time**: 10000 turns of a `[ -f ]` loop with no sleep, about 90 ms. Now that
   `_launch` removes the stale `.id`, a relaunch depends on the new script
