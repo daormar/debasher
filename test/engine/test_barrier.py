@@ -551,6 +551,81 @@ def test_control_ports_have_to_be_input_ports():
         _Bad(opts=_FAKE_OPTS)
 
 
+# --- external ports: input ports fed only from outside the program ---------------------------
+
+
+class _WithExternal(_BarrierWorker):
+    INPUT_PORTS = ["inf", "ext"]
+    EXTERNAL_PORTS = ["ext"]
+
+
+class _OnlyExternal(_BarrierWorker):
+    INPUT_PORTS = ["ext"]
+    EXTERNAL_PORTS = ["ext"]
+
+
+_EXTERNAL_OPTS = {"inf": "/dev/null", "ext": "/dev/null", "x": "/dev/null", "y": "/dev/null"}
+
+
+def test_an_initiator_whose_only_input_is_an_external_port_closes_its_round_when_it_is_triggered():
+    proc = _OnlyExternal(opts=_EXTERNAL_OPTS)
+    _run_brain(proc, [("trigger", lib.TYPE_INTERACT, _START)])
+
+    assert [epoch for epoch, *_ in proc.closed_epochs] == [0]
+    for port in ("x", "y"):
+        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False}
+
+
+def test_a_round_does_not_wait_for_an_external_port_when_a_peer_starts_it():
+    proc = _WithExternal(opts=_EXTERNAL_OPTS)
+    # No marker will ever come from "ext": the round opens and closes on "inf" alone.
+    _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
+
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {})]
+
+
+def test_an_initiator_with_a_data_port_and_an_external_port_waits_only_for_the_data_port():
+    proc = _WithExternal(opts=_EXTERNAL_OPTS)
+    _run_brain(proc, [("trigger", lib.TYPE_INTERACT, _START)])
+    assert proc._barrier_pending == {"inf"}
+    assert proc.closed_epochs == []
+
+    _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"inf": []})]
+
+
+def test_a_close_on_an_external_port_marks_it_closed_for_good():
+    # Unlike a control port, whose writer may come back, an external source
+    # that says CLOSE is not expected to: the port closes for good.
+    proc = _WithExternal(opts=_EXTERNAL_OPTS)
+    _run_brain(proc, [_close("ext"), ("inf", lib.TYPE_BARRIER, _ROUND)])
+
+    assert proc._closed_ports == {"ext"}
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {})]
+
+
+def test_a_marker_from_a_cooperative_external_source_opens_a_round_like_any_other_port():
+    # An external source that does know the protocol may still write the
+    # marker: it is read like any other, and can open a round, but (unlike
+    # "inf") never settles it by itself, since it is never waited for.
+    proc = _WithExternal(opts=_EXTERNAL_OPTS)
+    _run_brain(proc, [("ext", lib.TYPE_BARRIER, _ROUND)])
+
+    assert proc._barrier_pending == {"inf"}
+    assert proc.closed_epochs == []
+
+    _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
+    assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {"inf": []})]
+
+
+def test_external_ports_have_to_be_input_ports():
+    class _Bad(_BarrierWorker):
+        EXTERNAL_PORTS = ["z"]
+
+    with pytest.raises(ValueError, match="EXTERNAL_PORTS"):
+        _Bad(opts=_FAKE_OPTS)
+
+
 # --- rounds that overlap: the newer one replaces the older -------------------------------------
 
 

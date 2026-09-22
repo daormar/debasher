@@ -126,6 +126,13 @@ mutation check, durability level) is defined in the Contract, where it is used.
   which an initiator receives its triggers. It never carries a marker, so it
   takes no part in any round, and a `CLOSE` on it does not close it, because its
   writer (the `Supervisor`, or whoever writes commands) may come back.
+- **external port** (puerto externo): an input port of a node, listed in
+  `EXTERNAL_PORTS`, fed only from outside the program (a source, or a person
+  writing by hand), which therefore does not carry a marker of its own: a round
+  never waits for it. Unlike a control port, a `CLOSE` on it does close it for
+  good, since its writer is not expected to come back. A source that does know
+  the protocol may still write the marker of the round the initiator opened: it
+  is then read like on any other port.
 - **incarnation** (encarnación): one running instance of a node's process.
   Relaunching a node after a crash starts a new incarnation of the same node,
   which reuses its FIFOs, its directory and its checkpoints.
@@ -829,8 +836,9 @@ channel):
   entries are FIFO paths to open reader/writer threads on. Any other option
   (e.g. a plain `-threshold` value) stays available in `self.opts` with no
   special handling. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
-  commands (see control port in the Glossary); a name that is not an input port
-  is refused when the node is built.
+  commands (see control port in the Glossary); `EXTERNAL_PORTS` names which are
+  fed only from outside the program (see external port in the Glossary); a name
+  in either list that is not an input port is refused when the node is built.
 - **Threads**: one reader thread per `INPUT_PORTS` entry, each running a
   blocking `readline()` loop over its FIFO and pushing every deserialized
   envelope onto a **shared inbound queue** as `(port_name, type, payload)`; one
@@ -910,9 +918,10 @@ never instantiates it: the heredoc itself creates the object, which parses the
 options of the process from `argv`, and calls `run()` (read from the engine's
 code, and checked with a real `debasher_exec` run on 2026-09-21).
 
-The class declares its ports (`INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`)
-and redefines four hooks. Each runs on a known thread, which is what lets the
-framework keep the state that a node captures in step with what it has sent:
+The class declares its ports (`INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
+`EXTERNAL_PORTS`) and redefines four hooks. Each runs on a known thread, which
+is what lets the framework keep the state that a node captures in step with
+what it has sent:
 
 - `process_data(port_name, packet)` runs on the brain thread, once for each
   `DATA`, in the order of the input log, and on the thread that called `run()`
@@ -2183,25 +2192,33 @@ designed.
   ended instead). Reasoned from the code, not run. Numbering the rounds from
   outside, with the epoch in the trigger, would fix it (see Future work, section
   7).
-- **A port that only a source writes to never carries a marker.** A round waits
-  for the marker of every input port that is not a control port, and a source is
-  outside the program, so it sends none: the round never closes, the node writes
-  no checkpoint and its input log is not pruned until it reaches
-  `INPUT_LOG_MAX_BYTES`, which is an error. Found on 2026-09-21 and checked with
-  a real run: a node with a data port written from outside and a control port, a
-  `start_snapshot` on the control port, and no checkpoint after 3 s. Declaring
-  the data port in `CONTROL_PORTS` makes the round close, but that is only a
-  workaround, since that list is for ports that carry commands. Two ways are
-  open, not decided, to be discussed: (a) declare such ports apart (a proposed
-  `EXTERNAL_PORTS`, exempt from rounds), so that a round never depends on the
-  outside; (b) require the source to write the marker, which works (checked with
-  a real run: with the source writing the `BARRIER` of epoch 0 into the port,
-  the round closes and the checkpoint is written) but makes rounds depend on the
-  outside: a person writing by hand, or a program that ignores the protocol,
-  leaves the round open, and the source must write the epoch that the initiator
-  chose (see the previous item). They combine: under (a), a marker that a source
-  which knows the protocol writes into an exempt port would be accepted like any
-  other (reasoned from `_on_barrier`, not run).
+- **A port that only a source writes to never carries a marker: fixed on
+  2026-09-22 with `EXTERNAL_PORTS`.** A round used to wait for the marker of
+  every input port that was not a control port, and a source is outside the
+  program, so it sends none: the round never closed, the node wrote no
+  checkpoint and its input log was not pruned until it reached
+  `INPUT_LOG_MAX_BYTES`, which is an error. Found on 2026-09-21 and checked
+  with a real run: a node with a data port written from outside and a control
+  port, a `start_snapshot` on the control port, and no checkpoint after 3 s.
+  Declaring the data port in `CONTROL_PORTS` made the round close, but that was
+  only a workaround, since that list is for ports that carry commands. Fixed by
+  a new `EXTERNAL_PORTS` list (see external port in the Glossary), excluded
+  from the pending set the same way `CONTROL_PORTS` is, but whose `CLOSE`
+  closes the port for good, unlike a control port's. A source that does know
+  the protocol may still write the marker of the round the initiator opened: it
+  is accepted like on any other port (`_on_barrier` does not special-case a
+  port that is not pending), which combines the two ways this item used to
+  weigh against each other, without coupling a round to the outside by default.
+  A node whose only inputs are external has no port left to receive a marker
+  from, so it has to be an initiator itself (see initiator in the Glossary),
+  triggered the same way a node with only a control port already was; this is
+  not a new case, `EXTERNAL_PORTS` does not change it. Checked with a real
+  `debasher_exec` run: a `sink` process with an externally fed data port `inf`
+  and an externally fed control port `ctl`, `EXTERNAL_PORTS = []` (the old
+  behavior): fed `k=1,2,3` on `inf`, `start_snapshot` on `ctl`, no
+  `checkpoints/0.json` after 3 s. With `EXTERNAL_PORTS = ["inf"]`: the same
+  sequence writes `checkpoints/0.json` right after `start_snapshot`, without
+  ever waiting on `inf`.
 - **A crash during a round** aborts it, and the mechanism is not designed. What
   exists: a node that comes back has no round open, and the next round of a
   newer epoch replaces a round that another node was left with open (section 2).

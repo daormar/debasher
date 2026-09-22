@@ -65,6 +65,18 @@ class FBPProcess(_PortWorker):
     # back.
     CONTROL_PORTS = []
 
+    # The INPUT_PORTS entries fed only from outside the program (a source
+    # with no other business port of this program upstream of it), which
+    # therefore never carries a marker: a round waits for it like any other
+    # port, unless it is declared here, in which case the round never
+    # depends on it. A CLOSE on it still closes it for good, like on any
+    # other business port, since (unlike a control port) its writer is not
+    # expected to come back. A source that does know the protocol may still
+    # write the marker of the round the initiator opened: it is then read
+    # like any other, opening or settling a round exactly as if the port
+    # were not declared here.
+    EXTERNAL_PORTS = []
+
     # Name of the OUTPUT_PORTS entry wired to the supervisor's heartbeat
     # channel, if any. A supervisor is optional (0 or 1 per resident
     # program): leave this None to run without one, in which case
@@ -206,6 +218,12 @@ class FBPProcess(_PortWorker):
         if unknown:
             raise ValueError(
                 f"{type(self).__name__}: CONTROL_PORTS names {unknown}, which are not in INPUT_PORTS "
+                f"(got: {list(self.INPUT_PORTS)})"
+            )
+        unknown = [port for port in self.EXTERNAL_PORTS if port not in self.INPUT_PORTS]
+        if unknown:
+            raise ValueError(
+                f"{type(self).__name__}: EXTERNAL_PORTS names {unknown}, which are not in INPUT_PORTS "
                 f"(got: {list(self.INPUT_PORTS)})"
             )
 
@@ -684,11 +702,14 @@ class FBPProcess(_PortWorker):
                 continue
             self._send_barrier(out_port, epoch, halt=halt)
 
-        # A control port carries no markers, and a port whose writer has
-        # finished sends no more, so the round does not wait for either. The brain thread's own set decides, in the order of
-        # the input log: a CLOSE that the reader threads have already logged
-        # but that comes after this item does not count yet.
-        pending = set(self.INPUT_PORTS) - set(self.CONTROL_PORTS)
+        # A control port carries no markers, a port fed only from outside the
+        # program carries none either (unless its source knows the protocol,
+        # in which case _on_barrier accepts it like any other), and a port
+        # whose writer has finished sends no more, so the round does not
+        # wait for any of the three. The brain thread's own set decides, in
+        # the order of the input log: a CLOSE that the reader threads have
+        # already logged but that comes after this item does not count yet.
+        pending = set(self.INPUT_PORTS) - set(self.CONTROL_PORTS) - set(self.EXTERNAL_PORTS)
         pending.discard(arrived_port)
         pending -= self._closed_ports
         self._barrier_pending = pending
