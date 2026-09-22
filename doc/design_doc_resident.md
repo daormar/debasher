@@ -226,8 +226,16 @@ mutation check, durability level) is defined in the Contract, where it is used.
   atomically in `<execdir>/checkpoints/` when a round closes. It holds a schema
   version, the epoch, the `node_state` and the `channel_state` and, with the
   input-log redesign, the engine's own bookkeeping: `capture_pos`,
-  `closed_ports`, `out_seq` and `last_seq`. Only the last `CHECKPOINT_RETENTION`
-  are kept.
+  `closed_ports`, `out_seq`, `last_seq` and the outbound backlog,
+  `out_backlog`. Only the last `CHECKPOINT_RETENTION` are kept.
+- **outbound backlog, `out_backlog`** (cola de salida pendiente): the `DATA`
+  that `send_data` has numbered and queued but the writer thread has not yet
+  finished writing when a round captures the node state (G5): `{tag: [{"seq":,
+  "payload":}, ...]}`, decoded fresh from each queued line. Without it, a crash
+  right there would destroy those messages for good, with no trace (see "Both
+  endpoints of a channel crashed" in the Contract's limits, fixed 2026-09-22).
+  Recovery re-enqueues it, with the same numbers, before anything else is
+  sent.
 
 ### Input log
 
@@ -330,10 +338,9 @@ live value that the brain thread keeps up to date as it processes each item, a
 copy taken at the capture and held only while a round is open (see "capture"
 above), and the checkpoint field the copy is written to when the round closes.
 The table names the three for each concept, which this glossary already
-defines: it is not redefined here. It lists what the code holds today: as
-step 5 adds the outbound backlog (5.4), a row joins it. `Supervisor`'s own
-bookkeeping (which nodes are down, how many times each has been relaunched)
-is a separate concern, covered in section 4.
+defines: it is not redefined here. `Supervisor`'s own bookkeeping (which
+nodes are down, how many times each has been relaunched) is a separate
+concern, covered in section 4.
 
 | Concept                | Live            | Held during an open round  | Checkpoint field |
 | ---------------------- | --------------- | -------------------------- | ---------------- |
@@ -341,8 +348,14 @@ is a separate concern, covered in section 4.
 | closed input ports     | `_closed_ports` | `_barrier_closed_ports`    | `closed_ports`   |
 | sender counters (G5)   | `_out_seq`      | `_barrier_out_seq`         | `out_seq`        |
 | receiver counters (G5) | `_last_seq`     | `_barrier_last_seq`        | `last_seq`       |
+| outbound backlog (G5)  | `_unwritten`    | `_barrier_out_backlog`     | `out_backlog`    |
 | node state             | module's own    | `_barrier_node_state`      | `node_state`     |
 | channel state          | round open only | `_barrier_channel_buffers` | `channel_state`  |
+
+`_unwritten` is the one exception to "the brain thread keeps it up to date":
+`send_data` appends to it (the brain thread, or the one replaying the input
+log), but the writer thread pops from it, under the same lock, as it confirms
+each line written.
 
 Bookkeeping that never enters a checkpoint, because it only means something
 while its own thread or round is live: `_handler_thread` (the identity of the
@@ -499,7 +512,11 @@ guarantee in words and never cite these numbers, which may change.
 - **Both endpoints of a channel crashed before either reopened the FIFO.** When
   one endpoint of a channel crashes, nothing is lost: the other holds the FIFO
   open, and what the writer had sent and the reader had not yet read waits in
-  it. A relaunched node holds its FIFOs from the first step of its recovery,
+  it. That now also covers what the writer had only numbered and queued but not
+  yet written when it crashed, which used to be destroyed with no trace: the
+  checkpoint's outbound backlog carries it, and recovery sends it again before
+  anything else (fixed 2026-09-22, 5.4). A relaunched node holds its FIFOs
+  from the first step of its recovery,
   before it restores its checkpoint or replays its input log, until it dies. So
   only if the second endpoint crashes before the first has been relaunched and
   has reopened the FIFO, which takes the time to notice the crash and start the
@@ -1566,7 +1583,43 @@ replayed nothing. All five were verified with the real classes and are fixed
        holds `1, 2, 3, 4, 5`, the relaunched relay's replay regenerating `4`
        and `5` and the sink correctly recognizing them as duplicates.
      - 5.4 The checkpoint carries the outputs that the writer thread had not yet
-       written, and recovery sends them again before the replay.
+       written, and recovery sends them again before the replay. **Done
+       2026-09-22**: `send_data` appends the line it queues to `_unwritten`,
+       per output port, before it can be written; the writer thread's own
+       loop calls a new hook, `_on_written`, after every line it finishes,
+       which leaves the backlog if the line is the oldest one still queued
+       for that port (always true, a queue being FIFO). A round's capture
+       takes a decoded copy, `_barrier_out_backlog`, the same isolation the
+       other counters already need (a reader thread's writer counterpart can
+       confirm a later line while the round stays open); the checkpoint's
+       `out_backlog` is restored before anything else is sent, by
+       `_restore_out_backlog`, which re-enqueues each line with its original
+       number, ahead of what a replay sends again. Over
+       `OUT_BACKLOG_MAX_BYTES` (8 MiB by default, a new decision, not
+       previously fixed), `_save_checkpoint` writes nothing and warns loudly
+       instead of growing the file without bound; the round still closes and
+       a halt still signals shutdown, since the previous checkpoint plus a
+       longer replay cover it. 18 new tests in the words of the guarantee
+       (`send_data` backlogs a line before anything can write it; a written
+       line leaves the backlog; the checkpoint carries only what is still
+       unwritten at the capture, not what a concurrent write confirms after
+       it; a capture is a copy, not a live view; over the cap nothing is
+       written and a halt still signals shutdown regardless; `run()`
+       restores the backlog and it reaches a neighbor, ahead of the replay),
+       checked against 8 mutants (`send_data` not backlogging, the writer
+       hook never popping or matching the wrong line, the capture aliasing
+       the live backlog, the checkpoint never writing it, `run()` never
+       restoring it, the cap check inverted, halt not firing when the write
+       is skipped), all killed. Checked with a real `debasher_exec` run: the
+       same finding that opened this whole step (1c: a slow neighbor fills
+       the pipe, so part of what a node has already numbered stays only in
+       memory) reproduced end to end, a relay forwarding to a sink slow to
+       start, `1` to `8` sent, `5` to `8` still in the backlog when a
+       snapshot captures relay (`out_seq` `{outf: 8}`, `out_backlog` `outf`
+       holding `5, 6, 7, 8`), relay killed and relaunched: the sink receives
+       `1` to `8`, none missing, none duplicated, closing the gap that 1c
+       found (a real relay under the same conditions had delivered `1, 2, 3,
+       4` only, silently losing `5` to `8`, before this piece existed).
      - 5.5 A gap in the numbers of a channel is an error.
      - 5.6 `CLOSE` carries the last number.
   6. The chaos test of the Contract.

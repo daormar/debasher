@@ -473,7 +473,17 @@ class _PortWorker:
                     _write_all(wfd, encode_close() + "\n")
                 break
             _write_all(wfd, item + "\n")
+            self._on_written(tag, item)
         self.log.debug("writer for %r stopped", tag)
+
+    def _on_written(self, tag, item):
+        """
+        Called with every item once the writer thread has finished writing
+        it (never for the leading HELLO or a closing CLOSE, neither of which
+        a subclass ever needs to track). The base class has no use for it;
+        FBPProcess overrides it to know which of what send_data numbered is
+        still only in memory (see _unwritten, G5's outbound backlog).
+        """
 
     def _brain_loop(self):
         raise NotImplementedError

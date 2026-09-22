@@ -43,7 +43,8 @@ class _BarrierWorker(lib.FBPProcess):
         self.received.append((port_name, packet))
 
     def _on_epoch_closed(
-        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
+        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
+        out_backlog
     ):
         self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
@@ -67,7 +68,8 @@ class _OnePort(lib.FBPProcess):
         return {"marker": "initial"}
 
     def _on_epoch_closed(
-        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
+        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
+        out_backlog
     ):
         self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
@@ -83,7 +85,8 @@ class _Root(lib.FBPProcess):
         return {}
 
     def _on_epoch_closed(
-        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
+        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
+        out_backlog
     ):
         self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 
@@ -357,7 +360,8 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
             return self.opts["execdir"]
 
         def _on_epoch_closed(
-            self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq
+            self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
+            out_backlog
         ):
             self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
 

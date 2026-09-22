@@ -55,17 +55,19 @@ def test_load_latest_checkpoint_returns_none_when_the_dir_is_empty(execdir):
 
 def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [], {}, {})
-    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [], {}, {})
+    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [], {}, {}, {})
+    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [], {}, {}, {})
 
-    epoch, node_state, capture_pos, closed_ports, out_seq, last_seq = proc._load_latest_checkpoint()
+    epoch, node_state, capture_pos, closed_ports, out_seq, last_seq, out_backlog = (
+        proc._load_latest_checkpoint()
+    )
     assert epoch == 1
     assert node_state == {"marker": "new"}
 
 
 def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -79,7 +81,7 @@ def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
 
 def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_closed_ports(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -93,7 +95,7 @@ def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_closed_ports(ex
 
 def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_seq(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -107,7 +109,7 @@ def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_seq(execdir
 
 def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_last_seq(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -116,6 +118,20 @@ def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_last_seq(execdi
         json.dump(data, f)
 
     with pytest.raises(KeyError, match="last_seq"):
+        proc._load_latest_checkpoint()
+
+
+def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_backlog(execdir):
+    proc = _Node(opts={})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
+    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
+    with open(checkpoint_path) as f:
+        data = json.load(f)
+    del data["out_backlog"]
+    with open(checkpoint_path, "w") as f:
+        json.dump(data, f)
+
+    with pytest.raises(KeyError, match="out_backlog"):
         proc._load_latest_checkpoint()
 
 
@@ -136,7 +152,7 @@ def test_run_skips_restore_state_and_starts_with_defaults_when_no_checkpoint(exe
 
 def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(4, {"marker": "restored"}, {}, 0, [], {"outf": 3}, {"inf": 2})
+    proc._save_checkpoint(4, {"marker": "restored"}, {}, 0, [], {"outf": 3}, {"inf": 2}, {})
 
     # A second instance is what actually "restarts": the first one
     # above only exists here to seed the checkpoint file on disk.
@@ -184,6 +200,53 @@ class _Relay(_Node):
 
     def process_data(self, port_name, packet):
         self.send_data("outf", packet)
+
+
+def test_restore_out_backlog_queues_the_original_lines_with_their_own_numbers():
+    proc = _Relay(opts={"inf": "/dev/null", "outf": "/dev/null"})
+
+    proc._restore_out_backlog({"outf": [{"seq": 4, "payload": "d"}, {"seq": 5, "payload": "e"}]})
+
+    assert [
+        lib.decode_envelope(line) for line in list(proc._outbound_queues["outf"].queue)
+    ] == [
+        lib.Envelope(type="DATA", payload="d", seq=4),
+        lib.Envelope(type="DATA", payload="e", seq=5),
+    ]
+    assert proc._unwritten["outf"] == [
+        (4, lib.encode_data("d", seq=4)),
+        (5, lib.encode_data("e", seq=5)),
+    ]
+
+
+def test_run_restores_the_outbound_backlog_and_it_reaches_a_neighbor(execdir):
+    out_fifo = execdir / "out.fifo"
+    os.mkfifo(out_fifo)
+    # A read end held here keeps what the node wrote in the pipe once it is gone.
+    rfd = os.open(out_fifo, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        proc = _Relay(opts={"inf": "/dev/null", "outf": str(out_fifo)})
+        proc._save_checkpoint(
+            0, {}, {}, 0, [], {"outf": 5}, {}, {"outf": [{"seq": 4, "payload": "d"}, {"seq": 5, "payload": "e"}]}
+        )
+
+        restarted = _Relay(opts={"inf": "/dev/null", "outf": str(out_fifo)})
+        run_thread = threading.Thread(target=restarted.run, daemon=True)
+        run_thread.start()
+
+        assert _wait_until(lambda: restarted._brain_thread is not None and restarted._brain_thread.is_alive())
+        restarted._halted.set()
+        assert _wait_until(lambda: not restarted._brain_thread.is_alive())
+
+        sent = os.read(rfd, 1 << 16).decode().split("\n")
+    finally:
+        os.close(rfd)
+
+    envelopes = [lib.decode_envelope(line) for line in sent if line]
+    assert [e for e in envelopes if e.type == "DATA"] == [
+        lib.Envelope(type="DATA", payload="d", seq=4),
+        lib.Envelope(type="DATA", payload="e", seq=5),
+    ]
 
 
 def test_an_ordered_halt_says_nothing_after_the_marker(execdir):

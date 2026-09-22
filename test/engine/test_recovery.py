@@ -316,13 +316,13 @@ def test_a_retained_checkpoint_that_cannot_be_read_aborts_the_prune_with_an_erro
 
     node = _Keeping(opts=_opts(tmp_path))
     node._open_input_log(0)
-    node._save_checkpoint(0, {"seen": []}, {}, 0, [], {}, {})
-    node._save_checkpoint(1, {"seen": []}, {}, 0, [], {}, {})
+    node._save_checkpoint(0, {"seen": []}, {}, 0, [], {}, {}, {})
+    node._save_checkpoint(1, {"seen": []}, {}, 0, [], {}, {}, {})
     # Saving epoch 2 keeps epochs 2 and 1, so epoch 1 is the oldest one kept.
     (tmp_path / "node" / "checkpoints" / "1.json").write_text("not json")
 
     with pytest.raises(RuntimeError, match="cannot read"):
-        node._save_checkpoint(2, {"seen": []}, {}, 0, [], {}, {})
+        node._save_checkpoint(2, {"seen": []}, {}, 0, [], {}, {}, {})
     # The checkpoint that was being saved is on disk all the same.
     assert (tmp_path / "node" / "checkpoints" / "2.json").exists()
 
@@ -747,6 +747,11 @@ def test_what_a_writer_sent_to_a_relaunched_reader_survives_the_writer_crashing_
 def test_what_a_relaunched_writer_had_in_its_fifo_survives_its_reader_crashing_while_it_recovers(tmp_path, step):
     opts = _opts(tmp_path, ("inf", "outf"))
     live = _HeldRelay(opts=opts)
+    # _process() drives the brain loop directly, with no writer thread of its
+    # own running: send_data("outf", 1) numbers and queues "1" (seq 1) but
+    # nothing ever writes it, so the checkpoint that the BARRIER closes right
+    # after finds it still in the outbound backlog (G5). "3" arrives after
+    # that capture and is only in the input log.
     _process(live, [_data("inf", 1), ("inf", lib.TYPE_BARRIER, _ROUND), _data("inf", 3)])
     _crash(live)
 
@@ -767,8 +772,11 @@ def test_what_a_relaunched_writer_had_in_its_fifo_survives_its_reader_crashing_w
 
     runner = _recover_held(relaunched, step, the_reader_crashes)
     try:
-        # What the crashed writer had sent, and then what the recovery sends again.
-        assert _drain_data(opts["outf"], 4) == [10, 20, 30, 3]
+        # What the crashed writer had sent (10, 20, 30), then what the
+        # checkpoint's outbound backlog re-sends before anything else (1,
+        # never written the first time), then what the replay of the input
+        # log sends again (3).
+        assert _drain_data(opts["outf"], 5) == [10, 20, 30, 1, 3]
     finally:
         relaunched._halted.set()
         runner.join(10)

@@ -178,9 +178,9 @@ def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has
 
 def test_load_latest_checkpoint_returns_last_seq():
     proc = _Recorder(opts=_OPTS)
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {"inf": 4})
+    proc._save_checkpoint(0, {}, {}, 0, [], {}, {"inf": 4}, {})
 
-    _, _, _, _, _, last_seq = proc._load_latest_checkpoint()
+    _, _, _, _, _, last_seq, _ = proc._load_latest_checkpoint()
     assert last_seq == {"inf": 4}
 
 
@@ -191,10 +191,11 @@ def test_a_restored_node_drops_what_its_own_log_already_covers():
     live = _Recorder(opts=_OPTS)
     _arrive(live, "inf", "a", seq=1)
     _arrive(live, "inf", "b", seq=2)
-    live._save_checkpoint(0, live.capture_node_state(), {}, 0, [], {}, {})  # last_seq: {} (nothing processed yet)
+    # last_seq: {} (nothing processed yet)
+    live._save_checkpoint(0, live.capture_node_state(), {}, 0, [], {}, {}, {})
 
     relaunched = _Recorder(opts=_OPTS)
-    _, node_state, capture_pos, closed_ports, out_seq, last_seq = relaunched._load_latest_checkpoint()
+    _, node_state, capture_pos, closed_ports, out_seq, last_seq, _ = relaunched._load_latest_checkpoint()
     relaunched.restore_node_state(node_state)
     relaunched._closed_ports = set(closed_ports)
     relaunched._out_seq = dict(out_seq)
