@@ -881,3 +881,92 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
         for name, delay in kills
     ) + ")"
     _assert_trace_matches(tailer.records, k, context)
+
+
+@pytest.mark.parametrize("run_index", range(10))
+def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or_duplicate(
+    outdir, run_index
+):
+    """
+    "run... repeatedly under kill -9 of random nodes at random moments...
+    [including] moments in which a snapshot round is open" (Acceptance).
+
+    fanin, this program's only initiator, is the only node with a genuine
+    window between opening its own round (the instant it relays a manual
+    start_snapshot trigger) and closing it (once loop_in's marker
+    completes the round trip through loop): every other node's own round
+    closes atomically, in the same step that its one pending port's
+    marker arrives, so there is nothing to land a kill inside for them.
+    `loop` is briefly `SIGSTOP`ped first (well under
+    `HEARTBEAT_TIMEOUT_SECS`, so the `Supervisor`'s own heartbeat-timeout
+    machinery never notices or interferes) so the round trip cannot
+    complete no matter how long fanin's round stays open, `fanin` is
+    killed at its own randomly chosen moment inside that window, then
+    `loop` is resumed.
+
+    Confirmed separately, with a real `debasher_exec` run (see the design
+    doc's Conformance status and Loose ends), that this exact case, a
+    crash during an ordinary (non-halt) round, recovers cleanly: `fanin`
+    simply forgets the open round on relaunch and a later marker reopens
+    it. A crash during a HALT round instead hangs the whole program
+    forever (a real, different, already-recorded gap this piece
+    deliberately does not exercise, since there is no clean pass
+    criterion for a run that is expected to hang).
+    """
+    k = 60
+    interval = 0.03
+    rng = random.Random(run_index)
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+
+    ext_fifo = _find_fifo(outdir, "fanin_ext")
+    manual_fifo = _find_fifo(outdir, "sup_manual")
+
+    feeder = _ExtFeeder(ext_fifo, k, interval)
+    feeder.start()
+
+    time.sleep(rng.uniform(0.1, 0.5))
+    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
+    os.killpg(loop_pid, signal.SIGSTOP)
+
+    _write_line(
+        manual_fifo, {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}}
+    )
+
+    # Anywhere in this range lands inside fanin's still-open round: loop
+    # cannot complete the round trip while stopped, and this whole window
+    # stays comfortably under HEARTBEAT_TIMEOUT_SECS (3s), so the
+    # Supervisor never has a chance to notice or relaunch loop itself.
+    open_round_delay = rng.uniform(0.02, 1.5)
+    time.sleep(open_round_delay)
+
+    fanin_old_pid = int(_read_pid(_id_file(outdir, "fanin")))
+    os.killpg(fanin_old_pid, signal.SIGKILL)
+
+    os.killpg(loop_pid, signal.SIGCONT)
+
+    fanin_new_pid = _wait_for_relaunch(outdir, "fanin", str(fanin_old_pid))
+    assert fanin_new_pid is not None, f"fanin (pid {fanin_old_pid}) was never relaunched"
+
+    feeder.join(timeout=60)
+    assert not feeder.is_alive(), "feeder did not finish sending"
+    if feeder.error is not None:
+        raise feeder.error
+
+    # Same deliberate grace period as the other kill/relaunch pieces
+    # above, and for the same reason: the separate, already-recorded
+    # ordered-shutdown G2 gap, not what this test is about.
+    time.sleep(1.0)
+
+    _write_line(manual_fifo, {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}})
+    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    context = (
+        f" (killed fanin pid {fanin_old_pid} -> {fanin_new_pid}, "
+        f"{open_round_delay:.2f}s into its open round)"
+    )
+    _assert_trace_matches(tailer.records, k, context)

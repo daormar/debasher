@@ -635,9 +635,11 @@ above.
 
 **Status (2026-09-22): the reference program, the no-failure baseline, a
 single-node-kill driver, a channel-safe two-node-kill driver, an
-engineered-gap driver for one adjacent pair and a random-timing driver for
-the other adjacent pair are built and tested; killing during an open round
-and the kill/relaunch bookkeeping are not.**
+engineered-gap driver for one adjacent pair, a random-timing driver for the
+other adjacent pair and an open-round-kill driver are built and tested. Only
+killing several nodes at once (see below) is left, and it is optional: what
+motivated the kill/relaunch bookkeeping this section used to list here
+turned out not to be needed by any piece actually built (see below).**
 `test/engine/debasher_chaos_ref.sh` is the reference program: `fanin` (the
 fan-in node) reads `ext`, fed from outside the program (`EXTERNAL_PORTS`),
 and `loop_in`, fed by `loop`, which simply echoes back to `fanin` whatever
@@ -652,7 +654,7 @@ from outside.
 
 `test/engine/test_chaos.py` (skipped unless `DEBASHER_RUN_CHAOS_TEST` is set,
 since it is slow and disruptive on purpose: real `debasher_exec`, no mocks)
-has five pieces so far. The "run once with no failures" step: 20 messages
+has six pieces so far. The "run once with no failures" step: 20 messages
 through `ext`, a `start_snapshot` and a `shutdown` in the middle of the run,
 the resulting trace checked against the criterion above. And a first
 kill/relaunch piece, ten repeats of killing exactly one of `fanin`, `loop` or
@@ -790,8 +792,53 @@ relaunched, instead of only right before the `shutdown`, so no more
 rounds compete with whatever is still catching up; 30 repeats since, in
 three separate runs, all clean.
 
-Not built yet: killing during an open round, and the bookkeeping of when
-each node was killed and relaunched.
+A fifth kill/relaunch piece covers "moments in which a snapshot round is
+open" from the top of this section directly: `fanin`, this program's only
+initiator, is the only node with a genuine window between opening its own
+round (the instant it relays a manual `start_snapshot` trigger) and
+closing it (once `loop_in`'s marker completes the round trip through
+`loop`), since every other node's own round closes atomically, in the
+same step its one pending port's marker arrives, leaving nothing to land
+a kill inside. Ten repeats: `loop` briefly `SIGSTOP`ped first (well under
+`HEARTBEAT_TIMEOUT_SECS`, so the round trip cannot complete no matter how
+long the window is held open, and short enough that the `Supervisor`'s
+own heartbeat-timeout machinery never notices or interferes), `fanin`
+killed at its own randomly chosen moment inside that window, `loop`
+resumed. Confirmed, and built on, an ordinary (non-halt) round crash: see
+the new Loose ends annotation below and the "A crash during a halt..."
+Conformance status entry, both added by building this piece. Its own
+mutation check needed two tries: the first mutant (an off-by-one on
+`_last_epoch` when a checkpoint restores) survived, and turned out to be
+equivalent, not a weak test, since `fanin` is both the node whose epoch
+tracking was corrupted and the sole initiator deciding every later
+epoch's number, so it silently skips the one poisoned number and never
+notices; the second (a relaunched node's own barrier handling unable to
+open any round beyond the very first one it ever sees) was killed, the
+run hanging until the final `shutdown`'s own halt round timed out
+waiting for `sup.finished`, confirmed on a single repeat rather than all
+ten, since a hanging mutant makes every repeat slow.
+
+The bookkeeping of when each node was killed and relaunched, once listed
+here as still to build, turned out not to be needed by any piece actually
+built. It was meant to answer, from recorded kill/relaunch timestamps
+alone, whether a run's two chosen nodes had overlapping downtimes and so
+could legitimately have touched the "both endpoints of a channel crashed"
+limit. In practice every pair resolved that question a different way,
+without ever needing the timestamps: `loop`+`sink` share no channel, so
+the answer is always no, provably, with nothing to compute; `fanin`+`loop`
+share a channel but cannot touch the limit either, also provably, since
+closing a checkpoint on it needs both of them cooperating (see above); and
+`fanin`+`sink` is engineered on purpose, so the answer is always yes, by
+construction, not by measurement. What the criterion actually needs when a
+G8 error does show up, examining it to confirm it is well-formed and
+matches the trace, is `_find_g8_error` and its own cross-check
+(`_assert_engineered_gap_trace`), already built for that piece and directly
+reusable by any future one.
+
+Not built yet, and optional rather than required to close this section:
+killing several nodes at once (beyond a pair), the only reading of the
+opening paragraph's own "several at once" left uncovered for this
+reference program's small, 3-node set of killable nodes.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
 guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through
@@ -996,6 +1043,33 @@ any guarantee is relied on.
   `sup.finished` once a node has been given up on, only for the reachable
   part of the graph to log as finished, and leaves teardown to
   `debasher_stop`.
+
+- **A crash during a halt can leave the program permanently half-halted:
+  the Loose ends worry of 2026-09-21 ("nobody sends it another
+  `shutdown`"), confirmed with a real `debasher_exec` run on 2026-09-22 by
+  the chaos test's open-round piece (see "Acceptance"), not fixed.**
+  `fanin`, this program's only initiator, opens its own halt round the
+  moment it relays the `shutdown` trigger, and that round only closes once
+  `loop_in`'s marker completes the round trip through `loop`; killed in
+  that window (`loop` briefly `SIGSTOP`ped first, so the round trip cannot
+  complete before the kill), the relaunched `fanin` has no round open and
+  nothing left to reopen it, since the `shutdown` that triggered it was a
+  one-time message from an external actor, not something resent on a
+  timer or on recovery. `loop` and `sink`, unaffected, both log "finished
+  cleanly"; `fanin` never does, and `sup.finished` does not appear even 40
+  s later. The same construction with an ordinary (non-halt) round instead
+  does not hang: `fanin` simply forgets the open round on relaunch and a
+  later marker reopens it, exactly as reasoned in Loose ends, confirmed by
+  the same run (see "Acceptance" for the piece built on this case, since
+  it is the one that actually recovers).
+
+  This is the same class of problem as the G2 ordered-shutdown gap above,
+  and the third candidate noted there (treating a halt exactly like an
+  ordinary snapshot, with an external tool deciding when it is safe to
+  stop by signal, outside the message protocol) would very likely fix
+  this too, for the same reason: a node crashing mid-halt would then fall
+  into the already-recoverable "crash during an ordinary round" case
+  instead of losing a one-time message nothing ever resends.
 
 ## 1. Control envelope
 
@@ -2486,8 +2560,8 @@ designed.
 - **A crash during a round** aborts it, and the mechanism is not designed. What
   exists: a node that comes back has no round open, and the next round of a
   newer epoch replaces a round that another node was left with open (section 2).
-  A real crash during a round has not been tried. What else it can cause, found
-  on 2026-09-21 by reading the code (measured only where it says so):
+  What it can cause, found on 2026-09-21 by reading the code (measured only
+  where it says so):
   - A marker that is lost keeps the round of its receiver open. A node that
     crashes after it has captured its state and enqueued its marker, and before
     its writer thread has written it, leaves the next node waiting for it. At a
@@ -2505,24 +2579,28 @@ designed.
     whatever loses a marker, be it a message read from a FIFO and not yet
     written to the input log, or a FIFO destroyed with both its endpoints down
     (see the Contract's limits).
-  - A node that crashes between capturing and closing a round forgets it. On
-    coming back it has no round open, and the markers that arrive later open it
-    again, capture at another position and forward another marker. A repeated
-    marker is harmless downstream, but the two captures are not the same
-    instant, so the checkpoints of that epoch do not form a consistent cut,
-    which matters for a global rollback and not for localized recovery.
-    Reasoned, not run.
-  - A crash during a halt can leave the program half halted. The nodes that
-    saved their checkpoint for the halt finish with code 0 and count as done for
-    the `Supervisor`; the node that came back runs on from an earlier checkpoint
-    with no round open, and nobody sends it another `shutdown`. Reasoned, not
-    run.
+  - **A node that crashes between capturing and closing an ordinary round
+    forgets it, and recovers cleanly: confirmed with a real `debasher_exec`
+    run on 2026-09-22 by the chaos test's open-round piece** (see
+    "Acceptance"). On coming back it has no round open, and the markers that
+    arrive later open it again, capture at another position and forward
+    another marker. A repeated marker is harmless downstream, but the two
+    captures are not the same instant, so the checkpoints of that epoch do
+    not form a consistent cut, which matters for a global rollback and not
+    for localized recovery (reasoned, not run: the chaos test's own
+    criterion does not check for a consistent cut, only for the trace).
+  - **A crash during a halt can leave the program permanently half halted:
+    confirmed, moved to the Contract's Conformance status** (see "A crash
+    during a halt can leave the program permanently half-halted" above),
+    since it is a real gap, not just a loose end.
 
   Candidate mechanisms, none designed: a time limit at the initiators after
   which an open round is abandoned (it heals the loss of a marker whatever its
   cause), re-sending on recovery the marker of the epoch that the node restores
   (a marker of a round that is already over is ignored), and a rule for the
-  halt.
+  halt (see the Conformance status entry's own third candidate, which folds
+  the halt case into the ordinary-round one instead of giving it its own
+  rule).
 - **`debasher_stop`, `debasher_status` and `debasher_stats` did not see a
   resident program launched without `--sched BUILTIN`: fixed on 2026-09-20, for
   every program.** Found with real runs: `debasher_exec` forced the built-in
@@ -2626,20 +2704,39 @@ designed.
   itself, nor raise an error. No guarantee is broken (G1 to G8): nothing is
   lost or duplicated, the node just keeps using more memory, unbounded and
   unnoticed. Found on 2026-09-22, reasoned from the code, not run.
-- **An unexplained `sup.finished` timeout, seen so far only when running
-  the whole chaos test file together.** Twice on 2026-09-22, in two
-  separate full runs of `test_chaos.py` (36 repeats across every piece,
-  back to back), one single repeat's `shutdown` never resolved within
-  60 s: once in the single-node-kill piece, once in the `loop`+`sink`
-  piece, both already-passing pieces unmodified that day, in neither case
-  a repeat whose own design should ever need a node to give up (a lone
-  kill, or a kill of a pair sharing no channel, both always recover on
-  their first relaunch). Never seen running either piece by itself,
-  repeatedly, in isolation. Not investigated: most likely just system
-  load from dozens of real `debasher_exec` launches already run in the
-  same process pushing one recovery past the 60 s wait, but recorded here
-  rather than assumed, since the same symptom is also the confirmed,
-  structural one right above it, in a different piece, for a real reason.
+- **Under heavy system load, `HEARTBEAT_TIMEOUT_SECS` (3 s) is not always
+  margin enough, and the Supervisor's own relaunch mechanism turns a
+  scheduling delay into a real `kill -9` that can land inside either of
+  the two round-related gaps already on record above, with no deliberate
+  kill anywhere in the test.** Seen three times so far, only when running
+  the whole `test_chaos.py` file together (46 repeats across every piece,
+  back to back, three separate full runs on 2026-09-22): twice as a
+  `sup.finished` timeout with no explanation at the time (once in the
+  single-node-kill piece, once in the `loop`+`sink` piece, neither a
+  repeat whose own design should ever need a node to give up); the third
+  time, in the single-node-kill piece again, with the actual mechanism
+  legible in `sup`'s own log: `fanin` saved its epoch 1 checkpoint, then
+  simply stopped appearing (no crash, no traceback in its own
+  `.sched_out`) while `loop` and `sink` carried on through two more
+  snapshot rounds without it and then "finished cleanly", and `fanin` was
+  declared down almost exactly `HEARTBEAT_TIMEOUT_SECS` after its last
+  checkpoint, consistent with a perfectly healthy process starved of CPU
+  by the other 45 concurrently-run repeats (or by an unrelated mutation
+  check running in parallel that same time) rather than an actual crash.
+  `debasher_builtin_sched::_launch`'s own "kill any stale PID before
+  relaunching" step (see the G7 reconnection fix) then turns that
+  scheduling delay into a genuine `kill -9`, at whatever moment it lands:
+  inside a halt round, it is "A crash during a halt can leave the program
+  permanently half-halted" above; inside the ordered-shutdown race, it is
+  the G2 ordered-shutdown gap. In the SAME run that showed the legible
+  `fanin` timeline, the concurrently-running `loop`+`sink` piece lost
+  exactly 9 values off the end of `loop_seq` with no error reported,
+  matching G2's own signature exactly. Never seen running any single
+  piece by itself, repeatedly, in isolation: the load, not any one
+  piece's own construction, is what triggers it. Not a third gap:
+  reasoned from real log timing, not from a dedicated, controlled repro
+  (deliberately starving a node of CPU and watching it happen), so the
+  causal chain above is inferred, strongly, not proven letter for letter.
 
 ## 7. Future work
 
