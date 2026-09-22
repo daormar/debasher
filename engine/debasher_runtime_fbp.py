@@ -371,7 +371,9 @@ class FBPProcess(_PortWorker):
             # as a duplicate is dropped before either. A DATA with no number
             # (from a source, or a plain _PortWorker) is not part of the
             # numbering and is always accepted; only DATA is sequenced
-            # (BARRIER/INTERACT/CLOSE carry none).
+            # (BARRIER/INTERACT carry no seq of their own; CLOSE carries the
+            # sender's last one instead, checked below, once CLOSE itself is
+            # durably recorded, since nothing sends it twice).
             if envelope.type == TYPE_DATA and envelope.seq is not None:
                 accepted = self._accepted_seq.get(tag, 0)
                 if envelope.seq <= accepted:
@@ -400,6 +402,22 @@ class FBPProcess(_PortWorker):
             # heartbeat notices: the item that was being read is not queued.
             pos = self._input_log.append(tag, line)
             self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
+            # G5/G8: a CLOSE that carries the sender's last number is checked
+            # only now, after it is itself durably logged and queued, unlike
+            # a DATA gap: nothing ever sends CLOSE a second time, so losing
+            # it here to an early raise would leave this port's writer
+            # looking unfinished forever, rather than reporting one lost
+            # message and moving on.
+            if envelope.type == TYPE_CLOSE:
+                claimed = envelope.payload.get("last_seq")
+                accepted = self._accepted_seq.get(tag, 0)
+                if claimed is not None and claimed > accepted:
+                    missing = f"{accepted + 1}" if claimed == accepted + 1 else f"{accepted + 1} to {claimed}"
+                    raise ValueError(
+                        f"{type(self).__name__}: {tag!r} closed for good after sending up "
+                        f"to {claimed}, but only {accepted} was ever accepted here, "
+                        f"missing {missing}"
+                    )
 
     def _brain_loop(self):
         while True:
@@ -486,6 +504,15 @@ class FBPProcess(_PortWorker):
             backlog = self._unwritten.get(tag)
             if backlog and backlog[0][1] == item:
                 backlog.pop(0)
+
+    def _close_payload(self, tag):
+        """
+        `_out_seq[tag]`, 0 if this port never sent anything: by the time a
+        writer thread is about to send CLOSE, the brain thread has already
+        stopped (a finished writer means run() is on its way out), so
+        nothing can bump this again and reading it here needs no lock (G5).
+        """
+        return self._out_seq.get(tag, 0)
 
     def _restore_out_backlog(self, out_backlog):
         """

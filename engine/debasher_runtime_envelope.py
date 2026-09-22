@@ -84,7 +84,7 @@ def encode_interact(command, args=None):
     return _encode(TYPE_INTERACT, {"command": command, "args": args or {}})
 
 
-def encode_close():
+def encode_close(last_seq=None):
     """
     Encodes a CLOSE envelope: sent by a writer, as its very last line,
     when it has finished for good. A reader that sees it knows nothing
@@ -92,8 +92,15 @@ def encode_close():
     it, silence means either that the writer finished or that it stopped
     and will be relaunched (after a crash, or after a halt), and nothing
     in the fifo tells the two apart. That is why a halt sends none.
+    `last_seq` is the sender's own count of the last numbered `DATA` it
+    ever sent on this channel (G5): the receiver can then tell a message
+    lost between there and here (G8) from a channel that simply never
+    carried that many, which a later gap in the numbers could otherwise
+    never reveal, since none is coming after a CLOSE. Left out (an empty
+    payload) when the sender is not one that numbers what it sends.
     """
-    return _encode(TYPE_CLOSE, {})
+    payload = {} if last_seq is None else {"last_seq": last_seq}
+    return _encode(TYPE_CLOSE, payload)
 
 
 def encode_hello():

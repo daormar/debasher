@@ -470,7 +470,7 @@ class _PortWorker:
             item = out_queue.get()
             if item is _STOP:
                 if self._close_on_stop:
-                    _write_all(wfd, encode_close() + "\n")
+                    _write_all(wfd, encode_close(self._close_payload(tag)) + "\n")
                 break
             _write_all(wfd, item + "\n")
             self._on_written(tag, item)
@@ -484,6 +484,14 @@ class _PortWorker:
         FBPProcess overrides it to know which of what send_data numbered is
         still only in memory (see _unwritten, G5's outbound backlog).
         """
+
+    def _close_payload(self, tag):
+        """
+        The `last_seq` that this port's own CLOSE carries (see encode_close),
+        or None for an empty payload. The base class has no counter of its
+        own to report; FBPProcess overrides it with `_out_seq[tag]` (G5).
+        """
+        return None
 
     def _brain_loop(self):
         raise NotImplementedError

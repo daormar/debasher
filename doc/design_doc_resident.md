@@ -161,6 +161,12 @@ mutation check, durability level) is defined in the Contract, where it is used.
   a node that closed its channel may be relaunched and must be heard).
   `closed_ports` is the checkpoint field that lists the input ports whose
   `CLOSE` the brain thread had processed when the round captured the node state.
+  A sender that numbers what it sends (G5) puts its `out_seq` for that channel
+  in `CLOSE`'s own payload, `last_seq`: the receiver checks it against what it
+  has accepted, and a mismatch is a lost message that nothing else would ever
+  reveal, since nothing comes after a `CLOSE` (G8, decided and done
+  2026-09-22). Left out (an empty payload) when the sender does not number
+  what it sends.
 - **`HELLO`, resync line** (línea de resincronización): the first thing every
   incarnation of a writer sends, in one write together with a leading newline.
   The newline ends any fragment that the previous incarnation left when it was
@@ -619,9 +625,9 @@ does not measure coverage.
 
 ### Conformance status today: gaps between this contract and the code (2026-09-19)
 
-Each one was verified by running the real classes, not only by reading the code.
-The ones marked fixed were fixed on 2026-09-20; the others are to be fixed
-before any guarantee is relied on.
+Each one was verified by running the real classes, not only by reading the
+code. The ones marked fixed give the date; the others are to be fixed before
+any guarantee is relied on.
 
 - **G2 was violated, fixed on 2026-09-20.** `DATA` arriving on a port that was
   still pending in an open barrier round was stored in `channel_state` but never
@@ -657,9 +663,23 @@ before any guarantee is relied on.
   the drain replayed port by port, so the order across ports was lost (processed
   `A1 B2 A3 B4`, replayed `A1 A3 B2 B4`). Now there is one input log per node,
   in queue order, and replay follows it.
-- **G5 not implemented.** Replay after a crash re-emits the outputs the node had
-  already sent, and a running neighbor receives them again (verified with a real
-  run). Mechanism decided on 2026-09-20.
+- **G5 not implemented, fixed on 2026-09-22.** Replay after a crash re-emitted
+  the outputs the node had already sent, and a running neighbor received them
+  again (verified with a real run). Mechanism decided on 2026-09-20, built in
+  six pieces between 2026-09-21 and 2026-09-22 (see the order of implementation
+  in section 3): the sender numbers each channel's `DATA` and stores its
+  counters in its checkpoint; the receiver drops a number it has already
+  accepted, before logging or queuing it; a number it skips over is a real
+  loss and raises loudly instead (G8); the checkpoint also carries what the
+  writer thread had not yet written when a round captured, and recovery sends
+  it again with the same numbers before anything else. Checked with a real
+  run: a relay whose neighbor was still recovering had 4 of 8 messages still
+  unwritten when a snapshot captured it; killed and relaunched, its neighbor
+  received all 8, where without this piece those 4 would have been lost for
+  good (reasoned from the same run: nothing else regenerates what a crash
+  destroys in the outbound queue). `CLOSE` carries the sender's own last
+  number, so a message lost right before a channel finishes for good is not
+  silent either, since nothing else would ever reveal it.
 - **G7 was partly violated, fixed on 2026-09-20.** A `FBPProcess` whose input
   writer sent `CLOSE` ended that reader thread and then stopped sending
   heartbeats, so a healthy consumer whose producer finished for good would have
@@ -1211,11 +1231,12 @@ replayed nothing. All five were verified with the real classes and are fixed
   - *Checkpoint schema.* Version 2 adds `capture_pos`: the position of the
     item whose processing captured the node state (a peer's first marker, or the
     `INTERACT` that started the round), taken when the round opens and not when
-    it closes. `closed_ports` joined it later the same day, and `out_seq` and
-    `last_seq` will join the same version in their own steps, since the branch
-    is not released. A node restored from a checkpoint numbers after its
-    `capture_pos` (from the last piece on, after the larger of that and the
-    last record of its log). A checkpoint of version 1 is refused.
+    it closes. `closed_ports` joined it later the same day; `out_seq`,
+    `last_seq` and `out_backlog` joined the same version in their own later
+    steps, since the branch is not released. A node restored from a checkpoint
+    numbers after its `capture_pos` (from the last piece on, after the larger
+    of that and the last record of its log). A checkpoint of version 1 is
+    refused.
 - **`CLOSE`** means that the writer has finished for good, and only that. **A
   halt sends none (decided and done on 2026-09-20).** Measured with real runs of
   a producer and a consumer that halt, with the earlier behavior: the producer's
@@ -1501,9 +1522,10 @@ replayed nothing. All five were verified with the real classes and are fixed
        ignores the late marker of round 0, closes round 1 when the slow path's
        marker arrives (checkpoint 1) and completes the halt (checkpoint 2), and
        the four nodes finish; the last snapshot has a checkpoint at every node.
-  5. G5: sequence numbers, deduplication and detection of gaps, in six pieces
-     (agreed 2026-09-21; the outbound backlog was added on that date, and the
-     first piece before them because the numbering relies on it):
+  5. G5: sequence numbers, deduplication and detection of gaps. **Done
+     2026-09-22**, in six pieces (agreed 2026-09-21; the outbound backlog was
+     added on that date, and the first piece before them because the
+     numbering relies on it):
      - 5.1 A node sends only inside `process_data`. **Done 2026-09-21**:
        `FBPProcess.send_data` raises unless it is called on the thread that is
        running `process_data`, the brain thread or the one that replays the
@@ -1641,7 +1663,36 @@ replayed nothing. All five were verified with the real classes and are fixed
        scheduler log holding the exact error (`expected 3, got 5, missing 3
        to 4`), the process itself still alive (`debasher_status` reporting
        `IN-PROGRESS`) with only its reader thread gone.
-     - 5.6 `CLOSE` carries the last number.
+     - 5.6 `CLOSE` carries the last number. **Done 2026-09-22**: `encode_close`
+       takes an optional `last_seq`; a writer thread asks a new hook,
+       `_close_payload(tag)` (`None` on the base class, `_out_seq[tag]` on
+       `FBPProcess`), right when it is about to send `CLOSE`, by when the
+       brain thread has already stopped for good, so reading `_out_seq` needs
+       no lock. On arrival, once `CLOSE` is itself durably logged and queued,
+       a claimed `last_seq` above what this channel has accepted is a lost
+       message that nothing would otherwise ever reveal, since nothing comes
+       after a `CLOSE`: it raises there, naming the port and the missing
+       numbers, the same wording 5.5 already uses, but only after `CLOSE`
+       is recorded, not before it, unlike a `DATA` gap: nothing ever sends
+       `CLOSE` a second time, so losing it to an early raise would leave that
+       port looking unfinished forever, in place of reporting one lost
+       message and moving on. 9 new tests in the words of the guarantee
+       (`CLOSE` carries the sender's last number; a plain `_PortWorker`'s
+       carries none; a matching claim is not an error; one above it is,
+       naming the port and the missing numbers; a single missing message
+       has no range; `CLOSE` is logged and queued even though it raises; no
+       claim is never an error; a real reader thread dies from a real lost
+       message, the process staying alive; a halt sends no `CLOSE`, so
+       nothing to check), checked against 5 mutants (the hook never
+       reporting the counter, the check removed, an off-by-one that also
+       flags a matching claim, the raise moved before `CLOSE` is recorded,
+       `encode_close` ignoring `last_seq`), all killed. Checked with a real
+       `debasher_exec` run of a node fed from outside: `1`, `2`, then a
+       `CLOSE` claiming `4` (`3` and `4` never sent), the scheduler log
+       holding the exact error (`closed for good after sending up to 4, but
+       only 2 was ever accepted here, missing 3 to 4`), `CLOSE` itself found
+       durably recorded in the node's own input log, the process still
+       alive with only its reader thread gone.
   6. The chaos test of the Contract.
 
 (Placed right after `FBPProcess` rather than near checkpointing/recovery, and
