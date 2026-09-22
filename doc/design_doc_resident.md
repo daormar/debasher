@@ -1060,11 +1060,12 @@ any guarantee is relied on.
   isolation) surfaced one further, unrelated bug, also found and fixed the
   same day: a leaked `stdout`/`stderr` file descriptor that kept a
   `Supervisor`'s own wrapper script from ever finishing after it relaunched
-  a node (section 4's "Relaunching a downed node"). Kept open on its own,
-  deliberately separate from this entry (its own paragraph, section 4's
-  "Escalation on a permanent node failure"): `Supervisor`'s own escalation
-  after a permanent node failure does not call this tool yet, and until it
-  does, degrades to always falling back to a hard kill.
+  a node (section 4's "Relaunching a downed node"). `Supervisor`'s own
+  escalation after a permanent node failure (section 4's "Escalation on a
+  permanent node failure") now calls this tool too, closed 2026-09-22 (a
+  separate paragraph there, kept apart since it needed its own design
+  decision, `--keep-supervisor`, and surfaced its own further bug, a missing
+  `DEBASHER_BINDIR`): this G2 entry is fully closed.
 
   Two things the tool had to get right, both now done, not just designed.
   First, it waits for every node's marker before sending the stop signal to
@@ -1091,29 +1092,32 @@ any guarantee is relied on.
 
 - **The `Supervisor`'s own resolution after a node gives up may not
   complete: found on 2026-09-22 by the chaos test's engineered-gap piece,
-  not investigated.** After `sink` exhausts `MAX_RELAUNCH_ATTEMPTS` and is
-  given up on, its escalation (`on_node_permanently_failed`) sends
-  `shutdown` to every `TRIGGER_PORT` initiator as designed, and the still-
-  reachable part of the graph does resolve: `fanin` and `loop` both log
-  "finished cleanly" in the `Supervisor`'s own record. But `sup.finished`
-  (the marker the surrounding launch script writes once `Sup().run()`
-  itself returns) was not seen to appear afterward, even 20+ seconds
-  later, in two separate reproductions with a real `debasher_exec` run
-  (once relying only on the automatic escalation, once also sending an
-  explicit manual `shutdown` right after the give-up was logged).
-  Reasoned from the code, not confirmed: `_maybe_resolve` requires both
-  `len(done)+len(given_up)==len(NODE_PORTS)` and `_active_escalations==0`,
-  and the escalation thread's own 1 s poll loop should see the first
-  condition become true shortly after `fanin`/`loop` finish and decrement
-  `_active_escalations` in its `finally` block, which should let `run()`'s
-  `_all_resolved.wait()` return; whether that chain actually completes, or
-  `stop_threads()`'s own unconditional `thread.join(None)` (no timeout) on
-  a `Supervisor` reader thread instead blocks indefinitely, is not yet
-  traced through a real run. Worked around in the chaos test's own
-  engineered-gap driver (see "Acceptance"): it does not wait for
-  `sup.finished` once a node has been given up on, only for the reachable
-  part of the graph to log as finished, and leaves teardown to
-  `debasher_stop`.
+  root-caused and fixed the same day.** After `sink` exhausted
+  `MAX_RELAUNCH_ATTEMPTS` and was given up on, its escalation
+  (`on_node_permanently_failed`, the version that sent `shutdown` to every
+  `TRIGGER_PORT` initiator directly, since replaced, section 4's
+  "Escalation on a permanent node failure") saw the still-
+  reachable part of the graph resolve (`fanin` and `loop` both logged
+  "finished cleanly"), but `sup.finished` (the marker the surrounding
+  launch script writes once `Sup().run()` itself returns) was not seen to
+  appear afterward, even 20+ seconds later, in two separate reproductions
+  with a real `debasher_exec` run. First reasoned about, inconclusively
+  (`_maybe_resolve`'s own two conditions looked like they should have been
+  met), then actually root-caused while building the third candidate's own
+  escalation (section 4's "Escalation on a permanent node failure"): a bare
+  command name (`"debasher_stop_resident"`, and before it the same call's
+  own bare `"debasher_stop"` fallback) relies on `PATH` already including
+  `bin/`, which nothing sets for a launched process, so the escalation
+  thread crashed on `FileNotFoundError` before it could do anything,
+  silently (nothing joins that thread). Fixed by resolving the tool's
+  absolute path from a new `DEBASHER_BINDIR` export
+  (`debasher_builtin_sched::_launch`), the same pattern already used for
+  `debasher_launch_process` via `DEBASHER_LIBEXECDIR`. Confirmed, not just
+  inferred from the shared mechanism: rerunning the exact original
+  scenario that found this gap
+  (`test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recognized_g8_error`,
+  unmodified apart from now also asserting on `sup.finished`) shows it
+  appearing, reliably, across repeated runs.
 
 - **A crash during a halt can leave the program permanently half-halted:
   the Loose ends worry of 2026-09-21 ("nobody sends it another
@@ -2434,7 +2438,7 @@ kept as a record.
   Fixed by also redirecting `stdout`/`stderr` to `DEVNULL` in that same
   `Popen` call.
 
-### Escalation on a permanent node failure
+### Escalation on a permanent node failure: DONE, implemented and tested
 
 A node given up on for good can, in the worst case, have been the only path (in
 the business-data graph) to some other node(s); if so, no ordered shutdown can
@@ -2444,43 +2448,88 @@ than build a second, parallel broadcast mechanism (a direct connection from
 `Supervisor` to every node, bypassing the graph, with a new barrier-skipping
 command), which would mean N extra FIFOs to wire per program, and would put
 every ordinary shutdown at risk of losing the barrier's consistency guarantees,
-not just the pathological case, `on_node_permanently_ failed`'s default
-implementation escalates in two phases, reusing what already exists:
+not just the pathological case, `on_node_permanently_failed`'s default
+implementation calls **`debasher_stop_resident`** (the tool below) as a
+subprocess, `-x <node_name>` excluding the node just given up on and
+`--keep-supervisor` set: the tool gracefully halts and stops whatever part of
+the graph remains reachable, and falls back on its own, past its own
+`--timeout` (`FORCE_STOP_TIMEOUT_SECS`), to `debasher_stop -d <dirname>`, an
+existing, unmodified engine tool (`engine/debasher_stop.sh`) that walks every
+process of the program and sends `kill -9 -- "-$pid"` (a process-group
+`SIGKILL`) to any still `INPROGRESS`, regardless of the graph's connectivity.
+Built and reusing what already exists this way, `on_node_permanently_failed`
+itself no longer reimplements any of that sequence by hand, the way an earlier
+version of this same escalation once did: that earlier version sent plain
+`shutdown` to every `TRIGGER_PORT` initiator directly and waited on "done"
+tracking itself, which stopped resolving anything once a halt stopped being
+self-terminating (section 2's "Ordered shutdown"), always falling through to
+the hard-kill fallback instead, not just in the pathological case.
 
-1. Send `shutdown` to every configured `TRIGGER_PORT` initiator (ordinary
-   ordered shutdown, unchanged); this covers, cleanly and consistently, whatever
-   part of the graph remains reachable.
-2. Wait up to `FORCE_STOP_TIMEOUT_SECS`, watching the same "done" tracking
-   described above. If not every node in `NODE_PORTS` reaches "done" within that
-   window (the signature of a graph left disconnected by the dead node), fall
-   back to calling **`debasher_stop -d <dirname>`**, an existing, unmodified
-   engine tool (`engine/debasher_stop.sh`) that walks every process of the
-   program and sends `kill -9 -- "-$pid"` (a process-group `SIGKILL`, via the
-   same `.id` PID files already used for the fast-path detection above) to any
-   still `INPROGRESS`. It does not depend on the business graph's connectivity
-   at all, so it is a guaranteed way to actually end the whole program
-   regardless of what died or what it was connected to. `dirname` (the program's
-   own base output directory, not a process's own exec dir) needs no new engine
-   export: it is exactly `dirname(dirname(DEBASHER_PROCESS_EXECDIR))` (confirmed
-   against `debasher::get_prg_exec_dir_given_basedir`,
-   `<dirname>/__exec__/<processname>`).
+`dirname` (the program's own base output directory, not a process's own exec
+dir) needs no new engine export: it is exactly
+`dirname(dirname(DEBASHER_PROCESS_EXECDIR))` (confirmed against
+`debasher::get_prg_exec_dir_given_basedir`, `<dirname>/__exec__/<processname>`),
+and the tool's own absolute path needs `DEBASHER_BINDIR`, a new export
+alongside the existing `DEBASHER_LIBEXECDIR` (`debasher_builtin_sched::_launch`,
+`engine/debasher_builtin_sched_lib.sh`): found missing 2026-09-22 by a real
+`debasher_exec` run (see "Getting this right" below), the same way
+`DEBASHER_LIBEXECDIR` already exists for `_launch_process_command`'s own
+`debasher_launch_process` lookup.
 
-This deliberately accepts an asymmetry: phase 1 preserves every
-checkpoint/input-log consistency guarantee already built; phase 2 is explicitly
-a "just end it" backstop, expected to only ever fire in the pathological case of
-a graph broken by a permanent node failure, and is allowed to lose in-flight
-state for whatever it kills.
+This deliberately accepts an asymmetry: the graceful phase preserves every
+checkpoint/input-log consistency guarantee already built; the hard-kill fallback
+is explicitly a "just end it" backstop, expected to only ever fire in the
+pathological case of a graph broken by a permanent node failure, and is allowed
+to lose in-flight state for whatever it kills.
 
-**Phase 1 no longer resolves anything by itself, since 2026-09-22 (see
-"Conformance status"'s G2 entry): plain `shutdown` stops nothing now, a
-node only stops on a stop signal (see section 2's "Ordered shutdown"),
-which nothing here sends.** Every escalation today waits out the full
-`FORCE_STOP_TIMEOUT_SECS` and falls through to phase 2 regardless, not
-just in the pathological case. Not fixed: the planned repair is
-`on_node_permanently_failed` calling `debasher_stop_resident` (this
-section, below) in place of phase 1's `shutdown`, so the reachable part of
-the graph is actually, gracefully stopped again, but that is not built
-yet.
+**`--keep-supervisor` is not optional for this caller.** This call runs on a
+thread of the same `Supervisor` process it is about to ask the tool to act on
+`Supervisor`'s own program. Without it, the tool's own first step
+(`stop_supervisor_if_any`) would target this same process's group, and this
+call would never actually get anywhere: see that function's own comment
+(`engine/debasher_stop_resident.sh`) for the deadlock this avoids, and
+"Getting this right" below for how this was found before it shipped, not
+after. Left alone by `--keep-supervisor`, `Supervisor` still ends, on its own,
+the same way it always does once every node it watches is done or given up on
+(see "Clean-completion detection"): nothing here has to signal it, or even
+knows when that will be.
+
+**Getting this right, 2026-09-22, surfaced two more bugs, both found by a
+real `debasher_exec` run of a node actually being driven to exhaust
+`MAX_RELAUNCH_ATTEMPTS` (`test/engine/test_chaos.py`'s
+`test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure`),
+neither caught by the unit tests written first (which mock `subprocess.run`
+and so never actually exec anything):**
+
+1. **The deadlock above**, found by design before any code was written (not by
+   a failing run): two other candidates were considered and ruled out first.
+   Running the tool in a detached process group (`setsid`) does not help: the
+   tool's own step still targets `Supervisor`'s *original* process group by
+   pid, which the `Supervisor` process itself never leaves, so it would still
+   stop itself prematurely, before the reachable nodes it is meant to
+   supervise while this runs are actually done. Stopping it last instead of
+   first (after the reachable nodes, still inside the same tool call) does not
+   help either, for a different reason: the call is blocked on a thread of the
+   `Supervisor` process itself, so a last step that signals `Supervisor` and
+   waits for its `.finished` waits on something that cannot happen until that
+   same blocked thread returns, which cannot happen until this wait does.
+   Leaving `Supervisor` alone entirely, letting it resolve itself once the
+   reachable nodes are done (already true regardless, see
+   "Clean-completion detection"), avoids both.
+2. **A bare `"debasher_stop_resident"` (`subprocess.run`'s own `args[0]`)
+   relies on `PATH` already including `bin/`, which nothing sets for a
+   launched process.** The first real run crashed the escalation thread on
+   `FileNotFoundError` before it ever reached the tool, silently (nothing
+   joins that thread, so nothing surfaced it beyond a stack trace on stderr).
+   Fixed by resolving the tool's absolute path from the new `DEBASHER_BINDIR`
+   (`Supervisor._debasher_stop_resident_command`), the same pattern
+   `_launch_process_command` already used for `debasher_launch_process` via
+   `DEBASHER_LIBEXECDIR`. This almost certainly also explains, not just
+   resembles, "Conformance status"'s "Supervisor's own resolution after a
+   node gives up may not complete" entry: that entry's escalation used this
+   same bare-name call for its `debasher_stop` fallback, which would have
+   failed exactly the same way, silently, for exactly the same reason, every
+   time it was ever actually reached.
 
 ### `debasher_stop_resident`: the graceful stop tool: DONE, implemented and tested (`engine/debasher_stop_resident.sh`, `bin/debasher_stop_resident` once built)
 
@@ -2490,27 +2539,32 @@ for a resident program specifically. Built 2026-09-22, alongside the
 `Supervisor` changes above, which it depends on.
 
 - **Usage: `debasher_stop_resident -d <outdir> [-x <name>[,<name>...]]
-  [--timeout <secs>]`.** `-d` is the program's own output directory, same as
-  every other engine tool that operates on one. `-x` names process(es) to
-  leave alone entirely (not waited for, not signalled): for
-  `on_node_permanently_failed`'s planned use (escalation section above),
-  which must not wait forever on a node it has already given up on.
-  `--timeout` (default 60, the same default `FORCE_STOP_TIMEOUT_SECS` already
-  used) bounds the whole graceful attempt; past it, falls back to
-  `debasher_stop -d <outdir>` (a hard kill of the entire program), so this
-  always ends the program one way or another, never hangs indefinitely by
-  itself.
+  [--timeout <secs>] [--keep-supervisor]`.** `-d` is the program's own output
+  directory, same as every other engine tool that operates on one. `-x` names
+  process(es) to leave alone entirely (not waited for, not signalled): for
+  `on_node_permanently_failed`'s own use (escalation section above), which
+  must not wait forever on a node it has already given up on. `--timeout`
+  (default 60, the same default `FORCE_STOP_TIMEOUT_SECS` already used) bounds
+  the whole graceful attempt; past it, falls back to `debasher_stop -d
+  <outdir>` (a hard kill of the entire program), so this always ends the
+  program one way or another, never hangs indefinitely by itself.
+  `--keep-supervisor` skips stopping the program's `Supervisor` (step 1 of the
+  Sequence below), also for `on_node_permanently_failed`'s own use: it calls
+  this tool from a thread of the very `Supervisor` process it would otherwise
+  target (see the escalation section above for why that specifically must not
+  happen, not just should not).
 - **Finds the program's nodes and its `Supervisor` (if any) the same way
   `debasher::_validate_resident_program_processes` already does**: loads the
   module, iterates `DEBASHER_PROGRAM_PROCESSES`, and classifies each with the
   existing `debasher::_classify_resident_process_role` (no new classifier
   written for this).
 - **Sequence:**
-  1. If the program has a `Supervisor`, stop it first (a stop signal to its
-     whole process group, see below) and wait for its own `.finished`,
-     before touching any node it watches: this is exactly why `Supervisor`
-     itself needed a stop signal of its own (subsection above), and it is
-     what keeps this tool from racing a relaunch it did not ask for.
+  1. If the program has a `Supervisor` and `--keep-supervisor` was not given,
+     stop it first (a stop signal to its whole process group, see below) and
+     wait for its own `.finished`, before touching any node it watches: this
+     is exactly why `Supervisor` itself needed a stop signal of its own
+     (subsection above), and it is what keeps this tool from racing a
+     relaunch it did not ask for.
   2. Record each node's halted marker as it stands right now (its content,
      or `-1` if absent): the baseline a fresh one has to beat.
   3. Write `shutdown` into every node's own control ports (the design doc's
@@ -2558,6 +2612,20 @@ for a resident program specifically. Built 2026-09-22, alongside the
   relaunches anything, so neither had ever been exercised by any run before
   this tool existed and something started actually waiting for a graceful,
   confirmed stop rather than a hard kill.
+- **`--keep-supervisor`, and the escalation that needs it, verified the same
+  way, separately, also 2026-09-22**
+  (`test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure`):
+  `sink` genuinely driven to exceed `MAX_RELAUNCH_ATTEMPTS` (a real, repeated
+  `kill -9` of each fresh relaunch, `SIGSTOP` first so it can never heartbeat
+  in between and reset its own budget), confirming `fanin` and `loop`, still
+  reachable, are gracefully halted and stopped by the escalation's own call to
+  this tool, `sink` itself is left alone (no `halted` marker, no `.finished`,
+  its last incarnation's pid never signalled again), and `sup.finished`
+  appears on its own, well under `FORCE_STOP_TIMEOUT_SECS`, confirming
+  `Supervisor` resolves itself rather than needing to be stopped. This run is
+  also what found the `DEBASHER_BINDIR` gap (escalation section above): the
+  unit tests, with `subprocess.run` mocked, could not have caught it, and did
+  not.
 
 ## 5. Recovery from a node failure: the writer-dies direction done, the reader-dies direction still open (`engine/debasher_runtime_fbp.py`, `engine/debasher_runtime_transport.py`)
 

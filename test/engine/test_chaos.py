@@ -686,12 +686,18 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     duplicate, nothing out of order, the missing sends forming a single
     contiguous range, the one the error itself named when it named one.
 
-    sup.finished is not waited on: once sink gives up (exhausts
+    sup.finished is also waited on, once sink gives up (exhausts
     MAX_RELAUNCH_ATTEMPTS, which a permanent, engineered gap always
-    forces), a separate, already-recorded gap in the Supervisor's own
-    escalation-resolution path (see Conformance status) means it may
-    never actually appear, even though fanin and loop do finish cleanly.
-    The `outdir` fixture's own teardown stops whatever is left running.
+    forces): a Conformance status entry once recorded it not appearing
+    here, root-caused and fixed 2026-09-22 (design doc section 4's
+    "Escalation on a permanent node failure": on_node_permanently_failed
+    relied on a bare command name that PATH never actually resolved,
+    crashing its own escalation thread silently before it could do
+    anything). See
+    test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure
+    for a simpler, dedicated real run of the same mechanism; this one
+    reruns the original scenario that found the gap, unmodified, and
+    confirms it directly.
     """
     # A long tail is deliberate, not padding: detecting the engineered gap
     # depends on a live message actually arriving on the channel after it
@@ -786,6 +792,10 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     assert _wait_for_text(
         sup_sched_out, "node 'loop' finished cleanly", timeout=30
     ), "loop (still reachable) never finished after sink gave up"
+
+    assert _wait_for(
+        os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=30
+    ), "sup.finished never appeared after the escalation resolved the reachable graph"
 
     time.sleep(0.5)
     tailer.stop_and_join()
@@ -1122,3 +1132,90 @@ def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
 
     assert not os.path.exists(os.path.join(outdir, "__exec__", "sink", "sink.finished"))
     os.kill(sink_pid, 0)  # raises ProcessLookupError if sink was touched
+
+
+def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure(outdir):
+    """
+    Pieza 3 of the design doc's G2 third candidate
+    (Supervisor._escalate_shutdown calling debasher_stop_resident with
+    -x and --keep-supervisor, instead of reimplementing the same
+    sequence by hand: design doc section 4's "Escalation on a permanent
+    node failure"). Drives sink to genuinely exhaust
+    MAX_RELAUNCH_ATTEMPTS: a real, repeated kill -9 of each fresh
+    relaunch, SIGSTOP first (before SIGKILL) so it can never send a
+    heartbeat in between and accidentally reset its own relaunch budget
+    (a relaunched node's heartbeat thread waits one full
+    HEARTBEAT_INTERVAL_SECONDS from start_threads() before its first
+    send, per the reference program's own Sup class comment; freezing it
+    first removes the race rather than trying to outrun it).
+
+    Once sink has given up, this checks the actual point of this piece:
+    fanin and loop, still reachable, are gracefully halted and signalled
+    by the escalation's own debasher_stop_resident call (not silently
+    ignored, per the G2 gap this whole candidate exists to close), and
+    sup.finished actually appears, on its own, well under
+    FORCE_STOP_TIMEOUT_SECS (60s): if -x were not actually excluding
+    sink (already dead by then), the tool would instead hang waiting on
+    a control_ports/halted marker/.finished that can never come, time
+    out, and fall back to a hard debasher_stop, which kills fanin and
+    loop too, ungracefully (no "finished cleanly" logged for either).
+
+    This run also settles a second, separate Conformance status entry
+    left "not investigated": whether the Supervisor's own resolution
+    after a node gives up actually completes. It very likely shares a
+    root cause with the leaked stdout/stderr fd bug pieza 2 found and
+    fixed (both go through the same on_node_down relaunch Popen call,
+    and this scenario relaunches sink repeatedly before giving up), but
+    that was never independently confirmed; if sup.finished appears here
+    for the first time, this closes that entry too, empirically, whether
+    or not the exact shared cause is retraced.
+    """
+    _launch(outdir)
+
+    sup_out = _sched_out_file(outdir, "sup")
+    pid = _kill_node(outdir, "sink")
+    gave_up = False
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
+        # A tight poll interval, and no wait between detecting a fresh
+        # relaunch and freezing it: the race this loop is trying to win
+        # (SIGSTOP landing before the relaunch's own first heartbeat,
+        # sent one HEARTBEAT_INTERVAL_SECONDS after its start_threads())
+        # is won or lost within a few hundred ms, so any extra delay this
+        # loop itself adds between iterations just hands it back.
+        new_pid = _wait_for_relaunch(outdir, "sink", pid, timeout=15.0, interval=0.01)
+        if new_pid is None:
+            # No further relaunch is exactly what a give-up also looks
+            # like from here (nothing left to detect a new pid for): the
+            # check below after the loop is what actually decides it.
+            break
+        os.killpg(int(new_pid), signal.SIGSTOP)
+        os.killpg(int(new_pid), signal.SIGKILL)
+        pid = new_pid
+        try:
+            with open(sup_out) as f:
+                if "node 'sink' exceeded" in f.read():
+                    gave_up = True
+                    break
+        except FileNotFoundError:
+            pass
+    if not gave_up:
+        gave_up = _wait_for_text(sup_out, "node 'sink' exceeded", timeout=2.0)
+    assert gave_up, "sink never exceeded MAX_RELAUNCH_ATTEMPTS"
+
+    escalation_start = time.monotonic()
+    assert _wait_for_text(
+        sup_out, "node 'fanin' finished cleanly", timeout=30
+    ), "fanin (still reachable) never finished after sink gave up"
+    assert _wait_for_text(
+        sup_out, "node 'loop' finished cleanly", timeout=30
+    ), "loop (still reachable) never finished after sink gave up"
+    assert _wait_for(
+        os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=30
+    ), "sup.finished never appeared after the escalation resolved the reachable graph"
+    elapsed = time.monotonic() - escalation_start
+    assert elapsed < 30.0, (
+        f"took {elapsed:.1f}s: this close to FORCE_STOP_TIMEOUT_SECS (60s) is the sign "
+        "debasher_stop_resident fell back to a hard kill instead of stopping gracefully "
+        "(e.g. -x not actually excluding sink, or --keep-supervisor not applied)"
+    )

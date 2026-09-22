@@ -260,6 +260,19 @@ class Supervisor(_PortWorker):
             return
 
         with self._lock:
+            # An escalation already in flight (on_node_permanently_failed,
+            # via debasher_stop_resident) is itself asking every reachable
+            # node to stop, gracefully, right now: declaring one of them
+            # "down" here over a heartbeat gap that stopping naturally
+            # produces would relaunch a node the escalation just told to
+            # leave, racing its own graceful stop signal. Suspending
+            # failure detection for every node, not just the ones the
+            # escalation targets, is deliberate: a genuinely unrelated
+            # failure during this window is left for the next tick once
+            # the escalation itself has ended (gracefully, or by falling
+            # back to debasher_stop, which ends the whole program anyway).
+            if self._active_escalations > 0:
+                return
             already_down = node_name in self._down
             last_seen = self._last_heartbeat[node_name]
         if already_down:
@@ -482,46 +495,69 @@ class Supervisor(_PortWorker):
 
     def on_node_permanently_failed(self, node_name):
         """
-        Default: escalate in two phases, in a background thread (so the
-        checker thread that triggered this keeps running and noticing
-        other nodes reaching "done" meanwhile): (1) ask every configured
-        TRIGGER_PORT initiator for an ordinary ordered shutdown, which
-        cleanly covers whatever part of the graph remains reachable;
-        (2) if not every node has resolved within FORCE_STOP_TIMEOUT_SECS
-        (the signature of a graph left disconnected by this node's
-        death), fall back to `debasher_stop`, an existing, unmodified
-        engine tool that ends the whole program regardless of the
-        graph's connectivity.
+        Default: escalate in a background thread (so the checker thread
+        that triggered this keeps running and noticing other nodes
+        reaching "done" meanwhile), by calling `debasher_stop_resident`
+        (`-x node_name`, `--keep-supervisor`) as a subprocess: it gracefully
+        stops whatever part of the graph remains reachable (an ordinary
+        halt, then a real stop signal, per node), excluding node_name
+        itself, and falls back to `debasher_stop` on its own if that does
+        not finish within FORCE_STOP_TIMEOUT_SECS (the signature of a graph
+        left disconnected by this node's death). `--keep-supervisor` is not
+        optional here: this call runs on a thread of this same Supervisor
+        process, so the tool must not try to stop it too (see
+        `debasher_stop_resident`'s own `stop_supervisor_if_any` for why
+        that would deadlock into always forcing debasher_stop). Left alone,
+        this Supervisor resolves on its own, the same way it always does,
+        once every node it watches is done or given up on (see
+        "Clean-completion detection").
         """
         with self._lock:
             self._active_escalations += 1
         thread = threading.Thread(
-            target=self._escalate_shutdown, name=f"escalate:{node_name}"
+            target=self._escalate_shutdown, args=(node_name,), name=f"escalate:{node_name}"
         )
         thread.start()
 
-    def _escalate_shutdown(self):
-        try:
-            for port in self.TRIGGER_PORT:
-                self._send_interact(port, "shutdown")
-
-            deadline = time.monotonic() + self.FORCE_STOP_TIMEOUT_SECS
-            while time.monotonic() < deadline:
-                with self._lock:
-                    if len(self._done) + len(self._given_up) == len(self.NODE_PORTS):
-                        return
-                time.sleep(1)
-
-            with self._lock:
-                if len(self._done) + len(self._given_up) == len(self.NODE_PORTS):
-                    return
-
-            self.log.error(
-                "not every node resolved within %ss of the shutdown escalation, "
-                "forcing debasher_stop",
-                self.FORCE_STOP_TIMEOUT_SECS,
+    def _debasher_stop_resident_command(self):
+        # Same reasoning as _launch_process_command's own DEBASHER_LIBEXECDIR
+        # lookup: PATH is not guaranteed to include bin/, so this bin_SCRIPTS
+        # tool needs its own absolute path, found missing by a real
+        # debasher_exec run, 2026-09-22 (see debasher_builtin_sched::_launch's
+        # own DEBASHER_BINDIR export).
+        bindir = os.environ.get("DEBASHER_BINDIR")
+        if not bindir:
+            raise RuntimeError(
+                f"{type(self).__name__}: DEBASHER_BINDIR is not set in the "
+                "environment, cannot locate debasher_stop_resident (only set by "
+                "the engine's builtin scheduler when it launches a process)"
             )
-            subprocess.run(["debasher_stop", "-d", self._program_outdir()])
+        return os.path.join(bindir, "debasher_stop_resident")
+
+    def _escalate_shutdown(self, node_name):
+        try:
+            result = subprocess.run(
+                [
+                    self._debasher_stop_resident_command(),
+                    "-d",
+                    self._program_outdir(),
+                    "-x",
+                    self._node_process_name(node_name),
+                    "--keep-supervisor",
+                    "--timeout",
+                    str(self.FORCE_STOP_TIMEOUT_SECS),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                self.log.error(
+                    "debasher_stop_resident exited with code %s while escalating "
+                    "the shutdown after %r's permanent failure",
+                    result.returncode,
+                    node_name,
+                )
         finally:
             with self._lock:
                 self._active_escalations -= 1

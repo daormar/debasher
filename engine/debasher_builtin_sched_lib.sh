@@ -1308,6 +1308,20 @@ debasher_builtin_sched::_launch()
     # debasher_launch_process) cannot learn it any other way. Being a
     # constant, unlike the two variables above, it needs no unset.
     export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
+    # Same reasoning, for debasher_bindir: a Python heredoc process (a
+    # Supervisor calling debasher_stop_resident as a subprocess, see its
+    # own on_node_permanently_failed) has no other way to find a
+    # bin_SCRIPTS tool either. Found missing by a real debasher_exec run,
+    # 2026-09-22: a bare "debasher_stop_resident" (and, before it, the
+    # same call's own now-removed bare "debasher_stop" fallback) relied
+    # on PATH already including bin/, which nothing here ever put there,
+    # so the escalation thread crashed on FileNotFoundError before it
+    # could do anything, silently, unwaited-on since nothing joins it.
+    # This most likely explains the Conformance status entry recording
+    # sup.finished never appearing after a node gave up: the very
+    # fallback meant to end the program in exactly that case could never
+    # actually run.
+    export DEBASHER_BINDIR="${debasher_bindir}"
 
     # Execute file, with job control enabled just for this one launch
     # so it becomes its own process group (pgid == pid). The launched

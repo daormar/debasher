@@ -327,6 +327,34 @@ def test_repeated_relaunches_that_never_heartbeat_eventually_escalate(execdir):
     assert "a" in proc._given_up
 
 
+def test_check_node_suspends_failure_detection_while_an_escalation_is_in_flight(execdir):
+    # An escalation already asks every reachable node to stop; declaring
+    # one "down" here over the heartbeat gap that stopping naturally
+    # produces would relaunch a node the escalation just told to leave.
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(_dead_pid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc._active_escalations = 1
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    proc._check_node("a")
+
+    assert calls == []
+    assert "a" not in proc._down
+
+
+def test_check_node_still_detects_finished_while_an_escalation_is_in_flight(execdir):
+    # The one thing that must keep working during an escalation: a node
+    # reaching "done" is what lets _maybe_resolve ever fire once it ends.
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc._active_escalations = 1
+    _node_dir(execdir, "a").joinpath("a.finished").write_text("ok")
+
+    proc._check_node("a")
+
+    assert "a" in proc._done
+
+
 # --- _declare_down / relaunch budget -------------------------------------
 
 
@@ -482,6 +510,19 @@ def test_launch_process_command_requires_the_libexec_env_var(monkeypatch):
         proc._launch_process_command("a")
 
 
+def test_debasher_stop_resident_command_uses_the_bindir_env_var(monkeypatch):
+    monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert proc._debasher_stop_resident_command() == "/opt/bin/debasher_stop_resident"
+
+
+def test_debasher_stop_resident_command_requires_the_bindir_env_var(monkeypatch):
+    monkeypatch.delenv("DEBASHER_BINDIR", raising=False)
+    proc = _Sup(opts=_FAKE_OPTS)
+    with pytest.raises(RuntimeError, match="DEBASHER_BINDIR"):
+        proc._debasher_stop_resident_command()
+
+
 def test_on_node_down_default_runs_the_launcher_tool(execdir, monkeypatch):
     monkeypatch.setenv("DEBASHER_LIBEXECDIR", "/opt/libexec")
     proc = _Sup(opts=_FAKE_OPTS)
@@ -514,54 +555,94 @@ def test_on_node_down_default_logs_a_failing_launcher(execdir, monkeypatch, capl
     assert "'a'" in caplog.text
 
 
-# --- on_node_permanently_failed: two-phase escalation --------------------
+# --- on_node_permanently_failed: escalation via debasher_stop_resident ---
 
 
-def test_escalation_sends_shutdown_to_every_trigger_port_and_resolves_without_force_stop(
+def test_escalation_calls_debasher_stop_resident_excluding_the_given_up_node(
     execdir, monkeypatch
 ):
-    class Sup(lib.Supervisor):
-        NODE_PORTS = {"a": "hb_a", "b": "hb_b"}
-        TRIGGER_PORT = ["init_a"]
-        FORCE_STOP_TIMEOUT_SECS = 5
-
-    proc = Sup(opts={**_FAKE_OPTS, "init_a": "/tmp/init_a"})
-    force_stop_calls = []
-    monkeypatch.setattr(subprocess, "run", lambda args: force_stop_calls.append(args))
-
+    monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.FORCE_STOP_TIMEOUT_SECS = 5
     proc._given_up.add("a")
     proc._done.add("b")  # everyone else already resolved
 
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
     proc.on_node_permanently_failed("a")
 
     assert _wait_until(lambda: proc._active_escalations == 0)
-    line = proc._outbound_queues["init_a"].get_nowait()
-    assert lib.decode_envelope(line).payload["command"] == "shutdown"
-    assert force_stop_calls == []
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args == [
+        "/opt/bin/debasher_stop_resident",
+        "-d",
+        str(execdir),
+        "-x",
+        "a",
+        "--keep-supervisor",
+        "--timeout",
+        "5",
+    ]
+    # Matches the DEVNULL redirection Supervisor already applies to its
+    # own relaunch Popen calls (see on_node_down): left inherited, the
+    # generated wrapper script's own stdout/stderr tee pipe would stay
+    # open for as long as this subprocess runs, the same leak pieza 2
+    # found and fixed for a relaunch.
+    assert kwargs["stdin"] == subprocess.DEVNULL
+    assert kwargs["stdout"] == subprocess.DEVNULL
+    assert kwargs["stderr"] == subprocess.DEVNULL
     assert proc._all_resolved.is_set()
 
 
-def test_escalation_forces_debasher_stop_when_the_timeout_elapses_unresolved(
+def test_escalation_excludes_by_process_name_for_an_array_task(execdir, monkeypatch):
+    monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
+
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {("w", 0): "hb_w0", ("w", 1): "hb_w1"}
+
+    proc = Sup(opts={"hb_w0": "/tmp/hb_w0", "hb_w1": "/tmp/hb_w1"})
+    proc._given_up.add(("w", 1))
+    proc._done.add(("w", 0))
+
+    calls = []
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda args, **kwargs: (calls.append(args), subprocess.CompletedProcess(args, 0))[1],
+    )
+
+    proc.on_node_permanently_failed(("w", 1))
+
+    assert _wait_until(lambda: proc._active_escalations == 0)
+    assert calls[0][calls[0].index("-x") + 1] == "w"
+
+
+def test_escalation_logs_but_still_resolves_bookkeeping_when_the_tool_fails(
     execdir, monkeypatch
 ):
-    class Sup(lib.Supervisor):
-        NODE_PORTS = {"a": "hb_a", "b": "hb_b"}
-        TRIGGER_PORT = []
-        FORCE_STOP_TIMEOUT_SECS = 0
-
-    proc = Sup(opts=_FAKE_OPTS)
-    force_stop_calls = []
-    monkeypatch.setattr(subprocess, "run", lambda args: force_stop_calls.append(args))
-
+    monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
+    proc = _Sup(opts=_FAKE_OPTS)
     proc._given_up.add("a")
-    # "b" never resolves -- simulates the unreachable remainder of a
-    # graph broken by "a"'s permanent death.
+    proc._done.add("b")
+
+    monkeypatch.setattr(
+        subprocess, "run", lambda args, **kwargs: subprocess.CompletedProcess(args, 1)
+    )
 
     proc.on_node_permanently_failed("a")
 
     assert _wait_until(lambda: proc._active_escalations == 0)
-    assert force_stop_calls == [["debasher_stop", "-d", str(execdir)]]
-    assert not proc._all_resolved.is_set()
+    # debasher_stop_resident itself already falls back to debasher_stop
+    # internally on its own timeout: a nonzero exit here is logged, not
+    # retried or escalated further from this side.
+    assert proc._all_resolved.is_set()
 
 
 # --- _maybe_resolve -------------------------------------------------------

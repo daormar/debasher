@@ -43,12 +43,17 @@ print_desc()
 usage()
 {
     echo "debasher_stop_resident    -d <string> [-x <string>]"
-    echo "                          [--timeout <int>] [--help]"
+    echo "                          [--timeout <int>] [--keep-supervisor] [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
     echo "-x <string>               Comma-separated process names to leave alone"
     echo "--timeout <int>           Seconds to wait for a clean stop before"
     echo "                          falling back to debasher_stop (default: 60)"
+    echo "--keep-supervisor         Do not stop the program's Supervisor, if it"
+    echo "                          has one (for a Supervisor calling this tool"
+    echo "                          on itself; leaving it running is what lets"
+    echo "                          it resolve on its own once every node it"
+    echo "                          still watches is done)"
     echo "--help                    Display this help and exit"
 }
 
@@ -58,6 +63,7 @@ read_pars()
     d_given=0
     excluded_csv=""
     timeout_secs=60
+    keep_supervisor=0
     while [ $# -ne 0 ]; do
         case $1 in
             "--help") usage
@@ -78,6 +84,8 @@ read_pars()
                   if [ $# -ne 0 ]; then
                       timeout_secs=$1
                   fi
+                  ;;
+            "--keep-supervisor") keep_supervisor=1
                   ;;
         esac
         shift
@@ -261,13 +269,27 @@ find_supervisor_and_nodes()
 # process group) and waits for its .finished to appear, so it is
 # confirmed gone, not just signalled, before anything else here touches a
 # node it could otherwise still relaunch. A no-op, returning success at
-# once, if the program has none.
+# once, if the program has none, or if --keep-supervisor was given: that
+# flag is for a Supervisor calling this tool on itself (its own escalation
+# after a permanent node failure, see the design doc's "Escalation on a
+# permanent node failure"), where stopping it here would be self-defeating
+# twice over. First, the signal targets the same process group the calling
+# Python interpreter already runs in, and that interpreter is blocked, on
+# a thread of its own, on this very tool call returning: a graceful stop
+# waits for its .finished, which cannot appear until that thread
+# unblocks, which cannot happen until this tool returns, a deadlock this
+# tool's own --timeout only escapes by giving up on grace entirely, into
+# debasher_stop's hard kill, every single time. Second, even without that
+# deadlock, killing the Supervisor here is premature on its own terms: it
+# already resolves itself, on its own, once every node it still watches is
+# either done or given up on (see "Clean-completion detection"), which is
+# exactly what stopping the other, reachable nodes below is for.
 stop_supervisor_if_any()
 {
     local absdirname=$1
     local deadline=$2
 
-    if [ -z "${SUPERVISOR_PROCESSNAME}" ]; then
+    if [ -z "${SUPERVISOR_PROCESSNAME}" ] || [ "${keep_supervisor}" -eq 1 ]; then
         return 0
     fi
 
