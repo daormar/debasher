@@ -1153,6 +1153,16 @@ any guarantee is relied on.
   still ends in the hard-kill fallback rather than a graceful close.
   Not re-confirmed with a real run under the new mechanism.
 
+  **Still not fixed, but no longer silent, since 2026-09-22 (section 4's
+  "Failing loudly instead of retrying"): the hard-kill fallback this case
+  falls into now reports itself, by a distinct exit code
+  (`DEBASHER_STOP_RESIDENT_FORCED_EXIT`) `debasher_stop_resident` returns
+  and `Supervisor`'s own escalation logs specifically, rather than only a
+  stderr line a caller could miss or, as `Supervisor`'s own call already
+  did, redirect away entirely.** Making the underlying gap itself durably
+  recoverable was designed far enough to find two real holes (see that
+  subsection): a materially larger change than accepted here, deliberately.
+
 ## 1. Control envelope
 
 Wire format: JSON Lines (one JSON object per line, `\n` as delimiter). Always
@@ -2530,6 +2540,65 @@ and so never actually exec anything):**
    same bare-name call for its `debasher_stop` fallback, which would have
    failed exactly the same way, silently, for exactly the same reason, every
    time it was ever actually reached.
+
+### Failing loudly instead of retrying: DONE, implemented and tested
+
+The Conformance status entry "A crash during a halt can leave the program
+permanently half-halted" describes a real, still-open gap: if the one node
+whose own round-open captured `capture_pos` right at the point that opened a
+halt round then crashes before that round closes, its relaunched incarnation
+has no durable memory of an open round to resume, and nothing resends the
+one-time `shutdown` trigger that opened it (see that entry, and section 3's
+"Arrival and positions" for why `capture_pos` lands exactly there, not
+before it). `debasher_stop_resident`'s own `--timeout` already keeps this
+from hanging the program forever, structurally, but it does so by falling
+back to `debasher_stop`'s hard kill silently: past this decision, 2026-09-22,
+it does so loudly instead, without attempting to fix the underlying gap.
+
+Two directions were compared. Making the gap itself durably recoverable
+(a checkpoint field recording a pending, unclosed halt, restored and acted
+on at recovery) was designed far enough to see two real holes, not just
+imagined ones: first, checkpoints are only ever taken when a round *opens*,
+never when it *closes* (the same `capture_pos` timing above), so nothing
+would ever clear that field once the round legitimately closed, and a later,
+unrelated crash would then re-open a halt round that had already finished
+cleanly; second, the same forgetting affects every node on the barrier's
+propagation path, not just an initiator, so closing it for real means making
+a round's *partial* progress (which peers already closed their own part)
+durable and reconstructible, not just "a halt was requested", a materially
+larger change to the Chandy-Lamport mechanism section 2 already has DONE and
+verified. Failing loudly instead accepts the asymmetry already accepted
+elsewhere in this same section (the hard-kill fallback's own "just end it"
+backstop): it does not make this case end gracefully, but it makes sure
+nobody mistakes the forced ending for one, at the cost of no change at all
+to the barrier or checkpoint mechanism.
+
+**Mechanism**: `debasher_stop_resident` now returns a distinct exit code,
+`DEBASHER_STOP_RESIDENT_FORCED_EXIT` (2), whenever it falls back to
+`debasher_stop`, instead of propagating `debasher_stop`'s own exit code
+(typically 0, since it does not treat "something was still running to kill"
+as a failure): the one signal that survives a caller that redirects the
+tool's own stderr, such as `Supervisor`'s own escalation
+(`_escalate_shutdown`, `engine/debasher_runtime_supervisor.py`), which now
+recognizes this specific code and logs its own, more specific error (G8,
+detected, never silent), durably captured in `sup.sched_out` the same way
+every other `Supervisor` log line already is, rather than only the tool's
+own stderr line, which that redirect would otherwise have thrown away
+entirely (the same reasoning as `on_node_down`'s own `DEVNULL` redirect,
+section 4 above).
+
+**Verified with a real `debasher_exec` run**
+(`test_debasher_stop_resident_forced_exit_code_on_the_hard_kill_fallback`,
+`test/engine/test_chaos.py`): `loop` is `SIGSTOP`ped before the tool is
+called, so it can never write its own halted marker; the tool still ends
+the whole program (`SIGKILL` is not blockable, so the hard kill reaches a
+stopped process the same as a running one), but returns 2, not 0, and the
+"forcing debasher_stop" warning is on its stderr too. A unit test
+(`test/engine/test_supervisor.py`) also ties the two sides of this
+cross-language contract together, reading the actual exit code the shell
+script defines rather than a literal duplicated in Python, since every
+other test around it mocks `subprocess.run` and reads the same Python
+constant back, and so could not otherwise catch the two drifting apart.
 
 ### `debasher_stop_resident`: the graceful stop tool: DONE, implemented and tested (`engine/debasher_stop_resident.sh`, `bin/debasher_stop_resident` once built)
 

@@ -26,11 +26,24 @@
 # within --timeout, it falls back to debasher_stop on the whole program. If
 # the program has a Supervisor, that is stopped first, the same graceful
 # way, so it cannot relaunch a node out from under the rest of this.
+#
+# Exit codes: 0 is a clean, fully graceful stop; 1 is a usage or setup error
+# (bad arguments, a directory that is not a resident program's, and the
+# like); 2 (DEBASHER_STOP_RESIDENT_FORCED_EXIT) means the graceful attempt
+# did not finish within --timeout and this fell back to debasher_stop's hard
+# kill, which itself is not treated as an error here (it is, by design, a
+# "just end it" backstop that always succeeds if anything is left running):
+# the program did end, but not gracefully, and a caller that cares about
+# that distinction (Supervisor's own escalation, in particular, since a
+# graceful stop and a forced one both end the program the same way from the
+# outside) must tell the two apart by this exit code, not by the warning
+# below, which a caller redirecting stderr would never see.
 
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
 
 DEBASHER_SHUTDOWN_INTERACT_JSON='{"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}}'
+DEBASHER_STOP_RESIDENT_FORCED_EXIT=2
 
 ########
 print_desc()
@@ -451,6 +464,11 @@ stop_resident_program()
 
     echo "Warning: could not stop ${dirname} gracefully within ${timeout_secs}s, forcing debasher_stop" >&2
     "${debasher_bindir}/debasher_stop" -d "${dirname}"
+    # Always DEBASHER_STOP_RESIDENT_FORCED_EXIT here, not debasher_stop's own
+    # exit code (typically 0: it does not treat "something was still running
+    # to kill" as a failure): this is the one signal a caller redirecting
+    # stderr can still see, see this file's own header comment.
+    return "${DEBASHER_STOP_RESIDENT_FORCED_EXIT}"
 }
 
 ########

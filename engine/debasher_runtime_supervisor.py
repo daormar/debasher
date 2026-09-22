@@ -519,6 +519,14 @@ class Supervisor(_PortWorker):
         )
         thread.start()
 
+    # debasher_stop_resident's own DEBASHER_STOP_RESIDENT_FORCED_EXIT
+    # (engine/debasher_stop_resident.sh): a graceful stop and a forced one
+    # both end the program the same way from here, so this is the only
+    # signal that tells them apart (the tool's own stderr warning is
+    # redirected to DEVNULL below, same reasoning as on_node_down's own
+    # relaunch Popen call, see its comment).
+    _DEBASHER_STOP_RESIDENT_FORCED_EXIT = 2
+
     def _debasher_stop_resident_command(self):
         # Same reasoning as _launch_process_command's own DEBASHER_LIBEXECDIR
         # lookup: PATH is not guaranteed to include bin/, so this bin_SCRIPTS
@@ -551,7 +559,21 @@ class Supervisor(_PortWorker):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            if result.returncode != 0:
+            if result.returncode == self._DEBASHER_STOP_RESIDENT_FORCED_EXIT:
+                # G8, detected, never silent: the reachable part of the
+                # graph was not stopped gracefully within
+                # FORCE_STOP_TIMEOUT_SECS, so debasher_stop_resident itself
+                # already fell back to a hard kill (the program did end,
+                # just not cleanly). Logged here, not just left to the
+                # tool's own stderr (discarded above), so it survives in
+                # this process's own sched_out.
+                self.log.error(
+                    "debasher_stop_resident could not stop the reachable part of "
+                    "the graph gracefully after %r's permanent failure and forced "
+                    "a hard kill (debasher_stop) instead",
+                    node_name,
+                )
+            elif result.returncode != 0:
                 self.log.error(
                     "debasher_stop_resident exited with code %s while escalating "
                     "the shutdown after %r's permanent failure",

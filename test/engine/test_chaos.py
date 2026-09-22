@@ -1134,6 +1134,50 @@ def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
     os.kill(sink_pid, 0)  # raises ProcessLookupError if sink was touched
 
 
+def test_debasher_stop_resident_forced_exit_code_on_the_hard_kill_fallback(outdir):
+    """
+    The exit-code contract added 2026-09-22 (design doc section 4, "Failing
+    loudly instead of retrying": DEBASHER_STOP_RESIDENT_FORCED_EXIT, engine/
+    debasher_stop_resident.sh), decided instead of making a crash-during-halt
+    durably recoverable (a materially bigger, riskier change to the barrier/
+    checkpoint mechanism, see the design doc for why that was rejected):
+    a graceful stop and a forced one both end the program, but only the exit
+    code (2, not whatever debasher_stop's own happens to be, typically 0)
+    tells a caller which one actually happened, since a caller that redirects
+    stderr (Supervisor's own escalation, in particular) would otherwise never
+    know.
+
+    Forces the fallback for real: SIGSTOPs loop before calling the tool, so
+    it can never process the shutdown trigger or write its own halted
+    marker, then calls the tool with a short --timeout. The tool must still
+    end the whole program (the hard-kill fallback actually running, not just
+    the exit code alone), but return 2, not 0, and say so on stderr too.
+    """
+    _launch(outdir)
+    time.sleep(1.0)
+
+    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
+    os.killpg(loop_pid, signal.SIGSTOP)
+
+    result = subprocess.run(
+        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "3"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2, f"{result.stdout}\n{result.stderr}"
+    assert "forcing debasher_stop" in result.stderr
+
+    # The hard kill actually ran, SIGSTOP notwithstanding (SIGKILL is not
+    # blockable and reaches a stopped process the same as a running one):
+    # every process the program launched must be gone.
+    for name in ("fanin", "loop", "sink", "sup"):
+        pid = _read_pid(_id_file(outdir, name))
+        assert pid is not None, f"{name} has no pid to check"
+        with pytest.raises(ProcessLookupError):
+            os.killpg(int(pid), 0)
+
+
 def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure(outdir):
     """
     Pieza 3 of the design doc's G2 third candidate

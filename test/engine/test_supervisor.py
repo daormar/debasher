@@ -1,4 +1,5 @@
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -642,6 +643,52 @@ def test_escalation_logs_but_still_resolves_bookkeeping_when_the_tool_fails(
     # debasher_stop_resident itself already falls back to debasher_stop
     # internally on its own timeout: a nonzero exit here is logged, not
     # retried or escalated further from this side.
+    assert proc._all_resolved.is_set()
+
+
+def test_forced_exit_constant_matches_the_tool_script():
+    # Ties the two sides of a cross-language contract together: a mismatch
+    # here (either constant edited without the other) would otherwise pass
+    # every other test silently, since they mock subprocess.run and read
+    # this same Python constant back for the "forced" case rather than a
+    # literal value.
+    sh_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(lib.__file__))),
+        "engine",
+        "debasher_stop_resident.sh",
+    )
+    with open(sh_path) as f:
+        text = f.read()
+    match = re.search(r"^DEBASHER_STOP_RESIDENT_FORCED_EXIT=(\d+)$", text, re.MULTILINE)
+    assert match, "debasher_stop_resident.sh no longer defines DEBASHER_STOP_RESIDENT_FORCED_EXIT"
+    assert lib.Supervisor._DEBASHER_STOP_RESIDENT_FORCED_EXIT == int(match.group(1))
+
+
+def test_escalation_logs_a_specific_message_when_the_tool_reports_a_forced_stop(
+    execdir, monkeypatch, caplog
+):
+    monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc._given_up.add("a")
+    proc._done.add("b")
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(
+            args, proc._DEBASHER_STOP_RESIDENT_FORCED_EXIT
+        ),
+    )
+
+    proc.log.addHandler(caplog.handler)
+    try:
+        with caplog.at_level("ERROR", logger=proc.log.name):
+            proc.on_node_permanently_failed("a")
+            assert _wait_until(lambda: "forced a hard kill" in caplog.text)
+    finally:
+        proc.log.removeHandler(caplog.handler)
+
+    assert "'a'" in caplog.text
     assert proc._all_resolved.is_set()
 
 
