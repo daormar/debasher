@@ -965,15 +965,13 @@ Future work).
   capture would include messages that the sender had sent after its own, and
   holding back the port would break the order of the input log) and forwards
   the newer marker. A halt is never replaced by a snapshot, and a marker of
-  an older epoch, or of a round that is over, is ignored. A trigger that
-  finds a round open does not start another: a `start_snapshot` is ignored,
-  since the round in progress takes the snapshot; a `shutdown` replaces an
-  open snapshot and starts the halt at once; a `shutdown` that finds a halt
-  open, and any trigger once the node has halted, are ignored. That rule is
-  for a trigger without an epoch. A numbered trigger follows the rule of a
-  marker instead (see numbered trigger in the Glossary), so that an initiator
-  left on an older round, for example because its marker was lost, follows the
-  other initiators to the new one.
+  an older epoch, or of a round that is over, is ignored. A trigger without
+  an epoch that finds a snapshot open replaces it with a round numbered as the
+  open one plus one, a number above it so that the nodes that have that round
+  open replace it too; without this, an initiator whose marker was lost would
+  keep its round open for ever. A trigger that finds a halt open, and any
+  trigger once the node has halted, are ignored. A numbered trigger follows
+  the rule of a marker instead (see numbered trigger in the Glossary).
 - **Not yet done**: checking that the node chosen as initiator can actually
   reach every other node (the graph is strongly connected from that node) before
   it is ever allowed to be used as one: no validation code exists for this
@@ -1923,6 +1921,22 @@ open.
   program straight into the FIFO of an initiator, still uses that
   initiator's own counter, and with several initiators whose rounds meet it
   can still lead to the same wait.
+- **A lost marker kept the round of an initiator open for ever.** A marker
+  is lost when a node crashes after it has captured its state and enqueued
+  its marker and before its writer thread has written it, and likewise with
+  a message read from a FIFO and not yet written to the input log, or a FIFO
+  destroyed with both its endpoints down (see the Contract's limits). The
+  round of its receiver then stays open. At a node that is not an initiator,
+  the marker of the next round, of a newer epoch, replaces it; at an
+  initiator, a `start_snapshot` without an epoch that found a round open was
+  ignored, so an initiator in a cycle whose marker never came back took no
+  further snapshot. No node of the cycle wrote another checkpoint, and their
+  input logs grew until `INPUT_LOG_MAX_BYTES` was reached, which ends the
+  reader thread and looks, to the `Supervisor`, like a crash. Now a trigger
+  without an epoch replaces an open snapshot too, as a numbered trigger of a
+  newer epoch already did (see "Chandy-Lamport barrier propagation"), so the
+  round with the lost marker is abandoned at the next trigger, whatever lost
+  it: that round has no complete cut, and the next one does.
 - Dedicated concurrency test for the fan-in case with more than one input
   port pending on the barrier:
   `test_two_pending_ports_waits_for_the_second_marker`.
@@ -1933,22 +1947,6 @@ open.
   What exists: a node that comes back has no round open, and the next round
   of a newer epoch replaces a round that another node was left with open
   (see "Base class `FBPProcess`"). What it can cause:
-  - A marker that is lost keeps the round of its receiver open. A node that
-    crashes after it has captured its state and enqueued its marker, and before
-    its writer thread has written it, leaves the next node waiting for it. At a
-    node that is not an initiator, a marker of a newer epoch replaces the open
-    round. At an initiator only a trigger replaces it: a numbered trigger of a
-    newer epoch (see numbered trigger in the Glossary), or a `shutdown`; a
-    `start_snapshot` without an epoch that finds a round open is ignored. So an
-    initiator in a cycle whose marker never comes back, and whose triggers carry
-    no epoch (those of its own snapshot timer, or those that an actor outside
-    the program writes straight into its FIFO), keeps its round open, with the
-    port of the cycle pending, and takes no further snapshot: no node of the
-    cycle writes another checkpoint, and their input logs, which only a new
-    checkpoint prunes, grow until `INPUT_LOG_MAX_BYTES` is reached, an error.
-    The same happens whatever loses a marker, be it a message read from a FIFO
-    and not yet written to the input log, or a FIFO destroyed with both its
-    endpoints down (see the Contract's limits).
   - A node that crashes between capturing and closing an ordinary round
     forgets it, and recovers cleanly: on coming back it has no round open,
     and the markers that arrive later open it again, capture at another
@@ -1974,12 +1972,10 @@ open.
     holes (see "Failing loudly instead of retrying" again), a materially
     larger change than accepted so far.
 
-  Candidate mechanisms, none designed: a time limit at the initiators after
-  which an open round is abandoned (it heals the loss of a marker whatever
-  its cause), re-sending on recovery the marker of the epoch that the node
-  restores (a marker of a round that is already over is ignored), and a
-  rule for the halt that folds it into the ordinary-round mechanism above
-  instead of giving it its own.
+  Candidate mechanism, not designed: a rule that lets a halt heal like an
+  ordinary round, where the next trigger replaces a round that did not
+  complete, instead of giving it its own; today a node that has halted
+  ignores every trigger.
 - Whether checkpoints' `channel_state` (the State capture
   subsection) needs to actually be fed back into `process_data` somehow on
   restore, or is genuinely only for external inspection/audit of a
@@ -2132,9 +2128,13 @@ built. Empty for now: nothing listed in Future work is marked completed yet.
   manipulating files, with no special mode in the startup sequence (which always
   loads the highest epoch and replays the log): an auxiliary script run while
   the program is stopped. Points to settle when designing it:
-  - The target epoch is the highest one present in the checkpoint folder of
-    every node (the minimum of their latest epochs, if contiguous). Every node
-    deletes, or moves aside, the checkpoints above it, which belong to a round
+  - The target epoch is chosen for each independent subgraph (a set of nodes
+    that no channel joins to the rest of the program) on its own: the highest
+    one present in the checkpoint folder of every node of the subgraph. No
+    channel joins two subgraphs, so no message crosses from the cut of one to
+    the cut of another, and cuts of different epochs in different subgraphs
+    still make a consistent cut of the whole program. Every node deletes, or
+    moves aside, the checkpoints above its target, which belong to a round
     that not everybody completed. The target has to lie inside every node's
     retained window (`CHECKPOINT_RETENTION`), so the interval between snapshots
     bounds how far back a rollback can go.

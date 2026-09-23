@@ -694,14 +694,30 @@ def test_a_marker_of_a_round_that_was_replaced_or_is_over_is_ignored():
     assert proc._barrier_epoch is None
 
 
-def test_a_snapshot_trigger_that_finds_a_round_open_changes_nothing_and_does_not_end_the_node():
-    proc = _BarrierWorker(opts=_FAKE_OPTS)
-    _run_brain(proc, [_marker("a", 0), _trigger("start_snapshot"), ("b", lib.TYPE_DATA, 5)])
+def test_a_snapshot_trigger_that_finds_a_snapshot_open_replaces_it_with_the_next_epoch():
+    # An initiator whose marker was lost gets out of its round at its next trigger, with a number
+    # above the open one so that the nodes that have that round open replace it too.
+    proc = _Counting(opts=_FAKE_OPTS)
+    _run_brain(
+        proc,
+        [_marker("a", 0), ("b", lib.TYPE_DATA, 5), _trigger("start_snapshot"), ("b", lib.TYPE_DATA, 6)],
+    )
 
-    assert (proc._barrier_epoch, proc._barrier_pending) == (0, {"b"})
-    assert proc.received == [("b", 5)]  # the node went on processing
-    assert lib.decode_envelope(_out(proc, "x")).payload["epoch"] == 0
-    assert proc._outbound_queues["x"].empty()  # and no marker of a second round went out
+    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (1, False, {"a", "b"})
+    assert proc._barrier_node_state == {"n": 1}
+    assert proc.received == [("b", 5), ("b", 6)]  # the node went on processing
+    assert [lib.decode_envelope(_out(proc, "x")).payload for _ in range(2)] == [
+        {"epoch": 0, "halt": False},
+        {"epoch": 1, "halt": False},
+    ]
+
+
+def test_a_snapshot_trigger_that_finds_a_halt_open_changes_nothing():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 0, halt=True), _trigger("start_snapshot")])
+
+    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (0, True, {"b"})
+    assert proc._outbound_queues["x"].qsize() == 1
 
 
 def test_a_shutdown_trigger_that_finds_a_snapshot_open_replaces_it_with_the_halt():

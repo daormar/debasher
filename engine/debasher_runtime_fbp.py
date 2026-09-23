@@ -766,15 +766,17 @@ class FBPProcess(_PortWorker):
         """
         The epoch of the round that a trigger without an epoch starts, the
         one after the last this node closed, abandoned or has open, or None
-        if the trigger is to be ignored. Such a trigger does not start a
-        round when one is open: a snapshot is ignored, since the round in
-        progress takes it, and a shutdown replaces an open snapshot and
-        starts the halt at once, and is ignored if a halt is open.
+        if the trigger is to be ignored. It replaces an open snapshot, so
+        that an initiator whose marker was lost, and whose round would
+        otherwise stay open for ever, gets out of it at its next trigger;
+        the number has to be above the open one for the nodes that have
+        that round open to replace it too. It is ignored if a halt is open:
+        a halt is never given up, and a second one adds nothing.
         """
         if self._barrier_epoch is None:
             return self._last_epoch + 1
-        if not halt or self._barrier_halt:
-            self.log.warning("ignoring a trigger: round %s is already open", self._barrier_epoch)
+        if self._barrier_halt:
+            self.log.warning("ignoring a trigger: the halt of round %s is open", self._barrier_epoch)
             return None
         return self._barrier_epoch + 1
 
