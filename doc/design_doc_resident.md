@@ -279,8 +279,9 @@ mutation check, durability level) is defined in the Contract, where it is used.
 - **channel state** (estado de canal): `channel_state`, the copy that a node
   keeps, in the checkpoint, of the `DATA` that arrived on a pending port during
   a round: the messages that were in transit at the cut. They are also processed
-  normally. Localized recovery does not read it (it uses the input log); a
-  global rollback would.
+  normally. Localized recovery does not read it: the same messages are in the
+  input log above `capture_pos`, and the replay processes them again. A global
+  rollback would.
 - **consistent cut** (corte consistente): the checkpoints of every node for the
   same round, taken together (each one holds its node state and the channel
   state of its input ports): a state that the whole program could really have
@@ -906,13 +907,16 @@ signal, and a stop sends no `CLOSE`.
   `initialize_runtime()` instead, see the Startup sequence below.
 - Channel state: a copy of the `DATA` that arrives on a still-pending port
   during an open barrier round (the generic barrier logic above) is saved as the
-  checkpoint's own `channel_state` field
-  (`_save_checkpoint(epoch, node_state, channel_buffers, capture_pos)`).
-  **Not currently read back by anything**: on restore, only `node_state` is
-  passed to `restore_node_state()`; whether `channel_state` is meant purely for
-  external inspection/audit of a consistent global snapshot (per the
-  introduction's second goal) or is a real gap is flagged in the Loose ends
-  section below, not resolved here.
+  checkpoint's own `channel_state` field (`_save_checkpoint`). A restore does
+  not read it, and must not: on restore, only `node_state` is passed to
+  `restore_node_state()`. Every message in it arrived after the capture, so the
+  input log holds it above `capture_pos` and the replay processes it again;
+  feeding it from `channel_state` too would process it twice. It exists for the
+  two uses of a consistent cut: inspecting the state of the whole program at a
+  round, where the node states alone miss the messages that were in transit (the
+  introduction's second goal), and a global rollback, which discards the input
+  logs above the target and has to redeliver those messages from it (see Future
+  work).
 - The node state is stored under `node_state`, distinct from `channel_state`;
   its hooks are `capture_node_state()` and `restore_node_state()`. There is no
   backward-compatibility code for a mismatch: a checkpoint written under
@@ -1978,14 +1982,6 @@ open.
 
 ## Unfixed
 
-- Whether checkpoints' `channel_state` (the State capture
-  subsection) needs to actually be fed back into `process_data` somehow on
-  restore, or is genuinely only for external inspection/audit of a
-  consistent global snapshot as the introduction's second goal describes:
-  today it is captured and persisted but never read back by anything, which
-  is either correct as designed or a real gap, not resolved. Localized
-  recovery does not need it (it uses the log); a global rollback would (see
-  Future work).
 - Verifying that a valid `BARRIER` initiator can actually reach every other
   node in the graph (the Chandy-Lamport subsection): no validation
   exists. The `TRIGGER_PORT` list (one initiator per genuinely
@@ -2167,10 +2163,9 @@ Design ideas from Future work move here once they are actually built.
     recovery, with the duplicates between nodes that this implies.
   - `channel_state` is needed here, unlike in localized recovery: the messages
     in transit at the cut were sent by nodes that, once restored, will not send
-    them again, so they have to be redelivered. This answers the open question
-    about `channel_state` in "Loose ends". A way to do it with no new logic: the
-    script appends them to the log of the receiving node as records after the
-    target position, which the unchanged startup already replays.
+    them again, so they have to be redelivered. A way to do it with no new
+    logic: the script appends them to the log of the receiving node as records
+    after the target position, which the unchanged startup already replays.
   - An epoch number must identify a single round. A numbered trigger gives its
     round a number of its own, the time in milliseconds (see numbered trigger
     in the Glossary), but a trigger without an epoch is numbered from the
