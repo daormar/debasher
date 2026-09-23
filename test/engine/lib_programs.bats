@@ -415,3 +415,218 @@ EOF
     run debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--pfile"
     [ "${output}" = "with space.sh" ]
 }
+
+# --- fifo tags and the channels of a resident program ------------------------
+#
+# The registries are filled by hand, as debasher_exec leaves them once every
+# process has defined its options and the other end of every fifo is known.
+
+set_up_registries() {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_KINDS=()
+    declare -gA DEBASHER_FIFO_MIRRORED=() DEBASHER_RESIDENT_PROCESS_ROLES=()
+    declare -gA DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=()
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+    SORT="$(command -v sort)"
+    TR="$(command -v tr)"
+}
+
+# $1: process name, $2: role, $3: number of tasks (1 if omitted)
+add_process() {
+    DEBASHER_RESIDENT_PROCESS_ROLES["$1"]="$2"
+    DEBASHER_PROCESS_OPT_LIST_LEN["$1"]="${3:-1}"
+}
+
+# A node or process end as the registries store it: $1 process, $2 task
+end_of() {
+    echo "$1${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${2:-0}"
+}
+
+# $1: fifo, $2: owner end, $3: other end (or "outside"), $4: tag (optional),
+# $5: the owner's option (by default an input option for a tagged fifo fed
+# from outside, which its owner reads, and an output option otherwise)
+add_fifo() {
+    DEBASHER_PROGRAM_FIFOS["$1"]="$2"
+    if [ "$3" = "outside" ]; then
+        DEBASHER_FIFO_USERS["$1"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    else
+        DEBASHER_FIFO_USERS["$1"]="$3"
+    fi
+    if [ -n "${4:-}" ]; then
+        DEBASHER_FIFO_KINDS["$1"]="$4"
+    fi
+    if [ -n "${5:-}" ]; then
+        DEBASHER_FIFO_OWNER_OPTS["$1"]="$5"
+    elif [ -n "${4:-}" ] && [ "$3" = "outside" ]; then
+        DEBASHER_FIFO_OWNER_OPTS["$1"]="-in"
+    else
+        DEBASHER_FIFO_OWNER_OPTS["$1"]="-out"
+    fi
+}
+
+@test "debasher::_validate_program_fifo_kinds accepts the channels of the chaos reference program" {
+    set_up_registries
+    add_process fanin fbpprocess
+    add_process loop fbpprocess
+    add_process sink fbpprocess
+    add_process sup supervisor
+    add_fifo sup/sup_trig_fanin "$(end_of sup)" "$(end_of fanin)" control
+    add_fifo sup/sup_manual "$(end_of sup)" outside control
+    add_fifo fanin/fanin_ext "$(end_of fanin)" outside external
+    add_fifo fanin/fanin_to_loop "$(end_of fanin)" "$(end_of loop)"
+    add_fifo loop/loop_to_fanin "$(end_of loop)" "$(end_of fanin)"
+    add_fifo fanin/fanin_to_sink "$(end_of fanin)" "$(end_of sink)"
+    add_fifo fanin/fanin_hb "$(end_of fanin)" "$(end_of sup)"
+    add_fifo sink/sink_hb "$(end_of sink)" "$(end_of sup)"
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_validate_program_fifo_kinds refuses a node that no round can reach" {
+    # Two nodes fed from outside fan in to c, and only a can be triggered.
+    set_up_registries
+    add_process a fbpprocess
+    add_process b fbpprocess
+    add_process c fbpprocess
+    add_fifo a/a_trigger "$(end_of a)" outside control
+    add_fifo a/a_ext "$(end_of a)" outside external
+    add_fifo b/b_ext "$(end_of b)" outside external
+    add_fifo a/a_out "$(end_of a)" "$(end_of c)"
+    add_fifo b/b_out "$(end_of b)" "$(end_of c)"
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: no round can reach b:"* ]]
+}
+
+@test "debasher::_validate_program_fifo_kinds follows the fifos in the direction they carry a marker" {
+    # b only writes to the initiator a, so nothing reaches b.
+    set_up_registries
+    add_process a fbpprocess
+    add_process b fbpprocess
+    add_fifo a/a_trigger "$(end_of a)" outside control
+    add_fifo b/b_out "$(end_of b)" "$(end_of a)"
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: no round can reach b:"* ]]
+}
+
+@test "debasher::_validate_program_fifo_kinds names an unreachable task of an array with its index" {
+    set_up_registries
+    add_process start fbpprocess
+    add_process worker fbpprocess 3
+    add_fifo start/start_trigger "$(end_of start)" outside control
+    add_fifo start/start_out_0 "$(end_of start)" "$(end_of worker 0)"
+    add_fifo start/start_out_1 "$(end_of start)" "$(end_of worker 1)"
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: no round can reach worker:2:"* ]]
+}
+
+@test "debasher::_validate_program_fifo_kinds refuses an external fifo with its other end inside the program" {
+    set_up_registries
+    add_process a fbpprocess
+    add_process b fbpprocess
+    add_fifo a/a_trigger "$(end_of a)" outside control
+    add_fifo a/a_ext "$(end_of a)" "$(end_of b)" external
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: fifo a/a_ext is tagged --external, but process b of the program uses it"* ]]
+}
+
+@test "debasher::_validate_program_fifo_kinds refuses a control fifo between two nodes" {
+    set_up_registries
+    add_process a fbpprocess
+    add_process b fbpprocess
+    add_fifo a/a_trigger "$(end_of a)" outside control
+    add_fifo a/a_to_b "$(end_of a)" "$(end_of b)" control
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: fifo a/a_to_b is tagged --control, but it is neither fed from outside the program nor written by the Supervisor to a node"* ]]
+}
+
+@test "debasher::_validate_program_fifo_kinds refuses a fifo defined by its reader without a tag" {
+    # a reads a fifo fed from outside, and forgot to tag it.
+    set_up_registries
+    add_process a fbpprocess
+    add_fifo a/a_trigger "$(end_of a)" outside control
+    add_fifo a/a_in "$(end_of a)" outside "" "-inf"
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: fifo a/a_in is defined by process a through the input option -inf: a fifo is defined by the process that writes it"* ]]
+}
+
+@test "debasher::_validate_program_fifo_kinds refuses a tagged fifo fed from outside defined through an output option" {
+    set_up_registries
+    add_process a fbpprocess
+    add_fifo a/a_trigger "$(end_of a)" outside control "-outtrigger"
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: fifo a/a_trigger is tagged --control and fed from outside the program, so process a reads it, but defines it through the output option -outtrigger"* ]]
+}
+
+@test "debasher::_validate_program_fifo_kinds refuses a fifo tag in a general program" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    add_fifo p/p_in "$(end_of p)" outside external
+
+    run debasher::_validate_program_fifo_kinds
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: fifo p/p_in is tagged --external, which only a 'resident' program may use"* ]]
+}
+
+@test "debasher::define_fifo_opt records the tag of the fifo" {
+    set_up_registries
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    tagproc_define_opts() {
+        local optlist=""
+        define_fifo_opt "-trigger" "tagproc_trigger" optlist --control
+        define_fifo_opt "-ext" "tagproc_ext" optlist --external
+        define_fifo_opt "-out" "tagproc_out" optlist
+    }
+    tagproc_define_opts
+
+    [ "${DEBASHER_FIFO_KINDS["tagproc/tagproc_trigger"]}" = "control" ]
+    [ "${DEBASHER_FIFO_KINDS["tagproc/tagproc_ext"]}" = "external" ]
+    [ -z "${DEBASHER_FIFO_KINDS["tagproc/tagproc_out"]+x}" ]
+    [ "${DEBASHER_FIFO_OWNER_OPTS["tagproc/tagproc_trigger"]}" = "-trigger" ]
+    [ "${DEBASHER_FIFO_OWNER_OPTS["tagproc/tagproc_out"]}" = "-out" ]
+}
+
+@test "debasher::define_fifo_opt refuses both tags on one fifo, and an unknown flag" {
+    set_up_registries
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    bothproc_define_opts() {
+        local optlist=""
+        define_fifo_opt "-x" "bothproc_x" optlist --control --external
+    }
+    run bothproc_define_opts
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"define_fifo_opt: Error, a fifo takes at most one of --control and --external"* ]]
+
+    unknownproc_define_opts() {
+        local optlist=""
+        define_fifo_opt "-x" "unknownproc_x" optlist --bogus
+    }
+    run unknownproc_define_opts
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"define_fifo_opt: Error, unknown flag --bogus"* ]]
+}
+
+@test "debasher::define_opt_from_proc_out refuses to connect to an option that is not an output" {
+    run debasher::define_opt_from_proc_out "-from_fanin" "fanin" "-to_loop" optlist
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"connected process option should start with -out or --out"* ]]
+
+    local optlist=""
+    debasher::define_opt_from_proc_out "-from_fanin" "fanin" "-outloop" optlist
+    [ -n "${optlist}" ]
+}

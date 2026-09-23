@@ -661,7 +661,7 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     """
     "run... repeatedly under kill -9 of random nodes at random moments...
     [including] adjacent pairs" (Acceptance): fanin and sink share exactly
-    one, one-way channel (fanin.to_sink -> sink.from_fanin), one of the
+    one, one-way channel (fanin.outsink -> sink.from_fanin), one of the
     only two pairs of killable nodes that can touch the Contract's "both
     endpoints of a channel crashed" limit (see "Limits and non-goals";
     the other is fanin+loop, not covered by this piece).

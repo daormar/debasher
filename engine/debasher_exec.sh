@@ -744,6 +744,10 @@ check_process_opts()
     # Register fifo users
     register_fifo_users "${cmdline}" || return 1
 
+    # Check the tags of the fifos, now that the other end of every fifo is
+    # known (see debasher::_validate_program_fifo_kinds)
+    debasher::_validate_program_fifo_kinds || return 1
+
     # Print info about fifos
     debasher::_show_program_fifos > "${program_fifos_file}" || return 1
 

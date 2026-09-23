@@ -794,6 +794,8 @@ debasher::_define_fifo_task_idx()
     local processname=$2
     local task_idx=$3
     local mirrored=$4
+    local kind=$5
+    local opt=$6
 
     # Get augmented fifo name
     local augm_fifoname="${processname}/${fifoname}"
@@ -810,6 +812,59 @@ debasher::_define_fifo_task_idx()
     if [ "${mirrored}" = "1" ]; then
         DEBASHER_FIFO_MIRRORED["${augm_fifoname}"]=1
     fi
+
+    # Record the fifo's tag, if it has one (see DEBASHER_FIFO_KINDS)
+    if [ -n "${kind}" ]; then
+        DEBASHER_FIFO_KINDS["${augm_fifoname}"]=${kind}
+    fi
+
+    # Record the option through which the owner defines the fifo
+    DEBASHER_FIFO_OWNER_OPTS["${augm_fifoname}"]=${opt}
+}
+
+########
+# Reads the optional flags of define_fifo_opt and define_fifo_opt_generator:
+# --mirror, and at most one of --control and --external (the fifo's tag, see
+# DEBASHER_FIFO_KINDS). Whether a tag is allowed in the program is checked
+# once the program is loaded (see debasher::_validate_program_fifo_kinds),
+# not here: an option generator also runs again inside the script of each of
+# its tasks, where the program type is not known.
+#
+# $1 - Name of the public function, for the error messages.
+# $2 - Name of the variable that receives 1 if --mirror was given, 0 if not.
+# $3 - Name of the variable that receives the tag, or the empty string.
+# $4... - The flags.
+#
+# Returns 0 if every flag is valid; otherwise prints an error and returns 1.
+debasher::_read_fifo_opt_flags()
+{
+    local funcname=$1
+    local -n fifo_flags_mirrored_ref=$2
+    local -n fifo_flags_kind_ref=$3
+    shift 3
+
+    fifo_flags_mirrored_ref=0
+    fifo_flags_kind_ref=""
+    local flag
+    for flag in "$@"; do
+        case "${flag}" in
+            "--mirror")
+                debasher::_check_fifo_mirror_allowed "${funcname}" || return 1
+                fifo_flags_mirrored_ref=1
+                ;;
+            "--control"|"--external")
+                if [ -n "${fifo_flags_kind_ref}" ]; then
+                    echo "${funcname}: Error, a fifo takes at most one of --control and --external" >&2
+                    return 1
+                fi
+                fifo_flags_kind_ref="${flag#--}"
+                ;;
+            *)
+                echo "${funcname}: Error, unknown flag ${flag}" >&2
+                return 1
+                ;;
+        esac
+    done
 }
 
 ########
@@ -823,14 +878,23 @@ debasher::_define_fifo_task_idx()
 #      mirror log file (see debasher::_start_fifo_mirror_taps_for_process).
 #      Only meaningful on the process that WRITES to the fifo. Not
 #      allowed in a resident program (the program aborts when loaded).
+#      In a resident program, at most one of these tags may be given as
+#      well (refused in a general program when it is loaded):
+#      "--control": the reader's end of the fifo is a control port;
+#      "--external": the reader's end is an external port, fed from
+#      outside the program. A fifo whose writer is outside the program is
+#      defined by its reader, and has to carry one of the two tags (see
+#      the design doc's "Channel kinds declared with the fifo").
 #
 # This function should only be defined in one of the processes connected
-# by the FIFO. More specifically, in the process defining an output option.
+# by the FIFO. More specifically, in the process defining an output option,
+# except for a tagged fifo whose writer is outside the program.
 #
 # Examples
 #
 #   debasher::define_fifo_opt "-o" "${fifoname}" "optlist"
 #   debasher::define_fifo_opt "-o" "${fifoname}" "optlist" --mirror
+#   debasher::define_fifo_opt "-trigger" "${fifoname}" "optlist" --control
 #
 # The function does not return any value
 debasher::define_fifo_opt()
@@ -838,11 +902,8 @@ debasher::define_fifo_opt()
     local opt=$1
     local fifoname=$2
     local varname=$3
-    local mirrored=0
-    if [ "$4" = "--mirror" ]; then
-        debasher::_check_fifo_mirror_allowed "define_fifo_opt" || exit 1
-        mirrored=1
-    fi
+    local mirrored kind
+    debasher::_read_fifo_opt_flags "define_fifo_opt" mirrored kind "${@:4}" || exit 1
 
     # Check that the call is valid
     local proc_generate=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
@@ -858,7 +919,7 @@ debasher::define_fifo_opt()
     local task_idx=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}
 
     # Define FIFO
-    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}"
+    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}"
 
     # Get absolute name of FIFO
     local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
@@ -873,9 +934,12 @@ debasher::define_fifo_opt()
 # $1 - Option name.
 # $2 - Name of fifo.
 # $3 - Name of variable that will store the information about the option to be added.
+# $4... - (optional) "--mirror", and "--control" or "--external" (see
+#      debasher::define_fifo_opt).
 #
 # This function should only be defined in one of the processes connected
-# by the FIFO. More specifically, in the process defining an output option.
+# by the FIFO. More specifically, in the process defining an output option,
+# except for a tagged fifo whose writer is outside the program.
 #
 # Examples
 #
@@ -891,10 +955,12 @@ define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 # $2 - Name of fifo.
 # $3 - Index of the task whose options the generator is producing.
 # $4 - Name of variable that will store the information about the option to be added.
-# $5 - (optional) "--mirror" (see debasher::define_fifo_opt).
+# $5... - (optional) "--mirror", and "--control" or "--external" (see
+#      debasher::define_fifo_opt).
 #
 # This function should only be defined in one of the processes connected
-# by the FIFO. More specifically, in the process defining an output option.
+# by the FIFO. More specifically, in the process defining an output option,
+# except for a tagged fifo whose writer is outside the program.
 # Additionally, the function should only be called from an option generator.
 #
 # Examples
@@ -908,11 +974,8 @@ debasher::define_fifo_opt_generator()
     local fifoname=$2
     local task_idx=$3
     local varname=$4
-    local mirrored=0
-    if [ "$5" = "--mirror" ]; then
-        debasher::_check_fifo_mirror_allowed "define_fifo_opt_generator" || exit 1
-        mirrored=1
-    fi
+    local mirrored kind
+    debasher::_read_fifo_opt_flags "define_fifo_opt_generator" mirrored kind "${@:5}" || exit 1
 
     # Check that the call is valid
     local proc_define=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
@@ -925,7 +988,7 @@ debasher::define_fifo_opt_generator()
     local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
 
     # Define FIFO
-    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}"
+    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}"
 
     # Get absolute name of FIFO
     local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
@@ -941,10 +1004,12 @@ debasher::define_fifo_opt_generator()
 # $2 - Name of fifo.
 # $3 - Index of the task whose options the generator is producing.
 # $4 - Name of variable that will store the information about the option to be added.
-# $5 - (optional) "--mirror" (see debasher::define_fifo_opt).
+# $5... - (optional) "--mirror", and "--control" or "--external" (see
+#      debasher::define_fifo_opt).
 #
 # This function should only be defined in one of the processes connected
-# by the FIFO. More specifically, in the process defining an output option.
+# by the FIFO. More specifically, in the process defining an output option,
+# except for a tagged fifo whose writer is outside the program.
 # Additionally, the function should only be called from an option generator.
 #
 # Examples
@@ -1373,7 +1438,7 @@ debasher::define_opt_from_proc_task_out()
         debasher::errmsg "define_opt_from_proc_task_out: wrong input parameters, process option cannot start with ${opt} (it should not be an output option)"
         return 1
     else
-        if [[ ! "${out_opt}" != "-out"* && ! "${out_opt}" != "--out"* ]]; then
+        if [[ "${out_opt}" != "-out"* && "${out_opt}" != "--out"* ]]; then
             debasher::errmsg "define_opt_from_proc_task_out: wrong input parameters, connected process option should start with -out or --out"
             return 1
         fi

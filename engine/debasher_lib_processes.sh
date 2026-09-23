@@ -1762,13 +1762,13 @@ debasher::_register_fifos_used_by_process()
             augm_fifoname=$(debasher::_get_augm_fifoname_from_absname "${value}")
             [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || continue
 
-            local proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}"
-            local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+            # The task that owns the fifo is not a user of it; another task of
+            # the same array is
+            local this_task="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+            [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" = "${this_task}" ] && continue
 
-            [ "${processowner}" = "${processname}" ] && continue
-
-            # The current process is not the owner of the FIFO: register it as a user
-            DEBASHER_FIFO_USERS["${augm_fifoname}"]=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}
+            # Register the current task as a user of the fifo
+            DEBASHER_FIFO_USERS["${augm_fifoname}"]=${this_task}
         done
     }
 

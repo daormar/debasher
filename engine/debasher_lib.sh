@@ -477,6 +477,26 @@ declare -A DEBASHER_FIFO_USERS
 # --mirror flag (see debasher::_start_fifo_mirror_taps_for_process)
 declare -A DEBASHER_FIFO_MIRRORED
 
+# Declare associative array with the tag of each tagged fifo (by augmented
+# name), "control" or "external", given to define_fifo_opt or
+# define_fifo_opt_generator as --control or --external: the reader's end of
+# the fifo is a control port or an external port of a resident program's
+# node, and a fifo fed from outside is owned by its reader (see the design
+# doc's "Channel kinds declared with the fifo")
+declare -A DEBASHER_FIFO_KINDS
+DEBASHER_FIFO_KIND_CONTROL="control"
+DEBASHER_FIFO_KIND_EXTERNAL="external"
+
+# Declare associative array with the option through which the owner of each
+# fifo (by augmented name) defines it: an output option ("-out...") if the
+# owner writes it, an input option if it reads it
+declare -A DEBASHER_FIFO_OWNER_OPTS
+
+# Declare associative array with the role of each process of a resident
+# program, "supervisor" or "fbpprocess" (see
+# debasher::_validate_resident_program_processes)
+declare -A DEBASHER_RESIDENT_PROCESS_ROLES
+
 # Declare general scheduler-related variables
 declare DEBASHER_SCHEDULER
 declare -A DEBASHER_RERUN_PROCESSES

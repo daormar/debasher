@@ -469,6 +469,7 @@ debasher::_validate_resident_program_processes()
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         local role
         role=$(debasher::_classify_resident_process_role "${processname}") || return 1
+        DEBASHER_RESIDENT_PROCESS_ROLES["${processname}"]="${role}"
 
         case "${role}" in
             supervisor)
@@ -487,6 +488,160 @@ debasher::_validate_resident_program_processes()
                 ;;
         esac
     done
+}
+
+########
+# Checks the tags of the program's fifos (see DEBASHER_FIFO_KINDS) once
+# every process has defined its options and the other end of every fifo is
+# known (see debasher::_register_fifos_used_by_process). A general program
+# may not use them. In a resident program they have to be used as they say,
+# and a round has to be able to reach every node (see the design doc's
+# "Channel kinds declared with the fifo"). Prints an error and returns 1 on
+# the first violation found.
+debasher::_validate_program_fifo_kinds()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        local augm_fifoname
+        for augm_fifoname in "${!DEBASHER_FIFO_KINDS[@]}"; do
+            echo "Error: fifo ${augm_fifoname} is tagged --${DEBASHER_FIFO_KINDS[${augm_fifoname}]}, which only a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program may use" >&2
+            return 1
+        done
+        return 0
+    fi
+
+    debasher::_validate_resident_channels
+}
+
+########
+# The name of a node for a message: the process name, or
+# <process>:<idx> for a task of an array (as debasher_stop_resident's -x
+# names it). $1 is a node as the fifo registries store it,
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>.
+debasher::_resident_node_display_name()
+{
+    local node=$1
+    local processname="${node%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local idx="${node#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+    if [ "$(debasher::_get_numtasks_for_process "${processname}")" -eq 1 ]; then
+        echo "${processname}"
+    else
+        echo "${processname}:${idx}"
+    fi
+}
+
+########
+# Builds the graph of the business channels of a resident program, task
+# by task, from the fifo registries and tags, and checks it:
+#
+# 1. Every tagged fifo is used as its tag says: one tagged --external has
+#    its other end outside the program, and one tagged --control either has
+#    its other end outside or is owned by the Supervisor and read by a node.
+#    The owner of a fifo writes it, through an output option ("-out..."),
+#    except a tagged fifo fed from outside, which it reads through an input
+#    option.
+# 2. Every node (every task of every FBPProcess) can be reached from an
+#    initiator, a node that reads a fifo tagged --control, through the
+#    fifos without a tag, each from its owner, which writes it, to the node
+#    at its other end, which reads it.
+#
+# A fifo without a tag whose other end is outside the program is a channel
+# to someone outside (a node that writes its results out), and so is one
+# whose other end is the Supervisor (a heartbeat channel): neither is an
+# edge of the graph. Needs DEBASHER_RESIDENT_PROCESS_ROLES, filled by
+# debasher::_validate_resident_program_processes.
+debasher::_validate_resident_channels()
+{
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    # Every task of every business node
+    local -A is_node=()
+    local processname idx num_tasks
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
+        num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        for (( idx = 0; idx < num_tasks; idx++ )); do
+            is_node["${processname}${sep}${idx}"]=1
+        done
+    done
+
+    # Edges of the graph, and the initiators
+    local -A successors=()
+    local -A reached=()
+    local -a queue=()
+    local augm_fifoname owner user kind reader owner_proc user_proc owner_opt
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+        user="${DEBASHER_FIFO_USERS[${augm_fifoname}]}"
+        kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
+        owner_proc="${owner%%${sep}*}"
+        user_proc="${user%%${sep}*}"
+        case "${kind}" in
+            "")
+                if [ -n "${is_node[${owner}]+x}" ] && [ -n "${is_node[${user}]+x}" ]; then
+                    successors["${owner}"]+=" ${user}"
+                fi
+                ;;
+            "${DEBASHER_FIFO_KIND_EXTERNAL}")
+                if [ "${user}" != "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                    echo "Error: fifo ${augm_fifoname} is tagged --external, but process ${user_proc} of the program uses it: a fifo fed from outside the program has no other end inside it" >&2
+                    return 1
+                fi
+                ;;
+            "${DEBASHER_FIFO_KIND_CONTROL}")
+                if [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                    reader="${owner}"
+                elif [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${owner_proc}]:-}" = "supervisor" ] && [ -n "${is_node[${user}]+x}" ]; then
+                    reader="${user}"
+                else
+                    echo "Error: fifo ${augm_fifoname} is tagged --control, but it is neither fed from outside the program nor written by the Supervisor to a node" >&2
+                    return 1
+                fi
+                if [ -n "${is_node[${reader}]+x}" ] && [ -z "${reached[${reader}]+x}" ]; then
+                    reached["${reader}"]=1
+                    queue+=("${reader}")
+                fi
+                ;;
+        esac
+
+        # The option through which the owner defines the fifo says whether it
+        # writes or reads it
+        owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]:-}"
+        if [ -n "${kind}" ] && [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+            if debasher::_str_is_output_option "${owner_opt}"; then
+                echo "Error: fifo ${augm_fifoname} is tagged --${kind} and fed from outside the program, so process ${owner_proc} reads it, but defines it through the output option ${owner_opt}" >&2
+                return 1
+            fi
+        elif ! debasher::_str_is_output_option "${owner_opt}"; then
+            echo "Error: fifo ${augm_fifoname} is defined by process ${owner_proc} through the input option ${owner_opt}: a fifo is defined by the process that writes it, through an output option (-out...), unless it is fed from outside the program and tagged --external or --control" >&2
+            return 1
+        fi
+    done
+
+    # Every node a round can reach, from the initiators
+    local head=0 node next
+    while [ "${head}" -lt "${#queue[@]}" ]; do
+        node="${queue[head]}"
+        head=$((head + 1))
+        for next in ${successors[${node}]:-}; do
+            if [ -z "${reached[${next}]+x}" ]; then
+                reached["${next}"]=1
+                queue+=("${next}")
+            fi
+        done
+    done
+
+    local -a unreached=()
+    for node in "${!is_node[@]}"; do
+        if [ -z "${reached[${node}]+x}" ]; then
+            unreached+=("$(debasher::_resident_node_display_name "${node}")")
+        fi
+    done
+    if [ "${#unreached[@]}" -gt 0 ]; then
+        local sorted
+        sorted=$(printf '%s\n' "${unreached[@]}" | "${SORT}" | "${TR}" '\n' ' ')
+        echo "Error: no round can reach ${sorted% }: a round starts at a node that reads a fifo tagged --control and goes on through the fifos without a tag, from their owner to the node at the other end" >&2
+        return 1
+    fi
 }
 
 ########

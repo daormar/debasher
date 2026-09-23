@@ -380,6 +380,7 @@ EOF
 
 @test "debasher::define_fifo_opt registers each fifo of an array defined in a loop as owned by its own task" {
     declare -gA DEBASHER_PROGRAM_FIFOS DEBASHER_FIFO_USERS DEBASHER_FIFO_MIRRORED
+    declare -gA DEBASHER_FIFO_KINDS DEBASHER_FIFO_OWNER_OPTS
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN DEBASHER_OUT_VALUE_TO_PROCESSES
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
 
@@ -404,4 +405,56 @@ EOF
     [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_0"]}" = "loopfifoproc${sep}0" ]
     [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_1"]}" = "loopfifoproc${sep}1" ]
     [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_2"]}" = "loopfifoproc${sep}2" ]
+}
+
+# --- users of the fifos --------------------------------------------------
+
+@test "debasher::_register_fifos_used_by_process registers the reader of a fifo that its owner writes" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname fanin fanin_to_loop)"
+    DEBASHER_PROGRAM_FIFOS["fanin/fanin_to_loop"]="fanin${sep}0"
+    DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    # fanin writes it through its output option (-outloop, say)
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["loop"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-from_fanin${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "loop"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]}" = "loop${sep}0" ]
+}
+
+@test "debasher::_register_fifos_used_by_process registers another task of the same array as a user" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname worker worker_out_0)"
+    DEBASHER_PROGRAM_FIFOS["worker/worker_out_0"]="worker${sep}0"
+    DEBASHER_FIFO_USERS["worker/worker_out_0"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="worker${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["worker"]=2
+    # Task 0 writes the fifo, task 1 reads it.
+    debasher::_get_opts_for_process_and_task() {
+        if [ "$3" -eq 0 ]; then
+            echo "-outnext${DEBASHER_ARG_SEP}${fifo}"
+        else
+            echo "-from_prev${DEBASHER_ARG_SEP}${fifo}"
+        fi
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "worker"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["worker/worker_out_0"]}" = "worker${sep}1" ]
 }

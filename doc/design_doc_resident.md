@@ -525,6 +525,12 @@ exposes a violation.
   resync line (see the Glossary) that every writer incarnation sends first,
   and the sender's replay regenerates the message. Only the framework writes
   to these channels; an external writer must send complete lines.
+- **Every fifo is defined by the process that writes it, through an output
+  option, except one fed from outside the program**, which its reader defines
+  through an input option with a fifo tag, `--control` for commands and
+  `--external` for data (see "Channel kinds declared with the fifo"). The
+  engine reads the direction of every channel from this, and refuses a
+  resident program that does not follow it when the program is loaded.
 
 ## Guarantees
 
@@ -1010,13 +1016,10 @@ Future work).
   keep its round open for ever. A trigger that finds a halt open, and any
   trigger once the node has halted, are ignored. A numbered trigger follows
   the rule of a marker instead (see numbered trigger in the Glossary).
-- **Not yet done**: checking that the node chosen as initiator can actually
-  reach every other node (the graph is strongly connected from that node) before
-  it is ever allowed to be used as one: no validation code exists for this
-  today; a module author enabling `SNAPSHOT_INTERVAL_SECS` or wiring a
-  `Supervisor`'s trigger to the wrong node would currently fail silently (the
-  round would simply never close for the nodes it can't reach) rather than being
-  told the topology is invalid.
+- A round has to be able to reach every node from an initiator, or it never
+  opens at the nodes it cannot reach and never closes at the nodes they write
+  to. The engine checks it when the program is loaded, and refuses a program in
+  which a node cannot be reached (see "Validation when the program is loaded").
 
 ## Ordered shutdown
 
@@ -1744,18 +1747,22 @@ what it needs to show and edit the channels of a resident program.
 
 ## Direction: the owner writes
 
-Every FIFO of a program is created once, by the `define_fifo_opt` (or
-`define_fifo_opt_generator`) of one process, its fifo owner. The process at the
-other end connects to it with `define_opt_from_proc_out` or
-`define_opt_from_proc_task_out`, or no process of the program does, and the
-other end is outside (`__EXTERNAL__` in the engine's fifo registry). The owner
-of a fifo is the process that writes it, as the documentation of
-`define_fifo_opt` already asks. The one exception is a fifo whose writer is
-outside the program: the process that reads it has to create it, and the fifo
-carries a fifo tag. The engine's registries (`DEBASHER_PROGRAM_FIFOS` and
-`DEBASHER_FIFO_USERS`, written to `program.fifos`) already give the owner and
-the other end of every fifo, task by task, so the direction of every channel
-follows from them and from the tags, with nothing read from Python.
+An output option is named `-out...` or `--out...`, in every program, and
+`define_opt_from_proc_out` and `define_opt_from_proc_task_out` only connect an
+input option to an output option of another process. Every FIFO of a program
+is created once, by the `define_fifo_opt` (or `define_fifo_opt_generator`) of
+one process, its fifo owner, through an output option: the owner writes it.
+The process at the other end reads it, through an input option connected to
+that output, or no process of the program does, and the other end is outside
+(`__EXTERNAL__` in the engine's fifo registry). The one exception is a fifo
+whose writer is outside the program: the process that reads it has to create
+it, through an input option, and the fifo carries a fifo tag. The engine's
+registries (`DEBASHER_PROGRAM_FIFOS` and `DEBASHER_FIFO_USERS`, written to
+`program.fifos`) give the owner and the other end of every fifo, task by task,
+and the other end may be another task of the owner's own array; the option
+through which the owner defines each fifo is recorded too
+(`DEBASHER_FIFO_OWNER_OPTS`). The direction of every channel follows from them
+and from the tags, with nothing read from Python.
 
 ## Tags: `--control` and `--external`
 
@@ -1775,11 +1782,11 @@ From the reference programs:
 ```bash
 # fanin (debasher_chaos_ref.sh)
 define_fifo_opt "-ext" "fanin_ext" optlist --external
-define_opt_from_proc_out "-trigger" "sup" "-trig_fanin" optlist
-define_fifo_opt "-to_loop" "fanin_to_loop" optlist
+define_opt_from_proc_out "-trigger" "sup" "-outtrig_fanin" optlist
+define_fifo_opt "-outloop" "fanin_to_loop" optlist
 
 # sup
-define_fifo_opt "-trig_fanin" "sup_trig_fanin" optlist --control
+define_fifo_opt "-outtrig_fanin" "sup_trig_fanin" optlist --control
 define_fifo_opt "-manual" "sup_manual" optlist --control
 
 # start (debasher_array_ref.sh)
@@ -1796,8 +1803,8 @@ loaded, as a resident program that uses `--mirror` is.
 With the direction and the kind of every fifo, the engine builds the graph of
 the business channels between the business nodes, task by task (the
 `Supervisor` takes no part in rounds, so its channels are left out), and checks
-it before launching anything, as part of
-`debasher::_validate_resident_program_processes`:
+it before launching anything, in `debasher::_validate_program_fifo_kinds`,
+which `debasher_exec` calls once the other end of every fifo is known:
 
 1. Every node can be reached from an initiator, a node that reads a control
    channel, through business channels in the direction in which they carry a
@@ -1806,13 +1813,12 @@ it before launching anything, as part of
    its other end outside the program, so that its owner reads it. A fifo tagged
    `--control` either has its other end outside, and its owner reads it, or is
    owned by the `Supervisor` and read by a node.
+3. The owner of a fifo defines it through an output option, except a tagged
+   fifo fed from outside, which it defines through an input option. A fifo that
+   a node reads from outside and that lacks its tag is refused by this rule.
 
 A fifo without a tag whose other end is outside is a business channel from its
-owner to someone outside the program, a node that writes its results out, and
-needs no check: by construction, every business channel that a node reads has
-its writer inside the program. A fifo that a node reads from outside and that
-lacks its tag is therefore taken for an output, and it is the ports from the
-engine (below) that catch it, when they disagree with the class.
+owner to someone outside the program, a node that writes its results out.
 
 A violation stops the load with an error that names the node or the fifo, and
 the rule. The check walks the fifos once; the registries it reads are already
@@ -2099,22 +2105,23 @@ open.
   newer epoch already did (see "Chandy-Lamport barrier propagation"), so the
   round with the lost marker is abandoned at the next trigger, whatever lost
   it: that round has no complete cut, and the next one does.
+- **Nothing checked that a round can reach every node.** A node that no
+  round reaches never writes a checkpoint, and neither do the nodes it
+  writes to, which wait for its marker: their input logs grow until
+  `INPUT_LOG_MAX_BYTES` is reached, and a halt never closes there. The engine
+  could not check it, since which channels carry commands or come from
+  outside, and which end of a fifo writes it, were only in the Python classes
+  of the nodes. Now a fifo fed from outside, or carrying commands, carries a
+  fifo tag, the owner of any other fifo writes it, and the engine refuses a
+  program in which a node cannot be reached, when it is loaded (see "Channel
+  kinds declared with the fifo"). A node cut off at run time, by a node that
+  fails for good, is handled by "Escalation on a permanent node failure".
 - Dedicated concurrency test for the fan-in case with more than one input
   port pending on the barrier:
   `test_two_pending_ports_waits_for_the_second_marker`.
 
 ## Unfixed
 
-- Verifying that a valid `BARRIER` initiator can actually reach every other
-  node in the graph (the Chandy-Lamport subsection): no validation
-  exists. The `TRIGGER_PORT` list (one initiator per genuinely
-  independent subgraph) covers the *known-at-design-time* version of this,
-  but does not validate that each configured initiator can really reach
-  everything in its own intended subgraph. A graph that becomes
-  disconnected only at *runtime* (a node dying permanently mid-execution)
-  is a separate case, not a validation problem at all, and is instead
-  handled by the "Escalation on a permanent node failure" subsection. The
-  validation is designed in "Channel kinds declared with the fifo".
 - **`debasher_builtin_sched::_wait_until_file_exists` is an iteration
   count, not a time**: 10000 turns of a `[ -f ]` loop with no sleep, about
   90 ms. Now that `_launch` removes the stale `.id`, a relaunch depends on

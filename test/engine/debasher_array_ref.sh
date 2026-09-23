@@ -40,7 +40,7 @@ start_identify_cmdline_opts()
 start_define_opts()
 {
     local optlist=""
-    define_fifo_opt "-trigger" "start_trigger" optlist || return 1
+    define_fifo_opt "-trigger" "start_trigger" optlist --control || return 1
     local i
     for (( i = 0; i < DEBASHER_ARRAY_REF_NUM_WORKERS; i++ )); do
         define_fifo_opt "-outf${i}" "start_out_${i}" optlist || return 1

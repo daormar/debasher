@@ -40,7 +40,7 @@ solo_identify_cmdline_opts()
 solo_define_opts()
 {
     local optlist=""
-    define_fifo_opt "-trigger" "solo_trigger" optlist || return 1
+    define_fifo_opt "-trigger" "solo_trigger" optlist --control || return 1
     save_opt_list optlist
 }
 

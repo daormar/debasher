@@ -28,9 +28,9 @@ fanin_explain_opts()
     explain_opt "-ext" "<fifo>" "externally fed input fifo"
     explain_opt "-loop_in" "<fifo>" "input fifo from loop, closes the cycle"
     explain_opt "-trigger" "<fifo>" "control fifo from the supervisor"
-    explain_opt "-to_loop" "<fifo>" "output fifo to loop"
-    explain_opt "-to_sink" "<fifo>" "output fifo to sink"
-    explain_opt "-hb" "<fifo>" "heartbeat fifo to the supervisor"
+    explain_opt "-outloop" "<fifo>" "output fifo to loop"
+    explain_opt "-outsink" "<fifo>" "output fifo to sink"
+    explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
 }
 
 fanin_identify_cmdline_opts()
@@ -41,12 +41,12 @@ fanin_identify_cmdline_opts()
 fanin_define_opts()
 {
     local optlist=""
-    define_fifo_opt "-ext" "fanin_ext" optlist || return 1
-    define_opt_from_proc_out "-loop_in" "loop" "-to_fanin" optlist || return 1
-    define_opt_from_proc_out "-trigger" "sup" "-trig_fanin" optlist || return 1
-    define_fifo_opt "-to_loop" "fanin_to_loop" optlist || return 1
-    define_fifo_opt "-to_sink" "fanin_to_sink" optlist || return 1
-    define_fifo_opt "-hb" "fanin_hb" optlist || return 1
+    define_fifo_opt "-ext" "fanin_ext" optlist --external || return 1
+    define_opt_from_proc_out "-loop_in" "loop" "-outfanin" optlist || return 1
+    define_opt_from_proc_out "-trigger" "sup" "-outtrig_fanin" optlist || return 1
+    define_fifo_opt "-outloop" "fanin_to_loop" optlist || return 1
+    define_fifo_opt "-outsink" "fanin_to_sink" optlist || return 1
+    define_fifo_opt "-outhb" "fanin_hb" optlist || return 1
     save_opt_list optlist
 }
 
@@ -58,16 +58,16 @@ from debasher_runtime_lib import FBPProcess
 
 class Fanin(FBPProcess):
     INPUT_PORTS = ["ext", "loop_in", "trigger"]
-    OUTPUT_PORTS = ["to_loop", "to_sink", "hb"]
+    OUTPUT_PORTS = ["outloop", "outsink", "outhb"]
     CONTROL_PORTS = ["trigger"]
     EXTERNAL_PORTS = ["ext"]
-    SUPERVISOR_PORT = "hb"
+    SUPERVISOR_PORT = "outhb"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
-        self.send_data("to_sink", {"port": port_name, "value": packet})
+        self.send_data("outsink", {"port": port_name, "value": packet})
         if port_name == "ext":
-            self.send_data("to_loop", packet)
+            self.send_data("outloop", packet)
 
     def capture_node_state(self):
         return {}
@@ -92,8 +92,8 @@ loop_document()
 loop_explain_opts()
 {
     explain_opt "-from_fanin" "<fifo>" "input fifo from fanin"
-    explain_opt "-to_fanin" "<fifo>" "output fifo to fanin"
-    explain_opt "-hb" "<fifo>" "heartbeat fifo to the supervisor"
+    explain_opt "-outfanin" "<fifo>" "output fifo to fanin"
+    explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
 }
 
 loop_identify_cmdline_opts()
@@ -104,9 +104,9 @@ loop_identify_cmdline_opts()
 loop_define_opts()
 {
     local optlist=""
-    define_opt_from_proc_out "-from_fanin" "fanin" "-to_loop" optlist || return 1
-    define_fifo_opt "-to_fanin" "loop_to_fanin" optlist || return 1
-    define_fifo_opt "-hb" "loop_hb" optlist || return 1
+    define_opt_from_proc_out "-from_fanin" "fanin" "-outloop" optlist || return 1
+    define_fifo_opt "-outfanin" "loop_to_fanin" optlist || return 1
+    define_fifo_opt "-outhb" "loop_hb" optlist || return 1
     save_opt_list optlist
 }
 
@@ -118,12 +118,12 @@ from debasher_runtime_lib import FBPProcess
 
 class Loop(FBPProcess):
     INPUT_PORTS = ["from_fanin"]
-    OUTPUT_PORTS = ["to_fanin", "hb"]
-    SUPERVISOR_PORT = "hb"
+    OUTPUT_PORTS = ["outfanin", "outhb"]
+    SUPERVISOR_PORT = "outhb"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
-        self.send_data("to_fanin", packet)
+        self.send_data("outfanin", packet)
 
     def capture_node_state(self):
         return {}
@@ -148,7 +148,7 @@ sink_document()
 sink_explain_opts()
 {
     explain_opt "-from_fanin" "<fifo>" "input fifo from fanin"
-    explain_opt "-hb" "<fifo>" "heartbeat fifo to the supervisor"
+    explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
 }
 
 sink_identify_cmdline_opts()
@@ -159,8 +159,8 @@ sink_identify_cmdline_opts()
 sink_define_opts()
 {
     local optlist=""
-    define_opt_from_proc_out "-from_fanin" "fanin" "-to_sink" optlist || return 1
-    define_fifo_opt "-hb" "sink_hb" optlist || return 1
+    define_opt_from_proc_out "-from_fanin" "fanin" "-outsink" optlist || return 1
+    define_fifo_opt "-outhb" "sink_hb" optlist || return 1
     save_opt_list optlist
 }
 
@@ -172,8 +172,8 @@ from debasher_runtime_lib import FBPProcess
 
 class Sink(FBPProcess):
     INPUT_PORTS = ["from_fanin"]
-    OUTPUT_PORTS = ["hb"]
-    SUPERVISOR_PORT = "hb"
+    OUTPUT_PORTS = ["outhb"]
+    SUPERVISOR_PORT = "outhb"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
@@ -204,7 +204,7 @@ sup_explain_opts()
     explain_opt "-hb_fanin" "<fifo>" "fanin's heartbeat fifo"
     explain_opt "-hb_loop" "<fifo>" "loop's heartbeat fifo"
     explain_opt "-hb_sink" "<fifo>" "sink's heartbeat fifo"
-    explain_opt "-trig_fanin" "<fifo>" "trigger fifo to fanin"
+    explain_opt "-outtrig_fanin" "<fifo>" "trigger fifo to fanin"
     explain_opt "-manual" "<fifo>" "externally fed manual trigger fifo"
 }
 
@@ -216,11 +216,11 @@ sup_identify_cmdline_opts()
 sup_define_opts()
 {
     local optlist=""
-    define_opt_from_proc_out "-hb_fanin" "fanin" "-hb" optlist || return 1
-    define_opt_from_proc_out "-hb_loop" "loop" "-hb" optlist || return 1
-    define_opt_from_proc_out "-hb_sink" "sink" "-hb" optlist || return 1
-    define_fifo_opt "-trig_fanin" "sup_trig_fanin" optlist || return 1
-    define_fifo_opt "-manual" "sup_manual" optlist || return 1
+    define_opt_from_proc_out "-hb_fanin" "fanin" "-outhb" optlist || return 1
+    define_opt_from_proc_out "-hb_loop" "loop" "-outhb" optlist || return 1
+    define_opt_from_proc_out "-hb_sink" "sink" "-outhb" optlist || return 1
+    define_fifo_opt "-outtrig_fanin" "sup_trig_fanin" optlist --control || return 1
+    define_fifo_opt "-manual" "sup_manual" optlist --control || return 1
     save_opt_list optlist
 }
 
@@ -232,7 +232,7 @@ from debasher_runtime_lib import Supervisor
 
 class Sup(Supervisor):
     NODE_PORTS = {"fanin": "hb_fanin", "loop": "hb_loop", "sink": "hb_sink"}
-    TRIGGER_PORT = ["trig_fanin"]
+    TRIGGER_PORT = ["outtrig_fanin"]
     MANUAL_TRIGGER_PORT = "manual"
     HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
     # Comfortably above HEARTBEAT_INTERVAL_SECONDS (0.2s on every node),
