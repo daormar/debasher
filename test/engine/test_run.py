@@ -18,6 +18,20 @@ def _wait_until(predicate, timeout=2.0, interval=0.01):
     return predicate()
 
 
+def _stop_and_wait_for_run(proc, run_thread):
+    """
+    Stops a node whose run() was started on run_thread, and waits for run()
+    to return, which it does only after stopping every thread it started.
+    Waiting on the brain thread instead would race with run() itself, which
+    starts its threads only after initialize_runtime(), opening the input
+    log and replaying it: until then there is no brain thread to look at.
+    """
+    proc._stop_requested.set()
+    run_thread.join(timeout=2.0)
+    assert not run_thread.is_alive()
+    assert not proc._brain_thread.is_alive()
+
+
 class _Node(lib.FBPProcess):
     def __init__(self, *a, **kw):
         self.restored_with = None
@@ -141,14 +155,14 @@ def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_backlog(exe
 
 def test_run_skips_restore_state_and_starts_with_defaults_when_no_checkpoint(execdir):
     proc = _Node(opts={})
-    threading.Thread(target=proc.run, daemon=True).start()
+    run_thread = threading.Thread(target=proc.run, daemon=True)
+    run_thread.start()
 
     assert _wait_until(lambda: proc.initialize_runtime_calls == 1)
     assert proc.restored_with is None
     assert proc._last_epoch == -1
 
-    proc._stop_requested.set()
-    assert _wait_until(lambda: not proc._brain_thread.is_alive())
+    _stop_and_wait_for_run(proc, run_thread)
 
 
 def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdir):
@@ -158,7 +172,8 @@ def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdi
     # A second instance is what actually "restarts": the first one
     # above only exists here to seed the checkpoint file on disk.
     restarted = _Node(opts={})
-    threading.Thread(target=restarted.run, daemon=True).start()
+    run_thread = threading.Thread(target=restarted.run, daemon=True)
+    run_thread.start()
 
     assert _wait_until(lambda: restarted.initialize_runtime_calls == 1)
     assert restarted.restored_with == {"marker": "restored"}
@@ -172,8 +187,7 @@ def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdi
     assert restarted._last_seq == {"inf": 2}
     assert restarted._accepted_seq == {"inf": 2}
 
-    restarted._stop_requested.set()
-    assert _wait_until(lambda: not restarted._brain_thread.is_alive())
+    _stop_and_wait_for_run(restarted, run_thread)
 
 
 def test_run_keeps_every_thread_alive_after_a_halt_closes_its_own_round(execdir):
@@ -426,13 +440,13 @@ def test_run_sets_the_gil_switch_interval_of_the_process(execdir):
     import sys
 
     proc = _Node(opts={})
-    threading.Thread(target=proc.run, daemon=True).start()
+    run_thread = threading.Thread(target=proc.run, daemon=True)
+    run_thread.start()
     assert _wait_until(lambda: proc.initialize_runtime_calls == 1)
 
     assert sys.getswitchinterval() == pytest.approx(lib.FBPProcess.GIL_SWITCH_INTERVAL_SECS)
 
-    proc._stop_requested.set()
-    assert _wait_until(lambda: not proc._brain_thread.is_alive())
+    _stop_and_wait_for_run(proc, run_thread)
 
 
 def test_run_leaves_the_gil_switch_interval_alone_when_it_is_none(execdir):
@@ -443,10 +457,10 @@ def test_run_leaves_the_gil_switch_interval_alone_when_it_is_none(execdir):
 
     sys.setswitchinterval(0.004)
     proc = _Untouched(opts={})
-    threading.Thread(target=proc.run, daemon=True).start()
+    run_thread = threading.Thread(target=proc.run, daemon=True)
+    run_thread.start()
     assert _wait_until(lambda: proc.initialize_runtime_calls == 1)
 
     assert sys.getswitchinterval() == pytest.approx(0.004)
 
-    proc._stop_requested.set()
-    assert _wait_until(lambda: not proc._brain_thread.is_alive())
+    _stop_and_wait_for_run(proc, run_thread)
