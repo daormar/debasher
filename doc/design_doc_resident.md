@@ -542,8 +542,8 @@ guarantee in words and never cite these numbers, which may change.
   round, the checkpoints closed by that round form a consistent cut, and after a
   halt every node resumes in the state it had when it stopped: it loads its
   checkpoint and replays from its input log only what it processed after
-  capturing it. A crash during a round aborts it (mechanism not designed yet,
-  see Loose ends).
+  capturing it. A crash during a round aborts it at the node that crashed
+  (see "A crash while a round is open" in the limits below).
 - **G7, bounded detection**: a crashed node is noticed within
   `HEARTBEAT_CHECK_INTERVAL_SECS` when its PID is verifiably gone, and within
   `HEARTBEAT_TIMEOUT_SECS` when it is alive but unhealthy (one of its reader,
@@ -615,10 +615,27 @@ guarantee in words and never cite these numbers, which may change.
   without a checkpoint for its epoch, so that epoch has no complete cut. The
   round that replaced it does complete, at every node it reaches, and that is
   the cut that counts; localized recovery never uses a cut. It holds if the
-  initiators start the same epoch (see Loose ends). Rounds started closer
-  together than they take to complete keep replacing each other, and none
-  completes until they stop, so the period of periodic snapshots has to be
-  longer than a round.
+  initiators start the same epoch (see numbered trigger in the Glossary). Rounds
+  started closer together than they take to complete keep replacing each other,
+  and none completes until they stop, so the period of periodic snapshots has to
+  be longer than a round.
+- **A crash while a round is open.** The node comes back with no round open,
+  and the markers it had received for that round are not replayed (only `DATA`
+  and `CLOSE` are). At a node that is not an initiator, the next marker of
+  that round opens it again, and it waits for ever for the markers already
+  received: it writes no checkpoint for that epoch, and the next round
+  replaces it. At an initiator whose round a trigger opened, no marker was
+  received, so the round opens again when its own marker comes back around a
+  cycle and closes there, with a capture later than the first: that epoch is
+  not a consistent cut (see the global rollback in Future work). A halt
+  cannot wait for the next round, because a node that has halted ignores
+  every later trigger, so a node that is not an initiator and crashes while
+  its halt is open never halts, while every other node does.
+  `debasher_stop_resident`'s `--timeout` bounds the wait for the halted
+  markers whatever the reason one never appears, then falls back to the hard
+  kill of `debasher_stop` and reports it with its own exit code (see "Failing
+  loudly instead of retrying"). Making the case recoverable needs a round's
+  partial progress to be durable, which is not designed.
 - **A node that crashes again right after every relaunch** is not retried
   forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
   the escalation applies.
@@ -1573,17 +1590,15 @@ has to signal it, or even knows when that will be.
 
 ## Failing loudly instead of retrying
 
-The "Unfixed" part of "Loose ends" describes a real, still-open gap: if the
-one node whose own round-open captured `capture_pos` right at the point that
-opened a halt round then crashes before that round closes, its relaunched
-incarnation has no durable memory of an open round to resume, and nothing
-resends the one-time `shutdown` trigger that opened it (see that entry, and
-"Arrival and positions" for why `capture_pos` lands exactly there, not
-before it). `debasher_stop_resident`'s own `--timeout` already
-keeps this from hanging the program forever, structurally, but falling back
-to `debasher_stop`'s hard kill silently would let that forced ending pass
-for a graceful one, so it does so loudly instead, without attempting to fix
-the underlying gap.
+The Contract's limits include a gap that stays open (see "A crash while a round
+is open" there): a node that is not an initiator and crashes while its halt
+round is open comes back with no durable memory of that round, the markers it
+had received for it are not replayed, and nothing resends the one-time
+`shutdown` trigger, so it never halts. `debasher_stop_resident`'s own
+`--timeout` already keeps this from hanging the program forever, structurally,
+but falling back to `debasher_stop`'s hard kill silently would let that forced
+ending pass for a graceful one, so it does so loudly instead, without attempting
+to fix the underlying gap.
 
 Two directions were compared. Making the gap itself durably recoverable (a
 checkpoint field recording a pending, unclosed halt, restored and acted on
@@ -1943,39 +1958,6 @@ open.
 
 ## Unfixed
 
-- **A crash during a round** aborts it, and the mechanism is not designed.
-  What exists: a node that comes back has no round open, and the next round
-  of a newer epoch replaces a round that another node was left with open
-  (see "Base class `FBPProcess`"). What it can cause:
-  - A node that crashes between capturing and closing an ordinary round
-    forgets it, and recovers cleanly: on coming back it has no round open,
-    and the markers that arrive later open it again, capture at another
-    position and forward another marker. A repeated marker is harmless
-    downstream, but the two captures are not the same instant, so the
-    checkpoints of that epoch do not form a consistent cut, which matters
-    for a global rollback and not for localized recovery.
-  - **A crash during a halt can leave the program permanently
-    half-halted.** The one node whose own round-open captures
-    `capture_pos` right at the point that opens a halt round, if it then
-    crashes before that round closes, comes back with no round open and
-    nothing left to reopen it, since the `shutdown` that triggered it was a
-    one-time message from an external actor, not something resent on a
-    timer or on recovery: every other node halts and finishes cleanly, but
-    this one never does. `debasher_stop_resident`'s own `--timeout` bounds
-    the wait for every halted marker regardless of why one never appears,
-    and falls back to `debasher_stop`'s hard kill, so this cannot hang the
-    program forever, and that fallback reports itself with a distinct exit
-    code (`DEBASHER_STOP_RESIDENT_FORCED_EXIT`, "Failing loudly instead of
-    retrying") rather than passing silently for a graceful stop. What it
-    does not do is retry or recover gracefully: making the underlying gap
-    itself durably recoverable was designed far enough to find two real
-    holes (see "Failing loudly instead of retrying" again), a materially
-    larger change than accepted so far.
-
-  Candidate mechanism, not designed: a rule that lets a halt heal like an
-  ordinary round, where the next trigger replaces a round that did not
-  complete, instead of giving it its own; today a node that has halted
-  ignores every trigger.
 - Whether checkpoints' `channel_state` (the State capture
   subsection) needs to actually be fed back into `process_data` somehow on
   restore, or is genuinely only for external inspection/audit of a
@@ -2021,17 +2003,16 @@ open.
   enough for a perfectly healthy but CPU-starved node**: the Supervisor may
   declare it down and relaunch it although it was never actually dead.
   `debasher_builtin_sched::_launch`'s own "kill any stale PID before
-  relaunching" step then turns that mistaken diagnosis into a real
-  `kill -9` of a node that was, in fact, still running and still sending,
-  at whatever moment it happens to land. Landing inside an open halt round
-  is "A crash during a halt can leave the program permanently
-  half-halted" above; landing while an upstream peer is still forwarding
-  what it owes to a downstream neighbor during an ordinary shutdown can
-  lose that in-flight data the same way any untimely `SIGKILL` can (see
-  the Contract's "both endpoints of a channel crashed" limit, and the
-  residual window noted in the `debasher_stop_resident` subsection). Not a
-  third, independent gap: heavy load simply makes an already-accepted kind
-  of loss easier to trigger than a deliberate test would.
+  relaunching" step then turns that mistaken diagnosis into a real `kill -9` of
+  a node that was, in fact, still running and still sending, at whatever moment
+  it happens to land. Landing inside an open halt round is the Contract's "A
+  crash while a round is open" limit; landing while an upstream peer is still
+  forwarding what it owes to a downstream neighbor during an ordinary shutdown
+  can lose that in-flight data the same way any untimely `SIGKILL` can (see the
+  Contract's "both endpoints of a channel crashed" limit, and the residual
+  window noted in the `debasher_stop_resident` subsection). Not a third,
+  independent gap: heavy load simply makes an already-accepted kind of loss
+  easier to trigger than a deliberate test would.
 
 # Extensions
 
@@ -2157,6 +2138,16 @@ built. Empty for now: nothing listed in Future work is marked completed yet.
     no longer be a consistent cut. Either every round of a program that is to
     be rolled back comes from a numbered trigger, or a round identifier carried
     by the marker and stored in each checkpoint lets the script check it.
+  - An initiator that crashes while its round is open can close that round
+    again after it is relaunched, with a later capture (see "A crash while a
+    round is open" in the Contract's limits), so that epoch is not a
+    consistent cut, and the script cannot tell from the checkpoints alone. The
+    node itself can tell at recovery: the log after the restored checkpoint's
+    `capture_pos` holds the trigger or the marker with which it opened the
+    round. Advancing `_last_epoch` during the replay past the epoch of every
+    marker and numbered trigger in the log would make the node ignore that
+    round from then on; a trigger without an epoch does not say which epoch
+    it opened. Not designed.
   - How `debasher_exec` relaunches a program some of whose nodes are already
     `finished` (to be checked against the rerun logic). A new run recreates the
     FIFOs, which is what a rollback needs.
