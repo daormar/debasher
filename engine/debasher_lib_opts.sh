@@ -855,7 +855,7 @@ debasher::define_fifo_opt()
     local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
 
     # Get task index
-    local task_idx=${#DEBASHER_CURRENT_PROCESS_OPT_LIST[@]}
+    local task_idx=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}
 
     # Define FIFO
     debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}"

@@ -375,3 +375,33 @@ EOF
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: process notithproc defines option -x1, which is not declared in its explain_opts"* ]]
 }
+
+# --- define_fifo_opt in an array defined in a loop ---------------------
+
+@test "debasher::define_fifo_opt registers each fifo of an array defined in a loop as owned by its own task" {
+    declare -gA DEBASHER_PROGRAM_FIFOS DEBASHER_FIFO_USERS DEBASHER_FIFO_MIRRORED
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN DEBASHER_OUT_VALUE_TO_PROCESSES
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    loopfifoproc_define_opts()
+    {
+        local idx
+        for (( idx = 0; idx < 3; idx++ )); do
+            local optlist=""
+            define_fifo_opt "-outf" "loopfifoproc_out_${idx}" optlist || return 1
+            save_opt_list optlist
+        done
+    }
+    # save_opt_list relies on lookups that return 1 in the ordinary case (no
+    # option generator), which bats's errexit would treat as a failure.
+    set +e
+    loopfifoproc_define_opts "" "" "loopfifoproc" "${BATS_TEST_TMPDIR}"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_0"]}" = "loopfifoproc${sep}0" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_1"]}" = "loopfifoproc${sep}1" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_2"]}" = "loopfifoproc${sep}2" ]
+}
