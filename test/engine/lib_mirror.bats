@@ -13,15 +13,12 @@
 # and survives the case where the reopening reader is fully detached
 # (SIGPIPE) at the exact moment the tap tries to write.
 #
-# Each test's own writes into the shim fifo go through one independent
-# background `printf > shim` job per line (helper below), matching how
-# a real owning process writes to a mirrored option today: a fresh
-# open() blocks until the tap's own repeated-open shim read attaches,
-# it never risks the SIGPIPE-on-a-momentary-gap hazard a *persistent*
-# writer would (that hazard is real, but only for a writer that stays
-# open across messages -- exactly what was checked and fixed on the
-# tap's real-fifo side above, not something to reintroduce here on the
-# shim side just to make the tests themselves simpler).
+# A mirrored fifo has a single writer, its owning process, so the
+# tests write into the shim fifo from one background job at a time
+# (helpers below): two jobs started together would race, and the order
+# in which their lines reach the tap would be left to chance. A job
+# sends one line, or several in a single open, the way a process that
+# prints several lines at once does.
 
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
@@ -52,6 +49,12 @@ teardown() {
 # fresh open/write/close (see file header for why this matters).
 write_to_shim() {
     { printf '%s\n' "$1" > "${shimfifo}"; } &
+}
+
+# Sends every argument, one per line, from one background job in a
+# single open/write/close.
+write_lines_to_shim() {
+    { printf '%s\n' "$@" > "${shimfifo}"; } &
 }
 
 @test "debasher::_run_fifo_mirror_tap forwards multiple lines to a reader that reopens the real fifo per line" {
@@ -85,8 +88,7 @@ write_to_shim() {
     ) &
     local reader_pid=$!
 
-    write_to_shim "alpha"
-    write_to_shim "beta"
+    write_lines_to_shim "alpha" "beta"
     wait "${reader_pid}"
 
     write_to_shim "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}"
@@ -95,6 +97,29 @@ write_to_shim() {
     run cat "${readerout}"
     [ "${lines[0]}" = "alpha" ]
     [ "${lines[1]}" = "beta" ]
+}
+
+@test "debasher::_run_fifo_mirror_tap forwards every line that a writer sends in a single open" {
+    # The writer closes before the tap has read past the first line, and
+    # the lines still waiting in the shim fifo must not be discarded with
+    # it.
+    debasher::_run_fifo_mirror_tap "${shimfifo}" "${realfifo}" "${mirrorfile}" &
+    tap_pid=$!
+
+    local readerout="${BATS_TEST_TMPDIR}/reader_out"
+    timeout 5 cat "${realfifo}" > "${readerout}" &
+    local reader_pid=$!
+
+    { printf 'a\nb\nc\n' > "${shimfifo}"; }
+    write_to_shim "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}"
+    wait "${tap_pid}"
+    [ "$?" -eq 0 ]
+    wait "${reader_pid}"
+
+    run cat "${readerout}"
+    [ "${output}" = $'a\nb\nc' ]
+    run cat "${mirrorfile}"
+    [ "${output}" = $'a\nb\nc' ]
 }
 
 @test "debasher::_run_fifo_mirror_tap writes every forwarded line to the mirror file, in order" {
@@ -163,8 +188,7 @@ write_to_shim() {
     ) &
     local reader_pid=$!
 
-    write_to_shim "only"
-    write_to_shim "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}"
+    write_lines_to_shim "only" "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}"
     wait "${tap_pid}"
     [ "$?" -eq 0 ]
 

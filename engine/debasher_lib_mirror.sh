@@ -117,6 +117,17 @@ debasher::_check_fifo_mirror_allowed()
 # very same fd, no close/reopen needed -- also verified: an existing
 # writer fd starts working again as soon as a new reader attaches) until
 # it succeeds, rather than treated as fatal.
+#
+# The shim fifo is opened once too, for reading and writing, and never
+# closed until the tap ends. Opening it anew for each line would lose
+# lines: a writer that sends several lines in one open (printf with
+# several lines, cat of a file) and closes before the tap has read them
+# all leaves the rest in a fifo that, once the tap closes its own read
+# end, nobody holds, and the kernel discards what a fifo held when its
+# last descriptor is closed. Holding a write end of its own also keeps
+# the tap's reads from ever seeing EOF between writers, and a writer's
+# open from blocking. Opening a fifo for reading and writing does not
+# block on Linux (POSIX leaves it undefined).
 debasher::_run_fifo_mirror_tap()
 {
     local shimfifo=$1
@@ -131,18 +142,19 @@ debasher::_run_fifo_mirror_tap()
     # would corrupt the test harness's own channel, not just this
     # process's -- avoided by staying well clear of low fd numbers
     # any shell/test tooling might already be using.
+    exec 7<>"${shimfifo}"
     exec 8>"${realfifo}"
     exec 9>>"${mirrorfile}"
 
     local line
     while :; do
-        IFS= read -r line < "${shimfifo}" || {
+        IFS= read -r line <&7 || {
             echo "Error: fifo mirror tap lost its shim fifo (${shimfifo}) unexpectedly" >&2
-            exec 8>&- 9>&-
+            exec 7<&- 8>&- 9>&-
             exit 1
         }
         if [ "${line}" = "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" ]; then
-            exec 8>&- 9>&-
+            exec 7<&- 8>&- 9>&-
             exit 0
         fi
         printf '%s\n' "${line}" >&9
