@@ -2120,10 +2120,8 @@ Design ideas from Future work move here once they are actually built.
     worker load would break the guarantees.
   - Array processes. The `w` workers are `w` nodes, `(process_name, task_idx)`,
     which a resident program already supports (see "Array processes" in
-    Extensions). Not known: how the frontend and the script generation of the
-    API (`api/script_generation.py`) would express them for resident processes,
-    and how a real run would cover a `Supervisor` that relaunches one task of an
-    array.
+    Extensions). Not known: how a real run would cover a `Supervisor` that
+    relaunches one task of an array.
 - **Auxiliary script to reset checkpoints across a whole topology**: deleting
   (or moving) every node's checkpoint folder before launching forces a clean
   start with no special-case code needed anywhere (the Startup sequence
@@ -2335,3 +2333,26 @@ Design ideas from Future work move here once they are actually built.
   means interpreting `start_snapshot` and `shutdown`: how to add that for the
   triggers that a person writes is not clear, and it would only cover the nodes
   that report to the `Supervisor`. Not designed.
+- **Resident programs in the frontend.** The visual editor (`frontend/`) and
+  the API behind it (`api/`) know nothing about resident programs: the program
+  model has no program type, `api/program_import.py` and
+  `api/script_generation.py` neither read nor write `program_type "resident"`,
+  and nothing describes a process as an `FBPProcess` or a `Supervisor`.
+  Everything needed to build, run and inspect a resident program from the
+  frontend is left to do, among it:
+  - the program type, in the model and in both directions of the conversion
+    between the model and a module;
+  - editing a node's class and its ports (`INPUT_PORTS`, `OUTPUT_PORTS`,
+    `CONTROL_PORTS`, `EXTERNAL_PORTS`), and wiring the heartbeat channels and
+    the trigger ports of a `Supervisor` (`SUPERVISOR_PORT`, `NODE_PORTS`,
+    `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT`);
+  - array processes, whose tasks are nodes of their own (see "Array processes"
+    in Extensions);
+  - the "Watch FIFO" action, whose `--mirror` a resident program refuses (see
+    the Contract's limits);
+  - starting a snapshot or a halt, and stopping the program with
+    `debasher_stop_resident`;
+  - showing the state of each node: heartbeats, relaunches, checkpoints and
+    halted markers.
+
+  Not designed.
