@@ -6,7 +6,7 @@ test_input_log.py test_arrival_positions.py test_recovery.py test_send_data.py	\
 test_dedup.py test_out_backlog.py test_close_seq.py		\
 test_chaos.py debasher_chaos_ref.sh				\
 test_halt_ref.py debasher_halt_ref.sh				\
-test_array_ref.py debasher_array_ref.sh
+test_array_ref.py debasher_array_ref.sh debasher_array_gen_ref.sh
 
 check-local:
 if HAVE_BATS

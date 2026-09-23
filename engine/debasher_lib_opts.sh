@@ -889,8 +889,9 @@ define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 #
 # $1 - Option name.
 # $2 - Name of fifo.
-# $3 - Name of variable that will store the information about the option to be added.
-# $4 - (optional) "--mirror" (see debasher::define_fifo_opt).
+# $3 - Index of the task whose options the generator is producing.
+# $4 - Name of variable that will store the information about the option to be added.
+# $5 - (optional) "--mirror" (see debasher::define_fifo_opt).
 #
 # This function should only be defined in one of the processes connected
 # by the FIFO. More specifically, in the process defining an output option.
@@ -898,7 +899,7 @@ define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 #
 # Examples
 #
-#   debasher::define_fifo_opt_generator "-o" "${fifoname}" "optlist"
+#   debasher::define_fifo_opt_generator "-o" "${fifoname}" "${task_idx}" "optlist"
 #
 # The function does not return any value
 debasher::define_fifo_opt_generator()
@@ -930,7 +931,7 @@ debasher::define_fifo_opt_generator()
     local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
 
     # Define option for FIFO
-    debasher::define_opt "-outf" "${abs_fifoname}" "${varname}" || return 1
+    debasher::define_opt "${opt}" "${abs_fifoname}" "${varname}" || return 1
 }
 
 ########
@@ -938,7 +939,9 @@ debasher::define_fifo_opt_generator()
 #
 # $1 - Option name.
 # $2 - Name of fifo.
-# $3 - Name of variable that will store the information about the option to be added.
+# $3 - Index of the task whose options the generator is producing.
+# $4 - Name of variable that will store the information about the option to be added.
+# $5 - (optional) "--mirror" (see debasher::define_fifo_opt).
 #
 # This function should only be defined in one of the processes connected
 # by the FIFO. More specifically, in the process defining an output option.
@@ -946,7 +949,7 @@ debasher::define_fifo_opt_generator()
 #
 # Examples
 #
-#   define_fifo_opt_generator "-o" "${fifoname}" "optlist"
+#   define_fifo_opt_generator "-o" "${fifoname}" "${task_idx}" "optlist"
 #
 # The function does not return any value
 define_fifo_opt_generator() { debasher::define_fifo_opt_generator "$@"; }
@@ -2130,7 +2133,7 @@ debasher::_load_curr_opt_list_loop()
             # Call options generator (output stored into DEBASHER_DESERIALIZED_ARGS)
             local connected_proc_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${connected_proc}"]}
             local connected_proc_outdir=$(debasher::_get_process_outdir "${connected_proc}")
-            ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${task_idx}" || return 1
+            ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${connected_proc_task_idx}" || return 1
 
             # Get option value from function arguments
             value=$(debasher::_get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}")

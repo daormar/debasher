@@ -2039,16 +2039,19 @@ open.
 Design ideas from Future work move here once they are actually built.
 
 - **Array processes** (from "Fan-out and fan-in sized from the command line" in
-  Future work). A process that is an array of tasks takes part in a resident
-  program with each task as a node of its own, `(process_name, task_idx)`:
+  Future work). A process that is an array of tasks, whether its options are
+  written in a loop or produced by an option generator, takes part in a
+  resident program with each task as a node of its own,
+  `(process_name, task_idx)`:
   - Files. The tasks share the process's directory, as they already share the
     engine's own per-task files (`<process_name>_<idx>.id`, `.sched_out`, ...),
     and each keeps its checkpoints, input log, halted marker and control ports
     file there under names that carry its index (see execdir in the Glossary).
   - Connections. `define_opt_from_proc_out` connects a task to a fifo of
     another node, and `define_opt_from_proc_task_out` connects a node to the
-    fifo of one task, as for any other process; the engine creates every fifo
-    before launching, so a task's channels are like those of any node.
+    fifo of one task, as for any other process; a generator gives each task a
+    fifo of its own with `define_fifo_opt_generator`. The engine creates every
+    fifo before launching, so a task's channels are like those of any node.
   - Supervision. A `Supervisor` names a task in `NODE_PORTS` as
     `(process_name, task_idx)` and finds and relaunches it through its own
     `.id` and `.finished` (see "Port declaration and node identity").
@@ -2058,7 +2061,9 @@ Design ideas from Future work move here once they are actually built.
 
   `test/engine/debasher_array_ref.sh` is the reference: an initiator fans out
   to the three tasks of an array, which fan in to a third node, with no
-  `Supervisor`.
+  `Supervisor`. `test/engine/debasher_array_gen_ref.sh` is the same program with
+  the tasks produced by an option generator: only the number of tasks matters
+  to the rest of the engine.
 
 # Future work
 
@@ -2115,11 +2120,8 @@ Design ideas from Future work move here once they are actually built.
     worker load would break the guarantees.
   - Array processes. The `w` workers are `w` nodes, `(process_name, task_idx)`,
     which a resident program already supports (see "Array processes" in
-    Extensions), as long as the options of its tasks are written in a loop.
-    Tasks produced by an option generator that give each task a fifo of its
-    own (`define_fifo_opt_generator`) do not work yet, in general programs
-    either. Not known: how the frontend and the script generation of the API
-    (`api/script_generation.py`) would express them for resident processes,
+    Extensions). Not known: how the frontend and the script generation of the
+    API (`api/script_generation.py`) would express them for resident processes,
     and how a real run would cover a `Supervisor` that relaunches one task of an
     array.
 - **Auxiliary script to reset checkpoints across a whole topology**: deleting

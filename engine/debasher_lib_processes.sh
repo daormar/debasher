@@ -720,6 +720,7 @@ debasher::_process_is_defined()
 ########
 debasher::_uses_option_generator()
 {
+    local processname=$1
     local uses_option_generator_nr
     debasher::_get_generate_opts_size_funcname "${processname}" uses_option_generator_nr
 

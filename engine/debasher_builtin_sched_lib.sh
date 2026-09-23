@@ -1086,7 +1086,11 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     local post_funct=$(debasher::_get_post_funcname ${processname})
 
     # Get serialized arguments
-    local sargs=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}")
+    local sargs
+    sargs=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}") || {
+        echo "Error: the options of ${processname} (task ${task_idx}) could not be generated" >&2
+        return 1
+    }
 
     # Convert serialized process options to array (result is placed into
     # the DEBASHER_DESERIALIZED_ARGS variable)
