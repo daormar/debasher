@@ -20,6 +20,10 @@
 # sends one line, or several in a single open, the way a process that
 # prints several lines at once does.
 
+# A test that hangs fails instead of hanging the whole suite: a tap that
+# never stops is exactly what some of these tests guard against.
+BATS_TEST_TIMEOUT=30
+
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
     debasher_pkglibdir="${ENGINE_BUILDDIR}"
@@ -198,6 +202,131 @@ write_lines_to_shim() {
     [ "${output}" = "0" ]
     run cat "${readerout}"
     [ "${output}" = "only" ]
+}
+
+# --- stopping the taps of a process ---------------------------------------
+
+# Starts a tap the way debasher::_start_fifo_mirror_taps_for_process does,
+# registering it for debasher::_stop_fifo_mirror_taps, from a shell that
+# ignores SIGTERM like the wrapper of a real process, so that the tap
+# inherits that.
+start_registered_tap() {
+    DEBASHER_FIFO_MIRROR_TAP_PIDS=()
+    DEBASHER_FIFO_MIRROR_TAP_SHIMS=()
+    trap '' TERM
+    debasher::_run_fifo_mirror_tap "${shimfifo}" "${realfifo}" "${mirrorfile}" &
+    tap_pid=$!
+    trap - TERM
+    DEBASHER_FIFO_MIRROR_TAP_PIDS+=("${tap_pid}")
+    DEBASHER_FIFO_MIRROR_TAP_SHIMS+=("${shimfifo}")
+}
+
+# Waits until the mirror file holds $1 lines, which the tap writes before
+# it forwards each line to the real fifo.
+wait_for_mirror_lines() {
+    local i
+    for (( i = 0; i < 100; i++ )); do
+        [ "$(wc -l < "${mirrorfile}")" -ge "$1" ] && return 0
+        "${SLEEP}" 0.05
+    done
+    return 1
+}
+
+now_ms() {
+    date +%s%3N
+}
+
+@test "debasher::_stop_fifo_mirror_taps stops a tap on its token at once, with no warning" {
+    start_registered_tap
+    local readerout="${BATS_TEST_TMPDIR}/reader_out"
+    cat "${realfifo}" > "${readerout}" 3>&- &
+    local reader_pid=$!
+    write_to_shim "one"
+    wait_for_mirror_lines 1
+
+    local start=$(now_ms)
+    debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
+    local status=$?
+    local elapsed=$(( $(now_ms) - start ))
+
+    [ "${status}" -eq 0 ]
+    [ "${elapsed}" -lt 1000 ]
+    [ ! -s "${BATS_TEST_TMPDIR}/stderr" ]
+    ! kill -0 "${tap_pid}" 2>/dev/null
+    wait "${reader_pid}"
+    [ "$(cat "${readerout}")" = "one" ]
+}
+
+@test "debasher::_stop_fifo_mirror_taps ends a tap whose reader is gone, with a warning, and does not fail" {
+    # The reader of the real fifo reads one line and leaves; the owning
+    # process then writes another, which the tap can never forward, so it
+    # never gets to the token.
+    DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=1
+    start_registered_tap
+    write_lines_to_shim "one" "two"
+    IFS= read -r _ < "${realfifo}"
+    wait_for_mirror_lines 2
+
+    local start=$(now_ms)
+    debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
+    [ "$?" -eq 0 ]
+    # SIGTERM ends it: the SIGKILL fallback would take a second grace period.
+    [ $(( $(now_ms) - start )) -lt 2000 ]
+
+    ! kill -0 "${tap_pid}" 2>/dev/null
+    grep -q "Warning: fifo mirror tap for ${shimfifo} did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"
+    run cat "${mirrorfile}"
+    [ "${output}" = $'one\ntwo' ]
+}
+
+@test "debasher::_stop_fifo_mirror_taps ends a tap whose real fifo never got a reader" {
+    # The tap is blocked opening the real fifo, which waits for a reader.
+    DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=1
+    start_registered_tap
+    "${SLEEP}" 0.2
+
+    local start=$(now_ms)
+    debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
+    [ "$?" -eq 0 ]
+    [ $(( $(now_ms) - start )) -lt 2000 ]
+
+    ! kill -0 "${tap_pid}" 2>/dev/null
+    grep -q "did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"
+}
+
+@test "debasher::_stop_fifo_mirror_taps ends a stuck tap even when its shim fifo is full" {
+    # The token cannot even be written: the owning process filled the shim
+    # behind a tap stuck on a reader that left. The stop must not block on
+    # that write either.
+    DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=1
+    start_registered_tap
+    write_to_shim "one"
+    IFS= read -r _ < "${realfifo}"
+    write_to_shim "two"
+    wait_for_mirror_lines 2
+    local filler
+    filler=$(head -c 4000 /dev/zero | tr '\0' x)
+    local k
+    for (( k = 0; k < 20; k++ )); do
+        { printf '%s\n' "${filler}" > "${shimfifo}"; } 3>&- &
+    done
+    "${SLEEP}" 0.3
+
+    debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
+    [ "$?" -eq 0 ]
+
+    ! kill -0 "${tap_pid}" 2>/dev/null
+    grep -q "did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"
+}
+
+@test "debasher::_stop_fifo_mirror_taps still reports a tap that exited abnormally" {
+    start_registered_tap
+    kill -9 "${tap_pid}"
+    "${SLEEP}" 0.1
+
+    run debasher::_stop_fifo_mirror_taps
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: fifo mirror tap for ${shimfifo} exited abnormally"* ]]
 }
 
 # --- resident programs refuse --mirror -------------------------------------

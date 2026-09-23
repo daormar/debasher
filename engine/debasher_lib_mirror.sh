@@ -135,6 +135,12 @@ debasher::_run_fifo_mirror_tap()
     local mirrorfile=$3
 
     trap '' PIPE
+    # The owning process's wrapper ignores SIGTERM and this tap, a
+    # subshell of it, inherits that: it catches the signal again so that
+    # debasher::_stop_fifo_mirror_taps can end it when it does not stop on
+    # its token. Exiting closes its descriptors, so a reader still attached
+    # to the real fifo sees EOF.
+    trap 'exit 143' TERM
 
     # High fd numbers (not 3/4): fd 3 is reserved by bats-core itself
     # for test status reporting, and this tap's own bats tests run it
@@ -240,21 +246,66 @@ debasher::_start_fifo_mirror_taps_for_process()
 }
 
 ########
+# Waits until the process $1 has exited, or $2 seconds (an integer) have
+# passed. Returns 0 if it exited, 1 otherwise.
+debasher::_wait_for_pid_exit()
+{
+    local pid=$1
+    local secs=$2
+    local step
+    for (( step = 0; step < secs * 20; step++ )); do
+        kill -0 "${pid}" 2>/dev/null || return 0
+        "${SLEEP}" 0.05
+    done
+    kill -0 "${pid}" 2>/dev/null || return 0
+    return 1
+}
+
+########
 # Stops every mirror tap started by
-# debasher::_start_fifo_mirror_taps_for_process, unblocking each one's
-# read via its own stop token and waiting for it to exit. Returns
-# non-zero if any tap exited abnormally, so the caller can fail the
-# owning process instead of silently losing mirrored output.
+# debasher::_start_fifo_mirror_taps_for_process, and never blocks for
+# good. Each tap is sent its stop token and given
+# DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS to exit. A tap that does not is
+# stuck forwarding a line that nobody reads, typically because the reader
+# of its real fifo finished or died before the owning process did: the
+# tap retries that write until it succeeds and never gets to the token.
+# It is then ended with SIGTERM (SIGKILL if that is not enough within
+# the same time), with a warning and not an error: the owning process
+# itself succeeded, and every line it wrote is in the mirror log, the
+# ones that could not be forwarded included. The token is written from
+# a background job, since that write can block (with the shim full
+# behind a stuck tap, or with no tap left to read it); the job is killed
+# once its tap is gone. Returns non-zero
+# if a tap that stopped on its token exited abnormally, so the caller can
+# fail the owning process instead of silently losing mirrored output.
 debasher::_stop_fifo_mirror_taps()
 {
+    local grace="${DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS}"
     local failed=0
-    local i
+    local i pid shim token_pid
     for i in "${!DEBASHER_FIFO_MIRROR_TAP_PIDS[@]}"; do
-        echo "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" > "${DEBASHER_FIFO_MIRROR_TAP_SHIMS[i]}" 2>/dev/null
-        if ! wait "${DEBASHER_FIFO_MIRROR_TAP_PIDS[i]}"; then
-            echo "Error: fifo mirror tap for ${DEBASHER_FIFO_MIRROR_TAP_SHIMS[i]} exited abnormally" >&2
-            failed=1
+        pid="${DEBASHER_FIFO_MIRROR_TAP_PIDS[i]}"
+        shim="${DEBASHER_FIFO_MIRROR_TAP_SHIMS[i]}"
+
+        { printf '%s\n' "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" > "${shim}"; } 2>/dev/null &
+        token_pid=$!
+
+        if debasher::_wait_for_pid_exit "${pid}" "${grace}"; then
+            if ! wait "${pid}"; then
+                echo "Error: fifo mirror tap for ${shim} exited abnormally" >&2
+                failed=1
+            fi
+        else
+            echo "Warning: fifo mirror tap for ${shim} did not stop within ${grace}s (the reader of its real fifo is probably gone), terminating it; the lines it could not forward are in its mirror log" >&2
+            kill -TERM "${pid}" 2>/dev/null || true
+            if ! debasher::_wait_for_pid_exit "${pid}" "${grace}"; then
+                kill -KILL "${pid}" 2>/dev/null || true
+            fi
+            wait "${pid}" 2>/dev/null || true
         fi
+
+        kill -KILL "${token_pid}" 2>/dev/null || true
+        wait "${token_pid}" 2>/dev/null || true
     done
     return ${failed}
 }

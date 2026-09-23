@@ -233,6 +233,9 @@ DEBASHER_SHUTDOWN_TOKEN="__SHUTDOWN_TOKEN__"
 # "cycle"-style processes do), so a mirror tap's own termination can't
 # depend on it.
 DEBASHER_FIFO_MIRROR_STOP_TOKEN="__FIFO_MIRROR_TAP_STOP__"
+# How long debasher::_stop_fifo_mirror_taps waits for a tap to stop on its
+# token, and then again for it to end on SIGTERM, before going further.
+DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=2
 
 # RERUN REASONS
 DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_user_owner"
