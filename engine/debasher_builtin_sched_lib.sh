@@ -1131,6 +1131,15 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # __exec__/<processname>/ directory (e.g. for checkpoints) without
     # any option needing to be wired for it.
     export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    # The tasks of an array share that directory, so a task also gets its
+    # own index, to name what it keeps there the way the engine names its
+    # per-task files (<process>_<idx>.id); empty for a process that is not
+    # an array.
+    if [ "${opt_array_size}" -gt 1 ]; then
+        export DEBASHER_PROCESS_TASK_IDX="${task_idx}"
+    else
+        export DEBASHER_PROCESS_TASK_IDX=""
+    fi
     "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
 
     local funct_exit_code=${PIPESTATUS[0]}

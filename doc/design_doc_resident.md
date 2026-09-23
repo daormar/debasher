@@ -139,13 +139,13 @@ mutation check, durability level) is defined in the Contract, where it is used.
   which an initiator receives its triggers. It never carries a marker, so it
   takes no part in any round, and a `CLOSE` on it does not close it, because its
   writer (the `Supervisor`, or whoever writes commands) may come back.
-- **control ports file**: the file `control_ports` that a node writes in its
-  own `execdir` when it starts (one fifo path per line, from `self.opts`, one
-  per entry of `CONTROL_PORTS`; empty, not absent, if it has none), so that an
-  external actor can find where to write a trigger for an initiator with no
-  other knowledge of this program: `CONTROL_PORTS` is a Python class
-  attribute, invisible to a tool outside the process (see
-  `_write_control_ports_file`).
+- **control ports file**: the file `control_ports` (`control_ports_<idx>` for a
+  task of an array, see execdir) that a node writes in its own `execdir` when it
+  starts (one fifo path per line, from `self.opts`, one per entry of
+  `CONTROL_PORTS`; empty, not absent, if it has none), so that an external actor
+  can find where to write a trigger for an initiator with no other knowledge of
+  this program: `CONTROL_PORTS` is a Python class attribute, invisible to a tool
+  outside the process (see `_write_control_ports_file`).
 - **external port** (puerto externo): an input port of a node, listed in
   `EXTERNAL_PORTS`, fed only from outside the program (a source, or a person
   writing by hand), which therefore does not carry a marker of its own: a round
@@ -158,7 +158,13 @@ mutation check, durability level) is defined in the Contract, where it is used.
   which reuses its FIFOs, its directory and its checkpoints.
 - **execdir**: the node's own directory, `__exec__/<process_name>/` under the
   program's output directory, exported to the process as
-  `DEBASHER_PROCESS_EXECDIR`. Its checkpoints and its input log live there.
+  `DEBASHER_PROCESS_EXECDIR`. Its checkpoints and its input log live there. The
+  tasks of an array process share it, as they already share the engine's own
+  files, which carry the task's index (`<process_name>_<idx>.id`, `.sched_out`,
+  ...). A task gets its index too, exported as `DEBASHER_PROCESS_TASK_IDX`
+  (empty for a process that is not an array), and adds `_<idx>` to the name of
+  everything it keeps there: `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>`
+  and `control_ports_<idx>` (`_execdir_entry`).
 
 ## Messages
 
@@ -243,14 +249,15 @@ mutation check, durability level) is defined in the Contract, where it is used.
   top of that (see below). What actually stops the node, and later resumes the
   program by relaunching every node, is a **stop signal** (see below), decided
   entirely outside the barrier protocol.
-- **halted marker** (marca de halted): the file `halted` that a node writes in
-  its own `execdir` (atomically, like a checkpoint, but never schema-versioned
-  or pruned) when a halt round closes, holding that round's epoch as plain
-  text. Read by nothing inside the node itself (in memory, `_halted` already
-  keeps the same incarnation from opening another round, see "State variables,
-  at a glance"); it exists only for an external actor with no other view of
-  the node's state, such as the tool a stop signal comes from, to notice that
-  this incarnation has nothing further to send and it is safe to stop it.
+- **halted marker** (marca de halted): the file `halted` (`halted_<idx>` for a
+  task of an array, see execdir) that a node writes in its own `execdir`
+  (atomically, like a checkpoint, but never schema-versioned or pruned) when a
+  halt round closes, holding that round's epoch as plain text. Read by nothing
+  inside the node itself (in memory, `_halted` already keeps the same
+  incarnation from opening another round, see "State variables, at a glance");
+  it exists only for an external actor with no other view of the node's state,
+  such as the tool a stop signal comes from, to notice that this incarnation has
+  nothing further to send and it is safe to stop it.
 - **stop signal**: `SIGTERM`, sent to a node's whole process group (the same
   group `debasher_stop` already reaches with `SIGKILL`, see
   `debasher::_stop_pid`), which is what actually ends a node's `run()`
@@ -280,11 +287,12 @@ mutation check, durability level) is defined in the Contract, where it is used.
   been in. It is what the literature calls the snapshot, the result of a round.
   It holds only if no node crashes during the round.
 - **checkpoint** (punto de control): the file `<epoch>.json` that a node writes
-  atomically in `<execdir>/checkpoints/` when a round closes. It holds a schema
-  version, the epoch, the `node_state` and the `channel_state` and, with the
-  input-log redesign, the engine's own bookkeeping: `capture_pos`,
-  `closed_ports`, `out_seq`, `last_seq` and the outbound backlog,
-  `out_backlog`. Only the last `CHECKPOINT_RETENTION` are kept.
+  atomically in `<execdir>/checkpoints/` (`checkpoints_<idx>/` for a task of an
+  array, see execdir) when a round closes. It holds a schema version, the epoch,
+  the `node_state` and the `channel_state` and, with the input-log redesign, the
+  engine's own bookkeeping: `capture_pos`, `closed_ports`, `out_seq`, `last_seq`
+  and the outbound backlog, `out_backlog`. Only the last `CHECKPOINT_RETENTION`
+  are kept.
 - **outbound backlog, `out_backlog`** (cola de salida pendiente): the `DATA`
   that `send_data` has numbered and queued but the writer thread has not yet
   finished writing when a round captures the node state (G5): `{tag: [{"seq":,
@@ -295,11 +303,11 @@ mutation check, durability level) is defined in the Contract, where it is used.
 
 ## Input log
 
-- **input log** (log de entrada): one log per node, in `<execdir>/log/`, of
-  everything that arrives at it, in the order in which the brain thread
-  processes it, written by the reader threads when each item arrives. It holds
-  every queued item (`DATA`, `BARRIER`, `INTERACT`, `CLOSE`), and only `DATA` is
-  replayed.
+- **input log** (log de entrada): one log per node, in `<execdir>/log/`
+  (`log_<idx>/` for a task of an array, see execdir), of everything that arrives
+  at it, in the order in which the brain thread processes it, written by the
+  reader threads when each item arrives. It holds every queued item (`DATA`,
+  `BARRIER`, `INTERACT`, `CLOSE`), and only `DATA` is replayed.
 - **record** (entrada del log): one line of the input log, holding the position,
   the port and the envelope exactly as it arrived. Not to be confused with the
   verb: what a round does to the `DATA` of a pending port is "keep a copy".
@@ -1060,7 +1068,9 @@ Future work).
 - Location: `__exec__/<process_name>/checkpoints/`, a dedicated directory (not
   loose files mixed in with
   `<process_name>.{finished,id,opts,sched_out,stdout}`, which already exist
-  today under `__exec__/<process_name>/`): `_checkpoints_dir()`.
+  today under `__exec__/<process_name>/`): `_checkpoints_dir()`. A task of an
+  array keeps its own, `checkpoints_<idx>/`, next to those of the other tasks
+  (see execdir in the Glossary).
 - Atomic write: temporary file + rename, `_save_checkpoint()`'s `os.replace`.
 - Named by epoch; on startup, load the highest valid epoch:
   `_load_latest_checkpoint()`.
@@ -1640,12 +1650,14 @@ program specifically. It depends on the `Supervisor` changes above.
 - **Usage: `debasher_stop_resident -d <outdir> [-x <name>[,<name>...]]
   [--timeout <secs>] [--keep-supervisor]`.** `-d` is the program's own output
   directory, same as every other engine tool that operates on one. `-x` names
-  process(es) to leave alone entirely (not waited for, not signalled): for
-  `on_node_permanently_failed`'s own use (escalation section above), which
-  must not wait forever on a node it has already given up on. `--timeout`
-  (default 60, the same default `FORCE_STOP_TIMEOUT_SECS` already used) bounds
-  the whole graceful attempt; past it, falls back to `debasher_stop -d
-  <outdir>` (a hard kill of the entire program), so this always ends the
+  nodes to leave alone entirely (not waited for, not signalled), each a process
+  name (every task, if it is an array) or `<process_name>:<idx>` (one task of an
+  array; `<process_name>_<idx>` would be ambiguous with a process whose name
+  ends that way): for `on_node_permanently_failed`'s own use (escalation section
+  above), which must not wait forever on a node it has already given up on.
+  `--timeout` (default 60, the same default `FORCE_STOP_TIMEOUT_SECS` already
+  used) bounds the whole graceful attempt; past it, falls back to `debasher_stop
+  -d <outdir>` (a hard kill of the entire program), so this always ends the
   program one way or another, never hangs indefinitely by itself.
   `--keep-supervisor` skips stopping the program's `Supervisor` (step 1 of the
   Sequence below), also for `on_node_permanently_failed`'s own use: it calls
@@ -1656,7 +1668,15 @@ program specifically. It depends on the `Supervisor` changes above.
   `debasher::_validate_resident_program_processes` already does**: loads the
   module, iterates `DEBASHER_PROGRAM_PROCESSES`, and classifies each with the
   existing `debasher::_classify_resident_process_role` (no new classifier
-  written for this).
+  written for this). An array process is one node per task, as a `Supervisor`'s
+  `NODE_PORTS` names it, and as many as the `DEBASHER_NUM_TASKS` line of the
+  script that the scheduler wrote for the process before launching any task, so
+  that a task not started yet is counted too. Every step below reads a task's
+  own files: its `.id` and `.finished` (`debasher::_get_array_taskid_filename`,
+  `debasher::_get_task_finished_filename`), its halted marker and its control
+  ports file (see execdir in the Glossary). The `Supervisor`'s escalation names
+  the one task it gave up on, so that the other tasks of the same array are
+  still stopped.
 - **Sequence:**
   1. If the program has a `Supervisor` and `--keep-supervisor` was not given,
      stop it first (a stop signal to its whole process group, see below) and
@@ -2016,8 +2036,29 @@ open.
 
 # Extensions
 
-Design ideas from Future work move here once they are actually
-built. Empty for now: nothing listed in Future work is marked completed yet.
+Design ideas from Future work move here once they are actually built.
+
+- **Array processes** (from "Fan-out and fan-in sized from the command line" in
+  Future work). A process that is an array of tasks takes part in a resident
+  program with each task as a node of its own, `(process_name, task_idx)`:
+  - Files. The tasks share the process's directory, as they already share the
+    engine's own per-task files (`<process_name>_<idx>.id`, `.sched_out`, ...),
+    and each keeps its checkpoints, input log, halted marker and control ports
+    file there under names that carry its index (see execdir in the Glossary).
+  - Connections. `define_opt_from_proc_out` connects a task to a fifo of
+    another node, and `define_opt_from_proc_task_out` connects a node to the
+    fifo of one task, as for any other process; the engine creates every fifo
+    before launching, so a task's channels are like those of any node.
+  - Supervision. A `Supervisor` names a task in `NODE_PORTS` as
+    `(process_name, task_idx)` and finds and relaunches it through its own
+    `.id` and `.finished` (see "Port declaration and node identity").
+  - Stopping. `debasher_stop_resident` stops each task as a node of its own,
+    and `-x` can leave one task alone (see "`debasher_stop_resident`: the
+    graceful stop tool").
+
+  `test/engine/debasher_array_ref.sh` is the reference: an initiator fans out
+  to the three tasks of an array, which fan in to a third node, with no
+  `Supervisor`.
 
 # Future work
 
@@ -2073,13 +2114,14 @@ built. Empty for now: nothing listed in Future work is marked completed yet.
     (the block index modulo `w`, in `dynamic_fanout_dispatcher.py`); a choice by
     worker load would break the guarantees.
   - Array processes. The `w` workers are `w` nodes, `(process_name, task_idx)`,
-    each with its own directory, checkpoints and input log, and the `Supervisor`
-    already accepts such names in `NODE_PORTS`. Not known: whether
-    `define_opt_from_proc_task_out` works for the fifos of resident nodes, how
-    the script generation and the frontend would express it for resident
-    processes, and how the chaos test would cover it (a fan-out to several
-    workers and a fan-in from them are two more shapes for its reference
-    program).
+    which a resident program already supports (see "Array processes" in
+    Extensions), as long as the options of its tasks are written in a loop.
+    Tasks produced by an option generator that give each task a fifo of its
+    own (`define_fifo_opt_generator`) do not work yet, in general programs
+    either. Not known: how the frontend and the script generation of the API
+    (`api/script_generation.py`) would express them for resident processes,
+    and how a real run would cover a `Supervisor` that relaunches one task of an
+    array.
 - **Auxiliary script to reset checkpoints across a whole topology**: deleting
   (or moving) every node's checkpoint folder before launching forces a clean
   start with no special-case code needed anywhere (the Startup sequence

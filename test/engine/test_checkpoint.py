@@ -39,6 +39,32 @@ def test_checkpoints_dir_is_a_checkpoints_subdir_of_the_execdir(execdir):
     assert proc._checkpoints_dir() == os.path.join(str(execdir), "checkpoints")
 
 
+def test_a_process_that_is_not_an_array_names_its_files_without_an_index(execdir, monkeypatch):
+    # The engine exports an empty index for a process that is not an array.
+    monkeypatch.setenv("DEBASHER_PROCESS_TASK_IDX", "")
+    proc = _Node(opts={"x": "/dev/null"})
+
+    assert proc._task_idx() is None
+    assert proc._checkpoints_dir() == os.path.join(str(execdir), "checkpoints")
+    assert proc._halted_marker_path() == os.path.join(str(execdir), "halted")
+    assert proc._control_ports_path() == os.path.join(str(execdir), "control_ports")
+
+
+def test_a_task_of_an_array_adds_its_index_to_every_file_it_keeps(execdir, monkeypatch):
+    # The tasks of an array share the process's directory, so each one keeps
+    # its own checkpoints, input log, halted marker and control ports file.
+    monkeypatch.setenv("DEBASHER_PROCESS_TASK_IDX", "2")
+    proc = _Node(opts={"x": "/dev/null"})
+    proc._open_input_log(0)
+    proc._input_log.append("a", '{"type": "DATA", "payload": 1}')
+    proc._save_checkpoint(0, {}, {}, 0, frozenset(), {}, {}, {})
+    proc._write_halted_marker(0)
+    proc._write_control_ports_file()
+
+    assert proc._task_idx() == 2
+    assert sorted(os.listdir(execdir)) == ["checkpoints_2", "control_ports_2", "halted_2", "log_2"]
+
+
 # --- _save_checkpoint --------------------------------------------------
 
 

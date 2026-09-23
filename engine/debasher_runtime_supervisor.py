@@ -397,6 +397,14 @@ class Supervisor(_PortWorker):
         name = self._node_process_name(node)
         return name if idx is None else f"{name}_{idx}"
 
+    def _node_stop_resident_name(self, node):
+        # How debasher_stop_resident's -x names a node: "<process>:<idx>"
+        # for one task of an array process, so that the other tasks are
+        # still stopped, plain "<process>" otherwise.
+        idx = self._node_task_idx(node)
+        name = self._node_process_name(node)
+        return name if idx is None else f"{name}:{idx}"
+
     def _node_exec_dir(self, node):
         return os.path.join(self._program_dir(), self._node_process_name(node))
 
@@ -573,7 +581,7 @@ class Supervisor(_PortWorker):
                     "-d",
                     self._program_outdir(),
                     "-x",
-                    self._node_process_name(node_name),
+                    self._node_stop_resident_name(node_name),
                     "--keep-supervisor",
                     "--timeout",
                     str(self.FORCE_STOP_TIMEOUT_SECS),

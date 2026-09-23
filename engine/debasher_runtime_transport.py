@@ -519,6 +519,26 @@ class _PortWorker:
             )
         return execdir
 
+    def _task_idx(self):
+        """
+        The index of this task, if the process is an array of tasks (the
+        engine exports DEBASHER_PROCESS_TASK_IDX only then), or None.
+        """
+        task_idx = os.environ.get("DEBASHER_PROCESS_TASK_IDX")
+        return int(task_idx) if task_idx else None
+
+    def _execdir_entry(self, name):
+        """
+        The path of `name` inside this process's own directory. The tasks
+        of an array process share that directory, the same way the engine's
+        own files do, so a task adds its index to the name, as in
+        <process>_<idx>.id: "checkpoints_2" for task 2, "checkpoints" for
+        a process that is not an array.
+        """
+        task_idx = self._task_idx()
+        entry = name if task_idx is None else f"{name}_{task_idx}"
+        return os.path.join(self._execdir(), entry)
+
     def send_data(self, tag, payload, seq=None):
         """
         Enqueues a DATA envelope for tag's writer thread to send. `seq` is

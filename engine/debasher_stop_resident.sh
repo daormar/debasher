@@ -58,7 +58,9 @@ usage()
     echo "                          [--timeout <int>] [--keep-supervisor] [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
-    echo "-x <string>               Comma-separated process names to leave alone"
+    echo "-x <string>               Comma-separated nodes to leave alone: a process"
+    echo "                          name (every task, if it is an array) or"
+    echo "                          <process>:<idx> (one task of an array)"
     echo "--timeout <int>           Seconds to wait for a clean stop before"
     echo "                          falling back to debasher_stop (default: 60)"
     echo "--keep-supervisor         Do not stop the program's Supervisor, if it"
@@ -198,16 +200,107 @@ wait_for_fresh_halted_marker()
 }
 
 ########
-# Reads a process's own .id file and sends its whole process group a
-# graceful stop signal (see debasher::_stop_pid_gracefully). A missing or
-# empty .id file (never launched, or already gone) is not an error: there
-# is nothing to stop.
-stop_processname_gracefully()
+# A node is a process name, or <process>:<idx> for one task of an array
+# process (the same identity a Supervisor's NODE_PORTS gives it). The
+# functions below give the files of a node, which for a task carry its
+# index the way the engine names them (<process>_<idx>.id).
+node_processname()
+{
+    echo "${1%%:*}"
+}
+
+node_task_idx()
+{
+    case "$1" in
+        *:*) echo "${1#*:}" ;;
+        *) echo "" ;;
+    esac
+}
+
+node_id_filename()
+{
+    local absdirname=$1
+    local node=$2
+    local processname=$(node_processname "${node}")
+    local idx=$(node_task_idx "${node}")
+    if [ -z "${idx}" ]; then
+        debasher::_get_processid_filename "${absdirname}" "${processname}"
+    else
+        debasher::_get_array_taskid_filename "${absdirname}" "${processname}" "${idx}"
+    fi
+}
+
+node_finished_filename()
+{
+    local absdirname=$1
+    local node=$2
+    local processname=$(node_processname "${node}")
+    local idx=$(node_task_idx "${node}")
+    if [ -z "${idx}" ]; then
+        debasher::_get_process_finished_filename "${absdirname}" "${processname}"
+    else
+        debasher::_get_task_finished_filename "${absdirname}" "${processname}" "${idx}"
+    fi
+}
+
+# The path of $3 in the process's own directory, as the node's runtime
+# names it (see _execdir_entry in engine/debasher_runtime_transport.py):
+# "<name>_<idx>" for a task, "<name>" otherwise.
+node_execdir_entry()
+{
+    local absdirname=$1
+    local node=$2
+    local name=$3
+    local processname=$(node_processname "${node}")
+    local idx=$(node_task_idx "${node}")
+    local execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
+    if [ -z "${idx}" ]; then
+        echo "${execdir}/${name}"
+    else
+        echo "${execdir}/${name}_${idx}"
+    fi
+}
+
+########
+# The number of tasks of process $2, from the script the scheduler wrote
+# for it before launching any of them (its DEBASHER_NUM_TASKS line), so
+# that tasks not started yet are counted too. Waits for the script until
+# the deadline $3, since a program can still be starting up.
+num_tasks_of_process()
 {
     local absdirname=$1
     local processname=$2
+    local deadline=$3
+    local script_file
+    script_file=$(debasher::_get_script_filename "${absdirname}" "${processname}")
+    if ! wait_for_file "${script_file}" "${deadline}"; then
+        echo "Error: ${processname} was never launched (no ${script_file})" >&2
+        return 1
+    fi
+    local line
+    while IFS= read -r line; do
+        case "${line}" in
+            DEBASHER_NUM_TASKS=*)
+                echo "${line#DEBASHER_NUM_TASKS=}"
+                return 0
+                ;;
+        esac
+    done < "${script_file}"
+    echo "Error: ${script_file} does not say how many tasks ${processname} has" >&2
+    return 1
+}
+
+########
+# Reads a node's own .id file and sends its whole process group a
+# graceful stop signal (see debasher::_stop_pid_gracefully). A missing or
+# empty .id file (never launched, or already gone) is not an error: there
+# is nothing to stop.
+stop_node_gracefully()
+{
+    local absdirname=$1
+    local node=$2
     local id_file
-    id_file=$(debasher::_get_processid_filename "${absdirname}" "${processname}")
+    id_file=$(node_id_filename "${absdirname}" "${node}")
     if [ ! -f "${id_file}" ]; then
         return 0
     fi
@@ -221,14 +314,17 @@ stop_processname_gracefully()
 
 ########
 # Populates SUPERVISOR_PROCESSNAME (empty if the program has none) and
-# NODE_PROCESSNAMES (every other process, minus $1's comma-separated
-# names, if any) from DEBASHER_PROGRAM_PROCESSES, already populated by
-# the caller. Reuses debasher::_classify_resident_process_role, the same
-# classifier debasher::_validate_resident_program_processes already uses,
-# rather than reinventing it here.
+# NODES (every other process, or every task of it if it is an array,
+# minus the nodes named in $1's comma-separated list, see usage) from
+# DEBASHER_PROGRAM_PROCESSES, already populated by the caller. Reuses
+# debasher::_classify_resident_process_role, the same classifier
+# debasher::_validate_resident_program_processes already uses, rather
+# than reinventing it here.
 find_supervisor_and_nodes()
 {
-    local excluded_csv=$1
+    local absdirname=$1
+    local excluded_csv=$2
+    local deadline=$3
 
     local -A excluded=()
     if [ -n "${excluded_csv}" ]; then
@@ -247,9 +343,9 @@ find_supervisor_and_nodes()
     fi
 
     SUPERVISOR_PROCESSNAME=""
-    NODE_PROCESSNAMES=()
+    NODES=()
 
-    local processname role
+    local processname role num_tasks idx
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         role=$(debasher::_classify_resident_process_role "${processname}") || {
             echo "Error: cannot classify process ${processname} (not a resident program?)" >&2
@@ -264,8 +360,18 @@ find_supervisor_and_nodes()
                 SUPERVISOR_PROCESSNAME="${processname}"
                 ;;
             fbpprocess)
-                if [ -z "${excluded[${processname}]+x}" ]; then
-                    NODE_PROCESSNAMES+=("${processname}")
+                if [ -n "${excluded[${processname}]+x}" ]; then
+                    continue
+                fi
+                num_tasks=$(num_tasks_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
+                if [ "${num_tasks}" -eq 1 ]; then
+                    NODES+=("${processname}")
+                else
+                    for (( idx = 0; idx < num_tasks; idx++ )); do
+                        if [ -z "${excluded[${processname}:${idx}]+x}" ]; then
+                            NODES+=("${processname}:${idx}")
+                        fi
+                    done
                 fi
                 ;;
             *)
@@ -305,7 +411,7 @@ stop_supervisor_if_any()
         return 0
     fi
 
-    stop_processname_gracefully "${absdirname}" "${SUPERVISOR_PROCESSNAME}"
+    stop_node_gracefully "${absdirname}" "${SUPERVISOR_PROCESSNAME}"
 
     local finished_file
     finished_file=$(debasher::_get_process_finished_filename "${absdirname}" "${SUPERVISOR_PROCESSNAME}")
@@ -330,10 +436,9 @@ capture_halted_marker_baselines()
     local absdirname=$1
 
     declare -gA HALTED_MARKER_BASELINE=()
-    local processname execdir
-    for processname in "${NODE_PROCESSNAMES[@]}"; do
-        execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
-        HALTED_MARKER_BASELINE["${processname}"]=$(read_halted_marker_or_baseline "${execdir}/halted")
+    local node
+    for node in "${NODES[@]}"; do
+        HALTED_MARKER_BASELINE["${node}"]=$(read_halted_marker_or_baseline "$(node_execdir_entry "${absdirname}" "${node}" halted)")
     done
 }
 
@@ -367,12 +472,11 @@ trigger_shutdown_for_all_nodes()
     local shutdown_json
     shutdown_json=$(shutdown_interact_json "$(date +%s%3N)")
 
-    local processname execdir cp_file fifo
-    for processname in "${NODE_PROCESSNAMES[@]}"; do
-        execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
-        cp_file="${execdir}/control_ports"
+    local node cp_file fifo
+    for node in "${NODES[@]}"; do
+        cp_file=$(node_execdir_entry "${absdirname}" "${node}" control_ports)
         if ! wait_for_file "${cp_file}" "${deadline}"; then
-            echo "Error: ${processname} never wrote its control_ports file" >&2
+            echo "Error: ${node} never wrote its control_ports file" >&2
             return 1
         fi
         while IFS= read -r fifo; do
@@ -396,12 +500,11 @@ wait_for_every_halted_marker()
     local absdirname=$1
     local deadline=$2
 
-    local processname execdir marker_file
-    for processname in "${NODE_PROCESSNAMES[@]}"; do
-        execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
-        marker_file="${execdir}/halted"
-        if ! wait_for_fresh_halted_marker "${marker_file}" "${HALTED_MARKER_BASELINE[${processname}]}" "${deadline}"; then
-            echo "Error: ${processname} never marked itself halted" >&2
+    local node marker_file
+    for node in "${NODES[@]}"; do
+        marker_file=$(node_execdir_entry "${absdirname}" "${node}" halted)
+        if ! wait_for_fresh_halted_marker "${marker_file}" "${HALTED_MARKER_BASELINE[${node}]}" "${deadline}"; then
+            echo "Error: ${node} never marked itself halted" >&2
             return 1
         fi
     done
@@ -418,16 +521,16 @@ stop_every_node_and_wait_for_finished()
     local absdirname=$1
     local deadline=$2
 
-    local processname
-    for processname in "${NODE_PROCESSNAMES[@]}"; do
-        stop_processname_gracefully "${absdirname}" "${processname}"
+    local node
+    for node in "${NODES[@]}"; do
+        stop_node_gracefully "${absdirname}" "${node}"
     done
 
     local finished_file
-    for processname in "${NODE_PROCESSNAMES[@]}"; do
-        finished_file=$(debasher::_get_process_finished_filename "${absdirname}" "${processname}")
+    for node in "${NODES[@]}"; do
+        finished_file=$(node_finished_filename "${absdirname}" "${node}")
         if ! wait_for_file "${finished_file}" "${deadline}"; then
-            echo "Error: ${processname} never exited cleanly after a stop signal" >&2
+            echo "Error: ${node} never exited cleanly after a stop signal" >&2
             return 1
         fi
     done
@@ -464,10 +567,10 @@ stop_resident_program()
 
     debasher::_exec_program_func_for_module "${pfile}"
 
-    find_supervisor_and_nodes "${excluded_csv}" || return 1
-    capture_halted_marker_baselines "${absdirname}"
-
     local deadline=$(( $(now_epoch) + timeout_secs ))
+
+    find_supervisor_and_nodes "${absdirname}" "${excluded_csv}" "${deadline}" || return 1
+    capture_halted_marker_baselines "${absdirname}"
 
     if stop_supervisor_if_any "${absdirname}" "${deadline}" \
         && trigger_shutdown_for_all_nodes "${absdirname}" "${deadline}" \

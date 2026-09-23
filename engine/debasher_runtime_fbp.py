@@ -394,7 +394,7 @@ class FBPProcess(_PortWorker):
         self._heartbeat_thread.start()
 
     def _control_ports_path(self):
-        return os.path.join(self._execdir(), "control_ports")
+        return self._execdir_entry("control_ports")
 
     def _write_control_ports_file(self):
         """
@@ -915,10 +915,10 @@ class FBPProcess(_PortWorker):
             )
 
     def _checkpoints_dir(self):
-        return os.path.join(self._execdir(), "checkpoints")
+        return self._execdir_entry("checkpoints")
 
     def _halted_marker_path(self):
-        return os.path.join(self._execdir(), "halted")
+        return self._execdir_entry("halted")
 
     def _write_halted_marker(self, epoch):
         """
@@ -1028,7 +1028,7 @@ class FBPProcess(_PortWorker):
         (0 if there is none), so that numbering goes on after it.
         """
         log = _InputLog(
-            os.path.join(self._execdir(), "log"),
+            self._execdir_entry("log"),
             self.INPUT_LOG_MAX_BYTES,
             self.INPUT_LOG_SEGMENT_BYTES,
         )

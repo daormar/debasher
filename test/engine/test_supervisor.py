@@ -645,7 +645,7 @@ def test_escalation_calls_debasher_stop_resident_excluding_the_given_up_node(
     assert proc._all_resolved.is_set()
 
 
-def test_escalation_excludes_by_process_name_for_an_array_task(execdir, monkeypatch):
+def test_escalation_excludes_only_the_failed_task_of_an_array(execdir, monkeypatch):
     monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
 
     class Sup(lib.Supervisor):
@@ -665,7 +665,7 @@ def test_escalation_excludes_by_process_name_for_an_array_task(execdir, monkeypa
     proc.on_node_permanently_failed(("w", 1))
 
     assert _wait_until(lambda: proc._active_escalations == 0)
-    assert calls[0][calls[0].index("-x") + 1] == "w"
+    assert calls[0][calls[0].index("-x") + 1] == "w:1"
 
 
 def test_escalation_logs_but_still_resolves_bookkeeping_when_the_tool_fails(
