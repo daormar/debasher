@@ -202,13 +202,11 @@ EOF
     [ "$(grep '^pid=' "${EXECDIR}/seen.txt" | cut -d= -f2)" = "${pid}" ]
 }
 
-@test "_export_process_comp_specs exports the computational specs of the process" {
+@test "_get_process_comp_specs returns the computational specs of the process" {
+    source "${ENGINE_BUILDDIR}/debasher_lib_process_spec.sh"
     declare -gA DEBASHER_INITIAL_PROCESS_SPEC
-    DEBASHER_INITIAL_PROCESS_SPEC[proc]="proc cpus=1; mem=32; time=00:01:00; out_backlog_fail_mb=16 ||| "
-    debasher_builtin_sched::_export_process_comp_specs proc
-    [ "${DEBASHER_PROCESS_COMP_SPECS}" = "cpus=1; mem=32; time=00:01:00; out_backlog_fail_mb=16" ]
-    # Exported, so a child process (a resident process's interpreter) sees it.
-    [ "$(bash -c 'echo "${DEBASHER_PROCESS_COMP_SPECS}"')" = "${DEBASHER_PROCESS_COMP_SPECS}" ]
+    DEBASHER_INITIAL_PROCESS_SPEC[proc]="proc cpus=1; mem=32; time=00:01:00; out_backlog_fail_mb=16 ||| force=yes"
+    [ "$(debasher::_get_process_comp_specs proc)" = "cpus=1; mem=32; time=00:01:00; out_backlog_fail_mb=16" ]
 }
 
 @test "the spec check refuses a resident limit that is not a positive number, and accepts one that is" {

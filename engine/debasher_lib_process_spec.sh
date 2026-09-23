@@ -85,6 +85,14 @@ debasher::extract_process_comp_specs()
 }
 
 ########
+debasher::_get_process_comp_specs()
+{
+    local processname=$1
+
+    debasher::extract_process_comp_specs "${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
+}
+
+########
 debasher::extract_process_additional_specs()
 {
     local process_spec=$1
