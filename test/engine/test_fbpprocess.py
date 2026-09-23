@@ -131,3 +131,50 @@ def test_a_module_that_still_defines_the_old_hooks_fails_at_its_first_round():
     proc = _OldHooks(opts={})
     with pytest.raises(NotImplementedError):
         proc._on_interact({"command": "start_snapshot", "args": {}})
+
+
+# --- FBPProcess: limits from the computational specifications ---------
+
+
+class _Limited(_Worker):
+    OUT_BACKLOG_FAIL_BYTES = 5 * 1024 * 1024
+
+
+def _limited_opts():
+    return {port: "/dev/null" for port in _Limited.INPUT_PORTS + _Limited.OUTPUT_PORTS}
+
+
+@pytest.mark.parametrize(
+    "comp_specs",
+    [
+        "cpus=1; mem=32; time=00:01:00; input_log_max_mb=2; out_backlog_max_mb=0.5; "
+        "out_backlog_fail_mb=16; gil_switch_interval_ms=2",
+        "cpus=1 mem=32 time=00:01:00 input_log_max_mb=2 out_backlog_max_mb=0.5 "
+        "out_backlog_fail_mb=16 gil_switch_interval_ms=2",
+    ],
+)
+def test_the_computational_specs_set_the_limits_of_the_node(monkeypatch, comp_specs):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", comp_specs)
+    node = _Limited(opts=_limited_opts())
+    assert node.INPUT_LOG_MAX_BYTES == 2 * 1024 * 1024
+    assert node.OUT_BACKLOG_MAX_BYTES == 512 * 1024
+    assert node.OUT_BACKLOG_FAIL_BYTES == 16 * 1024 * 1024
+    assert node.GIL_SWITCH_INTERVAL_SECS == pytest.approx(0.002)
+
+
+def test_without_computational_specs_the_class_decides(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; mem=32; time=00:01:00")
+    node = _Limited(opts=_limited_opts())
+    assert node.OUT_BACKLOG_FAIL_BYTES == 5 * 1024 * 1024
+    assert node.INPUT_LOG_MAX_BYTES == lib.FBPProcess.INPUT_LOG_MAX_BYTES
+    # The class itself is left as it was.
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "out_backlog_fail_mb=1")
+    _Limited(opts=_limited_opts())
+    assert _Limited.OUT_BACKLOG_FAIL_BYTES == 5 * 1024 * 1024
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abc", "", "inf", "nan"])
+def test_a_limit_that_is_not_a_positive_number_is_refused(monkeypatch, value):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", f"cpus=1; out_backlog_fail_mb={value}")
+    with pytest.raises(ValueError, match="out_backlog_fail_mb"):
+        _Limited(opts=_limited_opts())

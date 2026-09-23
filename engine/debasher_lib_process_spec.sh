@@ -53,6 +53,19 @@ debasher::_program_process_spec_is_ok()
         return 1
     fi
 
+    # The limits that a resident process reads, when given, must be positive
+    # numbers: checked here, when the program is loaded, rather than by the
+    # node when it starts, after it has been launched
+    local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
+    local specname
+    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES}; do
+        local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
+        if [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && ! debasher::_str_is_positive_number "${value}"; then
+            echo "Error: ${specname} computational specification of process ${processname} must be a positive number, got \"${value}\"" >&2
+            return 1
+        fi
+    done
+
     return 0
 }
 

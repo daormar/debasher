@@ -174,6 +174,11 @@ mutation check, durability level) is defined in the Contract, where it is used.
   (empty for a process that is not an array), and adds `_<idx>` to the name of
   everything it keeps there: `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>`
   and `control_ports_<idx>` (`_execdir_entry`).
+- **limits of a node** (límites de un nodo): `INPUT_LOG_MAX_BYTES`,
+  `OUT_BACKLOG_MAX_BYTES`, `OUT_BACKLOG_FAIL_BYTES` and
+  `GIL_SWITCH_INTERVAL_SECS`, class attributes of `FBPProcess` that a module
+  can redefine and that the computational specifications of a process can set
+  for that process of a program (see "Limits of a node").
 
 ## Messages
 
@@ -924,6 +929,31 @@ as it arrives, with no join across ports.
 
 How a node finishes for good is not defined yet: `run()` returns only on a stop
 signal, and a stop sends no `CLOSE`.
+
+## Limits of a node
+
+Four limits of a node (see the Glossary) are class attributes of `FBPProcess`,
+with a default each, that a module can redefine in its class. A program can
+also set them for one of its processes, over what the class says, in the
+computational specifications that it gives to `add_debasher_process`, next to
+`cpus`, `mem` and `time`:
+
+| Specification            | Attribute                  | Default | Explained in                                                               |
+|--------------------------|----------------------------|---------|----------------------------------------------------------------------------|
+| `input_log_max_mb`       | `INPUT_LOG_MAX_BYTES`      | 100 MiB | "Pruning and the size cap"                                                 |
+| `out_backlog_max_mb`     | `OUT_BACKLOG_MAX_BYTES`    | 8 MiB   | "Checkpoint persistence"                                                   |
+| `out_backlog_fail_mb`    | `OUT_BACKLOG_FAIL_BYTES`   | 64 MiB  | "Checkpoint persistence"                                                   |
+| `gil_switch_interval_ms` | `GIL_SWITCH_INTERVAL_SECS` | 0.5 ms  | "Messages read from a FIFO but not yet written to the input log" (Contract) |
+
+For example, `add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00;
+out_backlog_fail_mb=128"`. Sizes are in MiB and the interval in milliseconds,
+and each value, when given, must be a positive number: the engine checks it
+when it loads the program (`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before
+anything is launched. The built-in scheduler exports the computational
+specifications of the process to it as `DEBASHER_PROCESS_COMP_SPECS`, from
+the specification that the generated script carries, so a relaunch gets them
+too, and `FBPProcess` sets them on its instance when it is created
+(`_apply_comp_specs`); it ignores the other fields.
 
 ## State capture and checkpoint schema
 

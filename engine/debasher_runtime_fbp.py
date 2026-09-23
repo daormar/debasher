@@ -126,8 +126,22 @@ class FBPProcess(_PortWorker):
     OUT_BACKLOG_MAX_BYTES = 8 * 1024 * 1024
     OUT_BACKLOG_FAIL_BYTES = 64 * 1024 * 1024
 
+    # The computational specifications of a process (see
+    # add_debasher_process) that set the limits above for that process of a
+    # program, over what its class says: name -> (attribute, factor from
+    # the unit of the specification to the unit of the attribute). The
+    # engine checks, when it loads the program, that each one given is a
+    # positive number (DEBASHER_RESIDENT_COMP_SPEC_NAMES).
+    _COMP_SPEC_ATTRS = {
+        "input_log_max_mb": ("INPUT_LOG_MAX_BYTES", 1024 * 1024),
+        "out_backlog_max_mb": ("OUT_BACKLOG_MAX_BYTES", 1024 * 1024),
+        "out_backlog_fail_mb": ("OUT_BACKLOG_FAIL_BYTES", 1024 * 1024),
+        "gil_switch_interval_ms": ("GIL_SWITCH_INTERVAL_SECS", 0.001),
+    }
+
     def __init__(self, argv=None, opts=None):
         super().__init__(argv, opts)
+        self._apply_comp_specs(os.environ.get("DEBASHER_PROCESS_COMP_SPECS", ""))
 
         self._heartbeat_thread = None
         self._heartbeat_stop = threading.Event()
@@ -618,6 +632,34 @@ class FBPProcess(_PortWorker):
             self.process_data(port_name, packet)
         finally:
             self._handler_thread = None
+
+    def _apply_comp_specs(self, comp_specs):
+        """
+        Sets, on this instance, over what the class says, the limits that the
+        computational specifications of the process give (see
+        _COMP_SPEC_ATTRS): the engine exports them to the process as
+        DEBASHER_PROCESS_COMP_SPECS, fields `name=value` separated by ";" or,
+        in the legacy form, by blanks. The other fields (cpus, mem, time...)
+        are for the scheduler, and are ignored here.
+        """
+        separator = ";" if ";" in comp_specs else None
+        for field in comp_specs.split(separator):
+            name, _, value = field.strip().partition("=")
+            target = self._COMP_SPEC_ATTRS.get(name)
+            if target is None:
+                continue
+            attribute, factor = target
+            try:
+                number = float(value)
+            except ValueError:
+                number = float("nan")
+            if not 0 < number < float("inf"):
+                raise ValueError(
+                    f"{type(self).__name__}: the computational specification "
+                    f"{name}={value!r} is not a positive number"
+                )
+            scaled = number * factor
+            setattr(self, attribute, int(scaled) if attribute.endswith("_BYTES") else scaled)
 
     def send_data(self, tag, payload):
         """

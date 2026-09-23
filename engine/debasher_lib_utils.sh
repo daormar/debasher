@@ -461,6 +461,16 @@ debasher::_str_is_natural_number()
 }
 
 ########
+debasher::_str_is_positive_number()
+{
+    local str=$1
+
+    # Digits with at most one decimal point, and not zero
+    [[ "${str}" =~ ^[0-9]*\.?[0-9]+$ ]] || [[ "${str}" =~ ^[0-9]+\.$ ]] || return 1
+    [[ "${str}" =~ [1-9] ]]
+}
+
+########
 debasher::_str_is_option()
 {
     local str=$1

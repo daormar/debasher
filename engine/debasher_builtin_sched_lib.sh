@@ -1065,6 +1065,19 @@ debasher_builtin_sched::_print_script_header()
 }
 
 ########
+debasher_builtin_sched::_export_process_comp_specs()
+{
+    local processname=$1
+
+    # Exported, like DEBASHER_PROCESS_EXECDIR, so that it reaches whatever
+    # the process function execs (a resident process's "python -c ..."
+    # heredoc, which reads the limits it is given there, see
+    # DEBASHER_RESIDENT_COMP_SPEC_NAMES). The generated script carries the
+    # specification of every process, so a relaunch gets it too.
+    export DEBASHER_PROCESS_COMP_SPECS=$(debasher::extract_process_comp_specs "${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}")
+}
+
+########
 debasher_builtin_sched::_execute_funct_plus_postfunct()
 {
     local cmdline=$1
@@ -1126,6 +1139,10 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # __exec__/<processname>/ directory (e.g. for checkpoints) without
     # any option needing to be wired for it.
     export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    # The computational specifications of the process, for a resident
+    # process to read its own limits from (see
+    # debasher_builtin_sched::_export_process_comp_specs)
+    debasher_builtin_sched::_export_process_comp_specs "${processname}"
     # The tasks of an array share that directory, so a task also gets its
     # own index, to name what it keeps there the way the engine names its
     # per-task files (<process>_<idx>.id); empty for a process that is not
@@ -1201,6 +1218,7 @@ debasher_builtin_sched::_write_env_vars_and_funcs()
     debasher::_write_env_vars_and_funcs "${dirname}"
 
     # Write builtin sched environment functions
+    declare -f debasher_builtin_sched::_export_process_comp_specs
     declare -f debasher_builtin_sched::_execute_funct_plus_postfunct
     declare -f debasher::_seq_execute_builtin
     declare -f debasher_builtin_sched::_get_script_log_filenames

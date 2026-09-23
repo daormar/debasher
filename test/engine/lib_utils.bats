@@ -19,6 +19,22 @@ setup() {
     [ "$status" -eq 1 ]
 }
 
+@test "debasher::_str_is_positive_number accepts integers and decimals above zero" {
+    local value
+    for value in 1 64 0.5 .5 2. 0010; do
+        run debasher::_str_is_positive_number "${value}"
+        [ "$status" -eq 0 ] || { echo "rejected ${value}"; return 1; }
+    done
+}
+
+@test "debasher::_str_is_positive_number rejects zero, signs, letters and empty strings" {
+    local value
+    for value in 0 0.0 . -1 +1 1e3 abc "" 1.2.3 " 1"; do
+        run debasher::_str_is_positive_number "${value}"
+        [ "$status" -ne 0 ] || { echo "accepted '${value}'"; return 1; }
+    done
+}
+
 @test "debasher::_is_absolute_path accepts an absolute path" {
     run debasher::_is_absolute_path "/tmp/foo"
     [ "$status" -eq 0 ]

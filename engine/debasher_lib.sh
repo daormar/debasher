@@ -51,6 +51,10 @@ DEBASHER_MODULE_METHOD_SEP="_"
 DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP="|||"
 DEBASHER_LEGACY_PROCSPECS_SEP=" "
 DEBASHER_PROCSPECS_SEP=";"
+# Computational specifications that only a resident process reads (see
+# FBPProcess._apply_comp_specs): limits of the node, given per process
+# with add_debasher_process. Each, when given, is a positive number.
+DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backlog_fail_mb gil_switch_interval_ms"
 DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX=".__VAL_DESCRIPTOR__"
 DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX="__PROC_OUT_OPT_DESCRIPTOR__"
 DEBASHER_SCHED_OPTS_DIRNAME=".sched_opts"
