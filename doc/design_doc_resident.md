@@ -2565,6 +2565,9 @@ Design ideas from Future work move here once they are actually built.
     between the model and a module;
   - the fifo tags, `--control` and `--external` (see "Channel kinds declared
     with the fifo"), as an attribute of a fifo option, like `mirror`;
+  - the limits of a node in the computational specifications (see "Limits of
+    a node"): the model knows only `cpus`, `mem` and `time`, so a round trip
+    through the editor drops them;
   - editing a node's class and its ports (`INPUT_PORTS`, `OUTPUT_PORTS`,
     `CONTROL_PORTS`, `EXTERNAL_PORTS`), and wiring the heartbeat channels and
     the trigger ports of a `Supervisor` (`SUPERVISOR_PORT`, `NODE_PORTS`,
