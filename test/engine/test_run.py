@@ -417,3 +417,36 @@ def test_start_threads_writes_the_control_ports_file(execdir):
         assert os.path.exists(proc._control_ports_path())
     finally:
         proc.stop_threads(close=False)
+
+
+# --- the GIL switch interval ------------------------------------------------
+
+
+def test_run_sets_the_gil_switch_interval_of_the_process(execdir):
+    import sys
+
+    proc = _Node(opts={})
+    threading.Thread(target=proc.run, daemon=True).start()
+    assert _wait_until(lambda: proc.initialize_runtime_calls == 1)
+
+    assert sys.getswitchinterval() == pytest.approx(lib.FBPProcess.GIL_SWITCH_INTERVAL_SECS)
+
+    proc._stop_requested.set()
+    assert _wait_until(lambda: not proc._brain_thread.is_alive())
+
+
+def test_run_leaves_the_gil_switch_interval_alone_when_it_is_none(execdir):
+    import sys
+
+    class _Untouched(_Node):
+        GIL_SWITCH_INTERVAL_SECS = None
+
+    sys.setswitchinterval(0.004)
+    proc = _Untouched(opts={})
+    threading.Thread(target=proc.run, daemon=True).start()
+    assert _wait_until(lambda: proc.initialize_runtime_calls == 1)
+
+    assert sys.getswitchinterval() == pytest.approx(0.004)
+
+    proc._stop_requested.set()
+    assert _wait_until(lambda: not proc._brain_thread.is_alive())

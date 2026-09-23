@@ -615,11 +615,20 @@ guarantee in words and never cite these numbers, which may change.
   boundary delivery is at most once; inside the graph, the guarantees start from
   the first message a node logs.
 - **Messages read from a FIFO but not yet written to the input log** when a node
-  crashes. The reader thread writes each message to the log when it arrives, so
-  this window is only the time between taking a block from the FIFO and
-  appending each of its messages. A message lost in that window is not
-  recovered, since its sender considers it delivered, but the sequence numbers
-  of G5 make the hole detectable (G8).
+  crashes. A reader thread takes a block from the FIFO, up to 64 KiB, and
+  writes every message of it to the log in one write before any of them is
+  queued, so this window is the time between taking the block and that write:
+  decoding and checking its lines, and getting the GIL back after the read if
+  another thread of the node holds it, which `FBPProcess` bounds by setting the
+  process's switch interval to `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms. A message
+  longer than what one read brings, one larger than the FIFO in particular, is
+  in memory, in part, from its first read until its last, so it stays exposed
+  for as long as its writer takes to write the rest. A message lost in that
+  window is not recovered, since its sender considers it delivered, but the
+  sequence numbers of G5 make the hole detectable (G8), and the rest of a
+  message cut in two reaches the relaunched reader as a fragment that no
+  `HELLO` follows, which stops it. A FIFO offers no way to look at what it
+  holds without taking it, so the window can be made short but not closed.
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
   loop, deadlock) is not detected today: the heartbeat proves that its threads
   are alive, not that they make progress. Not a goal for now; an extension would
@@ -1159,13 +1168,20 @@ relaunches the node.
 
 ## Arrival and positions
 
-A reader thread hands what it decodes to `_on_arrival(tag, envelope, line)`
-instead of putting it on the inbound queue itself. `FBPProcess` overrides it:
-under one lock it appends the record to the log, which assigns it its
-position, `pos`, then puts `(pos, tag, type, payload, seq)` on the queue, so
-that position order is processing order. The base class, used
-directly only by the `Supervisor`, is unaffected: it puts `(tag, type,
-payload)`, with no position.
+A reader thread reads its FIFO a block at a time and hands the items it
+decodes from one block, together, to `_on_arrivals(tag, items)` instead of
+putting them on the inbound queue itself; a line cut at the end of a block
+waits for the next one. `FBPProcess` overrides it: under one lock it appends
+the records of the whole block to the log in one write
+(`_InputLog.append_many`), which assigns them consecutive positions, `pos`,
+then puts `(pos, tag, type, payload, seq)` on the queue for each, so that
+position order is processing order across every port. Logging a block in one
+write keeps each of its messages in memory, taken from the FIFO but not yet in
+the log, for the same short time, instead of a time that grows with its place
+in the block (see "Messages read from a FIFO but not yet written to the input
+log" in the Contract's limits). The base class, used directly only by the
+`Supervisor`, is unaffected: it puts `(tag, type, payload)` for each item,
+with no position.
 
 Every queued item gets a position, starting at 1; `HELLO` never reaches the
 queue. Whatever starts a round from inside the node, such as a future
@@ -1301,9 +1317,9 @@ at the checkpoint's `last_seq` and replay advances it, scanning the numbered
 before the crash, whether the brain had processed it or not.
 
 What is left uncovered: the window between a reader thread taking a block
-from the FIFO and appending each of its messages. A message lost there is
-not recovered, since its sender considers it delivered, but the jump in the
-sequence numbers detects it (G8).
+from the FIFO and the one write that logs its messages. A message lost there
+is not recovered, since its sender considers it delivered, but the jump in
+the sequence numbers detects it (G8).
 
 Rejected alternatives: a bounded inbound queue (the reader still consumes
 blocks of up to 64 KiB from the FIFO, unbounded); a log at the sender with
@@ -2352,8 +2368,8 @@ Design ideas from Future work move here once they are actually built.
     only new part is the holder itself. It does not touch the Contract's
     other limit, "a message read from a FIFO but not yet written to the input
     log" (a window internal to one process, between its own `read()` and its
-    own log `write()`, that no outside fd can protect), which is narrow
-    (microseconds) and not, on its own, worth chasing further.
+    own log `write()`, that no outside fd can protect), which a reader thread
+    keeps short by logging every message of a block in one write.
 
     The simplest holder is a single process for the whole program, the
     `Supervisor` or one of its own, but if it dies together with both

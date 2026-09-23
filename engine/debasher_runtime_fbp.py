@@ -23,6 +23,7 @@ import os
 import copy
 import json
 import signal
+import sys
 import threading
 
 from debasher_runtime_envelope import (
@@ -34,7 +35,7 @@ from debasher_runtime_envelope import (
     encode_data,
 )
 from debasher_runtime_transport import _PortWorker, _STOP
-from debasher_runtime_inputlog import _InputLog
+from debasher_runtime_inputlog import LogCapReached, _InputLog
 
 
 #####################
@@ -85,6 +86,16 @@ class FBPProcess(_PortWorker):
     SUPERVISOR_PORT = None
 
     HEARTBEAT_INTERVAL_SECONDS = 5
+
+    # The GIL switch interval of the node's process (sys.setswitchinterval),
+    # set when run() starts; None keeps Python's own, 5 ms. A reader thread
+    # that has taken a block from its fifo needs the GIL back before it can
+    # log the block, and while process_data computes it may wait up to this
+    # long, with the block only in memory, where the death of the process
+    # loses it (see the Contract's limits). A short interval keeps that wait
+    # short, at no cost that a measurement tells apart from noise. It applies
+    # to the whole process, which the node has to itself.
+    GIL_SWITCH_INTERVAL_SECS = 0.0005
     CHECKPOINT_SCHEMA_VERSION = 2
     CHECKPOINT_RETENTION = 3
 
@@ -267,6 +278,9 @@ class FBPProcess(_PortWorker):
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, self._on_stop_signal)
 
+        if self.GIL_SWITCH_INTERVAL_SECS is not None:
+            sys.setswitchinterval(self.GIL_SWITCH_INTERVAL_SECS)
+
         # The FIFOs are held from the very first moment of the recovery, not
         # from the moment the threads start. Restoring and replaying can take
         # a while, and a FIFO keeps what its neighbors sent only while some
@@ -438,6 +452,17 @@ class FBPProcess(_PortWorker):
         return tag not in self.CONTROL_PORTS
 
     def _on_arrival(self, tag, envelope, line):
+        self._on_arrivals(tag, [(envelope, line)])
+
+    def _on_arrivals(self, tag, items):
+        """
+        Records in the input log, and then queues for the brain thread, the
+        items of one block that a reader thread has taken from its fifo, all
+        of them in one write (see _InputLog.append_many): until then they
+        exist only in this process, and are lost if it dies. The lock keeps
+        the positions in the log in the order in which the brain thread gets
+        the items, across the reader threads of every port.
+        """
         with self._arrival_lock:
             if self._input_log is None:
                 raise RuntimeError(
@@ -449,50 +474,67 @@ class FBPProcess(_PortWorker):
             # is ever logged or queued, so that it is never processed twice.
             # One that skips over a number is a message this channel will
             # never see: a real loss, not a duplicate, so it is never silent
-            # (G8) -- raised here, before anything is logged or queued, same
-            # as a duplicate is dropped before either. A DATA with no number
-            # (from a source, or a plain _PortWorker) is not part of the
-            # numbering and is always accepted; only DATA is sequenced
-            # (BARRIER/INTERACT carry no seq of their own; CLOSE carries the
-            # sender's last one instead, checked below, once CLOSE itself is
-            # durably recorded, since nothing sends it twice).
-            if envelope.type == TYPE_DATA and envelope.seq is not None:
-                accepted = self._accepted_seq.get(tag, 0)
-                if envelope.seq <= accepted:
-                    self.log.debug(
-                        "reader for %r dropped a duplicate: seq %s is not above %s "
-                        "already accepted",
-                        tag,
-                        envelope.seq,
-                        accepted,
-                    )
-                    return
-                if envelope.seq > accepted + 1:
-                    missing = (
-                        f"{accepted + 1}"
-                        if envelope.seq == accepted + 2
-                        else f"{accepted + 1} to {envelope.seq - 1}"
-                    )
-                    raise ValueError(
-                        f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
-                        f"expected {accepted + 1}, got {envelope.seq}, missing {missing}"
-                    )
-                self._accepted_seq[tag] = envelope.seq
-            # The record is in the file, in one write, before the brain thread
-            # can see the item. If this raises (the size cap, or a failed
-            # write), the exception ends the reader thread, which is how the
-            # heartbeat notices: the item that was being read is not queued.
-            pos = self._input_log.append(tag, line)
-            self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
+            # (G8). The items before it are logged and queued, as they would
+            # be one by one, and then it raises, before it is itself logged
+            # or queued. A DATA with no number (from a source, or a plain
+            # _PortWorker) is not part of the numbering and is always
+            # accepted; only DATA is sequenced (BARRIER/INTERACT carry no seq
+            # of their own; CLOSE carries the sender's last one instead,
+            # checked below, once CLOSE itself is durably recorded, since
+            # nothing sends it twice).
+            accepted_items = []
+            close_checks = []
+            gap = None
+            for envelope, line in items:
+                if envelope.type == TYPE_DATA and envelope.seq is not None:
+                    accepted = self._accepted_seq.get(tag, 0)
+                    if envelope.seq <= accepted:
+                        self.log.debug(
+                            "reader for %r dropped a duplicate: seq %s is not above %s "
+                            "already accepted",
+                            tag,
+                            envelope.seq,
+                            accepted,
+                        )
+                        continue
+                    if envelope.seq > accepted + 1:
+                        missing = (
+                            f"{accepted + 1}"
+                            if envelope.seq == accepted + 2
+                            else f"{accepted + 1} to {envelope.seq - 1}"
+                        )
+                        gap = ValueError(
+                            f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
+                            f"expected {accepted + 1}, got {envelope.seq}, missing {missing}"
+                        )
+                        break
+                    self._accepted_seq[tag] = envelope.seq
+                if envelope.type == TYPE_CLOSE:
+                    close_checks.append((envelope, self._accepted_seq.get(tag, 0)))
+                accepted_items.append((envelope, line))
+
+            # The records are in the file, in one write, before the brain
+            # thread can see the items. If this raises, the exception ends
+            # the reader thread, which is how the heartbeat notices: after a
+            # failed write none of these items is queued, and at the size cap
+            # only the ones logged before it are.
+            try:
+                positions = self._input_log.append_many([(tag, line) for _, line in accepted_items])
+            except LogCapReached as exc:
+                for pos, (envelope, _) in zip(exc.positions, accepted_items):
+                    self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
+                raise
+            for pos, (envelope, _) in zip(positions, accepted_items):
+                self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
+
             # G5/G8: a CLOSE that carries the sender's last number is checked
             # only now, after it is itself durably logged and queued, unlike
             # a DATA gap: nothing ever sends CLOSE a second time, so losing
             # it here to an early raise would leave this port's writer
             # looking unfinished forever, rather than reporting one lost
             # message and moving on.
-            if envelope.type == TYPE_CLOSE:
+            for envelope, accepted in close_checks:
                 claimed = envelope.payload.get("last_seq")
-                accepted = self._accepted_seq.get(tag, 0)
                 if claimed is not None and claimed > accepted:
                     missing = f"{accepted + 1}" if claimed == accepted + 1 else f"{accepted + 1} to {claimed}"
                     raise ValueError(
@@ -500,6 +542,9 @@ class FBPProcess(_PortWorker):
                         f"to {claimed}, but only {accepted} was ever accepted here, "
                         f"missing {missing}"
                     )
+
+            if gap is not None:
+                raise gap
 
     def _brain_loop(self):
         while True:

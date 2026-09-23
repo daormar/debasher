@@ -43,6 +43,17 @@ from debasher_runtime_transport import _write_all
 LogRecord = namedtuple("LogRecord", ["pos", "port", "envelope"])
 
 
+class LogCapReached(RuntimeError):
+    """
+    An append would take the input log over its size cap. `positions` are
+    those of the records of the same call written before it.
+    """
+
+    def __init__(self, message, positions):
+        super().__init__(message)
+        self.positions = positions
+
+
 class _InputLog:
     """
     One log per node: a directory of segment files. A segment is named after
@@ -180,40 +191,78 @@ class _InputLog:
 
     def append(self, port, line):
         """
-        Appends a record for the envelope `line` (the text exactly as it
-        arrived: one JSON value, with no newline in it) received on `port`, and
-        returns the position it was given. The record is handed to the
-        operating system before this returns, with one write and no buffering
-        in this process, so it survives the death of the process.
+        Appends one record, see append_many, and returns its position.
+        """
+        return self.append_many([(port, line)])[0]
 
-        Raises RuntimeError, before writing anything, if the record would take
-        the log over its size cap: it means that nothing is being pruned, a
-        real problem to fix rather than a reason to drop history that a
-        recovery may need. A failed write is different: it may have left a
-        fragment, so from then on every append raises, until the process
-        restarts. Otherwise another thread could append behind the fragment
-        and bury it in the middle of the file, where replay rejects it,
-        instead of leaving it as the torn tail of its segment.
+    def append_many(self, records):
+        """
+        Appends a record for each (port, line) of `records`, in order: `line`
+        is an envelope exactly as it arrived on `port` (one JSON value, with no
+        newline in it). Returns the positions they were given, consecutive.
+        The records are handed to the operating system before this returns,
+        all of them in one write and with no buffering in this process, so
+        they survive the death of the process. A reader thread appends in
+        one go every message of a block it has taken from its fifo, so that
+        none of them waits in memory for the others to be logged: what a
+        reader has taken from a fifo and not yet logged is lost if the
+        process dies (see the Contract's limits). A write cut short by the
+        death of the process leaves the records it wrote whole and a torn
+        tail, which recovery ignores.
+
+        Raises LogCapReached if a record would take the log over its size
+        cap, after writing the records before it, whose positions the
+        exception carries: it means that nothing is being pruned, a real
+        problem to fix rather than a reason to drop history that a recovery
+        may need. A failed write is different: it may have
+        left a fragment, so from then on every append raises, until the
+        process restarts. Otherwise another thread could append behind the
+        fragment and bury it in the middle of the file, where replay rejects
+        it, instead of leaving it as the torn tail of its segment.
+
+        The records of one call go to the same segment, so a segment can
+        grow past INPUT_LOG_SEGMENT_BYTES by the size of one call.
         """
         if self._failure is not None:
             raise RuntimeError(
                 "the input log accepts no more records after a failed write"
             ) from self._failure
-        if "\n" in line:
-            raise ValueError("an envelope line must not contain a newline")
 
-        pos = self._next_pos
-        port_json = self._port_json.get(port)
-        if port_json is None:
-            port_json = self._port_json[port] = json.dumps(port)
-        data = f'{{"pos": {pos}, "port": {port_json}, "env": {line}}}\n'.encode("utf-8")
-
-        if self._total_bytes + len(data) > self._max_bytes:
-            raise RuntimeError(
+        first_pos = self._next_pos
+        chunks = []
+        for offset, (port, line) in enumerate(records):
+            if "\n" in line:
+                raise ValueError("an envelope line must not contain a newline")
+            port_json = self._port_json.get(port)
+            if port_json is None:
+                port_json = self._port_json[port] = json.dumps(port)
+            chunks.append(f'{{"pos": {first_pos + offset}, "port": {port_json}, "env": {line}}}\n')
+        encoded = [chunk.encode("utf-8") for chunk in chunks]
+        fitting = 0
+        total = self._total_bytes
+        for record in encoded:
+            if total + len(record) > self._max_bytes:
+                break
+            total += len(record)
+            fitting += 1
+        positions = self._write_records(first_pos, encoded[:fitting])
+        if fitting < len(encoded):
+            raise LogCapReached(
                 f"the input log in {self._dir} would exceed {self._max_bytes} bytes with no "
                 "pruning having kept up: an epoch is not closing (no periodic or triggered "
-                "snapshot), a real problem to fix, not something to silently discard history over"
+                "snapshot), a real problem to fix, not something to silently discard history over",
+                positions,
             )
+        return positions
+
+    def _write_records(self, first_pos, encoded):
+        """
+        Writes the already encoded records `encoded`, numbered from
+        `first_pos`, in one write, and returns their positions.
+        """
+        if not encoded:
+            return []
+        data = b"".join(encoded)
 
         try:
             if self._fd is not None and self._active_bytes >= self._segment_bytes:
@@ -223,11 +272,11 @@ class _InputLog:
                 os.makedirs(self._dir, exist_ok=True)
                 # O_EXCL: a new segment must never land on an existing file.
                 self._fd = os.open(
-                    self._segment_path(pos),
+                    self._segment_path(first_pos),
                     os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_EXCL,
                     0o644,
                 )
-                self._segments.append([pos, 0])
+                self._segments.append([first_pos, 0])
                 self._active_bytes = 0
             _write_all(self._fd, data)
         except BaseException as exc:
@@ -237,8 +286,8 @@ class _InputLog:
         self._segments[-1][1] += len(data)
         self._active_bytes += len(data)
         self._total_bytes += len(data)
-        self._next_pos = pos + 1
-        return pos
+        self._next_pos = first_pos + len(encoded)
+        return list(range(first_pos, self._next_pos))
 
     def replay(self, after=0):
         """

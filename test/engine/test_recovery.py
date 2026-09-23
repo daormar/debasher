@@ -793,3 +793,110 @@ def test_a_node_that_opened_its_fifos_before_starting_its_threads_does_not_open_
         assert proc._reader_fds == readers
     finally:
         proc.stop_threads()
+
+
+# --- a reader logs the messages of a block at once ----------------------------
+
+
+def _write_raw(path, text):
+    """Writes `text` into the fifo with one write, so that a reader gets it whole."""
+    fd = os.open(path, os.O_WRONLY)
+    try:
+        os.write(fd, text.encode())
+    finally:
+        os.close(fd)
+
+
+def _numbered(*seqs):
+    return "".join(lib.encode_data(seq * 10, seq=seq) + "\n" for seq in seqs)
+
+
+def test_the_messages_of_a_block_reach_the_log_in_one_write(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    calls = []
+    real_append_many = node._input_log.append_many
+
+    def spying_append_many(records):
+        calls.append([line for _, line in records])
+        return real_append_many(records)
+
+    node._input_log.append_many = spying_append_many
+    try:
+        _write_raw(opts["a"], _numbered(1, 2, 3))
+        assert _wait_until(lambda: len(node.seen) == 3)
+        assert [len(call) for call in calls] == [3]
+        assert [r.envelope.seq for r in node._input_log.replay(0)] == [1, 2, 3]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_line_cut_between_two_blocks_waits_for_the_rest(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        text = _numbered(1, 2)
+        cut = len(lib.encode_data(10, seq=1)) + 5
+        fd = os.open(opts["a"], os.O_WRONLY)
+        try:
+            os.write(fd, text[:cut].encode())
+            assert _wait_until(lambda: len(node.seen) == 1)
+            time.sleep(0.2)
+            assert len(node.seen) == 1
+            os.write(fd, text[cut:].encode())
+        finally:
+            os.close(fd)
+        assert _wait_until(lambda: len(node.seen) == 2)
+        assert [packet for _, packet in node.seen] == [10, 20]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_duplicate_in_the_middle_of_a_block_is_dropped(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        _write_raw(opts["a"], _numbered(1, 2, 2, 3))
+        assert _wait_until(lambda: len(node.seen) == 3)
+        time.sleep(0.2)
+        assert [packet for _, packet in node.seen] == [10, 20, 30]
+        assert [r.envelope.seq for r in node._input_log.replay(0)] == [1, 2, 3]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_gap_in_the_middle_of_a_block_logs_what_came_before_it_and_ends_the_reader(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        _write_raw(opts["a"], _numbered(1, 2, 4, 5))
+        assert _wait_until(lambda: not node._reader_threads["a"].is_alive())
+        assert _wait_until(lambda: len(node.seen) == 2)
+        assert [packet for _, packet in node.seen] == [10, 20]
+        assert [r.envelope.seq for r in node._input_log.replay(0)] == [1, 2]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_message_longer_than_a_block_arrives_whole(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        big = "x" * 200_000
+        text = lib.encode_data(big, seq=1) + "\n" + lib.encode_data("after", seq=2) + "\n"
+        fd = os.open(opts["a"], os.O_WRONLY)
+        try:
+            data = text.encode()
+            while data:
+                data = data[os.write(fd, data):]
+        finally:
+            os.close(fd)
+        assert _wait_until(lambda: len(node.seen) == 2)
+        assert [packet for _, packet in node.seen] == [big, "after"]
+    finally:
+        node.stop_threads(timeout=2)

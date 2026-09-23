@@ -8,3 +8,14 @@ from pathlib import Path
 # test/engine/*.bats, which do need ENGINE_BUILDDIR).
 _ENGINE_DIR = Path(__file__).resolve().parents[2] / "engine"
 sys.path.insert(0, str(_ENGINE_DIR))
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_gil_switch_interval():
+    # FBPProcess.run() sets the switch interval of the whole process, which
+    # here is pytest's own: put it back after every test.
+    interval = sys.getswitchinterval()
+    yield
+    sys.setswitchinterval(interval)

@@ -114,6 +114,11 @@ def _open_fifo_reader(path):
     return rfd, gfd
 
 
+# How much a reader thread takes from its fifo at a time: a pipe's
+# capacity on Linux, so that one read can empty a full pipe.
+_READ_BLOCK_BYTES = 65536
+
+
 def _open_fifo_writer(path):
     """
     Opens a fifo for the process that writes it and returns (real write end,
@@ -369,89 +374,130 @@ class _PortWorker:
 
     def _on_arrival(self, tag, envelope, line):
         """
-        Called by a reader thread with every envelope that the transport
-        does not consume itself (everything but HELLO), in the order in
-        which that thread read them, and the only way an item gets onto the
-        inbound queue. `line` is the text exactly as it arrived. The base
-        class puts (tag, type, payload) on the queue and has no use for the
-        text; a subclass overrides this to do something with each item at
-        the moment it arrives, before the thread that processes it can see
-        it.
+        Called with every envelope that the transport does not consume itself
+        (everything but HELLO), in the order in which it was read, and the
+        only way an item gets onto the inbound queue. `line` is the text
+        exactly as it arrived. The base class puts (tag, type, payload) on
+        the queue and has no use for the text; a subclass overrides this, or
+        _on_arrivals, to do something with each item at the moment it
+        arrives, before the thread that processes it can see it.
         """
         self._inbound_queue.put((tag, envelope.type, envelope.payload))
+
+    def _on_arrivals(self, tag, items):
+        """
+        Called by a reader thread with the (envelope, line) pairs of one block
+        it has read from its fifo, in order: every item of the block that
+        reaches the node, at once, so that a subclass can record them all
+        together (see FBPProcess._on_arrivals). The base class hands each one
+        to _on_arrival.
+        """
+        for envelope, line in items:
+            self._on_arrival(tag, envelope, line)
 
     def _reader_loop(self, tag, option_name):
         rfd, _ = self._reader_fds[tag]
         self.log.debug("reader for %r reading %r", tag, self.opts[option_name])
 
-        # The descriptor stays open when this file object closes: it belongs
-        # to start_threads()/stop_threads().
-        with os.fdopen(
-            rfd, "r", encoding="utf-8", errors="replace", newline="\n", closefd=False
-        ) as fifo:
-            # An unparsable line is tolerated once, provided the next line
-            # is a HELLO: it is then the fragment left by a writer that died
-            # in the middle of a message (see encode_hello). Anything else
-            # is a corrupt stream, never skipped silently.
-            fragment = None
-            # Set once the writer has sent CLOSE and this class drops what
-            # follows it (see _drops_after_close). From then on the loop only
-            # reads: nothing is decoded, logged or queued, so not even a
-            # corrupt line can stop it. The first line warns, since a writer
-            # that says something after CLOSE is either a new incarnation of
-            # it or at fault.
-            closed = self._closed_at_start(tag) and self._drops_after_close(tag)
-            warned = False
-            for line in fifo:
-                if self._stopping.is_set():
-                    break
-                line = line.rstrip("\n")
-                if not line:
+        # The reader takes from the fifo a block at a time, and hands every
+        # item of a block to _on_arrivals at once: what it has taken from the
+        # fifo exists only in this process until it is logged, and is lost if
+        # the process dies before, so every item of a block is logged
+        # together, without waiting for the others one by one (see the
+        # Contract's limits). A line cut at the end of a block waits for the
+        # next one. The descriptor belongs to start_threads()/stop_threads().
+        #
+        # An unparsable line is tolerated once, provided the next line is a
+        # HELLO: it is then the fragment left by a writer that died in the
+        # middle of a message (see encode_hello). Anything else is a corrupt
+        # stream, never skipped silently.
+        fragment = None
+        # Set once the writer has sent CLOSE and this class drops what
+        # follows it (see _drops_after_close). From then on the loop only
+        # reads: nothing is decoded, logged or queued, so not even a corrupt
+        # line can stop it. The first line warns, since a writer that says
+        # something after CLOSE is either a new incarnation of it or at fault.
+        closed = self._closed_at_start(tag) and self._drops_after_close(tag)
+        warned = False
+        # The pieces of a line not yet complete: a long message arrives in
+        # many reads, and only the read that brings its end is searched and
+        # joined, so that reading it costs time in proportion to its size.
+        partial = []
+        while not self._stopping.is_set():
+            block = os.read(rfd, _READ_BLOCK_BYTES)
+            if block:
+                if b"\n" not in block:
+                    partial.append(block)
                     continue
+                partial.append(block)
+                *raw_lines, rest = b"".join(partial).split(b"\n")
+                partial = [rest] if rest else []
+            else:
+                # No writer left (this node holds a write end of its own, so
+                # it does not happen while it runs): what is left is the last
+                # line.
+                raw_lines, partial = [b"".join(partial)], []
 
-                if closed:
-                    if not warned:
-                        self.log.warning(
-                            "reader for %r: its writer sent something after CLOSE (a new "
-                            "incarnation of it?), dropping everything that follows",
-                            tag,
-                        )
-                        warned = True
-                    else:
-                        self.log.debug("reader for %r dropped a line sent after CLOSE", tag)
-                    continue
+            items = []
+            try:
+                for raw_line in raw_lines:
+                    if self._stopping.is_set():
+                        break
+                    line = raw_line.decode("utf-8", errors="replace")
+                    if not line:
+                        continue
 
-                try:
-                    envelope = decode_envelope(line)
-                except json.JSONDecodeError:
+                    if closed:
+                        if not warned:
+                            self.log.warning(
+                                "reader for %r: its writer sent something after CLOSE (a new "
+                                "incarnation of it?), dropping everything that follows",
+                                tag,
+                            )
+                            warned = True
+                        else:
+                            self.log.debug("reader for %r dropped a line sent after CLOSE", tag)
+                        continue
+
+                    try:
+                        envelope = decode_envelope(line)
+                    except json.JSONDecodeError:
+                        if fragment is not None:
+                            raise ValueError(
+                                f"{type(self).__name__}: two unparsable lines in a row on "
+                                f"{tag!r}: {fragment[:60]!r} and {line[:60]!r}"
+                            ) from None
+                        fragment = line
+                        continue
+
+                    if envelope.type == TYPE_HELLO:
+                        if fragment is not None:
+                            self.log.warning(
+                                "reader for %r dropped %d bytes left by a writer that died "
+                                "in the middle of a message",
+                                tag,
+                                len(fragment),
+                            )
+                            fragment = None
+                        continue
+
                     if fragment is not None:
                         raise ValueError(
-                            f"{type(self).__name__}: two unparsable lines in a row on "
-                            f"{tag!r}: {fragment[:60]!r} and {line[:60]!r}"
-                        ) from None
-                    fragment = line
-                    continue
-
-                if envelope.type == TYPE_HELLO:
-                    if fragment is not None:
-                        self.log.warning(
-                            "reader for %r dropped %d bytes left by a writer that died "
-                            "in the middle of a message",
-                            tag,
-                            len(fragment),
+                            f"{type(self).__name__}: unparsable line on {tag!r} not followed "
+                            f"by HELLO: {fragment[:60]!r}"
                         )
-                        fragment = None
-                    continue
 
-                if fragment is not None:
-                    raise ValueError(
-                        f"{type(self).__name__}: unparsable line on {tag!r} not followed "
-                        f"by HELLO: {fragment[:60]!r}"
-                    )
+                    items.append((envelope, line))
+                    if envelope.type == TYPE_CLOSE and self._drops_after_close(tag):
+                        closed = True
+            finally:
+                # Whatever came before a corrupt line reaches the node before
+                # the error ends this thread, as it would line by line.
+                if items:
+                    self._on_arrivals(tag, items)
 
-                self._on_arrival(tag, envelope, line)
-                if envelope.type == TYPE_CLOSE and self._drops_after_close(tag):
-                    closed = True
+            if not block:
+                break
 
         self.log.debug("reader for %r stopped", tag)
 

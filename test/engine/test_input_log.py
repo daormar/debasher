@@ -621,3 +621,46 @@ def test_kill_9_never_loses_a_record_that_append_had_returned_for(tmp_path):
     final = lib._InputLog(directory, BIG, BIG)
     final.recover()
     assert final.next_pos == len(records) + 1
+
+
+# --- appending the items of a block at once ---------------------------------
+
+
+def test_append_many_writes_every_record_in_one_write_with_consecutive_positions(tmp_path, monkeypatch):
+    log = _new_log(tmp_path)
+    log.append("a", _data(0))
+    writes = []
+    real_write_all = inputlog._write_all
+
+    def counting_write_all(fd, data):
+        writes.append(data)
+        real_write_all(fd, data)
+
+    monkeypatch.setattr(inputlog, "_write_all", counting_write_all)
+    positions = log.append_many([("a", _data(1)), ("b", _data(2)), ("a", _data(3))])
+
+    assert positions == [2, 3, 4]
+    assert len(writes) == 1
+    assert [(r.pos, r.port, r.envelope.payload) for r in _replay(tmp_path)] == [
+        (1, "a", 0),
+        (2, "a", 1),
+        (3, "b", 2),
+        (4, "a", 3),
+    ]
+
+
+def test_append_many_at_the_cap_writes_the_records_that_fit_and_reports_their_positions(tmp_path):
+    record_bytes = len(f'{{"pos": 1, "port": "a", "env": {_data(0)}}}\n'.encode())
+    log = _new_log(tmp_path, max_bytes=2 * record_bytes + 1)
+
+    with pytest.raises(inputlog.LogCapReached, match="exceed") as info:
+        log.append_many([("a", _data(0)), ("a", _data(1)), ("a", _data(2))])
+
+    assert info.value.positions == [1, 2]
+    assert [r.envelope.payload for r in _replay(tmp_path)] == [0, 1]
+
+
+def test_append_many_with_nothing_to_append_writes_nothing(tmp_path):
+    log = _new_log(tmp_path)
+    assert log.append_many([]) == []
+    assert _replay(tmp_path) == []
