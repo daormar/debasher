@@ -162,13 +162,56 @@ def test_manual_trigger_relays_the_command_to_every_trigger_port():
         TRIGGER_PORT = ["init_a", "init_b"]
 
     proc = Sup(opts={"init_a": "/tmp/a", "init_b": "/tmp/b"})
-    proc._on_manual_trigger({"command": "start_snapshot", "args": {"foo": 1}})
+    proc._on_manual_trigger({"command": "start_snapshot", "args": {"foo": 1, "epoch": 42}})
 
     for port in ("init_a", "init_b"):
         line = proc._outbound_queues[port].get_nowait()
         assert lib.decode_envelope(line) == lib.Envelope(
-            type="INTERACT", payload={"command": "start_snapshot", "args": {"foo": 1}}
+            type="INTERACT", payload={"command": "start_snapshot", "args": {"foo": 1, "epoch": 42}}
         )
+
+
+def test_manual_trigger_gives_every_initiator_the_same_epoch_in_milliseconds(monkeypatch):
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {}
+        TRIGGER_PORT = ["init_a", "init_b"]
+
+    monkeypatch.setattr(time, "time_ns", lambda: 1_790_000_000_123_456_789)
+    proc = Sup(opts={"init_a": "/tmp/a", "init_b": "/tmp/b"})
+    proc._on_manual_trigger({"command": "shutdown", "args": {"foo": 1}})
+
+    for port in ("init_a", "init_b"):
+        payload = lib.decode_envelope(proc._outbound_queues[port].get_nowait()).payload
+        assert payload == {"command": "shutdown", "args": {"foo": 1, "epoch": 1_790_000_000_123}}
+
+
+def test_manual_trigger_epochs_keep_growing_within_the_same_millisecond(monkeypatch):
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {}
+        TRIGGER_PORT = ["init_a"]
+
+    monkeypatch.setattr(time, "time_ns", lambda: 5_000_000)
+    proc = Sup(opts={"init_a": "/tmp/a"})
+    proc._on_manual_trigger({"command": "start_snapshot"})
+    proc._on_manual_trigger({"command": "start_snapshot", "args": None})
+
+    epochs = [
+        lib.decode_envelope(proc._outbound_queues["init_a"].get_nowait()).payload["args"]["epoch"]
+        for _ in range(2)
+    ]
+    assert epochs == [5, 6]
+
+
+def test_manual_trigger_leaves_args_that_are_not_an_object_alone():
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {}
+        TRIGGER_PORT = ["init_a"]
+
+    proc = Sup(opts={"init_a": "/tmp/a"})
+    proc._on_manual_trigger({"command": "whatever_the_gui_sent", "args": [1, 2]})
+
+    line = proc._outbound_queues["init_a"].get_nowait()
+    assert lib.decode_envelope(line).payload["args"] == [1, 2]
 
 
 def test_manual_trigger_does_not_validate_the_command():

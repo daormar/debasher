@@ -42,7 +42,6 @@
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
 
-DEBASHER_SHUTDOWN_INTERACT_JSON='{"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}}'
 DEBASHER_STOP_RESIDENT_FORCED_EXIT=2
 
 ########
@@ -339,17 +338,34 @@ capture_halted_marker_baselines()
 }
 
 ########
+# The shutdown trigger, numbered with the epoch $1: every initiator that
+# gets it opens its halt with that same number, so a node that the halts
+# of several initiators reach waits for markers of one epoch, not of
+# several.
+shutdown_interact_json()
+{
+    local epoch=$1
+    echo "{\"type\": \"INTERACT\", \"payload\": {\"command\": \"shutdown\", \"args\": {\"epoch\": ${epoch}}}}"
+}
+
+########
 # Writes the shutdown trigger into every node's own control ports (an
 # initiator's own; most nodes have none, and the round reaches them from
 # elsewhere in the graph, see the design doc's Glossary entry for
 # "control ports file"). Waits (briefly, against the overall deadline)
 # for a node that has not written its control_ports file yet, rather than
 # giving up on it at once: a program can still be starting up when this
-# runs.
+# runs. The epoch is the time in milliseconds, the same numbering a
+# Supervisor uses for the triggers it relays: it needs no state kept
+# between calls and stays above the epochs that initiators number
+# themselves.
 trigger_shutdown_for_all_nodes()
 {
     local absdirname=$1
     local deadline=$2
+
+    local shutdown_json
+    shutdown_json=$(shutdown_interact_json "$(date +%s%3N)")
 
     local processname execdir cp_file fifo
     for processname in "${NODE_PROCESSNAMES[@]}"; do
@@ -361,7 +377,7 @@ trigger_shutdown_for_all_nodes()
         fi
         while IFS= read -r fifo; do
             [ -n "${fifo}" ] || continue
-            if ! timeout 5 bash -c 'echo "$1" > "$2"' _ "${DEBASHER_SHUTDOWN_INTERACT_JSON}" "${fifo}"; then
+            if ! timeout 5 bash -c 'echo "$1" > "$2"' _ "${shutdown_json}" "${fifo}"; then
                 echo "Error: could not write the shutdown trigger to ${fifo}" >&2
                 return 1
             fi

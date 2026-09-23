@@ -645,48 +645,50 @@ class FBPProcess(_PortWorker):
 
     def _on_barrier(self, port_name, payload):
         """
-        A marker settles its port in the round it belongs to. Rounds do not
-        overlap on a node: when a marker of a newer epoch arrives while an
-        older round is open, the newer round replaces it (see
-        _abandon_barrier_round), unless the older one is a halt and the newer
-        one is not, since a halt is never given up for a snapshot. A marker
-        of an older epoch, or of one that this node has closed or abandoned,
-        is stale and is ignored.
+        A marker settles its port in the round it belongs to. A marker of
+        another round opens it, if _round_may_open allows it, replacing the
+        round that is open; otherwise it is ignored.
         """
         epoch = payload["epoch"]
         halt = payload["halt"]
 
-        if self._barrier_epoch is None:
-            if epoch <= self._last_epoch:
-                self.log.warning(
-                    "ignoring the marker of round %s on port %r: that round is over", epoch, port_name
-                )
-                return
-            self._open_barrier_round(epoch, halt, arrived_port=port_name)
-        elif epoch < self._barrier_epoch:
-            self.log.warning(
-                "ignoring the marker of round %s on port %r: round %s replaced it",
-                epoch,
-                port_name,
-                self._barrier_epoch,
-            )
-            return
-        elif epoch > self._barrier_epoch:
-            if self._barrier_halt and not halt:
-                self.log.warning(
-                    "ignoring the marker of round %s on port %r: the halt of round %s is open",
-                    epoch,
-                    port_name,
-                    self._barrier_epoch,
-                )
-                return
-            self._abandon_barrier_round(replaced_by=epoch)
-            self._open_barrier_round(epoch, halt, arrived_port=port_name)
-        else:
+        if epoch == self._barrier_epoch:
             self._barrier_pending.discard(port_name)
+        elif self._round_may_open(epoch, halt, f"the marker of round {epoch} on port {port_name!r}"):
+            self._enter_barrier_round(epoch, halt, arrived_port=port_name)
+        else:
+            return
 
         if not self._barrier_pending:
             self._close_barrier_round()
+
+    def _round_may_open(self, epoch, halt, what):
+        """
+        Whether a round that reaches this node, other than the open one, may
+        open, replacing the open round if there is one. Rounds do not overlap
+        on a node: a newer round replaces an older one (see
+        _abandon_barrier_round), unless the older one is a halt and the newer
+        one is not, since a halt is never given up for a snapshot. A round
+        older than the open one, or one that this node has closed or
+        abandoned, is stale. When the answer is no, the reason is logged,
+        `what` naming what brought the round.
+        """
+        if self._barrier_epoch is None:
+            if epoch <= self._last_epoch:
+                self.log.warning("ignoring %s: that round is over", what)
+                return False
+        elif epoch < self._barrier_epoch:
+            self.log.warning("ignoring %s: round %s replaced it", what, self._barrier_epoch)
+            return False
+        elif self._barrier_halt and not halt:
+            self.log.warning("ignoring %s: the halt of round %s is open", what, self._barrier_epoch)
+            return False
+        return True
+
+    def _enter_barrier_round(self, epoch, halt, arrived_port):
+        if self._barrier_epoch is not None:
+            self._abandon_barrier_round(replaced_by=epoch)
+        self._open_barrier_round(epoch, halt, arrived_port)
 
     def _on_close(self, port_name):
         """
@@ -709,17 +711,20 @@ class FBPProcess(_PortWorker):
 
     def _on_interact(self, payload):
         command = payload["command"]
-        if command == "start_snapshot":
-            self._start_barrier_round(halt=False)
-        elif command == "shutdown":
-            self._start_barrier_round(halt=True)
+        if command in ("start_snapshot", "shutdown"):
+            args = payload.get("args")
+            epoch = args.get("epoch") if isinstance(args, dict) else None
+            if epoch is not None and (not isinstance(epoch, int) or isinstance(epoch, bool)):
+                self.log.warning("ignoring a trigger: its epoch %r is not an integer", epoch)
+                return
+            self._start_barrier_round(halt=command == "shutdown", epoch=epoch)
         else:
             # The command catalog is deliberately open-ended: an
             # unrecognized command is a forward-compatibility concern,
             # not a reason to abort an otherwise-healthy process.
             self.log.warning("ignoring unrecognized INTERACT command: %r", command)
 
-    def _start_barrier_round(self, halt):
+    def _start_barrier_round(self, halt, epoch=None):
         """
         Opens a barrier round as its initiator (triggered by INTERACT,
         not by a peer's own BARRIER arriving on some input port): no
@@ -728,27 +733,50 @@ class FBPProcess(_PortWorker):
         (including this node's own, if a cycle loops back to it) starts
         out pending, and the initiator only closes its part once the
         marker it just sent comes back around, the same as any other
-        node would.
+        node would. A node that has halted starts no more rounds.
 
-        A trigger that finds a round open does not start another one. A
-        snapshot is ignored, since the round in progress takes it. A
-        shutdown replaces an open snapshot and starts the halt at once, and
-        is ignored if a halt is already open. A node that has halted starts
-        no more rounds.
+        A trigger that carries its epoch was numbered outside the node,
+        the same for every initiator it reaches, and follows the rule of
+        a marker (see _round_may_open): ignoring a newer one would leave
+        this initiator alone on an older round while the others open the
+        new one. It is ignored if its round is already open, which in a
+        cycle happens when the marker of another initiator gets here
+        first. A trigger without an epoch is numbered by the node itself
+        (see _own_round_epoch).
         """
         if self._halted.is_set():
             self.log.warning("ignoring a trigger: this node has already halted")
             return
-        if self._barrier_epoch is not None:
-            if not halt or self._barrier_halt:
-                self.log.warning("ignoring a trigger: round %s is already open", self._barrier_epoch)
-                return
-            self._abandon_barrier_round(replaced_by=self._barrier_epoch + 1)
 
-        epoch = self._last_epoch + 1
-        self._open_barrier_round(epoch, halt, arrived_port=None)
+        if epoch is None:
+            epoch = self._own_round_epoch(halt)
+            if epoch is None:
+                return
+        elif epoch == self._barrier_epoch:
+            self.log.warning("ignoring the trigger of round %s: that round is already open", epoch)
+            return
+        elif not self._round_may_open(epoch, halt, f"the trigger of round {epoch}"):
+            return
+
+        self._enter_barrier_round(epoch, halt, arrived_port=None)
         if not self._barrier_pending:
             self._close_barrier_round()
+
+    def _own_round_epoch(self, halt):
+        """
+        The epoch of the round that a trigger without an epoch starts, the
+        one after the last this node closed, abandoned or has open, or None
+        if the trigger is to be ignored. Such a trigger does not start a
+        round when one is open: a snapshot is ignored, since the round in
+        progress takes it, and a shutdown replaces an open snapshot and
+        starts the halt at once, and is ignored if a halt is open.
+        """
+        if self._barrier_epoch is None:
+            return self._last_epoch + 1
+        if not halt or self._barrier_halt:
+            self.log.warning("ignoring a trigger: round %s is already open", self._barrier_epoch)
+            return None
+        return self._barrier_epoch + 1
 
     def _open_barrier_round(self, epoch, halt, arrived_port):
         self._barrier_epoch = epoch

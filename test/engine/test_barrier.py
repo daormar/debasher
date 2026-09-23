@@ -723,3 +723,84 @@ def test_a_shutdown_trigger_that_finds_a_halt_open_changes_nothing():
 
     assert (proc._barrier_epoch, proc._barrier_pending) == (0, {"b"})
     assert proc._outbound_queues["x"].qsize() == 1
+
+
+# --- triggers that carry their epoch: numbered outside the initiators --------------------------
+
+
+def _numbered(command, epoch):
+    return ("trigger", lib.TYPE_INTERACT, {"command": command, "args": {"epoch": epoch}})
+
+
+def test_two_initiators_whose_counters_differ_open_the_same_round_when_the_trigger_carries_the_epoch():
+    # Two nodes whose only inputs are external, both feeding a third: each has to be an
+    # initiator, and nothing flows between them, so their own counters never meet.
+    init_a = _OnlyExternal(opts=_EXTERNAL_OPTS)
+    init_b = _OnlyExternal(opts=_EXTERNAL_OPTS)
+    init_a._last_epoch, init_b._last_epoch = 5, 3
+    _run_brain(init_a, [_numbered("start_snapshot", 1000)])
+    _run_brain(init_b, [_numbered("start_snapshot", 1000)])
+
+    fanin = _BarrierWorker(opts=_FAKE_OPTS)
+    markers = [lib.decode_envelope(_out(init, "x")).payload for init in (init_a, init_b)]
+    _run_brain(fanin, [("b", lib.TYPE_BARRIER, markers[1]), ("a", lib.TYPE_BARRIER, markers[0])])
+
+    assert [epoch for epoch, *_ in fanin.closed_epochs] == [1000]
+    assert fanin._barrier_epoch is None
+
+
+def test_a_numbered_trigger_of_a_round_that_is_over_is_ignored():
+    proc = _Root(opts={"x": "/dev/null"})
+    _run_brain(proc, [_numbered("start_snapshot", 7), _numbered("start_snapshot", 7)])
+    _run_brain(proc, [_numbered("shutdown", 6)])
+
+    assert [(epoch, halt) for epoch, halt, *_ in proc.closed_epochs] == [(7, False)]
+    assert proc._last_epoch == 7
+
+
+def test_a_numbered_trigger_of_the_round_already_open_changes_nothing():
+    # In a cycle, the marker of another initiator can reach this one before its own trigger.
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 9), _numbered("start_snapshot", 9)])
+
+    assert (proc._barrier_epoch, proc._barrier_pending) == (9, {"b"})
+    assert proc._outbound_queues["x"].qsize() == 1
+
+
+def test_a_numbered_trigger_of_a_newer_round_replaces_the_open_one(caplog):
+    # An initiator left on an older round (its marker was lost) follows the others to the new one.
+    proc = _Counting(opts=_FAKE_OPTS)
+    with caplog.at_level("WARNING"):
+        _run_brain(
+            proc,
+            [_marker("a", 4), ("b", lib.TYPE_DATA, 1), _numbered("start_snapshot", 9)],
+        )
+
+    assert "abandoning round 4: round 9 reached this node" in caplog.text
+
+    assert (proc._barrier_epoch, proc._barrier_pending) == (9, {"a", "b"})
+    assert proc._barrier_node_state == {"n": 1}
+    assert [lib.decode_envelope(_out(proc, "x")).payload["epoch"] for _ in range(2)] == [4, 9]
+
+
+def test_a_numbered_snapshot_trigger_does_not_replace_an_open_halt():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 4, halt=True), _numbered("start_snapshot", 9)])
+
+    assert (proc._barrier_epoch, proc._barrier_halt) == (4, True)
+
+
+def test_a_numbered_shutdown_trigger_replaces_an_open_snapshot_with_its_own_epoch():
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    _run_brain(proc, [_marker("a", 4), _numbered("shutdown", 9)])
+
+    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (9, True, {"a", "b"})
+
+
+def test_a_trigger_whose_epoch_is_not_an_integer_is_ignored(caplog):
+    proc = _Root(opts={"x": "/dev/null"})
+    with caplog.at_level("WARNING"):
+        _run_brain(proc, [_numbered("start_snapshot", "9"), _numbered("start_snapshot", True)])
+
+    assert proc.closed_epochs == []
+    assert caplog.text.count("is not an integer") == 2

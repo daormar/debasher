@@ -60,8 +60,8 @@ class Supervisor(_PortWorker):
     tuple (one task of an array process), and optionally TRIGGER_PORT
     (a list of output option names, one per initiator to send
     start_snapshot/shutdown to) and MANUAL_TRIGGER_PORT (a single input
-    option name for an external manual trigger, relayed verbatim to
-    every TRIGGER_PORT entry).
+    option name for an external manual trigger, relayed to every
+    TRIGGER_PORT entry with an epoch added to it, see _stamp_epoch).
     """
 
     NODE_PORTS = {}
@@ -88,6 +88,8 @@ class Supervisor(_PortWorker):
         self._done = set()
         self._given_up = set()
         self._active_escalations = 0
+        # The epoch put on the last trigger relayed (see _stamp_epoch).
+        self._last_stamped_epoch = -1
 
         self._checker_thread = None
         self._checker_stop = threading.Event()
@@ -197,16 +199,37 @@ class Supervisor(_PortWorker):
         self.log.debug("brain thread stopped")
 
     def _on_manual_trigger(self, payload):
-        # A pure relay: Supervisor does not validate or interpret
-        # `command`, matching the deliberately open-ended INTERACT
-        # catalog convention used everywhere else in this design -- the
-        # real safety net is the initiator's own _on_interact, one hop
-        # further down (unrecognized command logged and ignored, never
-        # aborts).
+        # A relay: Supervisor does not validate or interpret `command`,
+        # matching the deliberately open-ended INTERACT catalog
+        # convention used everywhere else in this design; the real safety
+        # net is the initiator's own _on_interact, one hop further down
+        # (unrecognized command logged and ignored, never aborts). The one
+        # thing it adds is the epoch, the same for every initiator, which
+        # a command that does not start a round simply never reads.
         command = payload["command"]
-        args = payload.get("args")
+        args = self._stamp_epoch(payload.get("args"))
         for port in self.TRIGGER_PORT:
             self._send_interact(port, command, args)
+
+    def _stamp_epoch(self, args):
+        """
+        Returns `args` with an "epoch" added, unless it already has one
+        (whoever wrote the trigger numbered it) or is not a JSON object.
+        Every initiator that gets the trigger then opens a round with the
+        same number, so a node that the rounds of several initiators reach
+        waits for markers of one epoch, not of several. The number is the
+        time in milliseconds, which needs no state to survive a relaunch
+        of this Supervisor and stays above the epochs that initiators
+        number themselves (the last one plus one); kept strictly
+        increasing in case two triggers fall on the same millisecond.
+        """
+        if args is None:
+            args = {}
+        if not isinstance(args, dict) or "epoch" in args:
+            return args
+        epoch = max(time.time_ns() // 1_000_000, self._last_stamped_epoch + 1)
+        self._last_stamped_epoch = epoch
+        return {**args, "epoch": epoch}
 
     def _on_node_interact(self, node_name, payload):
         command = payload["command"]

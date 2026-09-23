@@ -1089,16 +1089,27 @@ def test_debasher_stop_resident_stops_the_whole_program_cleanly(outdir):
     time.sleep(1.0)  # let every node send at least one heartbeat first
 
     start = time.monotonic()
+    start_ms = time.time_ns() // 1_000_000
     result = subprocess.run(
         [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
         capture_output=True,
         text=True,
     )
+    end_ms = time.time_ns() // 1_000_000
     elapsed = time.monotonic() - start
 
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     assert "forcing debasher_stop" not in result.stderr, result.stderr
     assert elapsed < 10.0, f"took {elapsed:.1f}s, the hard fallback must not have been needed"
+
+    # The shutdown carries its epoch, the time in milliseconds when the tool sent it, and every
+    # node halts in that same round.
+    halted_epochs = set()
+    for name in _KILLABLE_NODES:
+        with open(os.path.join(outdir, "__exec__", name, "halted")) as f:
+            halted_epochs.add(int(f.read()))
+    assert len(halted_epochs) == 1, halted_epochs
+    assert start_ms <= halted_epochs.pop() <= end_ms
 
     for name in (*_KILLABLE_NODES, "sup"):
         finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")

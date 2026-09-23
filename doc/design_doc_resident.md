@@ -115,7 +115,19 @@ mutation check, durability level) is defined in the Contract, where it is used.
   that makes a node start a round. It reaches an initiator from the
   `Supervisor`, from an actor outside the program that writes it into a FIFO of
   the initiator, or, as an in-process call and not as a message, from the
-  initiator's own snapshot timer.
+  initiator's own snapshot timer. It may carry the epoch of the round it
+  starts (see numbered trigger).
+- **numbered trigger** (disparo numerado): a trigger whose `args` carry the
+  epoch of the round it starts, the same for every initiator it reaches. An
+  initiator handles it like a marker of that epoch that counts no port as
+  arrived: it is ignored if that round is already open or over, if it is older
+  than the open round, or if it is a snapshot while a halt is open, and
+  otherwise it replaces the open round. The `Supervisor` numbers every trigger
+  it relays that does not carry an epoch yet, and `debasher_stop_resident`
+  numbers its `shutdown`, both with the time in milliseconds: it needs no state
+  to survive a relaunch, and it lies above the epochs that initiators number
+  themselves. A clock set back makes a numbered trigger look old, and it is
+  ignored with a warning.
 - **trigger port** (puerto de disparo): an output port of the `Supervisor`, an
   entry of its `TRIGGER_PORT` list, wired to an initiator; the `Supervisor`
   sends the triggers through it.
@@ -211,7 +223,8 @@ mutation check, durability level) is defined in the Contract, where it is used.
   that reaches it replaces an older one that is open (see abandoned round).
 - **epoch** (época): the number that identifies a round. Markers carry it, and
   it names the checkpoint file (`<epoch>.json`). An initiator numbers a new
-  round as the last epoch it closed or abandoned plus one.
+  round with the epoch that its trigger carries (see numbered trigger) or, if
+  it carries none, as the last epoch it closed or abandoned plus one.
 - **abandoned round** (ronda abandonada): a round that a node drops, without
   writing a checkpoint for its epoch, because a newer round reached it while it
   was open. The nodes that had already closed it keep their checkpoint, so that
@@ -685,7 +698,9 @@ interpreting `payload`):
   (the Ordered shutdown subsection) instead of a snapshot.
 - `INTERACT.payload.command`/`args`: an open catalog, extended as needed by
   whichever sections trigger it (`start_snapshot`, `shutdown`, `heartbeat`,
-  `checkpoint_saved`, ...).
+  `checkpoint_saved`, ...). `start_snapshot` and `shutdown` take an optional
+  `args.epoch`, an integer (see numbered trigger in the Glossary); a trigger
+  whose epoch is not an integer is ignored with a warning.
 - `CLOSE.payload.last_seq`: the sender's last `out_seq` for that channel, left
   out when the sender does not number what it sends (see `CLOSE` in the
   Glossary). Sent by a writer when it has finished for good; a halt sends
@@ -954,7 +969,11 @@ Future work).
   finds a round open does not start another: a `start_snapshot` is ignored,
   since the round in progress takes the snapshot; a `shutdown` replaces an
   open snapshot and starts the halt at once; a `shutdown` that finds a halt
-  open, and any trigger once the node has halted, are ignored.
+  open, and any trigger once the node has halted, are ignored. That rule is
+  for a trigger without an epoch. A numbered trigger follows the rule of a
+  marker instead (see numbered trigger in the Glossary), so that an initiator
+  left on an older round, for example because its marker was lost, follows the
+  other initiators to the new one.
 - **Not yet done**: checking that the node chosen as initiator can actually
   reach every other node (the graph is strongly connected from that node) before
   it is ever allowed to be used as one: no validation code exists for this
@@ -1345,13 +1364,14 @@ node.)
 - **`MANUAL_TRIGGER_PORT`**: an optional single input option name, distinct from
   `NODE_PORTS` (carries no per-node identity, it is an external control channel,
   not a supervised node's heartbeat). Any `INTERACT` envelope arriving there is
-  relayed verbatim to every configured `TRIGGER_PORT` initiator. `Supervisor`
-  does not validate or interpret `command`, matching the deliberately open-ended
-  `INTERACT` catalog convention used everywhere else in this design (see
-  "Control envelope").
-  Whatever ends up unrecognized is still handled safely at the far end, by the
-  initiator's own existing `_on_interact` (logs a warning and ignores it, never
-  aborts).
+  relayed to every configured `TRIGGER_PORT` initiator, with an epoch added to
+  its `args` when they carry none (see numbered trigger in the Glossary), so
+  that every initiator opens the same round; a command that starts no round
+  never reads it. `Supervisor` does not validate or interpret `command`,
+  matching the deliberately open-ended `INTERACT` catalog convention used
+  everywhere else in this design (see "Control envelope"). Whatever ends up
+  unrecognized is still handled safely at the far end, by the initiator's own
+  existing `_on_interact` (logs a warning and ignores it, never aborts).
 
 ## Failure detection
 
@@ -1635,7 +1655,9 @@ program specifically. It depends on the `Supervisor` changes above.
      or `-1` if absent): the baseline a fresh one has to beat.
   3. Write `shutdown` into every node's own control ports (the design doc's
      "control ports file", most nodes have none; the round reaches them from
-     elsewhere in the graph).
+     elsewhere in the graph), numbered with the time in milliseconds (see
+     numbered trigger in the Glossary), so that every initiator halts in the
+     same round.
   4. Wait for every node's halted marker to go past its own baseline (never
      "exists": a node halted from a previous, already-resumed cycle would
      already show one that means nothing about this run).
@@ -1883,39 +1905,50 @@ open.
   it is already gone): one code path for an initial launch and every
   relaunch, with no need to tell a genuine crash apart from a stuck but
   live process.
+- **Initiators numbered their rounds independently.** Each initiator
+  numbered its next round as the last epoch it closed or abandoned plus one,
+  and nothing makes two counters meet when no channel goes from one
+  initiator to the other: they drift apart when a trigger is written into
+  the FIFO of only one of them, or when a relaunched initiator restores a
+  checkpoint older than a round it had abandoned. A node that both reach,
+  such as the fan-in of two nodes whose only inputs are external (each has
+  to be an initiator), replaced the lower round with the higher one and then
+  waited for a marker of the higher epoch that the other initiator would
+  never send: it wrote no further checkpoint, its input log grew until
+  `INPUT_LOG_MAX_BYTES` was reached, and a halt never closed there, so
+  `debasher_stop_resident` always ended in its hard kill. Now the
+  `Supervisor` and `debasher_stop_resident` number the triggers they send
+  (see numbered trigger in the Glossary), so that every initiator opens the
+  same round. A trigger without an epoch, written by an actor outside the
+  program straight into the FIFO of an initiator, still uses that
+  initiator's own counter, and with several initiators whose rounds meet it
+  can still lead to the same wait.
 - Dedicated concurrency test for the fan-in case with more than one input
   port pending on the barrier:
   `test_two_pending_ports_waits_for_the_second_marker`.
 
 ## Unfixed
 
-- **Initiators number their rounds independently.** Each initiator numbers
-  its next round as the last epoch it closed or abandoned plus one, so two
-  initiators whose counters differ (one was down during a round, say) start
-  different epochs for what a person means as one round. A node with inputs
-  from both replaces the lower round with the higher one and then waits for
-  a marker of the higher epoch that the other initiator will not send, so
-  its rounds stay incomplete, with warnings in the log. Numbering the
-  rounds from outside, with the epoch in the trigger, would fix it (see
-  Future work).
 - **A crash during a round** aborts it, and the mechanism is not designed.
   What exists: a node that comes back has no round open, and the next round
   of a newer epoch replaces a round that another node was left with open
   (see "Base class `FBPProcess`"). What it can cause:
   - A marker that is lost keeps the round of its receiver open. A node that
-    crashes after it has captured its state and enqueued its marker, and
-    before its writer thread has written it, leaves the next node waiting
-    for it. At a node that is not an initiator, a marker of a newer epoch
-    replaces the open round. At an initiator nothing replaces it: a
-    `start_snapshot` that finds a round open is ignored. So an initiator in
-    a cycle whose marker never comes back keeps its round open, with the
-    port of the cycle pending, and takes no further snapshot: no node of
-    the cycle writes another checkpoint, and their input logs, which only a
-    new checkpoint prunes, grow until `INPUT_LOG_MAX_BYTES` is reached, an
-    error. Only a `shutdown` replaces the open round. The same happens
-    whatever loses a marker, be it a message read from a FIFO and not yet
-    written to the input log, or a FIFO destroyed with both its endpoints
-    down (see the Contract's limits).
+    crashes after it has captured its state and enqueued its marker, and before
+    its writer thread has written it, leaves the next node waiting for it. At a
+    node that is not an initiator, a marker of a newer epoch replaces the open
+    round. At an initiator only a trigger replaces it: a numbered trigger of a
+    newer epoch (see numbered trigger in the Glossary), or a `shutdown`; a
+    `start_snapshot` without an epoch that finds a round open is ignored. So an
+    initiator in a cycle whose marker never comes back, and whose triggers carry
+    no epoch (those of its own snapshot timer, or those that an actor outside
+    the program writes straight into its FIFO), keeps its round open, with the
+    port of the cycle pending, and takes no further snapshot: no node of the
+    cycle writes another checkpoint, and their input logs, which only a new
+    checkpoint prunes, grow until `INPUT_LOG_MAX_BYTES` is reached, an error.
+    The same happens whatever loses a marker, be it a message read from a FIFO
+    and not yet written to the input log, or a FIFO destroyed with both its
+    endpoints down (see the Contract's limits).
   - A node that crashes between capturing and closing an ordinary round
     forgets it, and recovers cleanly: on coming back it has no round open,
     and the markers that arrive later open it again, capture at another
@@ -2115,12 +2148,15 @@ built. Empty for now: nothing listed in Future work is marked completed yet.
     about `channel_state` in "Loose ends". A way to do it with no new logic: the
     script appends them to the log of the receiving node as records after the
     target position, which the unchanged startup already replays.
-  - An epoch number must identify a single round. Today the initiator derives it
-    from its own last epoch, which can go back when the initiator restarts, and
-    after an aborted round two nodes could hold a checkpoint with the same
+  - An epoch number must identify a single round. A numbered trigger gives its
+    round a number of its own, the time in milliseconds (see numbered trigger
+    in the Glossary), but a trigger without an epoch is numbered from the
+    initiator's own last epoch, which can go back when the initiator restarts,
+    and after an aborted round two nodes could hold a checkpoint with the same
     number that comes from different rounds, so "the highest common epoch" would
-    no longer be a consistent cut. A round identifier carried by the marker and
-    stored in each checkpoint would let the script check it.
+    no longer be a consistent cut. Either every round of a program that is to
+    be rolled back comes from a numbered trigger, or a round identifier carried
+    by the marker and stored in each checkpoint lets the script check it.
   - How `debasher_exec` relaunches a program some of whose nodes are already
     `finished` (to be checked against the rerun logic). A new run recreates the
     FIFOs, which is what a rollback needs.
@@ -2254,15 +2290,13 @@ built. Empty for now: nothing listed in Future work is marked completed yet.
 - **A `Supervisor` that serializes rounds** (perhaps never done). It would track
   which nodes have reported `checkpoint_saved` for an epoch (today it only logs
   it), leave out the nodes that finished, and relay a trigger only when the
-  previous round is complete or a time limit has passed; it could also put the
-  epoch in the trigger, so that all the initiators number a round the same. It
-  would avoid rounds that replace each other and would tell which epochs are
-  complete cuts. It would not replace the rule that a newer round replaces an
-  older one at a node, which holds whatever the source of the trigger (a person
-  writing into the fifo of an initiator, a timer, a `Supervisor` relaunched by
-  hand, a node relaunched in the middle of a round). It is doubtful because a
-  manual trigger reaches the `Supervisor` as a command that it relays without
-  interpreting, and serializing means interpreting `start_snapshot` and
-  `shutdown`: how to add that for the triggers that a person writes is not
-  clear, and it would only cover the nodes that report to the `Supervisor`. Not
-  designed.
+  previous round is complete or a time limit has passed. It would avoid rounds
+  that replace each other and would tell which epochs are complete cuts. It
+  would not replace the rule that a newer round replaces an older one at a node,
+  which holds whatever the source of the trigger (a person writing into the fifo
+  of an initiator, a timer, a `Supervisor` relaunched by hand, a node relaunched
+  in the middle of a round). It is doubtful because a manual trigger reaches the
+  `Supervisor` as a command that it relays without interpreting, and serializing
+  means interpreting `start_snapshot` and `shutdown`: how to add that for the
+  triggers that a person writes is not clear, and it would only cover the nodes
+  that report to the `Supervisor`. Not designed.
