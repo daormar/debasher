@@ -627,8 +627,9 @@ guarantee in words and never cite these numbers, which may change.
   window is not recovered, since its sender considers it delivered, but the
   sequence numbers of G5 make the hole detectable (G8), and the rest of a
   message cut in two reaches the relaunched reader as a fragment that no
-  `HELLO` follows, which stops it. A FIFO offers no way to look at what it
-  holds without taking it, so the window can be made short but not closed.
+  `HELLO` follows, which stops it (keeping that first part on disk is in
+  Future work). A FIFO offers no way to look at what it holds without taking
+  it, so the window can be made short but not closed.
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
   loop, deadlock) is not detected today: the heartbeat proves that its threads
   are alive, not that they make progress. Not a goal for now; an extension would
@@ -2400,6 +2401,32 @@ Design ideas from Future work move here once they are actually built.
   - The global rollback above, which rewinds both nodes to the last consistent
     cut and redelivers from `channel_state` the messages that were in transit at
     the cut.
+- **Keeping on disk the part of a line already read when its reader dies.**
+  A line that a reader takes in more than one read (in practice, one longer
+  than `PIPE_BUF`, since a shorter one is written atomically) is in memory,
+  in part, until its last read; if the reader dies meanwhile, that part is
+  lost and the rest reaches the relaunched reader as a fragment with no
+  `HELLO` after it (see "Messages read from a FIFO but not yet written to the
+  input log" in the Contract's limits). The loss is detected (G8), but the
+  node cannot get past the hole on its own, which makes it one of the cases
+  for the global rollback above. Not done for now, since the loss never goes
+  unnoticed and the cost below is significant; it may be worth doing if lines
+  of several KiB become common. A possible shape, with portable means only:
+  - The reader appends each part of a line still incomplete to a file of its
+    port, separate from the input log so that replay, pruning and the size
+    cap stay as they are, headed by the log position, `start`, that was next
+    when the line began. Once the whole line is in the log, the file is
+    emptied, both steps under the lock that orders arrivals. A relaunched
+    reader joins what the file holds with what follows in the FIFO, unless
+    the last complete record of the log is of its port with a position of at
+    least `start`: then the process died between the two steps and the line
+    is already in the log.
+  - A process killed between a read and the write of that part to the file
+    leaves a piece missing from the middle of the line, and the joined line
+    can still be valid JSON, with a shorter payload and no error. So joining
+    needs the writer to state, in each line longer than `PIPE_BUF`, its length
+    and a checksum, checked only on a joined line; one that fails the check is
+    a fragment, dropped if a `HELLO` follows, as today.
 - **Durability against machine failure (`fsync`)**: see the note in the
   Contract's failure model. First step: `fsync` of the checkpoint file and of
   its directory when a checkpoint is saved, and of the log at a halt (about 2 ms
