@@ -1450,7 +1450,7 @@ node.)
   resolved (see below), compares `now - _last_heartbeat[node]` against
   `HEARTBEAT_TIMEOUT_SECS`.
 - **PID-based fast path**: every BUILTIN-scheduler process already gets a `.id`
-  file holding its own PID (`debasher_builtin_sched::_print_pid_to_file`,
+  file holding its PID (written by `debasher_builtin_sched::_launch`,
   pre-existing, not `resident`-specific), at `__exec__/<node>/<node>.id`. If
   that PID no longer exists (checked directly, no need to wait for the heartbeat
   timeout) and `<node>.finished` is absent, the node is declared down
@@ -1520,24 +1520,26 @@ node.)
   same code path as the original launch (matches the Startup sequence
   subsection's "first launch and recovery are the same operation").
 - **Why not simply re-execute `__exec__/<node>/<node>`?** That generated
-  script does not carry the per-launch state. `BUILTIN_SCHED_PID_FILENAME`
-  (which `.id` file to write) and `BUILTIN_ARRAY_TASK_ID` are exported by
-  `_launch` just before it starts the script, and are not among the
-  variables dumped into the script itself (that dump is a deliberate
-  allowlist, and it runs once per process at generation time, while these
-  values are per launch). A bare `subprocess.Popen` from the Supervisor
-  would inherit the Supervisor's own values instead, so the relaunched node
-  would never update its own `.id` (and could write into `supervisor.id`):
-  a stale PID that `_node_pid_alive` reports "dead" forever, and since a
-  real heartbeat resets `_relaunch_attempts` on every recovery, the budget
-  never trips, an endless relaunch loop. It would also leave the node in
-  the Supervisor's own process group, which `debasher_stop`
-  (`kill -9 -- -$pid`) relies on being one per process. `_launch` avoids
-  all of it, since its explicit exports override whatever the caller
+  script does not carry the per-launch state. `BUILTIN_ARRAY_TASK_ID` is
+  exported by `_launch` just before it starts the script, and is not among
+  the variables dumped into the script itself (that dump is a deliberate
+  allowlist, and it runs once per process at generation time, while this
+  value is per launch), and the `.id` file is written by `_launch`, not by
+  the script. A bare `subprocess.Popen` from the Supervisor would inherit
+  the Supervisor's own `BUILTIN_ARRAY_TASK_ID` instead, and the relaunched
+  node's `.id` would never be updated: a stale PID that `_node_pid_alive`
+  reports "dead" forever, and since a real heartbeat resets
+  `_relaunch_attempts` on every recovery, the budget never trips, an
+  endless relaunch loop. It would also leave the node in the Supervisor's
+  own process group, which `debasher_stop` (`kill -9 -- -$pid`) relies on
+  being one per process. `_launch` avoids all of it, since it writes the
+  `.id` itself and its explicit export overrides whatever the caller
   inherited.
 - **What `_launch` does for this** (`engine/debasher_builtin_sched_lib.sh`):
-  it removes any stale `.id` before launching, so its wait for the PID file
-  really waits for the new process; it exports `DEBASHER_LIBEXECDIR` so a
+  it writes the new process's PID into the `.id` itself, as soon as the
+  process starts and without waiting for it, through a temporary file
+  renamed into place, so that a reader sees either the old PID or the new
+  one, never an empty file; it exports `DEBASHER_LIBEXECDIR` so a
   running process can find the installed tools (`debasher_libexecdir` is
   deliberately excluded from what generated scripts carry); and it unsets
   `BUILTIN_ARRAY_TASK_ID` before a non-array launch.
@@ -2133,18 +2135,22 @@ open.
   program in which a node cannot be reached, when it is loaded (see "Channel
   kinds declared with the fifo"). A node cut off at run time, by a node that
   fails for good, is handled by "Escalation on a permanent node failure".
+- **A launch depended on the new process publishing its PID in time.** The
+  launched script wrote its own `.id`, and `_launch` waited for it with a
+  fixed number of turns of a `[ -f ]` loop, about 90 ms, not a time: a
+  script slower to start (it reads its whole dumped environment first) made
+  `_launch` return an error although the process was starting. Now
+  `_launch` writes the `.id` itself, from `$!`, which is the script's own
+  PID (the background job execs the script directly, and `set -m` makes it
+  the leader of its process group, which `debasher::_stop_pid` already
+  relies on), through a temporary file renamed into place. The file is
+  complete as soon as `_launch` returns, and nothing waits.
 - Dedicated concurrency test for the fan-in case with more than one input
   port pending on the barrier:
   `test_two_pending_ports_waits_for_the_second_marker`.
 
 ## Unfixed
 
-- **`debasher_builtin_sched::_wait_until_file_exists` is an iteration
-  count, not a time**: 10000 turns of a `[ -f ]` loop with no sleep, about
-  90 ms. Now that `_launch` removes the stale `.id`, a relaunch depends on
-  the new script publishing its PID within that window, or `_launch`
-  returns an error although the process is starting. A time-based wait
-  would be safer.
 - **A writer whose peer finished for good can grow its own backlog
   forever, with nothing to stop it and no error raised.** "The reader-dies
   direction" already covers why a writer cannot tell a reader

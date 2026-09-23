@@ -1033,14 +1033,6 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 }
 
 ########
-debasher_builtin_sched::_print_pid_to_file()
-{
-    if [ "${BUILTIN_SCHED_PID_FILENAME}" != "" ]; then
-        echo $$ > "${BUILTIN_SCHED_PID_FILENAME}"
-    fi
-}
-
-########
 debasher_builtin_sched::_print_script_trap()
 {
     # Ignored, not left at bash's default (terminate): a graceful stop
@@ -1070,7 +1062,6 @@ debasher_builtin_sched::_print_script_header()
     echo "DEBASHER_DIR_NAME=\"${dirname}\""
     echo "DEBASHER_PROCESS_NAME=${processname}"
     echo "DEBASHER_NUM_TASKS=${num_tasks}"
-    echo "debasher_builtin_sched::_print_pid_to_file"
 }
 
 ########
@@ -1210,7 +1201,6 @@ debasher_builtin_sched::_write_env_vars_and_funcs()
     debasher::_write_env_vars_and_funcs "${dirname}"
 
     # Write builtin sched environment functions
-    declare -f debasher_builtin_sched::_print_pid_to_file
     declare -f debasher_builtin_sched::_execute_funct_plus_postfunct
     declare -f debasher::_seq_execute_builtin
     declare -f debasher_builtin_sched::_get_script_log_filenames
@@ -1251,23 +1241,6 @@ debasher_builtin_sched::_create_script()
 }
 
 ########
-debasher_builtin_sched::_wait_until_file_exists()
-{
-    local pid_file=$1
-    local max_num_iters=$2
-    local iterno=1
-
-    while [ ${iterno} -le ${max_num_iters} ]; do
-        if [ -f "${pid_file}" ]; then
-            return 0
-        fi
-        iterno=$((iterno + 1))
-    done
-
-    return 1
-}
-
-########
 debasher_builtin_sched::_launch()
 {
     # Initialize variables
@@ -1283,14 +1256,11 @@ debasher_builtin_sched::_launch()
         export BUILTIN_ARRAY_TASK_ID=${task_idx}
     fi
 
-    # Set variable indicating name of file storing PID
+    # Name of the file that stores the PID
     if [ ${task_idx} = ${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
         local pid_file=$(debasher::_get_processid_filename "${dirname}" ${processname})
-        export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
-        # Write pid
         local pid_file=$(debasher::_get_array_taskid_filename "${dirname}" ${processname} ${task_idx})
-        export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
 
     # If a previous incarnation of this same process/task left its PID
@@ -1306,13 +1276,6 @@ debasher_builtin_sched::_launch()
             debasher::_stop_pid "${old_pid}" || true
         fi
     fi
-
-    # Remove any stale PID file left by a previous launch of this same
-    # process/task (a relaunch after a crash). The wait below only checks
-    # that the file exists, so it must not exist yet: otherwise it would
-    # return immediately with the old process's PID still inside, which
-    # debasher_stop would then try to kill.
-    "${RM}" -f "${pid_file}"
 
     # Tell the launched process where the installed helper tools live.
     # debasher_libexecdir is deliberately not among the variables dumped
@@ -1339,25 +1302,30 @@ debasher_builtin_sched::_launch()
     # Execute file, with job control enabled just for this one launch
     # so it becomes its own process group (pgid == pid). The launched
     # script always forks at least one child of its own (the stdout-
-    # capturing tee pipeline every process runs through — see
-    # debasher_builtin_sched::_execute_funct_plus_postfunct — plus a
+    # capturing tee pipeline every process runs through, see
+    # debasher_builtin_sched::_execute_funct_plus_postfunct, plus a
     # mirrored fifo's background tap, if any); without a distinct
     # process group, killing just this pid (debasher::_stop_pid, used
     # by debasher_stop) leaves those children running as orphans. Job
-    # control is normally off in a non-interactive script — toggling it
+    # control is normally off in a non-interactive script: toggling it
     # only around the launch keeps the scope narrow.
     set -m
     "${file}" &
     local pid=$!
     set +m
 
-    # Wait for PID file to be created
-    local max_num_iters=10000
-    debasher_builtin_sched::_wait_until_file_exists "${pid_file}" ${max_num_iters} || return 1
+    # Record the PID here, not from inside the launched script: $! is
+    # the script's own PID (the background job execs it directly), so
+    # the file is complete as soon as this returns, however long the
+    # script takes to start. Written to a temporary file and renamed
+    # over the old one, so that a concurrent reader (debasher_stop, a
+    # relaunch) sees either the old PID or the new one, never an empty
+    # file.
+    echo ${pid} > "${pid_file}.tmp" || return 1
+    "${MV}" -f "${pid_file}.tmp" "${pid_file}" || return 1
 
     # Unset variables
     unset BUILTIN_ARRAY_TASK_ID
-    unset BUILTIN_SCHED_PID_FILENAME
 }
 
 ########
