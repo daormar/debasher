@@ -83,7 +83,8 @@ mutation check, durability level) is defined in the Contract, where it is used.
   ports after the nodes it watches (`NODE_PORTS`).
 - **channel** (canal): the one-way connection from an output port of one node to
   an input port of another, made of a FIFO (a named pipe created by the engine).
-  It delivers envelopes in the order in which they were sent. Business channels
+  A **self-loop** (bucle propio) joins two ports of the same node. A channel
+  delivers envelopes in the order in which they were sent. Business channels
   carry `DATA` and `BARRIER`; the channels to and from the `Supervisor` carry
   only `INTERACT`.
 - **source** (fuente): whatever puts `DATA` into an input port of a node without
@@ -855,8 +856,8 @@ inputs together keeps what it has received in its node state and decides in
 `process_data` when it has enough, because the framework delivers each message
 as it arrives, with no join across ports.
 
-How a node finishes for good is not defined yet: `run()` returns only after a
-halt, and a halt sends no `CLOSE`.
+How a node finishes for good is not defined yet: `run()` returns only on a stop
+signal, and a stop sends no `CLOSE`.
 
 ## State capture and checkpoint schema
 
@@ -2212,8 +2213,24 @@ built. Empty for now: nothing listed in Future work is marked completed yet.
   arrives, so that the state a node captures stays in step with what it has
   sent; a pace for it, since the outbound queue has no limit; a way to finish
   for good; and, for a node that also has inputs, a record in the input log of
-  where each call fell, so that a replay reproduces it. For now, sources stay
-  outside the program.
+  where each call fell, so that a replay reproduces it. What serves today is a
+  self-loop: the node's configuration arrives from outside, and each call to
+  `process_data` emits one step and sends itself the message that triggers the
+  next, until its node state says to stop. Every call is short, so rounds,
+  replay and G5 apply unchanged. It still has no way to finish for good (a
+  last `DATA` that says so is the workaround) and no pace: a delay inside
+  `process_data` caps its rate without adapting it to the readers, and slows
+  down a replay (see the next item).
+- **A startup deadline for a relaunched node.** A node sends its first
+  heartbeat only after its replay, when `start_threads()` runs, so a replay
+  longer than `HEARTBEAT_TIMEOUT_SECS` gets it declared down again and, if
+  that repeats, given up. Starting the heartbeat before the replay is not the
+  fix: a heartbeat resets the relaunch budget, so a node that crashes on the
+  same record at every replay would be relaunched forever. Two options, not
+  designed: a longer deadline in the `Supervisor` for the first heartbeat
+  after a relaunch, which covers any long replay; and a read-only `replaying`
+  flag, so that a module can skip what only matters live, such as the delay
+  of a self-loop.
 - **Outputs that leave `process_data` as a result, not as calls to
   `send_data`.** Today a module calls `send_data` from inside `process_data`, at
   any moment of the call and any number of times. The alternative is that
