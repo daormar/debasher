@@ -313,7 +313,7 @@ def test_check_node_declares_down_on_heartbeat_timeout_with_a_live_pid(execdir):
     _node_dir(execdir, "a").joinpath("a.id").write_text(str(os.getpid()))
     proc = _Sup(opts=_FAKE_OPTS)
     proc.HEARTBEAT_TIMEOUT_SECS = 0
-    proc._last_heartbeat["a"] = time.time() - 10
+    proc._last_heartbeat["a"] = time.monotonic() - 10
     calls = []
     proc.on_node_down = lambda node: calls.append(node)
 
@@ -965,3 +965,128 @@ def test_a_real_sigterm_stops_run_before_every_node_is_resolved(_sigterm_handler
 
     sender.join(timeout=2)
     assert not proc._checker_thread.is_alive()
+
+
+# --- a Supervisor that did not run for a while --------------------------
+
+
+def test_a_late_tick_moves_every_last_heartbeat_forward_by_the_stall():
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
+    proc._last_heartbeat = {"a": 100.0, "b": 200.0}
+
+    # 5.5 s since the previous tick, 0.5 s expected: 5 s during which this
+    # Supervisor did not run.
+    proc._credit_own_stall(5.5)
+
+    assert proc._last_heartbeat == {"a": pytest.approx(105.0), "b": pytest.approx(205.0)}
+
+
+def test_a_tick_late_by_no_more_than_one_interval_changes_nothing():
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
+    proc._last_heartbeat = {"a": 100.0, "b": 200.0}
+
+    proc._credit_own_stall(1.0)
+
+    assert proc._last_heartbeat == {"a": 100.0, "b": 200.0}
+
+
+def test_after_its_own_stall_the_supervisor_does_not_declare_a_live_node_down(execdir):
+    # The node sent its last heartbeat just before this Supervisor stopped
+    # running for 10 s; the ones it sent meanwhile are still unread.
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(os.getpid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
+    proc.HEARTBEAT_TIMEOUT_SECS = 3
+    proc._last_heartbeat["a"] = time.monotonic() - 10.5
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    proc._credit_own_stall(10.5)
+    proc._check_node("a")
+
+    assert calls == []
+
+
+def test_after_its_own_stall_a_node_whose_process_is_gone_is_still_declared_down(execdir):
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(_dead_pid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    proc._credit_own_stall(10.5)
+    proc._check_node("a")
+
+    assert calls == ["a"]
+
+
+def test_a_jump_of_the_wall_clock_does_not_make_a_node_look_silent(execdir, monkeypatch):
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(os.getpid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc._on_heartbeat("a")
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    real_time = time.time
+    monkeypatch.setattr(time, "time", lambda: real_time() + 3600)
+    proc._check_node("a")
+
+    assert calls == []
+
+
+# --- the heartbeat timeout from the computational specifications -------
+
+
+def test_the_computational_specs_set_the_heartbeat_timeout(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; mem=32; time=00:01:00; heartbeat_timeout_s=90")
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert proc.HEARTBEAT_TIMEOUT_SECS == 90
+    assert _Sup.HEARTBEAT_TIMEOUT_SECS == lib.Supervisor.HEARTBEAT_TIMEOUT_SECS
+
+
+def test_the_limits_of_a_node_mean_nothing_to_a_supervisor(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; out_backlog_fail_mb=1")
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert not hasattr(proc, "OUT_BACKLOG_FAIL_BYTES")
+
+
+def test_a_heartbeat_timeout_that_is_not_a_positive_number_is_refused(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; heartbeat_timeout_s=0")
+    with pytest.raises(ValueError, match="heartbeat_timeout_s"):
+        _Sup(opts=_FAKE_OPTS)
+
+
+def test_a_node_silent_for_longer_than_the_timeout_is_declared_down(execdir, monkeypatch):
+    # The same clock measures both ends: when the heartbeat arrived, and
+    # how long ago that was.
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(os.getpid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc._on_heartbeat("a")
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    real_monotonic = time.monotonic
+    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + proc.HEARTBEAT_TIMEOUT_SECS + 1)
+    proc._check_node("a")
+
+    assert calls == ["a"]
+
+
+def test_the_checker_loop_hands_the_time_between_its_ticks_to_the_stall_credit(monkeypatch):
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_CHECK_INTERVAL_SECS = 0.05
+    gaps = []
+    proc._credit_own_stall = gaps.append
+    proc._check_once = lambda: None
+
+    checker = threading.Thread(target=proc._check_loop, daemon=True)
+    checker.start()
+    try:
+        assert _wait_until(lambda: len(gaps) >= 3)
+    finally:
+        proc._checker_stop.set()
+        checker.join(timeout=2)
+
+    assert all(gap >= 0.05 for gap in gaps)

@@ -70,6 +70,9 @@ class Supervisor(_PortWorker):
 
     HEARTBEAT_TIMEOUT_SECS = 30
     HEARTBEAT_CHECK_INTERVAL_SECS = 5
+    # The computational specification that sets HEARTBEAT_TIMEOUT_SECS for
+    # the Supervisor of a program (see _PortWorker._apply_comp_specs).
+    _COMP_SPEC_ATTRS = {"heartbeat_timeout_s": ("HEARTBEAT_TIMEOUT_SECS", 1)}
     MAX_RELAUNCH_ATTEMPTS = 3
     FORCE_STOP_TIMEOUT_SECS = 60
 
@@ -78,7 +81,11 @@ class Supervisor(_PortWorker):
         super().__init__(argv, opts)
 
         self._lock = threading.Lock()
-        now = time.time()
+        # Every time kept here to measure silence is on the monotonic clock,
+        # never the wall clock: a wall clock that jumps forward (an NTP
+        # correction, a machine coming back from suspend) would make every
+        # node look silent at once.
+        now = time.monotonic()
         # Seeded to "now", not 0: a node that simply hasn't had time yet
         # to send its first heartbeat must not be declared down before
         # HEARTBEAT_TIMEOUT_SECS has genuinely elapsed.
@@ -244,7 +251,7 @@ class Supervisor(_PortWorker):
 
     def _on_heartbeat(self, node_name):
         with self._lock:
-            self._last_heartbeat[node_name] = time.time()
+            self._last_heartbeat[node_name] = time.monotonic()
             self._down.discard(node_name)
             # A real heartbeat is proof of actual recovery (unlike a
             # merely-live PID, see _node_pid_alive) -- this is what
@@ -256,8 +263,37 @@ class Supervisor(_PortWorker):
     # -- failure detection --
 
     def _check_loop(self):
+        last_tick = time.monotonic()
         while not self._checker_stop.wait(self.HEARTBEAT_CHECK_INTERVAL_SECS):
+            now = time.monotonic()
+            self._credit_own_stall(now - last_tick)
+            last_tick = now
             self._check_once()
+
+    def _credit_own_stall(self, since_last_tick):
+        """
+        Called by the checker thread with the time since its previous tick.
+        A tick that comes more than one HEARTBEAT_CHECK_INTERVAL_SECS late
+        means that this Supervisor itself did not run for that long
+        (starved of CPU, stopped, paused): the heartbeats that the nodes sent
+        meanwhile may still be waiting, unread, in its fifos, and the checker
+        may well run before the threads that read them. So that time is not
+        counted against any node: every node's last heartbeat moves forward
+        by as much as this tick was late. A node whose process is gone is
+        still declared down at once (see _node_pid_alive), which does not
+        depend on elapsed time.
+        """
+        stall = since_last_tick - self.HEARTBEAT_CHECK_INTERVAL_SECS
+        if stall <= self.HEARTBEAT_CHECK_INTERVAL_SECS:
+            return
+        with self._lock:
+            for node_name in self._last_heartbeat:
+                self._last_heartbeat[node_name] += stall
+        self.log.warning(
+            "this Supervisor did not run for %.1f s; that time is not counted "
+            "against the heartbeats of any node",
+            stall,
+        )
 
     def _check_once(self):
         for node_name in self.NODE_PORTS:
@@ -307,7 +343,7 @@ class Supervisor(_PortWorker):
             # a relaunch that itself dies before its first heartbeat
             # would stay "down" forever, never re-declared and never
             # counted against MAX_RELAUNCH_ATTEMPTS.
-            if time.time() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
+            if time.monotonic() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
                 with self._lock:
                     self._down.discard(node_name)
                 self._declare_down(node_name)
@@ -317,7 +353,7 @@ class Supervisor(_PortWorker):
             self._declare_down(node_name)
             return
 
-        if time.time() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
+        if time.monotonic() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
             self._declare_down(node_name)
 
     def _declare_down(self, node_name):
@@ -333,7 +369,7 @@ class Supervisor(_PortWorker):
             # first heartbeat before _check_node treats it as down
             # again, instead of being stuck "down" forever if it never
             # does.
-            self._last_heartbeat[node_name] = time.time()
+            self._last_heartbeat[node_name] = time.monotonic()
 
         if attempts > self.MAX_RELAUNCH_ATTEMPTS:
             with self._lock:

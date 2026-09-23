@@ -159,6 +159,15 @@ class _PortWorker:
 
     DEFAULT_LOG_LEVEL = "INFO"
 
+    # The computational specifications of a process (see
+    # add_debasher_process) that set class attributes of a subclass for that
+    # process of a program, over what its class says: name -> (attribute,
+    # factor from the unit of the specification to the unit of the
+    # attribute). Each subclass lists its own; the engine checks, when it
+    # loads the program, that each one given is a positive number
+    # (DEBASHER_RESIDENT_COMP_SPEC_NAMES).
+    _COMP_SPEC_ATTRS = {}
+
     def __init__(self, argv=None, opts=None):
         if opts is not None:
             # Direct injection, mainly for tests: skips argv parsing
@@ -170,6 +179,7 @@ class _PortWorker:
 
         self._check_declared_ports()
         self.log = self._make_logger()
+        self._apply_comp_specs(os.environ.get("DEBASHER_PROCESS_COMP_SPECS", ""))
 
         # Shared inbound queue: every reader thread pushes onto this one,
         # the brain thread is its only consumer. One outbound queue per
@@ -191,6 +201,34 @@ class _PortWorker:
         self._stopping = threading.Event()
         # Whether the writers say CLOSE when they stop, decided by stop_threads().
         self._close_on_stop = True
+
+    def _apply_comp_specs(self, comp_specs):
+        """
+        Sets, on this instance, over what the class says, the limits that the
+        computational specifications of the process give (see
+        _COMP_SPEC_ATTRS): the engine exports them to the process as
+        DEBASHER_PROCESS_COMP_SPECS, fields `name=value` separated by ";" or,
+        in the legacy form, by blanks. The other fields (cpus, mem, time...)
+        are for the scheduler, and are ignored here.
+        """
+        separator = ";" if ";" in comp_specs else None
+        for field in comp_specs.split(separator):
+            name, _, value = field.strip().partition("=")
+            target = self._COMP_SPEC_ATTRS.get(name)
+            if target is None:
+                continue
+            attribute, factor = target
+            try:
+                number = float(value)
+            except ValueError:
+                number = float("nan")
+            if not 0 < number < float("inf"):
+                raise ValueError(
+                    f"{type(self).__name__}: the computational specification "
+                    f"{name}={value!r} is not a positive number"
+                )
+            scaled = number * factor
+            setattr(self, attribute, int(scaled) if attribute.endswith("_BYTES") else scaled)
 
     def _input_ports(self):
         raise NotImplementedError

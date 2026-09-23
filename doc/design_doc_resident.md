@@ -953,7 +953,8 @@ anything is launched. The built-in scheduler exports the computational
 specifications of the process to it as `DEBASHER_PROCESS_COMP_SPECS`, from
 the specification that the generated script carries, so a relaunch gets them
 too, and `FBPProcess` sets them on its instance when it is created
-(`_apply_comp_specs`); it ignores the other fields.
+(`_apply_comp_specs`); it ignores the other fields. The `Supervisor` reads
+its own, `heartbeat_timeout_s`, the same way (see "Failure detection").
 
 ## State capture and checkpoint schema
 
@@ -1497,7 +1498,24 @@ node.)
 - **`HEARTBEAT_TIMEOUT_SECS` / `HEARTBEAT_CHECK_INTERVAL_SECS`**: the checker
   thread wakes every `HEARTBEAT_CHECK_INTERVAL_SECS` and, for each node not yet
   resolved (see below), compares `now - _last_heartbeat[node]` against
-  `HEARTBEAT_TIMEOUT_SECS`.
+  `HEARTBEAT_TIMEOUT_SECS`. A program sets the timeout of its `Supervisor` in
+  the computational specifications of that process, `heartbeat_timeout_s`, in
+  seconds, the same way as the limits of a node (see "Limits of a node").
+- **Monotonic clock**: every time kept to measure the silence of a node is
+  taken from the monotonic clock (`time.monotonic()`), never from the wall
+  clock, which can jump forward (an NTP correction, a machine coming back from
+  suspend) and make every node look silent at once.
+- **A `Supervisor` that did not run for a while**: when it is starved of CPU,
+  stopped or paused, the heartbeats that the nodes send meanwhile wait unread
+  in its FIFOs, and when it runs again its checker thread may run before the
+  threads that read them, and declare a live node down. So the checker
+  measures the time since its previous tick, and when a tick comes more than
+  one `HEARTBEAT_CHECK_INTERVAL_SECS` late, it moves every node's
+  `_last_heartbeat` forward by as much as the tick was late
+  (`_credit_own_stall`): the time the `Supervisor` did not run is not counted
+  against any node. A node whose process is gone is still declared down at
+  once, by the PID-based fast path below, which does not depend on elapsed
+  time.
 - **PID-based fast path**: every BUILTIN-scheduler process already gets a `.id`
   file holding its PID (written by `debasher_builtin_sched::_launch`,
   pre-existing, not `resident`-specific), at `__exec__/<node>/<node>.id`. If
@@ -2209,26 +2227,27 @@ open.
   fails loudly, naming the port, and the input log's cap names the backlog
   when checkpoints are being skipped (see "Checkpoint persistence"). No
   guarantee was at stake (G1 to G8): nothing was lost or duplicated.
+- **A healthy node could be declared down when the `Supervisor` itself did
+  not run for a while.** Its checker thread, running again before the
+  threads that read the heartbeats still waiting in its FIFOs, found a live
+  node silent for longer than `HEARTBEAT_TIMEOUT_SECS`, and the relaunch
+  killed the node that was still running (`debasher_builtin_sched::_launch`
+  kills the previous incarnation first), at whatever moment it landed. The
+  wall clock it measured with could also jump and make every node look
+  silent at once. Now the checker measures on the monotonic clock and does
+  not count against any node the time it did not run itself (see "Failure
+  detection"). A node that is itself starved of CPU for longer than the
+  timeout is still declared down, since from outside it cannot be told from
+  one that is stuck: a program where that is expected sets a longer
+  `heartbeat_timeout_s` for its `Supervisor`.
 - Dedicated concurrency test for the fan-in case with more than one input
   port pending on the barrier:
   `test_two_pending_ports_waits_for_the_second_marker`.
 
 ## Unfixed
 
-- **Under heavy system load, `HEARTBEAT_TIMEOUT_SECS` is not always margin
-  enough for a perfectly healthy but CPU-starved node**: the Supervisor may
-  declare it down and relaunch it although it was never actually dead.
-  `debasher_builtin_sched::_launch`'s own "kill any stale PID before
-  relaunching" step then turns that mistaken diagnosis into a real `kill -9` of
-  a node that was, in fact, still running and still sending, at whatever moment
-  it happens to land. Landing inside an open halt round is the Contract's "A
-  crash while a round is open" limit; landing while an upstream peer is still
-  forwarding what it owes to a downstream neighbor during an ordinary shutdown
-  can lose that in-flight data the same way any untimely `SIGKILL` can (see the
-  Contract's "both endpoints of a channel crashed" limit, and the residual
-  window noted in the `debasher_stop_resident` subsection). Not a third,
-  independent gap: heavy load simply makes an already-accepted kind of loss
-  easier to trigger than a deliberate test would.
+None at present.
+
 
 # Extensions
 
