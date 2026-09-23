@@ -112,13 +112,19 @@ class FBPProcess(_PortWorker):
 
     # Total size, across every output port, of the DATA that send_data has
     # numbered but the writer thread has not yet finished writing (G5's
-    # outbound backlog, see _unwritten). The input log's own cap is what
-    # actually bounds a node stuck with a down or slow neighbor; this one
-    # only decides how big a single checkpoint is allowed to grow. Over it,
-    # _save_checkpoint skips writing that checkpoint rather than raising: the
-    # previous one plus the replay of the input log after it regenerate
-    # every output since, so nothing is lost by waiting for a smaller round.
+    # outbound backlog, see _unwritten). The first limit only decides how
+    # big a single checkpoint is allowed to grow: over it, _save_checkpoint
+    # skips writing that checkpoint rather than raising, since the previous
+    # one plus the replay of the input log after it regenerate every output
+    # since, so nothing is lost by waiting for a smaller round while a
+    # neighbor is slow for a while. The second one bounds the memory the
+    # backlog takes: send_data raises rather than go over it, since a
+    # backlog that keeps growing means that a reader is not reading (it was
+    # stopped, is down or stuck, or is slower than this node for good), and
+    # a loud failure is better than a node that eats the memory of the
+    # machine.
     OUT_BACKLOG_MAX_BYTES = 8 * 1024 * 1024
+    OUT_BACKLOG_FAIL_BYTES = 64 * 1024 * 1024
 
     def __init__(self, argv=None, opts=None):
         super().__init__(argv, opts)
@@ -199,7 +205,17 @@ class FBPProcess(_PortWorker):
         # both the thread inside process_data() (send_data appends) and the
         # writer threads (_on_written pops), hence the lock.
         self._unwritten = {}
+        # The size of every line in _unwritten together, kept up to date
+        # with it (under the same lock) so that send_data checks
+        # OUT_BACKLOG_FAIL_BYTES at no cost.
+        self._unwritten_bytes = 0
         self._out_backlog_lock = threading.Lock()
+        # The epoch of the first round whose checkpoint was skipped because
+        # of the size of the outbound backlog, since the last one written;
+        # None while checkpoints are being written. Only the brain thread
+        # writes it; a reader thread reads it to explain an input log that
+        # reached its cap (see _on_arrivals).
+        self._checkpoints_skipped_since = None
 
         # Every item that a reader thread queues gets a position and a record
         # in the input log before the brain thread can see it. The lock makes
@@ -523,7 +539,19 @@ class FBPProcess(_PortWorker):
             except LogCapReached as exc:
                 for pos, (envelope, _) in zip(exc.positions, accepted_items):
                     self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
-                raise
+                skipped_since = self._checkpoints_skipped_since
+                if skipped_since is None:
+                    raise
+                # Rounds do close here, but none has written a checkpoint
+                # for a while, so nothing has been pruned: the real cause is
+                # a reader of this node that is not keeping up.
+                raise LogCapReached(
+                    f"{exc}; here the cause is not the rounds: no checkpoint has been "
+                    f"written since epoch {skipped_since}, because the outbound backlog "
+                    f"is over OUT_BACKLOG_MAX_BYTES ({self.OUT_BACKLOG_MAX_BYTES}): a "
+                    "reader of this node is not keeping up with it",
+                    exc.positions,
+                ) from None
             for pos, (envelope, _) in zip(positions, accepted_items):
                 self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
 
@@ -603,6 +631,8 @@ class FBPProcess(_PortWorker):
         state it captures, in the order in which it processed what it
         received, which is what a replay reproduces: restored from the same
         checkpoint, it renumbers what it sends again exactly the same way.
+        It also raises, again with nothing sent or numbered, if the message
+        would take the outbound backlog over OUT_BACKLOG_FAIL_BYTES.
         """
         if self._handler_thread != threading.get_ident():
             raise RuntimeError(
@@ -611,10 +641,20 @@ class FBPProcess(_PortWorker):
                 "in reaction to a message that it receives"
             )
         seq = self._out_seq.get(tag, 0) + 1
-        self._out_seq[tag] = seq
         line = encode_data(payload, seq=seq)
         with self._out_backlog_lock:
+            if self._unwritten_bytes + len(line) > self.OUT_BACKLOG_FAIL_BYTES:
+                port_bytes = sum(len(entry) for _, entry in self._unwritten.get(tag, []))
+                raise RuntimeError(
+                    f"{type(self).__name__}: the outbound backlog would go over "
+                    f"OUT_BACKLOG_FAIL_BYTES ({self.OUT_BACKLOG_FAIL_BYTES} bytes) with this "
+                    f"message on {tag!r}, which holds {port_bytes} bytes not yet written: "
+                    "a reader of this node is not reading (it was stopped, is down or "
+                    "stuck, or is slower than this node)"
+                )
             self._unwritten.setdefault(tag, []).append((seq, line))
+            self._unwritten_bytes += len(line)
+        self._out_seq[tag] = seq
         self._outbound_queues[tag].put(line)
 
     def _on_written(self, tag, item):
@@ -631,6 +671,7 @@ class FBPProcess(_PortWorker):
             backlog = self._unwritten.get(tag)
             if backlog and backlog[0][1] == item:
                 backlog.pop(0)
+                self._unwritten_bytes -= len(item)
 
     def _close_payload(self, tag):
         """
@@ -658,6 +699,7 @@ class FBPProcess(_PortWorker):
                 line = encode_data(entry["payload"], seq=seq)
                 with self._out_backlog_lock:
                     self._unwritten.setdefault(tag, []).append((seq, line))
+                    self._unwritten_bytes += len(line)
                 self._outbound_queues[tag].put(line)
 
     def _snapshot_out_backlog(self):
@@ -936,8 +978,10 @@ class FBPProcess(_PortWorker):
             # program is concerned (its markers were sent when it opened);
             # only this node's own persistence of it falls back to whatever
             # its previous checkpoint was, plus a longer replay later.
-            pass
+            if self._checkpoints_skipped_since is None:
+                self._checkpoints_skipped_since = epoch
         else:
+            self._checkpoints_skipped_since = None
             self.log.info("checkpoint saved for epoch %s at %s", epoch, path)
             if self.SUPERVISOR_PORT is not None:
                 self._send_interact(

@@ -7,6 +7,7 @@ import pytest
 
 import debasher_runtime_lib as lib
 import debasher_runtime_transport as transport
+from debasher_runtime_inputlog import LogCapReached
 
 
 def _wait_until(predicate, timeout=5.0, interval=0.01):
@@ -203,3 +204,94 @@ def test_load_latest_checkpoint_returns_out_backlog():
 
     *_, out_backlog = proc._load_latest_checkpoint()
     assert out_backlog == {"outf": [{"seq": 1, "payload": "a"}]}
+
+
+# --- the limit on the memory the backlog takes -------------------------------
+
+
+class _SmallFailCap(_Relay):
+    # Room for two lines of the payloads below, not three.
+    OUT_BACKLOG_FAIL_BYTES = 2 * len(lib.encode_data("p" * 50, seq=1)) + 5
+
+
+def test_send_data_raises_past_the_fail_cap_with_nothing_sent_or_numbered():
+    proc = _SmallFailCap(opts=_OPTS)
+    proc._handler_thread = threading.get_ident()
+    proc.send_data("outf", "p" * 50)
+    proc.send_data("outf", "p" * 50)
+
+    with pytest.raises(RuntimeError, match="OUT_BACKLOG_FAIL_BYTES.*'outf'.*not reading"):
+        proc.send_data("outf", "p" * 50)
+
+    assert proc._out_seq["outf"] == 2
+    assert [seq for seq, _ in proc._unwritten["outf"]] == [1, 2]
+    assert proc._outbound_queues["outf"].qsize() == 2
+
+
+def test_a_written_line_makes_room_under_the_fail_cap_again():
+    proc = _SmallFailCap(opts=_OPTS)
+    proc._handler_thread = threading.get_ident()
+    proc.send_data("outf", "p" * 50)
+    proc.send_data("outf", "p" * 50)
+
+    proc._on_written("outf", lib.encode_data("p" * 50, seq=1))
+    proc.send_data("outf", "p" * 50)
+
+    assert [seq for seq, _ in proc._unwritten["outf"]] == [2, 3]
+    assert proc._unwritten_bytes == sum(len(line) for _, line in proc._unwritten["outf"])
+
+
+def test_a_restored_backlog_counts_against_the_fail_cap():
+    proc = _SmallFailCap(opts=_OPTS)
+    proc._restore_out_backlog({"outf": [{"seq": 1, "payload": "p" * 50}, {"seq": 2, "payload": "p" * 50}]})
+    proc._out_seq["outf"] = 2
+    proc._handler_thread = threading.get_ident()
+
+    with pytest.raises(RuntimeError, match="OUT_BACKLOG_FAIL_BYTES"):
+        proc.send_data("outf", "p" * 50)
+
+
+def test_a_skipped_checkpoint_is_remembered_until_one_is_written():
+    class _SmallCap(_Relay):
+        OUT_BACKLOG_MAX_BYTES = 10
+
+    proc = _SmallCap(opts=_OPTS)
+    _run_brain(proc, [("inf", "a longer payload than the cap allows")])
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+    proc._close_barrier_round()
+    assert proc._checkpoints_skipped_since == 0
+
+    # A second skipped round keeps the first epoch that was skipped.
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+    proc._close_barrier_round()
+    assert proc._checkpoints_skipped_since == 0
+
+    # Once the line is written, the next round writes its checkpoint.
+    proc._on_written("outf", lib.encode_data("a longer payload than the cap allows", seq=1))
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+    proc._close_barrier_round()
+    assert os.path.exists(os.path.join(proc._checkpoints_dir(), "2.json"))
+    assert proc._checkpoints_skipped_since is None
+
+
+@pytest.mark.parametrize("skipped_since", [None, 7])
+def test_a_log_at_its_cap_names_the_backlog_when_checkpoints_are_being_skipped(skipped_since):
+    class _SmallLog(_Relay):
+        INPUT_LOG_MAX_BYTES = 200
+
+    proc = _SmallLog(opts=_OPTS)
+    proc._open_input_log(0)
+    proc._checkpoints_skipped_since = skipped_since
+    line = lib.encode_data("q" * 60, seq=None)
+    items = [(lib.decode_envelope(line), line)] * 5
+
+    with pytest.raises(LogCapReached) as info:
+        proc._on_arrivals("inf", items)
+
+    if skipped_since is None:
+        assert "outbound backlog" not in str(info.value)
+    else:
+        assert "since epoch 7" in str(info.value)
+        assert "OUT_BACKLOG_MAX_BYTES" in str(info.value)
+    # What fitted was queued either way.
+    assert proc._inbound_queue.qsize() == len(info.value.positions) > 0

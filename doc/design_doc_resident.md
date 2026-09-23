@@ -1108,6 +1108,25 @@ Future work).
 - The process always looks for the most recent checkpoint on startup; it does
   not distinguish "first time" from "recovery" by itself (see the Startup
   sequence above).
+- Size of the outbound backlog in a checkpoint: over `OUT_BACKLOG_MAX_BYTES`
+  (8 MiB by default), `_save_checkpoint()` writes nothing and warns. The
+  previous checkpoint plus a longer replay of the input log regenerate every
+  output since, so a neighbor that is slow for a while costs no more than
+  rounds without a checkpoint. Nothing is pruned meanwhile, and if the input
+  log reaches `INPUT_LOG_MAX_BYTES` its error names the outbound backlog and
+  the epoch since which no checkpoint has been written, since the rounds
+  themselves do close (`_checkpoints_skipped_since`).
+- Memory of the outbound backlog: `send_data` raises, with nothing sent or
+  numbered, rather than take the backlog over `OUT_BACKLOG_FAIL_BYTES` (64 MiB
+  by default), and names the port. A backlog that keeps growing means a
+  reader that is not reading: stopped, down or stuck, or slower than this
+  node for good. The exception ends the brain thread, which the heartbeat
+  reports; the `Supervisor` relaunches the node, and if the reader still does
+  not read, the relaunch reaches the limit again and the node ends in
+  "Escalation on a permanent node failure". The memory a node takes for its
+  messages is thus bounded by this limit and by `INPUT_LOG_MAX_BYTES`, which
+  also bounds what waits in its inbound queue, since every queued item is
+  logged first.
 
 # Input log
 
@@ -2145,30 +2164,27 @@ open.
   the leader of its process group, which `debasher::_stop_pid` already
   relies on), through a temporary file renamed into place. The file is
   complete as soon as `_launch` returns, and nothing waits.
+- **A writer whose reader does not read could grow its outbound backlog
+  without limit.** A writer cannot tell a reader gone for good from one
+  that crashed or halted (see "The reader-dies direction"), and blocks on
+  backpressure in every case, but `send_data` kept accepting messages into
+  `_outbound_queues` and `_unwritten` with no limit, and
+  `OUT_BACKLOG_MAX_BYTES` only skipped checkpoints: the node took more and
+  more memory and ended, if at all, at the input log's cap, with an error
+  about rounds that do not close. A reader of a resident program stops for
+  good only if it is stopped on its own by hand (a node ends only on a stop
+  signal, and `debasher_stop_resident` sends it to every node together), or
+  crashes with nobody to relaunch it; one slower than its writer for good
+  has the same effect. Now `OUT_BACKLOG_FAIL_BYTES` bounds the backlog and
+  fails loudly, naming the port, and the input log's cap names the backlog
+  when checkpoints are being skipped (see "Checkpoint persistence"). No
+  guarantee was at stake (G1 to G8): nothing was lost or duplicated.
 - Dedicated concurrency test for the fan-in case with more than one input
   port pending on the barrier:
   `test_two_pending_ports_waits_for_the_second_marker`.
 
 ## Unfixed
 
-- **A writer whose peer finished for good can grow its own backlog
-  forever, with nothing to stop it and no error raised.** "The reader-dies
-  direction" already covers why a writer cannot tell a reader
-  gone for good from one that merely crashed or halted, and why it does
-  not need to: in all three cases it blocks on backpressure, which is
-  correct and loses nothing. What that leaves open: if the reader is in
-  fact gone for good and nothing ever reopens that end again, nothing ever
-  relieves the backpressure either, and `send_data` keeps accepting more
-  regardless. `_outbound_queues` is an unbounded `queue.Queue()`
-  (`engine/debasher_runtime_transport.py`), and `send_data` appends
-  unconditionally to `_unwritten`, the checkpoint's outbound backlog for G5
-  (`engine/debasher_runtime_fbp.py`), so both grow without limit for as
-  long as the node keeps calling `send_data` on that port.
-  `OUT_BACKLOG_MAX_BYTES` only makes `_save_checkpoint` skip a checkpoint
-  that has grown too big; it does not slow or stop the growth itself, nor
-  raise an error. No guarantee is broken (G1 to G8): nothing is lost or
-  duplicated, the node just keeps using more memory, unbounded and
-  unnoticed.
 - **Under heavy system load, `HEARTBEAT_TIMEOUT_SECS` is not always margin
   enough for a perfectly healthy but CPU-starved node**: the Supervisor may
   declare it down and relaunch it although it was never actually dead.
