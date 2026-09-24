@@ -467,10 +467,6 @@ EOF
     DEBASHER_INITIAL_PROCESS_SPEC["genfifoproc"]="${spec}"
     DEBASHER_PROGRAM_PROCESSES["genfifoproc"]=1
 
-    # _define_opts_for_process reads the process name from its caller's
-    # processname variable, as debasher_exec's loop over the processes
-    # sets it
-    local processname="genfifoproc"
     set +e
     debasher::_define_opts_for_process "" "${spec}"
     local status=$?
@@ -487,6 +483,39 @@ EOF
     # owner task, so those have to be recorded as well
     local fifo="$(debasher::_get_absolute_fifoname genfifoproc genfifoproc_out_1)"
     [ "${DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]}" = "genfifoproc${sep}1" ]
+}
+
+@test "debasher::_define_opts_for_process takes the process name from the given process spec, not from a variable of its caller" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    genonlyproc_generate_opts_size()
+    {
+        echo 2
+    }
+
+    genonlyproc_generate_opts()
+    {
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-id" "${task_idx}" optlist || return 1
+        save_opt_list optlist
+    }
+
+    local spec="genonlyproc cpus=1 mem=32 time=00:01:00"
+    DEBASHER_INITIAL_PROCESS_SPEC["genonlyproc"]="${spec}"
+
+    # A caller whose own processname variable names another process, one
+    # without a generator
+    local processname="loopproc"
+    set +e
+    debasher::_define_opts_for_process "" "${spec}"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["genonlyproc"]}" -eq 2 ]
+    [ -z "${DEBASHER_PROCESS_OPT_LIST_LEN["loopproc"]+x}" ]
 }
 
 # --- users of the fifos --------------------------------------------------

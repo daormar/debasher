@@ -976,8 +976,9 @@ debasher::_define_opts_for_process()
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
+    local processname=$(debasher::_extract_processname_from_process_spec "${process_spec}")
 
-    if debasher::_uses_option_generator "$processname"; then
+    if debasher::_uses_option_generator "${processname}"; then
         debasher::_define_opts_generator "${cmdline}" "${process_spec}"
     else
         debasher::_define_opts_loop "${cmdline}" "${process_spec}"
