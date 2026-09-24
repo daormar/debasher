@@ -1028,6 +1028,8 @@ repository.
 
    generator
 
+   fifo_generator
+
    subprogram
 
    host_workflow
