@@ -125,6 +125,36 @@ debasher::_define_forced_rerun_processes()
 }
 
 ########
+# In a resident program, a process that is not running was stopped, by a
+# halt or a signal, or crashed, and is never done: its .finished only says
+# that it exited. Marks every such process to rerun, one that has not been
+# launched yet aside, so that debasher_exec on the same output directory
+# launches every node again, and each resumes from its checkpoint and its
+# input log. Without it, a process with a .finished would be taken for a
+# done one and never launched again, and so would the tasks of an array
+# that have one while others have not. A no-op for a general program.
+debasher::_define_rerun_processes_due_to_resident_resume()
+{
+    local dirname=$1
+
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    local processname status
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        status=$(debasher::_get_process_status "${dirname}" "${processname}")
+        case "${status}" in
+            "${DEBASHER_INPROGRESS_PROCESS_STATUS}"|"${DEBASHER_TODO_PROCESS_STATUS}")
+                ;;
+            *)
+                debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_RESIDENT_RESUME_RERUN_REASON}"
+                ;;
+        esac
+    done
+}
+
+########
 debasher::_check_script_is_older_than_modules()
 {
     local script_filename=$1

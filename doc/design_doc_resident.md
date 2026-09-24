@@ -1155,6 +1155,20 @@ Future work).
   anything that reached its log after that. The node ends in the state it had
   when it stopped, and re-executing those messages is deterministic, like any
   other replay.
+- How a program is resumed: `debasher_exec` again, on the same output
+  directory. Every node stopped by the halt left a `.finished`, which for a
+  general program means a process that is done and is not launched again. In
+  a resident program a process is never done, so `debasher_exec` marks every
+  process that is not running to be launched again
+  (`debasher::_define_rerun_processes_due_to_resident_resume`), every task of
+  an array included, also when only some of them have a `.finished`, as a
+  hard kill of the others leaves them. Nothing in the directory of a node is
+  reset on the way: not its checkpoints, its input log or its halted marker,
+  in its execdir (Glossary), nor its output directory, `<outdir>/<process>`,
+  which a general process has emptied every time it is launched. What a node
+  keeps there is part of what it has done so far, and a launch of the node
+  resumes it, whether it is a new run after a halt or the `Supervisor`'s
+  relaunch after a crash.
 
 ## Checkpoint persistence
 

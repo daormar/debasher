@@ -753,3 +753,48 @@ add_fifo() {
     debasher::define_opt_from_proc_out "-from_fanin" "fanin" "-outloop" optlist
     [ -n "${optlist}" ]
 }
+
+# --- resuming a resident program -------------------------------------------
+
+# $1: status that debasher::_get_process_status reports for every process,
+# by name, as "<process>=<status> ..."
+fake_statuses() {
+    FAKE_STATUSES="$1"
+    debasher::_get_process_status() {
+        local entry
+        for entry in ${FAKE_STATUSES}; do
+            if [ "${entry%%=*}" = "$2" ]; then
+                echo "${entry#*=}"
+                return 0
+            fi
+        done
+    }
+}
+
+@test "debasher::_define_rerun_processes_due_to_resident_resume marks every stopped process of a resident program" {
+    declare -gA DEBASHER_RERUN_PROCESSES=()
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+    DEBASHER_PROGRAM_PROCESSES=([halted]=1 [partial]=1 [running]=1 [crashed]=1 [new]=1)
+    fake_statuses "halted=${DEBASHER_FINISHED_PROCESS_STATUS} partial=${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS} running=${DEBASHER_INPROGRESS_PROCESS_STATUS} crashed=${DEBASHER_UNFINISHED_PROCESS_STATUS} new=${DEBASHER_TODO_PROCESS_STATUS}"
+
+    debasher::_define_rerun_processes_due_to_resident_resume "/unused"
+
+    [ "${DEBASHER_RERUN_PROCESSES[halted]}" = "${DEBASHER_RESIDENT_RESUME_RERUN_REASON}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[partial]}" = "${DEBASHER_RESIDENT_RESUME_RERUN_REASON}" ]
+    # Also an array with only some tasks finished, which the engine reports
+    # as unfinished
+    [ "${DEBASHER_RERUN_PROCESSES[crashed]}" = "${DEBASHER_RESIDENT_RESUME_RERUN_REASON}" ]
+    # Not to be touched (running) or launched anyway (new)
+    [ -z "${DEBASHER_RERUN_PROCESSES[running]:-}" ]
+    [ -z "${DEBASHER_RERUN_PROCESSES[new]:-}" ]
+}
+
+@test "debasher::_define_rerun_processes_due_to_resident_resume is a no-op for a general program" {
+    declare -gA DEBASHER_RERUN_PROCESSES=()
+    DEBASHER_PROGRAM_PROCESSES=([done]=1)
+    fake_statuses "done=${DEBASHER_FINISHED_PROCESS_STATUS}"
+
+    debasher::_define_rerun_processes_due_to_resident_resume "/unused"
+
+    [ "${#DEBASHER_RERUN_PROCESSES[@]}" -eq 0 ]
+}

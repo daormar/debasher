@@ -171,9 +171,17 @@ debasher_builtin_sched::_revise_rerun_proc_status()
     # Iterate over defined processes
     local processname
     for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
-        # If process is marked as rerun and it was finished, its process completion is reset
+        # If process is marked as rerun and it was finished, its process
+        # completion is reset. So it is for any process of a resident program
+        # that is not running, in particular an array with only some tasks
+        # finished: each task is a node, and every one of them resumes, not
+        # only those without a .finished
         if debasher::_process_marked_as_rerun ${processname}; then
-            if [ ${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
+            local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+            if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] \
+                   || { [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ] \
+                            && [ "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
+                            && [ "${status}" != "${DEBASHER_TODO_PROCESS_STATUS}" ]; }; then
                 debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
                 DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${DEBASHER_UNFINISHED_PROCESS_STATUS}
             fi
@@ -1065,6 +1073,84 @@ debasher_builtin_sched::_print_script_header()
 }
 
 ########
+# Writes the resolved options of the task, DEBASHER_DESERIALIZED_ARGS, to its
+# ".opts" file (the webui's "See options" inspect action).
+debasher_builtin_sched::_write_opts_file()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    local opts_fname=$(debasher::_get_process_opts_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
+    debasher::_print_opts_as_qstrings "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${opts_fname}"
+}
+
+########
+# Resets the output directory of the process before it runs, through its own
+# reset function if it has one, or by emptying it. Not for a node of a
+# resident program: what the directory holds is part of what the node has
+# done so far, like its checkpoints and its input log, and a launch of the
+# node resumes it, whether it is the Supervisor's relaunch after a crash or a
+# new run after a halt.
+debasher_builtin_sched::_reset_outdir()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+    local reset_funct=$(debasher::_get_reset_funcname ${processname})
+
+    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    if [ "${reset_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
+    elif [ "${opt_array_size}" -eq 1 ]; then
+        debasher::_default_reset_outfiles_for_process "${dirname}" "${processname}"
+    else
+        debasher::_default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
+    fi
+}
+
+########
+# Exports what the process reads about itself from the environment. Exported,
+# not plain assignments, so that they survive both the process's own wrapper
+# function and whatever it execs in turn (e.g. a resident process's "python
+# -c ..." heredoc).
+debasher_builtin_sched::_export_process_env()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    # Its own __exec__/<processname>/ directory (e.g. for checkpoints),
+    # without any option needing to be wired for it.
+    export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    # The tasks of an array share that directory, so a task also gets its
+    # own index, to name what it keeps there the way the engine names its
+    # per-task files (<process>_<idx>.id); empty for a process that is not
+    # an array.
+    if [ "${opt_array_size}" -gt 1 ]; then
+        export DEBASHER_PROCESS_TASK_IDX="${task_idx}"
+    else
+        export DEBASHER_PROCESS_TASK_IDX=""
+    fi
+    # The computational specifications of the process, so that a resident
+    # process's heredoc reads its own limits from them (see
+    # DEBASHER_RESIDENT_COMP_SPEC_NAMES). The generated script carries the
+    # specification of every process, so a relaunch gets them too.
+    export DEBASHER_PROCESS_COMP_SPECS=$(debasher::_get_process_comp_specs "${processname}")
+    # The ports of the task, for a node or the Supervisor of a resident
+    # program, which takes them from here instead of declaring them in its
+    # class (see debasher::_register_resident_task_ports); empty for any
+    # other process
+    export DEBASHER_PROCESS_PORTS="${DEBASHER_RESIDENT_TASK_PORTS[${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}]:-}"
+}
+
+########
 debasher_builtin_sched::_execute_funct_plus_postfunct()
 {
     local cmdline=$1
@@ -1073,7 +1159,6 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     local opt_array_size=$4
     local task_idx=$5
     local skip_funct=$(debasher::_get_skip_funcname ${processname})
-    local reset_funct=$(debasher::_get_reset_funcname ${processname})
     local post_funct=$(debasher::_get_post_funcname ${processname})
 
     # Get serialized arguments
@@ -1087,10 +1172,7 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # the DEBASHER_DESERIALIZED_ARGS variable)
     debasher::_deserialize_args "${sargs}"
 
-    # Dump resolved options to the process's ".opts" file (webui "See
-    # options" inspect action)
-    local opts_fname=$(debasher::_get_process_opts_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
-    debasher::_print_opts_as_qstrings "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${opts_fname}"
+    debasher_builtin_sched::_write_opts_file "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 
     # Execute process skip function if it was provided
     if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
@@ -1099,16 +1181,7 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
 
     debasher::_display_begin_process_message
 
-    # Reset output directory
-    if [ "${reset_funct}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        if [ "${opt_array_size}" -eq 1 ]; then
-            debasher::_default_reset_outfiles_for_process "${dirname}" "${processname}"
-        else
-            debasher::_default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
-        fi
-    else
-        ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
-    fi
+    debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 
     # Start mirror taps (if any) for fifos this process owns and writes
     # to (see debasher::_start_fifo_mirror_taps_for_process) — must run
@@ -1117,37 +1190,9 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # each mirrored option's shim path instead.
     debasher::_start_fifo_mirror_taps_for_process "${processname}"
 
-    # Execute process function
-
-    # Where the stdout of the process is kept: only this function uses it,
-    # unlike the variables exported below, which the process itself reads
+    # Execute process function, keeping its stdout
+    debasher_builtin_sched::_export_process_env "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
     local stdout_filename=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
-    # Exported (not a plain assignment) so it survives both the process's
-    # own wrapper function and whatever it execs in turn (e.g. a resident
-    # process's "python -c ..." heredoc): it lets a process locate its own
-    # __exec__/<processname>/ directory (e.g. for checkpoints) without
-    # any option needing to be wired for it.
-    export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
-    # The tasks of an array share that directory, so a task also gets its
-    # own index, to name what it keeps there the way the engine names its
-    # per-task files (<process>_<idx>.id); empty for a process that is not
-    # an array.
-    if [ "${opt_array_size}" -gt 1 ]; then
-        export DEBASHER_PROCESS_TASK_IDX="${task_idx}"
-    else
-        export DEBASHER_PROCESS_TASK_IDX=""
-    fi
-    # The computational specifications of the process, exported like the
-    # two variables above so that a resident process's heredoc reads its
-    # own limits from them (see DEBASHER_RESIDENT_COMP_SPEC_NAMES). The
-    # generated script carries the specification of every process, so a
-    # relaunch gets them too.
-    export DEBASHER_PROCESS_COMP_SPECS=$(debasher::_get_process_comp_specs "${processname}")
-    # The ports of the task, for a node or the Supervisor of a resident
-    # program, which takes them from here instead of declaring them in its
-    # class (see debasher::_register_resident_task_ports); empty for any
-    # other process
-    export DEBASHER_PROCESS_PORTS="${DEBASHER_RESIDENT_TASK_PORTS[${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}]:-}"
     "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${stdout_filename}"
 
     local funct_exit_code=${PIPESTATUS[0]}
@@ -1214,6 +1259,9 @@ debasher_builtin_sched::_write_env_vars_and_funcs()
     debasher::_write_env_vars_and_funcs "${dirname}"
 
     # Write builtin sched environment functions
+    declare -f debasher_builtin_sched::_write_opts_file
+    declare -f debasher_builtin_sched::_reset_outdir
+    declare -f debasher_builtin_sched::_export_process_env
     declare -f debasher_builtin_sched::_execute_funct_plus_postfunct
     declare -f debasher::_seq_execute_builtin
     declare -f debasher_builtin_sched::_get_script_log_filenames

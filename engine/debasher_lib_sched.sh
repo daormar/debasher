@@ -355,6 +355,7 @@ debasher::_write_env_vars_and_funcs()
 
         # Write initialized variables
         declare -p DEBASHER_SCHEDULER
+        declare -p DEBASHER_PROGRAM_TYPE
         declare -p DEBASHER_INITIAL_PROCESS_SPEC
         declare -p DEBASHER_RESIDENT_TASK_PORTS
         declare -p DEBASHER_PROGRAM_OUTDIR

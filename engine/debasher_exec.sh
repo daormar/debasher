@@ -824,6 +824,8 @@ register_all_rerun_processes()
         debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner "${dirname}" || exit 1
     fi
 
+    debasher::_define_rerun_processes_due_to_resident_resume "${dirname}" || exit 1
+
     debasher::_propagate_rerun_processes "${dirname}" || exit 1
 
     echo "Registering complete" >&2

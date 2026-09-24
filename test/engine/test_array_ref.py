@@ -128,6 +128,34 @@ def test_debasher_stop_resident_stops_every_task_of_an_array(pfile, outdir):
         assert os.path.exists(path), f"{path} was never written"
 
 
+def test_a_new_run_resumes_every_task_of_an_array_even_if_only_some_have_finished(pfile, outdir):
+    """
+    After a halt, debasher_exec on the same output directory launches every
+    task of worker again, also when only some of them have a .finished (here
+    task 1's is removed, as a hard kill would have left it): each task is a
+    node, and all of them resume, not only those that the engine would take
+    for pending.
+    """
+    launch(pfile, outdir)
+    _wait_until_every_node_started(outdir)
+    result = subprocess.run(
+        [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    os.remove(_worker_file(outdir, "worker", 1) + ".finished")
+    old_pids = {idx: read_pid(_worker_file(outdir, "worker", idx) + ".id") for idx in range(_NUM_WORKERS)}
+
+    launch(pfile, outdir)
+
+    for idx, old_pid in old_pids.items():
+        id_path = _worker_file(outdir, "worker", idx) + ".id"
+        assert wait_until(lambda: read_pid(id_path) not in (None, old_pid)), (
+            f"task {idx} of worker was not launched again"
+        )
+
+
 def test_debasher_stop_resident_leaves_alone_only_the_task_named_with_dash_x(pfile, outdir):
     """
     -x worker:1 names one task: the tool neither waits for it nor signals it,
