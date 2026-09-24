@@ -1054,13 +1054,12 @@ supervisor, only failure detection and running the script; the rest
 (looking for a checkpoint, restoring it or not, how much of the log to
 replay) is resolved by the process itself, exactly as on any startup.
 
-**Resetting checkpoints as an external operation, not yet built**: to force a
-clean start, it should be enough to delete (or move) the node's checkpoint
-folder before launching it; no flag or special logic needed inside either the
-process or the supervisor to distinguish the case. A simple auxiliary script
-(deleting checkpoints for every node of the topology) would cover restarting the
-whole system from scratch; noted here as a real gap, not yet written (see
-Future work).
+**A clean start is an external operation**: it is enough to take away what a
+node finds at startup, with no flag or special logic inside either the process
+or the `Supervisor` to tell the case apart. That is more than the checkpoints:
+with no checkpoint, a node replays the whole of its input log, and ends in the
+state it had. `debasher_reset_resident` does it for the whole program (see
+"`debasher_reset_resident`: a clean start").
 
 ## Chandy-Lamport barrier propagation
 
@@ -1899,6 +1898,33 @@ program specifically. It depends on the `Supervisor` changes above.
   actually exits. `SIGKILL`, used by `debasher_stop`'s hard kill, cannot be
   trapped and is unaffected by any of this.
 
+## `debasher_reset_resident`: a clean start
+
+`debasher_reset_resident -d <outdir> [--delete]`
+(`engine/debasher_reset_resident.sh`, installed in `bin`) resets a stopped
+resident program, so that the next `debasher_exec` on the same output
+directory starts every node as on its first run. A node keeps its state across
+runs in files that the engine does not reset (see "Ordered shutdown"): its
+checkpoints, its input log and its halted marker, in its execdir (Glossary),
+and the output directory of its process. The tool takes all of them away, for
+every task of every process, the `Supervisor` included, and leaves the output
+directory of each process empty, as the engine leaves it before a first run.
+
+- **The whole program, never one node.** A node that starts afresh numbers
+  its channels from the start again (G5), and a reader that kept its own
+  checkpoint would drop everything it sends as duplicates, having accepted
+  higher numbers before. Resetting a node would mean resetting its readers,
+  and theirs in turn.
+- **Set aside by default.** What it takes away is moved under
+  `__reset__/<timestamp>/` in the program's output directory, each path kept
+  relative to it (`__reset__/<timestamp>/__exec__/<process>/checkpoints`,
+  `__reset__/<timestamp>/<process>/...`), since a checkpoint that is lost
+  cannot be made again. `--delete` deletes it instead.
+- **Only a stopped program.** It refuses while any process of the program is
+  running, as `debasher_exec` does.
+- **What it does not reach**: the files that a module writes outside the
+  output directory of its process.
+
 # Channel kinds declared with the fifo
 
 The kind of every channel of a resident program, and its direction, are
@@ -2444,8 +2470,8 @@ Design ideas from Future work move here once they are actually built.
     ports it had when it saved it, while `closed_ports` and the sequence
     numbers of G5 in the checkpoint are keyed by port name. A relaunch runs
     the same generated script, so it gets the same `-w`; a run with another
-    `-w` has to start from clean checkpoints (see "Auxiliary script to reset
-    checkpoints across a whole topology" in Future work).
+    `-w` has to start afresh (see "`debasher_reset_resident`: a clean
+    start").
 
   `test/engine/debasher_fanout_cmdline_ref.sh` is the reference: `start`
   sends each message from outside to the next of the `-w` tasks of `worker`,
@@ -2492,6 +2518,13 @@ Design ideas from Future work move here once they are actually built.
   `Supervisor`; a round started while it counts closes through the loop, and
   a `counter` killed while it counts is relaunched and goes on with no value
   missing or repeated at `sink`.
+- **A clean start of a resident program.** A tool, `debasher_reset_resident`,
+  takes away the state that every node keeps across runs, its checkpoints,
+  input log, halted marker and output directory, setting it aside or deleting
+  it, so that the next run starts afresh (see "`debasher_reset_resident`: a
+  clean start"). The real-run tests of `test/engine/debasher_resume_ref.sh`
+  check that it refuses while the program runs, and that the run after it
+  finds no checkpoint.
 - **A startup deadline for a node.** A node sends its first heartbeat only
   once it has restored its checkpoint, run `initialize_runtime()` and
   replayed its input log, which can take longer than
@@ -2528,10 +2561,6 @@ Design ideas from Future work move here once they are actually built.
   mechanism could be entirely different. Noted here so it is not forgotten and
   can be tackled later, so that `resident` programs have as much expressiveness
   as possible.
-- **Auxiliary script to reset checkpoints across a whole topology**: deleting
-  (or moving) every node's checkpoint folder before launching forces a clean
-  start with no special-case code needed anywhere (the Startup sequence
-  subsection); the script itself is not written yet.
 - **Global (coordinated) rollback, as a fallback to localized recovery**: noted
   here, not designed and not built. Localized recovery (see "Recovery from a
   node failure") remains the policy for the ordinary crash of a node. A
@@ -2553,10 +2582,11 @@ Design ideas from Future work move here once they are actually built.
   node. The price is the work done since the chosen epoch, and the external
   inputs received since then (delivery at that boundary is at most once).
 
-  Like resetting checkpoints (previous item), it can be done from outside, by
-  manipulating files, with no special mode in the startup sequence (which always
-  loads the highest epoch and replays the log): an auxiliary script run while
-  the program is stopped. Points to settle when designing it:
+  Like a clean start (see "`debasher_reset_resident`: a clean start"), it can
+  be done from outside, by manipulating files, with no special mode in the
+  startup sequence (which always loads the highest epoch and replays the log):
+  an auxiliary script run while the program is stopped. Points to settle when
+  designing it:
   - The target epoch is chosen for each independent subgraph (a set of nodes
     that no channel joins to the rest of the program) on its own: the highest
     one present in the checkpoint folder of every node of the subgraph. No
@@ -2734,8 +2764,8 @@ Design ideas from Future work move here once they are actually built.
     leave the same `.finished`. The `Supervisor` counts both as done, but a
     resume launches every node again, so a node that finished for good needs
     a marker of its own, like the halted marker, for its relaunch to end at
-    once or not to happen; resetting the checkpoints (see "Auxiliary script to
-    reset checkpoints across a whole topology" above) removes it.
+    once or not to happen; a clean start (see "`debasher_reset_resident`: a
+    clean start") removes it.
   - The end of the program. Once every node has finished for good, the
     `Supervisor` finds them all done and exits, so the program ends by itself.
 

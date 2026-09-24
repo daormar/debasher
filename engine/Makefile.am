@@ -2,7 +2,7 @@ bin_SCRIPTS= debasher_exec debasher_exec_batch debasher_get_stdout	\
 debasher_get_sched_out debasher_get_fifo_mirror debasher_stop		\
 debasher_status debasher_stats debasher_exec_process debasher_doc_mod	\
 debasher_proc_dataset debasher_reformat_status debasher_fifo_writer_loop	\
-debasher_stop_resident
+debasher_stop_resident debasher_reset_resident
 
 libexec_SCRIPTS= debasher_get_vars_and_funcs			\
 debasher_get_deblib_vars_and_funcs debasher_check_prg_files	\
@@ -43,6 +43,7 @@ debasher_get_stdout.sh debasher_get_sched_out.sh			\
 debasher_get_fifo_mirror.sh						\
 debasher_get_vars_and_funcs.sh debasher_get_deblib_vars_and_funcs.sh	\
 debasher_check_prg_files.py debasher_stop.sh debasher_stop_resident.sh	\
+debasher_reset_resident.sh						\
 debasher_status.sh						\
 debasher_stats.sh debasher_exec_process.sh debasher_doc_mod.sh		\
 debasher_proc_dataset.sh debasher_fifo_writer_loop.sh			\
