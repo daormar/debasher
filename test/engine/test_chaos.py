@@ -317,6 +317,12 @@ class _ExtFeeder(threading.Thread):
     fanin reopens ext succeeds and is delivered whole, so no value is
     ever lost or duplicated as long as the retry loop below keeps going
     until each one is actually accepted.
+
+    Every value carries its own sequence number, as a source that knows
+    the protocol may send it: a value that fanin takes from ext and loses
+    before writing it to its input log (see the Contract's limits) is
+    then a gap that fanin reports (G8), not a silent loss at the
+    boundary of the program.
     """
 
     def __init__(self, ext_fifo, k, interval, stop_event=None):
@@ -338,7 +344,7 @@ class _ExtFeeder(threading.Thread):
             fd = os.open(self._ext_fifo, os.O_WRONLY)
             try:
                 for i in range(1, self._k + 1):
-                    line = (json.dumps({"type": "DATA", "payload": i}) + "\n").encode()
+                    line = (json.dumps({"type": "DATA", "seq": i, "payload": i}) + "\n").encode()
                     while True:
                         if self._stop_event is not None and self._stop_event.is_set():
                             return
@@ -492,6 +498,106 @@ def _assert_engineered_gap_trace(records, k, reported_range, context=""):
     )
 
 
+def _start_sched_out_tailers(outdir):
+    """One _SchedOutTailer per killable node, started, keyed by name."""
+    tailers = {name: _SchedOutTailer(_sched_out_file(outdir, name)) for name in _KILLABLE_NODES}
+    for out in tailers.values():
+        out.start()
+    return tailers
+
+
+def _find_reported_losses(texts):
+    """
+    Every G8 error that the nodes' outputs hold, as (node, channel, lo, hi):
+    lo..hi is the missing range, or (None, None) for the "torn line" shape,
+    which names no numbers (see _find_g8_error).
+    """
+    reported = []
+    for name, text in texts.items():
+        for m in _G8_GAP_RE.finditer(text):
+            lo = int(m.group("lo"))
+            hi = int(m.group("hi")) if m.group("hi") else lo
+            reported.append((name, m.group("channel"), lo, hi))
+        for m in _G8_TORN_RE.finditer(text):
+            reported.append((name, m.group("channel"), None, None))
+    return reported
+
+
+def _assert_trace_with_reported_losses(records, k, reported, context=""):
+    """
+    The Acceptance criterion's exception clause, for a run in which a
+    killed node reported a loss: sink's trace is a gapless prefix of its
+    channel's sequence numbers (ending right before the gap, if the gap
+    is sink's own), and each port's values are in order, with no
+    duplicate and nothing that ext was never sent.
+    """
+    seqs = [r["seq"] for r in records if r.get("type") == "DATA"]
+    sink_gaps = [lo for node, _, lo, _ in reported if node == "sink" and lo is not None]
+    if sink_gaps:
+        assert seqs == list(range(1, min(sink_gaps))), (
+            f"sink's trace should be exactly seq 1..{min(sink_gaps) - 1}, before the gap it "
+            f"reported{context}: {seqs}"
+        )
+    else:
+        assert seqs == list(range(1, len(seqs) + 1)), (
+            f"sink's trace is not a gapless prefix{context}: {seqs}"
+        )
+
+    for port in ("ext", "loop_in"):
+        values = [
+            r["payload"]["value"]
+            for r in records
+            if r.get("type") == "DATA" and r["payload"]["port"] == port
+        ]
+        assert values == sorted(set(values)), (
+            f"{port} values out of order or duplicated{context}: {values}"
+        )
+        assert set(values) <= set(range(1, k + 1)), f"{port} values never sent{context}: {values}"
+
+
+def _halt_and_check_trace(outdir, tailer, node_outs, killed, k, context=""):
+    """
+    Ends a run in which the nodes named in `killed` were killed at random
+    moments, and checks it against the Acceptance criterion.
+
+    A kill can land in the window in which a node has taken a message
+    from a fifo but not yet written it to its input log (see the
+    Contract's limits): the message is lost for good, the node reports
+    it with a G8 error when the next one arrives, and the halt may never
+    complete, since that node's reader has stopped. Such a run passes if
+    every G8 error came from a killed node and the trace satisfies
+    _assert_trace_with_reported_losses. A run with no G8 error has to
+    halt cleanly and give the exact trace.
+    """
+    result = subprocess.run(
+        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "60"],
+        capture_output=True,
+        text=True,
+    )
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    texts = {}
+    for name, out in node_outs.items():
+        out.stop_and_join()
+        if out.error is not None:
+            raise out.error
+        texts[name] = out.text
+
+    reported = _find_reported_losses(texts)
+    if not reported:
+        assert result.returncode == 0, (
+            f"debasher_stop_resident failed:\n{result.stdout}\n{result.stderr}"
+        )
+        assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
+        _assert_trace_matches(tailer.records, k, context)
+        return
+
+    not_killed = [loss for loss in reported if loss[0] not in killed]
+    assert not not_killed, f"G8 error at a node that was never killed{context}: {not_killed}"
+    _assert_trace_with_reported_losses(tailer.records, k, reported, f"{context}, reported {reported}")
+
+
 def test_a_clean_run_produces_the_exact_trace_at_sink(outdir):
     """
     "Run once with no failures" (Acceptance): every value fanin forwards
@@ -530,9 +636,12 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     (Acceptance), restricted here to exactly one kill of exactly one
     node per run: the only shape that cannot touch the Contract's "both
     endpoints of a channel crashed" limit, since every channel's other
-    endpoint stays alive the whole time, holding it open. No run here
-    should ever need the G8-error exception: every run's trace must
-    match the criterion exactly.
+    endpoint stays alive the whole time, holding it open. The kill can
+    still land in the window in which the node has taken a message from a
+    fifo but not yet logged it, the Contract's other limit: such a run
+    passes with the G8 error that reports the loss (see
+    _halt_and_check_trace), and every other run's trace must match the
+    criterion exactly.
     """
     k = 60
     interval = 0.03
@@ -540,6 +649,7 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     _launch(outdir)
     tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
+    node_outs = _start_sched_out_tailers(outdir)
 
     ext_fifo = _find_fifo(outdir, "fanin_ext")
     manual_fifo = _find_fifo(outdir, "sup_manual")
@@ -562,26 +672,18 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     if feeder.error is not None:
         raise feeder.error
 
-    # Deliberate grace period, not a magic number: the Contract's
-    # Conformance status has an open, unfixed finding that a shutdown's
-    # halt marker can reach a downstream node with only one pending port
-    # (sink) well before an upstream node (fanin) has finished forwarding
-    # everything a still-recovering peer (loop, here) owed it on the same
-    # channel, silently losing the tail. This test is about recovering
-    # from a single kill, not about that separate shutdown race, so it
-    # waits for the pipeline to settle before asking for a halt.
+    # Lets the pipeline settle before the halt: what fanin forwards after
+    # its halt marker (the last echoes of a loop still catching up after a
+    # relaunch) reaches sink's log only if sink takes it before its stop
+    # signal, and the rest would arrive on a resume, which this test does
+    # not run.
     time.sleep(1.0)
 
     stop_snapshots.set()
     snapshots.join(timeout=5)
 
-    _halt_and_wait_for_finished(outdir, timeout=60)
-
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
     context = f" (killed {target}, pid {old_pid} -> {new_pid}, at +{kill_delay:.2f}s)"
-    _assert_trace_matches(tailer.records, k, context)
+    _halt_and_check_trace(outdir, tailer, node_outs, {target}, k, context)
 
 
 @pytest.mark.parametrize("run_index", range(10))
@@ -595,9 +697,10 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     nodes with no direct channel between them: fanin is the other endpoint
     of every channel that touches either one, so this still cannot touch
     the Contract's "both endpoints of a channel crashed" limit, the same
-    reasoning as the single-node-kill driver above. No G8-error exception
-    is expected here either; every run's trace must match the criterion
-    exactly.
+    reasoning as the single-node-kill driver above. As there, a kill that
+    lands between a read and its logging ends the run with a G8 error
+    instead (see _halt_and_check_trace); every other run's trace must
+    match the criterion exactly.
     """
     k = 60
     interval = 0.03
@@ -605,6 +708,7 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     _launch(outdir)
     tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
+    node_outs = _start_sched_out_tailers(outdir)
 
     ext_fifo = _find_fifo(outdir, "fanin_ext")
     manual_fifo = _find_fifo(outdir, "sup_manual")
@@ -634,24 +738,18 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     if feeder.error is not None:
         raise feeder.error
 
-    # Same deliberate grace period as the single-node-kill driver above,
-    # and for the same reason: the separate, already-recorded ordered-
-    # shutdown G2 gap, not what this test is about.
+    # Same grace period as the single-node-kill driver above, for the same
+    # reason.
     time.sleep(1.0)
 
     stop_snapshots.set()
     snapshots.join(timeout=5)
 
-    _halt_and_wait_for_finished(outdir, timeout=60)
-
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
     context = " (" + ", ".join(
         f"killed {name} pid {old_pids[name]} -> {new_pids[name]} at +{delay:.2f}s"
         for name, delay in kills
     ) + ")"
-    _assert_trace_matches(tailer.records, k, context)
+    _halt_and_check_trace(outdir, tailer, node_outs, set(old_pids), k, context)
 
 
 @pytest.mark.parametrize("run_index", range(5))
@@ -839,10 +937,11 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     construction, already fully drained: no backlog was ever behind it.
 
     So this piece uses independent random timing instead, the same style
-    as the loop+sink piece: every repeat's trace must still match the
-    criterion exactly, with no G8 exception expected, because the
-    topology itself rules the limit out here, not because timing happened
-    to avoid it.
+    as the loop+sink piece: no run can end in the "both endpoints"
+    exception, because the topology itself rules that limit out here, not
+    because timing happened to avoid it. A kill between a read and its
+    logging still ends a run with a G8 error, as in the pieces above (see
+    _halt_and_check_trace).
     """
     k = 60
     interval = 0.03
@@ -850,6 +949,7 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     _launch(outdir)
     tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
+    node_outs = _start_sched_out_tailers(outdir)
 
     ext_fifo = _find_fifo(outdir, "fanin_ext")
     manual_fifo = _find_fifo(outdir, "sup_manual")
@@ -896,21 +996,15 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     if feeder.error is not None:
         raise feeder.error
 
-    # Same deliberate grace period as the other kill/relaunch pieces
-    # above, and for the same reason: the separate, already-recorded
-    # ordered-shutdown G2 gap, not what this test is about.
+    # Same grace period as the other kill/relaunch pieces above, for the
+    # same reason.
     time.sleep(1.0)
 
-    _halt_and_wait_for_finished(outdir, timeout=60)
-
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
     context = " (" + ", ".join(
         f"killed {name} pid {old_pids[name]} -> {new_pids[name]} at +{delay:.2f}s"
         for name, delay in kills
     ) + ")"
-    _assert_trace_matches(tailer.records, k, context)
+    _halt_and_check_trace(outdir, tailer, node_outs, set(old_pids), k, context)
 
 
 @pytest.mark.parametrize("run_index", range(10))
@@ -934,14 +1028,13 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     killed at its own randomly chosen moment inside that window, then
     `loop` is resumed.
 
-    Confirmed separately, with a real `debasher_exec` run (see the design
-    doc's Conformance status and Loose ends), that this exact case, a
-    crash during an ordinary (non-halt) round, recovers cleanly: `fanin`
-    simply forgets the open round on relaunch and a later marker reopens
-    it. A crash during a HALT round instead hangs the whole program
-    forever (a real, different, already-recorded gap this piece
-    deliberately does not exercise, since there is no clean pass
-    criterion for a run that is expected to hang).
+    A crash during an ordinary (non-halt) round recovers cleanly: `fanin`
+    forgets the open round on relaunch and a later marker reopens it (see
+    "A crash while a round is open" in the Contract's limits). A crash
+    during a halt round is a different case, which this piece does not
+    exercise. As in the pieces above, a kill that lands between a read and
+    its logging ends the run with a G8 error instead (see
+    _halt_and_check_trace).
     """
     k = 60
     interval = 0.03
@@ -949,6 +1042,7 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     _launch(outdir)
     tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
+    node_outs = _start_sched_out_tailers(outdir)
 
     ext_fifo = _find_fifo(outdir, "fanin_ext")
     manual_fifo = _find_fifo(outdir, "sup_manual")
@@ -984,21 +1078,15 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     if feeder.error is not None:
         raise feeder.error
 
-    # Same deliberate grace period as the other kill/relaunch pieces
-    # above, and for the same reason: the separate, already-recorded
-    # ordered-shutdown G2 gap, not what this test is about.
+    # Same grace period as the other kill/relaunch pieces above, for the
+    # same reason.
     time.sleep(1.0)
 
-    _halt_and_wait_for_finished(outdir, timeout=60)
-
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
     context = (
         f" (killed fanin pid {fanin_old_pid} -> {fanin_new_pid}, "
         f"{open_round_delay:.2f}s into its open round)"
     )
-    _assert_trace_matches(tailer.records, k, context)
+    _halt_and_check_trace(outdir, tailer, node_outs, {"fanin"}, k, context)
 
 
 def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdir):
