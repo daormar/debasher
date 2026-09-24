@@ -358,6 +358,9 @@ Dynamic Fanout Example Using FIFOs and Generators
         local task_idx=$5
         local optlist=""
 
+        # -w option
+        define_cmdline_opt "$cmdline" "-w" optlist || return 1
+
         # -id option
         define_opt "-id" "${task_idx}" optlist || return 1
 
