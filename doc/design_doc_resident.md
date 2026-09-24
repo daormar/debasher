@@ -1015,12 +1015,15 @@ also set them for one of its processes, over what the class says, in the
 computational specifications that it gives to `add_debasher_process`, next to
 `cpus`, `mem` and `time`:
 
-| Specification            | Attribute                  | Default | Explained in                                                               |
-|--------------------------|----------------------------|---------|----------------------------------------------------------------------------|
-| `input_log_max_mb`       | `INPUT_LOG_MAX_BYTES`      | 100 MiB | "Pruning and the size cap"                                                 |
-| `out_backlog_max_mb`     | `OUT_BACKLOG_MAX_BYTES`    | 8 MiB   | "Checkpoint persistence"                                                   |
-| `out_backlog_fail_mb`    | `OUT_BACKLOG_FAIL_BYTES`   | 64 MiB  | "Checkpoint persistence"                                                   |
-| `gil_switch_interval_ms` | `GIL_SWITCH_INTERVAL_SECS` | 0.5 ms  | "Messages read from a FIFO but not yet written to the input log" (Contract) |
+- `input_log_max_mb` sets `INPUT_LOG_MAX_BYTES`, 100 MiB by default (see
+  "Pruning and the size cap").
+- `out_backlog_max_mb` sets `OUT_BACKLOG_MAX_BYTES`, 8 MiB by default (see
+  "Checkpoint persistence").
+- `out_backlog_fail_mb` sets `OUT_BACKLOG_FAIL_BYTES`, 64 MiB by default (see
+  "Checkpoint persistence").
+- `gil_switch_interval_ms` sets `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms by default
+  (see "Messages read from a FIFO but not yet written to the input log" in the
+  Contract's limits).
 
 For example, `add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00;
 out_backlog_fail_mb=128"`. Sizes are in MiB and the interval in milliseconds,
