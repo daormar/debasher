@@ -41,8 +41,11 @@ def outdir(tmp_path):
     )
 
 
-def launch(pfile, outdir):
-    """Runs debasher_exec on the module `pfile`, into `outdir`."""
+def launch(pfile, outdir, *program_opts):
+    """
+    Runs debasher_exec on the module `pfile`, into `outdir`, with the
+    options of the program `program_opts` (e.g. "-w", "4").
+    """
     assert DEBASHER_EXEC.exists(), "bin/debasher_exec not built: run make install first"
     log_path = os.path.join(os.path.dirname(outdir), "exec.log")
     # A resident program's processes are launched in the background and
@@ -51,7 +54,7 @@ def launch(pfile, outdir):
     # make subprocess.run wait for those too, not just for debasher_exec.
     with open(log_path, "w") as log_file:
         result = subprocess.run(
-            [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", outdir],
+            [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", outdir, *program_opts],
             stdout=log_file,
             stderr=subprocess.STDOUT,
         )

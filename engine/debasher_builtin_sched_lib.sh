@@ -1143,9 +1143,10 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # generated script carries the specification of every process, so a
     # relaunch gets them too.
     export DEBASHER_PROCESS_COMP_SPECS=$(debasher::_get_process_comp_specs "${processname}")
-    # The ports of the task, for a node of a resident program, which takes
-    # them from here instead of declaring them in its class (see
-    # debasher::_register_resident_task_ports); empty for any other process
+    # The ports of the task, for a node or the Supervisor of a resident
+    # program, which takes them from here instead of declaring them in its
+    # class (see debasher::_register_resident_task_ports); empty for any
+    # other process
     export DEBASHER_PROCESS_PORTS="${DEBASHER_RESIDENT_TASK_PORTS[${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}]:-}"
     "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${stdout_filename}"
 

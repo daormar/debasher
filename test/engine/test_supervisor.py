@@ -91,6 +91,47 @@ def test_rejects_a_missing_declared_port():
         _Sup(opts={"hb_a": "/tmp/hb_a"})
 
 
+# --- ports from the engine ----------------------------------------------
+
+_ENGINE_PORTS = "nodes=start=hb_start,worker:0=hb_w0,worker:1=hb_w1;trigger=trig;manual_trigger=manual"
+_ENGINE_OPTS = {port: "/dev/null" for port in ("hb_start", "hb_w0", "hb_w1", "trig", "manual")}
+
+
+class _UndeclaredSup(lib.Supervisor):
+    HEARTBEAT_TIMEOUT_SECS = 3
+
+
+def test_a_supervisor_run_by_the_engine_takes_its_ports_from_it(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", _ENGINE_PORTS)
+    proc = _UndeclaredSup(opts=_ENGINE_OPTS)
+    assert proc.NODE_PORTS == {"start": "hb_start", ("worker", 0): "hb_w0", ("worker", 1): "hb_w1"}
+    assert proc.TRIGGER_PORT == ["trig"]
+    assert proc.MANUAL_TRIGGER_PORT == "manual"
+    assert set(proc._last_heartbeat) == {"start", ("worker", 0), ("worker", 1)}
+    # The class itself is left as it was.
+    assert _UndeclaredSup.NODE_PORTS == {} and _UndeclaredSup.MANUAL_TRIGGER_PORT is None
+
+
+def test_empty_fields_from_the_engine_give_a_supervisor_no_trigger(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "nodes=a=hb_a;trigger=;manual_trigger=")
+    proc = _UndeclaredSup(opts={"hb_a": "/dev/null"})
+    assert proc.NODE_PORTS == {"a": "hb_a"}
+    assert proc.TRIGGER_PORT == []
+    assert proc.MANUAL_TRIGGER_PORT is None
+
+
+def test_a_supervisor_that_declares_ports_is_refused_when_the_engine_gives_them(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", _ENGINE_PORTS)
+    with pytest.raises(ValueError, match="must not declare them: remove NODE_PORTS"):
+        _Sup(opts=_ENGINE_OPTS)
+
+
+def test_a_node_field_in_the_ports_of_a_supervisor_is_refused(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "input=inf;output=outf")
+    with pytest.raises(ValueError, match="unknown field 'input'"):
+        _UndeclaredSup(opts={"inf": "/dev/null"})
+
+
 # --- heartbeat / checkpoint_saved / unrecognized command dispatch ------
 
 

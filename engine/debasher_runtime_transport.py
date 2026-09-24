@@ -168,7 +168,15 @@ class _PortWorker:
     # (DEBASHER_RESIDENT_COMP_SPEC_NAMES).
     _COMP_SPEC_ATTRS = {}
 
+    # The field of DEBASHER_PROCESS_PORTS that gives each class attribute of
+    # a subclass that names ports (see _take_ports_from_engine). Each
+    # subclass lists its own.
+    _PORT_FIELDS = {}
+
     def __init__(self, argv=None, opts=None):
+        # Before anything reads the ports: the checks below, and the queue
+        # built for each output port
+        self._take_ports_from_engine(os.environ.get("DEBASHER_PROCESS_PORTS", ""))
         if opts is not None:
             # Direct injection, mainly for tests: skips argv parsing
             # entirely, so a test doesn't need to build a realistic
@@ -229,6 +237,53 @@ class _PortWorker:
                 )
             scaled = number * factor
             setattr(self, attribute, int(scaled) if attribute.endswith("_BYTES") else scaled)
+
+    def _take_ports_from_engine(self, ports):
+        """
+        Sets the ports of this process, on this instance, from what the
+        engine exports to it as DEBASHER_PROCESS_PORTS: fields `name=value`
+        separated by ";" (see _PORT_FIELDS), each value a list separated by
+        ",", which _port_field_value turns into the value of the attribute.
+        Empty when the engine does not run the process: the class attributes
+        are then its ports. When the engine gives them, the class must not
+        declare any, so that the options of the module are the only place
+        that says what the ports of a process are.
+        """
+        if not ports:
+            return
+        mro = type(self).__mro__
+        # The class that lists the fields, FBPProcess or Supervisor: its own
+        # attributes are the defaults, those of its subclasses a declaration
+        base = next(cls for cls in reversed(mro) if vars(cls).get("_PORT_FIELDS"))
+        subclasses = mro[: mro.index(base)]
+        declared = [
+            attribute
+            for attribute in self._PORT_FIELDS.values()
+            if any(attribute in vars(cls) for cls in subclasses)
+        ]
+        if declared:
+            raise ValueError(
+                f"{type(self).__name__}: the engine gives this process its ports, from "
+                f"the options of its module, so the class must not declare them: remove "
+                f"{', '.join(declared)}"
+            )
+        for field in ports.split(";"):
+            name, _, value = field.partition("=")
+            attribute = self._PORT_FIELDS.get(name)
+            if attribute is None:
+                raise ValueError(
+                    f"{type(self).__name__}: unknown field {name!r} in the ports that the "
+                    f"engine gave: {ports!r}"
+                )
+            items = [item for item in value.split(",") if item]
+            setattr(self, attribute, self._port_field_value(attribute, items))
+
+    def _port_field_value(self, attribute, items):
+        """
+        The value of the class attribute `attribute` from the items of its
+        field in DEBASHER_PROCESS_PORTS (see _take_ports_from_engine).
+        """
+        raise NotImplementedError
 
     def _input_ports(self):
         raise NotImplementedError

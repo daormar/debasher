@@ -54,14 +54,18 @@ _MANUAL_TRIGGER_TAG = "manual trigger"
 
 class Supervisor(_PortWorker):
     """
-    A subclass declares NODE_PORTS = {node: option_name} (one entry per
+    Its ports are NODE_PORTS = {node: option_name} (one entry per
     supervised node's heartbeat channel), where node is either a string
     (the name of a non-array process) or a (process_name, task_idx)
-    tuple (one task of an array process), and optionally TRIGGER_PORT
-    (a list of output option names, one per initiator to send
-    start_snapshot/shutdown to) and MANUAL_TRIGGER_PORT (a single input
-    option name for an external manual trigger, relayed to every
-    TRIGGER_PORT entry with an epoch added to it, see _stamp_epoch).
+    tuple (one task of an array process), TRIGGER_PORT (a list of output
+    option names, one per initiator to send start_snapshot/shutdown to)
+    and MANUAL_TRIGGER_PORT (a single input option name for an external
+    manual trigger, relayed to every TRIGGER_PORT entry with an epoch
+    added to it, see _stamp_epoch). A Supervisor run by the engine takes
+    them from the options of its module (see
+    _PortWorker._take_ports_from_engine); one built without the engine,
+    as the unit tests build them, declares them in the class attributes
+    below.
     """
 
     NODE_PORTS = {}
@@ -76,8 +80,16 @@ class Supervisor(_PortWorker):
     MAX_RELAUNCH_ATTEMPTS = 3
     FORCE_STOP_TIMEOUT_SECS = 60
 
+    # The field of DEBASHER_PROCESS_PORTS that gives each of the class
+    # attributes above that name ports (see
+    # _PortWorker._take_ports_from_engine).
+    _PORT_FIELDS = {
+        "nodes": "NODE_PORTS",
+        "trigger": "TRIGGER_PORT",
+        "manual_trigger": "MANUAL_TRIGGER_PORT",
+    }
+
     def __init__(self, argv=None, opts=None):
-        self._check_node_names()
         super().__init__(argv, opts)
 
         self._lock = threading.Lock()
@@ -108,6 +120,31 @@ class Supervisor(_PortWorker):
         # unlike FBPProcess, nothing else here needs to tell "resolved
         # naturally" apart from "told to stop", so one event covers both.
         self._all_resolved = threading.Event()
+
+    def _port_field_value(self, attribute, items):
+        """
+        NODE_PORTS from items `<node>=<option>`, where a node is a process
+        name or, for a task of an array, `<process>:<idx>`; TRIGGER_PORT, a
+        list; MANUAL_TRIGGER_PORT, a single port or None (see
+        _PortWorker._take_ports_from_engine).
+        """
+        if attribute == "NODE_PORTS":
+            node_ports = {}
+            for item in items:
+                label, _, option_name = item.rpartition("=")
+                process_name, sep, task_idx = label.rpartition(":")
+                if sep and task_idx.isdigit():
+                    node_ports[(process_name, int(task_idx))] = option_name
+                else:
+                    node_ports[label] = option_name
+            return node_ports
+        if attribute == "MANUAL_TRIGGER_PORT":
+            return items[0] if items else None
+        return items
+
+    def _check_declared_ports(self):
+        self._check_node_names()
+        super()._check_declared_ports()
 
     def _check_node_names(self):
         for node in self.NODE_PORTS:

@@ -81,8 +81,9 @@ mutation check, durability level) is defined in the Contract, where it is used.
   without its leading dash. The engine gives each node run by it its input and
   output ports, taken from the options of its module (see "Ports from the
   engine"), in `INPUT_PORTS` and `OUTPUT_PORTS`; a node built without the
-  engine declares them in these class attributes. The `Supervisor` names its
-  input ports after the nodes it watches (`NODE_PORTS`).
+  engine declares them in these class attributes. The engine gives the
+  `Supervisor` its ports too, and the `Supervisor` names its input ports after
+  the nodes it watches (`NODE_PORTS`).
 - **channel** (canal): the one-way connection from an output port of one node to
   an input port of another, made of a FIFO (a named pipe created by the engine).
   A **self-loop** (bucle propio) joins two ports of the same node. A channel
@@ -1421,13 +1422,14 @@ node.)
 
 ## Port declaration and node identity
 
-- **`NODE_PORTS`**: a dict `{node_name: option_name}`, hardcoded in the heredoc
-  by the module author (the engine gives an `FBPProcess` its ports, see "Ports
-  from the engine", but not the `Supervisor`). A dict, and not a list of ports,
-  is needed here specifically because, unlike `FBPProcess`'s barrier logic,
-  which only ever needs "did this pending port's marker arrive yet, yes or
-  no", treating every input port interchangeably, `Supervisor`'s detection and
-  relaunch logic inherently act on a *specific node's identity*, not just
+- **`NODE_PORTS`**: a dict `{node_name: option_name}`, which the engine gives
+  the `Supervisor` from the options of its module, with its other ports (see
+  "Ports from the engine"); a `Supervisor` built without the engine, as the
+  unit tests build it, declares it in its class. A dict, and not a list of
+  ports, is needed here specifically because, unlike `FBPProcess`'s barrier
+  logic, which only ever needs "did this pending port's marker arrive yet, yes
+  or no", treating every input port interchangeably, `Supervisor`'s detection
+  and relaunch logic inherently act on a *specific node's identity*, not just
   "which port". The key is a label `Supervisor`'s own code uses internally
   (logs, detection, relaunch); the value is the option name resolved through
   `self.opts` (the same `-optname value` CLI convention) to the actual FIFO
@@ -1461,11 +1463,13 @@ node.)
 - **`TRIGGER_PORT` is a list of zero or more output option names**, not a single
   scalar, each wired to a different initiator node. This covers a `resident`
   program made of multiple genuinely independent subgraphs: a single initiator
-  can never reach a disjoint subgraph no matter what, so the module author names
-  one initiator per subgraph it actually needs to reach. `Supervisor` sends
+  can never reach a disjoint subgraph no matter what, so the module wires the
+  `Supervisor` to one initiator per subgraph it actually needs to reach, each
+  through a fifo that the `Supervisor` defines with the tag `--control`, and
+  the engine lists them (see "Ports from the engine"). `Supervisor` sends
   `start_snapshot`/`shutdown` to every configured initiator when triggered
-  (manually, or by `on_node_permanently_failed`, see below). Empty by default: a
-  `Supervisor` doing pure monitoring + relaunch, with no
+  (manually, or by `on_node_permanently_failed`, see below). Empty when there
+  is no such fifo: a `Supervisor` doing pure monitoring + relaunch, with no
   snapshot/shutdown-triggering capability at all, is a valid configuration.
 - An initiator that receives its triggers through a trigger port has the port
   on which it reads them in `CONTROL_PORTS`, since the `Supervisor` defines
@@ -1486,10 +1490,12 @@ node.)
 
 - **`MANUAL_TRIGGER_PORT`**: an optional single input option name, distinct from
   `NODE_PORTS` (carries no per-node identity, it is an external control channel,
-  not a supervised node's heartbeat). Any `INTERACT` envelope arriving there is
-  relayed to every configured `TRIGGER_PORT` initiator, with an epoch added to
-  its `args` when they carry none (see numbered trigger in the Glossary), so
-  that every initiator opens the same round; a command that starts no round
+  not a supervised node's heartbeat): the fifo that the `Supervisor` defines
+  with the tag `--control` and that is fed from outside the program, at most
+  one. Any `INTERACT` envelope arriving there is relayed to every configured
+  `TRIGGER_PORT` initiator, with an epoch added to its `args` when they carry
+  none (see numbered trigger in the Glossary), so that every initiator opens
+  the same round; a command that starts no round
   never reads it. `Supervisor` does not validate or interpret `command`,
   matching the deliberately open-ended `INTERACT` catalog convention used
   everywhere else in this design (see "Control envelope"). Whatever ends up
@@ -1931,8 +1937,9 @@ by rule 1, since `b` cannot be reached.
 ## Ports from the engine
 
 Once the program is loaded and its channels are checked, the engine gives
-each task of an `FBPProcess` its ports, taken from the same registries and
-tags (`debasher::_register_resident_task_ports`):
+each task of an `FBPProcess`, and the `Supervisor`, its ports, taken from the
+same registries and tags (`debasher::_register_resident_task_ports`). For a
+node:
 
 - The owner of a fifo has an output port on the option through which it
   defines it, or, for a tagged fifo fed from outside, an input port, which is
@@ -1944,6 +1951,26 @@ tags (`debasher::_register_resident_task_ports`):
   `SUPERVISOR_PORT`. A node with more than one is refused when the program is
   loaded, since a node has a single heartbeat channel.
 
+For the `Supervisor`, the same fifos seen from its end:
+
+- A fifo without a tag that a node defines and the `Supervisor` reads is the
+  heartbeat channel of that node: an entry of `NODE_PORTS`, the node as its
+  key and the option through which the `Supervisor` reads it as its value.
+- A fifo that the `Supervisor` defines with the tag `--control` and a node
+  reads is a trigger port, an entry of `TRIGGER_PORT`.
+- A fifo that the `Supervisor` defines with the tag `--control` and that is
+  fed from outside the program is its `MANUAL_TRIGGER_PORT`. A `Supervisor`
+  with more than one is refused when the program is loaded.
+- Any other fifo that the `Supervisor` defines is refused when the program is
+  loaded: the `Supervisor` takes no part in the business channels.
+
+So the heartbeat channels need no tag of their own: the role of the process
+at each end, which the engine already knows, says which fifo is which. With
+the options of the module as the only place that says what the ports are, a
+program whose number of nodes comes from the command line (see "Fan-out and
+fan-in sized from the command line" in Extensions) has a `Supervisor` that
+watches as many nodes as there are, with no code that depends on it.
+
 The generated script of each process carries the ports of every task
 (`DEBASHER_RESIDENT_TASK_PORTS`), so that a relaunch gets them too, and the
 wrapper of a task exports its own as `DEBASHER_PROCESS_PORTS`. For `fanin`, in
@@ -1953,19 +1980,23 @@ the chaos reference program:
 input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb
 ```
 
-`FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
-`EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, before
-anything uses them (`_take_ports_from_engine`). The options of the module are
-then the only place that says what the ports of a node are: a class that
-declares any of the five, even with the same value, stops the node with an
-error. A node built without the engine, as the unit tests build them, gets no
-such variable and takes its ports from the attributes of its class. The order
-of a list means nothing, in the variable or in the class: every use of a port
-list is port by port.
+and for its `Supervisor`, `sup`, where a task of an array would be named
+`<process>:<idx>`, as `debasher_stop_resident -x` names it:
 
-The `Supervisor` keeps declaring `NODE_PORTS`, `TRIGGER_PORT` and
-`MANUAL_TRIGGER_PORT`: telling which fifo is the heartbeat channel of which
-node would need a tag of its own.
+```
+nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual
+```
+
+`FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
+`EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, and the
+`Supervisor` `NODE_PORTS`, `TRIGGER_PORT` and `MANUAL_TRIGGER_PORT`, before
+anything uses them (`_take_ports_from_engine`). The options of the module are
+then the only place that says what the ports of a process are: a class that
+declares any of them, even with the same value, stops the process with an
+error. A process built without the engine, as the unit tests build them, gets
+no such variable and takes its ports from the attributes of its class. The
+order of a list means nothing, in the variable or in the class: every use of
+a port list is port by port.
 
 ## What the fifo tags leave out
 
@@ -2294,10 +2325,9 @@ None at present.
 
 Design ideas from Future work move here once they are actually built.
 
-- **Array processes** (from "Fan-out and fan-in sized from the command line" in
-  Future work). A process that is an array of tasks, whether its options are
-  written in a loop or produced by an option generator, takes part in a
-  resident program with each task as a node of its own,
+- **Array processes.** A process that is an array of tasks, whether its
+  options are written in a loop or produced by an option generator, takes
+  part in a resident program with each task as a node of its own,
   `(process_name, task_idx)`:
   - Files. The tasks share the process's directory, as they already share the
     engine's own per-task files (`<process_name>_<idx>.id`, `.sched_out`, ...),
@@ -2308,9 +2338,10 @@ Design ideas from Future work move here once they are actually built.
     fifo of one task, as for any other process; a generator gives each task a
     fifo of its own with `define_fifo_opt_generator`. The engine creates every
     fifo before launching, so a task's channels are like those of any node.
-  - Supervision. A `Supervisor` names a task in `NODE_PORTS` as
-    `(process_name, task_idx)` and finds and relaunches it through its own
-    `.id` and `.finished` (see "Port declaration and node identity").
+  - Supervision. The engine names a task in the `NODE_PORTS` of the
+    `Supervisor` as `(process_name, task_idx)`, and the `Supervisor` finds and
+    relaunches it through its own `.id` and `.finished` (see "Port declaration
+    and node identity").
   - Stopping. `debasher_stop_resident` stops each task as a node of its own,
     and `-x` can leave one task alone (see "`debasher_stop_resident`: the
     graceful stop tool").
@@ -2320,6 +2351,42 @@ Design ideas from Future work move here once they are actually built.
   `Supervisor`. `test/engine/debasher_array_gen_ref.sh` is the same program with
   the tasks produced by an option generator: only the number of tasks matters
   to the rest of the engine.
+- **Fan-out and fan-in sized from the command line (the `ith` convention of
+  general programs).** A node can have as many input or output ports as an
+  option of the command line says, written as in a general program
+  (`data/programs/debasher_dynamic_fanout_fifos.sh`): a process documents the
+  family once, as `-outfith`, and defines `-outf0` to `-outf<w-1>` in a loop
+  over its `-w` option; an array process of `w` tasks takes one each (see
+  "Array processes" above), and a fan-in node defines `-ind0` to `-ind<w-1>`
+  from the tasks. The engine's check of option names recognizes the family
+  (`debasher::_actual_opt_is_ith_instance`). The topology stays fixed and is
+  known before the run starts: every process and every connection is defined
+  up front, and only how many there are comes from the option, unlike
+  "Dynamic process launching" in Future work. Nothing in the engine is
+  specific to it:
+  - Ports. Each node gets the ports of the family from its options, and the
+    `Supervisor` a heartbeat channel for each task that has one, so that it
+    watches as many nodes as `-w` says (see "Ports from the engine").
+  - The barrier, `CLOSE` and the input log loop over the declared lists of
+    ports: a fan-in node is the case of several pending ports, and a fan-out
+    node forwards the marker on every output port.
+  - Routing is part of `process_data`, and it has to be deterministic: a
+    function of the packet, or of a counter kept in the node state. A choice
+    by the load of the tasks would make a replay send a message to another
+    task than the first time, and the numbers of that channel would label
+    different messages.
+  - The engine does not check that a node restored from a checkpoint has the
+    ports it had when it saved it, while `closed_ports` and the sequence
+    numbers of G5 in the checkpoint are keyed by port name. A relaunch runs
+    the same generated script, so it gets the same `-w`; a run with another
+    `-w` has to start from clean checkpoints (see "Auxiliary script to reset
+    checkpoints across a whole topology" in Future work).
+
+  `test/engine/debasher_fanout_cmdline_ref.sh` is the reference: `start`
+  sends each message from outside to the next of the `-w` tasks of `worker`,
+  with a counter in its node state, the tasks forward it to `collect`, and a
+  `Supervisor` that declares no port watches every node and relaunches a task
+  of the array like any other node.
 
 # Future work
 
@@ -2337,46 +2404,6 @@ Design ideas from Future work move here once they are actually built.
   mechanism could be entirely different. Noted here so it is not forgotten and
   can be tackled later, so that `resident` programs have as much expressiveness
   as possible.
-- **Fan-out and fan-in sized from the command line (the `ith` convention of
-  general programs).** General programs can already write a process whose number
-  of connections comes from an option of the command line, and
-  `data/programs/debasher_dynamic_fanout_fifos.sh` is the reference for the fifo
-  version. `dispatch` documents its output family once, as `-outfith`, and
-  defines `-outf0` to `-outf<w-1>` in a loop over its `-w` option (fan-out).
-  `worker` is an array process of `w` tasks, and task `i` reads `-outf<i>` of
-  `dispatch`. `aggregate` documents `-indith` and defines `-ind0` to `-ind<w-1>`
-  from the tasks of `worker` (fan-in). The engine's check of option names
-  recognizes the family (`debasher::_actual_opt_is_ith_instance`), and the API
-  and the frontend model it (`countSourceOptionId`, `_is_fanout_label`,
-  `isFanoutOption`). The goal is that a resident node can have as many input or
-  output ports as a command-line option says (`-w`, for example), written the
-  same way. The topology stays fixed and is known before the run starts: every
-  process and every connection is defined up front, and the engine schedules
-  them as in any other program. Only how many there are comes from the option.
-  That is what sets it apart from the item above, where processes are launched
-  while the program is running. What follows is reasoned from the code, nothing
-  of it is built or tried:
-  - Ports. The engine gives each task its ports from its options (see "Ports
-    from the engine"), so a node with a family gets `-outf0` to `-outf<w-1>`
-    as output ports with no code of its own. The names must be the same in
-    every incarnation, because `closed_ports` and the sequence numbers of G5
-    in the checkpoint are keyed by port name: a relaunch that finds another
-    set of ports should fail loudly.
-  - The barrier, `CLOSE` and the input log do not depend on how many ports there
-    are, since they already loop over the declared lists: a fan-in node is the
-    case of several pending ports that the tests cover, and a fan-out node
-    already forwards the marker on every output port.
-  - Routing is part of `process_data`. Which output port a fan-out node picks
-    for a packet has to be deterministic (a function of the packet, or of a
-    counter kept in the node state), or a replay would send a message to another
-    worker than the first time and the numbers of that channel would label
-    different messages. The dispatcher of the general example does it that way
-    (the block index modulo `w`, in `dynamic_fanout_dispatcher.py`); a choice by
-    worker load would break the guarantees.
-  - Array processes. The `w` workers are `w` nodes, `(process_name, task_idx)`,
-    which a resident program already supports (see "Array processes" in
-    Extensions). Not known: how a real run would cover a `Supervisor` that
-    relaunches one task of an array.
 - **Auxiliary script to reset checkpoints across a whole topology**: deleting
   (or moving) every node's checkpoint folder before launching forces a clean
   start with no special-case code needed anywhere (the Startup sequence
@@ -2650,12 +2677,17 @@ Design ideas from Future work move here once they are actually built.
   - the limits of a node in the computational specifications (see "Limits of
     a node"): the model knows only `cpus`, `mem` and `time`, so a round trip
     through the editor drops them;
-  - editing a node's class, showing its ports (which the engine takes from its
-    options and their tags, see "Ports from the engine"), and wiring the
-    heartbeat channels and the trigger ports of a `Supervisor` (`NODE_PORTS`,
-    `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT`);
+  - editing a node's class, showing its ports, and wiring the heartbeat
+    channels and the trigger ports of a `Supervisor`, which are fifos like any
+    other: the engine takes the ports of every process from its options and
+    their tags (see "Ports from the engine");
   - array processes, whose tasks are nodes of their own (see "Array processes"
-    in Extensions);
+    in Extensions), and fan-outs and fan-ins sized from the command line (see
+    "Fan-out and fan-in sized from the command line" in Extensions): the loops
+    of `define_opts` over an option such as `-w`, which the frontend already
+    writes for a general program (`countSourceOptionId`, `_is_fanout_label`,
+    `isFanoutOption`), and a template of `process_data` for a fan-out node
+    whose routing is deterministic;
   - the "Watch FIFO" action, whose `--mirror` a resident program refuses (see
     the Contract's limits);
   - starting a snapshot or a halt, and stopping the program with

@@ -248,9 +248,6 @@ from debasher_runtime_lib import Supervisor
 
 
 class Sup(Supervisor):
-    NODE_PORTS = {"fanin": "hb_fanin", "loop": "hb_loop", "sink": "hb_sink"}
-    TRIGGER_PORT = ["outtrig_fanin"]
-    MANUAL_TRIGGER_PORT = "manual"
     HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
     # Comfortably above HEARTBEAT_INTERVAL_SECONDS (0.2s on every node),
     # not equal to it: a relaunched node's heartbeat thread only sends

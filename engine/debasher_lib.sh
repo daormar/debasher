@@ -508,8 +508,9 @@ declare -A DEBASHER_FIFO_USER_OPTS
 declare -A DEBASHER_RESIDENT_PROCESS_ROLES
 
 # Declare associative array with the ports of each task of the FBPProcess
-# nodes of a resident program (by <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>),
-# which the wrapper of the task exports to it as DEBASHER_PROCESS_PORTS (see
+# nodes and of the Supervisor of a resident program (by
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>), which the wrapper of the
+# task exports to it as DEBASHER_PROCESS_PORTS (see
 # debasher::_register_resident_task_ports)
 declare -A DEBASHER_RESIDENT_TASK_PORTS
 

@@ -608,7 +608,7 @@ add_fifo() {
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of fanin)]}" = "input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of loop)]}" = "input=from_fanin;output=outfanin,outhb;control=;external=;supervisor=outhb" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sink)]}" = "input=from_fanin;output=outhb;control=;external=;supervisor=outhb" ]
-    [ -z "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]+x}" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual" ]
 }
 
 @test "debasher::_register_resident_task_ports gives each task of an array its own ports, and a node with none an entry" {
@@ -627,6 +627,43 @@ add_fifo() {
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of worker 0)]}" = "input=inf,peer;output=outf;control=;external=;supervisor=" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of worker 1)]}" = "input=inf;output=outg;control=;external=;supervisor=" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of idle)]}" = "input=;output=;control=;external=;supervisor=" ]
+}
+
+@test "debasher::_register_resident_task_ports names a task of an array in the Supervisor's ports by its index" {
+    set_up_registries
+    add_process start fbpprocess
+    add_process worker fbpprocess 2
+    add_process sup supervisor
+    add_fifo sup/sup_trig "$(end_of sup)" "$(end_of start)" control -outtrig -trigger
+    add_fifo start/start_hb "$(end_of start)" "$(end_of sup)" "" -outhb -hb_start
+    add_fifo worker/worker_hb_0 "$(end_of worker 0)" "$(end_of sup)" "" -outhb -hb_worker0
+    add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
+
+    debasher::_register_resident_task_ports
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=" ]
+}
+
+@test "debasher::_register_resident_task_ports refuses a Supervisor with two manual triggers" {
+    set_up_registries
+    add_process a fbpprocess
+    add_process sup supervisor
+    add_fifo sup/sup_manual "$(end_of sup)" outside control -manual
+    add_fifo sup/sup_manual2 "$(end_of sup)" outside control -manual2
+
+    run debasher::_register_resident_task_ports
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the Supervisor sup has more than one manual trigger fed from outside the program (manual,manual2)"* ]]
+}
+
+@test "debasher::_register_resident_task_ports refuses a fifo of the Supervisor that is not a trigger" {
+    set_up_registries
+    add_process a fbpprocess
+    add_process sup supervisor
+    add_fifo sup/sup_to_a "$(end_of sup)" "$(end_of a)" "" -outa -in
+
+    run debasher::_register_resident_task_ports
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the Supervisor sup defines fifo sup/sup_to_a, but the only fifos a Supervisor defines are its triggers to nodes and its manual trigger fed from outside the program, both tagged --control"* ]]
 }
 
 @test "debasher::_register_resident_task_ports refuses a node with two outputs read by the Supervisor" {

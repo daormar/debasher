@@ -668,21 +668,30 @@ debasher::_sorted_comma_list()
 
 ########
 # Fills DEBASHER_RESIDENT_TASK_PORTS with the ports of every task of every
-# FBPProcess of a resident program, taken from the fifo registries and tags
-# (see the design doc's "Ports from the engine"): which of its options are
-# input, output, control and external ports, and which output port goes to
-# the Supervisor. A port is the name of the option without its leading
-# dashes, as the node's own options name it. The wrapper of each task
-# exports its entry as DEBASHER_PROCESS_PORTS, of the form
+# FBPProcess of a resident program, and of the Supervisor, taken from the
+# fifo registries and tags (see the design doc's "Ports from the engine"). A
+# port is the name of the option without its leading dashes, as the
+# process's own options name it. The wrapper of each task exports its entry
+# as DEBASHER_PROCESS_PORTS. For a node, which of its options are input,
+# output, control and external ports, and which output port goes to the
+# Supervisor:
 #
 #   input=<ports>;output=<ports>;control=<ports>;external=<ports>;supervisor=<port>
+#
+# For the Supervisor, the heartbeat channel of each node, as <node>=<port>
+# with the node named as debasher::_resident_node_display_name names it,
+# the output ports to the initiators it triggers, and the input port of a
+# manual trigger fed from outside:
+#
+#   nodes=<node>=<port>,...;trigger=<ports>;manual_trigger=<port>
 #
 # each list sorted and separated by commas, and possibly empty. A no-op when
 # the program is not resident. Needs the checks of
 # debasher::_validate_resident_channels to have passed, and
 # DEBASHER_RESIDENT_PROCESS_ROLES. Returns 1, with an error, if a task has
-# more than one output port read by the Supervisor: a node has a single
-# heartbeat channel.
+# more than one output port read by the Supervisor (a node has a single
+# heartbeat channel), if the Supervisor has more than one manual trigger, or
+# if it defines a fifo that is neither.
 debasher::_register_resident_task_ports()
 {
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
@@ -700,7 +709,7 @@ debasher::_register_resident_task_ports()
         ports["$1${sep}$2"]+=" ${port#-}"
     }
 
-    local augm_fifoname owner user kind owner_opt user_opt
+    local augm_fifoname owner user kind owner_opt user_opt hb_port
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
         owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
         user="${DEBASHER_FIFO_USERS[${augm_fifoname}]}"
@@ -731,6 +740,26 @@ debasher::_register_resident_task_ports()
                 debasher::_add_resident_task_port "${user}" control "${user_opt}"
             fi
         fi
+
+        # The Supervisor's end. It reads the heartbeat channel of a node, the
+        # one fifo without a tag that a node writes to it (the checks above
+        # refuse a tagged one). It defines a trigger to a node, tagged
+        # --control, or its manual trigger, tagged --control and fed from
+        # outside, and nothing else.
+        if [ "$(debasher::_resident_node_role "${user}")" = "supervisor" ]; then
+            hb_port="${user_opt#-}"
+            debasher::_add_resident_task_port "${user}" nodes "$(debasher::_resident_node_display_name "${owner}")=${hb_port#-}"
+        fi
+        if [ "$(debasher::_resident_node_role "${owner}")" = "supervisor" ]; then
+            if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ] && [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                debasher::_add_resident_task_port "${owner}" manual_trigger "${owner_opt}"
+            elif [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
+                debasher::_add_resident_task_port "${owner}" trigger "${owner_opt}"
+            else
+                echo "Error: the Supervisor ${owner%%${sep}*} defines fifo ${augm_fifoname}, but the only fifos a Supervisor defines are its triggers to nodes and its manual trigger fed from outside the program, both tagged --control" >&2
+                return 1
+            fi
+        fi
     done
 
     # One entry for every task, also for one with no port at all, so that
@@ -746,6 +775,25 @@ debasher::_register_resident_task_ports()
                 list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
                 if [ "${field}" = "supervisor" ] && [[ "${list}" == *,* ]]; then
                     echo "Error: node $(debasher::_resident_node_display_name "${node}") has more than one output read by the Supervisor (${list}), but a node has a single heartbeat channel" >&2
+                    return 1
+                fi
+                entry+=";${field}=${list}"
+            done
+            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry#;}"
+        done
+    done
+
+    # The same for the Supervisor, if there is one
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "supervisor" ] || continue
+        num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        for (( idx = 0; idx < num_tasks; idx++ )); do
+            node="${processname}${sep}${idx}"
+            entry=""
+            for field in nodes trigger manual_trigger; do
+                list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
+                if [ "${field}" = "manual_trigger" ] && [[ "${list}" == *,* ]]; then
+                    echo "Error: the Supervisor ${processname} has more than one manual trigger fed from outside the program (${list})" >&2
                     return 1
                 fi
                 entry+=";${field}=${list}"
