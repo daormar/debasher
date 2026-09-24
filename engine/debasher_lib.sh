@@ -497,10 +497,21 @@ DEBASHER_FIFO_KIND_EXTERNAL="external"
 # owner writes it, an input option if it reads it
 declare -A DEBASHER_FIFO_OWNER_OPTS
 
+# Declare associative array with the option through which the process at the
+# other end of each fifo (by augmented name) uses it, when that process is
+# part of the program: an input option, since it reads the fifo
+declare -A DEBASHER_FIFO_USER_OPTS
+
 # Declare associative array with the role of each process of a resident
 # program, "supervisor" or "fbpprocess" (see
 # debasher::_validate_resident_program_processes)
 declare -A DEBASHER_RESIDENT_PROCESS_ROLES
+
+# Declare associative array with the ports of each task of the FBPProcess
+# nodes of a resident program (by <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>),
+# which the wrapper of the task exports to it as DEBASHER_PROCESS_PORTS (see
+# debasher::_register_resident_task_ports)
+declare -A DEBASHER_RESIDENT_TASK_PORTS
 
 # Declare general scheduler-related variables
 declare DEBASHER_SCHEDULER

@@ -52,10 +52,6 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Start(FBPProcess):
-    INPUT_PORTS = ["trigger"]
-    CONTROL_PORTS = ["trigger"]
-    OUTPUT_PORTS = ["outf0", "outf1", "outf2"]
-
     def process_data(self, port_name, packet):
         pass
 
@@ -116,9 +112,6 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Worker(FBPProcess):
-    INPUT_PORTS = ["inf"]
-    OUTPUT_PORTS = ["outf"]
-
     def process_data(self, port_name, packet):
         pass
 
@@ -169,8 +162,6 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Collect(FBPProcess):
-    INPUT_PORTS = ["ind0", "ind1", "ind2"]
-
     def process_data(self, port_name, packet):
         pass
 

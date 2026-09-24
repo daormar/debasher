@@ -63,6 +63,87 @@ def test_fbpprocess_parses_real_argv_when_opts_is_not_given():
     assert proc.opts == {"inf": "/tmp/a", "outf": "/tmp/b"}
 
 
+# --- FBPProcess: ports from the engine --------------------------------
+
+_FANIN_PORTS = (
+    "input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;"
+    "external=ext;supervisor=outhb"
+)
+_FANIN_OPTS = {
+    port: "/dev/null" for port in ("ext", "loop_in", "trigger", "outhb", "outloop", "outsink")
+}
+
+
+class _Undeclared(lib.FBPProcess):
+    HEARTBEAT_INTERVAL_SECONDS = 0.2
+
+
+def test_a_node_run_by_the_engine_takes_its_ports_from_it(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", _FANIN_PORTS)
+    node = _Undeclared(opts=_FANIN_OPTS)
+    assert node.INPUT_PORTS == ["ext", "loop_in", "trigger"]
+    assert node.OUTPUT_PORTS == ["outhb", "outloop", "outsink"]
+    assert node.CONTROL_PORTS == ["trigger"]
+    assert node.EXTERNAL_PORTS == ["ext"]
+    assert node.SUPERVISOR_PORT == "outhb"
+    assert set(node._outbound_queues) == {"outhb", "outloop", "outsink"}
+    # The class itself is left as it was.
+    assert _Undeclared.INPUT_PORTS == [] and _Undeclared.SUPERVISOR_PORT is None
+
+
+def test_empty_fields_from_the_engine_give_no_ports_and_no_supervisor(monkeypatch):
+    monkeypatch.setenv(
+        "DEBASHER_PROCESS_PORTS", "input=inf;output=;control=;external=;supervisor="
+    )
+    node = _Undeclared(opts={"inf": "/dev/null"})
+    assert node.INPUT_PORTS == ["inf"]
+    assert node.OUTPUT_PORTS == []
+    assert node.SUPERVISOR_PORT is None
+
+
+class _DeclaresSupervisorOnly(lib.FBPProcess):
+    SUPERVISOR_PORT = "outhb"
+
+
+class _InheritsDeclaredPorts(_Worker):
+    pass
+
+
+@pytest.mark.parametrize(
+    "cls, attribute",
+    [
+        (_Worker, "INPUT_PORTS"),
+        (_DeclaresSupervisorOnly, "SUPERVISOR_PORT"),
+        (_InheritsDeclaredPorts, "OUTPUT_PORTS"),
+    ],
+)
+def test_a_class_that_declares_ports_is_refused_when_the_engine_gives_them(
+    monkeypatch, cls, attribute
+):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", _FANIN_PORTS)
+    with pytest.raises(ValueError, match=f"must not declare them: remove .*{attribute}"):
+        cls(opts=_FANIN_OPTS)
+
+
+def test_without_ports_from_the_engine_the_class_declares_them(monkeypatch):
+    monkeypatch.delenv("DEBASHER_PROCESS_PORTS", raising=False)
+    node = _Worker(opts={"inf": "/tmp/a", "outf": "/tmp/b"})
+    assert node.INPUT_PORTS == ["inf"]
+    assert node.OUTPUT_PORTS == ["outf"]
+
+
+def test_an_unknown_field_in_the_ports_from_the_engine_is_refused(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "input=inf;inputs=x")
+    with pytest.raises(ValueError, match="unknown field 'inputs'"):
+        _Undeclared(opts={"inf": "/dev/null"})
+
+
+def test_a_port_from_the_engine_without_its_option_is_refused(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "input=inf;output=outf")
+    with pytest.raises(ValueError, match="outf"):
+        _Undeclared(opts={"inf": "/dev/null"})
+
+
 # --- FBPProcess: logging ------------------------------------------------
 
 

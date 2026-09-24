@@ -645,6 +645,117 @@ debasher::_validate_resident_channels()
 }
 
 ########
+# Prints the role of the process of a node end as the fifo registries store
+# it, <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx> (see
+# DEBASHER_RESIDENT_PROCESS_ROLES), or nothing for the end outside the
+# program.
+debasher::_resident_node_role()
+{
+    local node=$1
+    echo "${DEBASHER_RESIDENT_PROCESS_ROLES[${node%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}]:-}"
+}
+
+########
+# Prints the blank-separated words of $1 sorted and separated by commas.
+debasher::_sorted_comma_list()
+{
+    local words=$1
+    [ -n "${words// /}" ] || return 0
+    local sorted
+    sorted=$(printf '%s\n' ${words} | "${SORT}")
+    echo "${sorted//$'\n'/,}"
+}
+
+########
+# Fills DEBASHER_RESIDENT_TASK_PORTS with the ports of every task of every
+# FBPProcess of a resident program, taken from the fifo registries and tags
+# (see the design doc's "Ports from the engine"): which of its options are
+# input, output, control and external ports, and which output port goes to
+# the Supervisor. A port is the name of the option without its leading
+# dashes, as the node's own options name it. The wrapper of each task
+# exports its entry as DEBASHER_PROCESS_PORTS, of the form
+#
+#   input=<ports>;output=<ports>;control=<ports>;external=<ports>;supervisor=<port>
+#
+# each list sorted and separated by commas, and possibly empty. A no-op when
+# the program is not resident. Needs the checks of
+# debasher::_validate_resident_channels to have passed, and
+# DEBASHER_RESIDENT_PROCESS_ROLES. Returns 1, with an error, if a task has
+# more than one output port read by the Supervisor: a node has a single
+# heartbeat channel.
+debasher::_register_resident_task_ports()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    # The ports found so far, blank-separated, by <node><sep><field>
+    local -A ports=()
+    # $1: node, $2: field, $3: option
+    debasher::_add_resident_task_port()
+    {
+        local port="${3#-}"
+        ports["$1${sep}$2"]+=" ${port#-}"
+    }
+
+    local augm_fifoname owner user kind owner_opt user_opt
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+        user="${DEBASHER_FIFO_USERS[${augm_fifoname}]}"
+        kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
+        owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]}"
+        user_opt="${DEBASHER_FIFO_USER_OPTS[${augm_fifoname}]:-}"
+
+        # The owner's end: an output port, unless the fifo is tagged and fed
+        # from outside the program, in which case the owner reads it
+        if [ "$(debasher::_resident_node_role "${owner}")" = "fbpprocess" ]; then
+            if [ -n "${kind}" ] && [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                # The tag, "control" or "external", is also the name of the field
+                debasher::_add_resident_task_port "${owner}" input "${owner_opt}"
+                debasher::_add_resident_task_port "${owner}" "${kind}" "${owner_opt}"
+            else
+                debasher::_add_resident_task_port "${owner}" output "${owner_opt}"
+                if [ "$(debasher::_resident_node_role "${user}")" = "supervisor" ]; then
+                    debasher::_add_resident_task_port "${owner}" supervisor "${owner_opt}"
+                fi
+            fi
+        fi
+
+        # The other end, when a node of the program reads the fifo: an input
+        # port, and a control port too if the fifo is tagged --control
+        if [ "$(debasher::_resident_node_role "${user}")" = "fbpprocess" ]; then
+            debasher::_add_resident_task_port "${user}" input "${user_opt}"
+            if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
+                debasher::_add_resident_task_port "${user}" control "${user_opt}"
+            fi
+        fi
+    done
+
+    # One entry for every task, also for one with no port at all, so that
+    # every node of the program takes its ports from here
+    local processname idx num_tasks node field list entry
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
+        num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        for (( idx = 0; idx < num_tasks; idx++ )); do
+            node="${processname}${sep}${idx}"
+            entry=""
+            for field in input output control external supervisor; do
+                list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
+                if [ "${field}" = "supervisor" ] && [[ "${list}" == *,* ]]; then
+                    echo "Error: node $(debasher::_resident_node_display_name "${node}") has more than one output read by the Supervisor (${list}), but a node has a single heartbeat channel" >&2
+                    return 1
+                fi
+                entry+=";${field}=${list}"
+            done
+            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry#;}"
+        done
+    done
+}
+
+########
 # Python heredoc processes only: source prepended ahead of the
 # heredoc's own text so it can "import debasher_runtime_lib" (and
 # anything else installed alongside it) -- mirrors the

@@ -1,6 +1,6 @@
 # *- bash -*
 # Chaos test reference program: fanin has two input ports, one external
-# (ext, EXTERNAL_PORTS) and one closing a 2-node cycle (loop_in, fed by
+# (ext, tagged --external) and one closing a 2-node cycle (loop_in, fed by
 # loop). fanin forwards a tagged copy of everything it processes, on either
 # port, to sink: sink's own input log is then the exact, deduplicated,
 # ordered record of what fanin actually saw, which is what the verifier
@@ -57,11 +57,6 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Fanin(FBPProcess):
-    INPUT_PORTS = ["ext", "loop_in", "trigger"]
-    OUTPUT_PORTS = ["outloop", "outsink", "outhb"]
-    CONTROL_PORTS = ["trigger"]
-    EXTERNAL_PORTS = ["ext"]
-    SUPERVISOR_PORT = "outhb"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
@@ -117,9 +112,6 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Loop(FBPProcess):
-    INPUT_PORTS = ["from_fanin"]
-    OUTPUT_PORTS = ["outfanin", "outhb"]
-    SUPERVISOR_PORT = "outhb"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):
@@ -171,9 +163,6 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Sink(FBPProcess):
-    INPUT_PORTS = ["from_fanin"]
-    OUTPUT_PORTS = ["outhb"]
-    SUPERVISOR_PORT = "outhb"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
 
     def process_data(self, port_name, packet):

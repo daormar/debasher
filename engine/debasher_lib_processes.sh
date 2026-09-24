@@ -1761,8 +1761,10 @@ debasher::_register_fifos_used_by_process()
             local this_task="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
             [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" = "${this_task}" ] && continue
 
-            # Register the current task as a user of the fifo
+            # Register the current task as a user of the fifo, and the option
+            # through which it uses it
             DEBASHER_FIFO_USERS["${augm_fifoname}"]=${this_task}
+            DEBASHER_FIFO_USER_OPTS["${augm_fifoname}"]=${DEBASHER_DESERIALIZED_ARGS[j]}
         done
     }
 

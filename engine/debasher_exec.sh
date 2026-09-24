@@ -748,6 +748,10 @@ check_process_opts()
     # known (see debasher::_validate_program_fifo_kinds)
     debasher::_validate_program_fifo_kinds || return 1
 
+    # Give each node of a resident program its ports, which the checks above
+    # guarantee are consistent (see debasher::_register_resident_task_ports)
+    debasher::_register_resident_task_ports || return 1
+
     # Print info about fifos
     debasher::_show_program_fifos > "${program_fifos_file}" || return 1
 

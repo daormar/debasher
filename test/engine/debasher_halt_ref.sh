@@ -1,15 +1,13 @@
 # *- bash -*
-# Minimal resident-program reference for the third G2 fix candidate (design
-# doc, Conformance status): a single node, no Supervisor at all (one is
-# optional, see SUPERVISOR_PORT), with only a control port fed from outside.
-# Exists to check, with a real debasher_exec run, exactly what pieza 1 is
-# responsible for (control_ports/halted files, staying alive after a halt
-# closes, a clean exit on SIGTERM) with nothing else that could relaunch
-# it: debasher_chaos_ref.sh's own Supervisor, polling every 0.5s, races an
-# external SIGTERM against its own PID check and can relaunch a node that
-# is exiting cleanly but has not written its .finished file yet (found
-# 2026-09-22, not yet designed around); this program has no such thing to
-# race against.
+# Minimal resident-program reference for a halt: a single node, no
+# Supervisor at all (one is optional), with only a control port fed from
+# outside. Checks, with a real debasher_exec run, the files a node writes
+# for a halt (control_ports, halted), that it stays alive after its halt
+# closes, and that it exits cleanly on SIGTERM, with nothing else that could
+# relaunch it: the Supervisor of debasher_chaos_ref.sh, polling every 0.5s,
+# races an external SIGTERM against its own PID check and can relaunch a
+# node that is exiting cleanly but has not written its .finished file yet;
+# this program has no such thing to race against.
 
 debasher_halt_ref_shared_dirs()
 {
@@ -51,9 +49,6 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Solo(FBPProcess):
-    INPUT_PORTS = ["trigger"]
-    CONTROL_PORTS = ["trigger"]
-
     def process_data(self, port_name, packet):
         pass
 

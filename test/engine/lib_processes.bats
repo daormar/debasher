@@ -537,7 +537,7 @@ EOF
 
 @test "debasher::_register_fifos_used_by_process registers the reader of a fifo that its owner writes" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname fanin fanin_to_loop)"
@@ -547,7 +547,7 @@ EOF
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["loop"]=1
     debasher::_get_opts_for_process_and_task() {
-        echo "-from_fanin${DEBASHER_ARG_SEP}${fifo}"
+        echo "-n${DEBASHER_ARG_SEP}3${DEBASHER_ARG_SEP}-from_fanin${DEBASHER_ARG_SEP}${fifo}"
     }
 
     set +e
@@ -556,11 +556,12 @@ EOF
     set -e
     [ "${status}" -eq 0 ]
     [ "${DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]}" = "loop${sep}0" ]
+    [ "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_to_loop"]}" = "-from_fanin" ]
 }
 
 @test "debasher::_register_fifos_used_by_process registers another task of the same array as a user" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname worker worker_out_0)"
@@ -573,7 +574,7 @@ EOF
         if [ "$3" -eq 0 ]; then
             echo "-outnext${DEBASHER_ARG_SEP}${fifo}"
         else
-            echo "-from_prev${DEBASHER_ARG_SEP}${fifo}"
+            echo "-n${DEBASHER_ARG_SEP}3${DEBASHER_ARG_SEP}-from_prev${DEBASHER_ARG_SEP}${fifo}"
         fi
     }
 
@@ -583,4 +584,5 @@ EOF
     set -e
     [ "${status}" -eq 0 ]
     [ "${DEBASHER_FIFO_USERS["worker/worker_out_0"]}" = "worker${sep}1" ]
+    [ "${DEBASHER_FIFO_USER_OPTS["worker/worker_out_0"]}" = "-from_prev" ]
 }

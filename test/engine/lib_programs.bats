@@ -424,7 +424,8 @@ EOF
 set_up_registries() {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_KINDS=()
     declare -gA DEBASHER_FIFO_MIRRORED=() DEBASHER_RESIDENT_PROCESS_ROLES=()
-    declare -gA DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_FIFO_OWNER_OPTS=() DEBASHER_FIFO_USER_OPTS=()
+    declare -gA DEBASHER_RESIDENT_TASK_PORTS=()
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=()
     DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
     SORT="$(command -v sort)"
@@ -444,7 +445,8 @@ end_of() {
 
 # $1: fifo, $2: owner end, $3: other end (or "outside"), $4: tag (optional),
 # $5: the owner's option (by default an input option for a tagged fifo fed
-# from outside, which its owner reads, and an output option otherwise)
+# from outside, which its owner reads, and an output option otherwise), $6:
+# the option of the process at the other end ("-in" by default)
 add_fifo() {
     DEBASHER_PROGRAM_FIFOS["$1"]="$2"
     if [ "$3" = "outside" ]; then
@@ -461,6 +463,9 @@ add_fifo() {
         DEBASHER_FIFO_OWNER_OPTS["$1"]="-in"
     else
         DEBASHER_FIFO_OWNER_OPTS["$1"]="-out"
+    fi
+    if [ "$3" != "outside" ]; then
+        DEBASHER_FIFO_USER_OPTS["$1"]="${6:--in}"
     fi
 }
 
@@ -581,6 +586,69 @@ add_fifo() {
     run debasher::_validate_program_fifo_kinds
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: fifo p/p_in is tagged --external, which only a 'resident' program may use"* ]]
+}
+
+@test "debasher::_register_resident_task_ports gives each node of the chaos reference program its ports" {
+    set_up_registries
+    add_process fanin fbpprocess
+    add_process loop fbpprocess
+    add_process sink fbpprocess
+    add_process sup supervisor
+    add_fifo sup/sup_trig_fanin "$(end_of sup)" "$(end_of fanin)" control -outtrig_fanin -trigger
+    add_fifo sup/sup_manual "$(end_of sup)" outside control -manual
+    add_fifo fanin/fanin_ext "$(end_of fanin)" outside external -ext
+    add_fifo fanin/fanin_to_loop "$(end_of fanin)" "$(end_of loop)" "" -outloop -from_fanin
+    add_fifo loop/loop_to_fanin "$(end_of loop)" "$(end_of fanin)" "" -outfanin -loop_in
+    add_fifo fanin/fanin_to_sink "$(end_of fanin)" "$(end_of sink)" "" -outsink -from_fanin
+    add_fifo fanin/fanin_hb "$(end_of fanin)" "$(end_of sup)" "" -outhb -hb_fanin
+    add_fifo loop/loop_hb "$(end_of loop)" "$(end_of sup)" "" -outhb -hb_loop
+    add_fifo sink/sink_hb "$(end_of sink)" "$(end_of sup)" "" -outhb -hb_sink
+
+    debasher::_register_resident_task_ports
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of fanin)]}" = "input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of loop)]}" = "input=from_fanin;output=outfanin,outhb;control=;external=;supervisor=outhb" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sink)]}" = "input=from_fanin;output=outhb;control=;external=;supervisor=outhb" ]
+    [ -z "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]+x}" ]
+}
+
+@test "debasher::_register_resident_task_ports gives each task of an array its own ports, and a node with none an entry" {
+    set_up_registries
+    add_process start fbpprocess
+    add_process worker fbpprocess 2
+    add_process idle fbpprocess
+    add_fifo start/start_trigger "$(end_of start)" outside control --trigger
+    add_fifo start/start_out_0 "$(end_of start)" "$(end_of worker 0)" "" -outf0 -inf
+    add_fifo start/start_out_1 "$(end_of start)" "$(end_of worker 1)" "" -outf1 -inf
+    add_fifo worker/worker_out_0 "$(end_of worker 0)" outside "" -outf
+    add_fifo worker/worker_out_1 "$(end_of worker 1)" "$(end_of worker 0)" "" -outg -peer
+
+    debasher::_register_resident_task_ports
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of start)]}" = "input=trigger;output=outf0,outf1;control=trigger;external=;supervisor=" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of worker 0)]}" = "input=inf,peer;output=outf;control=;external=;supervisor=" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of worker 1)]}" = "input=inf;output=outg;control=;external=;supervisor=" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of idle)]}" = "input=;output=;control=;external=;supervisor=" ]
+}
+
+@test "debasher::_register_resident_task_ports refuses a node with two outputs read by the Supervisor" {
+    set_up_registries
+    add_process a fbpprocess
+    add_process sup supervisor
+    add_fifo a/a_hb "$(end_of a)" "$(end_of sup)" "" -outhb -hb_a
+    add_fifo a/a_hb2 "$(end_of a)" "$(end_of sup)" "" -outhb2 -hb_a2
+
+    run debasher::_register_resident_task_ports
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: node a has more than one output read by the Supervisor (outhb,outhb2)"* ]]
+}
+
+@test "debasher::_register_resident_task_ports is a no-op for a general program" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    add_process a fbpprocess
+    add_fifo a/a_out "$(end_of a)" outside
+
+    debasher::_register_resident_task_ports
+    [ "${#DEBASHER_RESIDENT_TASK_PORTS[@]}" -eq 0 ]
 }
 
 @test "debasher::define_fifo_opt records the tag of the fifo" {

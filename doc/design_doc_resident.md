@@ -78,9 +78,11 @@ mutation check, durability level) is defined in the Contract, where it is used.
   `FBPProcess`; the `Supervisor` is a process of the program but not a business
   node, and it takes no part in the barrier.
 - **port** (puerto): an option of a node that is connected to a FIFO, named
-  without its leading dash. A subclass lists its input ports and its output
-  ports in `INPUT_PORTS` and `OUTPUT_PORTS`; the `Supervisor` names its input
-  ports after the nodes it watches (`NODE_PORTS`).
+  without its leading dash. The engine gives each node run by it its input and
+  output ports, taken from the options of its module (see "Ports from the
+  engine"), in `INPUT_PORTS` and `OUTPUT_PORTS`; a node built without the
+  engine declares them in these class attributes. The `Supervisor` names its
+  input ports after the nodes it watches (`NODE_PORTS`).
 - **channel** (canal): the one-way connection from an output port of one node to
   an input port of another, made of a FIFO (a named pipe created by the engine).
   A **self-loop** (bucle propio) joins two ports of the same node. A channel
@@ -144,24 +146,24 @@ mutation check, durability level) is defined in the Contract, where it is used.
   `Supervisor`, `MANUAL_TRIGGER_PORT`, where an actor outside the program writes
   a trigger, which the `Supervisor` relays to every trigger port.
 - **control port** (puerto de control): an input port of a node, listed in
-  `CONTROL_PORTS`, that carries only `INTERACT` commands, such as the one on
-  which an initiator receives its triggers. It never carries a marker, so it
-  takes no part in any round, and a `CLOSE` on it does not close it, because its
-  writer (the `Supervisor`, or whoever writes commands) may come back.
+  `CONTROL_PORTS` (from a fifo tagged `--control`), that carries only
+  `INTERACT` commands, such as the one on which an initiator receives its
+  triggers. It never carries a marker, so it takes no part in any round, and a
+  `CLOSE` on it does not close it, because its writer (the `Supervisor`, or
+  whoever writes commands) may come back.
 - **control ports file**: the file `control_ports` (`control_ports_<idx>` for a
   task of an array, see execdir) that a node writes in its own `execdir` when it
   starts (one fifo path per line, from `self.opts`, one per entry of
   `CONTROL_PORTS`; empty, not absent, if it has none), so that an external actor
   can find where to write a trigger for an initiator with no other knowledge of
-  this program: `CONTROL_PORTS` is a Python class attribute, invisible to a tool
-  outside the process (see `_write_control_ports_file`).
+  this program (see `_write_control_ports_file`).
 - **external port** (puerto externo): an input port of a node, listed in
-  `EXTERNAL_PORTS`, fed only from outside the program (a source, or a person
-  writing by hand), which therefore does not carry a marker of its own: a round
-  never waits for it. Unlike a control port, a `CLOSE` on it does close it for
-  good, since its writer is not expected to come back. A source that does know
-  the protocol may still write the marker of the round the initiator opened: it
-  is then read like on any other port.
+  `EXTERNAL_PORTS` (from a fifo tagged `--external`), fed only from outside the
+  program (a source, or a person writing by hand), which therefore does not
+  carry a marker of its own: a round never waits for it. Unlike a control port,
+  a `CLOSE` on it does close it for good, since its writer is not expected to
+  come back. A source that does know the protocol may still write the marker of
+  the round the initiator opened: it is then read like on any other port.
 - **incarnation** (encarnación): one running instance of a node's process.
   Relaunching a node after a crash starts a new incarnation of the same node,
   which reuses its FIFOs, its directory and its checkpoints.
@@ -825,15 +827,18 @@ interpreting `payload`):
     `sys.path.append("$(pkgpythondir)")`. So a Python heredoc's own text is
     itself prefixed with that same `sys.path.append(...)` call, ahead of the
     module author's code.
-- **Port declaration**: a subclass declares its ports as class attributes,
-  `INPUT_PORTS`/ `OUTPUT_PORTS` (lists of option names, e.g.
-  `INPUT_PORTS = ["inf"]`). `FBPProcess` parses `argv` generically when it is
-  built, into a `self.opts` name -> value dict (the engine's existing
-  `-optname value` CLI
-  convention, untouched); `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those
-  entries are FIFO paths to open reader/writer threads on. Any other option
-  (e.g. a plain `-threshold` value) stays available in `self.opts` with no
-  special handling. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
+- **Port declaration**: the ports of a node are lists of option names,
+  `INPUT_PORTS`/`OUTPUT_PORTS` (e.g. `["inf"]`), with `CONTROL_PORTS`,
+  `EXTERNAL_PORTS` and `SUPERVISOR_PORT` (a single name) beside them. A node
+  run by the engine takes all five from it, and its class must not declare
+  any (see "Ports from the engine"); a node built without the engine, as the
+  unit tests build them, declares them as class attributes. `FBPProcess`
+  parses `argv` generically when it is built, into a `self.opts` name -> value
+  dict (the engine's existing `-optname value` CLI convention, untouched);
+  `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those entries are FIFO paths
+  to open reader/writer threads on. Any other option (e.g. a plain
+  `-threshold` value) stays available in `self.opts` with no special
+  handling. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
   commands (see control port in the Glossary); `EXTERNAL_PORTS` names which are
   fed only from outside the program (see external port in the Glossary); a name
   in either list that is not an input port is refused when the node is built.
@@ -913,10 +918,9 @@ importing anything, that the heredoc has a top-level class deriving from
 never instantiates it: the heredoc itself creates the object, which parses the
 options of the process from `argv`, and calls `run()`.
 
-The class declares its ports (`INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
-`EXTERNAL_PORTS`) and redefines four hooks. Each runs on a known thread, which
-is what lets the framework keep the state that a node captures in step with
-what it has sent:
+The class takes its ports from the engine (see "Ports from the engine") and
+redefines four hooks. Each runs on a known thread, which is what lets the
+framework keep the state that a node captures in step with what it has sent:
 
 - `process_data(port_name, packet)` runs on the brain thread, once for each
   `DATA`, in the order of the input log, and on the thread that called `run()`
@@ -1415,15 +1419,16 @@ node.)
 ## Port declaration and node identity
 
 - **`NODE_PORTS`**: a dict `{node_name: option_name}`, hardcoded in the heredoc
-  by the module author (like `INPUT_PORTS`/`OUTPUT_PORTS` in `FBPProcess`, but a
-  dict instead of a list). A dict is needed here specifically because, unlike
-  `FBPProcess`'s barrier logic, which only ever needs "did this pending port's
-  marker arrive yet, yes or no", treating every input port interchangeably,
-  `Supervisor`'s detection and relaunch logic inherently act on a *specific
-  node's identity*, not just "which port". The key is a label `Supervisor`'s own
-  code uses internally (logs, detection, relaunch); the value is the option name
-  resolved through `self.opts` (the same `-optname value` CLI convention) to the
-  actual FIFO path opened by that node's reader thread. At startup, each
+  by the module author (the engine gives an `FBPProcess` its ports, see "Ports
+  from the engine", but not the `Supervisor`). A dict, and not a list of ports,
+  is needed here specifically because, unlike `FBPProcess`'s barrier logic,
+  which only ever needs "did this pending port's marker arrive yet, yes or
+  no", treating every input port interchangeably, `Supervisor`'s detection and
+  relaunch logic inherently act on a *specific node's identity*, not just
+  "which port". The key is a label `Supervisor`'s own code uses internally
+  (logs, detection, relaunch); the value is the option name resolved through
+  `self.opts` (the same `-optname value` CLI convention) to the actual FIFO
+  path opened by that node's reader thread. At startup, each
   `(node_name, option_name)` pair is resolved once; the reader thread spawned
   for it tags every message pushed to the shared inbound queue with `node_name`,
   not the raw option name, so all downstream `Supervisor` logic works purely in
@@ -1459,13 +1464,14 @@ node.)
   (manually, or by `on_node_permanently_failed`, see below). Empty by default: a
   `Supervisor` doing pure monitoring + relaunch, with no
   snapshot/shutdown-triggering capability at all, is a valid configuration.
-- An initiator that receives its triggers through a trigger port lists the port
-  on which it reads them in `CONTROL_PORTS`. Without it the channel is treated
-  as a data port: the round opens, the marker goes downstream and the initiator
-  waits for ever for a marker from the `Supervisor`. It is also what keeps the
-  `CLOSE` that a `Supervisor` sends
-  when it stops from closing the channel for good, so that the triggers of one
-  relaunched by hand still arrive.
+- An initiator that receives its triggers through a trigger port has the port
+  on which it reads them in `CONTROL_PORTS`, since the `Supervisor` defines
+  that fifo with the tag `--control`. Without the tag the channel would be a
+  data port: the round would open, the marker would go downstream and the
+  initiator would wait for ever for a marker from the `Supervisor`. The tag is
+  also what keeps the `CLOSE` that a `Supervisor` sends when it stops from
+  closing the channel for good, so that the triggers of one relaunched by hand
+  still arrive.
 - This is a convenience, not the only way to trigger a round: `FBPProcess`'s own
   opt-in periodic self-triggered snapshot (`SNAPSHOT_INTERVAL_SECS`, see "Base
   class `FBPProcess`") and a direct external `INTERACT` write into an
@@ -1824,7 +1830,7 @@ program specifically. It depends on the `Supervisor` changes above.
   actually exits. `SIGKILL`, used by `debasher_stop`'s hard kill, cannot be
   trapped and is unaffected by any of this.
 
-# Channel kinds declared with the fifo (in progress)
+# Channel kinds declared with the fifo
 
 The kind of every channel of a resident program, and its direction, are
 declared in the module's own options, where the engine can read them when it
@@ -1919,15 +1925,42 @@ two nodes fed from outside (see "Initiators numbered their rounds independently"
 in "Loose ends"), a program in which only `a` has a control channel is refused
 by rule 1, since `b` cannot be reached.
 
-## Ports from the engine (not built)
+## Ports from the engine
 
-The wrapper of each task exports its ports, taken from the same registries and
-tags: which of its options are input, output, control and external ports.
-`FBPProcess` fills `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS` and
-`EXTERNAL_PORTS` from them, so a module no longer declares them. The attributes
-of the class remain for a node built without the engine, as the unit tests
-build them; when both exist and differ, the node stops with an error. The
-`Supervisor` keeps declaring `NODE_PORTS`, `TRIGGER_PORT` and
+Once the program is loaded and its channels are checked, the engine gives
+each task of an `FBPProcess` its ports, taken from the same registries and
+tags (`debasher::_register_resident_task_ports`):
+
+- The owner of a fifo has an output port on the option through which it
+  defines it, or, for a tagged fifo fed from outside, an input port, which is
+  also a control or an external port, as its tag says.
+- The process at the other end, when it is a node, has an input port on the
+  option through which it uses the fifo (`DEBASHER_FIFO_USER_OPTS`), which is
+  also a control port if the fifo is tagged `--control`.
+- The output port whose other end is the `Supervisor` is the node's
+  `SUPERVISOR_PORT`. A node with more than one is refused when the program is
+  loaded, since a node has a single heartbeat channel.
+
+The generated script of each process carries the ports of every task
+(`DEBASHER_RESIDENT_TASK_PORTS`), so that a relaunch gets them too, and the
+wrapper of a task exports its own as `DEBASHER_PROCESS_PORTS`. For `fanin`, in
+the chaos reference program:
+
+```
+input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb
+```
+
+`FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
+`EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, before
+anything uses them (`_take_ports_from_engine`). The options of the module are
+then the only place that says what the ports of a node are: a class that
+declares any of the five, even with the same value, stops the node with an
+error. A node built without the engine, as the unit tests build them, gets no
+such variable and takes its ports from the attributes of its class. The order
+of a list means nothing, in the variable or in the class: every use of a port
+list is port by port.
+
+The `Supervisor` keeps declaring `NODE_PORTS`, `TRIGGER_PORT` and
 `MANUAL_TRIGGER_PORT`: telling which fifo is the heartbeat channel of which
 node would need a tag of its own.
 
@@ -2321,13 +2354,12 @@ Design ideas from Future work move here once they are actually built.
   That is what sets it apart from the item above, where processes are launched
   while the program is running. What follows is reasoned from the code, nothing
   of it is built or tried:
-  - Ports. `INPUT_PORTS` and `OUTPUT_PORTS` are class constants, so a node with
-    a family would compute its port lists from its options when it is built
-    (`_input_ports()` and `_output_ports()` are methods already, and the
-    `Supervisor` builds its own from `NODE_PORTS`). The names must be the same
-    in every incarnation, because `closed_ports` and the sequence numbers of G5
-    in the checkpoint are keyed by port name: a relaunch that finds another set
-    of ports should fail loudly.
+  - Ports. The engine gives each task its ports from its options (see "Ports
+    from the engine"), so a node with a family gets `-outf0` to `-outf<w-1>`
+    as output ports with no code of its own. The names must be the same in
+    every incarnation, because `closed_ports` and the sequence numbers of G5
+    in the checkpoint are keyed by port name: a relaunch that finds another
+    set of ports should fail loudly.
   - The barrier, `CLOSE` and the input log do not depend on how many ports there
     are, since they already loop over the declared lists: a fan-in node is the
     case of several pending ports that the tests cover, and a fan-out node
@@ -2593,9 +2625,9 @@ Design ideas from Future work move here once they are actually built.
   - the limits of a node in the computational specifications (see "Limits of
     a node"): the model knows only `cpus`, `mem` and `time`, so a round trip
     through the editor drops them;
-  - editing a node's class and its ports (`INPUT_PORTS`, `OUTPUT_PORTS`,
-    `CONTROL_PORTS`, `EXTERNAL_PORTS`), and wiring the heartbeat channels and
-    the trigger ports of a `Supervisor` (`SUPERVISOR_PORT`, `NODE_PORTS`,
+  - editing a node's class, showing its ports (which the engine takes from its
+    options and their tags, see "Ports from the engine"), and wiring the
+    heartbeat channels and the trigger ports of a `Supervisor` (`NODE_PORTS`,
     `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT`);
   - array processes, whose tasks are nodes of their own (see "Array processes"
     in Extensions);

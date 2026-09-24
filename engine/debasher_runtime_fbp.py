@@ -51,10 +51,13 @@ from debasher_runtime_inputlog import LogCapReached, _InputLog
 
 class FBPProcess(_PortWorker):
     """
-    Base class for resident processes. A subclass declares its ports via
-    the INPUT_PORTS/OUTPUT_PORTS class attributes (option names, without
-    their leading dash(es), e.g. INPUT_PORTS = ["inf"]) and overrides
+    Base class for resident processes. A subclass overrides
     process_data/capture_node_state/restore_node_state/initialize_runtime.
+    Its ports are option names, without their leading dash(es) (e.g.
+    "inf" for -inf). A node run by the engine takes them from the options
+    of its module (see _take_ports_from_engine); a node built without the
+    engine, as the unit tests build them, declares them in the class
+    attributes below.
     """
 
     INPUT_PORTS = []
@@ -135,7 +138,20 @@ class FBPProcess(_PortWorker):
         "gil_switch_interval_ms": ("GIL_SWITCH_INTERVAL_SECS", 0.001),
     }
 
+    # The field of DEBASHER_PROCESS_PORTS that gives each of the class
+    # attributes above that name ports (see _take_ports_from_engine).
+    _PORT_FIELDS = {
+        "input": "INPUT_PORTS",
+        "output": "OUTPUT_PORTS",
+        "control": "CONTROL_PORTS",
+        "external": "EXTERNAL_PORTS",
+        "supervisor": "SUPERVISOR_PORT",
+    }
+
     def __init__(self, argv=None, opts=None):
+        # Before the base class, which checks the ports and builds a queue
+        # for each output port
+        self._take_ports_from_engine(os.environ.get("DEBASHER_PROCESS_PORTS", ""))
         super().__init__(argv, opts)
 
         self._heartbeat_thread = None
@@ -254,6 +270,46 @@ class FBPProcess(_PortWorker):
         # Conformance status, "G2 is violated during an ordered shutdown",
         # third candidate).
         self._stop_requested = threading.Event()
+
+    def _take_ports_from_engine(self, ports):
+        """
+        Sets the ports of this node, on this instance, from what the engine
+        exports to the process as DEBASHER_PROCESS_PORTS: fields `name=value`
+        separated by ";" (see _PORT_FIELDS), each value a list of ports
+        separated by ",", and a single port or nothing for "supervisor".
+        Empty when the engine does not run the node: the class attributes are
+        then its ports. When the engine gives them, the class must not
+        declare any, so that the options of the module are the only place
+        that says what the ports of a node are.
+        """
+        if not ports:
+            return
+        mro = type(self).__mro__
+        subclasses = mro[: mro.index(FBPProcess)]
+        declared = [
+            attribute
+            for attribute in self._PORT_FIELDS.values()
+            if any(attribute in vars(cls) for cls in subclasses)
+        ]
+        if declared:
+            raise ValueError(
+                f"{type(self).__name__}: the engine gives this node its ports, from the "
+                f"options of its module, so the class must not declare them: remove "
+                f"{', '.join(declared)}"
+            )
+        for field in ports.split(";"):
+            name, _, value = field.partition("=")
+            attribute = self._PORT_FIELDS.get(name)
+            if attribute is None:
+                raise ValueError(
+                    f"{type(self).__name__}: unknown field {name!r} in the ports that the "
+                    f"engine gave: {ports!r}"
+                )
+            names = [port for port in value.split(",") if port]
+            if attribute == "SUPERVISOR_PORT":
+                setattr(self, attribute, names[0] if names else None)
+            else:
+                setattr(self, attribute, names)
 
     def _input_ports(self):
         return {port: port for port in self.INPUT_PORTS}
