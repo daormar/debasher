@@ -223,7 +223,7 @@ def _wait_for_any_text(path, needles, timeout=30.0, interval=0.05):
 
 
 # Two shapes a G8 violation on a killed node's channel is seen to take in
-# practice (see the design doc's Acceptance status): a clean one naming
+# practice (see "Acceptance" in the design doc): a clean one naming
 # the exact missing sequence numbers, raised when the reader notices the
 # jump itself; and a "torn line" one with no numbers, raised when a freshly
 # relaunched reader reattaches mid-message to a fifo whose writer never
@@ -786,16 +786,12 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
 
     sup.finished is also waited on, once sink gives up (exhausts
     MAX_RELAUNCH_ATTEMPTS, which a permanent, engineered gap always
-    forces): a Conformance status entry once recorded it not appearing
-    here, root-caused and fixed 2026-09-22 (design doc section 4's
-    "Escalation on a permanent node failure": on_node_permanently_failed
-    relied on a bare command name that PATH never actually resolved,
-    crashing its own escalation thread silently before it could do
-    anything). See
+    forces): the Supervisor's escalation must stop the reachable part of
+    the graph and then end the Supervisor itself (see "Escalation on a
+    permanent node failure" in the design doc). See
     test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure
     for a simpler, dedicated real run of the same mechanism; this one
-    reruns the original scenario that found the gap, unmodified, and
-    confirms it directly.
+    checks it in this scenario too.
     """
     # A long tail is deliberate, not padding: detecting the engineered gap
     # depends on a live message actually arriving on the channel after it
@@ -1091,17 +1087,17 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
 
 def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdir):
     """
-    G2's third fix candidate (design doc, Conformance status): a halt now
-    behaves exactly like an ordinary snapshot at every node, and only an
-    external actor decides when it is actually safe to stop, by a real
-    SIGTERM once every node's halted marker exists. This checks exactly
-    what this piece alone is responsible for (the tool that would normally
-    send that SIGTERM is separate, later work): fanin's control port is
-    discoverable from its own execdir (no Supervisor involved in finding
-    it), every node marks itself halted once its own round closes, every
-    node is still alive at that point (this is the actual G2 fix: the old
-    code exited the instant its own round closed, which is what lost
-    messages), and a real SIGTERM then stops each one cleanly.
+    A halt behaves like an ordinary snapshot at every node, and only an
+    external actor decides when it is safe to stop, by a real SIGTERM once
+    every node's halted marker exists (see "Ordered shutdown" in the design
+    doc). This checks the nodes' side, without the tool that normally
+    sends that SIGTERM (debasher_stop_resident, tested below): fanin's
+    control port is discoverable from its own execdir (no Supervisor
+    involved in finding it), every node marks itself halted once its own
+    round closes, every node is still alive at that point (a node that
+    stopped as soon as its own round closed would lose what its peers
+    were still sending it, against G2), and a real SIGTERM then stops
+    each one cleanly.
     """
     _launch(outdir)
 
@@ -1116,9 +1112,9 @@ def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdi
     assert control_ports["loop"] == []
     assert control_ports["sink"] == []
 
-    # Trigger the halt directly on fanin's own control port, the way the
-    # tool this piece is a prerequisite for would (not through the
-    # Supervisor's manual trigger, which is a separate path entirely).
+    # Trigger the halt directly on fanin's own control port, the way
+    # debasher_stop_resident does (not through the Supervisor's manual
+    # trigger, which is a separate path entirely).
     _write_line(
         control_ports["fanin"][0], {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}}
     )
@@ -1145,10 +1141,10 @@ def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdi
         # resident process's own Python interpreter sits at least one
         # pipeline subshell below it (see
         # debasher_builtin_sched::_execute_funct_plus_postfunct); a plain
-        # single-pid SIGTERM never reaches it at all (found 2026-09-22: it
-        # only kills the wrapper, orphaning a Python process that then
-        # never receives anything and runs forever, and the now-dead
-        # wrapper never gets to write .finished either). The wrapper
+        # single-pid SIGTERM never reaches it at all: it only kills the
+        # wrapper, orphaning a Python process that then never receives
+        # anything and runs forever, and the dead wrapper never gets to
+        # write .finished either. The wrapper
         # itself survives this same broadcast (see
         # debasher_builtin_sched::_print_script_trap) so it can still do
         # so once its own child actually exits.
@@ -1165,8 +1161,9 @@ def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdi
 
 def test_debasher_stop_resident_stops_the_whole_program_cleanly(outdir):
     """
-    debasher_stop_resident itself (pieza 2 of the design doc's G2 third
-    candidate): stops the Supervisor first, by the same graceful signal
+    debasher_stop_resident itself (see "`debasher_stop_resident`: the
+    graceful stop tool" in the design doc): stops the Supervisor first, by
+    the same graceful signal
     (its own new SIGTERM handler, engine/debasher_runtime_supervisor.py),
     so it cannot relaunch a node while the rest of this runs, then halts
     and signals every business node. Every process, sup included, must
@@ -1206,12 +1203,11 @@ def test_debasher_stop_resident_stops_the_whole_program_cleanly(outdir):
 
 def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
     """
-    The -x flag (design doc, Conformance status' G2 entry): a node named
-    there is not waited for and not signalled, for pieza 3's own future
-    use (Supervisor._escalate_shutdown excluding a node it already gave
-    up on). Excludes sink, still healthy here (nothing has failed): every
-    other node, sup included, must still stop cleanly, and sink must
-    still be running afterward, completely untouched.
+    The -x flag: a node named there is not waited for and not signalled,
+    which the Supervisor's escalation relies on to leave out a node it
+    has given up on. Excludes sink, still healthy here (nothing has
+    failed): every other node, sup included, must still stop cleanly, and
+    sink must still be running afterward, completely untouched.
     """
     _launch(outdir)
     time.sleep(1.0)
@@ -1235,15 +1231,13 @@ def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
 
 def test_debasher_stop_resident_forced_exit_code_on_the_hard_kill_fallback(outdir):
     """
-    The exit-code contract added 2026-09-22 (design doc section 4, "Failing
-    loudly instead of retrying": DEBASHER_STOP_RESIDENT_FORCED_EXIT, engine/
-    debasher_stop_resident.sh), decided instead of making a crash-during-halt
-    durably recoverable (a materially bigger, riskier change to the barrier/
-    checkpoint mechanism, see the design doc for why that was rejected):
-    a graceful stop and a forced one both end the program, but only the exit
-    code (2, not whatever debasher_stop's own happens to be, typically 0)
-    tells a caller which one actually happened, since a caller that redirects
-    stderr (Supervisor's own escalation, in particular) would otherwise never
+    The exit code of the hard-kill fallback (see "Failing loudly instead of
+    retrying" in the design doc; DEBASHER_STOP_RESIDENT_FORCED_EXIT in
+    engine/debasher_stop_resident.sh): a graceful stop and a forced one
+    both end the program, but only the exit code (2, not whatever
+    debasher_stop's own happens to be, typically 0) tells a caller which
+    one actually happened, since a caller that redirects stderr (the
+    Supervisor's own escalation, in particular) would otherwise never
     know.
 
     Forces the fallback for real: SIGSTOPs loop before calling the tool, so
@@ -1279,11 +1273,10 @@ def test_debasher_stop_resident_forced_exit_code_on_the_hard_kill_fallback(outdi
 
 def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure(outdir):
     """
-    Pieza 3 of the design doc's G2 third candidate
-    (Supervisor._escalate_shutdown calling debasher_stop_resident with
-    -x and --keep-supervisor, instead of reimplementing the same
-    sequence by hand: design doc section 4's "Escalation on a permanent
-    node failure"). Drives sink to genuinely exhaust
+    The Supervisor's escalation (Supervisor._escalate_shutdown calling
+    debasher_stop_resident with -x and --keep-supervisor, see "Escalation
+    on a permanent node failure" in the design doc). Drives sink to
+    genuinely exhaust
     MAX_RELAUNCH_ATTEMPTS: a real, repeated kill -9 of each fresh
     relaunch, SIGSTOP first (before SIGKILL) so it can never send a
     heartbeat in between and accidentally reset its own relaunch budget
@@ -1292,26 +1285,18 @@ def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failu
     send, per the reference program's own Sup class comment; freezing it
     first removes the race rather than trying to outrun it).
 
-    Once sink has given up, this checks the actual point of this piece:
+    Once sink has given up, this checks what the escalation guarantees:
     fanin and loop, still reachable, are gracefully halted and signalled
-    by the escalation's own debasher_stop_resident call (not silently
-    ignored, per the G2 gap this whole candidate exists to close), and
-    sup.finished actually appears, on its own, well under
+    by the escalation's own debasher_stop_resident call (not left running
+    unattended), and sup.finished actually appears, on its own, well under
     FORCE_STOP_TIMEOUT_SECS (60s): if -x were not actually excluding
     sink (already dead by then), the tool would instead hang waiting on
     a control_ports/halted marker/.finished that can never come, time
     out, and fall back to a hard debasher_stop, which kills fanin and
     loop too, ungracefully (no "finished cleanly" logged for either).
-
-    This run also settles a second, separate Conformance status entry
-    left "not investigated": whether the Supervisor's own resolution
-    after a node gives up actually completes. It very likely shares a
-    root cause with the leaked stdout/stderr fd bug pieza 2 found and
-    fixed (both go through the same on_node_down relaunch Popen call,
-    and this scenario relaunches sink repeatedly before giving up), but
-    that was never independently confirmed; if sup.finished appears here
-    for the first time, this closes that entry too, empirically, whether
-    or not the exact shared cause is retraced.
+    sup.finished appearing also shows that the Supervisor's own
+    resolution after a node gives up completes, after relaunching that
+    node several times.
     """
     _launch(outdir)
 
