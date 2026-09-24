@@ -4,8 +4,10 @@
 # loop). fanin forwards a tagged copy of everything it processes, on either
 # port, to sink: sink's own input log is then the exact, deduplicated,
 # ordered record of what fanin actually saw, which is what the verifier
-# reads after a run. fanin is the sole initiator, triggered by the
-# Supervisor's manual trigger channel (fed from outside).
+# reads after a run. Each copy also carries how many messages fanin has
+# processed on that port, fanin's node state, so that the trace also shows
+# whether a relaunch or a resume restored it. fanin is the sole initiator,
+# triggered by the Supervisor's manual trigger channel (fed from outside).
 
 debasher_chaos_ref_shared_dirs()
 {
@@ -59,16 +61,26 @@ from debasher_runtime_lib import FBPProcess
 class Fanin(FBPProcess):
     HEARTBEAT_INTERVAL_SECONDS = 0.2
 
+    def __init__(self):
+        super().__init__()
+        # The node state: how many messages it has processed on each port.
+        # Every copy sent to sink carries the count, so that sink's trace
+        # shows whether a relaunch, or a resume after a halt, restored it.
+        self.counts = {}
+
     def process_data(self, port_name, packet):
-        self.send_data("outsink", {"port": port_name, "value": packet})
+        self.counts[port_name] = self.counts.get(port_name, 0) + 1
+        self.send_data(
+            "outsink", {"port": port_name, "value": packet, "count": self.counts[port_name]}
+        )
         if port_name == "ext":
             self.send_data("outloop", packet)
 
     def capture_node_state(self):
-        return {}
+        return {"counts": dict(self.counts)}
 
     def restore_node_state(self, node_state):
-        pass
+        self.counts = dict(node_state["counts"])
 
     def initialize_runtime(self):
         pass

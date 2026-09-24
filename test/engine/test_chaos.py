@@ -15,6 +15,7 @@ import signal
 import subprocess
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -325,10 +326,13 @@ class _ExtFeeder(threading.Thread):
     boundary of the program.
     """
 
-    def __init__(self, ext_fifo, k, interval, stop_event=None):
+    def __init__(self, ext_fifo, k, interval, stop_event=None, first=1):
         super().__init__(daemon=True)
         self._ext_fifo = ext_fifo
         self._k = k
+        # The first value, and number, to send: above 1 only to go on
+        # after a resume, where fanin has already accepted the ones before
+        self._first = first
         self._interval = interval
         # Only a permanently-failed peer (a node given up on for good, not
         # just down for a relaunch) needs this: it never reopens ext
@@ -343,7 +347,7 @@ class _ExtFeeder(threading.Thread):
         try:
             fd = os.open(self._ext_fifo, os.O_WRONLY)
             try:
-                for i in range(1, self._k + 1):
+                for i in range(self._first, self._k + 1):
                     line = (json.dumps({"type": "DATA", "seq": i, "payload": i}) + "\n").encode()
                     while True:
                         if self._stop_event is not None and self._stop_event.is_set():
@@ -437,10 +441,33 @@ def _halt_and_wait_for_finished(outdir, timeout=30.0):
     assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=timeout)
 
 
+def _assert_node_state_restored(records, context=""):
+    """
+    G3 (and G6 across a resume): fanin's node state, the number of
+    messages it has processed on each port, travels in every copy it
+    sends to sink. On each port the counts that sink sees must be 1, 2,
+    3... with no jump and no restart: a relaunch or a resume that did not
+    restore the state as it was would start counting again, or skip.
+    Holds whether or not a message was lost before fanin processed it,
+    since the count only follows what fanin processed, and sink sees a
+    prefix of that when its own channel has a gap.
+    """
+    for port in ("ext", "loop_in"):
+        counts = [
+            r["payload"]["count"]
+            for r in records
+            if r.get("type") == "DATA" and r["payload"]["port"] == port
+        ]
+        assert counts == list(range(1, len(counts) + 1)), (
+            f"fanin's count on {port} was not restored{context}: {counts}"
+        )
+
+
 def _assert_trace_matches(records, k, context=""):
     """
     The reformulated Acceptance criterion: each port's own sequence,
-    exact, in order, no duplicate, no missing value.
+    exact, in order, no duplicate, no missing value; and fanin's node
+    state restored wherever it was relaunched.
     """
     ext_seq = [
         r["payload"]["value"]
@@ -456,6 +483,7 @@ def _assert_trace_matches(records, k, context=""):
     expected = list(range(1, k + 1))
     assert ext_seq == expected, f"ext_seq mismatch{context}: {ext_seq}"
     assert loop_seq == expected, f"loop_seq mismatch{context}: {loop_seq}"
+    _assert_node_state_restored(records, context)
 
 
 def _assert_engineered_gap_trace(records, k, reported_range, context=""):
@@ -496,6 +524,7 @@ def _assert_engineered_gap_trace(records, k, reported_range, context=""):
     assert loop_seq == sorted(set(loop_seq)), (
         f"loop_seq out of order or duplicated{context}: {loop_seq}"
     )
+    _assert_node_state_restored(data, context)
 
 
 def _start_sched_out_tailers(outdir):
@@ -553,6 +582,7 @@ def _assert_trace_with_reported_losses(records, k, reported, context=""):
             f"{port} values out of order or duplicated{context}: {values}"
         )
         assert set(values) <= set(range(1, k + 1)), f"{port} values never sent{context}: {values}"
+    _assert_node_state_restored(records, context)
 
 
 def _halt_and_check_trace(outdir, tailer, node_outs, killed, k, context=""):
@@ -1159,6 +1189,110 @@ def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdi
     assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=15.0)
 
 
+def _wait_for_logged(outdir, name, port, matches, timeout=30.0, interval=0.05):
+    """Waits until the input log of node `name` holds an envelope on `port`
+    for which `matches(envelope)` is true."""
+    log_dir = Path(outdir, "__exec__", name, "log")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for segment in log_dir.glob("*.log"):
+            try:
+                lines = segment.read_text().splitlines()
+            except FileNotFoundError:
+                continue
+            for line in lines:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record["port"] == port and matches(record["env"]):
+                    return True
+        time.sleep(interval)
+    return False
+
+
+def _data_numbered(seq):
+    return lambda env: env.get("type") == "DATA" and env.get("seq") == seq
+
+
+def _feed(ext_fifo, first, last, interval):
+    feeder = _ExtFeeder(ext_fifo, last, interval, first=first)
+    feeder.start()
+    feeder.join(timeout=60)
+    assert not feeder.is_alive(), "feeder did not finish sending"
+    if feeder.error is not None:
+        raise feeder.error
+
+
+def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
+    """
+    G6, orderly halt: after a halt every node resumes in the state it had
+    when it stopped, loading its checkpoint and replaying from its input
+    log what it processed after capturing it. The halt here closes with
+    messages in flight: loop is frozen while the last values go round, so
+    that their echoes reach fanin only after fanin has captured its state
+    for the halt. The program is then stopped and launched again with
+    debasher_exec on the same outdir, which is how it resumes (see
+    "Ordered shutdown" in the design doc), and fed the rest. Across both
+    runs, sink must see each port's exact sequence, and fanin's counts
+    must go on from where they stopped.
+    """
+    k_frozen, k_before, k = 25, 30, 60
+    interval = 0.02
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+    sup_out = _sched_out_file(outdir, "sup")
+
+    _feed(_find_fifo(outdir, "fanin_ext"), 1, k_frozen, interval)
+    assert _wait_for_logged(outdir, "fanin", "loop_in", _data_numbered(k_frozen)), (
+        "the loop never settled before being frozen"
+    )
+
+    # Well under HEARTBEAT_TIMEOUT_SECS: debasher_stop_resident stops the
+    # Supervisor before anything else, so it never relaunches loop.
+    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
+    os.killpg(loop_pid, signal.SIGSTOP)
+    try:
+        _feed(_find_fifo(outdir, "fanin_ext"), k_frozen + 1, k_before, interval)
+        assert _wait_for_logged(outdir, "fanin", "ext", _data_numbered(k_before)), (
+            f"fanin never logged ext value {k_before}"
+        )
+        halt = {}
+        halter = threading.Thread(
+            target=lambda: halt.update(
+                result=subprocess.run(
+                    [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "60"],
+                    capture_output=True,
+                    text=True,
+                )
+            )
+        )
+        halter.start()
+        shutdown = lambda env: env.get("type") == "INTERACT" and env["payload"]["command"] == "shutdown"
+        assert _wait_for_logged(outdir, "fanin", "trigger", shutdown), "fanin never got the halt"
+    finally:
+        os.killpg(loop_pid, signal.SIGCONT)
+    halter.join(timeout=90)
+    result = halt["result"]
+    assert result.returncode == 0, f"debasher_stop_resident failed:\n{result.stdout}\n{result.stderr}"
+    with open(sup_out) as f:
+        assert "node 'loop' is down" not in f.read(), "the Supervisor relaunched the frozen loop"
+
+    _launch(outdir)
+    _feed(_find_fifo(outdir, "fanin_ext"), k_before + 1, k, interval)
+
+    # Same grace period as the kill/relaunch pieces above, for the same
+    # reason.
+    time.sleep(1.0)
+    _halt_and_wait_for_finished(outdir, timeout=60)
+
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    _assert_trace_matches(tailer.records, k, " (halted with messages in flight, then resumed)")
+
+
 def test_debasher_stop_resident_stops_the_whole_program_cleanly(outdir):
     """
     debasher_stop_resident itself (see "`debasher_stop_resident`: the
@@ -1347,3 +1481,86 @@ def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failu
         "debasher_stop_resident fell back to a hard kill instead of stopping gracefully "
         "(e.g. -x not actually excluding sink, or --keep-supervisor not applied)"
     )
+
+
+# The detection settings of the Supervisor of the reference program (Sup in
+# debasher_chaos_ref.sh), and the margin a real run needs on top of them for
+# the processes involved to be scheduled.
+_HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
+_HEARTBEAT_TIMEOUT_SECS = 3
+_DETECTION_MARGIN_SECS = 1.0
+
+_DOWN_RE = r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3}) WARNING +\[checker\] node '{name}' is down"
+
+
+def _down_reported_at(outdir, name, timeout=30.0, interval=0.05):
+    """
+    The time at which the Supervisor declared node `name` down, from the
+    timestamp of its own log line, or None if it did not within `timeout`.
+    """
+    pattern = re.compile(_DOWN_RE.replace("{name}", re.escape(name)), re.MULTILINE)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with open(_sched_out_file(outdir, "sup")) as f:
+                m = pattern.search(f.read())
+        except FileNotFoundError:
+            m = None
+        if m:
+            return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S,%f").timestamp()
+        time.sleep(interval)
+    return None
+
+
+def test_a_node_whose_process_is_gone_is_noticed_within_the_check_interval(outdir):
+    """
+    G7, bounded detection: a crashed node is noticed within
+    HEARTBEAT_CHECK_INTERVAL_SECS when its PID is verifiably gone, and
+    then relaunched.
+    """
+    _launch(outdir)
+    time.sleep(1.0)  # let every node send at least one heartbeat first
+
+    killed_at = time.time()
+    old_pid = _kill_node(outdir, "fanin")
+    noticed_at = _down_reported_at(outdir, "fanin")
+    assert noticed_at is not None, "the Supervisor never declared fanin down"
+    delay = noticed_at - killed_at
+    assert delay <= _HEARTBEAT_CHECK_INTERVAL_SECS + _DETECTION_MARGIN_SECS, (
+        f"fanin was declared down {delay:.2f}s after it was killed"
+    )
+    assert _wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
+
+
+def test_a_node_with_a_dead_thread_is_noticed_within_the_heartbeat_timeout(outdir):
+    """
+    G7, bounded detection: a node that is alive but unhealthy, because one
+    of its threads died, is noticed within HEARTBEAT_TIMEOUT_SECS, and
+    then relaunched. A line that is not JSON, followed by one that is not
+    a HELLO, stops the reader thread of fanin's ext port (see the resync
+    line in the design doc) while the process and its other threads go
+    on.
+    """
+    _launch(outdir)
+    time.sleep(1.0)  # let every node send at least one heartbeat first
+    old_pid = _read_pid(_id_file(outdir, "fanin"))
+
+    fd = os.open(_find_fifo(outdir, "fanin_ext"), os.O_WRONLY)
+    try:
+        broken_at = time.time()
+        os.write(fd, b"not json\n" + (json.dumps({"type": "DATA", "seq": 1, "payload": 1}) + "\n").encode())
+    finally:
+        os.close(fd)
+
+    # Still alive well before the timeout: this is the path of an unhealthy
+    # node, not of a process that is gone.
+    time.sleep(1.0)
+    os.killpg(int(old_pid), 0)
+
+    noticed_at = _down_reported_at(outdir, "fanin")
+    assert noticed_at is not None, "the Supervisor never declared fanin down"
+    delay = noticed_at - broken_at
+    assert delay <= _HEARTBEAT_TIMEOUT_SECS + _HEARTBEAT_CHECK_INTERVAL_SECS + _DETECTION_MARGIN_SECS, (
+        f"fanin was declared down {delay:.2f}s after its reader thread died"
+    )
+    assert _wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"

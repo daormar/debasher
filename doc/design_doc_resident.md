@@ -689,30 +689,33 @@ guarantee in words and never cite these numbers, which may change.
 
 Reliability is claimed only for what passes a **chaos test**: a reference
 resident program with the shapes that matter (a fan-in node with more than one
-input port whose `process_data` is sensitive to the order across ports, a cycle,
-a source and a sink), run under `kill -9` of random nodes at random moments
-(including several at once, adjacent pairs, and moments in which a snapshot
-round is open), with the `Supervisor` relaunching them.
+input port, which keeps a node state and whose `process_data` is sensitive to
+the order across ports, a cycle, a source and a sink), run under `kill -9` of
+random nodes at random moments (including several at once, adjacent pairs, and
+moments in which a snapshot round is open), with the `Supervisor` relaunching
+them, and halted and resumed.
 
 Pass criterion: for each port the fan-in node reads, the messages it is seen
 to have processed on that port, in a run's own trace, form exactly the
 sequence that port's writer actually sent, in the order it sent them, with no
-duplicate and no missing message. The run's full trace only has to be some
-interleaving of those per-port sequences, never a byte-for-byte match against
-one frozen reference run: which interleaving comes out, even with no failure
-at all, is itself a race between independent writers that a single run does
-not pin down uniquely. The exception follows from two limits of the Contract,
-after which a message can be lost beyond repair: both endpoints of a channel
-crashed before either reopened the FIFO, and a node killed with a message
-that it has read from a FIFO but not yet written to its input log. A run
-that hits either passes if it ends with an error of G8 that names the
-channel and the numbers of the missing messages, in place of the reference
-result. The source of the reference program numbers what it sends (see
-"External inputs" in the Contract's limits), so that a message lost at the
-port it feeds ends in that error too. What always fails is a different result
-with no error (a message duplicated, lost or altered that nobody reported) and
-a run that never ends and reports nothing. The chaos test runs against real
-`debasher_exec` runs, not mocks.
+duplicate and no missing message. The fan-in node also sends, with each
+message, its node state after processing it, and that state must go on across
+every relaunch and resume as if the node had never stopped. The run's full
+trace only has to be some interleaving of those per-port sequences, never a
+byte-for-byte match against one frozen reference run: which interleaving comes
+out, even with no failure at all, is itself a race between independent writers
+that a single run does not pin down uniquely. The exception follows from two
+limits of the Contract, after which a message can be lost beyond repair: both
+endpoints of a channel crashed before either reopened the FIFO, and a node
+killed with a message that it has read from a FIFO but not yet written to its
+input log. A run that hits either passes if it ends with an error of G8 that
+names the channel and the numbers of the missing messages, in place of the
+reference result. The source of the reference program numbers what it sends
+(see "External inputs" in the Contract's limits), so that a message lost at
+the port it feeds ends in that error too. What always fails is a different
+result with no error (a message duplicated, lost or altered that nobody
+reported) and a run that never ends and reports nothing. The chaos test runs
+against real `debasher_exec` runs, not mocks.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
 guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through
