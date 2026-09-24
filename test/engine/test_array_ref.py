@@ -7,7 +7,6 @@ as a node of its own. Every test also runs on debasher_array_gen_ref.sh, the
 same program with worker's tasks produced by an option generator.
 """
 
-import json
 import os
 import signal
 import subprocess
@@ -16,65 +15,29 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from resident_run import (
+    DEBASHER_STOP_RESIDENT,
+    launch,
+    outdir,
+    read_pid,
+    real_run,
+    wait_until,
+    write_line,
+)
+
+pytestmark = real_run
+
 _PFILES = {
     "loop": Path(__file__).resolve().parent / "debasher_array_ref.sh",
     "generator": Path(__file__).resolve().parent / "debasher_array_gen_ref.sh",
 }
-_DEBASHER_EXEC = _REPO_ROOT / "bin" / "debasher_exec"
-_DEBASHER_STOP = _REPO_ROOT / "bin" / "debasher_stop"
-_DEBASHER_STOP_RESIDENT = _REPO_ROOT / "bin" / "debasher_stop_resident"
 
 _NUM_WORKERS = 3
-
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("DEBASHER_RUN_CHAOS_TEST"),
-    reason="real debasher_exec run: set DEBASHER_RUN_CHAOS_TEST=1 to run it",
-)
-
-
-def _write_line(fifo_path, obj):
-    fd = os.open(fifo_path, os.O_WRONLY)
-    try:
-        os.write(fd, (json.dumps(obj) + "\n").encode())
-    finally:
-        os.close(fd)
-
-
-def _wait_for(predicate, timeout=30.0, interval=0.1):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(interval)
-    return predicate()
 
 
 @pytest.fixture(params=sorted(_PFILES))
 def pfile(request):
     return _PFILES[request.param]
-
-
-@pytest.fixture
-def outdir(tmp_path):
-    d = str(tmp_path / "array_ref_out")
-    yield d
-    subprocess.run(
-        [str(_DEBASHER_STOP), "-d", d], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-
-
-def _launch(pfile, outdir):
-    assert _DEBASHER_EXEC.exists(), "bin/debasher_exec not built: run make install first"
-    log_path = os.path.join(os.path.dirname(outdir), "exec.log")
-    with open(log_path, "w") as log_file:
-        result = subprocess.run(
-            [str(_DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", outdir],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-        )
-    if result.returncode != 0:
-        pytest.fail(Path(log_path).read_text())
 
 
 def _execdir(outdir, processname):
@@ -83,11 +46,6 @@ def _execdir(outdir, processname):
 
 def _worker_file(outdir, name, idx):
     return os.path.join(_execdir(outdir, "worker"), f"{name}_{idx}")
-
-
-def _read_pid(id_file):
-    with open(id_file) as f:
-        return int(f.read().strip())
 
 
 def _pid_alive(pid):
@@ -103,7 +61,7 @@ def _wait_until_every_node_started(outdir):
         os.path.join(_execdir(outdir, "start"), "control_ports"),
         os.path.join(_execdir(outdir, "collect"), "control_ports"),
     ] + [_worker_file(outdir, "control_ports", idx) for idx in range(_NUM_WORKERS)]
-    assert _wait_for(lambda: all(os.path.exists(p) for p in control_ports)), control_ports
+    assert wait_until(lambda: all(os.path.exists(p) for p in control_ports)), control_ports
 
 
 def _start_trigger_fifo(outdir):
@@ -118,16 +76,16 @@ def test_every_task_of_an_array_keeps_its_own_files_and_takes_part_in_a_round(pf
     checkpoint in checkpoints_<idx>, next to the others', and none of them
     writes to the names that a process that is not an array uses.
     """
-    _launch(pfile, outdir)
+    launch(pfile, outdir)
     _wait_until_every_node_started(outdir)
 
-    _write_line(_start_trigger_fifo(outdir), {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {"epoch": 7}}})
+    write_line(_start_trigger_fifo(outdir), {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {"epoch": 7}}})
 
     checkpoints = [
         os.path.join(_execdir(outdir, "start"), "checkpoints", "7.json"),
         os.path.join(_execdir(outdir, "collect"), "checkpoints", "7.json"),
     ] + [os.path.join(_worker_file(outdir, "checkpoints", idx), "7.json") for idx in range(_NUM_WORKERS)]
-    assert _wait_for(lambda: all(os.path.exists(p) for p in checkpoints)), checkpoints
+    assert wait_until(lambda: all(os.path.exists(p) for p in checkpoints)), checkpoints
 
     worker_entries = set(os.listdir(_execdir(outdir, "worker")))
     for name in ("checkpoints", "control_ports", "halted", "log"):
@@ -140,12 +98,12 @@ def test_debasher_stop_resident_stops_every_task_of_an_array(pfile, outdir):
     its own: every task writes its own halted marker, all with the epoch of
     the one shutdown, and every task ends cleanly, with its own .finished.
     """
-    _launch(pfile, outdir)
+    launch(pfile, outdir)
     _wait_until_every_node_started(outdir)
 
     start = time.monotonic()
     result = subprocess.run(
-        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
+        [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
         capture_output=True,
         text=True,
     )
@@ -176,11 +134,11 @@ def test_debasher_stop_resident_leaves_alone_only_the_task_named_with_dash_x(pfi
     and still stops the other tasks of the same array. Task 1 halts all the
     same, since the round reaches it through its fifo, but it keeps running.
     """
-    _launch(pfile, outdir)
+    launch(pfile, outdir)
     _wait_until_every_node_started(outdir)
 
     result = subprocess.run(
-        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "-x", "worker:1", "--timeout", "30"],
+        [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "-x", "worker:1", "--timeout", "30"],
         capture_output=True,
         text=True,
     )
@@ -189,8 +147,8 @@ def test_debasher_stop_resident_leaves_alone_only_the_task_named_with_dash_x(pfi
     for idx in (0, 2):
         assert os.path.exists(os.path.join(_execdir(outdir, "worker"), f"worker_{idx}.finished"))
     assert not os.path.exists(os.path.join(_execdir(outdir, "worker"), "worker_1.finished"))
-    pid = _read_pid(os.path.join(_execdir(outdir, "worker"), "worker_1.id"))
+    pid = int(read_pid(os.path.join(_execdir(outdir, "worker"), "worker_1.id")))
     assert _pid_alive(pid)
 
     os.killpg(pid, signal.SIGTERM)
-    assert _wait_for(lambda: os.path.exists(os.path.join(_execdir(outdir, "worker"), "worker_1.finished")))
+    assert wait_until(lambda: os.path.exists(os.path.join(_execdir(outdir, "worker"), "worker_1.finished")))

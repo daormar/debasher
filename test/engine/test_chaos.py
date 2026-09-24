@@ -1,644 +1,50 @@
 """
 Chaos test for the resident-program engine (see the design doc's "Acceptance:
-how reliability is shown"). Drives a real debasher_exec run of
-debasher_chaos_ref.sh, never mocks, so it is slow and, in later pieces,
-disruptive on purpose (real kill -9 of real processes): skipped unless
-DEBASHER_RUN_CHAOS_TEST is set, so it never runs as part of the ordinary
-suite.
+how reliability is shown"): real debasher_exec runs of debasher_chaos_ref.sh
+under kill -9 of random nodes, relaunched by the Supervisor, whose trace at
+sink has to meet the Acceptance criterion (see chaos_ref.py).
 """
 
-import hashlib
-import json
 import os
 import random
-import re
 import signal
-import subprocess
 import threading
 import time
-from datetime import datetime
-from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_PFILE = Path(__file__).resolve().parent / "debasher_chaos_ref.sh"
-_DEBASHER_EXEC = _REPO_ROOT / "bin" / "debasher_exec"
-_DEBASHER_STOP = _REPO_ROOT / "bin" / "debasher_stop"
-_DEBASHER_STOP_RESIDENT = _REPO_ROOT / "bin" / "debasher_stop_resident"
-
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("DEBASHER_RUN_CHAOS_TEST"),
-    reason="real debasher_exec chaos test, slow and disruptive: set DEBASHER_RUN_CHAOS_TEST=1 to run it",
+from chaos_ref import (
+    ExtFeeder,
+    G8_GAP_RE,
+    G8_TORN_RE,
+    KILLABLE_NODES,
+    SinkTailer,
+    SnapshotPacer,
+    assert_engineered_gap_trace,
+    assert_trace_matches,
+    find_g8_error,
+    halt_and_check_trace,
+    halt_and_wait_for_finished,
+    launch_chaos,
+    start_sched_out_tailers,
+)
+from resident_run import (
+    SchedOutTailer,
+    find_fifo,
+    id_file,
+    kill_node,
+    outdir,
+    read_pid,
+    real_run,
+    sched_out_file,
+    wait_for,
+    wait_for_any_text,
+    wait_for_relaunch,
+    wait_for_text,
+    write_line,
 )
 
-
-def _write_line(fifo_path, obj):
-    fd = os.open(fifo_path, os.O_WRONLY)
-    try:
-        os.write(fd, (json.dumps(obj) + "\n").encode())
-    finally:
-        os.close(fd)
-
-
-def _find_fifo(outdir, name):
-    matches = list(Path(outdir, "__fifos__").rglob(name))
-    assert matches, f"fifo {name!r} not found under {outdir}"
-    return str(matches[0])
-
-
-def _wait_for(path, timeout=30.0, interval=0.1):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if os.path.exists(path):
-            return True
-        time.sleep(interval)
-    return False
-
-
-class _SinkTailer(threading.Thread):
-    """
-    Follows sink's own input log continuously, from before anything is
-    sent until told to stop, across however many segments (and however
-    many incarnations of sink) it takes.
-
-    Reading the log directory once, after the run, is not reliable once
-    sink itself can be a kill target: a checkpoint sink's relaunched
-    incarnation takes right after replaying the pre-crash log already
-    covers everything in it, so pruning (see the Input log section)
-    deletes that pre-crash segment, however high CHECKPOINT_RETENTION is
-    set (retention counts this incarnation's own epochs, not history
-    from before a crash it never checkpointed itself). Tailing from the
-    start sidesteps this: every record is captured, in memory, well
-    before any future pruning could ever remove it from disk.
-    """
-
-    def __init__(self, log_dir, poll_interval=0.02):
-        super().__init__(daemon=True)
-        self._log_dir = Path(log_dir)
-        self._poll_interval = poll_interval
-        self._stop_event = threading.Event()
-        self.records = []
-        self.error = None
-
-    def stop_and_join(self, timeout=10):
-        self._stop_event.set()
-        self.join(timeout)
-
-    def _segments(self):
-        if not self._log_dir.is_dir():
-            return []
-        return sorted(self._log_dir.glob("*.log"), key=lambda p: int(p.stem))
-
-    def run(self):
-        current = None
-        fh = None
-        try:
-            while True:
-                should_stop = self._stop_event.is_set()
-                segments = self._segments()
-                if current is None and segments:
-                    current = segments[0]
-                    fh = open(current)
-
-                if fh is not None:
-                    while True:
-                        pos = fh.tell()
-                        line = fh.readline()
-                        if not line:
-                            break
-                        if not line.endswith("\n"):
-                            # A torn tail, or a line still being written:
-                            # rewind and try again once more is there.
-                            fh.seek(pos)
-                            break
-                        try:
-                            record = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        self.records.append(record["env"])
-
-                    # By stem, not list position: `current` itself may
-                    # already be gone from a fresh listing by now (pruned
-                    # once a later checkpoint supersedes it), but the
-                    # already-open handle is still perfectly readable.
-                    current_pos = int(current.stem)
-                    newer = [s for s in segments if int(s.stem) > current_pos]
-                    if newer:
-                        fh.close()
-                        current = min(newer, key=lambda p: int(p.stem))
-                        fh = open(current)
-
-                if should_stop:
-                    break
-                time.sleep(self._poll_interval)
-        except Exception as exc:  # surfaced by the test through .error
-            self.error = exc
-        finally:
-            if fh is not None:
-                fh.close()
-
-
-class _SchedOutTailer(threading.Thread):
-    """
-    Follows a single node's own .sched_out (its stdout+stderr, where an
-    unhandled exception in a reader thread ends up, see debasher::
-    _get_process_log_filename) across however many incarnations it takes,
-    the same truncation problem _SinkTailer solves for the structured
-    input log: debasher_builtin_sched's own `> file 2>&1` redirection
-    truncates this file on every relaunch, so reading it once after the
-    run can lose an earlier incarnation's own traceback entirely.
-
-    Detects a new incarnation by the current content no longer starting
-    with what was last seen (a plain growing file always does): commits
-    whatever was captured of the previous incarnation to .text, then
-    starts tracking the new one. A poll interval far shorter than the
-    node's own relaunch cadence (seconds, driven by HEARTBEAT_TIMEOUT_SECS)
-    makes losing a whole incarnation between two polls very unlikely.
-    """
-
-    def __init__(self, path, poll_interval=0.02):
-        super().__init__(daemon=True)
-        self._path = path
-        self._poll_interval = poll_interval
-        self._stop_event = threading.Event()
-        self.text = ""
-        self.error = None
-
-    def stop_and_join(self, timeout=10):
-        self._stop_event.set()
-        self.join(timeout)
-
-    def run(self):
-        current = ""
-        try:
-            while True:
-                should_stop = self._stop_event.is_set()
-                try:
-                    with open(self._path) as f:
-                        content = f.read()
-                except FileNotFoundError:
-                    content = ""
-
-                if not content.startswith(current):
-                    self.text += current
-                    current = content
-                else:
-                    current = content
-
-                if should_stop:
-                    self.text += current
-                    break
-                time.sleep(self._poll_interval)
-        except Exception as exc:  # surfaced by the test through .error
-            self.error = exc
-
-
-def _wait_for_text(path, needle, timeout=30.0, interval=0.05):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with open(path) as f:
-                if needle in f.read():
-                    return True
-        except FileNotFoundError:
-            pass
-        time.sleep(interval)
-    return False
-
-
-def _wait_for_any_text(path, needles, timeout=30.0, interval=0.05):
-    """Like _wait_for_text, but for any one of several needles; returns
-    the one that matched, or None on timeout."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with open(path) as f:
-                content = f.read()
-            for needle in needles:
-                if needle in content:
-                    return needle
-        except FileNotFoundError:
-            pass
-        time.sleep(interval)
-    return None
-
-
-# Two shapes a G8 violation on a killed node's channel is seen to take in
-# practice (see "Acceptance" in the design doc): a clean one naming
-# the exact missing sequence numbers, raised when the reader notices the
-# jump itself; and a "torn line" one with no numbers, raised when a freshly
-# relaunched reader reattaches mid-message to a fifo whose writer never
-# itself died (so no fresh HELLO is coming to excuse the fragment). Both
-# stop the affected part and are detected, never silent, so both count as
-# the accepted exception; only the first names a range to cross-check.
-_G8_GAP_RE = re.compile(
-    r"gap in the sequence numbers on '(?P<channel>[^']+)': "
-    r"expected \d+, got \d+, missing (?P<lo>\d+)(?: to (?P<hi>\d+))?"
-)
-_G8_TORN_RE = re.compile(r"unparsable line on '(?P<channel>[^']+)' not followed by HELLO")
-
-
-def _find_g8_error(text, channel):
-    """
-    Returns (lo, hi) of the reported missing range if the clean, numbered
-    shape naming `channel` is found; (None, None) if only the numberless
-    "torn line" shape naming `channel` is found; None if neither is.
-    """
-    m = _G8_GAP_RE.search(text)
-    if m and m.group("channel") == channel:
-        lo = int(m.group("lo"))
-        hi = int(m.group("hi")) if m.group("hi") else lo
-        return (lo, hi)
-    m = _G8_TORN_RE.search(text)
-    if m and m.group("channel") == channel:
-        return (None, None)
-    return None
-
-
-_KILLABLE_NODES = ("fanin", "loop", "sink")
-
-
-def _read_pid(id_file):
-    try:
-        with open(id_file) as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return None
-
-
-def _id_file(outdir, name):
-    return os.path.join(outdir, "__exec__", name, f"{name}.id")
-
-
-def _sched_out_file(outdir, name):
-    # debasher::_get_process_log_filename's own naming: "<name>.sched_out",
-    # truncated and rewritten on every launch/relaunch of that node.
-    return os.path.join(outdir, "__exec__", name, f"{name}.sched_out")
-
-
-def _kill_node(outdir, name, timeout=10.0):
-    """
-    kill -9 -- -$pid on the node's own process group (debasher::_stop_pid's
-    own mechanism): every node is its own process group leader (see
-    debasher_builtin_sched::_launch), so this reaches whatever it forked
-    too. Returns the pid that was killed.
-    """
-    id_file = _id_file(outdir, name)
-    assert _wait_for(id_file, timeout=timeout), f"{name}.id never appeared"
-    pid = _read_pid(id_file)
-    os.killpg(int(pid), signal.SIGKILL)
-    return pid
-
-
-def _wait_for_relaunch(outdir, name, old_pid, timeout=15.0, interval=0.1):
-    id_file = _id_file(outdir, name)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        pid = _read_pid(id_file)
-        if pid is not None and pid != old_pid:
-            return pid
-        time.sleep(interval)
-    return None
-
-
-class _ExtFeeder(threading.Thread):
-    """
-    Feeds 1..k into ext, one write per value, from outside the program.
-    Keeps a single write fd open for the whole run and retries a write
-    that raises BrokenPipeError (fanin currently down) on that same fd.
-
-    Verified empirically (not assumed) with a standalone fifo, before
-    writing this: a value already buffered in ext, unread, when fanin
-    dies survives for its relaunched incarnation to read, but only if
-    something keeps a fd open on ext the whole time; with no fd open at
-    all, even for an instant, the kernel discards it. A write attempted
-    while fanin is down always raises BrokenPipeError at once (it never
-    blocks and never partially writes, every payload here being far
-    under PIPE_BUF), and retrying that same write on that same fd once
-    fanin reopens ext succeeds and is delivered whole, so no value is
-    ever lost or duplicated as long as the retry loop below keeps going
-    until each one is actually accepted.
-
-    Every value carries its own sequence number, as a source that knows
-    the protocol may send it: a value that fanin takes from ext and loses
-    before writing it to its input log (see the Contract's limits) is
-    then a gap that fanin reports (G8), not a silent loss at the
-    boundary of the program.
-    """
-
-    def __init__(self, ext_fifo, k, interval, stop_event=None, first=1):
-        super().__init__(daemon=True)
-        self._ext_fifo = ext_fifo
-        self._k = k
-        # The first value, and number, to send: above 1 only to go on
-        # after a resume, where fanin has already accepted the ones before
-        self._first = first
-        self._interval = interval
-        # Only a permanently-failed peer (a node given up on for good, not
-        # just down for a relaunch) needs this: it never reopens ext
-        # again, so retrying forever would hang the feeder past the point
-        # where anyone is still listening. None (the default) keeps every
-        # other piece's plain "retry until it is accepted" behavior.
-        self._stop_event = stop_event
-        self.error = None
-        self.sent = 0
-
-    def run(self):
-        try:
-            fd = os.open(self._ext_fifo, os.O_WRONLY)
-            try:
-                for i in range(self._first, self._k + 1):
-                    line = (json.dumps({"type": "DATA", "seq": i, "payload": i}) + "\n").encode()
-                    while True:
-                        if self._stop_event is not None and self._stop_event.is_set():
-                            return
-                        try:
-                            os.write(fd, line)
-                            break
-                        except BrokenPipeError:
-                            time.sleep(0.05)
-                    self.sent = i
-                    if self._stop_event is not None and self._stop_event.wait(self._interval):
-                        return
-                    elif self._stop_event is None:
-                        time.sleep(self._interval)
-            finally:
-                os.close(fd)
-        except Exception as exc:  # surfaced by the test through .error
-            self.error = exc
-
-
-class _SnapshotPacer(threading.Thread):
-    """Sends start_snapshot through the manual trigger on a steady beat,
-    for as long as the chaos run's main data feed lasts. sup itself is
-    never a kill target, so the plain per-message open+write+close of
-    _write_line is safe here."""
-
-    def __init__(self, manual_fifo, interval, stop_event):
-        super().__init__(daemon=True)
-        self._manual_fifo = manual_fifo
-        self._interval = interval
-        self._stop_event = stop_event
-
-    def run(self):
-        while not self._stop_event.wait(self._interval):
-            try:
-                _write_line(
-                    self._manual_fifo,
-                    {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}},
-                )
-            except OSError:
-                pass
-
-
-@pytest.fixture
-def outdir(tmp_path):
-    d = str(tmp_path / "chaos_out")
-    yield d
-    subprocess.run(
-        [str(_DEBASHER_STOP), "-d", d], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-
-
-def _launch(outdir):
-    assert _DEBASHER_EXEC.exists(), "bin/debasher_exec not built: run make install first"
-    log_path = os.path.join(os.path.dirname(outdir), "exec.log")
-    # A resident program's processes are launched in the background and
-    # keep running after debasher_exec itself returns, still holding
-    # their inherited stdout/stderr: piping (capture_output=True) would
-    # make subprocess.run wait for those too, not just for debasher_exec.
-    with open(log_path, "w") as log_file:
-        result = subprocess.run(
-            [str(_DEBASHER_EXEC), "--pfile", str(_PFILE), "--outdir", outdir],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-        )
-    if result.returncode != 0:
-        pytest.fail(Path(log_path).read_text())
-
-
-def _halt_and_wait_for_finished(outdir, timeout=30.0):
-    """
-    The design doc's third G2 candidate's own tool
-    (debasher_stop_resident), exercised for real, not hand-rolled: it
-    finds fanin's own control port by itself (no Supervisor involved in
-    that part), waits for every node's halted marker, stops the
-    Supervisor first the same graceful way, signals every node (whole
-    process group, see debasher_builtin_sched::_print_script_trap), and
-    falls back to debasher_stop if it cannot finish within timeout. See
-    test_debasher_stop_resident_stops_the_whole_program_cleanly for a
-    dedicated check of the tool itself; every test here only uses this to
-    end a run cleanly enough to look at its trace afterward.
-    """
-    result = subprocess.run(
-        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", str(int(timeout))],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, f"debasher_stop_resident failed:\n{result.stdout}\n{result.stderr}"
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=timeout)
-
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=timeout)
-
-
-def _assert_node_state_restored(records, context=""):
-    """
-    G3 (and G6 across a resume): fanin's node state travels in every copy
-    it sends to sink. On each port the counts that sink sees must be 1, 2,
-    3... with no jump and no restart: a relaunch or a resume that did not
-    restore the state as it was would start counting again, or skip.
-
-    G4: the digest in each copy folds every message fanin processed, on
-    any port, in the order it processed them, and sink sees the copies in
-    that same order. Folding sink's own trace must give the digest of
-    every copy: a replay that reproduced another interleaving of the ports
-    would leave fanin with a digest that no longer follows from the trace.
-
-    Both hold whether or not a message was lost before fanin processed
-    it, since the state only follows what fanin processed, and sink sees
-    a prefix of that when its own channel has a gap.
-    """
-    data = [r for r in records if r.get("type") == "DATA"]
-    for port in ("ext", "loop_in"):
-        counts = [r["payload"]["count"] for r in data if r["payload"]["port"] == port]
-        assert counts == list(range(1, len(counts) + 1)), (
-            f"fanin's count on {port} was not restored{context}: {counts}"
-        )
-    digest = ""
-    for position, r in enumerate(data, start=1):
-        payload = r["payload"]
-        folded = f"{digest}|{payload['port']}:{payload['value']}"
-        digest = hashlib.sha256(folded.encode()).hexdigest()
-        assert payload["digest"] == digest, (
-            f"fanin's digest does not follow from the order of sink's trace at copy "
-            f"{position} ({payload['port']}:{payload['value']}){context}"
-        )
-
-
-def _assert_trace_matches(records, k, context=""):
-    """
-    The reformulated Acceptance criterion: each port's own sequence,
-    exact, in order, no duplicate, no missing value; and fanin's node
-    state restored wherever it was relaunched.
-    """
-    ext_seq = [
-        r["payload"]["value"]
-        for r in records
-        if r.get("type") == "DATA" and r["payload"]["port"] == "ext"
-    ]
-    loop_seq = [
-        r["payload"]["value"]
-        for r in records
-        if r.get("type") == "DATA" and r["payload"]["port"] == "loop_in"
-    ]
-
-    expected = list(range(1, k + 1))
-    assert ext_seq == expected, f"ext_seq mismatch{context}: {ext_seq}"
-    assert loop_seq == expected, f"loop_seq mismatch{context}: {loop_seq}"
-    _assert_node_state_restored(records, context)
-
-
-def _assert_engineered_gap_trace(records, k, reported_range, context=""):
-    """
-    The Acceptance criterion's exception clause, for a run that engineers
-    a real loss on the fanin->sink channel on purpose (see
-    test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recognized_g8_error).
-
-    Once the gap opens, sink's reader thread for this channel dies on it
-    identically on every relaunch (the same durable hole is still there
-    to rediscover each time), so it never gets past it before giving up
-    for good: what survives is not "everything except a hole in the
-    middle", it is an exact, gapless prefix of the channel's own sequence
-    numbers (each DATA record's own `seq`, not the derived per-port
-    value), ending exactly where the gap the G8 error named begins.
-    """
-    data = [r for r in records if r.get("type") == "DATA" and r.get("seq") is not None]
-    seqs = [r["seq"] for r in data]
-
-    lo, hi = reported_range
-    if lo is not None:
-        assert seqs == list(range(1, lo)), (
-            f"surviving trace should be exactly seq 1..{lo - 1}, the reported gap's "
-            f"own start, got{context}: {seqs}"
-        )
-    else:
-        # The "torn line" shape names no numbers: still require a clean,
-        # gapless prefix (no trust in a number we don't have), and that
-        # real loss actually happened rather than a silently full trace.
-        assert seqs == list(range(1, len(seqs) + 1)), (
-            f"surviving trace is not a clean, gapless prefix{context}: {seqs}"
-        )
-        assert len(seqs) < 2 * k, f"no loss actually happened{context}: got all {2 * k} sends"
-
-    ext_seq = [r["payload"]["value"] for r in data if r["payload"]["port"] == "ext"]
-    loop_seq = [r["payload"]["value"] for r in data if r["payload"]["port"] == "loop_in"]
-    assert ext_seq == sorted(set(ext_seq)), f"ext_seq out of order or duplicated{context}: {ext_seq}"
-    assert loop_seq == sorted(set(loop_seq)), (
-        f"loop_seq out of order or duplicated{context}: {loop_seq}"
-    )
-    _assert_node_state_restored(data, context)
-
-
-def _start_sched_out_tailers(outdir):
-    """One _SchedOutTailer per killable node, started, keyed by name."""
-    tailers = {name: _SchedOutTailer(_sched_out_file(outdir, name)) for name in _KILLABLE_NODES}
-    for out in tailers.values():
-        out.start()
-    return tailers
-
-
-def _find_reported_losses(texts):
-    """
-    Every G8 error that the nodes' outputs hold, as (node, channel, lo, hi):
-    lo..hi is the missing range, or (None, None) for the "torn line" shape,
-    which names no numbers (see _find_g8_error).
-    """
-    reported = []
-    for name, text in texts.items():
-        for m in _G8_GAP_RE.finditer(text):
-            lo = int(m.group("lo"))
-            hi = int(m.group("hi")) if m.group("hi") else lo
-            reported.append((name, m.group("channel"), lo, hi))
-        for m in _G8_TORN_RE.finditer(text):
-            reported.append((name, m.group("channel"), None, None))
-    return reported
-
-
-def _assert_trace_with_reported_losses(records, k, reported, context=""):
-    """
-    The Acceptance criterion's exception clause, for a run in which a
-    killed node reported a loss: sink's trace is a gapless prefix of its
-    channel's sequence numbers (ending right before the gap, if the gap
-    is sink's own), and each port's values are in order, with no
-    duplicate and nothing that ext was never sent.
-    """
-    seqs = [r["seq"] for r in records if r.get("type") == "DATA"]
-    sink_gaps = [lo for node, _, lo, _ in reported if node == "sink" and lo is not None]
-    if sink_gaps:
-        assert seqs == list(range(1, min(sink_gaps))), (
-            f"sink's trace should be exactly seq 1..{min(sink_gaps) - 1}, before the gap it "
-            f"reported{context}: {seqs}"
-        )
-    else:
-        assert seqs == list(range(1, len(seqs) + 1)), (
-            f"sink's trace is not a gapless prefix{context}: {seqs}"
-        )
-
-    for port in ("ext", "loop_in"):
-        values = [
-            r["payload"]["value"]
-            for r in records
-            if r.get("type") == "DATA" and r["payload"]["port"] == port
-        ]
-        assert values == sorted(set(values)), (
-            f"{port} values out of order or duplicated{context}: {values}"
-        )
-        assert set(values) <= set(range(1, k + 1)), f"{port} values never sent{context}: {values}"
-    _assert_node_state_restored(records, context)
-
-
-def _halt_and_check_trace(outdir, tailer, node_outs, killed, k, context=""):
-    """
-    Ends a run in which the nodes named in `killed` were killed at random
-    moments, and checks it against the Acceptance criterion.
-
-    A kill can land in the window in which a node has taken a message
-    from a fifo but not yet written it to its input log (see the
-    Contract's limits): the message is lost for good, the node reports
-    it with a G8 error when the next one arrives, and the halt may never
-    complete, since that node's reader has stopped. Such a run passes if
-    every G8 error came from a killed node and the trace satisfies
-    _assert_trace_with_reported_losses. A run with no G8 error has to
-    halt cleanly and give the exact trace.
-    """
-    result = subprocess.run(
-        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "60"],
-        capture_output=True,
-        text=True,
-    )
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
-    texts = {}
-    for name, out in node_outs.items():
-        out.stop_and_join()
-        if out.error is not None:
-            raise out.error
-        texts[name] = out.text
-
-    reported = _find_reported_losses(texts)
-    if not reported:
-        assert result.returncode == 0, (
-            f"debasher_stop_resident failed:\n{result.stdout}\n{result.stderr}"
-        )
-        assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
-        _assert_trace_matches(tailer.records, k, context)
-        return
-
-    not_killed = [loss for loss in reported if loss[0] not in killed]
-    assert not not_killed, f"G8 error at a node that was never killed{context}: {not_killed}"
-    _assert_trace_with_reported_losses(tailer.records, k, reported, f"{context}, reported {reported}")
+pytestmark = real_run
 
 
 def test_a_clean_run_produces_the_exact_trace_at_sink(outdir):
@@ -649,27 +55,27 @@ def test_a_clean_run_produces_the_exact_trace_at_sink(outdir):
     order, G2 no silent loss, G4 faithful replay across ports).
     """
     k = 20
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    launch_chaos(outdir)
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
 
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    manual_fifo = _find_fifo(outdir, "sup_manual")
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    manual_fifo = find_fifo(outdir, "sup_manual")
 
     for i in range(1, k + 1):
-        _write_line(ext_fifo, {"type": "DATA", "payload": i})
+        write_line(ext_fifo, {"type": "DATA", "payload": i})
         time.sleep(0.02)
 
     time.sleep(0.5)
-    _write_line(
+    write_line(
         manual_fifo, {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}}
     )
     time.sleep(0.5)
-    _halt_and_wait_for_finished(outdir)
+    halt_and_wait_for_finished(outdir)
     tailer.stop_and_join()
     if tailer.error is not None:
         raise tailer.error
-    _assert_trace_matches(tailer.records, k)
+    assert_trace_matches(tailer.records, k)
 
 
 @pytest.mark.parametrize("run_index", range(10))
@@ -683,31 +89,31 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     still land in the window in which the node has taken a message from a
     fifo but not yet logged it, the Contract's other limit: such a run
     passes with the G8 error that reports the loss (see
-    _halt_and_check_trace), and every other run's trace must match the
+    halt_and_check_trace), and every other run's trace must match the
     criterion exactly.
     """
     k = 60
     interval = 0.03
     rng = random.Random(run_index)
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    launch_chaos(outdir)
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
-    node_outs = _start_sched_out_tailers(outdir)
+    node_outs = start_sched_out_tailers(outdir)
 
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    manual_fifo = _find_fifo(outdir, "sup_manual")
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    manual_fifo = find_fifo(outdir, "sup_manual")
 
-    feeder = _ExtFeeder(ext_fifo, k, interval)
+    feeder = ExtFeeder(ext_fifo, k, interval)
     stop_snapshots = threading.Event()
-    snapshots = _SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
+    snapshots = SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
     feeder.start()
     snapshots.start()
 
-    target = rng.choice(_KILLABLE_NODES)
+    target = rng.choice(KILLABLE_NODES)
     kill_delay = rng.uniform(0.2, max(0.25, k * interval - 0.2))
     time.sleep(kill_delay)
-    old_pid = _kill_node(outdir, target)
-    new_pid = _wait_for_relaunch(outdir, target, old_pid)
+    old_pid = kill_node(outdir, target)
+    new_pid = wait_for_relaunch(outdir, target, old_pid)
     assert new_pid is not None, f"{target} (pid {old_pid}) was never relaunched"
 
     feeder.join(timeout=60)
@@ -726,7 +132,7 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     snapshots.join(timeout=5)
 
     context = f" (killed {target}, pid {old_pid} -> {new_pid}, at +{kill_delay:.2f}s)"
-    _halt_and_check_trace(outdir, tailer, node_outs, {target}, k, context)
+    halt_and_check_trace(outdir, tailer, node_outs, {target}, k, context)
 
 
 @pytest.mark.parametrize("run_index", range(10))
@@ -742,23 +148,23 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     the Contract's "both endpoints of a channel crashed" limit, the same
     reasoning as the single-node-kill driver above. As there, a kill that
     lands between a read and its logging ends the run with a G8 error
-    instead (see _halt_and_check_trace); every other run's trace must
+    instead (see halt_and_check_trace); every other run's trace must
     match the criterion exactly.
     """
     k = 60
     interval = 0.03
     rng = random.Random(run_index)
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    launch_chaos(outdir)
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
-    node_outs = _start_sched_out_tailers(outdir)
+    node_outs = start_sched_out_tailers(outdir)
 
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    manual_fifo = _find_fifo(outdir, "sup_manual")
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    manual_fifo = find_fifo(outdir, "sup_manual")
 
-    feeder = _ExtFeeder(ext_fifo, k, interval)
+    feeder = ExtFeeder(ext_fifo, k, interval)
     stop_snapshots = threading.Event()
-    snapshots = _SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
+    snapshots = SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
     feeder.start()
     snapshots.start()
 
@@ -768,12 +174,12 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     elapsed = 0.0
     for name, delay in kills:
         time.sleep(max(0.0, delay - elapsed))
-        old_pids[name] = _kill_node(outdir, name)
+        old_pids[name] = kill_node(outdir, name)
         elapsed = delay
 
     new_pids = {}
     for name, old_pid in old_pids.items():
-        new_pids[name] = _wait_for_relaunch(outdir, name, old_pid)
+        new_pids[name] = wait_for_relaunch(outdir, name, old_pid)
         assert new_pids[name] is not None, f"{name} (pid {old_pid}) was never relaunched"
 
     feeder.join(timeout=60)
@@ -792,7 +198,7 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
         f"killed {name} pid {old_pids[name]} -> {new_pids[name]} at +{delay:.2f}s"
         for name, delay in kills
     ) + ")"
-    _halt_and_check_trace(outdir, tailer, node_outs, set(old_pids), k, context)
+    halt_and_check_trace(outdir, tailer, node_outs, set(old_pids), k, context)
 
 
 @pytest.mark.parametrize("run_index", range(5))
@@ -821,9 +227,9 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     SIGKILL both before either relaunches.
 
     The run must still end in one of the two shapes a G8 violation is
-    seen to take on this channel (see _find_g8_error) naming 'from_fanin',
+    seen to take on this channel (see find_g8_error) naming 'from_fanin',
     and the surviving trace, once the reachable part of the graph (fanin,
-    loop) settles, must satisfy _assert_engineered_gap_trace: no
+    loop) settles, must satisfy assert_engineered_gap_trace: no
     duplicate, nothing out of order, the missing sends forming a single
     contiguous range, the one the error itself named when it named one.
 
@@ -845,32 +251,32 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     # sink does give up, the Supervisor's own escalation shuts fanin down
     # right away, on its own, not waiting for the feed to finish, so the
     # feeder is stopped explicitly once that is observed (see stop_event
-    # on _ExtFeeder) instead of being joined to completion like every
+    # on ExtFeeder) instead of being joined to completion like every
     # other piece: the actual, stable count of what it got to send
     # (feeder.sent), not the nominal k, is what the trace is checked
     # against.
     k = 700
     interval = 0.02
     rng = random.Random(run_index)
-    _launch(outdir)
+    launch_chaos(outdir)
 
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
-    sink_out = _SchedOutTailer(_sched_out_file(outdir, "sink"))
+    sink_out = SchedOutTailer(sched_out_file(outdir, "sink"))
     sink_out.start()
-    fanin_out = _SchedOutTailer(_sched_out_file(outdir, "fanin"))
+    fanin_out = SchedOutTailer(sched_out_file(outdir, "fanin"))
     fanin_out.start()
 
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    manual_fifo = _find_fifo(outdir, "sup_manual")
-    sup_sched_out = _sched_out_file(outdir, "sup")
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    manual_fifo = find_fifo(outdir, "sup_manual")
+    sup_sched_out = sched_out_file(outdir, "sup")
 
     feeder_stop = threading.Event()
-    feeder = _ExtFeeder(ext_fifo, k, interval, stop_event=feeder_stop)
+    feeder = ExtFeeder(ext_fifo, k, interval, stop_event=feeder_stop)
     feeder.start()
 
     time.sleep(0.3)
-    sink_pid = int(_read_pid(_id_file(outdir, "sink")))
+    sink_pid = int(read_pid(id_file(outdir, "sink")))
     os.killpg(sink_pid, signal.SIGSTOP)
 
     # A generous, fixed floor, not tuned per seed: reliability of the
@@ -878,18 +284,18 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     # space, so only a small jitter is added on top of it.
     time.sleep(0.8 + rng.uniform(0.0, 0.3))
 
-    _write_line(
+    write_line(
         manual_fifo, {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}}
     )
-    assert _wait_for_text(
+    assert wait_for_text(
         sup_sched_out, "node 'fanin' saved a checkpoint", timeout=10
     ), "fanin never closed its checkpoint"
 
-    fanin_pid = int(_read_pid(_id_file(outdir, "fanin")))
+    fanin_pid = int(read_pid(id_file(outdir, "fanin")))
     os.killpg(fanin_pid, signal.SIGKILL)
     os.killpg(sink_pid, signal.SIGKILL)
 
-    assert _wait_for_text(
+    assert wait_for_text(
         sup_sched_out, "node 'sink' exceeded", timeout=30
     ), "sink never gave up on the engineered, permanent gap"
 
@@ -910,7 +316,7 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     # not the "both endpoints crashed" one this piece targets. Either
     # outcome is accepted, as long as fanin's own gap, if it has one, was
     # also detected, not silent.
-    fanin_outcome = _wait_for_any_text(
+    fanin_outcome = wait_for_any_text(
         sup_sched_out,
         ["node 'fanin' finished cleanly", "node 'fanin' exceeded"],
         timeout=30,
@@ -922,15 +328,15 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     if fanin_out.error is not None:
         raise fanin_out.error
     if fanin_outcome == "node 'fanin' exceeded":
-        assert _G8_GAP_RE.search(fanin_out.text) or _G8_TORN_RE.search(fanin_out.text), (
+        assert G8_GAP_RE.search(fanin_out.text) or G8_TORN_RE.search(fanin_out.text), (
             f"fanin also gave up, but without a recognizable G8 error: {fanin_out.text!r}"
         )
 
-    assert _wait_for_text(
+    assert wait_for_text(
         sup_sched_out, "node 'loop' finished cleanly", timeout=30
     ), "loop (still reachable) never finished after sink gave up"
 
-    assert _wait_for(
+    assert wait_for(
         os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=30
     ), "sup.finished never appeared after the escalation resolved the reachable graph"
 
@@ -942,12 +348,12 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     if sink_out.error is not None:
         raise sink_out.error
 
-    reported = _find_g8_error(sink_out.text, "from_fanin")
+    reported = find_g8_error(sink_out.text, "from_fanin")
     assert reported is not None, (
         f"no G8 error naming 'from_fanin' found across sink's incarnations: {sink_out.text!r}"
     )
     context = f" (run {run_index}, reported range {reported})"
-    _assert_engineered_gap_trace(tailer.records, k, reported, context)
+    assert_engineered_gap_trace(tailer.records, k, reported, context)
 
 
 @pytest.mark.parametrize("run_index", range(10))
@@ -980,22 +386,22 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     exception, because the topology itself rules that limit out here, not
     because timing happened to avoid it. A kill between a read and its
     logging still ends a run with a G8 error, as in the pieces above (see
-    _halt_and_check_trace).
+    halt_and_check_trace).
     """
     k = 60
     interval = 0.03
     rng = random.Random(run_index)
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    launch_chaos(outdir)
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
-    node_outs = _start_sched_out_tailers(outdir)
+    node_outs = start_sched_out_tailers(outdir)
 
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    manual_fifo = _find_fifo(outdir, "sup_manual")
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    manual_fifo = find_fifo(outdir, "sup_manual")
 
-    feeder = _ExtFeeder(ext_fifo, k, interval)
+    feeder = ExtFeeder(ext_fifo, k, interval)
     stop_snapshots = threading.Event()
-    snapshots = _SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
+    snapshots = SnapshotPacer(manual_fifo, 0.7, stop_snapshots)
     feeder.start()
     snapshots.start()
 
@@ -1008,12 +414,12 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     elapsed = 0.0
     for name, delay in kills:
         time.sleep(max(0.0, delay - elapsed))
-        old_pids[name] = _kill_node(outdir, name)
+        old_pids[name] = kill_node(outdir, name)
         elapsed = delay
 
     new_pids = {}
     for name, old_pid in old_pids.items():
-        new_pids[name] = _wait_for_relaunch(outdir, name, old_pid)
+        new_pids[name] = wait_for_relaunch(outdir, name, old_pid)
         assert new_pids[name] is not None, f"{name} (pid {old_pid}) was never relaunched"
 
     # Stopped here, right after both relaunches, not after the settle
@@ -1043,7 +449,7 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
         f"killed {name} pid {old_pids[name]} -> {new_pids[name]} at +{delay:.2f}s"
         for name, delay in kills
     ) + ")"
-    _halt_and_check_trace(outdir, tailer, node_outs, set(old_pids), k, context)
+    halt_and_check_trace(outdir, tailer, node_outs, set(old_pids), k, context)
 
 
 @pytest.mark.parametrize("run_index", range(10))
@@ -1073,27 +479,27 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     during a halt round is a different case, which this piece does not
     exercise. As in the pieces above, a kill that lands between a read and
     its logging ends the run with a G8 error instead (see
-    _halt_and_check_trace).
+    halt_and_check_trace).
     """
     k = 60
     interval = 0.03
     rng = random.Random(run_index)
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    launch_chaos(outdir)
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
-    node_outs = _start_sched_out_tailers(outdir)
+    node_outs = start_sched_out_tailers(outdir)
 
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    manual_fifo = _find_fifo(outdir, "sup_manual")
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    manual_fifo = find_fifo(outdir, "sup_manual")
 
-    feeder = _ExtFeeder(ext_fifo, k, interval)
+    feeder = ExtFeeder(ext_fifo, k, interval)
     feeder.start()
 
     time.sleep(rng.uniform(0.1, 0.5))
-    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
+    loop_pid = int(read_pid(id_file(outdir, "loop")))
     os.killpg(loop_pid, signal.SIGSTOP)
 
-    _write_line(
+    write_line(
         manual_fifo, {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}}
     )
 
@@ -1104,12 +510,12 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     open_round_delay = rng.uniform(0.02, 1.5)
     time.sleep(open_round_delay)
 
-    fanin_old_pid = int(_read_pid(_id_file(outdir, "fanin")))
+    fanin_old_pid = int(read_pid(id_file(outdir, "fanin")))
     os.killpg(fanin_old_pid, signal.SIGKILL)
 
     os.killpg(loop_pid, signal.SIGCONT)
 
-    fanin_new_pid = _wait_for_relaunch(outdir, "fanin", str(fanin_old_pid))
+    fanin_new_pid = wait_for_relaunch(outdir, "fanin", str(fanin_old_pid))
     assert fanin_new_pid is not None, f"fanin (pid {fanin_old_pid}) was never relaunched"
 
     feeder.join(timeout=60)
@@ -1125,680 +531,4 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
         f" (killed fanin pid {fanin_old_pid} -> {fanin_new_pid}, "
         f"{open_round_delay:.2f}s into its open round)"
     )
-    _halt_and_check_trace(outdir, tailer, node_outs, {"fanin"}, k, context)
-
-
-def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdir):
-    """
-    A halt behaves like an ordinary snapshot at every node, and only an
-    external actor decides when it is safe to stop, by a real SIGTERM once
-    every node's halted marker exists (see "Ordered shutdown" in the design
-    doc). This checks the nodes' side, without the tool that normally
-    sends that SIGTERM (debasher_stop_resident, tested below): fanin's
-    control port is discoverable from its own execdir (no Supervisor
-    involved in finding it), every node marks itself halted once its own
-    round closes, every node is still alive at that point (a node that
-    stopped as soon as its own round closed would lose what its peers
-    were still sending it, against G2), and a real SIGTERM then stops
-    each one cleanly.
-    """
-    _launch(outdir)
-
-    control_ports = {}
-    for name in _KILLABLE_NODES:
-        path = os.path.join(outdir, "__exec__", name, "control_ports")
-        assert _wait_for(path), f"{name} never wrote its control_ports file"
-        with open(path) as f:
-            control_ports[name] = f.read().splitlines()
-
-    assert control_ports["fanin"] == [_find_fifo(outdir, "sup_trig_fanin")]
-    assert control_ports["loop"] == []
-    assert control_ports["sink"] == []
-
-    # Trigger the halt directly on fanin's own control port, the way
-    # debasher_stop_resident does (not through the Supervisor's manual
-    # trigger, which is a separate path entirely).
-    _write_line(
-        control_ports["fanin"][0], {"type": "INTERACT", "payload": {"command": "shutdown", "args": {}}}
-    )
-
-    halted_paths = {name: os.path.join(outdir, "__exec__", name, "halted") for name in _KILLABLE_NODES}
-    for name, path in halted_paths.items():
-        assert _wait_for(path, timeout=15.0), f"{name} never marked itself halted"
-
-    # The guarantee this piece exists for: closing the round does not stop
-    # anyone by itself, unlike before.
-    pids = {}
-    for name in _KILLABLE_NODES:
-        pid = _read_pid(_id_file(outdir, name))
-        assert pid is not None, f"{name} has no pid"
-        os.kill(int(pid), 0)  # raises ProcessLookupError if it is not alive
-        pids[name] = int(pid)
-    time.sleep(1.0)
-    for name, pid in pids.items():
-        os.kill(pid, 0)  # still alive a moment later, not a race with a self-stop that never happens
-
-    for name, pid in pids.items():
-        # The whole process group, not the lone pid: the pid in .id is the
-        # process-group leader (the script _launch backgrounds), and a
-        # resident process's own Python interpreter sits at least one
-        # pipeline subshell below it (see
-        # debasher_builtin_sched::_execute_funct_plus_postfunct); a plain
-        # single-pid SIGTERM never reaches it at all: it only kills the
-        # wrapper, orphaning a Python process that then never receives
-        # anything and runs forever, and the dead wrapper never gets to
-        # write .finished either. The wrapper
-        # itself survives this same broadcast (see
-        # debasher_builtin_sched::_print_script_trap) so it can still do
-        # so once its own child actually exits.
-        os.killpg(pid, signal.SIGTERM)
-
-    for name in _KILLABLE_NODES:
-        finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")
-        assert _wait_for(finished, timeout=15.0), f"{name} never exited cleanly after SIGTERM"
-
-    # Nothing about how the Supervisor notices a clean finish had to change
-    # for this: .finished is already checked unconditionally, every tick.
-    assert _wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=15.0)
-
-
-def _wait_for_logged(outdir, name, port, matches, timeout=30.0, interval=0.05):
-    """Waits until the input log of node `name` holds an envelope on `port`
-    for which `matches(envelope)` is true."""
-    log_dir = Path(outdir, "__exec__", name, "log")
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        for segment in log_dir.glob("*.log"):
-            try:
-                lines = segment.read_text().splitlines()
-            except FileNotFoundError:
-                continue
-            for line in lines:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if record["port"] == port and matches(record["env"]):
-                    return True
-        time.sleep(interval)
-    return False
-
-
-def _data_numbered(seq):
-    return lambda env: env.get("type") == "DATA" and env.get("seq") == seq
-
-
-def _feed(ext_fifo, first, last, interval):
-    feeder = _ExtFeeder(ext_fifo, last, interval, first=first)
-    feeder.start()
-    feeder.join(timeout=60)
-    assert not feeder.is_alive(), "feeder did not finish sending"
-    if feeder.error is not None:
-        raise feeder.error
-
-
-def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
-    """
-    G6, orderly halt: after a halt every node resumes in the state it had
-    when it stopped, loading its checkpoint and replaying from its input
-    log what it processed after capturing it. The halt here closes with
-    messages in flight: loop is frozen while the last values go round, so
-    that their echoes reach fanin only after fanin has captured its state
-    for the halt. The program is then stopped and launched again with
-    debasher_exec on the same outdir, which is how it resumes (see
-    "Ordered shutdown" in the design doc), and fed the rest. Across both
-    runs, sink must see each port's exact sequence, and fanin's counts
-    must go on from where they stopped.
-    """
-    k_frozen, k_before, k = 25, 30, 60
-    interval = 0.02
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
-    tailer.start()
-    sup_out = _sched_out_file(outdir, "sup")
-
-    _feed(_find_fifo(outdir, "fanin_ext"), 1, k_frozen, interval)
-    assert _wait_for_logged(outdir, "fanin", "loop_in", _data_numbered(k_frozen)), (
-        "the loop never settled before being frozen"
-    )
-
-    # Well under HEARTBEAT_TIMEOUT_SECS: debasher_stop_resident stops the
-    # Supervisor before anything else, so it never relaunches loop.
-    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
-    os.killpg(loop_pid, signal.SIGSTOP)
-    try:
-        _feed(_find_fifo(outdir, "fanin_ext"), k_frozen + 1, k_before, interval)
-        assert _wait_for_logged(outdir, "fanin", "ext", _data_numbered(k_before)), (
-            f"fanin never logged ext value {k_before}"
-        )
-        halt = {}
-        halter = threading.Thread(
-            target=lambda: halt.update(
-                result=subprocess.run(
-                    [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "60"],
-                    capture_output=True,
-                    text=True,
-                )
-            )
-        )
-        halter.start()
-        shutdown = lambda env: env.get("type") == "INTERACT" and env["payload"]["command"] == "shutdown"
-        assert _wait_for_logged(outdir, "fanin", "trigger", shutdown), "fanin never got the halt"
-    finally:
-        os.killpg(loop_pid, signal.SIGCONT)
-    halter.join(timeout=90)
-    result = halt["result"]
-    assert result.returncode == 0, f"debasher_stop_resident failed:\n{result.stdout}\n{result.stderr}"
-    with open(sup_out) as f:
-        assert "node 'loop' is down" not in f.read(), "the Supervisor relaunched the frozen loop"
-
-    _launch(outdir)
-    _feed(_find_fifo(outdir, "fanin_ext"), k_before + 1, k, interval)
-
-    # Same grace period as the kill/relaunch pieces above, for the same
-    # reason.
-    time.sleep(1.0)
-    _halt_and_wait_for_finished(outdir, timeout=60)
-
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
-    _assert_trace_matches(tailer.records, k, " (halted with messages in flight, then resumed)")
-
-
-def test_debasher_stop_resident_stops_the_whole_program_cleanly(outdir):
-    """
-    debasher_stop_resident itself (see "`debasher_stop_resident`: the
-    graceful stop tool" in the design doc): stops the Supervisor first, by
-    the same graceful signal
-    (its own new SIGTERM handler, engine/debasher_runtime_supervisor.py),
-    so it cannot relaunch a node while the rest of this runs, then halts
-    and signals every business node. Every process, sup included, must
-    exit cleanly (.finished), and quickly: this is the plain, no-failure
-    case, nothing here should ever need the hard fallback to debasher_stop.
-    """
-    _launch(outdir)
-    time.sleep(1.0)  # let every node send at least one heartbeat first
-
-    start = time.monotonic()
-    start_ms = time.time_ns() // 1_000_000
-    result = subprocess.run(
-        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
-        capture_output=True,
-        text=True,
-    )
-    end_ms = time.time_ns() // 1_000_000
-    elapsed = time.monotonic() - start
-
-    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
-    assert "forcing debasher_stop" not in result.stderr, result.stderr
-    assert elapsed < 10.0, f"took {elapsed:.1f}s, the hard fallback must not have been needed"
-
-    # The shutdown carries its epoch, the time in milliseconds when the tool sent it, and every
-    # node halts in that same round.
-    halted_epochs = set()
-    for name in _KILLABLE_NODES:
-        with open(os.path.join(outdir, "__exec__", name, "halted")) as f:
-            halted_epochs.add(int(f.read()))
-    assert len(halted_epochs) == 1, halted_epochs
-    assert start_ms <= halted_epochs.pop() <= end_ms
-
-    for name in (*_KILLABLE_NODES, "sup"):
-        finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")
-        assert os.path.exists(finished), f"{name} never wrote .finished"
-
-
-def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
-    """
-    The -x flag: a node named there is not waited for and not signalled,
-    which the Supervisor's escalation relies on to leave out a node it
-    has given up on. Excludes sink, still healthy here (nothing has
-    failed): every other node, sup included, must still stop cleanly, and
-    sink must still be running afterward, completely untouched.
-    """
-    _launch(outdir)
-    time.sleep(1.0)
-
-    sink_pid = int(_read_pid(_id_file(outdir, "sink")))
-
-    result = subprocess.run(
-        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "-x", "sink", "--timeout", "30"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
-
-    for name in ("fanin", "loop", "sup"):
-        finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")
-        assert os.path.exists(finished), f"{name} never wrote .finished"
-
-    assert not os.path.exists(os.path.join(outdir, "__exec__", "sink", "sink.finished"))
-    os.kill(sink_pid, 0)  # raises ProcessLookupError if sink was touched
-
-
-def test_debasher_stop_resident_forced_exit_code_on_the_hard_kill_fallback(outdir):
-    """
-    The exit code of the hard-kill fallback (see "Failing loudly instead of
-    retrying" in the design doc; DEBASHER_STOP_RESIDENT_FORCED_EXIT in
-    engine/debasher_stop_resident.sh): a graceful stop and a forced one
-    both end the program, but only the exit code (2, not whatever
-    debasher_stop's own happens to be, typically 0) tells a caller which
-    one actually happened, since a caller that redirects stderr (the
-    Supervisor's own escalation, in particular) would otherwise never
-    know.
-
-    Forces the fallback for real: SIGSTOPs loop before calling the tool, so
-    it can never process the shutdown trigger or write its own halted
-    marker, then calls the tool with a short --timeout. The tool must still
-    end the whole program (the hard-kill fallback actually running, not just
-    the exit code alone), but return 2, not 0, and say so on stderr too.
-    """
-    _launch(outdir)
-    time.sleep(1.0)
-
-    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
-    os.killpg(loop_pid, signal.SIGSTOP)
-
-    result = subprocess.run(
-        [str(_DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "3"],
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 2, f"{result.stdout}\n{result.stderr}"
-    assert "forcing debasher_stop" in result.stderr
-
-    # The hard kill actually ran, SIGSTOP notwithstanding (SIGKILL is not
-    # blockable and reaches a stopped process the same as a running one):
-    # every process the program launched must be gone.
-    for name in ("fanin", "loop", "sink", "sup"):
-        pid = _read_pid(_id_file(outdir, name))
-        assert pid is not None, f"{name} has no pid to check"
-        with pytest.raises(ProcessLookupError):
-            os.killpg(int(pid), 0)
-
-
-def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure(outdir):
-    """
-    The Supervisor's escalation (Supervisor._escalate_shutdown calling
-    debasher_stop_resident with -x and --keep-supervisor, see "Escalation
-    on a permanent node failure" in the design doc). Drives sink to
-    genuinely exhaust
-    MAX_RELAUNCH_ATTEMPTS: a real, repeated kill -9 of each fresh
-    relaunch, SIGSTOP first (before SIGKILL) so it can never send a
-    heartbeat in between and accidentally reset its own relaunch budget
-    (a relaunched node's heartbeat thread waits one full
-    HEARTBEAT_INTERVAL_SECONDS from start_threads() before its first
-    send, per the reference program's own Sup class comment; freezing it
-    first removes the race rather than trying to outrun it).
-
-    Once sink has given up, this checks what the escalation guarantees:
-    fanin and loop, still reachable, are gracefully halted and signalled
-    by the escalation's own debasher_stop_resident call (not left running
-    unattended), and sup.finished actually appears, on its own, well under
-    FORCE_STOP_TIMEOUT_SECS (60s): if -x were not actually excluding
-    sink (already dead by then), the tool would instead hang waiting on
-    a control_ports/halted marker/.finished that can never come, time
-    out, and fall back to a hard debasher_stop, which kills fanin and
-    loop too, ungracefully (no "finished cleanly" logged for either).
-    sup.finished appearing also shows that the Supervisor's own
-    resolution after a node gives up completes, after relaunching that
-    node several times.
-    """
-    _launch(outdir)
-
-    sup_out = _sched_out_file(outdir, "sup")
-    pid = _kill_node(outdir, "sink")
-    gave_up = False
-    deadline = time.monotonic() + 60.0
-    while time.monotonic() < deadline:
-        # A tight poll interval, and no wait between detecting a fresh
-        # relaunch and freezing it: the race this loop is trying to win
-        # (SIGSTOP landing before the relaunch's own first heartbeat,
-        # sent one HEARTBEAT_INTERVAL_SECONDS after its start_threads())
-        # is won or lost within a few hundred ms, so any extra delay this
-        # loop itself adds between iterations just hands it back.
-        new_pid = _wait_for_relaunch(outdir, "sink", pid, timeout=15.0, interval=0.01)
-        if new_pid is None:
-            # No further relaunch is exactly what a give-up also looks
-            # like from here (nothing left to detect a new pid for): the
-            # check below after the loop is what actually decides it.
-            break
-        os.killpg(int(new_pid), signal.SIGSTOP)
-        os.killpg(int(new_pid), signal.SIGKILL)
-        pid = new_pid
-        try:
-            with open(sup_out) as f:
-                if "node 'sink' exceeded" in f.read():
-                    gave_up = True
-                    break
-        except FileNotFoundError:
-            pass
-    if not gave_up:
-        gave_up = _wait_for_text(sup_out, "node 'sink' exceeded", timeout=2.0)
-    assert gave_up, "sink never exceeded MAX_RELAUNCH_ATTEMPTS"
-
-    escalation_start = time.monotonic()
-    assert _wait_for_text(
-        sup_out, "node 'fanin' finished cleanly", timeout=30
-    ), "fanin (still reachable) never finished after sink gave up"
-    assert _wait_for_text(
-        sup_out, "node 'loop' finished cleanly", timeout=30
-    ), "loop (still reachable) never finished after sink gave up"
-    assert _wait_for(
-        os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=30
-    ), "sup.finished never appeared after the escalation resolved the reachable graph"
-    elapsed = time.monotonic() - escalation_start
-    assert elapsed < 30.0, (
-        f"took {elapsed:.1f}s: this close to FORCE_STOP_TIMEOUT_SECS (60s) is the sign "
-        "debasher_stop_resident fell back to a hard kill instead of stopping gracefully "
-        "(e.g. -x not actually excluding sink, or --keep-supervisor not applied)"
-    )
-
-
-# The detection settings of the Supervisor of the reference program (Sup in
-# debasher_chaos_ref.sh), and the margin a real run needs on top of them for
-# the processes involved to be scheduled.
-_HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
-_HEARTBEAT_TIMEOUT_SECS = 3
-_DETECTION_MARGIN_SECS = 1.0
-
-_DOWN_RE = r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3}) WARNING +\[checker\] node '{name}' is down"
-
-
-def _down_reported_at(outdir, name, timeout=30.0, interval=0.05):
-    """
-    The time at which the Supervisor declared node `name` down, from the
-    timestamp of its own log line, or None if it did not within `timeout`.
-    """
-    pattern = re.compile(_DOWN_RE.replace("{name}", re.escape(name)), re.MULTILINE)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            with open(_sched_out_file(outdir, "sup")) as f:
-                m = pattern.search(f.read())
-        except FileNotFoundError:
-            m = None
-        if m:
-            return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S,%f").timestamp()
-        time.sleep(interval)
-    return None
-
-
-def test_a_node_whose_process_is_gone_is_noticed_within_the_check_interval(outdir):
-    """
-    G7, bounded detection: a crashed node is noticed within
-    HEARTBEAT_CHECK_INTERVAL_SECS when its PID is verifiably gone, and
-    then relaunched.
-    """
-    _launch(outdir)
-    time.sleep(1.0)  # let every node send at least one heartbeat first
-
-    killed_at = time.time()
-    old_pid = _kill_node(outdir, "fanin")
-    noticed_at = _down_reported_at(outdir, "fanin")
-    assert noticed_at is not None, "the Supervisor never declared fanin down"
-    delay = noticed_at - killed_at
-    assert delay <= _HEARTBEAT_CHECK_INTERVAL_SECS + _DETECTION_MARGIN_SECS, (
-        f"fanin was declared down {delay:.2f}s after it was killed"
-    )
-    assert _wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
-
-
-def test_a_node_with_a_dead_thread_is_noticed_within_the_heartbeat_timeout(outdir):
-    """
-    G7, bounded detection: a node that is alive but unhealthy, because one
-    of its threads died, is noticed within HEARTBEAT_TIMEOUT_SECS, and
-    then relaunched. A line that is not JSON, followed by one that is not
-    a HELLO, stops the reader thread of fanin's ext port (see the resync
-    line in the design doc) while the process and its other threads go
-    on.
-    """
-    _launch(outdir)
-    time.sleep(1.0)  # let every node send at least one heartbeat first
-    old_pid = _read_pid(_id_file(outdir, "fanin"))
-
-    fd = os.open(_find_fifo(outdir, "fanin_ext"), os.O_WRONLY)
-    try:
-        broken_at = time.time()
-        os.write(fd, b"not json\n" + (json.dumps({"type": "DATA", "seq": 1, "payload": 1}) + "\n").encode())
-    finally:
-        os.close(fd)
-
-    # Still alive well before the timeout: this is the path of an unhealthy
-    # node, not of a process that is gone.
-    time.sleep(1.0)
-    os.killpg(int(old_pid), 0)
-
-    noticed_at = _down_reported_at(outdir, "fanin")
-    assert noticed_at is not None, "the Supervisor never declared fanin down"
-    delay = noticed_at - broken_at
-    assert delay <= _HEARTBEAT_TIMEOUT_SECS + _HEARTBEAT_CHECK_INTERVAL_SECS + _DETECTION_MARGIN_SECS, (
-        f"fanin was declared down {delay:.2f}s after its reader thread died"
-    )
-    assert _wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
-
-
-# --- one focused test per guarantee -------------------------------------
-#
-# The random-kill pieces above check the Acceptance criterion as a whole.
-# Each test below checks one guarantee, in its own words, in the one
-# situation that exercises it.
-
-
-def _copy_at_sink(port, value):
-    """Matches the copy of `value`, processed by fanin on `port`, that
-    sink receives."""
-    return lambda env: (
-        env.get("type") == "DATA"
-        and env["payload"]["port"] == port
-        and env["payload"]["value"] == value
-    )
-
-
-def _values_at_sink(records, port):
-    return [
-        r["payload"]["value"]
-        for r in records
-        if r.get("type") == "DATA" and r["payload"]["port"] == port
-    ]
-
-
-def _logged_values(outdir, name, port):
-    """The values of the DATA on `port` in node `name`'s input log, in
-    order, read once from disk (nothing may have pruned it)."""
-    log_dir = Path(outdir, "__exec__", name, "log")
-    values = []
-    for segment in sorted(log_dir.glob("*.log"), key=lambda p: int(p.stem)):
-        for line in segment.read_text().splitlines():
-            record = json.loads(line)
-            if record["port"] == port and record["env"].get("type") == "DATA":
-                values.append(record["env"]["payload"])
-    return values
-
-
-def test_on_every_channel_messages_are_delivered_in_the_order_they_were_sent(outdir):
-    """
-    G1, channel order: on every channel, messages are delivered in the
-    order they were sent. A burst with no pause between messages goes
-    through the three channels inside the program, fanin to loop, loop
-    back to fanin and fanin to sink, and each receiver must have logged
-    them in the order they were sent. No round runs, so no log is pruned.
-    """
-    k = 300
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
-    tailer.start()
-
-    _feed(_find_fifo(outdir, "fanin_ext"), 1, k, 0)
-    assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("loop_in", k)), (
-        "sink never received the last echo"
-    )
-
-    expected = list(range(1, k + 1))
-    assert _logged_values(outdir, "loop", "from_fanin") == expected, "fanin to loop out of order"
-    assert _logged_values(outdir, "fanin", "loop_in") == expected, "loop to fanin out of order"
-    time.sleep(0.5)
-    _halt_and_wait_for_finished(outdir)
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
-    seqs = [r["seq"] for r in tailer.records if r.get("type") == "DATA"]
-    assert seqs == list(range(1, 2 * k + 1)), "fanin to sink out of order"
-    _assert_trace_matches(tailer.records, k)
-
-
-def test_a_message_sent_while_a_round_is_open_reaches_process_data(outdir):
-    """
-    G2, no silent loss without failures, also while a round is open: send
-    5 and then 7 through a fan-in node while a round is open, and
-    process_data receives both. loop is frozen, well under
-    HEARTBEAT_TIMEOUT_SECS, so that the round fanin opens, which waits for
-    loop's marker, stays open. The echo of a 3 sent before the round
-    opened reaches fanin while the round is open too, on the port the
-    round is waiting on: process_data receives it, and the round keeps a
-    copy of it as the state of that channel.
-    """
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
-    tailer.start()
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    checkpoints_dir = Path(outdir, "__exec__", "fanin", "checkpoints")
-
-    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
-    os.killpg(loop_pid, signal.SIGSTOP)
-    try:
-        _write_line(ext_fifo, {"type": "DATA", "seq": 1, "payload": 3})
-        assert _wait_for_logged(outdir, "fanin", "ext", _data_numbered(1)), "fanin never got 3"
-        _write_line(
-            _find_fifo(outdir, "sup_trig_fanin"),
-            {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}},
-        )
-        trigger = lambda env: (
-            env.get("type") == "INTERACT" and env["payload"]["command"] == "start_snapshot"
-        )
-        assert _wait_for_logged(outdir, "fanin", "trigger", trigger), "fanin never got the trigger"
-
-        _write_line(ext_fifo, {"type": "DATA", "seq": 2, "payload": 5})
-        _write_line(ext_fifo, {"type": "DATA", "seq": 3, "payload": 7})
-        for value in (5, 7):
-            assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("ext", value)), (
-                f"process_data never received {value} while the round was open"
-            )
-        assert not list(checkpoints_dir.glob("*.json")), "the round closed while loop was frozen"
-    finally:
-        os.killpg(loop_pid, signal.SIGCONT)
-
-    assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("loop_in", 7)), (
-        "the echoes never came back"
-    )
-    checkpoints = list(checkpoints_dir.glob("*.json"))
-    assert len(checkpoints) == 1, f"the round did not close once: {checkpoints}"
-    with open(checkpoints[0]) as f:
-        assert json.load(f)["channel_state"] == {"loop_in": [3]}
-
-    time.sleep(0.5)
-    _halt_and_wait_for_finished(outdir)
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
-    assert _values_at_sink(tailer.records, "ext") == [3, 5, 7]
-    assert _values_at_sink(tailer.records, "loop_in") == [3, 5, 7]
-    _assert_node_state_restored(tailer.records)
-
-
-@pytest.mark.parametrize("run_index", range(5))
-def test_a_relaunched_node_replays_its_ports_in_the_order_it_processed_them(outdir, run_index):
-    """
-    G4, faithful replay: the input log is one log per node, in the order
-    in which the node processes what arrives on all its input ports, so
-    that replay reproduces that order exactly, and a node with several
-    input ports does not have to be insensitive to how their messages
-    interleave. fanin's digest depends on that interleaving; fanin is
-    killed while both its ports are busy and snapshots are taken, and the
-    digest in every copy sink sees must still follow from the order of
-    sink's trace (see _assert_node_state_restored).
-    """
-    k = 60
-    interval = 0.03
-    rng = random.Random(1000 + run_index)
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
-    tailer.start()
-    node_outs = _start_sched_out_tailers(outdir)
-
-    feeder = _ExtFeeder(_find_fifo(outdir, "fanin_ext"), k, interval)
-    stop_snapshots = threading.Event()
-    snapshots = _SnapshotPacer(_find_fifo(outdir, "sup_manual"), 0.5, stop_snapshots)
-    feeder.start()
-    snapshots.start()
-
-    kill_delay = rng.uniform(0.8, k * interval - 0.2)
-    time.sleep(kill_delay)
-    old_pid = _kill_node(outdir, "fanin")
-    new_pid = _wait_for_relaunch(outdir, "fanin", old_pid)
-    assert new_pid is not None, f"fanin (pid {old_pid}) was never relaunched"
-
-    feeder.join(timeout=60)
-    assert not feeder.is_alive(), "feeder did not finish sending"
-    if feeder.error is not None:
-        raise feeder.error
-    time.sleep(1.0)
-    stop_snapshots.set()
-    snapshots.join(timeout=5)
-
-    context = f" (killed fanin, pid {old_pid} -> {new_pid}, at +{kill_delay:.2f}s)"
-    _halt_and_check_trace(outdir, tailer, node_outs, {"fanin"}, k, context)
-
-
-def test_a_running_neighbor_sees_each_message_of_a_relaunched_node_once(outdir):
-    """
-    G5, no duplicates across a crash: a neighbor that keeps running
-    observes each message of a relaunched node once, not twice, and in
-    order. fanin is killed after sink has received messages that fanin
-    processed after its last checkpoint: its replay sends them again,
-    with the same numbers, and sink must drop every one of them. (The
-    other half of G5, that a message lost anyway is noticed, is the
-    engineered-gap piece above.)
-    """
-    _launch(outdir)
-    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
-    tailer.start()
-    ext_fifo = _find_fifo(outdir, "fanin_ext")
-    sup_out = _sched_out_file(outdir, "sup")
-
-    _feed(ext_fifo, 1, 10, 0.01)
-    assert _wait_for_logged(outdir, "fanin", "loop_in", _data_numbered(10)), (
-        "the loop never settled"
-    )
-    _write_line(
-        _find_fifo(outdir, "sup_manual"),
-        {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}},
-    )
-    assert _wait_for_text(sup_out, "node 'fanin' saved a checkpoint"), "fanin never checkpointed"
-
-    _feed(ext_fifo, 11, 20, 0.01)
-    assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("loop_in", 20)), (
-        "sink never received everything fanin processed after its checkpoint"
-    )
-    old_pid = _kill_node(outdir, "fanin")
-    assert _wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
-    replayed = re.compile(r"replayed (\d+) records of the input log")
-    deadline = time.monotonic() + 15
-    count = None
-    while count is None and time.monotonic() < deadline:
-        with open(_sched_out_file(outdir, "fanin")) as f:
-            m = replayed.search(f.read())
-        count = int(m.group(1)) if m else None
-        time.sleep(0.05)
-    assert count is not None and count >= 20, (
-        f"fanin's replay did not resend what sink had: {count}"
-    )
-
-    _feed(ext_fifo, 21, 30, 0.01)
-    time.sleep(1.0)
-    _halt_and_wait_for_finished(outdir)
-    tailer.stop_and_join()
-    if tailer.error is not None:
-        raise tailer.error
-    _assert_trace_matches(tailer.records, 30)
+    halt_and_check_trace(outdir, tailer, node_outs, {"fanin"}, k, context)

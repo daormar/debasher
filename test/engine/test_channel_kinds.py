@@ -4,19 +4,16 @@ checks of the fifo tags refuse when the program is loaded (see the design
 doc's "Channel kinds declared with the fifo"): nothing is launched.
 """
 
-import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEBASHER_EXEC = _REPO_ROOT / "bin" / "debasher_exec"
-
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("DEBASHER_RUN_CHAOS_TEST"),
-    reason="real debasher_exec run: set DEBASHER_RUN_CHAOS_TEST=1 to run it",
+from resident_run import (
+    DEBASHER_EXEC,
+    real_run,
 )
+
+pytestmark = real_run
+
 
 _NODE_PY = '''
 from debasher_runtime_lib import FBPProcess
@@ -83,9 +80,9 @@ EOF
 
 def _run(tmp_path, pfile):
     outdir = tmp_path / "out"
-    assert _DEBASHER_EXEC.exists(), "bin/debasher_exec not built: run make install first"
+    assert DEBASHER_EXEC.exists(), "bin/debasher_exec not built: run make install first"
     result = subprocess.run(
-        [str(_DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir)],
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir)],
         capture_output=True,
         text=True,
     )
