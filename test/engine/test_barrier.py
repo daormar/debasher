@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import threading
@@ -159,8 +160,8 @@ def test_epoch_number_increments_across_successive_self_initiated_rounds():
 
 
 
-def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
-    proc = _BarrierWorker(opts=_FAKE_OPTS)
+@contextlib.contextmanager
+def _capturing_warnings(proc, caplog):
     # caplog.at_level(level, logger=name) only adjusts that logger's level;
     # its capturing handler lives on the root logger, so it only ever sees
     # records that propagate there. proc.log has propagate=False (by
@@ -170,9 +171,15 @@ def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
     proc.log.addHandler(caplog.handler)
     try:
         with caplog.at_level("WARNING", logger=proc.log.name):
-            proc._on_interact({"command": "not_a_real_command", "args": {}})
+            yield
     finally:
         proc.log.removeHandler(caplog.handler)
+
+
+def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    with _capturing_warnings(proc, caplog):
+        proc._on_interact({"command": "not_a_real_command", "args": {}})
 
     assert proc.closed_epochs == []
     assert proc._barrier_epoch is None
@@ -786,7 +793,7 @@ def test_a_numbered_trigger_of_the_round_already_open_changes_nothing():
 def test_a_numbered_trigger_of_a_newer_round_replaces_the_open_one(caplog):
     # An initiator left on an older round (its marker was lost) follows the others to the new one.
     proc = _Counting(opts=_FAKE_OPTS)
-    with caplog.at_level("WARNING"):
+    with _capturing_warnings(proc, caplog):
         _run_brain(
             proc,
             [_marker("a", 4), ("b", lib.TYPE_DATA, 1), _numbered("start_snapshot", 9)],
@@ -815,7 +822,7 @@ def test_a_numbered_shutdown_trigger_replaces_an_open_snapshot_with_its_own_epoc
 
 def test_a_trigger_whose_epoch_is_not_an_integer_is_ignored(caplog):
     proc = _Root(opts={"x": "/dev/null"})
-    with caplog.at_level("WARNING"):
+    with _capturing_warnings(proc, caplog):
         _run_brain(proc, [_numbered("start_snapshot", "9"), _numbered("start_snapshot", True)])
 
     assert proc.closed_epochs == []
