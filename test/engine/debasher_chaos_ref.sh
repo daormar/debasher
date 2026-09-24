@@ -4,10 +4,12 @@
 # loop). fanin forwards a tagged copy of everything it processes, on either
 # port, to sink: sink's own input log is then the exact, deduplicated,
 # ordered record of what fanin actually saw, which is what the verifier
-# reads after a run. Each copy also carries how many messages fanin has
-# processed on that port, fanin's node state, so that the trace also shows
-# whether a relaunch or a resume restored it. fanin is the sole initiator,
-# triggered by the Supervisor's manual trigger channel (fed from outside).
+# reads after a run. Each copy also carries fanin's node state (how many
+# messages it has processed on that port, and a digest of the order in
+# which it processed every message, across ports), so that the trace also
+# shows whether a relaunch or a resume restored it and replayed that order.
+# fanin is the sole initiator, triggered by the Supervisor's manual trigger
+# channel (fed from outside).
 
 debasher_chaos_ref_shared_dirs()
 {
@@ -55,6 +57,8 @@ fanin_define_opts()
 fanin_heredoc_py()
 {
     cat <<'EOF'
+import hashlib
+
 from debasher_runtime_lib import FBPProcess
 
 
@@ -63,24 +67,36 @@ class Fanin(FBPProcess):
 
     def __init__(self):
         super().__init__()
-        # The node state: how many messages it has processed on each port.
-        # Every copy sent to sink carries the count, so that sink's trace
-        # shows whether a relaunch, or a resume after a halt, restored it.
+        # The node state: how many messages it has processed on each port,
+        # and a digest of every message it has processed, on any port, in
+        # the order it processed them, which makes the node sensitive to
+        # how its ports interleave. Every copy sent to sink carries both,
+        # so that sink's trace shows whether a relaunch, or a resume after
+        # a halt, restored the state and replayed that order exactly.
         self.counts = {}
+        self.digest = ""
 
     def process_data(self, port_name, packet):
         self.counts[port_name] = self.counts.get(port_name, 0) + 1
+        self.digest = hashlib.sha256(f"{self.digest}|{port_name}:{packet}".encode()).hexdigest()
         self.send_data(
-            "outsink", {"port": port_name, "value": packet, "count": self.counts[port_name]}
+            "outsink",
+            {
+                "port": port_name,
+                "value": packet,
+                "count": self.counts[port_name],
+                "digest": self.digest,
+            },
         )
         if port_name == "ext":
             self.send_data("outloop", packet)
 
     def capture_node_state(self):
-        return {"counts": dict(self.counts)}
+        return {"counts": dict(self.counts), "digest": self.digest}
 
     def restore_node_state(self, node_state):
         self.counts = dict(node_state["counts"])
+        self.digest = node_state["digest"]
 
     def initialize_runtime(self):
         pass

@@ -7,6 +7,7 @@ DEBASHER_RUN_CHAOS_TEST is set, so it never runs as part of the ordinary
 suite.
 """
 
+import hashlib
 import json
 import os
 import random
@@ -443,23 +444,35 @@ def _halt_and_wait_for_finished(outdir, timeout=30.0):
 
 def _assert_node_state_restored(records, context=""):
     """
-    G3 (and G6 across a resume): fanin's node state, the number of
-    messages it has processed on each port, travels in every copy it
-    sends to sink. On each port the counts that sink sees must be 1, 2,
+    G3 (and G6 across a resume): fanin's node state travels in every copy
+    it sends to sink. On each port the counts that sink sees must be 1, 2,
     3... with no jump and no restart: a relaunch or a resume that did not
     restore the state as it was would start counting again, or skip.
-    Holds whether or not a message was lost before fanin processed it,
-    since the count only follows what fanin processed, and sink sees a
-    prefix of that when its own channel has a gap.
+
+    G4: the digest in each copy folds every message fanin processed, on
+    any port, in the order it processed them, and sink sees the copies in
+    that same order. Folding sink's own trace must give the digest of
+    every copy: a replay that reproduced another interleaving of the ports
+    would leave fanin with a digest that no longer follows from the trace.
+
+    Both hold whether or not a message was lost before fanin processed
+    it, since the state only follows what fanin processed, and sink sees
+    a prefix of that when its own channel has a gap.
     """
+    data = [r for r in records if r.get("type") == "DATA"]
     for port in ("ext", "loop_in"):
-        counts = [
-            r["payload"]["count"]
-            for r in records
-            if r.get("type") == "DATA" and r["payload"]["port"] == port
-        ]
+        counts = [r["payload"]["count"] for r in data if r["payload"]["port"] == port]
         assert counts == list(range(1, len(counts) + 1)), (
             f"fanin's count on {port} was not restored{context}: {counts}"
+        )
+    digest = ""
+    for position, r in enumerate(data, start=1):
+        payload = r["payload"]
+        folded = f"{digest}|{payload['port']}:{payload['value']}"
+        digest = hashlib.sha256(folded.encode()).hexdigest()
+        assert payload["digest"] == digest, (
+            f"fanin's digest does not follow from the order of sink's trace at copy "
+            f"{position} ({payload['port']}:{payload['value']}){context}"
         )
 
 
@@ -1564,3 +1577,228 @@ def test_a_node_with_a_dead_thread_is_noticed_within_the_heartbeat_timeout(outdi
         f"fanin was declared down {delay:.2f}s after its reader thread died"
     )
     assert _wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
+
+
+# --- one focused test per guarantee -------------------------------------
+#
+# The random-kill pieces above check the Acceptance criterion as a whole.
+# Each test below checks one guarantee, in its own words, in the one
+# situation that exercises it.
+
+
+def _copy_at_sink(port, value):
+    """Matches the copy of `value`, processed by fanin on `port`, that
+    sink receives."""
+    return lambda env: (
+        env.get("type") == "DATA"
+        and env["payload"]["port"] == port
+        and env["payload"]["value"] == value
+    )
+
+
+def _values_at_sink(records, port):
+    return [
+        r["payload"]["value"]
+        for r in records
+        if r.get("type") == "DATA" and r["payload"]["port"] == port
+    ]
+
+
+def _logged_values(outdir, name, port):
+    """The values of the DATA on `port` in node `name`'s input log, in
+    order, read once from disk (nothing may have pruned it)."""
+    log_dir = Path(outdir, "__exec__", name, "log")
+    values = []
+    for segment in sorted(log_dir.glob("*.log"), key=lambda p: int(p.stem)):
+        for line in segment.read_text().splitlines():
+            record = json.loads(line)
+            if record["port"] == port and record["env"].get("type") == "DATA":
+                values.append(record["env"]["payload"])
+    return values
+
+
+def test_on_every_channel_messages_are_delivered_in_the_order_they_were_sent(outdir):
+    """
+    G1, channel order: on every channel, messages are delivered in the
+    order they were sent. A burst with no pause between messages goes
+    through the three channels inside the program, fanin to loop, loop
+    back to fanin and fanin to sink, and each receiver must have logged
+    them in the order they were sent. No round runs, so no log is pruned.
+    """
+    k = 300
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+
+    _feed(_find_fifo(outdir, "fanin_ext"), 1, k, 0)
+    assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("loop_in", k)), (
+        "sink never received the last echo"
+    )
+
+    expected = list(range(1, k + 1))
+    assert _logged_values(outdir, "loop", "from_fanin") == expected, "fanin to loop out of order"
+    assert _logged_values(outdir, "fanin", "loop_in") == expected, "loop to fanin out of order"
+    time.sleep(0.5)
+    _halt_and_wait_for_finished(outdir)
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    seqs = [r["seq"] for r in tailer.records if r.get("type") == "DATA"]
+    assert seqs == list(range(1, 2 * k + 1)), "fanin to sink out of order"
+    _assert_trace_matches(tailer.records, k)
+
+
+def test_a_message_sent_while_a_round_is_open_reaches_process_data(outdir):
+    """
+    G2, no silent loss without failures, also while a round is open: send
+    5 and then 7 through a fan-in node while a round is open, and
+    process_data receives both. loop is frozen, well under
+    HEARTBEAT_TIMEOUT_SECS, so that the round fanin opens, which waits for
+    loop's marker, stays open. The echo of a 3 sent before the round
+    opened reaches fanin while the round is open too, on the port the
+    round is waiting on: process_data receives it, and the round keeps a
+    copy of it as the state of that channel.
+    """
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+    ext_fifo = _find_fifo(outdir, "fanin_ext")
+    checkpoints_dir = Path(outdir, "__exec__", "fanin", "checkpoints")
+
+    loop_pid = int(_read_pid(_id_file(outdir, "loop")))
+    os.killpg(loop_pid, signal.SIGSTOP)
+    try:
+        _write_line(ext_fifo, {"type": "DATA", "seq": 1, "payload": 3})
+        assert _wait_for_logged(outdir, "fanin", "ext", _data_numbered(1)), "fanin never got 3"
+        _write_line(
+            _find_fifo(outdir, "sup_trig_fanin"),
+            {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}},
+        )
+        trigger = lambda env: (
+            env.get("type") == "INTERACT" and env["payload"]["command"] == "start_snapshot"
+        )
+        assert _wait_for_logged(outdir, "fanin", "trigger", trigger), "fanin never got the trigger"
+
+        _write_line(ext_fifo, {"type": "DATA", "seq": 2, "payload": 5})
+        _write_line(ext_fifo, {"type": "DATA", "seq": 3, "payload": 7})
+        for value in (5, 7):
+            assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("ext", value)), (
+                f"process_data never received {value} while the round was open"
+            )
+        assert not list(checkpoints_dir.glob("*.json")), "the round closed while loop was frozen"
+    finally:
+        os.killpg(loop_pid, signal.SIGCONT)
+
+    assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("loop_in", 7)), (
+        "the echoes never came back"
+    )
+    checkpoints = list(checkpoints_dir.glob("*.json"))
+    assert len(checkpoints) == 1, f"the round did not close once: {checkpoints}"
+    with open(checkpoints[0]) as f:
+        assert json.load(f)["channel_state"] == {"loop_in": [3]}
+
+    time.sleep(0.5)
+    _halt_and_wait_for_finished(outdir)
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    assert _values_at_sink(tailer.records, "ext") == [3, 5, 7]
+    assert _values_at_sink(tailer.records, "loop_in") == [3, 5, 7]
+    _assert_node_state_restored(tailer.records)
+
+
+@pytest.mark.parametrize("run_index", range(5))
+def test_a_relaunched_node_replays_its_ports_in_the_order_it_processed_them(outdir, run_index):
+    """
+    G4, faithful replay: the input log is one log per node, in the order
+    in which the node processes what arrives on all its input ports, so
+    that replay reproduces that order exactly, and a node with several
+    input ports does not have to be insensitive to how their messages
+    interleave. fanin's digest depends on that interleaving; fanin is
+    killed while both its ports are busy and snapshots are taken, and the
+    digest in every copy sink sees must still follow from the order of
+    sink's trace (see _assert_node_state_restored).
+    """
+    k = 60
+    interval = 0.03
+    rng = random.Random(1000 + run_index)
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+    node_outs = _start_sched_out_tailers(outdir)
+
+    feeder = _ExtFeeder(_find_fifo(outdir, "fanin_ext"), k, interval)
+    stop_snapshots = threading.Event()
+    snapshots = _SnapshotPacer(_find_fifo(outdir, "sup_manual"), 0.5, stop_snapshots)
+    feeder.start()
+    snapshots.start()
+
+    kill_delay = rng.uniform(0.8, k * interval - 0.2)
+    time.sleep(kill_delay)
+    old_pid = _kill_node(outdir, "fanin")
+    new_pid = _wait_for_relaunch(outdir, "fanin", old_pid)
+    assert new_pid is not None, f"fanin (pid {old_pid}) was never relaunched"
+
+    feeder.join(timeout=60)
+    assert not feeder.is_alive(), "feeder did not finish sending"
+    if feeder.error is not None:
+        raise feeder.error
+    time.sleep(1.0)
+    stop_snapshots.set()
+    snapshots.join(timeout=5)
+
+    context = f" (killed fanin, pid {old_pid} -> {new_pid}, at +{kill_delay:.2f}s)"
+    _halt_and_check_trace(outdir, tailer, node_outs, {"fanin"}, k, context)
+
+
+def test_a_running_neighbor_sees_each_message_of_a_relaunched_node_once(outdir):
+    """
+    G5, no duplicates across a crash: a neighbor that keeps running
+    observes each message of a relaunched node once, not twice, and in
+    order. fanin is killed after sink has received messages that fanin
+    processed after its last checkpoint: its replay sends them again,
+    with the same numbers, and sink must drop every one of them. (The
+    other half of G5, that a message lost anyway is noticed, is the
+    engineered-gap piece above.)
+    """
+    _launch(outdir)
+    tailer = _SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+    ext_fifo = _find_fifo(outdir, "fanin_ext")
+    sup_out = _sched_out_file(outdir, "sup")
+
+    _feed(ext_fifo, 1, 10, 0.01)
+    assert _wait_for_logged(outdir, "fanin", "loop_in", _data_numbered(10)), (
+        "the loop never settled"
+    )
+    _write_line(
+        _find_fifo(outdir, "sup_manual"),
+        {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}},
+    )
+    assert _wait_for_text(sup_out, "node 'fanin' saved a checkpoint"), "fanin never checkpointed"
+
+    _feed(ext_fifo, 11, 20, 0.01)
+    assert _wait_for_logged(outdir, "sink", "from_fanin", _copy_at_sink("loop_in", 20)), (
+        "sink never received everything fanin processed after its checkpoint"
+    )
+    old_pid = _kill_node(outdir, "fanin")
+    assert _wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
+    replayed = re.compile(r"replayed (\d+) records of the input log")
+    deadline = time.monotonic() + 15
+    count = None
+    while count is None and time.monotonic() < deadline:
+        with open(_sched_out_file(outdir, "fanin")) as f:
+            m = replayed.search(f.read())
+        count = int(m.group(1)) if m else None
+        time.sleep(0.05)
+    assert count is not None and count >= 20, (
+        f"fanin's replay did not resend what sink had: {count}"
+    )
+
+    _feed(ext_fifo, 21, 30, 0.01)
+    time.sleep(1.0)
+    _halt_and_wait_for_finished(outdir)
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    _assert_trace_matches(tailer.records, 30)
