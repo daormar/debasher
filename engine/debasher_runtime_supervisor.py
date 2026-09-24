@@ -51,6 +51,14 @@ from debasher_runtime_transport import _PortWorker, _STOP
 # by construction (Python identifiers can't contain spaces).
 _MANUAL_TRIGGER_TAG = "manual trigger"
 
+# The directory of the output directory of a program where the engine
+# creates every fifo (DEBASHER_FIFOS_DIRNAME in the engine).
+_FIFOS_DIRNAME = "__fifos__"
+
+# The flag that tells a Supervisor not to hold the fifos of the business
+# channels (see Supervisor._open_held_fifos).
+_NO_HOLD_FIFOS_FLAG = "no_hold_fifos"
+
 
 class Supervisor(_PortWorker):
     """
@@ -66,11 +74,22 @@ class Supervisor(_PortWorker):
     _PortWorker._take_ports_from_engine); one built without the engine,
     as the unit tests build them, declares them in the class attributes
     below.
+
+    It also holds open the fifo of every business channel of the program,
+    HOLD_FIFOS, through a read end that it never reads (see
+    _open_held_fifos), so that what a fifo holds outlives the crash of both
+    nodes of its channel, unless it is given the flag -no_hold_fifos, which
+    its module may offer as an option of the command line of the program.
     """
 
     NODE_PORTS = {}
     TRIGGER_PORT = []
     MANUAL_TRIGGER_PORT = None
+    # The fifos of the business channels, those without a tag between two
+    # nodes: the engine gives them relative to the fifo directory of the
+    # program, as <owner process>/<fifo>; a Supervisor built without the
+    # engine lists absolute paths.
+    HOLD_FIFOS = []
 
     HEARTBEAT_TIMEOUT_SECS = 30
     HEARTBEAT_CHECK_INTERVAL_SECS = 5
@@ -102,10 +121,23 @@ class Supervisor(_PortWorker):
         "trigger": "TRIGGER_PORT",
         "manual_trigger": "MANUAL_TRIGGER_PORT",
         "startup": "NODE_STARTUP_TIMEOUT_SECS",
+        "hold": "HOLD_FIFOS",
     }
+
+    _OWN_FLAGS = (_NO_HOLD_FIFOS_FLAG,)
 
     def __init__(self, argv=None, opts=None):
         super().__init__(argv, opts)
+
+        if self.opts.get(_NO_HOLD_FIFOS_FLAG):
+            if self.HOLD_FIFOS:
+                self.log.warning(
+                    "not holding the fifos of the %d business channels (-%s): what a "
+                    "fifo holds is lost if both nodes of its channel are down at once",
+                    len(self.HOLD_FIFOS),
+                    _NO_HOLD_FIFOS_FLAG,
+                )
+            self.HOLD_FIFOS = []
 
         self._lock = threading.Lock()
         # Every time kept here to measure silence is on the monotonic clock,
@@ -127,6 +159,9 @@ class Supervisor(_PortWorker):
         self._active_escalations = 0
         # The epoch put on the last trigger relayed (see _stamp_epoch).
         self._last_stamped_epoch = -1
+        # The read end of every fifo of HOLD_FIFOS, by path (see
+        # _open_held_fifos).
+        self._held_fds = {}
 
         self._checker_thread = None
         self._checker_stop = threading.Event()
@@ -144,8 +179,8 @@ class Supervisor(_PortWorker):
         NODE_PORTS from items `<node>=<option>`, and
         NODE_STARTUP_TIMEOUT_SECS from items `<node>=<seconds>`, where a node
         is a process name or, for a task of an array, `<process>:<idx>`;
-        TRIGGER_PORT, a list; MANUAL_TRIGGER_PORT, a single port or None (see
-        _PortWorker._take_ports_from_engine).
+        TRIGGER_PORT and HOLD_FIFOS, lists; MANUAL_TRIGGER_PORT, a single port
+        or None (see _PortWorker._take_ports_from_engine).
         """
         if attribute in ("NODE_PORTS", "NODE_STARTUP_TIMEOUT_SECS"):
             by_node = {}
@@ -205,7 +240,9 @@ class Supervisor(_PortWorker):
     def run(self):
         """
         Supervisor carries no state of its own to restore -- it always
-        starts fresh. Runs until every supervised node is resolved
+        starts fresh, and the first thing it does is hold the fifos of the
+        business channels (see _open_held_fifos), before it can relaunch any
+        node. Runs until every supervised node is resolved
         (cleanly done, or given up on after exhausting its relaunch
         budget) and no shutdown escalation is still in flight, or until
         told to stop by signal (see _on_stop_signal): a graceful-stop tool
@@ -237,6 +274,55 @@ class Supervisor(_PortWorker):
         super().stop_threads(timeout, close)
         if self._checker_thread is not None:
             self._checker_thread.join(timeout)
+        self._close_held_fifos()
+
+    # -- the fifos of the business channels --
+
+    def _held_fifo_paths(self):
+        """The paths of HOLD_FIFOS, those the engine gives resolved
+        against the fifo directory of the program."""
+        paths = []
+        for name in self.HOLD_FIFOS:
+            if not os.path.isabs(name):
+                name = os.path.join(self._program_outdir(), _FIFOS_DIRNAME, name)
+            paths.append(name)
+        return paths
+
+    def _fds_needed(self):
+        return super()._fds_needed() + len(self.HOLD_FIFOS)
+
+    def _open_fifos(self):
+        """
+        Holds the fifos of the business channels, then opens those of its
+        own ports (see _PortWorker._open_fifos).
+        """
+        self._raise_fd_limit()
+        self._open_held_fifos()
+        super()._open_fifos()
+
+    def _open_held_fifos(self):
+        """
+        Opens a read end of every fifo of HOLD_FIFOS that is not open yet,
+        without blocking, and never reads from it. A fifo keeps what it holds
+        while some process has it open: its two nodes each hold both of its
+        ends, so without a third holder, what a writer had sent and its
+        reader had not yet read is destroyed when both nodes are down at
+        once. With the Supervisor holding it, the relaunched reader finds it
+        there, and what the relaunched writer sends again from its input log
+        comes after it, with the same numbers, as duplicates that the reader
+        drops. A missing fifo stops the Supervisor with an error.
+        """
+        for path in self._held_fifo_paths():
+            if path not in self._held_fds:
+                self._held_fds[path] = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+
+    def _close_held_fifos(self):
+        for fd in self._held_fds.values():
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self._held_fds.clear()
 
     # -- brain loop: heartbeat/checkpoint_saved from nodes, manual trigger --
 

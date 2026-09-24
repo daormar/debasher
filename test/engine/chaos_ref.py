@@ -26,9 +26,10 @@ from resident_run import (
 PFILE = Path(__file__).resolve().parent / "debasher_chaos_ref.sh"
 
 
-def launch_chaos(outdir):
-    """Runs debasher_chaos_ref.sh into `outdir`."""
-    launch(PFILE, outdir)
+def launch_chaos(outdir, *program_opts):
+    """Runs debasher_chaos_ref.sh into `outdir`, with the options of the
+    program `program_opts` (e.g. "-no_hold_fifos")."""
+    launch(PFILE, outdir, *program_opts)
 
 
 # Two shapes a G8 violation on a killed node's channel is seen to take in
@@ -322,7 +323,7 @@ def assert_engineered_gap_trace(records, k, reported_range, context=""):
     """
     The Acceptance criterion's exception clause, for a run that engineers
     a real loss on the fanin->sink channel on purpose (see
-    test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recognized_g8_error).
+    test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_error).
 
     Once the gap opens, sink's reader thread for this channel dies on it
     identically on every relaunch (the same durable hole is still there
@@ -429,7 +430,8 @@ def halt_and_check_trace(outdir, tailer, node_outs, killed, k, context=""):
     complete, since that node's reader has stopped. Such a run passes if
     every G8 error came from a killed node and the trace satisfies
     assert_trace_with_reported_losses. A run with no G8 error has to
-    halt cleanly and give the exact trace.
+    halt cleanly and give the exact trace. Returns the G8 errors found
+    (see find_reported_losses), empty for a clean run.
     """
     result = subprocess.run(
         [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "60"],
@@ -453,11 +455,12 @@ def halt_and_check_trace(outdir, tailer, node_outs, killed, k, context=""):
         )
         assert wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=60)
         assert_trace_matches(tailer.records, k, context)
-        return
+        return reported
 
     not_killed = [loss for loss in reported if loss[0] not in killed]
     assert not not_killed, f"G8 error at a node that was never killed{context}: {not_killed}"
     assert_trace_with_reported_losses(tailer.records, k, reported, f"{context}, reported {reported}")
+    return reported
 
 
 def wait_for_logged(outdir, name, port, matches, timeout=30.0, interval=0.05):

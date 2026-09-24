@@ -620,7 +620,7 @@ add_fifo() {
     [[ "${output}" == *"Error: fifo p/p_in is tagged --external, which only a 'resident' program may use"* ]]
 }
 
-@test "debasher::_register_resident_task_ports gives each node of the chaos reference program its ports" {
+@test "debasher::_register_resident_task_ports gives each node of the chaos reference program its ports, and the Supervisor its business channels" {
     set_up_registries
     add_process fanin fbpprocess
     add_process loop fbpprocess
@@ -640,7 +640,7 @@ add_fifo() {
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of fanin)]}" = "input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of loop)]}" = "input=from_fanin;output=outfanin,outhb;control=;external=;supervisor=outhb" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sink)]}" = "input=from_fanin;output=outhb;control=;external=;supervisor=outhb" ]
-    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=;hold=fanin/fanin_to_loop,fanin/fanin_to_sink,loop/loop_to_fanin" ]
 }
 
 @test "debasher::_register_resident_task_ports gives each task of an array its own ports, and a node with none an entry" {
@@ -672,7 +672,7 @@ add_fifo() {
     add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
 
     debasher::_register_resident_task_ports
-    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=;startup=" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=;startup=;hold=" ]
 }
 
 @test "debasher::_register_resident_task_ports gives the Supervisor the startup deadline of each node that sets one" {
@@ -690,7 +690,26 @@ add_fifo() {
     add_fifo quick/quick_hb "$(end_of quick)" "$(end_of sup)" "" -outhb -hb_quick
 
     debasher::_register_resident_task_ports
-    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=quick=hb_quick,slow=hb_slow,worker:0=hb_worker0,worker:1=hb_worker1;trigger=;manual_trigger=;startup=slow=120,worker:0=45,worker:1=45" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=quick=hb_quick,slow=hb_slow,worker:0=hb_worker0,worker:1=hb_worker1;trigger=;manual_trigger=;startup=slow=120,worker:0=45,worker:1=45;hold=" ]
+}
+
+@test "debasher::_register_resident_task_ports gives the Supervisor every channel between two nodes, a task of an array or a self-loop too, and no other fifo" {
+    set_up_registries
+    add_process start fbpprocess
+    add_process worker fbpprocess 2
+    add_process counter fbpprocess
+    add_process sup supervisor
+    add_fifo sup/sup_trig "$(end_of sup)" "$(end_of start)" control -outtrig -trigger
+    add_fifo start/start_ext "$(end_of start)" outside external -ext
+    add_fifo start/start_out_0 "$(end_of start)" "$(end_of worker 0)" "" -outf0 -inf
+    add_fifo start/start_out_1 "$(end_of start)" "$(end_of worker 1)" "" -outf1 -inf
+    add_fifo worker/worker_out_0 "$(end_of worker 0)" outside "" -outf
+    add_fifo worker/worker_out_1 "$(end_of worker 1)" "$(end_of worker 0)" "" -outg -peer
+    add_fifo counter/counter_self "$(end_of counter)" "$(end_of counter)" "" -outself -self
+    add_fifo start/start_hb "$(end_of start)" "$(end_of sup)" "" -outhb -hb_start
+
+    debasher::_register_resident_task_ports
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start;trigger=outtrig;manual_trigger=;startup=;hold=counter/counter_self,start/start_out_0,start/start_out_1,worker/worker_out_1" ]
 }
 
 @test "debasher::_register_resident_task_ports refuses a Supervisor with two manual triggers" {

@@ -9,7 +9,8 @@
 # which it processed every message, across ports), so that the trace also
 # shows whether a relaunch or a resume restored it and replayed that order.
 # fanin is the sole initiator, triggered by the Supervisor's manual trigger
-# channel (fed from outside).
+# channel (fed from outside). The Supervisor holds the fifos of the business
+# channels unless the program is given -no_hold_fifos.
 
 debasher_chaos_ref_shared_dirs()
 {
@@ -223,16 +224,19 @@ sup_explain_opts()
     explain_opt "-hb_sink" "<fifo>" "sink's heartbeat fifo"
     explain_opt "-outtrig_fanin" "<fifo>" "trigger fifo to fanin"
     explain_opt "-manual" "<fifo>" "externally fed manual trigger fifo"
+    explain_flag "-no_hold_fifos" "do not hold the fifos of the business channels"
 }
 
 sup_identify_cmdline_opts()
 {
-    :
+    opt_is_non_mandatory_cmdline "-no_hold_fifos"
 }
 
 sup_define_opts()
 {
+    local cmdline=$1
     local optlist=""
+    define_cmdline_flag_if_given "${cmdline}" "-no_hold_fifos" optlist
     define_opt_from_proc_out "-hb_fanin" "fanin" "-outhb" optlist || return 1
     define_opt_from_proc_out "-hb_loop" "loop" "-outhb" optlist || return 1
     define_opt_from_proc_out "-hb_sink" "sink" "-outhb" optlist || return 1

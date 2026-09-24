@@ -34,6 +34,23 @@ def test_parse_opts_rejects_a_trailing_name_with_no_value():
         lib._parse_opts(["-c", "--", "-inf"])
 
 
+def test_parse_opts_takes_a_flag_with_no_value_and_a_value_that_starts_with_a_dash():
+    argv = ["-c", "--", "-verbose", "-offset", "-1", "-inf", "/tmp/a"]
+    assert lib._parse_opts(argv, flags=("verbose",)) == {
+        "verbose": True,
+        "offset": "-1",
+        "inf": "/tmp/a",
+    }
+
+
+def test_a_node_takes_the_flags_that_its_module_defines_from_its_argv():
+    class Flagged(_Worker):
+        FLAGS = ("verbose",)
+
+    proc = Flagged(argv=["-c", "--", "-inf", "/tmp/a", "-verbose", "-outf", "/tmp/b"])
+    assert proc.opts == {"inf": "/tmp/a", "verbose": True, "outf": "/tmp/b"}
+
+
 # --- FBPProcess: port declaration -------------------------------------
 
 

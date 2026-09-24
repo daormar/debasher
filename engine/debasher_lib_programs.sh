@@ -691,9 +691,12 @@ debasher::_sorted_comma_list()
 # the output ports to the initiators it triggers, the input port of a manual
 # trigger fed from outside, and the startup deadline of each node that gives
 # one in its computational specifications (startup_timeout_s), as
-# <node>=<seconds>:
+# <node>=<seconds>, and the fifos of the business channels, those without a
+# tag between two nodes, which it holds open so that what they hold outlives
+# the crash of both nodes of a channel, as names relative to the fifo
+# directory of the program, <owner process>/<fifo>:
 #
-#   nodes=<node>=<port>,...;trigger=<ports>;manual_trigger=<port>;startup=<node>=<seconds>,...
+#   nodes=<node>=<port>,...;trigger=<ports>;manual_trigger=<port>;startup=<node>=<seconds>,...;hold=<fifos>
 #
 # each list sorted and separated by commas, and possibly empty. A no-op when
 # the program is not resident. Needs the checks of
@@ -718,6 +721,9 @@ debasher::_register_resident_task_ports()
         local port="${3#-}"
         ports["$1${sep}$2"]+=" ${port#-}"
     }
+
+    # The fifos of the business channels, blank-separated
+    local held=""
 
     local augm_fifoname owner user kind owner_opt user_opt hb_port node_label startup
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
@@ -749,6 +755,13 @@ debasher::_register_resident_task_ports()
             if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
                 debasher::_add_resident_task_port "${user}" control "${user_opt}"
             fi
+        fi
+
+        # A business channel: a fifo without a tag between two nodes
+        if [ -z "${kind}" ] \
+               && [ "$(debasher::_resident_node_role "${owner}")" = "fbpprocess" ] \
+               && [ "$(debasher::_resident_node_role "${user}")" = "fbpprocess" ]; then
+            held+=" ${augm_fifoname}"
         fi
 
         # The Supervisor's end. It reads the heartbeat channel of a node, the
@@ -805,7 +818,8 @@ debasher::_register_resident_task_ports()
         for (( idx = 0; idx < num_tasks; idx++ )); do
             node="${processname}${sep}${idx}"
             entry=""
-            for field in nodes trigger manual_trigger startup; do
+            ports["${node}${sep}hold"]="${held}"
+            for field in nodes trigger manual_trigger startup hold; do
                 list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
                 if [ "${field}" = "manual_trigger" ] && [[ "${list}" == *,* ]]; then
                     echo "Error: the Supervisor ${processname} has more than one manual trigger fed from outside the program (${list})" >&2

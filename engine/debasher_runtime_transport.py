@@ -24,6 +24,7 @@ import os
 import json
 import logging
 import queue
+import resource
 import threading
 
 from debasher_runtime_envelope import (
@@ -56,12 +57,13 @@ from debasher_runtime_envelope import (
 _STOP = object()
 
 
-def _parse_opts(argv):
+def _parse_opts(argv, flags=()):
     """
     Parses argv into a name -> value dict, following DeBasher's own
     "-optname value" CLI convention (see debasher_lib_opts.sh) -- one or
     two leading dashes, both stripped, so "-inf"/"--inf" both become the
-    key "inf". `argv` is expected in the raw sys.argv shape a Python
+    key "inf". A name in `flags` is a flag, given with no value
+    (define_flag), and takes the value True. `argv` is expected in the raw sys.argv shape a Python
     heredoc receives from debasher::_create_heredoc_func_body: element 0
     is "-c" (python's own placeholder for a "-c script" invocation),
     followed eventually by a "--" marker and then the actual option
@@ -80,6 +82,9 @@ def _parse_opts(argv):
     for name in it:
         if not name.startswith("-"):
             raise ValueError(f"expected an option name starting with '-', got {name!r}")
+        if name.lstrip("-") in flags:
+            opts[name.lstrip("-")] = True
+            continue
         try:
             value = next(it)
         except StopIteration:
@@ -173,6 +178,13 @@ class _PortWorker:
     # subclass lists its own.
     _PORT_FIELDS = {}
 
+    # The options of the process that are flags, given with no value
+    # (explain_flag, define_flag), which _parse_opts takes as True, named
+    # like the ports, without the dash: a module lists those that it
+    # defines, and each class of the framework adds its own in _OWN_FLAGS.
+    FLAGS = ()
+    _OWN_FLAGS = ()
+
     def __init__(self, argv=None, opts=None):
         # Before anything reads the ports: the checks below, and the queue
         # built for each output port
@@ -183,7 +195,9 @@ class _PortWorker:
             # fake argv just to get a usable instance.
             self.opts = dict(opts)
         else:
-            self.opts = _parse_opts(list(sys.argv) if argv is None else argv)
+            self.opts = _parse_opts(
+                list(sys.argv) if argv is None else argv, (*self.FLAGS, *self._OWN_FLAGS)
+            )
 
         self._check_declared_ports()
         self.log = self._make_logger()
@@ -327,6 +341,48 @@ class _PortWorker:
     # keeps the process alive.
     WRITER_STOP_TIMEOUT_SECS = 5
 
+    # The descriptors a process may need beyond those of its fifos: the
+    # standard streams, its log files, a checkpoint being written, the pipes
+    # of a subprocess it launches and the interpreter's own.
+    FD_MARGIN = 64
+
+    def _fds_needed(self):
+        """
+        How many descriptors this process needs open at once: both ends of
+        the fifo of every port (see _open_fifo_reader and _open_fifo_writer),
+        and FD_MARGIN.
+        """
+        return 2 * (len(self._input_ports()) + len(self._output_ports())) + self.FD_MARGIN
+
+    def _raise_fd_limit(self):
+        """
+        Raises this process's limit of open descriptors (RLIMIT_NOFILE) to
+        what it needs (see _fds_needed), which grows with the number of its
+        ports, and so with the options of the program for a fan-in node or a
+        Supervisor. A process may raise its soft limit up to its hard limit;
+        when the hard limit is lower than what it needs, it stops with an
+        error that says both, before it opens anything.
+        """
+        needed = self._fds_needed()
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft == resource.RLIM_INFINITY or soft >= needed:
+            return
+        if hard != resource.RLIM_INFINITY and hard < needed:
+            raise RuntimeError(
+                f"{type(self).__name__}: needs {needed} open descriptors, for the "
+                f"fifos of its ports, but the hard limit of this process "
+                f"(RLIMIT_NOFILE, ulimit -Hn) is {hard}: raise it for the session "
+                f"that launches the program"
+            )
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (needed, hard))
+        except (ValueError, OSError) as exc:
+            raise RuntimeError(
+                f"{type(self).__name__}: needs {needed} open descriptors, for the "
+                f"fifos of its ports, but could not raise its limit (RLIMIT_NOFILE) "
+                f"from {soft}: {exc}"
+            ) from exc
+
     def _open_fifos(self):
         """
         Opens the fifo of every declared port that is not open yet, so that
@@ -336,8 +392,10 @@ class _PortWorker:
         while before its threads can run (FBPProcess restores a checkpoint
         and replays a log) opens its fifos first, so that its neighbors'
         messages wait for it in the fifos even if the neighbors crash
-        meanwhile.
+        meanwhile. It raises the limit of open descriptors first, if the
+        ports need it (see _raise_fd_limit).
         """
+        self._raise_fd_limit()
         for tag, option_name in self._input_ports().items():
             if tag not in self._reader_fds:
                 self._reader_fds[tag] = _open_fifo_reader(self.opts[option_name])

@@ -226,6 +226,11 @@ mutation check, durability level) is defined in the Contract, where it is used.
   reader never sees EOF and the writer never gets `EPIPE`; a dead peer is only
   backpressure, and a channel outlives the crash of either process. It relies on
   Linux behavior.
+- **held FIFO** (FIFO retenido): the FIFO of a business channel between two
+  nodes, which the `Supervisor` holds open through a read end that it never
+  reads, a third holder besides the two endpoints, so that what the FIFO holds
+  outlives the crash of both of them. The flag `-no_hold_fifos` turns it off
+  (see "Holding the business channels").
 
 ## Rounds and checkpoints
 
@@ -515,9 +520,10 @@ by at least one end-to-end test that states it in the same words (see
 - **Not tolerated**: machine crash or power loss (see above), disk corruption,
   and processes that misbehave instead of crashing (Byzantine faults).
 - **The `Supervisor` is not itself supervised.** If it dies, the nodes keep
-  running with their state, but nobody relaunches a crashed node until the
-  `Supervisor` is relaunched by hand. No mechanism covers this (see
-  "Supervising the `Supervisor`" in Future work).
+  running with their state, but nobody relaunches a crashed node, and no FIFO
+  is held (see held FIFO in the Glossary), until the `Supervisor` is
+  relaunched by hand. No mechanism covers this (see "Supervising the
+  `Supervisor`" in Future work).
 
 **Note on `fsync`, and why the level above is enough for now.** When a process
 writes to a file, the operating system copies the data into its own memory (the
@@ -623,19 +629,26 @@ guarantee in words and never cite these numbers, which may change.
 
 ## Limits and non-goals
 
-- **Both endpoints of a channel crashed before either reopened the FIFO.** When
-  one endpoint of a channel crashes, nothing is lost: the other holds the FIFO
-  open, and what the writer had sent and the reader had not yet read waits in
-  it. That also covers what the writer had only numbered and queued but not yet
-  written when it crashed: the checkpoint's outbound backlog carries it, and
-  recovery sends it again before anything else. A relaunched node holds its
-  FIFOs from the first step of its recovery, before it restores its checkpoint
-  or replays its input log, until it dies. So only if the second endpoint
-  crashes before the first has been relaunched and has reopened the FIFO, which
-  takes the time to notice the crash and start the new process, or if both
-  crash together, is there a moment at which neither holds the FIFO, and what
-  it held is destroyed, at most what a pipe holds (64 KiB). Whether the loss is
-  repaired depends on where the destroyed messages came from. A relaunched
+- **Both endpoints of a channel crashed while no other process held the
+  FIFO.** When one endpoint of a channel crashes, nothing is lost: the other
+  holds the FIFO open, and what the writer had sent and the reader had not yet
+  read waits in it. That also covers what the writer had only numbered and
+  queued but not yet written when it crashed: the checkpoint's outbound backlog
+  carries it, and recovery sends it again before anything else. A relaunched
+  node holds its FIFOs from the first step of its recovery, before it restores
+  its checkpoint or replays its input log, until it dies. If the second
+  endpoint crashes before the first has been relaunched and has reopened the
+  FIFO, which takes the time to notice the crash and start the new process, or
+  if both crash together, neither holds the FIFO for a while, and the
+  `Supervisor` still does (see "Holding the business channels"): what the FIFO
+  held waits for the relaunched reader, and what the relaunched writer sends
+  again from its input log comes after it, with the same numbers, as
+  duplicates that the reader drops (G5). Only when no process holds the FIFO
+  at some moment is what it held destroyed, at most what a pipe holds (64
+  KiB): both endpoints down while the `Supervisor` is down too (it is not
+  supervised, see the failure model), in a program without a `Supervisor`, or
+  in one whose `Supervisor` is given `-no_hold_fifos`. Whether the loss is
+  repaired then depends on where the destroyed messages came from. A relaunched
   writer restores its latest checkpoint and replays its input log after
   `capture_pos`, so it sends again, with the same sequence numbers, everything
   it produced from that point on: the destroyed messages among those reach the
@@ -739,16 +752,17 @@ byte-for-byte match against one frozen reference run: which interleaving comes
 out, even with no failure at all, is itself a race between independent writers
 that a single run does not pin down uniquely. The exception follows from two
 limits of the Contract, after which a message can be lost beyond repair: both
-endpoints of a channel crashed before either reopened the FIFO, and a node
-killed with a message that it has read from a FIFO but not yet written to its
-input log. A run that hits either passes if it ends with an error of G8 that
-names the channel and the numbers of the missing messages, in place of the
-reference result. The source of the reference program numbers what it sends
-(see "External inputs" in the Contract's limits), so that a message lost at
-the port it feeds ends in that error too. What always fails is a different
-result with no error (a message duplicated, lost or altered that nobody
-reported) and a run that never ends and reports nothing. The chaos test runs
-against real `debasher_exec` runs, not mocks.
+endpoints of a channel crashed while no other process held the FIFO, which the
+chaos test reaches with `-no_hold_fifos` (see "Holding the business
+channels"), and a node killed with a message that it has read from a FIFO but
+not yet written to its input log. A run that hits either passes if it ends
+with an error of G8 that names the channel and the numbers of the missing
+messages, in place of the reference result. The source of the reference
+program numbers what it sends (see "External inputs" in the Contract's
+limits), so that a message lost at the port it feeds ends in that error too.
+What always fails is a different result with no error (a message duplicated,
+lost or altered that nobody reported) and a run that never ends and reports
+nothing. The chaos test runs against real `debasher_exec` runs, not mocks.
 
 Besides it, each guarantee gets its own focused end-to-end test, written in the
 guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through
@@ -873,8 +887,12 @@ interpreting `payload`):
   dict (the engine's existing `-optname value` CLI convention, untouched);
   `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those entries are FIFO paths
   to open reader/writer threads on. Any other option (e.g. a plain
-  `-threshold` value) stays available in `self.opts` with no special
-  handling. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
+  `-threshold` value, or one from the command line of the program) stays
+  available in `self.opts` with no special handling. A flag, an option given
+  with no value (`explain_flag`, `define_flag`), is listed in the class's
+  `FLAGS`, by name without the dash, since `argv` alone cannot tell it from
+  an option whose value starts with a dash; it is `True` in `self.opts` when
+  it is given. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
   commands (see control port in the Glossary); `EXTERNAL_PORTS` names which are
   fed only from outside the program (see external port in the Glossary); a name
   in either list that is not an input port is refused when the node is built.
@@ -1017,6 +1035,18 @@ its own, `heartbeat_timeout_s` and `startup_timeout_s`, the same way. A node
 can give its startup deadline too, `startup_timeout_s`, in seconds, which it
 does not read itself: the engine passes it to the `Supervisor` (see "Failure
 detection").
+
+One more limit is not a specification: the open descriptors of the process
+(`RLIMIT_NOFILE`). A process needs two for each of its ports, since it holds
+both ends of every fifo (see "Ghost connections"), a `Supervisor` one more
+for each held FIFO (see "Holding the business channels"), and a margin,
+`FD_MARGIN`, for the rest. That number follows from the program, and grows
+with it when a fan-in node or a `Supervisor` has as many ports as the command
+line says, so nobody has to give it: before it opens anything, the process
+raises its soft limit to what it needs (`_raise_fd_limit`), which it may do
+up to its hard limit. When the hard limit is lower, it stops with an error
+that gives both numbers, and the hard limit has to be raised for the session
+that launches the program.
 
 ## Observing the outside world
 
@@ -1614,6 +1644,79 @@ node.)
   unrecognized is still handled safely at the far end, by the initiator's own
   existing `_on_interact` (logs a warning and ignores it, never aborts).
 
+## Holding the business channels
+
+The `Supervisor` holds the FIFO of every business channel between two nodes, a
+held FIFO in the Glossary, through a read end that it opens without blocking
+(`O_RDONLY | O_NONBLOCK`) and never reads (`_open_held_fifos`). A FIFO keeps
+what it holds for as long as some process has it open, and discards it only
+when every descriptor of it is closed. Each endpoint of a channel holds both
+of its ends (see "Ghost connections"), so the crash of one endpoint loses
+nothing; the `Supervisor`, a third holder, keeps what the FIFO holds while
+both endpoints are down at once. The relaunched reader finds it there, and
+what the relaunched writer sends again from its input log comes after it, with
+the same numbers, as duplicates that the reader drops (G5), so nothing is new
+on either side of the channel. The ends of the FIFO are also as before: a
+fragment that a writer killed in the middle of a line leaves at the end is
+followed by the `HELLO` of its next incarnation (see "The resync line"), which
+sends that whole message again, since a message leaves the outbound backlog
+only once it is written whole; a fragment at the start, the rest of a line
+that the reader had begun to take when it died, is the limit of "Messages read
+from a FIFO but not yet written to the input log" (see the Contract's limits),
+as when the reader alone crashes.
+
+- **Which FIFOs.** The engine gives them, `HOLD_FIFOS`, with the other ports
+  of the `Supervisor` (see "Ports from the engine"): every fifo without a tag
+  whose two ends are nodes, the loop of a node that emits on its own and the
+  channels of the tasks of an array included. The heartbeat channels and the
+  triggers are left out, since the `Supervisor` already holds them as one of
+  their endpoints, and so is a fifo with one end outside the program: delivery
+  there is at most once in any case (see "External inputs" in the Contract's
+  limits), and a holder would change what the process outside sees, whose
+  `open()` would no longer wait for the node while it is down. A fifo is not an
+  option of the `Supervisor`, so the engine names it by its path under the
+  fifo directory of the program, `<owner process>/<fifo>`, which the
+  `Supervisor` resolves against the output directory that it already finds
+  from its own execdir. A fifo that is missing stops the `Supervisor` with an
+  error.
+- **First thing at startup.** The `Supervisor` opens the held FIFOs before its
+  own ports, and before its checker thread can relaunch any node, so that a
+  `Supervisor` relaunched by hand holds every channel before it recovers
+  anything. A FIFO whose contents were destroyed while it was down is empty
+  when it opens it again, which does no harm. A second `Supervisor` running
+  at the same time, a new one while the old one hangs, is only a second holder.
+- **Released when the `Supervisor` ends**, never one channel at a time. A
+  node's `.finished` does not say whether it halted or finished for good, and
+  both a halt and an escalation end with the `Supervisor` itself stopping.
+  Holding the FIFO of a channel whose reader is gone for good costs one
+  descriptor and at most what a pipe holds, and changes nothing for its writer,
+  which already blocks once the pipe is full, since its own ghost end keeps the
+  pipe alive (see "A node that finishes for good" in Future work).
+- **When nothing is held.** While the `Supervisor` is down, which nothing
+  watches (see the Contract's failure model), in a program without a
+  `Supervisor`, and during a graceful stop, since `debasher_stop_resident`
+  stops the `Supervisor` first (a crash during a halt is already outside the
+  guarantees, see "A crash while a round is open" in the Contract's limits).
+- **The switch.** Given the flag `-no_hold_fifos`, the `Supervisor` holds
+  nothing and logs a warning that says what is at stake. Its module offers it
+  as an option of the command line of the program, a flag like any other
+  (`explain_flag`, `opt_is_non_mandatory_cmdline`,
+  `define_cmdline_flag_if_given`), so that a run can choose; the chaos test
+  uses it to reach the limit it would otherwise never reach. A module that
+  does not offer it holds the FIFOs in every run.
+- **Descriptors.** One for each held FIFO, which the `Supervisor` counts in
+  the limit it raises before it opens anything (see "Limits of a node").
+
+`test/engine/test_hold_fifos.py` kills both endpoints of a FIFO, opened as a
+node opens them, with a single `SIGKILL`, at random moments and with lines
+longer than `PIPE_BUF`: with the `Supervisor` holding it, a new reader finds
+what was left, complete lines with consecutive numbers between at most a
+fragment at each end; without it, nothing. The chaos test does it on a real
+run (see "Acceptance: how reliability is shown"): with sink frozen, fanin
+writes a backlog to their channel and saves a checkpoint that covers it, and
+both are killed; without a holder, sink reports the backlog as lost (G8), and
+with it the trace is exact.
+
 ## Failure detection
 
 - **One dedicated checker thread, not a `threading.Timer` per node**: chosen
@@ -2126,6 +2229,10 @@ For the `Supervisor`, the same fifos seen from its end:
   with more than one is refused when the program is loaded.
 - Any other fifo that the `Supervisor` defines is refused when the program is
   loaded: the `Supervisor` takes no part in the business channels.
+- A fifo without a tag whose two ends are nodes is a business channel, whose
+  FIFO the `Supervisor` holds (see "Holding the business channels"): an entry
+  of `HOLD_FIFOS`, named by its path under the fifo directory of the program,
+  `<owner process>/<fifo>`, since it is not an option of the `Supervisor`.
 
 With them goes the startup deadline of each node whose computational
 specifications give one, `startup_timeout_s`, into
@@ -2151,13 +2258,13 @@ and for its `Supervisor`, `sup`, where a task of an array would be named
 `<process>:<idx>`, as `debasher_stop_resident -x` names it:
 
 ```
-nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=
+nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=;hold=fanin/fanin_to_loop,fanin/fanin_to_sink,loop/loop_to_fanin
 ```
 
 `FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
 `EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, and the
-`Supervisor` `NODE_PORTS`, `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT` and
-`NODE_STARTUP_TIMEOUT_SECS`, before anything uses them
+`Supervisor` `NODE_PORTS`, `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT`,
+`NODE_STARTUP_TIMEOUT_SECS` and `HOLD_FIFOS`, before anything uses them
 (`_take_ports_from_engine`). The options of the module are then the only
 place that says what the ports of a process are: a class that declares any
 of them, even with the same value, stops the process with an error. A
@@ -2276,11 +2383,10 @@ writer threads with a bounded timeout.
 `Supervisor` learns that a node finished only from its `.finished` file, and
 none of its readers can hang waiting for an EOF that never comes.
 
-Not covered: both endpoints of a channel dying together, before either has
-reopened the FIFO. The ghost ends die with their processes, so the unread
-messages are destroyed; a third process holding the FIFO open would keep
-them alive, considered but not adopted (see the Contract's limits and
-Future work).
+The ghost ends die with their processes, so both endpoints of a channel
+dying together, before either has reopened the FIFO, would destroy the unread
+messages: the `Supervisor` holds the FIFO of every business channel as a third
+process, which keeps them (see "Holding the business channels").
 
 ## The resync line (`HELLO`)
 
@@ -2792,15 +2898,16 @@ Design ideas from Future work move here once they are actually built.
     transit, which the round keeps as the channel state of the loop, and the
     node's part of the round closes when the marker comes back.
   - Recovery. Both ends of the loop are the same process, so a crash of the
-    node destroys what the FIFO held, the case that "Both endpoints of a
-    channel crashed" in the Contract's limits describes. Here nothing is lost.
-    The checkpoint is saved when the round closes, after the marker has come
-    back, and so after everything that the node sent itself before the
-    capture has been read and written to the input log. Whatever the loop
-    holds at a crash was therefore sent while processing a message that lies
-    in the log after the `capture_pos` of the latest checkpoint: the replay
-    processes it again and resends what it sent, with the same numbers (G5),
-    and the reader drops as duplicates what had already arrived.
+    node, when the `Supervisor` does not hold the FIFO (see "Holding the
+    business channels"), destroys what it held, the case that "Both endpoints
+    of a channel crashed" in the Contract's limits describes. Even then
+    nothing is lost. The checkpoint is saved when the round closes, after the
+    marker has come back, and so after everything that the node sent itself
+    before the capture has been read and written to the input log. Whatever
+    the loop holds at a crash was therefore sent while processing a message
+    that lies in the log after the `capture_pos` of the latest checkpoint: the
+    replay processes it again and resends what it sent, with the same numbers
+    (G5), and the reader drops as duplicates what had already arrived.
   - Pace. `sleep(seconds)`, called from `process_data`, sets the rate of the
     loop. It does not wait while the node replays its input log, and returns
     early once the node is told to stop (see "Defining a node"). The rate
@@ -2864,6 +2971,19 @@ Design ideas from Future work move here once they are actually built.
   second over every message and has a startup deadline of 30 s, under a
   `Supervisor` whose heartbeat timeout is 2 s; relaunched with ten messages
   to replay, it is not declared down again.
+- **A third holder of every business channel.** The `Supervisor` holds the
+  FIFO of every business channel between two nodes through a read end that it
+  never reads, so that what a FIFO holds outlives the crash of both of its
+  endpoints; the engine gives it the FIFOs, and the flag `-no_hold_fifos`,
+  which its module can offer on the command line of the program, turns it off
+  (see "Holding the business channels"). The loss is then left to the
+  `Supervisor` being down at the same time, which nothing watches (see
+  "Supervising the `Supervisor`" in Future work). Every process also raises
+  its limit of open descriptors to what its ports need (see "Limits of a
+  node"). `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO
+  together at random moments, with and without the `Supervisor` holding it,
+  and the chaos test runs the same case on a real run of both kinds, one of
+  them with `-no_hold_fifos`.
 
 # Future work
 
@@ -2898,11 +3018,12 @@ Design ideas from Future work move here once they are actually built.
   `debasher_stop`; with a rollback it becomes "stop, fix, rewind, resume");
   several connected nodes, or
   all of them, crash together with inputs that cannot be regenerated (the
-  contents of the FIFOs are gone); a crash during a snapshot round, if aborting
-  rounds turns out to be harder than falling back to the last complete epoch; a
-  deliberate rewind requested by an operator. Not for the crash of a single
-  node. The price is the work done since the chosen epoch, and the external
-  inputs received since then (delivery at that boundary is at most once).
+  contents of the FIFOs are gone, with no process holding them); a crash
+  during a snapshot round, if aborting rounds turns out to be harder than
+  falling back to the last complete epoch; a deliberate rewind requested by
+  an operator. Not for the crash of a single node. The price is the work done
+  since the chosen epoch, and the external inputs received since then
+  (delivery at that boundary is at most once).
 
   Like a clean start (see "`debasher_reset_resident`: a clean start"), it can
   be done from outside, by manipulating files, with no special mode in the
@@ -2951,9 +3072,11 @@ Design ideas from Future work move here once they are actually built.
     `finished` (to be checked against the rerun logic). A new run recreates the
     FIFOs, which is what a rollback needs.
 - **Repairing messages destroyed with a FIFO.** When both endpoints of a channel
-  crash before either has reopened the FIFO, what the FIFO held is destroyed,
-  and only what the writer produces again after its latest checkpoint comes back
-  (see the Contract's limits). Ways to widen that, none designed or tried:
+  crash while no other process holds the FIFO (the `Supervisor` down too, no
+  `Supervisor`, or `-no_hold_fifos`, see "Holding the business channels"), what
+  the FIFO held is destroyed, and only what the writer produces again after its
+  latest checkpoint comes back (see the Contract's limits). Ways to widen that,
+  none designed or tried:
   - The writer restores an older retained checkpoint and replays from there. The
     input log is kept back to the `capture_pos` of the oldest retained
     checkpoint, the numbers are regenerated the same, and the readers drop what
@@ -2967,51 +3090,14 @@ Design ideas from Future work move here once they are actually built.
     "Input log": the writer keeps what it sent until the reader has it in a
     checkpoint. It would repair everything, but it needs a way back from the
     reader and coordination to delete.
-  - Auxiliary ghost connections: holders of a channel's FIFO other than its two
-    endpoints, placed somewhere else in the program, so that the unread messages
-    survive while both endpoints are gone. A read end opened without blocking is
-    enough to keep what a pipe holds. This closes the "both endpoints
-    of a channel crashed" limit itself (see the Contract's Limits and
-    non-goals), not just widens it: the writer's relaunch still replays its
-    input log deterministically and resends, with the same numbers, everything
-    after its checkpoint's `capture_pos` (G5), so whatever the auxiliary holder
-    kept alive simply arrives ahead of that resend and the reader's own
-    existing dedup (`_on_arrival`'s "a number not above the last one accepted
-    is a duplicate", see "Control envelope") drops the resend without any new
-    logic on
-    the reading side. Nothing about G5 or replay would need to change; the
-    only new part is the holder itself. It does not touch the Contract's
-    other limit, "a message read from a FIFO but not yet written to the input
-    log" (a window internal to one process, between its own `read()` and its
-    own log `write()`, that no outside fd can protect), which a reader thread
-    keeps short by logging every message of a block in one write.
-
-    The simplest holder is a single process for the whole program, the
-    `Supervisor` or one of its own, but if it dies together with both
-    endpoints the loss is back. Giving it its own heartbeat channel to the
-    `Supervisor`, like any business node's (it would carry no business logic
-    at all: open every channel's auxiliary end and do nothing else, so it
-    should be far less likely to crash than a node that also processes data),
-    narrows that from "if it ever dies" to "if it dies at the exact moment
-    both real endpoints of some channel are also down", since the `Supervisor`
-    would otherwise detect and relaunch it like any other node; the launch
-    mechanism's own "kill the stale PID first" step
-    (`debasher_builtin_sched::_launch`) still leaves a brief window, of
-    however long its own relaunch takes, where nobody holds that channel, so
-    this narrows the risk rather than closing it outright. It does not
-    answer who supervises the `Supervisor` itself (see "Supervising the
-    `Supervisor`" below). A series of holders spreads the
-    same risk further without needing this supervision at all: for example
-    every node also holds an auxiliary read end of the channels of its
-    neighbors (each already a supervised node in its own right), so that a
-    channel loses its contents only if its two endpoints and all its
-    auxiliary holders are gone within one recovery, which is far less
-    likely when the crashes are independent. Open
-    questions for either shape: who holds which channel, how a holder
-    learns the paths of FIFOs that are not its own (a node knows only its
-    own options today), whether a relaunched holder reopens its auxiliary
-    ends first thing, as it does with its own, and what becomes of the
-    auxiliary ends of a node that has finished for good. Not designed.
+  - More holders than the `Supervisor`, so that a channel keeps what its FIFO
+    holds while the `Supervisor` is down too: for example every node also
+    holds a read end of the channels of its neighbors, each of them a
+    supervised node in its own right. A channel then loses what it holds only
+    if its two endpoints and every holder of it are down within one recovery,
+    far less likely when the crashes are independent. Who holds which channel,
+    and how a node learns the paths of FIFOs that are not its own, would have
+    to be settled. Not designed.
   - The global rollback above, which rewinds both nodes to the last consistent
     cut and redelivers from `channel_state` the messages that were in transit at
     the cut.
@@ -3090,6 +3176,9 @@ Design ideas from Future work move here once they are actually built.
     clean start") removes it.
   - The end of the program. Once every node has finished for good, the
     `Supervisor` finds them all done and exits, so the program ends by itself.
+  - Held FIFOs. The `Supervisor` releases them only when it ends (see
+    "Holding the business channels"); knowing that a node finished for good,
+    it could release the FIFOs of that node's input channels at once.
 
   Not designed.
 - **Progress in the heartbeat.** A node whose brain thread is alive but
@@ -3102,11 +3191,11 @@ Design ideas from Future work move here once they are actually built.
   is not a failure (the Introduction asks for no false positives when a
   process is busy). Not designed.
 - **Supervising the `Supervisor`.** If the `Supervisor` dies, the nodes keep
-  running, but nobody relaunches a crashed node until the `Supervisor` is
-  relaunched by hand (see the Contract's failure model). It could be watched
-  and relaunched by a process outside the program, or by the nodes through a
-  heartbeat of its own; either way, what watches it is not watched in turn.
-  Not designed.
+  running, but nobody relaunches a crashed node, and no FIFO is held, until the
+  `Supervisor` is relaunched by hand (see the Contract's failure model). It
+  could be watched and relaunched by a process outside the program, or by the
+  nodes through a heartbeat of its own; either way, what watches it is not
+  watched in turn. Not designed.
 - **A signal from a reader that stops for good.** `CLOSE` goes only from a
   writer to its readers, so a writer cannot tell a reader that stopped for
   good from one that crashed and will be relaunched (see "The reader-dies

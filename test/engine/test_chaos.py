@@ -5,11 +5,13 @@ under kill -9 of random nodes, relaunched by the Supervisor, whose trace at
 sink has to meet the Acceptance criterion (see chaos_ref.py).
 """
 
+import json
 import os
 import random
 import signal
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -202,7 +204,7 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
 
 
 @pytest.mark.parametrize("run_index", range(5))
-def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recognized_g8_error(
+def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_error(
     outdir, run_index
 ):
     """
@@ -211,7 +213,10 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     one, one-way channel (fanin.outsink -> sink.from_fanin), one of the
     only two pairs of killable nodes that can touch the Contract's "both
     endpoints of a channel crashed" limit (see "Limits and non-goals";
-    the other is fanin+loop, not covered by this piece).
+    the other is fanin+loop, not covered by this piece). The program is
+    run with -no_hold_fifos, so that the Supervisor does not hold that
+    fifo and the limit is reached: with it held, the same construction
+    loses nothing (see the next piece).
 
     Left to random timing, this reference program's nodes are fast enough
     that a real loss essentially never happens (confirmed empirically: a
@@ -258,7 +263,7 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     k = 700
     interval = 0.02
     rng = random.Random(run_index)
-    launch_chaos(outdir)
+    launch_chaos(outdir, "-no_hold_fifos")
 
     tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()
@@ -356,6 +361,104 @@ def test_fanin_and_sink_killed_together_over_an_engineered_gap_ends_in_a_recogni
     assert_engineered_gap_trace(tailer.records, k, reported, context)
 
 
+def _latest_checkpoint(outdir, name):
+    """The latest checkpoint that node `name` has saved, or None."""
+    checkpoints = Path(outdir, "__exec__", name, "checkpoints")
+    epochs = [int(p.stem) for p in checkpoints.glob("*.json") if p.stem.isdigit()]
+    if not epochs:
+        return None
+    return json.loads((checkpoints / f"{max(epochs)}.json").read_text())
+
+
+@pytest.mark.parametrize("run_index", range(5))
+def test_fanin_and_sink_killed_together_over_an_engineered_backlog_lose_nothing(outdir, run_index):
+    """
+    "run... repeatedly under kill -9 of random nodes at random moments...
+    [including] adjacent pairs" (Acceptance): fanin and sink share exactly
+    one, one-way channel (fanin.outsink -> sink.from_fanin), so killing
+    both is the case of "both endpoints of a channel crashed" (see the
+    Contract's limits), which the Supervisor's hold on the fifo of every
+    business channel covers.
+
+    Left to random timing, this program's nodes are fast enough that the
+    fifo never holds anything that a relaunched fanin would not send again,
+    so the case is engineered on purpose: SIGSTOP sink to freeze its
+    reader, let a backlog build in the fifo (nothing stops fanin's writer
+    thread from pushing into it), close a checkpoint on fanin so that the
+    backlog counts as already sent as far as its own recovery is concerned,
+    then SIGKILL both before either is relaunched. Without a holder the
+    backlog dies with them, and sink reports the hole from the first number
+    of the backlog up to the last one that the checkpoint covers (G8, see
+    the previous piece). With the Supervisor holding the fifo, the relaunched sink reads the backlog,
+    and drops as duplicates what the relaunched fanin sends again.
+
+    The SIGSTOP can also freeze a reader after it has taken a block from a
+    fifo but before it has logged it, the other limit ("Messages read from
+    a FIFO but not yet written to the input log"), at sink or at fanin's
+    loop_in: halt_and_check_trace accepts such a loss when it was reported
+    by a killed node. At sink it can only take what was in the fifo when
+    it was stopped, so a hole it reports must end before the last number
+    that fanin had written when it saved its checkpoint, which is where the
+    hole of a lost backlog would end.
+    """
+    k = 200
+    interval = 0.02
+    rng = random.Random(run_index)
+    launch_chaos(outdir)
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+    node_outs = start_sched_out_tailers(outdir)
+
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    manual_fifo = find_fifo(outdir, "sup_manual")
+    sup_sched_out = sched_out_file(outdir, "sup")
+
+    feeder = ExtFeeder(ext_fifo, k, interval)
+    feeder.start()
+
+    time.sleep(0.3)
+    sink_pid = read_pid(id_file(outdir, "sink"))
+    os.killpg(int(sink_pid), signal.SIGSTOP)
+    time.sleep(0.8 + rng.uniform(0.0, 0.3))
+
+    write_line(
+        manual_fifo, {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}}
+    )
+    assert wait_for_text(
+        sup_sched_out, "node 'fanin' saved a checkpoint", timeout=10
+    ), "fanin never closed its checkpoint"
+
+    # What fanin had written to the fifo when it saved its checkpoint, and
+    # what sink, frozen since, has logged: the backlog is in between.
+    checkpoint = _latest_checkpoint(outdir, "fanin")
+    written = checkpoint["out_seq"]["outsink"] - len(checkpoint["out_backlog"].get("outsink", []))
+    logged = max((r["seq"] for r in list(tailer.records) if r.get("type") == "DATA"), default=0)
+    assert written > logged, f"no backlog built in the fifo: written {written}, logged {logged}"
+
+    fanin_pid = read_pid(id_file(outdir, "fanin"))
+    os.killpg(int(fanin_pid), signal.SIGKILL)
+    os.killpg(int(sink_pid), signal.SIGKILL)
+
+    for name, old_pid in (("fanin", fanin_pid), ("sink", sink_pid)):
+        assert wait_for_relaunch(outdir, name, old_pid) is not None, (
+            f"{name} (pid {old_pid}) was never relaunched"
+        )
+
+    feeder.join(timeout=60)
+    assert not feeder.is_alive(), "feeder did not finish sending"
+    if feeder.error is not None:
+        raise feeder.error
+    time.sleep(1.0)
+
+    context = f" (run {run_index}, backlog {logged + 1} to {written})"
+    reported = halt_and_check_trace(outdir, tailer, node_outs, {"fanin", "sink"}, k, context)
+    for node, channel, lo, hi in reported:
+        if node == "sink" and channel == "from_fanin":
+            assert hi is not None and hi < written, (
+                f"sink lost the backlog that the fifo held{context}: reported {lo} to {hi}"
+            )
+
+
 @pytest.mark.parametrize("run_index", range(10))
 def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(outdir, run_index):
     """
@@ -363,8 +466,8 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     [including] adjacent pairs" (Acceptance): fanin and loop are the other
     pair that shares a channel (two, in fact: they are this program's only
     cycle) and so, in principle, could touch the "both endpoints of a
-    channel crashed" limit the way fanin+sink does (see the engineered-gap
-    piece above). Unlike that pair, though, this one cannot touch it, not
+    channel crashed" limit the way fanin+sink does without a holder (see
+    the engineered-gap pieces above). Unlike that pair, though, this one cannot touch it, not
     by luck but structurally: closing any round on either of their shared
     channels needs BOTH to be alive and responsive (each is the other's
     peer in the same cycle), so any backlog built while one of them is
@@ -374,7 +477,7 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     checkpoint and resends that backlog, self-healing every time.
 
     Confirmed by trying, first, the same construction the engineered-gap
-    piece uses (freeze one side with SIGSTOP, close a checkpoint on the
+    pieces use (freeze one side with SIGSTOP, close a checkpoint on the
     other, kill both): freezing loop just left fanin's own round pending
     indefinitely, never closing, until the Supervisor's own heartbeat-
     timeout relaunched loop on its own well past HEARTBEAT_TIMEOUT_SECS,
