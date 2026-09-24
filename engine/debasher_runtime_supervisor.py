@@ -74,9 +74,23 @@ class Supervisor(_PortWorker):
 
     HEARTBEAT_TIMEOUT_SECS = 30
     HEARTBEAT_CHECK_INTERVAL_SECS = 5
-    # The computational specification that sets HEARTBEAT_TIMEOUT_SECS for
-    # the Supervisor of a program (see _PortWorker._apply_comp_specs).
-    _COMP_SPEC_ATTRS = {"heartbeat_timeout_s": ("HEARTBEAT_TIMEOUT_SECS", 1)}
+    # The startup deadline: how long a node has, from each launch, to send
+    # its first heartbeat, which comes only after it has restored its
+    # checkpoint, run initialize_runtime() and replayed its input log.
+    # NODE_STARTUP_TIMEOUT_SECS = {node: seconds} gives it for a node, and
+    # STARTUP_TIMEOUT_SECS for the others; never shorter than
+    # HEARTBEAT_TIMEOUT_SECS, which is also what it is when neither says.
+    STARTUP_TIMEOUT_SECS = None
+    NODE_STARTUP_TIMEOUT_SECS = {}
+    # The computational specifications that set HEARTBEAT_TIMEOUT_SECS and
+    # STARTUP_TIMEOUT_SECS for the Supervisor of a program (see
+    # _PortWorker._apply_comp_specs). The engine takes the startup_timeout_s
+    # of each node from its own specifications, into
+    # NODE_STARTUP_TIMEOUT_SECS (see _PORT_FIELDS).
+    _COMP_SPEC_ATTRS = {
+        "heartbeat_timeout_s": ("HEARTBEAT_TIMEOUT_SECS", 1),
+        "startup_timeout_s": ("STARTUP_TIMEOUT_SECS", 1),
+    }
     MAX_RELAUNCH_ATTEMPTS = 3
     FORCE_STOP_TIMEOUT_SECS = 60
 
@@ -87,6 +101,7 @@ class Supervisor(_PortWorker):
         "nodes": "NODE_PORTS",
         "trigger": "TRIGGER_PORT",
         "manual_trigger": "MANUAL_TRIGGER_PORT",
+        "startup": "NODE_STARTUP_TIMEOUT_SECS",
     }
 
     def __init__(self, argv=None, opts=None):
@@ -99,10 +114,13 @@ class Supervisor(_PortWorker):
         # node look silent at once.
         now = time.monotonic()
         # Seeded to "now", not 0: a node that simply hasn't had time yet
-        # to send its first heartbeat must not be declared down before
-        # HEARTBEAT_TIMEOUT_SECS has genuinely elapsed.
+        # to send its first heartbeat must not be declared down before its
+        # startup deadline has genuinely elapsed.
         self._last_heartbeat = {node: now for node in self.NODE_PORTS}
         self._relaunch_attempts = {node: 0 for node in self.NODE_PORTS}
+        # The nodes launched and not heard from since: their silence is
+        # measured against their startup deadline (see _silence_limit).
+        self._starting = set(self.NODE_PORTS)
         self._down = set()
         self._done = set()
         self._given_up = set()
@@ -123,24 +141,32 @@ class Supervisor(_PortWorker):
 
     def _port_field_value(self, attribute, items):
         """
-        NODE_PORTS from items `<node>=<option>`, where a node is a process
-        name or, for a task of an array, `<process>:<idx>`; TRIGGER_PORT, a
-        list; MANUAL_TRIGGER_PORT, a single port or None (see
+        NODE_PORTS from items `<node>=<option>`, and
+        NODE_STARTUP_TIMEOUT_SECS from items `<node>=<seconds>`, where a node
+        is a process name or, for a task of an array, `<process>:<idx>`;
+        TRIGGER_PORT, a list; MANUAL_TRIGGER_PORT, a single port or None (see
         _PortWorker._take_ports_from_engine).
         """
-        if attribute == "NODE_PORTS":
-            node_ports = {}
+        if attribute in ("NODE_PORTS", "NODE_STARTUP_TIMEOUT_SECS"):
+            by_node = {}
             for item in items:
-                label, _, option_name = item.rpartition("=")
-                process_name, sep, task_idx = label.rpartition(":")
-                if sep and task_idx.isdigit():
-                    node_ports[(process_name, int(task_idx))] = option_name
-                else:
-                    node_ports[label] = option_name
-            return node_ports
+                label, _, value = item.rpartition("=")
+                if attribute == "NODE_STARTUP_TIMEOUT_SECS":
+                    value = float(value)
+                by_node[self._node_from_label(label)] = value
+            return by_node
         if attribute == "MANUAL_TRIGGER_PORT":
             return items[0] if items else None
         return items
+
+    @staticmethod
+    def _node_from_label(label):
+        """A node from its name in DEBASHER_PROCESS_PORTS: a process name,
+        or `<process>:<idx>` for a task of an array."""
+        process_name, sep, task_idx = label.rpartition(":")
+        if sep and task_idx.isdigit():
+            return (process_name, int(task_idx))
+        return label
 
     def _check_declared_ports(self):
         self._check_node_names()
@@ -290,6 +316,7 @@ class Supervisor(_PortWorker):
         with self._lock:
             self._last_heartbeat[node_name] = time.monotonic()
             self._down.discard(node_name)
+            self._starting.discard(node_name)
             # A real heartbeat is proof of actual recovery (unlike a
             # merely-live PID, see _node_pid_alive) -- this is what
             # distinguishes a node crash-looping right after every
@@ -371,16 +398,17 @@ class Supervisor(_PortWorker):
                 return
             already_down = node_name in self._down
             last_seen = self._last_heartbeat[node_name]
+            silence_limit = self._silence_limit(node_name)
         if already_down:
             # Already declared down and (by default) already being
             # relaunched: don't call on_node_down again for the same
-            # outage every tick, only once HEARTBEAT_TIMEOUT_SECS has
+            # outage every tick, only once its startup deadline has
             # passed with still no real heartbeat (_on_heartbeat resets
             # last_seen the same way a genuine one would). Without this,
             # a relaunch that itself dies before its first heartbeat
             # would stay "down" forever, never re-declared and never
             # counted against MAX_RELAUNCH_ATTEMPTS.
-            if time.monotonic() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
+            if time.monotonic() - last_seen > silence_limit:
                 with self._lock:
                     self._down.discard(node_name)
                 self._declare_down(node_name)
@@ -390,19 +418,35 @@ class Supervisor(_PortWorker):
             self._declare_down(node_name)
             return
 
-        if time.monotonic() - last_seen > self.HEARTBEAT_TIMEOUT_SECS:
+        if time.monotonic() - last_seen > silence_limit:
             self._declare_down(node_name)
+
+    def _silence_limit(self, node_name):
+        """
+        How long `node_name` may go without a heartbeat before it is declared
+        down: HEARTBEAT_TIMEOUT_SECS, or its startup deadline while it has
+        not sent one since it was launched (see STARTUP_TIMEOUT_SECS). Only a
+        live, silent node waits that long: one whose process is gone, which
+        is how a node that crashes during its replay ends, is declared down
+        at once (see _node_pid_alive), and uses up its relaunch attempts as
+        before. Called with the lock held.
+        """
+        if node_name not in self._starting:
+            return self.HEARTBEAT_TIMEOUT_SECS
+        startup = self.NODE_STARTUP_TIMEOUT_SECS.get(node_name, self.STARTUP_TIMEOUT_SECS)
+        return max(self.HEARTBEAT_TIMEOUT_SECS, startup or 0)
 
     def _declare_down(self, node_name):
         with self._lock:
             if node_name in self._down:
                 return
             self._down.add(node_name)
+            self._starting.add(node_name)
             self._relaunch_attempts[node_name] += 1
             attempts = self._relaunch_attempts[node_name]
             # A fresh grace period starts now, the same reasoning as
             # __init__'s own seeding: the incarnation on_node_down is
-            # about to start has HEARTBEAT_TIMEOUT_SECS to send its
+            # about to start has its startup deadline to send its
             # first heartbeat before _check_node treats it as down
             # again, instead of being stuck "down" forever if it never
             # does.

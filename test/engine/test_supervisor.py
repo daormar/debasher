@@ -1099,6 +1099,106 @@ def test_a_heartbeat_timeout_that_is_not_a_positive_number_is_refused(monkeypatc
         _Sup(opts=_FAKE_OPTS)
 
 
+# --- the startup deadline ------------------------------------------------
+
+
+def _silent_live_node(execdir, proc, node, silent_for):
+    _node_dir(execdir, node).joinpath(f"{node}.id").write_text(str(os.getpid()))
+    proc._last_heartbeat[node] = time.monotonic() - silent_for
+
+
+def test_a_node_not_heard_from_since_its_launch_has_its_startup_deadline(execdir):
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_TIMEOUT_SECS = 3
+    proc.STARTUP_TIMEOUT_SECS = 60
+    _silent_live_node(execdir, proc, "a", 10)
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    proc._check_node("a")
+    assert calls == []
+
+    proc._last_heartbeat["a"] = time.monotonic() - 61
+    proc._check_node("a")
+    assert calls == ["a"]
+
+
+def test_after_its_first_heartbeat_a_node_has_the_heartbeat_timeout(execdir):
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_TIMEOUT_SECS = 3
+    proc.STARTUP_TIMEOUT_SECS = 60
+    proc._on_heartbeat("a")
+    _silent_live_node(execdir, proc, "a", 10)
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    proc._check_node("a")
+
+    assert calls == ["a"]
+
+
+def test_a_relaunched_node_has_its_startup_deadline_again(execdir):
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.HEARTBEAT_TIMEOUT_SECS = 3
+    proc.STARTUP_TIMEOUT_SECS = 60
+    proc._on_heartbeat("a")
+    proc.on_node_down = lambda node: None
+    proc._declare_down("a")
+    with proc._lock:
+        assert proc._silence_limit("a") == 60
+
+
+def test_a_node_that_dies_during_its_startup_is_declared_down_at_once(execdir):
+    # How a node that crashes on the same record at every replay ends: its
+    # relaunch attempts run out as before, the deadline does not delay it.
+    _node_dir(execdir, "a").joinpath("a.id").write_text(str(_dead_pid()))
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.STARTUP_TIMEOUT_SECS = 999999
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    proc._check_node("a")
+
+    assert calls == ["a"]
+
+
+def test_the_startup_deadline_of_a_node_overrides_the_supervisors(execdir):
+    class Sup(_Sup):
+        STARTUP_TIMEOUT_SECS = 60
+        NODE_STARTUP_TIMEOUT_SECS = {"b": 120}
+
+    proc = Sup(opts=_FAKE_OPTS)
+    with proc._lock:
+        assert proc._silence_limit("a") == 60
+        assert proc._silence_limit("b") == 120
+
+
+def test_the_startup_deadline_is_never_shorter_than_the_heartbeat_timeout():
+    class Sup(_Sup):
+        HEARTBEAT_TIMEOUT_SECS = 30
+        NODE_STARTUP_TIMEOUT_SECS = {"b": 5}
+
+    proc = Sup(opts=_FAKE_OPTS)
+    with proc._lock:
+        assert proc._silence_limit("a") == 30
+        assert proc._silence_limit("b") == 30
+
+
+def test_the_computational_specs_set_the_startup_deadline_of_every_node(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; mem=32; startup_timeout_s=90")
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert proc.STARTUP_TIMEOUT_SECS == 90
+
+
+def test_the_engine_gives_the_startup_deadline_of_each_node(monkeypatch):
+    monkeypatch.setenv(
+        "DEBASHER_PROCESS_PORTS",
+        "nodes=a=hb_a,worker:1=hb_w1;trigger=;manual_trigger=;startup=worker:1=45",
+    )
+    proc = _UndeclaredSup(opts={"hb_a": "/dev/null", "hb_w1": "/dev/null"})
+    assert proc.NODE_STARTUP_TIMEOUT_SECS == {("worker", 1): 45.0}
+
+
 def test_a_node_silent_for_longer_than_the_timeout_is_declared_down(execdir, monkeypatch):
     # The same clock measures both ends: when the heartbeat arrived, and
     # how long ago that was.

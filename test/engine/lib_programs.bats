@@ -426,7 +426,7 @@ set_up_registries() {
     declare -gA DEBASHER_FIFO_MIRRORED=() DEBASHER_RESIDENT_PROCESS_ROLES=()
     declare -gA DEBASHER_FIFO_OWNER_OPTS=() DEBASHER_FIFO_USER_OPTS=()
     declare -gA DEBASHER_RESIDENT_TASK_PORTS=()
-    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_INITIAL_PROCESS_SPEC=()
     DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
     SORT="$(command -v sort)"
     TR="$(command -v tr)"
@@ -608,7 +608,7 @@ add_fifo() {
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of fanin)]}" = "input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of loop)]}" = "input=from_fanin;output=outfanin,outhb;control=;external=;supervisor=outhb" ]
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sink)]}" = "input=from_fanin;output=outhb;control=;external=;supervisor=outhb" ]
-    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=" ]
 }
 
 @test "debasher::_register_resident_task_ports gives each task of an array its own ports, and a node with none an entry" {
@@ -640,7 +640,25 @@ add_fifo() {
     add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
 
     debasher::_register_resident_task_ports
-    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=;startup=" ]
+}
+
+@test "debasher::_register_resident_task_ports gives the Supervisor the startup deadline of each node that sets one" {
+    set_up_registries
+    add_process slow fbpprocess
+    add_process worker fbpprocess 2
+    add_process quick fbpprocess
+    add_process sup supervisor
+    DEBASHER_INITIAL_PROCESS_SPEC["slow"]="slow cpus=1; mem=32; time=00:10:00; startup_timeout_s=120"
+    DEBASHER_INITIAL_PROCESS_SPEC["worker"]="worker cpus=1 mem=32 time=00:10:00 startup_timeout_s=45"
+    DEBASHER_INITIAL_PROCESS_SPEC["quick"]="quick cpus=1 mem=32 time=00:10:00"
+    add_fifo slow/slow_hb "$(end_of slow)" "$(end_of sup)" "" -outhb -hb_slow
+    add_fifo worker/worker_hb_0 "$(end_of worker 0)" "$(end_of sup)" "" -outhb -hb_worker0
+    add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
+    add_fifo quick/quick_hb "$(end_of quick)" "$(end_of sup)" "" -outhb -hb_quick
+
+    debasher::_register_resident_task_ports
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=quick=hb_quick,slow=hb_slow,worker:0=hb_worker0,worker:1=hb_worker1;trigger=;manual_trigger=;startup=slow=120,worker:0=45,worker:1=45" ]
 }
 
 @test "debasher::_register_resident_task_ports refuses a Supervisor with two manual triggers" {

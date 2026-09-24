@@ -400,9 +400,15 @@ mutation check, durability level) is defined in the Contract, where it is used.
   rollback** (vuelta atrás global) would instead rewind every node to the last
   consistent cut; it is future work.
 - **heartbeat** (latido): the `INTERACT` command that a healthy node sends the
-  `Supervisor` every `HEARTBEAT_INTERVAL_SECONDS`. The `Supervisor` declares a
-  node down when they stop for `HEARTBEAT_TIMEOUT_SECS`, or at once if the
-  node's PID is gone and its `.finished` file is absent.
+  `Supervisor` every `HEARTBEAT_INTERVAL_SECONDS` from the moment its threads
+  start. The `Supervisor` declares a node down when they stop for
+  `HEARTBEAT_TIMEOUT_SECS`, or for its startup deadline before the first one,
+  or at once if the node's PID is gone and its `.finished` file is absent.
+- **startup deadline** (plazo de arranque): how long a node has, from each
+  launch, to send its first heartbeat, which comes only once it has restored
+  its checkpoint, run `initialize_runtime()` and replayed its input log, and
+  then run for one `HEARTBEAT_INTERVAL_SECONDS`. Never shorter than
+  `HEARTBEAT_TIMEOUT_SECS` (see "Failure detection").
 - **down, done, given up** (caído, terminado, abandonado): the states of a node
   in the `Supervisor`. Down: declared down and relaunched. Done: its `.finished`
   file appeared (it exited cleanly with code 0), so it is never checked again.
@@ -943,6 +949,16 @@ has received in its node state and decides in `process_data` when it has
 enough, because the framework delivers each message as it arrives, with no
 join across ports.
 
+A module cannot tell a replay from the first execution: `process_data` gets
+the same calls, in the same order, and nothing says which of the two is
+running, so that neither the node state nor what it sends can depend on it.
+The one thing that has to differ, the pace of a node that emits on its own,
+is in the framework: `sleep(seconds)` waits `seconds` when called from
+`process_data`, does not wait while the node replays its log, where the pace
+of the first execution has no use and would only delay the recovery, and
+returns early once the node is told to stop, so that a stop is not delayed
+either. Only when the next step comes changes.
+
 How a node finishes for good is not defined yet: `run()` returns only on a stop
 signal, and a stop sends no `CLOSE` (see "A node that finishes for good" in
 Future work).
@@ -971,7 +987,10 @@ specifications of the process to it as `DEBASHER_PROCESS_COMP_SPECS`, from
 the specification that the generated script carries, so a relaunch gets them
 too, and `FBPProcess` sets them on its instance when it is created
 (`_apply_comp_specs`); it ignores the other fields. The `Supervisor` reads
-its own, `heartbeat_timeout_s`, the same way (see "Failure detection").
+its own, `heartbeat_timeout_s` and `startup_timeout_s`, the same way. A node
+can give its startup deadline too, `startup_timeout_s`, in seconds, which it
+does not read itself: the engine passes it to the `Supervisor` (see "Failure
+detection").
 
 ## State capture and checkpoint schema
 
@@ -1525,6 +1544,28 @@ node.)
   `HEARTBEAT_TIMEOUT_SECS`. A program sets the timeout of its `Supervisor` in
   the computational specifications of that process, `heartbeat_timeout_s`, in
   seconds, the same way as the limits of a node (see "Limits of a node").
+- **Startup deadline**: from each launch until its first heartbeat, a node's
+  silence is measured against its startup deadline instead (Glossary), kept in
+  `_starting` and applied by `_silence_limit`: from its launch the node
+  restores its checkpoint, runs `initialize_runtime()` and replays its input
+  log before its threads start, and that can take much longer than the
+  interval between two heartbeats. The first heartbeat still comes one
+  `HEARTBEAT_INTERVAL_SECONDS` after the threads start, not at once: it resets
+  the relaunch budget (see "Relaunching a downed node"), so it has to show
+  that the node has run healthy for a while, not only that it started; sent at
+  once, it would reset the budget of a node whose reader fails on the first
+  live message after every relaunch, such as one past a gap in its sequence
+  numbers that no relaunch can fill, and that node would be relaunched for
+  ever. A node gives it in its computational specifications,
+  `startup_timeout_s`, which the engine passes to the `Supervisor` in
+  `NODE_STARTUP_TIMEOUT_SECS` (see "Ports from the engine"); the
+  `startup_timeout_s` of the `Supervisor` itself, `STARTUP_TIMEOUT_SECS`, is
+  the deadline of every node that gives none; and neither is ever shorter than
+  `HEARTBEAT_TIMEOUT_SECS`, which is also the deadline when neither is given.
+  A long deadline delays only the detection of a node that is alive and silent
+  at startup: a node that crashes during its startup, for example on the same
+  record at every replay, is declared down at once by the PID-based fast path
+  below, and uses up its relaunch attempts as before.
 - **Monotonic clock**: every time kept to measure the silence of a node is
   taken from the monotonic clock (`time.monotonic()`), never from the wall
   clock, which can jump forward (an NTP correction, a machine coming back from
@@ -1639,10 +1680,12 @@ node.)
 - **`MAX_RELAUNCH_ATTEMPTS` per node**: a plain counter, incremented each time
   `on_node_down` actually fires for that node, **reset to 0 on that node's next
   real heartbeat** (proof of actual recovery, not just that its PID exists
-  again, consistent with "PID-alive proves nothing about health" above). This
-  distinguishes a node that keeps crashing immediately after every relaunch
-  (counter climbs, never resets, eventually exhausts the budget) from one that
-  crashes rarely over a very long run and always recovers cleanly each time
+  again, consistent with "PID-alive proves nothing about health" above: the
+  first heartbeat goes out one interval after the startup, restore and
+  replay included, is over). This distinguishes a node that keeps crashing
+  during its startup, or right after it, after every relaunch (counter
+  climbs, never resets, eventually exhausts the budget) from one that crashes
+  rarely over a very long run and always recovers cleanly each time
   (counter keeps resetting, never exhausted just by accumulating spaced-out
   incidents).
 - Exceeding the limit calls **`on_node_permanently_failed(node_name)`** instead
@@ -1967,6 +2010,10 @@ For the `Supervisor`, the same fifos seen from its end:
 - Any other fifo that the `Supervisor` defines is refused when the program is
   loaded: the `Supervisor` takes no part in the business channels.
 
+With them goes the startup deadline of each node whose computational
+specifications give one, `startup_timeout_s`, into
+`NODE_STARTUP_TIMEOUT_SECS` (see "Failure detection").
+
 So the heartbeat channels need no tag of their own: the role of the process
 at each end, which the engine already knows, says which fifo is which. With
 the options of the module as the only place that says what the ports are, a
@@ -1987,19 +2034,20 @@ and for its `Supervisor`, `sup`, where a task of an array would be named
 `<process>:<idx>`, as `debasher_stop_resident -x` names it:
 
 ```
-nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual
+nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=
 ```
 
 `FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
 `EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, and the
-`Supervisor` `NODE_PORTS`, `TRIGGER_PORT` and `MANUAL_TRIGGER_PORT`, before
-anything uses them (`_take_ports_from_engine`). The options of the module are
-then the only place that says what the ports of a process are: a class that
-declares any of them, even with the same value, stops the process with an
-error. A process built without the engine, as the unit tests build them, gets
-no such variable and takes its ports from the attributes of its class. The
-order of a list means nothing, in the variable or in the class: every use of
-a port list is port by port.
+`Supervisor` `NODE_PORTS`, `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT` and
+`NODE_STARTUP_TIMEOUT_SECS`, before anything uses them
+(`_take_ports_from_engine`). The options of the module are then the only
+place that says what the ports of a process are: a class that declares any
+of them, even with the same value, stops the process with an error. A
+process built without the engine, as the unit tests build them, gets no such
+variable and takes its ports from the attributes of its class. The order of a
+list means nothing, in the variable or in the class: every use of a port list
+is port by port.
 
 ## What the fifo tags leave out
 
@@ -2414,12 +2462,13 @@ Design ideas from Future work move here once they are actually built.
     in the log after the `capture_pos` of the latest checkpoint: the replay
     processes it again and resends what it sent, with the same numbers (G5),
     and the reader drops as duplicates what had already arrived.
-  - Pace. A delay inside `process_data` sets the rate of the loop, and slows
-    down a replay as much (see "A startup deadline for a relaunched node" in
-    Future work). It does not adapt to the readers: a channel is one-way, so a
-    node cannot know how far its readers got, and one that emits faster than
-    they read is stopped by `OUT_BACKLOG_FAIL_BYTES` with an error (see
-    "Checkpoint persistence").
+  - Pace. `sleep(seconds)`, called from `process_data`, sets the rate of the
+    loop. It does not wait while the node replays its input log, and returns
+    early once the node is told to stop (see "Defining a node"). The rate
+    does not adapt to the readers: a channel is one-way, so a node cannot
+    know how far its readers got, and one that emits faster than they read is
+    stopped by `OUT_BACKLOG_FAIL_BYTES` with an error (see "Checkpoint
+    persistence").
   - Ending. The node stops sending itself the next trigger when its node
     state says so, and stays idle; it does not finish for good, since no node
     does (see "A node that finishes for good" in Future work).
@@ -2429,6 +2478,25 @@ Design ideas from Future work move here once they are actually built.
   `Supervisor`; a round started while it counts closes through the loop, and
   a `counter` killed while it counts is relaunched and goes on with no value
   missing or repeated at `sink`.
+- **A startup deadline for a node.** A node sends its first heartbeat only
+  once it has restored its checkpoint, run `initialize_runtime()` and
+  replayed its input log, which can take longer than
+  `HEARTBEAT_TIMEOUT_SECS`; declared down for it, a node with a long replay
+  would be relaunched again and again, and given up. Until its first
+  heartbeat after a launch, the `Supervisor` gives it its startup deadline
+  (see "Failure detection"), which the node sets in its computational
+  specifications, `startup_timeout_s`. Sending the first heartbeat earlier,
+  before the replay or as soon as the threads start, would not do: a
+  heartbeat resets the relaunch budget, so a node that crashes on the same
+  record at every replay, or on the first live message after it, would be
+  relaunched for ever. A replay
+  also no longer waits for the pace of a node that emits on its own, since
+  `sleep()` does not wait during it (see "Defining a node").
+
+  `test/engine/debasher_startup_ref.sh` is the reference: `slow` takes half a
+  second over every message and has a startup deadline of 30 s, under a
+  `Supervisor` whose heartbeat timeout is 2 s; relaunched with ten messages
+  to replay, it is not declared down again.
 
 # Future work
 
@@ -2658,16 +2726,6 @@ Design ideas from Future work move here once they are actually built.
     `Supervisor` finds them all done and exits, so the program ends by itself.
 
   Not designed.
-- **A startup deadline for a relaunched node.** A node sends its first
-  heartbeat only after its replay, when `start_threads()` runs, so a replay
-  longer than `HEARTBEAT_TIMEOUT_SECS` gets it declared down again and, if
-  that repeats, given up. Starting the heartbeat before the replay is not the
-  fix: a heartbeat resets the relaunch budget, so a node that crashes on the
-  same record at every replay would be relaunched forever. Two options, not
-  designed: a longer deadline in the `Supervisor` for the first heartbeat
-  after a relaunch, which covers any long replay; and a read-only `replaying`
-  flag, so that a module can skip what only matters live, such as the delay
-  of a self-loop.
 - **Progress in the heartbeat.** A node whose brain thread is alive but
   blocked is not detected (see "Stuck but alive" in the Contract's limits):
   the heartbeat says that its threads are alive, not that they make progress.

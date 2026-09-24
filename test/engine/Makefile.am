@@ -10,6 +10,7 @@ test_halt_ref.py debasher_halt_ref.sh				\
 test_array_ref.py debasher_array_ref.sh debasher_array_gen_ref.sh	\
 test_fanout_cmdline_ref.py debasher_fanout_cmdline_ref.sh		\
 test_selfloop_ref.py debasher_selfloop_ref.sh			\
+test_startup_ref.py debasher_startup_ref.sh			\
 test_channel_kinds.py
 
 check-local:

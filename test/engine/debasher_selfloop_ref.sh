@@ -54,15 +54,13 @@ counter_define_opts()
 counter_heredoc_py()
 {
     cat <<'EOF'
-import time
-
 from debasher_runtime_lib import FBPProcess
 
 
 class Counter(FBPProcess):
     HEARTBEAT_INTERVAL_SECONDS = 0.2
     # The pace of the loop: long enough for a test to kill counter while it
-    # counts, short enough to keep a replay quick.
+    # counts. sleep() does not wait while counter replays its log.
     STEP_SECS = 0.01
 
     def __init__(self):
@@ -76,7 +74,7 @@ class Counter(FBPProcess):
             self.send_data("outself", 0)
             return
         # A step of the loop
-        time.sleep(self.STEP_SECS)
+        self.sleep(self.STEP_SECS)
         self.send_data("outsink", packet)
         if packet + 1 < self.limit:
             self.send_data("outself", packet + 1)

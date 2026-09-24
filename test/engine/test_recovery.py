@@ -900,3 +900,61 @@ def test_a_message_longer_than_a_block_arrives_whole(tmp_path):
         assert [packet for _, packet in node.seen] == [big, "after"]
     finally:
         node.stop_threads(timeout=2)
+
+
+# --- sleep(): the pace of a node, live and not while replaying -------------
+
+
+class _Pacer(_Fanin):
+    """A node that waits STEP_SECS in every call, as a node that emits on its
+    own through a self-loop sets its pace."""
+
+    STEP_SECS = 0.0
+
+    def process_data(self, port_name, packet):
+        self.sleep(self.STEP_SECS)
+        super().process_data(port_name, packet)
+
+
+class _SlowPacer(_Pacer):
+    STEP_SECS = 5.0
+
+
+def test_sleep_does_not_wait_while_the_node_replays_its_log(tmp_path):
+    live = _Pacer(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _data("b", 2), _data("a", 3)])
+    _crash(live)
+
+    # Not told to stop before the replay, unlike _relaunch: a stop would end
+    # any wait too, and hide whether the replay waited at all.
+    relaunched = _SlowPacer(opts=_opts(tmp_path))
+    runner = threading.Thread(target=relaunched.run)
+    start = time.monotonic()
+    runner.start()
+    try:
+        assert _wait_until(lambda: len(relaunched.seen) == 3, timeout=2.0)
+        assert time.monotonic() - start < 2.0
+    finally:
+        relaunched._stop_requested.set()
+        runner.join(5)
+    assert not runner.is_alive()
+    assert relaunched.seen == [("a", 1), ("b", 2), ("a", 3)]
+
+
+def test_sleep_waits_while_the_node_is_live(tmp_path):
+    node = _Pacer(opts=_opts(tmp_path))
+    start = time.monotonic()
+    node.sleep(0.2)
+    assert time.monotonic() - start >= 0.2
+
+
+def test_sleep_returns_early_once_the_node_is_told_to_stop(tmp_path):
+    node = _Pacer(opts=_opts(tmp_path))
+    sleeper = threading.Thread(target=node.sleep, args=(30,))
+    start = time.monotonic()
+    sleeper.start()
+    time.sleep(0.1)
+    node._stop_requested.set()
+    sleeper.join(5)
+    assert not sleeper.is_alive()
+    assert time.monotonic() - start < 2.0

@@ -268,6 +268,11 @@ class FBPProcess(_PortWorker):
         # Conformance status, "G2 is violated during an ordered shutdown",
         # third candidate).
         self._stop_requested = threading.Event()
+        # Whether the node is replaying its input log (see
+        # _replay_input_log). Internal: a module never sees it, so that
+        # neither its node state nor what it sends can depend on it; sleep()
+        # is what uses it.
+        self._replaying = False
 
     def _port_field_value(self, attribute, items):
         """
@@ -651,6 +656,20 @@ class FBPProcess(_PortWorker):
         finally:
             self._handler_thread = None
 
+    def sleep(self, seconds):
+        """
+        Waits `seconds`, from process_data, to set the pace of a node that
+        emits on its own through a self-loop (see "A node that emits on its
+        own" in the design doc's Extensions). It does not wait while the node
+        replays its input log, where the pace of the first execution has no
+        use and would only delay the recovery, and it returns early once the
+        node is told to stop, so that a stop is not delayed either. Only when
+        the next step comes changes, never the node state or what is sent.
+        """
+        if self._replaying:
+            return
+        self._stop_requested.wait(seconds)
+
     def send_data(self, tag, payload):
         """
         Sends a DATA message on the output port `tag`, numbered with this
@@ -750,6 +769,12 @@ class FBPProcess(_PortWorker):
             }
 
     def _heartbeat_loop(self):
+        # The first heartbeat goes out one interval after the threads start,
+        # not at once: a heartbeat resets the relaunch budget of the node at
+        # the Supervisor, so it has to show that the node has been healthy
+        # for a while, not only that it started. A node whose reader fails on
+        # the first live message after every relaunch (a gap in the sequence
+        # numbers that no relaunch can fill) must use up its budget.
         while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECONDS):
             healthy = self._all_threads_alive()
             self.log.debug("heartbeat tick, healthy=%s", healthy)
@@ -1177,25 +1202,29 @@ class FBPProcess(_PortWorker):
         from disk and never writes to the log.
         """
         replayed = 0
-        for record in self._input_log.replay(capture_pos):
-            if record.envelope.type == TYPE_CLOSE:
-                if record.port not in self.CONTROL_PORTS:
-                    self._closed_ports.add(record.port)
-                continue
-            if record.envelope.type != TYPE_DATA:
-                continue
-            if record.port in self._closed_ports:
-                raise ValueError(
-                    f"{type(self).__name__}: the input log holds a DATA record at position "
-                    f"{record.pos} on port {record.port!r}, which had already received CLOSE; "
-                    "nothing is logged after a CLOSE, so the log or the checkpoint is corrupt"
-                )
-            self._current_pos = record.pos
-            if record.envelope.seq is not None:
-                self._last_seq[record.port] = record.envelope.seq
-                self._accepted_seq[record.port] = record.envelope.seq
-            self._run_process_data(record.port, record.envelope.payload)
-            replayed += 1
+        self._replaying = True
+        try:
+            for record in self._input_log.replay(capture_pos):
+                if record.envelope.type == TYPE_CLOSE:
+                    if record.port not in self.CONTROL_PORTS:
+                        self._closed_ports.add(record.port)
+                    continue
+                if record.envelope.type != TYPE_DATA:
+                    continue
+                if record.port in self._closed_ports:
+                    raise ValueError(
+                        f"{type(self).__name__}: the input log holds a DATA record at position "
+                        f"{record.pos} on port {record.port!r}, which had already received CLOSE; "
+                        "nothing is logged after a CLOSE, so the log or the checkpoint is corrupt"
+                    )
+                self._current_pos = record.pos
+                if record.envelope.seq is not None:
+                    self._last_seq[record.port] = record.envelope.seq
+                    self._accepted_seq[record.port] = record.envelope.seq
+                self._run_process_data(record.port, record.envelope.payload)
+                replayed += 1
+        finally:
+            self._replaying = False
         if replayed:
             self.log.info(
                 "replayed %d records of the input log after position %s", replayed, capture_pos

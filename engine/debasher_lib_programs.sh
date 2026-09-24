@@ -680,10 +680,12 @@ debasher::_sorted_comma_list()
 #
 # For the Supervisor, the heartbeat channel of each node, as <node>=<port>
 # with the node named as debasher::_resident_node_display_name names it,
-# the output ports to the initiators it triggers, and the input port of a
-# manual trigger fed from outside:
+# the output ports to the initiators it triggers, the input port of a manual
+# trigger fed from outside, and the startup deadline of each node that gives
+# one in its computational specifications (startup_timeout_s), as
+# <node>=<seconds>:
 #
-#   nodes=<node>=<port>,...;trigger=<ports>;manual_trigger=<port>
+#   nodes=<node>=<port>,...;trigger=<ports>;manual_trigger=<port>;startup=<node>=<seconds>,...
 #
 # each list sorted and separated by commas, and possibly empty. A no-op when
 # the program is not resident. Needs the checks of
@@ -709,7 +711,7 @@ debasher::_register_resident_task_ports()
         ports["$1${sep}$2"]+=" ${port#-}"
     }
 
-    local augm_fifoname owner user kind owner_opt user_opt hb_port
+    local augm_fifoname owner user kind owner_opt user_opt hb_port node_label startup
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
         owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
         user="${DEBASHER_FIFO_USERS[${augm_fifoname}]}"
@@ -748,7 +750,12 @@ debasher::_register_resident_task_ports()
         # outside, and nothing else.
         if [ "$(debasher::_resident_node_role "${user}")" = "supervisor" ]; then
             hb_port="${user_opt#-}"
-            debasher::_add_resident_task_port "${user}" nodes "$(debasher::_resident_node_display_name "${owner}")=${hb_port#-}"
+            node_label=$(debasher::_resident_node_display_name "${owner}")
+            debasher::_add_resident_task_port "${user}" nodes "${node_label}=${hb_port#-}"
+            startup=$(debasher::extract_attr_from_process_comp_specs "$(debasher::extract_process_comp_specs "${DEBASHER_INITIAL_PROCESS_SPEC[${owner%%${sep}*}]:-}")" startup_timeout_s)
+            if [ "${startup}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+                debasher::_add_resident_task_port "${user}" startup "${node_label}=${startup}"
+            fi
         fi
         if [ "$(debasher::_resident_node_role "${owner}")" = "supervisor" ]; then
             if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ] && [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
@@ -790,7 +797,7 @@ debasher::_register_resident_task_ports()
         for (( idx = 0; idx < num_tasks; idx++ )); do
             node="${processname}${sep}${idx}"
             entry=""
-            for field in nodes trigger manual_trigger; do
+            for field in nodes trigger manual_trigger startup; do
                 list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
                 if [ "${field}" = "manual_trigger" ] && [[ "${list}" == *,* ]]; then
                     echo "Error: the Supervisor ${processname} has more than one manual trigger fed from outside the program (${list})" >&2
