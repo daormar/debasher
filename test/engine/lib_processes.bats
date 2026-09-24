@@ -257,6 +257,38 @@ EOF
     [[ -v actual["-verbose"] ]]
 }
 
+@test "debasher::_get_actual_opt_names_for_first_task keeps generator option names that echo would take as its own flags" {
+    genproc3_generate_opts_size()
+    {
+        echo 1
+    }
+
+    genproc3_generate_opts()
+    {
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-n" "4" optlist
+        define_opt "-e" "x" optlist
+        define_flag "-E" optlist
+        save_opt_list optlist
+    }
+
+    DEBASHER_INITIAL_PROCESS_SPEC["genproc3"]="genproc3"
+    DEBASHER_PROGRAM_OUTDIR="/tmp/bats-debasher-outdir"
+
+    local -A actual=()
+    debasher::_get_actual_opt_names_for_first_task "" "genproc3" actual
+    [ "${#actual[@]}" -eq 3 ]
+    [[ -v actual["-n"] ]]
+    [[ -v actual["-e"] ]]
+    [[ -v actual["-E"] ]]
+}
+
 @test "debasher::_get_actual_opt_names_for_first_task's extra generate_opts call leaves no DEBASHER_OPT_LIST_* array behind" {
     genproc2_generate_opts_size()
     {

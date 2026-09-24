@@ -1081,7 +1081,10 @@ debasher::_get_actual_opt_names_for_first_task()
                     shift
                     continue
                 fi
-                echo "${token}"
+                # printf, not echo: echo would take an option named
+                # "-n", "-e" or "-E" as one of its own flags and print
+                # nothing
+                printf '%s\n' "${token}"
                 shift
                 [ $# -eq 0 ] && continue
                 debasher::_str_is_option "$1" && continue
