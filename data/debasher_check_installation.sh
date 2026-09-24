@@ -608,6 +608,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_dynamic_fanout_fifos_gen
+progname="debasher_dynamic_fanout_fifos_gen"
+sched="BUILTIN"
+bs_cpus=7 # increased number of cpus to be able to allocate all processes
+bs_mem=1024
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check execution using SLURM if available
 if [ -n "SBATCH" ]; then
     echo "# Checks using SLURM Scheduler"

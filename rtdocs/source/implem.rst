@@ -1051,3 +1051,5 @@ repository.
    dynamic_fanout
 
    dynamic_fanout_fifos
+
+   dynamic_fanout_fifos_gen
