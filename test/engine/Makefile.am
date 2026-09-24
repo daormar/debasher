@@ -14,6 +14,8 @@ test_startup_ref.py debasher_startup_ref.sh			\
 test_resume_ref.py debasher_resume_ref.sh			\
 test_launcher.py test_launcher_ref.py debasher_launcher_ref.sh	\
 debasher_launcher_batch.sh					\
+test_observe.py test_watcher.py test_watch_ref.py			\
+debasher_watch_ref.sh debasher_watch_batch.sh			\
 test_channel_kinds.py
 
 check-local:

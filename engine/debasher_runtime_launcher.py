@@ -22,7 +22,6 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 import json
 import os
 import subprocess
-import threading
 import time
 import uuid
 
@@ -33,12 +32,13 @@ from debasher_runtime_fbp import FBPProcess
 # ProgramLauncher   #
 #####################
 #
-# A node that launches a general program once for each request it
-# receives, each in a run directory of its own (see "ProgramLauncher: batch
-# runs from a node" in doc/design_doc_resident.md). process_data only
-# registers a batch run; a thread of the node, the launcher thread, launches
-# the registered ones from what their run directories say, so that the
-# queue is on disk and a relaunched node finds it as it was.
+# A node that launches a general program, or a single process of a module,
+# once for each request it receives, each in a run directory of its own (see
+# "ProgramLauncher: batch runs from a node" in doc/design_doc_resident.md).
+# process_data only registers a batch run; the node's observe() launches the
+# registered ones from what their run directories say, so that the queue is
+# on disk and a relaunched node finds it as it was, and brings in the end of
+# each one as an input.
 
 # The files a launcher node keeps in a run directory
 _LAUNCH_FILE = "launch.json"
@@ -99,17 +99,20 @@ class ProgramLauncher(FBPProcess):
     A subclass names the general program to launch, PFILE: a path relative to
     the directory of the module that declares the node, where a program keeps
     its files, as an external alias is; an absolute one is accepted with a
-    warning, since it ties the program to one machine. It may give RUNS_ROOT,
-    an absolute path under which the run directories go; by default they go
-    in the output directory of the process.
+    warning, since it ties the program to one machine. With PROCESS, the
+    name of a process of that module, it launches that process alone, with
+    debasher_exec_process, instead of the whole program. It may give
+    RUNS_ROOT, an absolute path under which the run directories go; by
+    default they go in the output directory of the process.
 
-    Every input port is a port of requests except RUNS_DONE_PORT, through
-    which the launcher thread tells the node that a batch run ended; if the
-    node has it and an output port DONE_PORT, the node sends a notice on
-    DONE_PORT for every batch run that ends.
+    Every input port is a port of requests. If the node has an output port
+    DONE_PORT, observe() brings in the end of every batch run under the name
+    RUNS_DONE_PORT (its observe port, which is not a fifo), and the node
+    sends a notice on DONE_PORT for each.
     """
 
     PFILE = None
+    PROCESS = None
     RUNS_ROOT = None
     RUNS_DONE_PORT = "runs_done"
     DONE_PORT = "outdone"
@@ -122,9 +125,9 @@ class ProgramLauncher(FBPProcess):
     # pick on its own. A program sets it for a process in its computational
     # specifications, batch_sched (BUILTIN or SLURM).
     BATCH_SCHED = "BUILTIN"
-    # How often the launcher thread looks at the run directories, and how
-    # often, at most, it asks debasher_status how a batch run is going.
-    LAUNCH_CHECK_INTERVAL_SECS = 1.0
+    # How often, at most, observe() asks debasher_status how a batch run is
+    # going (OBSERVE_INTERVAL_SECS is how often it looks at the run
+    # directories).
     STATUS_CHECK_INTERVAL_SECS = 5.0
 
     _COMP_SPEC_ATTRS = {
@@ -138,23 +141,20 @@ class ProgramLauncher(FBPProcess):
         if not self.PFILE:
             raise ValueError(f"{type(self).__name__}: PFILE, the general program to launch, is not set")
         self._pfile = self._find_pfile()
+        if self.PROCESS is not None and (not isinstance(self.PROCESS, str) or not self.PROCESS):
+            raise ValueError(f"{type(self).__name__}: PROCESS is not the name of a process")
         if self._task_idx() is not None:
             raise ValueError(f"{type(self).__name__}: a launcher node cannot be a task of an array process")
         # The node state: the batch runs whose end has been announced on
         # DONE_PORT, so that an end reported twice is announced once.
         self._announced = set()
         self._life_id = None
-        # The debasher_exec processes this incarnation launched: run
-        # directory -> Popen, so that their exit codes can be collected.
+        # The batch runs this incarnation launched: run directory -> Popen,
+        # so that their exit codes can be collected.
         self._children = {}
         # When debasher_status was last asked about a run directory, to ask
         # at most once every STATUS_CHECK_INTERVAL_SECS.
         self._status_checked_at = {}
-        self._launcher_thread = None
-        self._launcher_stop = threading.Event()
-        # Set by process_data when it registers a batch run, so that the
-        # launcher thread looks at once instead of waiting for its interval.
-        self._registered = threading.Event()
 
     # -- paths --
 
@@ -300,13 +300,13 @@ class ProgramLauncher(FBPProcess):
         os.makedirs(run_dir, exist_ok=True)
         _write_json_atomically(launch_path, record)
         _write_json_atomically(os.path.join(self._registrations_dir(), f"{pos}.json"), {"run": run})
-        self._registered.set()
+        self.observe_now()
 
     # -- end of a batch run --
 
     def _on_run_ended(self, packet):
         """
-        The launcher thread reports that a batch run ended. An end reported
+        observe() reports that a batch run ended. An end reported
         twice, by a node that went down between reporting it and marking the
         run directory, is announced once.
         """
@@ -322,32 +322,16 @@ class ProgramLauncher(FBPProcess):
             status = "finished" if exit_code == 0 else "failed"
             self.send_data(self.DONE_PORT, {"run": run, "status": status, "exit_code": exit_code})
 
-    # -- the launcher thread --
+    # -- the observation of the batch runs --
 
-    def start_threads(self):
-        super().start_threads()
-        self._launcher_thread = threading.Thread(target=self._launcher_loop, name="launcher")
-        self._launcher_thread.start()
+    def _observe_port(self):
+        """RUNS_DONE_PORT if the node has DONE_PORT to send notices on, so
+        that observe() brings in the end of each batch run; None otherwise,
+        and observe() only launches."""
+        return self.RUNS_DONE_PORT if self.DONE_PORT in self.OUTPUT_PORTS else None
 
-    def stop_threads(self, timeout=None, close=True):
-        self._launcher_stop.set()
-        self._registered.set()
-        if self._launcher_thread is not None:
-            self._launcher_thread.join(timeout)
-        super().stop_threads(timeout, close)
-
-    def _all_threads_alive(self):
-        alive = super()._all_threads_alive()
-        if self._launcher_thread is not None:
-            alive = alive and self._launcher_thread.is_alive()
-        return alive
-
-    def _launcher_loop(self):
-        while not self._launcher_stop.is_set():
-            self._check_runs()
-            self._registered.wait(self.LAUNCH_CHECK_INTERVAL_SECS)
-            self._registered.clear()
-        self.log.debug("launcher thread stopped")
+    def observe(self):
+        self._check_runs()
 
     def _registrations(self):
         """The registered batch runs, (position, run), in the order of their
@@ -399,6 +383,8 @@ class ProgramLauncher(FBPProcess):
         """
         if os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
             return "ended"
+        if self.PROCESS is not None:
+            return self._process_run_state(run_dir)
         child = self._children.get(run_dir)
         if child is not None:
             exit_code = child.poll()
@@ -417,6 +403,28 @@ class ProgramLauncher(FBPProcess):
             if _pid_alive(pid):
                 return "running"
         return self._state_from_status(run_dir)
+
+    def _process_run_state(self, run_dir):
+        """
+        The state of a batch run of a single process, with no exit code yet.
+        The process writes its own exit code when it ends (see _launch), so
+        a crash of the node does not lose it: while it is running, its PID is
+        alive; once that is gone with no exit code, it was stopped before it
+        ended, and it is launched again, from the start, since
+        debasher_exec_process has nothing to resume from.
+        """
+        child = self._children.get(run_dir)
+        if child is not None:
+            if child.poll() is None:
+                return "running"
+            del self._children[run_dir]
+            if os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
+                return "ended"
+            return "to_launch"
+        pid = _read_pid(os.path.join(run_dir, _PID_FILE))
+        if pid is not None and _pid_alive(pid):
+            return "running"
+        return "to_launch"
 
     def _state_from_status(self, run_dir):
         """
@@ -467,28 +475,56 @@ class ProgramLauncher(FBPProcess):
             )
         return os.path.join(bindir, name)
 
+    # The shell command that runs a single process and writes its exit code
+    # into the run directory, $1, once it ends, through a temporary file
+    # renamed into place: the process leaves its own exit code, which a crash
+    # of the node that launched it does not lose.
+    _RECORD_EXIT_CODE = (
+        'dir=$1; shift; "$@"; code=$?; '
+        'echo "$code" > "$dir/exit_code.tmp" && mv "$dir/exit_code.tmp" "$dir/exit_code"'
+    )
+
     def _launch(self, run_dir):
         """
-        Runs debasher_exec on the run directory, with the options of its
-        request, in a session of its own, so that the batch run outlives a
-        crash of the node and a stop of the resident program. debasher_exec
-        run again on a directory skips the processes that had finished.
+        Launches the batch run of a run directory, with the options of its
+        request, in a session of its own, so that it outlives a crash of the
+        node and a stop of the resident program: the program with
+        debasher_exec, which run again on a directory skips the processes
+        that had finished, or, with PROCESS, that process alone with
+        debasher_exec_process, from the run directory.
         """
         record = _read_json(os.path.join(run_dir, _LAUNCH_FILE))
-        args = [
-            self._tool("debasher_exec"),
-            "--pfile",
-            self._pfile,
-            "--outdir",
-            run_dir,
-            "--sched",
-            self.BATCH_SCHED,
-        ]
+        opts = []
         for name, value in record.get("opts", {}).items():
-            args += [name, value]
+            opts += [name, value]
+        if self.PROCESS is None:
+            args = [
+                self._tool("debasher_exec"),
+                "--pfile",
+                self._pfile,
+                "--outdir",
+                run_dir,
+                "--sched",
+                self.BATCH_SCHED,
+                *opts,
+            ]
+        else:
+            args = [
+                "/bin/sh",
+                "-c",
+                self._RECORD_EXIT_CODE,
+                "debasher_launcher",
+                run_dir,
+                self._tool("debasher_exec_process"),
+                self._pfile,
+                self.PROCESS,
+                "--",
+                *opts,
+            ]
         with open(os.path.join(run_dir, _LOG_FILE), "a") as log_file:
             child = subprocess.Popen(
                 args,
+                cwd=run_dir,
                 stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
@@ -503,22 +539,16 @@ class ProgramLauncher(FBPProcess):
 
     def _report_end(self, run, run_dir):
         """
-        Reports the end of a batch run to the node through RUNS_DONE_PORT,
-        as a source outside the program would, and marks the run directory
-        as notified. A node without the port reports nothing.
+        Brings the end of a batch run into the node (inject), and only then,
+        once it is logged, marks the run directory as notified, so that a
+        crash in between reports it again, and never loses it. A node without
+        DONE_PORT reports nothing.
         """
         notified = os.path.join(run_dir, _NOTIFIED_FILE)
-        if os.path.exists(notified) or self.RUNS_DONE_PORT not in self.INPUT_PORTS:
+        if os.path.exists(notified) or self._observe_port() is None:
             return
         with open(os.path.join(run_dir, _EXIT_CODE_FILE)) as f:
             exit_code = int(f.read().strip())
-        line = json.dumps({"type": "DATA", "payload": {"run": run, "exit_code": exit_code}}) + "\n"
-        # The node holds the read end of its own port, so this open does not
-        # block, and a line this short is written whole.
-        fd = os.open(self.opts[self.RUNS_DONE_PORT], os.O_WRONLY | os.O_NONBLOCK)
-        try:
-            os.write(fd, line.encode())
-        finally:
-            os.close(fd)
+        self.inject({"run": run, "exit_code": exit_code})
         with open(notified, "w"):
             pass

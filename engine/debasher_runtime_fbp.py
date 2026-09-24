@@ -90,6 +90,13 @@ class FBPProcess(_PortWorker):
 
     HEARTBEAT_INTERVAL_SECONDS = 5
 
+    # The observation of the outside world (see observe()): the name of the
+    # port under which what the node observes reaches process_data, which is
+    # not a fifo and so not one of its input ports, or None for a node that
+    # observes only to act; and how often observe() runs.
+    OBSERVE_PORT = None
+    OBSERVE_INTERVAL_SECS = 1.0
+
     # The GIL switch interval of the node's process (sys.setswitchinterval),
     # set when run() starts; None keeps Python's own, 5 ms. A reader thread
     # that has taken a block from its fifo needs the GIL back before it can
@@ -154,6 +161,19 @@ class FBPProcess(_PortWorker):
 
         self._heartbeat_thread = None
         self._heartbeat_stop = threading.Event()
+
+        # The observation thread, started only for a class that defines
+        # observe(), and what wakes it before its interval (observe_now).
+        self._observe_thread = None
+        self._observe_stop = threading.Event()
+        self._observe_wake = threading.Event()
+        observe_port = self._observe_port()
+        if observe_port is not None and observe_port in self.INPUT_PORTS:
+            raise ValueError(
+                f"{type(self).__name__}: OBSERVE_PORT names {observe_port!r}, which is one of "
+                "its input ports: what the node observes is not read from a fifo, and "
+                "process_data has to tell it apart from what arrives on its ports"
+            )
 
         # Chandy-Lamport barrier round in progress, if any (None = none).
         self._barrier_epoch = None
@@ -459,6 +479,9 @@ class FBPProcess(_PortWorker):
         super().start_threads()
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
+        if self._observes():
+            self._observe_thread = threading.Thread(target=self._observe_loop, name="observer")
+            self._observe_thread.start()
 
     def _control_ports_path(self):
         return self._execdir_entry("control_ports")
@@ -490,11 +513,71 @@ class FBPProcess(_PortWorker):
         then joins the heartbeat thread too.
         """
         self._heartbeat_stop.set()
+        self._observe_stop.set()
+        self._observe_wake.set()
+        if self._observe_thread is not None:
+            self._observe_thread.join(timeout)
         super().stop_threads(timeout, close)
         if self._heartbeat_thread is not None:
             self._heartbeat_thread.join(timeout)
         if self._input_log is not None:
             self._input_log.close()
+
+    def _all_threads_alive(self):
+        alive = super()._all_threads_alive()
+        if self._observe_thread is not None:
+            alive = alive and self._observe_thread.is_alive()
+        return alive
+
+    # -- observation of the outside world --
+
+    def _observes(self):
+        return type(self).observe is not FBPProcess.observe
+
+    def _observe_port(self):
+        """The name under which inject() brings what the node observes to
+        process_data, or None if it has none. A subclass may decide it from
+        its ports."""
+        return self.OBSERVE_PORT
+
+    def _observe_loop(self):
+        while not self._observe_stop.is_set():
+            self.observe()
+            self._observe_wake.wait(self.OBSERVE_INTERVAL_SECS)
+            self._observe_wake.clear()
+        self.log.debug("observation thread stopped")
+
+    def observe_now(self):
+        """Wakes the observation thread, so that observe() runs now and not
+        at the end of its interval."""
+        self._observe_wake.set()
+
+    def inject(self, payload):
+        """
+        Brings `payload`, something that observe() saw, into the node, as a
+        DATA of OBSERVE_PORT: writes it to the input log and queues it for the
+        brain thread, as a reader thread does with what it reads from a fifo,
+        in the same order across every port (see _on_arrivals). It reaches
+        process_data like any input, and a replay reproduces it without
+        looking at the world again. Returns once it is logged, so that
+        whatever observe() records afterwards (that it reported something,
+        for example) never gets ahead of what the node has logged. Never from
+        process_data: an input that processing made would be made again by
+        every replay.
+        """
+        if self._handler_thread == threading.get_ident():
+            raise RuntimeError(
+                f"{type(self).__name__}: inject() brings in what observe() sees; "
+                "process_data() sends with send_data()"
+            )
+        port = self._observe_port()
+        if port is None:
+            raise RuntimeError(
+                f"{type(self).__name__}: inject() needs OBSERVE_PORT, the name under which "
+                "what the node observes reaches process_data"
+            )
+        line = encode_data(payload)
+        self._on_arrivals(port, [(decode_envelope(line), line)])
 
     def _closed_at_start(self, tag):
         return tag in self._closed_at_start_ports
@@ -1268,3 +1351,15 @@ class FBPProcess(_PortWorker):
 
     def initialize_runtime(self):
         raise NotImplementedError
+
+    def observe(self):
+        """
+        Optional. Looks at the outside world (a directory, a queue, the
+        batch runs of a launcher node) and brings what it sees into the node
+        with inject(). Runs on a thread of its own, the observation thread,
+        every OBSERVE_INTERVAL_SECS or when observe_now() wakes it, only
+        while the node is live, never in a replay. What it sees is different
+        every time, so it cannot happen in process_data: it enters as an
+        input, which the input log records. A class that does not define it
+        has no observation thread.
+        """

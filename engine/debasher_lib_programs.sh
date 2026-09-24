@@ -362,8 +362,9 @@ debasher::_get_resident_process_source()
 # resolve -- following plain "import"/"from ... import ... as ..."
 # aliasing -- to the literal names "Supervisor" or "FBPProcess" (the
 # two base classes to_do_fbp.md defines for resident processes), or
-# "ProgramLauncher", the node of the runtime library that launches a
-# general program for each request, which derives from FBPProcess. This
+# "ProgramLauncher" or "DirectoryWatcher", nodes of the runtime library
+# that derive from FBPProcess (one launches a general program for each
+# request, the other sends a request for each file that arrives). This
 # is a static check: ast.parse never imports or executes the given
 # source, unlike a real "issubclass" check, which was deliberately
 # ruled out for this (see to_do_fbp.md) since it would need to run
@@ -379,6 +380,7 @@ BASE_ROLES = {
     "Supervisor": "supervisor",
     "FBPProcess": "fbpprocess",
     "ProgramLauncher": "fbpprocess",
+    "DirectoryWatcher": "fbpprocess",
 }
 
 

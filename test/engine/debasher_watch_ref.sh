@@ -1,33 +1,82 @@
 # *- bash -*
-# Resident-program reference with a launcher node, for a real debasher_exec
-# run: every request that arrives from outside at launch starts a batch run
-# of debasher_launcher_batch.sh, which launch finds next to this module, as
-# an external alias would be, in a run directory of its own; launch tells
-# sink when each one ends. A Supervisor watches launch and sink and relays a
-# manual trigger to launch. The batch runs use the scheduler that
-# DEBASHER_LAUNCHER_REF_SCHED names when debasher_exec loads the program,
-# BUILTIN by default.
+# Resident-program reference that observes the outside world, for a real
+# debasher_exec run: watch watches the directory that -watchdir names and,
+# once a file ending in .bam is complete there, sends launch a request for
+# it; launch runs count_lines of debasher_watch_batch.sh, alone, for each
+# request, in a run directory of its own, and tells sink when each one ends.
+# A Supervisor watches the three and relays a manual trigger to watch.
 
-debasher_launcher_ref_shared_dirs()
+debasher_watch_ref_shared_dirs()
 {
     :
 }
 
-debasher_launcher_ref_program_type()
+debasher_watch_ref_program_type()
 {
     program_type "resident"
 }
 
 ########
+watch_document()
+{
+    document_process "Watches a directory and sends a request for each complete .bam file."
+}
+
+watch_explain_opts()
+{
+    explain_opt "-watchdir" "<string>" "directory to watch"
+    explain_opt "-trigger" "<fifo>" "control fifo from the supervisor"
+    explain_opt "-outrequests" "<fifo>" "output fifo to launch, one request per file"
+    explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
+}
+
+watch_identify_cmdline_opts()
+{
+    opt_is_cmdline "-watchdir"
+}
+
+watch_define_opts()
+{
+    local cmdline=$1
+    local optlist=""
+    define_cmdline_opt "$cmdline" "-watchdir" optlist || return 1
+    define_opt_from_proc_out "-trigger" "sup" "-outtrig" optlist || return 1
+    define_fifo_opt "-outrequests" "watch_requests" optlist || return 1
+    define_fifo_opt "-outhb" "watch_hb" optlist || return 1
+    save_opt_list optlist
+}
+
+watch_heredoc_py()
+{
+    cat <<'EOF'
+import os
+
+from debasher_runtime_lib import DirectoryWatcher
+
+
+class Watch(DirectoryWatcher):
+    PATTERN = "*.bam"
+    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    OBSERVE_INTERVAL_SECS = 0.3
+
+    def request_for(self, path):
+        name = os.path.splitext(os.path.basename(path))[0]
+        return {"opts": {"-infile": path, "-outf": "lines.txt"}, "run": name}
+
+
+Watch().run()
+EOF
+}
+
+########
 launch_document()
 {
-    document_process "Launches the batch program once for each request, and tells sink when each batch run ends."
+    document_process "Runs count_lines for each request, and tells sink when each batch run ends."
 }
 
 launch_explain_opts()
 {
-    explain_opt "-requests" "<fifo>" "externally fed fifo of requests"
-    explain_opt "-trigger" "<fifo>" "control fifo from the supervisor"
+    explain_opt "-requests" "<fifo>" "input fifo from watch"
     explain_opt "-outdone" "<fifo>" "output fifo to sink, one notice per batch run"
     explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
 }
@@ -40,8 +89,7 @@ launch_identify_cmdline_opts()
 launch_define_opts()
 {
     local optlist=""
-    define_fifo_opt "-requests" "launch_requests" optlist --external || return 1
-    define_opt_from_proc_out "-trigger" "sup" "-outtrig" optlist || return 1
+    define_opt_from_proc_out "-requests" "watch" "-outrequests" optlist || return 1
     define_fifo_opt "-outdone" "launch_done" optlist || return 1
     define_fifo_opt "-outhb" "launch_hb" optlist || return 1
     save_opt_list optlist
@@ -54,10 +102,10 @@ from debasher_runtime_lib import ProgramLauncher
 
 
 class Launch(ProgramLauncher):
-    PFILE = "debasher_launcher_batch.sh"
+    PFILE = "debasher_watch_batch.sh"
+    PROCESS = "count_lines"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
     OBSERVE_INTERVAL_SECS = 0.2
-    STATUS_CHECK_INTERVAL_SECS = 0.5
 
 
 Launch().run()
@@ -118,14 +166,15 @@ EOF
 ########
 sup_document()
 {
-    document_process "Supervises launch and sink; relays a manual trigger from outside to launch."
+    document_process "Supervises watch, launch and sink; relays a manual trigger from outside to watch."
 }
 
 sup_explain_opts()
 {
+    explain_opt "-hb_watch" "<fifo>" "watch's heartbeat fifo"
     explain_opt "-hb_launch" "<fifo>" "launch's heartbeat fifo"
     explain_opt "-hb_sink" "<fifo>" "sink's heartbeat fifo"
-    explain_opt "-outtrig" "<fifo>" "trigger fifo to launch"
+    explain_opt "-outtrig" "<fifo>" "trigger fifo to watch"
     explain_opt "-manual" "<fifo>" "externally fed manual trigger fifo"
 }
 
@@ -137,6 +186,7 @@ sup_identify_cmdline_opts()
 sup_define_opts()
 {
     local optlist=""
+    define_opt_from_proc_out "-hb_watch" "watch" "-outhb" optlist || return 1
     define_opt_from_proc_out "-hb_launch" "launch" "-outhb" optlist || return 1
     define_opt_from_proc_out "-hb_sink" "sink" "-outhb" optlist || return 1
     define_fifo_opt "-outtrig" "sup_trig" optlist --control || return 1
@@ -160,9 +210,10 @@ EOF
 }
 
 ########
-debasher_launcher_ref_program()
+debasher_watch_ref_program()
 {
-    add_debasher_process "launch" "cpus=1; mem=32; time=00:10:00; batch_sched=${DEBASHER_LAUNCHER_REF_SCHED:-BUILTIN}"
+    add_debasher_process "watch" "cpus=1 mem=32 time=00:10:00"
+    add_debasher_process "launch" "cpus=1 mem=32 time=00:10:00"
     add_debasher_process "sink" "cpus=1 mem=32 time=00:10:00"
     add_debasher_process "sup" "cpus=1 mem=32 time=00:10:00"
 }

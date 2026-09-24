@@ -23,9 +23,8 @@ class _Launcher(lib.ProgramLauncher):
 
 
 class _NotifyingLauncher(_Launcher):
-    INPUT_PORTS = ["requests", "runs_done"]
+    INPUT_PORTS = ["requests"]
     OUTPUT_PORTS = ["outdone"]
-    EXTERNAL_PORTS = ["runs_done"]
 
 
 # A stand-in for debasher_exec: records its launch and its arguments in the
@@ -42,6 +41,16 @@ echo "$$" >> "${outdir}/fake_launches"
 echo "${args}" > "${outdir}/fake_args"
 sleep "${FAKE_SLEEP:-0}"
 echo "${FAKE_STATUS:-0}" > "${outdir}/fake_status"
+exit "${FAKE_EXIT:-0}"
+"""
+
+# A stand-in for debasher_exec_process, run from the run directory: records
+# its launch and its arguments there, takes FAKE_SLEEP seconds and exits with
+# FAKE_EXIT.
+_FAKE_DEBASHER_EXEC_PROCESS = """#!/bin/bash
+echo "$$" >> fake_launches
+echo "$*" > fake_args
+sleep "${FAKE_SLEEP:-0}"
 exit "${FAKE_EXIT:-0}"
 """
 
@@ -63,7 +72,11 @@ def outdir(tmp_path, monkeypatch):
     monkeypatch.delenv("DEBASHER_PROCESS_PORTS", raising=False)
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    for name, text in (("debasher_exec", _FAKE_DEBASHER_EXEC), ("debasher_status", _FAKE_DEBASHER_STATUS)):
+    for name, text in (
+        ("debasher_exec", _FAKE_DEBASHER_EXEC),
+        ("debasher_exec_process", _FAKE_DEBASHER_EXEC_PROCESS),
+        ("debasher_status", _FAKE_DEBASHER_STATUS),
+    ):
         fake = bindir / name
         fake.write_text(text)
         fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
@@ -392,27 +405,22 @@ def test_a_batch_run_that_finished_without_its_debasher_exec_is_not_launched_aga
 # --- the end of a batch run --------------------------------------------------
 
 
-@pytest.fixture
-def runs_done_fifo(tmp_path):
-    path = tmp_path / "runs_done"
-    os.mkfifo(path)
-    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
-    yield path, fd
-    os.close(fd)
+def test_the_end_of_a_batch_run_is_brought_in_once_and_then_marked(outdir):
+    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
+    brought_in = []
 
+    def inject(payload):
+        # The run directory is marked only once inject() has returned.
+        assert not (outdir / "a" / "notified").exists()
+        brought_in.append(payload)
 
-def test_the_end_of_a_batch_run_is_reported_once_through_the_nodes_own_port(outdir, runs_done_fifo):
-    path, fd = runs_done_fifo
-    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "runs_done": str(path), "outdone": "/dev/null"})
+    node.inject = inject
     _request(node, 1, {"opts": {}, "run": "a"})
 
     _check_until_ended(node, outdir, "a")
     node._check_runs()
 
-    lines = os.read(fd, 65536).decode().splitlines()
-    assert [json.loads(line) for line in lines] == [
-        {"type": "DATA", "payload": {"run": "a", "exit_code": 0}}
-    ]
+    assert brought_in == [{"run": "a", "exit_code": 0}]
     assert (outdir / "a" / "notified").exists()
 
 
@@ -429,7 +437,7 @@ def _sent(node, tag):
 
 
 def test_an_end_is_announced_once_even_if_reported_twice(outdir):
-    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "runs_done": "/dev/null", "outdone": "/dev/null"})
+    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
 
     _request(node, 5, {"run": "a", "exit_code": 0}, port="runs_done")
     _request(node, 6, {"run": "a", "exit_code": 0}, port="runs_done")
@@ -439,7 +447,7 @@ def test_an_end_is_announced_once_even_if_reported_twice(outdir):
 
 
 def test_the_end_of_a_failed_batch_run_is_announced_as_failed(outdir):
-    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "runs_done": "/dev/null", "outdone": "/dev/null"})
+    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
 
     _request(node, 5, {"run": "a", "exit_code": 3}, port="runs_done")
 
@@ -447,7 +455,7 @@ def test_the_end_of_a_failed_batch_run_is_announced_as_failed(outdir):
 
 
 def test_the_announced_runs_survive_a_restore(outdir):
-    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "runs_done": "/dev/null", "outdone": "/dev/null"})
+    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
     node.restore_node_state({"announced": ["a"]})
 
     _request(node, 5, {"run": "a", "exit_code": 0}, port="runs_done")
@@ -462,3 +470,70 @@ def test_the_computational_specs_set_the_batch_runs_at_a_time(outdir, monkeypatc
     monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; mem=32; max_concurrent_runs=4")
     node = _node()
     assert node.MAX_CONCURRENT_RUNS == 4
+
+
+# --- a single process instead of a program -----------------------------------
+
+
+class _ProcessLauncher(_Launcher):
+    PROCESS = "align"
+
+
+def test_a_process_launcher_runs_the_process_alone_from_the_run_directory(outdir, tmp_path):
+    node = _node(_ProcessLauncher)
+    _request(node, 1, {"opts": {"-bam": "/data/s17.bam", "-outf": "out.txt"}, "run": "a"})
+
+    _check_until_ended(node, outdir, "a")
+
+    pfile = (tmp_path / "program" / "pipeline.sh").resolve()
+    assert (outdir / "a" / "fake_args").read_text().split() == [
+        str(pfile), "align", "--", "-bam", "/data/s17.bam", "-outf", "out.txt"
+    ]
+    assert (outdir / "a" / "exit_code").read_text().strip() == "0"
+
+
+def test_a_process_writes_its_own_exit_code(outdir, monkeypatch):
+    monkeypatch.setenv("FAKE_EXIT", "4")
+    node = _node(_ProcessLauncher)
+    _request(node, 1, {"opts": {}, "run": "a"})
+
+    _check_until_ended(node, outdir, "a")
+
+    assert (outdir / "a" / "exit_code").read_text().strip() == "4"
+
+
+def test_the_exit_code_of_a_process_outlives_a_crash_of_its_launcher(outdir, monkeypatch):
+    monkeypatch.setenv("FAKE_SLEEP", "1")
+    node = _node(_ProcessLauncher)
+    _request(node, 1, {"opts": {}, "run": "a"})
+    node._check_runs()
+    assert _wait_until(lambda: _launches(outdir, "a"))
+
+    # A new incarnation, which did not launch it: the process is still
+    # running, and then writes its exit code on its own.
+    relaunched = _node(_ProcessLauncher)
+    relaunched._check_runs()
+    assert not (outdir / "a" / "exit_code").exists()
+    _check_until_ended(relaunched, outdir, "a")
+
+    assert (outdir / "a" / "exit_code").read_text().strip() == "0"
+    assert len(_launches(outdir, "a")) == 1
+
+
+def test_a_process_stopped_before_it_ended_is_launched_again(outdir):
+    node = _node(_ProcessLauncher)
+    _request(node, 1, {"opts": {}, "run": "a"})
+    _orphan(outdir, "a")
+
+    _check_until_ended(node, outdir, "a")
+
+    assert len(_launches(outdir, "a")) == 1
+    assert (outdir / "a" / "exit_code").read_text().strip() == "0"
+
+
+def test_process_is_the_name_of_a_process(outdir):
+    class Nameless(_Launcher):
+        PROCESS = ""
+
+    with pytest.raises(ValueError, match="PROCESS"):
+        Nameless(opts={"requests": "/dev/null"})

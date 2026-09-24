@@ -384,6 +384,11 @@ mutation check, durability level) is defined in the Contract, where it is used.
 - **heartbeat thread** (hilo de latido): checks on a timer that every other
   thread is alive and, if so, sends the `Supervisor` an `INTERACT` `heartbeat`.
   An unhealthy node simply stops sending.
+- **observation thread** (hilo de observación): only in a node whose class
+  defines `observe()`. It runs `observe()` every `OBSERVE_INTERVAL_SECS`, which
+  looks at the outside world and brings what it sees into the node with
+  `inject()`, under the name of its **observe port** (puerto de observación),
+  `OBSERVE_PORT`, which is not a fifo (see "Observing the outside world").
 
 ## Failure and recovery
 
@@ -1012,6 +1017,57 @@ its own, `heartbeat_timeout_s` and `startup_timeout_s`, the same way. A node
 can give its startup deadline too, `startup_timeout_s`, in seconds, which it
 does not read itself: the engine passes it to the `Supervisor` (see "Failure
 detection").
+
+## Observing the outside world
+
+A node acts only in reaction to what it receives, but some have to watch
+something outside the program: a directory where files arrive, a queue, the
+batch runs a launcher node started. What such a node sees is different every
+time it looks, so looking cannot happen in `process_data`, which a replay runs
+again. It happens in `observe()`, a hook that a class may define, on a thread
+of its own, the observation thread, every `OBSERVE_INTERVAL_SECS` or when
+`observe_now()` wakes it, and only while the node is live, never in a replay.
+What `observe()` sees enters the node as an input:
+
+- `inject(payload)` writes it, as a `DATA`, to the input log, under the name
+  `OBSERVE_PORT`, and queues it for the brain thread, as a reader thread does
+  with what it reads from a fifo and through the same code (`_on_arrivals`,
+  under the lock that orders the arrivals of every port), so that the order of
+  the log is the order in which the brain thread gets the items, whatever
+  thread logs them. The brain thread hands it to `process_data`, which decides
+  what the node does about it; a replay finds it in the log, and does not look
+  at the world again.
+- `inject()` returns once the observation is in the input log: whatever
+  `observe()` records after it returns, that it reported something for
+  example, never gets ahead of what the node has logged.
+- The observe port is a name, not a fifo: the node does not read it from a
+  channel, rounds never wait on it, and the program does not declare it. A name
+  that is also one of the node's input ports stops the node when it is created,
+  since `process_data` could not tell the two apart. What the frontend shows of
+  it is a property of the node, that it observes something, not a port to
+  connect.
+- A class that does not define `observe()` has no observation thread, and one
+  with no observe port may observe only to act, `inject()` being then an
+  error. `inject()` is an error from `process_data` too, since an input that
+  processing made would be made again by every replay.
+- The observation thread counts in the health of the node, like the others:
+  if `observe()` raises, the thread ends and the heartbeat stops.
+
+After a crash, `observe()` does not know what it had brought in, and brings it
+in again; `process_data` drops what it already acted on, keeping it in its
+node state, so an observation may enter more than once, and is acted on once.
+
+`DirectoryWatcher` (`engine/debasher_runtime_watcher.py`) is a node of the
+runtime library built on this: it watches a directory, `WATCH_DIR` or the
+option `-watchdir` (an absolute path, or one relative to the directory of its
+module), and for each file whose name matches `PATTERN` sends on
+`REQUESTS_PORT` a request for a launcher node (see "`ProgramLauncher`: batch
+runs from a node"), once the file is complete. A file is complete once its size
+and modification time have stayed the same for `STABLE_OBSERVATIONS`
+observations in a row, a file whose name starts with a dot never counts, and a
+module whose files are complete in another way (a companion file, a rename at
+the end of a copy) redefines `is_complete()`; `request_for()` makes the
+request from the path.
 
 ## State capture and checkpoint schema
 
@@ -2289,28 +2345,28 @@ can go on with its results.
 (`engine/debasher_runtime_launcher.py`), not a new kind of process: to the
 engine, a launcher node is a node like any other, with its heartbeat and its
 control ports. A module defines one with a class that names the general
-program, `PFILE`, and may give the runs root, `RUNS_ROOT`, an absolute path; by
-default it is the output directory of the process, which the engine keeps
-across launches of a node (see "Ordered shutdown") and exports to it as
+program, `PFILE`, or, with `PROCESS`, a single process of that module (see
+"A single process"), and may give the runs root, `RUNS_ROOT`, an absolute
+path; by default it is the output directory of the process, which the engine
+keeps across launches of a node (see "Ordered shutdown") and exports to it as
 `DEBASHER_PROCESS_OUTDIR`. `PFILE` is resolved as an external alias is: a
 path relative to the directory of the module that declares the node, where a
 program keeps its files, which the engine exports to the node as
 `DEBASHER_PROCESS_MODULE_DIR`; an absolute path is accepted with a warning,
 since it ties the program to one machine. A node whose `PFILE` is not a file
-stops when it is created. Every input
-port that carries data is a port of requests, except `RUNS_DONE_PORT`
-(`runs_done` by default), which with the output port `DONE_PORT` (`outdone`)
-tells when a batch run ends (see "The end of a batch run as an input event").
-A launcher node cannot be a task of an array process, since the tasks would
-share its bookkeeping.
+stops when it is created. Every input port that carries data is a port of
+requests; the output port `DONE_PORT` (`outdone` by default), if the node has
+it, tells when a batch run ends (see "The end of a batch run as an input
+event"). A launcher node cannot be a task of an array process, since the tasks
+would share its bookkeeping.
 
 The modules that the general program loads are found with the
 `DEBASHER_MOD_DIR` of the launcher node, which inherits it along the whole
-chain of launches: the
-frontend puts it in the environment of the `debasher_exec` it runs, from the
-program's own settings (or the shell has it, on the command line); every node
+chain of launches: the frontend puts it in the environment of the
+`debasher_exec` it runs, from the program's own settings (or the shell has it,
+on the command line); every node
 inherits the environment of `debasher_exec`, the `Supervisor` too, and so does
-a node that the `Supervisor` relaunches; and the launcher thread runs each
+a node that the `Supervisor` relaunches; and the launcher node runs each
 `debasher_exec` of a batch run with the environment of the node. The generated
 script of every process also carries the value that `debasher_exec` had when
 it generated it, so that a node relaunched by hand, from a shell without it,
@@ -2318,9 +2374,10 @@ still has it; a new run, which generates the scripts again, takes its own. It
 carries the directory of the module of every process too, from which
 `DEBASHER_PROCESS_MODULE_DIR` comes.
 
-Wrapping a single process is wrapping a program made of that process alone.
-Generating that program from a process of another module is left to the user
-or to the frontend (see Future work).
+The launcher node observes its batch runs (see "Observing the outside
+world"): its `observe()` launches the registered ones and, if the node has
+`DONE_PORT`, brings in the end of each under the name `RUNS_DONE_PORT`
+(`runs_done`), its observe port.
 
 ## Requests and run directories
 
@@ -2380,10 +2437,10 @@ process, which a reset empties. It cannot be part of the
 node state: a node that crashes before its first checkpoint would generate
 another one in its replay.
 
-## The launcher thread and the queue on disk
+## Launching from the queue on disk
 
-A thread of the node, the launcher thread, launches the batch runs that are
-registered, in the order of their positions, with at most
+The node's `observe()`, on its observation thread, launches the batch runs
+that are registered, in the order of their positions, with at most
 `MAX_CONCURRENT_RUNS` running at a time (1 by default). Each one runs
 `debasher_exec --pfile <PFILE> --outdir <run directory> --sched <scheduler>`
 with the options of its request, in a session of its own, so that the batch
@@ -2398,8 +2455,8 @@ the second one of the schedulers that `debasher_exec` knows.
 
 How a batch run is going is read from its run directory, whatever the
 scheduler: with the built-in one, `debasher_exec` waits for the program to
-end, but with SLURM it only submits the jobs, and ends at once. So the launcher
-thread writes the PID of `debasher_exec` into the run directory,
+end, but with SLURM it only submits the jobs, and ends at once. So `observe()`
+writes the PID of `debasher_exec` into the run directory,
 `launcher.pid`, its output going to `launcher.log`, and once `debasher_exec`
 has ended well (the file `submitted`), asks `debasher_status` on the run
 directory, at most once every `STATUS_CHECK_INTERVAL_SECS`, until nothing of
@@ -2424,27 +2481,26 @@ the program is in progress. The states of a batch run:
 An ended batch run keeps its exit code, `exit_code`, and is never launched
 again on its own: a program that always fails would be launched for ever. The
 queue is the list of registrations on disk: a relaunched node, or one resumed
-after a halt, finds it as it was, and the launcher thread goes on from there.
+after a halt, finds it as it was, and `observe()` goes on from there.
 When a batch run is launched is not part of the node state, and does not need
 to be the same in a replay, since the node sends nothing when it launches.
 
 ## The end of a batch run as an input event
 
 The directory of a batch run always says how it is going: its registration, the
-PID and exit code that the launcher thread writes, and `debasher_status` on it
+PID and exit code that `observe()` writes, and `debasher_status` on it
 for each of its processes. Anyone can read it, the frontend included, at no
 cost to the node.
 
 A node downstream can also be told, through an output port of the launcher
-node, `outdone`. The launcher thread cannot send on it: a node sends only from
+node, `outdone`. `observe()` cannot send on it: a node sends only from
 `process_data`, whose calls the input log records and a replay reproduces. So
 the end of a batch run enters the node as what it is, an event from outside the
-program. Once it has written the exit code, the launcher thread writes
-`{"run": ..., "exit_code": ...}` into an input port of the node, `runs_done`,
-tagged `--external`, as a source outside the program would, and then marks the
-run directory as notified, with a file `notified`. That line is logged like any
-other input, and `process_data`, on `runs_done`, adds the batch run to the set
-of announced runs in its node state and sends
+program. Once the exit code is written, `observe()` brings
+`{"run": ..., "exit_code": ...}` in with `inject()`, under `runs_done`, its
+observe port, and only then, once it is logged, marks the run directory as
+notified, with a file `notified`. `process_data`, on `runs_done`, adds the
+batch run to the set of announced runs in its node state and sends
 `{"run": ..., "status": ..., "exit_code": ...}` on `outdone`, with `status`
 `finished` for an exit code of 0 and `failed` for any other, which then has
 everything a channel has: its numbering (G5), its replay, its part in the
@@ -2456,17 +2512,35 @@ rounds.
   replay, which finds both in the log in the same order, drops it too: the
   event may arrive more than once, the notice goes out once.
 - A batch run that ends while the node is down leaves no exit code, since no
-  launcher thread was waiting for it. When the node comes back, the launcher
-  thread asks `debasher_status`, which says that every process finished, and
+  launcher node was waiting for it. When the node comes back, `observe()` asks
+  `debasher_status`, which says that every process finished, and
   the notice goes out.
-- A launcher node without `outdone` and `runs_done` writes no event.
+- A launcher node without `outdone` brings in no event.
+
+## A single process
+
+With `PROCESS`, a launcher node launches that process of the module of `PFILE`
+alone, with
+`debasher_exec_process <PFILE> <PROCESS> -- <options>`,
+from the run directory, so that a relative path among the options of a
+request (the file the process writes, for example) lands there. There is no
+scheduler in between: `debasher_exec_process` runs the process function and
+ends when it ends, and the options of a request are the arguments of that
+function. The states of a batch run differ in one point. A crash of the node
+while the process runs would lose the exit code that the node was waiting
+for, so the process records its own: it runs under a shell that writes its
+exit code into the run directory when it ends, through a temporary file
+renamed into place. With neither an exit code nor a live PID, the process was
+stopped before it ended, and it is launched again from the start, since
+`debasher_exec_process` has nothing to resume from: a process run this way has
+to be able to run twice, overwriting its results.
 
 ## Stopping and resetting a launcher node
 
 Stopping the resident program, by a halt or by a signal, does not stop the
 batch runs it launched: they are general programs, in sessions of their own,
 which `debasher_status` and `debasher_stop` reach on their run directories.
-When the program is resumed, the launcher thread finds them running, or ended
+When the program is resumed, `observe()` finds them running, or ended
 with no exit code, and goes on as above.
 
 `debasher_reset_resident` empties the output directory of the process: the
@@ -2751,15 +2825,26 @@ Design ideas from Future work move here once they are actually built.
   check that it refuses while the program runs, and that the run after it
   finds no checkpoint.
 - **Batch runs from a node.** A launcher node, of class `ProgramLauncher`,
-  launches a general program once for each request it receives, in a run
-  directory of its own, with a queue on disk, a limit of batch runs at a time
-  and a notice downstream when each one ends (see "`ProgramLauncher`: batch
-  runs from a node"). `test/engine/debasher_launcher_ref.sh` is the reference,
-  with `test/engine/debasher_launcher_batch.sh` as the general program: its
+  launches a general program, or a single process of a module, once for each
+  request it receives, in a run directory of its own, with a queue on disk, a
+  limit of batch runs at a time and a notice downstream when each one ends
+  (see "`ProgramLauncher`: batch runs from a node").
+  `test/engine/debasher_launcher_ref.sh` is the reference, with
+  `test/engine/debasher_launcher_batch.sh` as the general program: its
   real-run tests, with the built-in scheduler and with SLURM where the machine
   has a controller up, check the results and the notices of two requests,
   and that a batch run outlives a crash of its launcher node and is announced
   once.
+- **Observing the outside world.** A node can watch something outside the
+  program, and bring what it sees in as an input, with `observe()` and
+  `inject()` (see "Observing the outside world"); `DirectoryWatcher` watches a
+  directory for files. `test/engine/debasher_watch_ref.sh` is the reference: a
+  watcher sends a launcher node, which runs a single process of
+  `test/engine/debasher_watch_batch.sh`, a request for each `.bam` file that
+  arrives in a directory; its real-run test checks that every file is
+  processed once, one still being written only once it is complete, and that a
+  watcher killed and relaunched, which brings the files in again, makes no
+  request twice.
 - **A startup deadline for a node.** A node sends its first heartbeat only
   once it has restored its checkpoint, run `initialize_runtime()` and
   replayed its input log, which can take longer than
@@ -2783,11 +2868,9 @@ Design ideas from Future work move here once they are actually built.
 # Future work
 
 - **What a launcher node leaves out** (see "`ProgramLauncher`: batch runs
-  from a node"). Generating, from a process of a module, the program made of
-  that process alone, so that a launcher node can run a single process; a
-  command to launch again a batch run that failed, since the launcher thread
-  never does it on its own; and priorities, or a limit shared by several
-  launcher nodes, beyond the `max_concurrent_runs` of each. Also whether
+  from a node"). A command to launch again a batch run that failed, since its
+  `observe()` never does it on its own; and priorities, or a limit shared by
+  several launcher nodes, beyond the `max_concurrent_runs` of each. Also whether
   `PFILE` should be able to name a program outside the directory of its own
   module other than by an absolute path, for example one found through
   `DEBASHER_MOD_DIR`: that would let a program use the modules of others,

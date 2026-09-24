@@ -58,6 +58,7 @@ from debasher_runtime_inputlog import LogRecord, _InputLog
 from debasher_runtime_fbp import FBPProcess
 from debasher_runtime_supervisor import Supervisor, _MANUAL_TRIGGER_TAG
 from debasher_runtime_launcher import ProgramLauncher
+from debasher_runtime_watcher import DirectoryWatcher
 
 # Constants
 DEBASHER_SHUTDOWN_TOKEN = "__SHUTDOWN_TOKEN__"

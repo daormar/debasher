@@ -195,6 +195,22 @@ EOF
     [ "${result}" = "fbpprocess" ]
 }
 
+@test "debasher::_classify_resident_process_role takes a class deriving from DirectoryWatcher for a node" {
+    watcherproc_heredoc_py()
+    {
+        cat <<'EOF'
+from debasher_runtime_lib import DirectoryWatcher
+
+
+class Watch(DirectoryWatcher):
+    PATTERN = "*.bam"
+EOF
+    }
+
+    result=$(debasher::_classify_resident_process_role "watcherproc")
+    [ "${result}" = "fbpprocess" ]
+}
+
 @test "debasher::_classify_resident_process_role follows an aliased import of Supervisor" {
     aliasedproc_heredoc_py()
     {
