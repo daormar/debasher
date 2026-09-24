@@ -85,6 +85,9 @@ producer_generate_opts()
     local task_idx=$5
     local optlist=""
 
+    # -n option
+    define_cmdline_opt "$cmdline" "-n" optlist || return 1
+
     # -id option
     define_opt "-id" "${task_idx}" optlist || return 1
 
@@ -159,6 +162,9 @@ consumer_generate_opts()
     local process_outdir=$4
     local task_idx=$5
     local optlist=""
+
+    # -n option
+    define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
     # -id option
     define_opt "-id" "${task_idx}" optlist || return 1

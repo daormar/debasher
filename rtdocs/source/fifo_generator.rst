@@ -60,6 +60,9 @@ FIFO Array Example using Generators
         local task_idx=$5
         local optlist=""
 
+        # -n option
+        define_cmdline_opt "$cmdline" "-n" optlist || return 1
+
         # -id option
         define_opt "-id" "${task_idx}" optlist || return 1
 
@@ -128,6 +131,9 @@ FIFO Array Example using Generators
         local process_outdir=$4
         local task_idx=$5
         local optlist=""
+
+        # -n option
+        define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
         # -id option
         define_opt "-id" "${task_idx}" optlist || return 1
