@@ -179,6 +179,22 @@ EOF
     [ "${result}" = "supervisor" ]
 }
 
+@test "debasher::_classify_resident_process_role takes a class deriving from ProgramLauncher for a node" {
+    launcherproc_heredoc_py()
+    {
+        cat <<'EOF'
+from debasher_runtime_lib import ProgramLauncher
+
+
+class Launch(ProgramLauncher):
+    PFILE = "pipeline.sh"
+EOF
+    }
+
+    result=$(debasher::_classify_resident_process_role "launcherproc")
+    [ "${result}" = "fbpprocess" ]
+}
+
 @test "debasher::_classify_resident_process_role follows an aliased import of Supervisor" {
     aliasedproc_heredoc_py()
     {

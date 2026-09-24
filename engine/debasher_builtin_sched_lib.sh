@@ -1127,8 +1127,13 @@ debasher_builtin_sched::_export_process_env()
     local task_idx=$4
 
     # Its own __exec__/<processname>/ directory (e.g. for checkpoints),
-    # without any option needing to be wired for it.
+    # without any option needing to be wired for it, its output directory
+    # (e.g. for what a launcher node keeps across launches), and the
+    # directory of the module that declares it, against which a relative
+    # path of the program resolves, as an external alias does.
     export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    export DEBASHER_PROCESS_OUTDIR=$(debasher::_get_process_outdir_given_dirname "${dirname}" "${processname}")
+    export DEBASHER_PROCESS_MODULE_DIR="${DEBASHER_PROCESS_PFILE_DIR[${processname}]:-}"
     # The tasks of an array share that directory, so a task also gets its
     # own index, to name what it keeps there the way the engine names its
     # per-task files (<process>_<idx>.id); empty for a process that is not

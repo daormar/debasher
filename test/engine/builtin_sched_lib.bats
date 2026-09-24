@@ -221,3 +221,16 @@ EOF
     run debasher::_program_process_spec_is_ok "proc cpus=1 mem=32 time=00:01:00 input_log_max_mb=big ||| "
     [ "$status" -ne 0 ]
 }
+
+@test "the spec check accepts a known scheduler for the batch runs of a launcher node, and refuses another" {
+    source "${ENGINE_BUILDDIR}/debasher_lib_process_spec.sh"
+    run debasher::_program_process_spec_is_ok "proc cpus=1; mem=32; time=00:01:00; batch_sched=BUILTIN ||| "
+    [ "$status" -eq 0 ]
+
+    run debasher::_program_process_spec_is_ok "proc cpus=1; mem=32; time=00:01:00; batch_sched=SLURM ||| "
+    [ "$status" -eq 0 ]
+
+    run debasher::_program_process_spec_is_ok "proc cpus=1; mem=32; time=00:01:00; batch_sched=PBS ||| "
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"batch_sched"*"BUILTIN or SLURM"* ]]
+}

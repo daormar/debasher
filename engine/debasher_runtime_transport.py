@@ -217,7 +217,9 @@ class _PortWorker:
         _COMP_SPEC_ATTRS): the engine exports them to the process as
         DEBASHER_PROCESS_COMP_SPECS, fields `name=value` separated by ";" or,
         in the legacy form, by blanks. The other fields (cpus, mem, time...)
-        are for the scheduler, and are ignored here.
+        are for the scheduler, and are ignored here. A specification whose
+        factor is None takes its value as text, which the engine checked when
+        it loaded the program.
         """
         separator = ";" if ";" in comp_specs else None
         for field in comp_specs.split(separator):
@@ -226,6 +228,9 @@ class _PortWorker:
             if target is None:
                 continue
             attribute, factor = target
+            if factor is None:
+                setattr(self, attribute, value)
+                continue
             try:
                 number = float(value)
             except ValueError:

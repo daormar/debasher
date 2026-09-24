@@ -356,7 +356,15 @@ debasher::_write_env_vars_and_funcs()
         # Write initialized variables
         declare -p DEBASHER_SCHEDULER
         declare -p DEBASHER_PROGRAM_TYPE
+        # The directories where modules are searched, as debasher_exec had
+        # them, so that a process launched again from another environment
+        # (a node relaunched by hand) finds the modules its own launches
+        # would
+        if [ -n "${DEBASHER_MOD_DIR+x}" ]; then
+            declare -p DEBASHER_MOD_DIR
+        fi
         declare -p DEBASHER_INITIAL_PROCESS_SPEC
+        declare -p DEBASHER_PROCESS_PFILE_DIR
         declare -p DEBASHER_RESIDENT_TASK_PORTS
         declare -p DEBASHER_PROGRAM_OUTDIR
         declare -p DEBASHER_MEMOIZED_OPTS

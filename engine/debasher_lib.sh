@@ -53,10 +53,13 @@ DEBASHER_LEGACY_PROCSPECS_SEP=" "
 DEBASHER_PROCSPECS_SEP=";"
 # Computational specifications that only a resident program reads (see
 # _PortWorker._apply_comp_specs): limits of a node, the heartbeat timeout of
-# a Supervisor, and the startup deadline of a node, or of every node for a
-# Supervisor, given per process with add_debasher_process. Each, when given,
-# is a positive number.
-DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backlog_fail_mb gil_switch_interval_ms heartbeat_timeout_s startup_timeout_s"
+# a Supervisor, the startup deadline of a node, or of every node for a
+# Supervisor, and the batch runs a launcher node runs at a time, given per
+# process with add_debasher_process. Each, when given, is a positive number.
+DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backlog_fail_mb gil_switch_interval_ms heartbeat_timeout_s startup_timeout_s max_concurrent_runs"
+# The scheduler with which a launcher node runs its batch runs, one of those
+# debasher_exec takes in --sched; the built-in one when not given
+DEBASHER_BATCH_SCHED_COMP_SPEC_NAME="batch_sched"
 DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX=".__VAL_DESCRIPTOR__"
 DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX="__PROC_OUT_OPT_DESCRIPTOR__"
 DEBASHER_SCHED_OPTS_DIRNAME=".sched_opts"

@@ -361,7 +361,9 @@ debasher::_get_resident_process_source()
 # to stdout. It looks for a top-level class definition whose bases
 # resolve -- following plain "import"/"from ... import ... as ..."
 # aliasing -- to the literal names "Supervisor" or "FBPProcess" (the
-# two base classes to_do_fbp.md defines for resident processes). This
+# two base classes to_do_fbp.md defines for resident processes), or
+# "ProgramLauncher", the node of the runtime library that launches a
+# general program for each request, which derives from FBPProcess. This
 # is a static check: ast.parse never imports or executes the given
 # source, unlike a real "issubclass" check, which was deliberately
 # ruled out for this (see to_do_fbp.md) since it would need to run
@@ -373,7 +375,11 @@ debasher::_resident_role_classifier_src()
 import ast
 import sys
 
-BASE_ROLES = {"Supervisor": "supervisor", "FBPProcess": "fbpprocess"}
+BASE_ROLES = {
+    "Supervisor": "supervisor",
+    "FBPProcess": "fbpprocess",
+    "ProgramLauncher": "fbpprocess",
+}
 
 
 def resolved_base_names(tree):

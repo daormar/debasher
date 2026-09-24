@@ -65,6 +65,13 @@ debasher::_program_process_spec_is_ok()
             return 1
         fi
     done
+    local batch_sched=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}")
+    if [ "${batch_sched}" != "${DEBASHER_ATTR_NOT_FOUND}" ] \
+           && [ "${batch_sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ] \
+           && [ "${batch_sched}" != "${DEBASHER_SLURM_SCHEDULER}" ]; then
+        echo "Error: ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME} computational specification of process ${processname} must be ${DEBASHER_BUILTIN_SCHEDULER} or ${DEBASHER_SLURM_SCHEDULER}, got \"${batch_sched}\"" >&2
+        return 1
+    fi
 
     return 0
 }
