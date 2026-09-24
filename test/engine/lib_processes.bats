@@ -439,6 +439,52 @@ EOF
     [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_2"]}" = "loopfifoproc${sep}2" ]
 }
 
+@test "debasher::_define_opts_for_process registers the fifos of a generator even when all process dependencies were given" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    genfifoproc_generate_opts_size()
+    {
+        echo 3
+    }
+
+    genfifoproc_generate_opts()
+    {
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        define_fifo_opt_generator "-outf" "genfifoproc_out_${task_idx}" "${task_idx}" optlist || return 1
+        save_opt_list optlist
+    }
+
+    local spec="genfifoproc cpus=1 mem=32 time=00:01:00 ${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP} processdeps=none"
+    DEBASHER_INITIAL_PROCESS_SPEC["genfifoproc"]="${spec}"
+    DEBASHER_PROGRAM_PROCESSES["genfifoproc"]=1
+    debasher::_all_process_deps_pre_specified
+
+    # _define_opts_for_process reads the process name from its caller's
+    # processname variable, as debasher_exec's loop over the processes
+    # sets it
+    local processname="genfifoproc"
+    set +e
+    debasher::_define_opts_for_process "" "${spec}"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["genfifoproc"]}" -eq 3 ]
+    [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_0"]}" = "genfifoproc${sep}0" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_1"]}" = "genfifoproc${sep}1" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_2"]}" = "genfifoproc${sep}2" ]
+}
+
 # --- users of the fifos --------------------------------------------------
 
 @test "debasher::_register_fifos_used_by_process registers the reader of a fifo that its owner writes" {

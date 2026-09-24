@@ -948,41 +948,32 @@ debasher::_define_opts_for_process()
         local processname=$(debasher::_extract_processname_from_process_spec "${process_spec}")
         local process_outdir=$(debasher::_get_process_outdir "${processname}")
 
-        # Check if process dependencies were pre-specified for all processes
-        if debasher::_all_process_deps_pre_specified; then
-            # There are no process dependencies to be determined, so it is
-            # only necessary to update option list length
+        # Obtain the generator functions and the number of tasks
+        local define_opts_generator_gen_opts_size_fname
+        debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
+        local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
+        local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
 
-            # Obtain define_opts_array function name and call it
-            local define_opts_generator_gen_opts_size_fname
-            debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
-            local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
+        # Output options are only needed to determine process
+        # dependencies, which are not needed if all were given
+        local need_output_opts_info=1
+        debasher::_all_process_deps_pre_specified && need_output_opts_info=0
 
-            # Set option list length
-            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
-        else
-            # There are process dependencies to be determined, so it is
-            # necessary to update output options information
+        # Iterate over array tasks. The generator runs once per task in
+        # this shell even when the dependencies were given: a fifo it
+        # defines with define_fifo_opt_generator is registered as a side
+        # effect of that call, and nowhere else
+        local task_idx
+        for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
+            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
 
-            # Obtain define_opts_array function name and call it
-            local define_opts_generator_gen_opts_size_fname
-            debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
-            local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
-            local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
-
-            # Iterate over array tasks
-            local task_idx
-            for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
-                # Call option generator
-                ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
-
-                # Update output options information
+            if [ "${need_output_opts_info}" -eq 1 ]; then
                 debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
-            done
+            fi
+        done
 
-            # Set option list length
-            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
-        fi
+        # Set option list length
+        DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
     }
 
     # Initialize variables
