@@ -3,6 +3,8 @@ title: Design of resident programs
 fontsize: 11pt
 geometry: margin=2cm
 numbersections: true
+toc: true
+toc-depth: 2
 ---
 
 This document describes the design of resident programs and the guarantees
