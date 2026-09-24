@@ -466,7 +466,6 @@ EOF
     local spec="genfifoproc cpus=1 mem=32 time=00:01:00 ${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP} processdeps=none"
     DEBASHER_INITIAL_PROCESS_SPEC["genfifoproc"]="${spec}"
     DEBASHER_PROGRAM_PROCESSES["genfifoproc"]=1
-    debasher::_all_process_deps_pre_specified
 
     # _define_opts_for_process reads the process name from its caller's
     # processname variable, as debasher_exec's loop over the processes

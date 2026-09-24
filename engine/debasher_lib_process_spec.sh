@@ -267,26 +267,6 @@ debasher::_extract_ext_alias_from_process_spec()
 }
 
 ########
-debasher::_all_process_deps_pre_specified()
-{
-    local processname
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # Retrieve process specification
-        local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
-
-        # Extract dependencies from process specification
-        local procdeps=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
-
-        # Check if dependencies were given
-        if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-            return 1
-        fi
-    done
-
-    return 0
-}
-
-########
 debasher::_get_processdeps_from_detailed_spec()
 {
     local processdeps_spec=$1
