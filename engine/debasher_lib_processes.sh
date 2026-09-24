@@ -954,22 +954,19 @@ debasher::_define_opts_for_process()
         local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
         local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
 
-        # Output options are only needed to determine process
-        # dependencies, which are not needed if all were given
-        local need_output_opts_info=1
-        debasher::_all_process_deps_pre_specified && need_output_opts_info=0
-
-        # Iterate over array tasks. The generator runs once per task in
-        # this shell even when the dependencies were given: a fifo it
-        # defines with define_fifo_opt_generator is registered as a side
-        # effect of that call, and nowhere else
+        # Iterate over array tasks. This is done even when all process
+        # dependencies were given, as save_opt_list does for a process
+        # without a generator: a fifo the generator defines with
+        # define_fifo_opt_generator is registered as a side effect of
+        # calling it in this shell, and the readers of that fifo are then
+        # found through the output options information of its owner task
         local task_idx
         for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
+            # Call option generator
             ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
 
-            if [ "${need_output_opts_info}" -eq 1 ]; then
-                debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
-            fi
+            # Update output options information
+            debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
         done
 
         # Set option list length

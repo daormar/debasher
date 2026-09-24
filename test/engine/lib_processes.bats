@@ -483,6 +483,11 @@ EOF
     [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_0"]}" = "genfifoproc${sep}0" ]
     [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_1"]}" = "genfifoproc${sep}1" ]
     [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_2"]}" = "genfifoproc${sep}2" ]
+
+    # The readers of each fifo are found through the output values of its
+    # owner task, so those have to be recorded as well
+    local fifo="$(debasher::_get_absolute_fifoname genfifoproc genfifoproc_out_1)"
+    [ "${DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]}" = "genfifoproc${sep}1" ]
 }
 
 # --- users of the fifos --------------------------------------------------
