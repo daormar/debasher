@@ -520,6 +520,21 @@ EOF
 
 # --- users of the fifos --------------------------------------------------
 
+@test "debasher::_deserialized_args_idx_is_dep_candidate writes the option index into the caller's variable j" {
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=(["/abs/fifo"]="fanin")
+    DEBASHER_DESERIALIZED_ARGS=("-n" "3" "-from_fanin" "/abs/fifo")
+    # The callers name their variable j, as here
+    caller() {
+        local j=""
+        debasher::_deserialized_args_idx_is_dep_candidate 3 j || return 1
+        echo "${j}"
+    }
+
+    run caller
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "2" ]
+}
+
 @test "debasher::_register_fifos_used_by_process registers the reader of a fifo that its owner writes" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()

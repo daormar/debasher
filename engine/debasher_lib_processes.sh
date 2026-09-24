@@ -1461,7 +1461,9 @@ debasher::_get_end_idx_in_range()
 # Check whether the argument at position $1 is a candidate to generate
 # a process dependency. Returns 0 and writes the associated option index
 # into the caller-provided variable if it is a candidate; returns 1
-# otherwise.
+# otherwise. The locals below must not share a name with the caller's
+# variable (the callers pass "j"): the nameref would resolve to the local
+# one instead, and the caller's variable would never be written.
 debasher::_deserialized_args_idx_is_dep_candidate()
 {
     local i=$1
@@ -1472,12 +1474,12 @@ debasher::_deserialized_args_idx_is_dep_candidate()
         return 1
     fi
 
-    local j=$((i-1))
-    if [ $j -lt 0 ]; then
+    local opt_idx=$((i-1))
+    if [ ${opt_idx} -lt 0 ]; then
         return 1
     fi
 
-    local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
+    local opt="${DEBASHER_DESERIALIZED_ARGS[opt_idx]}"
     if ! debasher::_str_is_option "${opt}" || debasher::_str_is_output_option "${opt}"; then
         return 1
     fi
@@ -1486,7 +1488,7 @@ debasher::_deserialized_args_idx_is_dep_candidate()
         return 1
     fi
 
-    idx_ref=$j
+    idx_ref=${opt_idx}
     return 0
 }
 
