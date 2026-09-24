@@ -1756,10 +1756,17 @@ debasher::_register_fifos_used_by_process()
             augm_fifoname=$(debasher::_get_augm_fifoname_from_absname "${value}")
             [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || continue
 
-            # The task that owns the fifo is not a user of it; another task of
-            # the same array is
+            # The option through which the task that owns the fifo defines it
+            # does not make the task a user of it (a fifo fed from outside
+            # that the owner reads, defined through an input option). Any
+            # other option does: that of another task of the same array, and
+            # that of the owner itself when it reads what it writes (a
+            # self-loop)
             local this_task="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
-            [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" = "${this_task}" ] && continue
+            if [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" = "${this_task}" ] \
+                   && [ "${DEBASHER_DESERIALIZED_ARGS[j]}" = "${DEBASHER_FIFO_OWNER_OPTS["${augm_fifoname}"]:-}" ]; then
+                continue
+            fi
 
             # Register the current task as a user of the fifo, and the option
             # through which it uses it

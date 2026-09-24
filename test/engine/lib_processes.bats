@@ -586,3 +586,51 @@ EOF
     [ "${DEBASHER_FIFO_USERS["worker/worker_out_0"]}" = "worker${sep}1" ]
     [ "${DEBASHER_FIFO_USER_OPTS["worker/worker_out_0"]}" = "-from_prev" ]
 }
+
+@test "debasher::_register_fifos_used_by_process registers the owner that reads its own fifo through another option (a self-loop)" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname counter counter_self)"
+    DEBASHER_PROGRAM_FIFOS["counter/counter_self"]="counter${sep}0"
+    DEBASHER_FIFO_USERS["counter/counter_self"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_OWNER_OPTS["counter/counter_self"]="-outself"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="counter${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["counter"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-self${DEBASHER_ARG_SEP}${fifo}${DEBASHER_ARG_SEP}-outself${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "counter"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["counter/counter_self"]}" = "counter${sep}0" ]
+    [ "${DEBASHER_FIFO_USER_OPTS["counter/counter_self"]}" = "-self" ]
+}
+
+@test "debasher::_register_fifos_used_by_process leaves outside the user of a fifo that its owner defines through an input option" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname fanin fanin_ext)"
+    DEBASHER_PROGRAM_FIFOS["fanin/fanin_ext"]="fanin${sep}0"
+    DEBASHER_FIFO_USERS["fanin/fanin_ext"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_OWNER_OPTS["fanin/fanin_ext"]="-ext"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["fanin"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-ext${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "fanin"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]
+    [ -z "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_ext"]+x}" ]
+}

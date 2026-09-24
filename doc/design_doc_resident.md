@@ -105,10 +105,10 @@ mutation check, durability level) is defined in the Contract, where it is used.
   to what it receives, and never sends on its own initiative (`send_data`
   raises anywhere else), so a source is always outside the graph of nodes, and
   what enters through it is an external input (see "Limits and non-goals").
-- **root** (raíz): a node that no other node sends `DATA` to. Its input ports,
-  if it has any, are control ports or are written from outside the program, by a
-  source. It can start a round, and its part of a round closes as soon as it
-  opens, since it has no pending port.
+- **root** (raíz): a node that no node sends `DATA` to, not even itself
+  through a self-loop. Its input ports, if it has any, are control ports or are
+  written from outside the program, by a source. It can start a round, and its
+  part of a round closes as soon as it opens, since it has no pending port.
 - **relay** (relé): a node with one input port and one output port whose
   `process_data` sends on the output what it received on the input, one message
   out for each message in. It is the simplest node that has both an input log
@@ -936,13 +936,16 @@ framework keep the state that a node captures in step with what it has sent:
 
 No hook runs when nothing arrives: a node acts only in reaction to what it
 receives (see "source" in the Glossary), so whatever starts the activity of a
-program is written from outside into an input port. A module that needs several
-inputs together keeps what it has received in its node state and decides in
-`process_data` when it has enough, because the framework delivers each message
-as it arrives, with no join across ports.
+program is written from outside into an input port. A node that has to go on
+emitting after that does it through a self-loop (see "A node that emits on its
+own" in Extensions). A module that needs several inputs together keeps what it
+has received in its node state and decides in `process_data` when it has
+enough, because the framework delivers each message as it arrives, with no
+join across ports.
 
 How a node finishes for good is not defined yet: `run()` returns only on a stop
-signal, and a stop sends no `CLOSE`.
+signal, and a stop sends no `CLOSE` (see "A node that finishes for good" in
+Future work).
 
 ## Limits of a node
 
@@ -2387,6 +2390,45 @@ Design ideas from Future work move here once they are actually built.
   with a counter in its node state, the tasks forward it to `collect`, and a
   `Supervisor` that declares no port watches every node and relaunches a task
   of the array like any other node.
+- **A node that emits on its own: a self-loop.** A node acts only in reaction
+  to what it receives, so what starts the activity of a program comes from
+  outside. A node that has to go on emitting after that, a counter or the
+  ticks of a clock, sends itself the message that triggers its next step: an
+  output port of the node connected to one of its own input ports
+  (`define_opt_from_proc_out` naming its own process). Its configuration
+  arrives from outside, each call to `process_data` emits one step and sends
+  the next trigger to itself, and its node state says when to stop. Each call
+  is short, so the node takes part in rounds and answers commands between
+  steps. Nothing in the engine is specific to it:
+  - Rounds. The loop is a channel like any other: the marker that the node
+    sends on its output port goes round the loop behind whatever was in
+    transit, which the round keeps as the channel state of the loop, and the
+    node's part of the round closes when the marker comes back.
+  - Recovery. Both ends of the loop are the same process, so a crash of the
+    node destroys what the FIFO held, the case that "Both endpoints of a
+    channel crashed" in the Contract's limits describes. Here nothing is lost.
+    The checkpoint is saved when the round closes, after the marker has come
+    back, and so after everything that the node sent itself before the
+    capture has been read and written to the input log. Whatever the loop
+    holds at a crash was therefore sent while processing a message that lies
+    in the log after the `capture_pos` of the latest checkpoint: the replay
+    processes it again and resends what it sent, with the same numbers (G5),
+    and the reader drops as duplicates what had already arrived.
+  - Pace. A delay inside `process_data` sets the rate of the loop, and slows
+    down a replay as much (see "A startup deadline for a relaunched node" in
+    Future work). It does not adapt to the readers: a channel is one-way, so a
+    node cannot know how far its readers got, and one that emits faster than
+    they read is stopped by `OUT_BACKLOG_FAIL_BYTES` with an error (see
+    "Checkpoint persistence").
+  - Ending. The node stops sending itself the next trigger when its node
+    state says so, and stays idle; it does not finish for good, since no node
+    does (see "A node that finishes for good" in Future work).
+
+  `test/engine/debasher_selfloop_ref.sh` is the reference: `counter` counts up
+  to a limit that arrives from outside, sending each value to `sink`, under a
+  `Supervisor`; a round started while it counts closes through the loop, and
+  a `counter` killed while it counts is relaunched and goes on with no value
+  missing or repeated at `sink`.
 
 # Future work
 
@@ -2580,23 +2622,42 @@ Design ideas from Future work move here once they are actually built.
   result. A hook would have to be called in the order of the input log, and
   replayed, like `process_data`, so that the state a module builds from it is
   the one it would have had without a crash. Not designed.
-- **Nodes that emit on their own.** Today a node acts only in reaction to what
-  it receives, and what starts the activity of a program, the first message of a
-  cycle or a tick of a clock, is written into an input port from outside by a
-  source (see "source" in the Glossary). Whether a node should also be able to
-  emit by itself, for example a source inside the program, is left to be
-  assessed. It would need a hook that the brain thread calls when nothing
-  arrives, so that the state a node captures stays in step with what it has
-  sent; a pace for it, since the outbound queue has no limit; a way to finish
-  for good; and, for a node that also has inputs, a record in the input log of
-  where each call fell, so that a replay reproduces it. What serves today is a
-  self-loop: the node's configuration arrives from outside, and each call to
-  `process_data` emits one step and sends itself the message that triggers the
-  next, until its node state says to stop. Every call is short, so rounds,
-  replay and G5 apply unchanged. It still has no way to finish for good (a
-  last `DATA` that says so is the workaround) and no pace: a delay inside
-  `process_data` caps its rate without adapting it to the readers, and slows
-  down a replay (see the next item).
+- **A node that finishes for good.** No node does today: `run()` returns only
+  on a stop signal, which sends no `CLOSE`, since the node may be resumed
+  later. So the handling of `CLOSE` (`closed_ports`, a round that does not wait
+  for a closed port, a node whose inputs have all closed behaving as a root)
+  only runs with nodes that end outside `run()`, as the unit tests end them,
+  and a program never ends by itself: it runs until `debasher_stop_resident`
+  stops it. Points to settle:
+  - Who decides. The framework, when every input port that is not a control
+    port has closed, the rule of flow-based programming by which a process
+    ends once its inputs are exhausted; the module, with a call from
+    `process_data`, for a node that emits on its own (see "A node that emits
+    on its own" in Extensions); or both. A node with no data input could only
+    end through the module.
+  - Replay. The decision falls at a position of the input log, a `CLOSE`
+    record or the call to `process_data` for a `DATA`, so that a relaunch that
+    replays the log reaches it again at the same point.
+  - The order of the ending: write what is still in the outbound queues and
+    in the outbound backlog, then `CLOSE` on every output port, then exit. A
+    crash in between is recovered by a relaunch that reaches the decision
+    again and repeats the steps; a second `CLOSE` is harmless, since a reader
+    drops everything that follows the first.
+  - Rounds. A node that has finished takes no part in later rounds, as its
+    readers already assume, but a consistent cut of a later epoch, to inspect
+    the state of the program or for a global rollback (see "Global
+    (coordinated) rollback" above), needs its state: a checkpoint saved when it
+    finishes, valid for every later epoch.
+  - Files. A node stopped by a halt and one that finished for good would
+    leave the same `.finished`. The `Supervisor` counts both as done, but a
+    resume launches every node again, so a node that finished for good needs
+    a marker of its own, like the halted marker, for its relaunch to end at
+    once or not to happen; resetting the checkpoints (see "Auxiliary script to
+    reset checkpoints across a whole topology" above) removes it.
+  - The end of the program. Once every node has finished for good, the
+    `Supervisor` finds them all done and exits, so the program ends by itself.
+
+  Not designed.
 - **A startup deadline for a relaunched node.** A node sends its first
   heartbeat only after its replay, when `start_threads()` runs, so a replay
   longer than `HEARTBEAT_TIMEOUT_SECS` gets it declared down again and, if
