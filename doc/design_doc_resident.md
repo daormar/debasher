@@ -483,8 +483,8 @@ by at least one end-to-end test that states it in the same words (see
   and processes that misbehave instead of crashing (Byzantine faults).
 - **The `Supervisor` is not itself supervised.** If it dies, the nodes keep
   running with their state, but nobody relaunches a crashed node until the
-  `Supervisor` is relaunched by hand. This is simply documented, and no
-  mechanism is added for now.
+  `Supervisor` is relaunched by hand. No mechanism covers this (see
+  "Supervising the `Supervisor`" in Future work).
 
 **Note on `fsync`, and why the level above is enough for now.** When a process
 writes to a file, the operating system copies the data into its own memory (the
@@ -643,8 +643,8 @@ guarantee in words and never cite these numbers, which may change.
   it, so the window can be made short but not closed.
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
   loop, deadlock) is not detected today: the heartbeat proves that its threads
-  are alive, not that they make progress. Not a goal for now; an extension would
-  be a progress counter in the heartbeat.
+  are alive, not that they make progress. Not a goal for now (see "Progress in
+  the heartbeat" in Future work).
 - **Not covered**: non-deterministic `process_data`, effects on external systems
   beyond "idempotent if repeated", Slurm, machine failure.
 - **`--mirror`** (the debugging tap of a fifo, behind the frontend's "Watch
@@ -1974,10 +1974,10 @@ node would need a tag of its own.
 - Reading and writing the tags in the frontend is part of "Resident programs in
   the frontend" in Future work.
 
-# Recovery from a node failure: the writer-dies direction done, the reader-dies direction still open
+# Recovery from a node failure
 
-This section describes the design as built for a node cut off from a crashed
-peer, and what is still missing for the reverse case.
+This section describes the design of how a node that keeps running reconnects
+with a peer that crashed and is relaunched, in both directions of a channel.
 
 Policy: recovery is localized (only the downed node is relaunched), not a
 global rollback; a global rollback is kept as a possible future fallback for
@@ -2111,22 +2111,21 @@ notice the crash (`HEARTBEAT_CHECK_INTERVAL_SECS` when the process is gone)
 and to
 start the new process.
 
-## The reader-dies direction: one open question
+## The reader-dies direction
 
-Ghost connections already answer two of the three original concerns for a
-dying reader: the writer never sees `BrokenPipeError` (it blocks on
-backpressure instead, so there is nothing to reopen or resend), and unread
-data in the pipe survives a reader's crash and relaunch (see "Ghost
-connections" above).
+Ghost connections answer the crash of a reader: the writer never sees
+`BrokenPipeError` (it blocks on backpressure instead, so there is nothing to
+reopen or resend), and unread data in the pipe survives a reader's crash and
+relaunch (see "Ghost connections" above).
 
-What remains open is the symmetric case of `CLOSE` itself. `CLOSE` travels
-only in the direction the data does, from a writer to its readers, so a
-node that stops reading from one of its inputs sends nothing back to
-whatever writes to it. A writer therefore cannot tell a reader that closed
-on purpose (finished for good) from one that crashed and may relaunch: both
-look the same, the writer just blocks once the pipe fills. Closing this
-needs a signal in the other direction, symmetric to `CLOSE`, and is not
-designed.
+`CLOSE` travels only in the direction the data does, from a writer to its
+readers, so a node that stops reading from one of its inputs sends nothing
+back to whatever writes to it. A writer therefore cannot tell a reader that
+stopped for good from one that crashed and may relaunch: both look the same,
+the writer just blocks once the pipe fills, and its outbound backlog grows
+until `OUT_BACKLOG_FAIL_BYTES` stops it with an error that names the port (see
+"Checkpoint persistence"). A signal in the other direction, symmetric to
+`CLOSE`, is in Future work.
 
 # Loose ends to check before considering the design closed
 
@@ -2494,8 +2493,8 @@ Design ideas from Future work move here once they are actually built.
     (`debasher_builtin_sched::_launch`) still leaves a brief window, of
     however long its own relaunch takes, where nobody holds that channel, so
     this narrows the risk rather than closing it outright. It does not
-    answer who supervises the `Supervisor` itself, a separate, already-open
-    question elsewhere in this document. A series of holders spreads the
+    answer who supervises the `Supervisor` itself (see "Supervising the
+    `Supervisor`" below). A series of holders spreads the
     same risk further without needing this supervision at all: for example
     every node also holds an auxiliary read end of the channels of its
     neighbors (each already a supervised node in its own right), so that a
@@ -2578,6 +2577,29 @@ Design ideas from Future work move here once they are actually built.
   after a relaunch, which covers any long replay; and a read-only `replaying`
   flag, so that a module can skip what only matters live, such as the delay
   of a self-loop.
+- **Progress in the heartbeat.** A node whose brain thread is alive but
+  blocked is not detected (see "Stuck but alive" in the Contract's limits):
+  the heartbeat says that its threads are alive, not that they make progress.
+  A counter of the items the brain thread has processed, sent with each
+  heartbeat, would let the `Supervisor` notice a node whose counter does not
+  move. Telling that apart from a healthy node needs care: a node with
+  nothing to process makes no progress either, and a long `process_data` call
+  is not a failure (the Introduction asks for no false positives when a
+  process is busy). Not designed.
+- **Supervising the `Supervisor`.** If the `Supervisor` dies, the nodes keep
+  running, but nobody relaunches a crashed node until the `Supervisor` is
+  relaunched by hand (see the Contract's failure model). It could be watched
+  and relaunched by a process outside the program, or by the nodes through a
+  heartbeat of its own; either way, what watches it is not watched in turn.
+  Not designed.
+- **A signal from a reader that stops for good.** `CLOSE` goes only from a
+  writer to its readers, so a writer cannot tell a reader that stopped for
+  good from one that crashed and will be relaunched (see "The reader-dies
+  direction"): it keeps queueing for it until `OUT_BACKLOG_FAIL_BYTES` stops
+  it with an error. A signal in the other direction, symmetric to `CLOSE`,
+  would let the writer stop sending on that port instead. A channel is one
+  FIFO, one way, so the signal needs a way back from the reader to the
+  writer, which the program does not have today. Not designed.
 - **Outputs that leave `process_data` as a result, not as calls to
   `send_data`.** Today a module calls `send_data` from inside `process_data`, at
   any moment of the call and any number of times. The alternative is that
