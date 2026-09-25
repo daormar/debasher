@@ -167,6 +167,10 @@ obtain_info_for_module()
         envvars_after=$(compgen -v)
     fi
 
+    # Resolve the program type (as debasher_exec does before executing
+    # the program function)
+    debasher::_resolve_program_type "${module_fname}" || return 1
+
     # Execute program function for module
     debasher::_exec_program_func_for_module "${module_fname}"
 

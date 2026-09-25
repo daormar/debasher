@@ -23,13 +23,28 @@ DEFAULT_FLAGS = (
 )
 
 _MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
-_SHARED_DIRS_HEADING_RE = re.compile(r"^## Shared Directories$")
+_SHARED_DIRS_TITLE = "Shared Directories"
 _SHARED_DIR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`$")
 _PROCESS_HEADING_RE = re.compile(r"^## (?P<name>.+)$")
 _ALL_SHARED_DIRS_HEADING_RE = re.compile(r"^## All Shared Directories$")
 _ALL_ENVVARS_HEADING_RE = re.compile(r"^## All Module Variables$")
 _RESOLVED_VARS_HEADING_RE = re.compile(r"^## Resolved Variables$")
 _RESOLVED_VAR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`: `(?P<value>.*)`$")
+
+# Titles of the "## <title>" sections debasher_doc_mod prints for the
+# module itself, before the first "## <process>" section. Each one
+# contains a space, which a process name never can (see
+# debasher::_is_valid_processname in engine/debasher_lib_programs.sh),
+# so none of them can be mistaken for a process.
+_MODULE_SECTION_TITLES = frozenset(
+    {
+        "Program Type",
+        _SHARED_DIRS_TITLE,
+        "All Shared Directories",
+        "All Module Variables",
+        "Resolved Variables",
+    }
+)
 
 
 def run_doc_mod(
@@ -294,7 +309,8 @@ def parse_module_markdown(
     name, per-process Markdown) pair for each "## <process>" section —
     each of which markdown_parsing.parse_proc_info_markdown can parse on
     its own, exactly as it does for a single-process
-    debasher_get_proc_info block.
+    debasher_get_proc_info block. Any other module section (see
+    _MODULE_SECTION_TITLES, e.g. "## Program Type") is skipped.
     """
     name = ""
     description_lines: list[str] = []
@@ -303,7 +319,7 @@ def parse_module_markdown(
 
     current_process_name: str | None = None
     current_process_lines: list[str] = []
-    in_shared_dirs_section = False
+    current_module_section: str | None = None
 
     def flush_process() -> None:
         if current_process_name is not None:
@@ -318,22 +334,24 @@ def parse_module_markdown(
             start = 1
 
     for line in lines[start:]:
-        if current_process_name is None and _SHARED_DIRS_HEADING_RE.match(line):
-            in_shared_dirs_section = True
-            continue
         heading_match = _PROCESS_HEADING_RE.match(line)
         if heading_match:
-            in_shared_dirs_section = False
             flush_process()
-            current_process_name = heading_match.group("name").strip()
-            current_process_lines = []
+            title = heading_match.group("name").strip()
+            if title in _MODULE_SECTION_TITLES:
+                current_module_section = title
+                current_process_name = None
+            else:
+                current_module_section = None
+                current_process_name = title
+                current_process_lines = []
         elif current_process_name is not None:
             current_process_lines.append(line)
-        elif in_shared_dirs_section:
+        elif current_module_section == _SHARED_DIRS_TITLE:
             item_match = _SHARED_DIR_ITEM_RE.match(line)
             if item_match:
                 shared_dirs.append(item_match.group("name").strip())
-        else:
+        elif current_module_section is None:
             description_lines.append(line)
     flush_process()
 

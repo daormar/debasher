@@ -386,6 +386,13 @@ debasher::_show_module_documentation()
         echo "" >&2
     fi
 
+    # Print the program type (DEBASHER_PROGRAM_TYPE must have been
+    # resolved beforehand, see debasher::_resolve_program_type)
+    echo "## Program Type"
+    echo ""
+    echo "\`${DEBASHER_PROGRAM_TYPE}\`"
+    echo ""
+
     if [ "${show_shrdirs}" = 1 ]; then
         echo "## Shared Directories"
         debasher::_show_module_shared_dirs "${modulename}"
