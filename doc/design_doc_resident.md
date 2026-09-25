@@ -121,16 +121,15 @@ mutation check, durability level) is defined in the Contract, where it is used.
   heartbeats, relaunches downed nodes and can start rounds. It is not itself
   supervised.
 - **initiator** (iniciador): the node at which a round starts, because it
-  receives an `INTERACT` `start_snapshot` or `shutdown` (or, if enabled, because
-  of its own snapshot timer). It has to be able to reach every other node
-  through the channels; a program made of independent subgraphs needs one
-  initiator per subgraph.
+  receives an `INTERACT` `start_snapshot` or `shutdown`. It has to be able to
+  reach every other node through the channels; a program made of independent
+  subgraphs needs one initiator per subgraph.
 - **trigger** (disparo): the `INTERACT` command, `start_snapshot` or `shutdown`,
   that makes a node start a round. It reaches an initiator from the
-  `Supervisor`, from an actor outside the program that writes it into a FIFO of
-  the initiator, or, as an in-process call and not as a message, from the
-  initiator's own snapshot timer. It may carry the epoch of the round it
-  starts (see numbered trigger).
+  `Supervisor`, or from an actor outside the program that writes it into a
+  FIFO of the initiator (a snapshot timer of the initiator's own is not built,
+  see "Periodic snapshots from a node's own timer" in Future work). It may
+  carry the epoch of the round it starts (see numbered trigger).
 - **numbered trigger** (disparo numerado): a trigger whose `args` carry the
   epoch of the round it starts, the same for every initiator it reaches. An
   initiator handles it like a marker of that epoch that counts no port as
@@ -710,8 +709,8 @@ guarantee in words and never cite these numbers, which may change.
   the cut that counts; localized recovery never uses a cut. It holds if the
   initiators start the same epoch (see numbered trigger in the Glossary). Rounds
   started closer together than they take to complete keep replacing each other,
-  and none completes until they stop, so the period of periodic snapshots has to
-  be longer than a round.
+  and none completes until they stop, so whatever starts rounds periodically
+  has to leave more time between them than a round takes.
 - **A crash while a round is open.** The node comes back with no round open,
   and the markers it had received for that round are not replayed (only `DATA`
   and `CLOSE` are). At a node that is not an initiator, the next marker of
@@ -1036,19 +1035,14 @@ propagation, ordered shutdown and checkpoint persistence.
   convention `debasher_dynamic_fanout_fifos.sh` already uses): no new engine
   mechanism, it is just another entry in `self.opts`; a sensible default
   applies if the module does not declare it.
-- **Periodic self-triggered snapshots (opt-in)**: nothing otherwise ever closes
-  an epoch on its own; without this, the input log's safety cap (see "Input
-  log") becomes the normal failure mode instead of an actual safety net for any
-  `resident` program with no external actor triggering `start_snapshot`
-  periodically, `Supervisor` or not. A timer thread, gated by a
-  `SNAPSHOT_INTERVAL_SECS` class attribute/option (`None`, disabled, by
-  default), that calls the exact same internal barrier-starting logic
-  `start_snapshot` uses directly, bypassing the `INTERACT` channel entirely
-  since it is an in-process trigger, not a message. The module author enables it
-  only on whichever node it has already established is a valid initiator (see
-  "Chandy-Lamport barrier propagation"). Works identically whether or not a
-  `Supervisor` is present; a `Supervisor`, if present, can still trigger
-  `start_snapshot` on demand independently; the two are not mutually exclusive.
+- **Periodic self-triggered snapshots (not built)**: a node never starts a
+  round on its own; every round starts with a trigger, relayed by the
+  `Supervisor` or written from outside the program. A program in which nothing
+  triggers `start_snapshot` regularly closes no epoch, and its input logs grow
+  until their size cap (see "Pruning and the size cap"), which then stops being
+  a safety net and becomes the normal way the program fails. An opt-in timer
+  of the initiator's own would close that gap (see "Periodic snapshots from a
+  node's own timer" in Future work).
 
 ## Defining a node
 
@@ -1500,9 +1494,10 @@ log" in the Contract's limits). The version of `_PortWorker`, which the
 item, with no position.
 
 Every queued item gets a position, starting at 1; `HELLO` never reaches the
-queue. Whatever starts a round from inside the node, such as a future
-snapshot timer, goes through the same hook, so `capture_pos` (see the
-Glossary) is always defined; 0 means that nothing had been processed yet.
+queue. Whatever starts a round from inside the node, such as a snapshot timer
+(see "Periodic snapshots from a node's own timer" in Future work), has to go
+through the same hook, so that `capture_pos` (see the Glossary) is always
+defined; 0 means that nothing had been processed yet.
 
 ## The checkpoint's own bookkeeping
 
@@ -1559,9 +1554,10 @@ thread, under the same lock as an append.
 node's log together, kept in memory so that checking it costs nothing. It is a
 safety net, not the normal way old history goes away, which is pruning:
 exceeding it raises in the reader thread, before anything is written, like any
-other death of a thread, and should never trip in ordinary operation, since it
-would mean that no epoch has closed in a long time, which the periodic
-snapshots described in "`FBPProcess` class" are there to prevent.
+other death of a thread. Reaching it means that no epoch has closed in a long
+time, so it does not trip while something triggers rounds regularly; since a
+node does not start rounds on its own, a program in which nothing does
+reaches it (see "Periodic snapshots from a node's own timer" in Future work).
 
 ## `CLOSE` and closed ports
 
@@ -1746,11 +1742,12 @@ one that resets a program, in "Tools for resident programs".
   also what keeps the `CLOSE` that a `Supervisor` sends when it stops from
   closing the channel for good, so that the triggers of one relaunched by hand
   still arrive.
-- This is a convenience, not the only way to trigger a round: `FBPProcess`'s own
-  opt-in periodic self-triggered snapshot (`SNAPSHOT_INTERVAL_SECS`, see
-  "`FBPProcess` class") and a direct external `INTERACT` write into an
-  initiator's own FIFO (e.g. via Talk-to-FIFOs) both remain independent of
-  whether a `Supervisor` exists at all or how it is configured.
+- This is a convenience, not the only way to trigger a round: a direct
+  external `INTERACT` write into an initiator's own FIFO (e.g. via
+  Talk-to-FIFOs) remains independent of whether a `Supervisor` exists at all
+  or how it is configured, and so would a snapshot timer of the initiator's
+  own (not built, see "Periodic snapshots from a node's own timer" in Future
+  work).
 
 ## Manual trigger channel
 
@@ -3322,6 +3319,24 @@ Design ideas from Future work move here once they are actually built.
     it could release the FIFOs of that node's input channels at once.
 
   Not designed.
+- **Periodic snapshots from a node's own timer.** A node never starts a round
+  on its own, so a program in which nothing triggers `start_snapshot`
+  regularly closes no epoch, and its input logs grow until their size cap (see
+  "Pruning and the size cap"). The idea is an opt-in timer thread in
+  `FBPProcess`, gated by a `SNAPSHOT_INTERVAL_SECS` class attribute or option
+  (`None`, disabled, by default), that enters the same logic as a
+  `start_snapshot` trigger directly, as an in-process call and not as a
+  message. The module author would enable it only on a node that is a valid
+  initiator (see "Chandy-Lamport barrier propagation"), and it would work the
+  same with or without a `Supervisor`, which could still trigger rounds on
+  demand. Points to settle: the timer has to start its round through the same
+  hook as an item that arrives, so that the round has a `capture_pos` (see
+  "Arrival and positions"); its period has to be longer than a round, or
+  rounds keep replacing each other (see "A round that a newer one replaces" in
+  the Contract's limits); and the timers of several initiators would open
+  rounds of different epochs, which a node that both reach waits for
+  separately, so they need a common numbering, like that of a numbered trigger
+  (see the Glossary). Not built.
 - **Progress in the heartbeat.** A node whose brain thread is alive but
   blocked is not detected (see "Stuck but alive" in the Contract's limits):
   the heartbeat says that its threads are alive, not that they make progress.
