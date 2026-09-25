@@ -34,6 +34,8 @@ setup() {
     declare -gA DEBASHER_PROGRAM_OPT_DESC
     declare -gA DEBASHER_PROGRAM_OPT_TYPE
     declare -gA DEBASHER_PROGRAM_OPT_IS_CMDLINE
+    declare -gA DEBASHER_PROGRAM_OPT_IS_MANDATORY
+    declare -gA DEBASHER_MEMOIZED_OPTS
     declare -gA DEBASHER_PROGRAM_OPT_CATEG
     declare -gA DEBASHER_PROGRAM_CATEG_MAP
     declare -gA DEBASHER_INITIAL_PROCESS_SPEC
@@ -203,6 +205,26 @@ EOF
     [[ -v explained["-x"] ]]
 }
 
+@test "debasher::_get_explained_opt_names keeps the command-line marks that identify_cmdline_opts set" {
+    markedproc_explain_opts()
+    {
+        explain_opt "-n" "<int>" "desc n"
+        explain_flag "-v" "desc v"
+    }
+    markedproc_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-n"
+        opt_is_non_mandatory_cmdline "-v"
+    }
+    markedproc_explain_opts
+    markedproc_identify_cmdline_opts
+
+    local -A explained=()
+    debasher::_get_explained_opt_names "markedproc" explained
+    [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE["markedproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-n"]}" = 1 ]
+    [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE["markedproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-v"]}" = 1 ]
+}
+
 @test "debasher::_get_explained_opt_names returns 1 and leaves the set empty when the process declares no explain function" {
     local -A explained=()
     ! debasher::_get_explained_opt_names "noexplainproc" explained
@@ -255,6 +277,56 @@ EOF
     [ "${#actual[@]}" -eq 2 ]
     [[ -v actual["-id"] ]]
     [[ -v actual["-verbose"] ]]
+}
+
+@test "debasher::_get_actual_opt_names_for_first_task keeps each option's value, and none for a flag, for a generator process" {
+    genvalproc_generate_opts_size()
+    {
+        echo 1
+    }
+
+    genvalproc_generate_opts()
+    {
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-f" "a file with spaces" optlist
+        define_flag "-verbose" optlist
+        define_opt "-id" "${task_idx}" optlist
+        save_opt_list optlist
+    }
+
+    DEBASHER_INITIAL_PROCESS_SPEC["genvalproc"]="genvalproc"
+    DEBASHER_PROGRAM_OUTDIR="/tmp/bats-debasher-outdir"
+
+    local -A actual=()
+    debasher::_get_actual_opt_names_for_first_task "" "genvalproc" actual
+    [ "${#actual[@]}" -eq 3 ]
+    [ "${actual["-f"]}" = "a file with spaces" ]
+    [ -z "${actual["-verbose"]}" ]
+    [ "${actual["-id"]}" = "0" ]
+}
+
+@test "debasher::_get_actual_opt_names_for_first_task fails when generate_opts fails for a generator process" {
+    genfailproc_generate_opts_size()
+    {
+        echo 1
+    }
+
+    genfailproc_generate_opts()
+    {
+        return 1
+    }
+
+    DEBASHER_INITIAL_PROCESS_SPEC["genfailproc"]="genfailproc"
+    DEBASHER_PROGRAM_OUTDIR="/tmp/bats-debasher-outdir"
+
+    local -A actual=()
+    ! debasher::_get_actual_opt_names_for_first_task "" "genfailproc" actual
 }
 
 @test "debasher::_get_actual_opt_names_for_first_task keeps generator option names that echo would take as its own flags" {
@@ -633,4 +705,106 @@ EOF
     [ "${status}" -eq 0 ]
     [ "${DEBASHER_FIFO_USERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]
     [ -z "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_ext"]+x}" ]
+}
+
+# --- debasher::_check_opt_names_vs_explain, command-line options ---------
+#
+# A command-line option takes its value from the command line and
+# nowhere else, and may be left out of its process's tasks (e.g. a task
+# count only read to build them, as host1 does with -n in
+# debasher_host_process.sh).
+
+@test "debasher::_check_opt_names_vs_explain accepts a command-line option defined from the command line" {
+    cmdokproc_explain_opts()
+    {
+        explain_opt "-n" "<int>" "desc n"
+    }
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE["cmdokproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-n"]=1
+    declare -gA DEBASHER_OPT_LIST_cmdokproc_0=(["-n"]="3")
+    DEBASHER_PROGRAM_PROCESSES["cmdokproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-n" "3")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain accepts a command-line file option normalized to its absolute path" {
+    # debasher::_get_absolute_path, which gives the value its absolute
+    # form, relies on the tool path the built engine's preamble defines
+    REALPATH="$(command -v realpath)"
+
+    cmdfileproc_explain_opts()
+    {
+        explain_opt "-f" "<file>" "desc f"
+    }
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE["cmdfileproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-f"]=1
+    declare -gA DEBASHER_OPT_LIST_cmdfileproc_0=(["-f"]="$(pwd)/input.txt")
+    DEBASHER_PROGRAM_PROCESSES["cmdfileproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-f" "input.txt")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain accepts a command-line flag given on the command line" {
+    cmdflagproc_explain_opts()
+    {
+        explain_flag "-v" "desc v"
+    }
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE["cmdflagproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-v"]=1
+    declare -gA DEBASHER_OPT_LIST_cmdflagproc_0=(["-v"]="")
+    DEBASHER_PROGRAM_PROCESSES["cmdflagproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-v")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain aborts when a command-line option is defined with a value of its own" {
+    cmdownproc_explain_opts()
+    {
+        explain_opt "-f" "<string>" "desc f"
+    }
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE["cmdownproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-f"]=1
+    declare -gA DEBASHER_OPT_LIST_cmdownproc_0=(["-f"]="prefix_part1")
+    DEBASHER_PROGRAM_PROCESSES["cmdownproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-f" "prefix_")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process cmdownproc defines command-line option -f with a value that does not come from the command line"* ]]
+}
+
+@test "debasher::_check_opt_names_vs_explain aborts when a command-line option not given on the command line is defined anyway" {
+    cmdmissproc_explain_opts()
+    {
+        explain_opt "-t" "<int>" "desc t"
+    }
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE["cmdmissproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-t"]=1
+    declare -gA DEBASHER_OPT_LIST_cmdmissproc_0=(["-t"]="/some/fifo")
+    DEBASHER_PROGRAM_PROCESSES["cmdmissproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process cmdmissproc defines command-line option -t with a value that does not come from the command line"* ]]
+}
+
+@test "debasher::_check_opt_names_vs_explain does not warn about a command-line option left out of the tasks" {
+    cmdshapeproc_explain_opts()
+    {
+        explain_opt "-n" "<int>" "number of tasks"
+        explain_opt "-id" "<int>" "task id"
+    }
+    DEBASHER_PROGRAM_OPT_IS_CMDLINE["cmdshapeproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-n"]=1
+    declare -gA DEBASHER_OPT_LIST_cmdshapeproc_0=(["-id"]="0")
+    DEBASHER_PROGRAM_PROCESSES["cmdshapeproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-n" "3")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
 }

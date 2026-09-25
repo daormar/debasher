@@ -40,9 +40,13 @@ debasher_telegram_array_shared_dirs()
 ########
 decomposer_explain_opts()
 {
-    # -f option
+    # -pref option
     local description="Prefix of files to be processed"
-    explain_opt "-f" "<string>" "$description"
+    explain_opt "-pref" "<string>" "$description"
+
+    # -f option
+    local description="File to be processed"
+    explain_opt "-f" "<file>" "$description"
 
     # -outf option
     local description="output file"
@@ -52,7 +56,7 @@ decomposer_explain_opts()
 ########
 decomposer_identify_cmdline_opts()
 {
-    opt_is_cmdline "-f"
+    opt_is_cmdline "-pref"
 }
 
 ########
@@ -64,10 +68,10 @@ decomposer_define_opts()
     local process_name=$3
     local process_outdir=$4
 
-    # Obtain value of -f option
-    pref_of_files=$(get_cmdline_opt "${cmdline}" "-f")
+    # Obtain value of -pref option
+    pref_of_files=$(get_cmdline_opt "${cmdline}" "-pref")
 
-    # Array of files matching the -f prefix
+    # Array of files matching the -pref prefix
     array=()
     for file in "${pref_of_files}"*; do
         array+=("${file}")
@@ -89,6 +93,33 @@ decomposer_define_opts()
 }
 
 ########
+recomposer_explain_opts()
+{
+    # -pref option
+    local description="Prefix of files to be processed"
+    explain_opt "-pref" "<string>" "$description"
+
+    # -c option
+    local description="Line length in characters"
+    explain_opt "-c" "<int>" "$description"
+
+    # -inf option
+    local description="input fifo"
+    explain_opt "-inf" "<file>" "$description"
+
+    # -outf option
+    local description="output file"
+    explain_opt "-outf" "<file>" "$description"
+}
+
+########
+recomposer_identify_cmdline_opts()
+{
+    opt_is_cmdline "-pref"
+    opt_is_cmdline "-c"
+}
+
+########
 recomposer_define_opts()
 {
     # Initialize variables
@@ -97,10 +128,10 @@ recomposer_define_opts()
     local process_name=$3
     local process_outdir=$4
 
-    # Obtain value of -f option
-    pref_of_files=$(get_cmdline_opt "${cmdline}" "-f")
+    # Obtain value of -pref option
+    pref_of_files=$(get_cmdline_opt "${cmdline}" "-pref")
 
-    # Array of files matching the -f prefix
+    # Array of files matching the -pref prefix
     array=()
     for file in "${pref_of_files}"*; do
         array+=("${file}")

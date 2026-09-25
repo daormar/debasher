@@ -156,7 +156,7 @@ worker_explain_opts()
 ########
 worker_identify_cmdline_opts()
 {
-    opt_is_cmdline "-threshold"
+    :
 }
 
 ########

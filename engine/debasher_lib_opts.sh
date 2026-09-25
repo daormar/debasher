@@ -598,7 +598,6 @@ debasher::explain_opt()
 
     # Store option in associative arrays
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
-    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=0
     DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
     DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
     DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
@@ -651,7 +650,6 @@ debasher::explain_flag()
 
     # Store option in associative arrays
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
-    DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=0
     DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=""
     DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
     DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
@@ -761,7 +759,10 @@ debasher::_print_program_opts()
             local opt
             processname="${key%%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"
             opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
-            if [ "${only_cmdline_opts}" -eq 1 ] && [ ${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${key}]} -eq 0 ]; then
+            # An option is a command-line option only when the process's
+            # identify_cmdline_opts (or the legacy explain_cmdline_opt)
+            # marked it so: explaining it leaves the mark unset
+            if [ "${only_cmdline_opts}" -eq 1 ] && [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${key}]}" != 1 ]; then
                 continue
             fi
 
