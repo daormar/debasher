@@ -835,14 +835,140 @@ process", in the context menu of a canvas node, runs it for that one process.
 
 # Frontend state and the canvas
 
-*To be written.* The single store (`ProgramContext`), the conversion between
-the model and the canvas (`reactFlowAdapter.ts`), and which parts of the canvas
-state belong to the model (positions) and which do not (selection, colors).
+## Screens and the store
+
+The frontend has two screens: the home screen, which creates, loads or imports
+a program, and the editor. Opening a program in the editor creates a store
+with it (`ProgramProvider` in `store/ProgramContext.tsx`), and leaving the
+editor discards the store, stopping a run launched from it (see "Where the
+state lives"). The store holds the program, the selected process, the run
+phase with the last output of `debasher_status`, and the process statuses,
+from which it derives whether there is a run in progress. The dialogs edit a
+draft of their own and hand it to the store only when the user accepts it.
+
+Every change to the program goes through an operation of the store
+(`addProcess`, `connect`, `updateOption`, ...), and every operation passes its
+result through the same normalization, which derives the connection sentinels
+from the edges and restores the default scheduler if it is blank. The rules of
+"Connections" therefore hold after every change, not only when the program is
+saved. An operation that would change a process of a group first asks the
+user, and dissolves the whole group if the user agrees (see "Groups"); if not,
+the program is left as it was.
+
+The store keeps no history and no record of unsaved changes: there is no
+undo, and leaving the editor or closing the tab loses the changes made since
+the last save, without a warning.
+
+## From the store to the canvas
+
+`adapters/reactFlowAdapter.ts` turns the program into what the canvas library
+(React Flow) draws. Each process becomes a canvas node, with the process's id
+and position, and a handle for each option, with the option's id: the inputs
+along the top and the outputs along the bottom, except the pair of handles
+that the canvas moves to keep a short edge between two processes that answer
+each other (see "Connections"). Each edge becomes a canvas edge between two
+handles, drawn in one of three ways: a plain edge; a back edge, routed along a
+lane to the right of every process; or a fanout edge, narrow at the end of the
+fanout family. An edge from a FIFO is dashed.
+
+A canvas node shows the process's name and options, its options handler mode
+(a double border for `array` and `generator`, a dashed one for `manual`), its
+group (a border color derived from the `groupId`, and a badge with the
+module's name), and, as its background, the process status.
+
+Of what the canvas shows, only the positions belong to the program model and
+are saved. The selection, the part of the canvas in view (fitted to the
+program when the editor opens) and the colors are not.
+
+## Keeping the canvas in step with the store
+
+The canvas library draws from its own list of canvas nodes, which it updates
+on every frame of a drag. The canvas keeps that list, writes each new position
+into the store as the drag goes, and refreshes the list from the store only
+when the program's structural key changes (for each process: its id, name and
+mode, and the id, label and direction of each option) or when the set of moved
+handles changes, keeping the positions that the list already has. Refreshing
+it on every change of the store would fight with the drag.
+
+The rule that follows is that whatever a canvas node draws from its process
+must be part of the structural key; otherwise the canvas node keeps drawing an
+old value until the next structural change. The group is not part of it today,
+so a dissolved group keeps its color and its badge on the canvas until then
+(see "Future work"). The process status does not go through that list: each
+canvas node reads it from the store. Neither do the edges, which are derived
+again from the store on every change.
 
 # Guarantees and non-goals
 
-*To be written.* The guarantees the web UI gives today, stated in one place,
-and what it deliberately does not try to do.
+This section gathers the guarantees that the web UI gives today for general
+programs, stated in the sections above, and what it deliberately does not
+try to do. Where a guarantee has a known gap, "Future work" lists it.
+
+## Guarantees
+
+**The program model**
+
+- **Connections are consistent.** After every change, the value of each
+  connected input names the output its edge comes from, and the canvas accepts
+  only connections that the engine can resolve (see "Connections").
+- **No wrong module.** Script generation refuses a program whose module would
+  be wrong, rather than writing it (see "What script generation refuses").
+- **No lost code.** Leaving out the code that a loaded module already provides
+  can only remove a duplicate; when the check cannot be made, the code is
+  written (see "Code that a loaded module already provides").
+- **What import does not understand, it keeps.** An option definition function
+  outside the grammar of import is kept as its verbatim source, in `manual`
+  mode, so it runs as it did; a connection recovered from it only affects the
+  canvas (see "Recovering the options handler").
+
+**The program's directories**
+
+- **Two directories apart.** A program is never saved into its output
+  directory, and the output directory is never set to the home directory.
+- **User files are the user's.** The program files panel never touches a
+  reserved name, never leaves the home directory, and never changes the
+  generated script (see "Reserved names and user files").
+- **A reset stays in the output directory.** Resetting it deletes only what is
+  inside it, and does nothing when it is blank, missing, the root, the user's
+  home or the home directory (see "The output directory").
+- **No change under a running program.** While there is a run in progress, the
+  frontend refuses to save, to reset the output directory and to change it.
+  Only the frontend enforces this, and two actions of the Run menu bypass the
+  save's guard (see "The home directory").
+
+**Execution and observation**
+
+- **One run per output directory.** A run is not launched on an output
+  directory with a run in progress.
+- **A run launched from a tab does not outlive the tab.** Closing or reloading
+  the tab, leaving the editor, or dismissing the indicator of the run stops
+  it.
+- **Any run is observed.** The process statuses, and the guards that depend on
+  them, cover a run launched from another tab or from the command line.
+- **Watching a FIFO takes nothing from it.** "Watch FIFO" reads the FIFO
+  mirror, never the FIFO.
+- **Talking to a FIFO competes with nobody.** "Talk to FIFOs" only opens
+  unconnected FIFOs, and never blocks a request for more than a few seconds.
+- **Nothing is lost when the backend restarts**, since it keeps no state (see
+  "The backend keeps no state").
+
+## Non-goals
+
+- **Security.** The web UI trusts whoever reaches it: it has no
+  authentication, and it runs every tool, and reads any path, as the user who
+  started it. It listens only on the local machine unless told otherwise.
+- **Several people on one program.** Two tabs on the same program or the same
+  directories are not coordinated: the last save wins, and only the guards
+  based on the engine's own files (a run in progress) see the other tab.
+- **Keeping unsaved work.** There is no autosave, no undo and no warning
+  before unsaved changes are lost.
+- **Live updates.** The web UI learns what happens in a run by polling, every
+  few seconds, not by being told.
+- **Importing any module faithfully.** Import recognizes a closed grammar, and
+  keeps the rest as it is rather than trying to understand it (see "What the
+  round trip preserves").
+- **A program directory that can be moved.** The program metadata records
+  absolute paths (see "The home directory").
 
 # Resident programs in the web UI
 
@@ -911,6 +1037,9 @@ and that a tab stops the run it launched when it closes.
   there is a run in progress, and blocking "Run program (debug)" and "Check
   program options" during a run, which today save the generated script
   without that check.
+- **The group on the canvas.** Adding the group to the structural key of the
+  canvas, so that a dissolved group loses its color and badge at once (see
+  "Keeping the canvas in step with the store").
 - **A moved home directory.** Taking the home directory from the place the
   program is loaded from rather than from the program metadata, and deciding
   what a moved program should do with an output directory that still points
