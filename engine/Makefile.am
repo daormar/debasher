@@ -2,7 +2,7 @@ bin_SCRIPTS= debasher_exec debasher_exec_batch debasher_get_stdout	\
 debasher_get_sched_out debasher_get_fifo_mirror debasher_stop		\
 debasher_status debasher_stats debasher_exec_process debasher_doc_mod	\
 debasher_proc_dataset debasher_reformat_status debasher_fifo_writer_loop	\
-debasher_stop_resident debasher_reset_resident
+debasher_stop_resident debasher_reset_resident debasher_snapshot_resident
 
 libexec_SCRIPTS= debasher_get_vars_and_funcs			\
 debasher_get_deblib_vars_and_funcs debasher_check_prg_files	\
@@ -28,7 +28,7 @@ debasher_lib_sched_procs debasher_lib_sched_rerun			\
 debasher_lib_sched_topo_sort debasher_lib_process_spec			\
 debasher_lib_processes debasher_lib_programs debasher_lib_modules	\
 debasher_lib_opts debasher_lib_mirror debasher_lib_conda		\
-debasher_lib_docker debasher_builtin_sched_lib
+debasher_lib_docker debasher_lib_resident_tools debasher_builtin_sched_lib
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA)
 
@@ -39,12 +39,13 @@ debasher_lib_sched_slurm.sh debasher_lib_sched_builtin.sh		\
 debasher_lib_processes.sh debasher_lib_process_spec.sh			\
 debasher_lib_programs.sh debasher_lib_modules.sh debasher_lib_opts.sh	\
 debasher_lib_mirror.sh debasher_lib_conda.sh debasher_lib_docker.sh	\
+debasher_lib_resident_tools.sh						\
 debasher_builtin_sched_lib.sh debasher_exec.sh debasher_exec_batch.sh	\
 debasher_get_stdout.sh debasher_get_sched_out.sh			\
 debasher_get_fifo_mirror.sh						\
 debasher_get_vars_and_funcs.sh debasher_get_deblib_vars_and_funcs.sh	\
 debasher_check_prg_files.py debasher_stop.sh debasher_stop_resident.sh	\
-debasher_reset_resident.sh						\
+debasher_reset_resident.sh debasher_snapshot_resident.sh		\
 debasher_status.sh						\
 debasher_stats.sh debasher_exec_process.sh debasher_doc_mod.sh		\
 debasher_proc_dataset.sh debasher_fifo_writer_loop.sh			\

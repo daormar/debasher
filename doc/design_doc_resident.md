@@ -127,20 +127,21 @@ mutation check, durability level) is defined in the Contract, where it is used.
 - **trigger** (disparo): the `INTERACT` command, `start_snapshot` or `shutdown`,
   that makes a node start a round. It reaches an initiator from the
   `Supervisor`, or from an actor outside the program that writes it into a
-  FIFO of the initiator (a snapshot timer of the initiator's own is not built,
-  see "Periodic snapshots from a node's own timer" in Future work). It may
-  carry the epoch of the round it starts (see numbered trigger).
+  FIFO of the initiator, such as `debasher_snapshot_resident` and
+  `debasher_stop_resident` (a snapshot timer of the initiator's own is not
+  built, see "Periodic snapshots from a node's own timer" in Future work). It
+  may carry the epoch of the round it starts (see numbered trigger).
 - **numbered trigger** (disparo numerado): a trigger whose `args` carry the
   epoch of the round it starts, the same for every initiator it reaches. An
   initiator handles it like a marker of that epoch that counts no port as
   arrived: it is ignored if that round is already open or over, if it is older
   than the open round, or if it is a snapshot while a halt is open, and
   otherwise it replaces the open round. The `Supervisor` numbers every trigger
-  it relays that does not carry an epoch yet, and `debasher_stop_resident`
-  numbers its `shutdown`, both with the time in milliseconds: it needs no state
-  to survive a relaunch, and it lies above the epochs that initiators number
-  themselves. A clock set back makes a numbered trigger look old, and it is
-  ignored with a warning.
+  it relays that does not carry an epoch yet, `debasher_snapshot_resident`
+  numbers its `start_snapshot` and `debasher_stop_resident` its `shutdown`, all
+  with the time in milliseconds: it needs no state to survive a relaunch, and
+  it lies above the epochs that initiators number themselves. A clock set back
+  makes a numbered trigger look old, and it is ignored with a warning.
 - **trigger port** (puerto de disparo): an output port of the `Supervisor`, an
   entry of its `TRIGGER_PORT` list, wired to an initiator; the `Supervisor`
   sends the triggers through it.
@@ -296,6 +297,10 @@ mutation check, durability level) is defined in the Contract, where it is used.
   every node's halted marker, then signals each; stops a `Supervisor`, if
   the program has one, before touching any node it watches; falls back to
   `debasher_stop`'s hard kill past its own `--timeout`.
+- **`debasher_snapshot_resident`**: the tool that starts a snapshot in a
+  running program from outside it, with or without a `Supervisor`, once or
+  every given number of seconds (see "`debasher_snapshot_resident`: rounds
+  from outside the program").
 - **in transit** (en tránsito): a `DATA` message sent before its sender captured
   its state and received after its receiver captured its own.
 - **channel state** (estado de canal): `channel_state`, the copy that a node
@@ -1034,14 +1039,16 @@ propagation, ordered shutdown and checkpoint persistence.
   convention `debasher_dynamic_fanout_fifos.sh` already uses): no new engine
   mechanism, it is just another entry in `self.opts`; a sensible default
   applies if the module does not declare it.
-- **Periodic self-triggered snapshots (not built)**: a node never starts a
+- **Periodic snapshots come from outside the node**: a node never starts a
   round on its own; every round starts with a trigger, relayed by the
   `Supervisor` or written from outside the program. A program in which nothing
   triggers `start_snapshot` regularly closes no epoch, and its input logs grow
   until their size cap (see "Pruning and the size cap"), which then stops being
-  a safety net and becomes the normal way the program fails. An opt-in timer
-  of the initiator's own would close that gap (see "Periodic snapshots from a
-  node's own timer" in Future work).
+  a safety net and becomes the normal way the program fails.
+  `debasher_snapshot_resident --every` is what triggers rounds regularly, with
+  or without a `Supervisor` (see "`debasher_snapshot_resident`: rounds from
+  outside the program"); a timer of the initiator's own is not built (see
+  "Periodic snapshots from a node's own timer" in Future work).
 
 ## Defining a node
 
@@ -1556,7 +1563,9 @@ exceeding it raises in the reader thread, before anything is written, like any
 other death of a thread. Reaching it means that no epoch has closed in a long
 time, so it does not trip while something triggers rounds regularly; since a
 node does not start rounds on its own, a program in which nothing does
-reaches it (see "Periodic snapshots from a node's own timer" in Future work).
+reaches it. `debasher_snapshot_resident --every` triggers them from outside
+the program (see "`debasher_snapshot_resident`: rounds from outside the
+program").
 
 ## `CLOSE` and closed ports
 
@@ -1743,10 +1752,11 @@ one that resets a program, in "Tools for resident programs".
   still arrive.
 - This is a convenience, not the only way to trigger a round: a direct
   external `INTERACT` write into an initiator's own FIFO (e.g. via
-  Talk-to-FIFOs) remains independent of whether a `Supervisor` exists at all
-  or how it is configured, and so would a snapshot timer of the initiator's
-  own (not built, see "Periodic snapshots from a node's own timer" in Future
-  work).
+  Talk-to-FIFOs, or `debasher_snapshot_resident`, which writes into the
+  control ports of every node) remains independent of whether a `Supervisor`
+  exists at all or how it is configured, and so would a snapshot timer of the
+  initiator's own (not built, see "Periodic snapshots from a node's own timer"
+  in Future work).
 
 ## Manual trigger channel
 
@@ -2127,16 +2137,21 @@ entirely (the same reasoning as `on_node_down`'s own `DEVNULL` redirect, see
 
 A resident program does not end on its own: its nodes run until they are told
 to stop, and they keep their state across runs, in checkpoints, input logs and
-halted markers that the engine's general tools know nothing about. Two tools,
-installed in `bin` next to `debasher_exec` and `debasher_stop`, act on such a
-program as a whole, from outside it. `debasher_stop_resident` stops a running
-program gracefully: it halts it in one round, so that every node can later
-resume where it stopped, where `debasher_stop` would kill every process at
-once. `debasher_reset_resident` takes a stopped program back to its first run:
-it sets aside, or deletes, the state that its nodes keep, so that the next
+halted markers that the engine's general tools know nothing about. Three
+tools, installed in `bin` next to `debasher_exec` and `debasher_stop`, act on
+such a program as a whole, from outside it. `debasher_stop_resident` stops a
+running program gracefully: it halts it in one round, so that every node can
+later resume where it stopped, where `debasher_stop` would kill every process
+at once. `debasher_snapshot_resident` starts a snapshot in a running program,
+once or periodically, so that its nodes write checkpoints and prune their
+input logs whether the program has a `Supervisor` or not.
+`debasher_reset_resident` takes a stopped program back to its first run: it
+sets aside, or deletes, the state that its nodes keep, so that the next
 `debasher_exec` starts every node afresh. The `Supervisor` also uses the first
 one, to stop what remains of a program once it gives up on a node (see
-"Escalation on a permanent node failure").
+"Escalation on a permanent node failure"). The first two share what they need
+to find the nodes of a program and to write a trigger into their control
+ports (`engine/debasher_lib_resident_tools.sh`).
 
 ## `debasher_stop_resident`: the graceful stop tool
 
@@ -2214,6 +2229,50 @@ signal (see "Clean-completion detection").
   its own child (the Python interpreter, or a stopped `Supervisor`)
   actually exits. `SIGKILL`, used by `debasher_stop`'s hard kill, cannot be
   trapped and is unaffected by any of this.
+
+## `debasher_snapshot_resident`: rounds from outside the program
+
+`debasher_snapshot_resident -d <outdir> [--timeout <secs> | --every <secs>]`
+(`engine/debasher_snapshot_resident.sh`, installed in `bin`) starts a snapshot
+in a running resident program. A node never starts a round on its own, and the
+`Supervisor` starts a snapshot only when a trigger reaches its manual trigger
+channel, so without this tool, or someone else writing triggers, a program
+closes no epoch, prunes nothing and ends at the size cap of its input logs
+(see "Pruning and the size cap").
+
+- **One round.** It writes `start_snapshot` into the control ports of every
+  node, as `debasher_stop_resident` writes `shutdown`, numbered with the time
+  in milliseconds (see numbered trigger in the Glossary), so that every
+  initiator opens the same round. With a `Supervisor`, the control port of an
+  initiator is a trigger port, and the tool writes into it next to the
+  `Supervisor`: a line of a trigger is shorter than `PIPE_BUF`, so the two
+  never interleave. Without one, it is a fifo fed from outside. Every node of
+  a program that loads is reached from an initiator (see "Validation when the
+  program is loaded"), so the tool needs nothing else to reach every node.
+- **Waiting for the round to close.** It then waits, up to `--timeout`
+  seconds (60 by default), until every node has a checkpoint of that epoch or
+  of a newer one: a newer round replaces an open one, and its cut is as recent
+  a point to recover from. It prints the epoch and returns 0 once every node
+  has one. Otherwise it names the nodes that have none and returns 2
+  (`DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT`), not 1, which is kept for
+  usage and setup errors. A round does not close at a node that is down or
+  stopped, nor at one that has halted or has a halt open, which ignores a
+  snapshot. It does not start when a trigger cannot be written within 5
+  seconds (a control port fed from outside whose node is down has no reader).
+  And a node closes it without a checkpoint when its outbound backlog is over
+  its cap (see "Checkpoint persistence").
+- **Periodically.** With `--every <secs>`, it starts a round every that many
+  seconds, and each round has until the next one to close: one that has not
+  closed by then is reported with a warning, and the next trigger replaces
+  it. The period has to be longer than a round, or rounds keep replacing each
+  other (see "A round that a newer one replaces" in the Contract's limits).
+  `--timeout` does not apply, and giving both is an error.
+- **Only a running program, and it ends with it.** It refuses a program none
+  of whose nodes is running. With `--every`, it checks every second whether
+  some node still is, and returns 0 once none is, after
+  `debasher_stop_resident`, a `Supervisor`'s escalation or `debasher_stop`.
+  It is a process outside the program: nothing relaunches it, and a program
+  that is resumed needs it started again.
 
 ## `debasher_reset_resident`: a clean start
 
@@ -3079,6 +3138,15 @@ Design ideas from Future work move here once they are actually built.
   clean start"). The real-run tests of `test/engine/debasher_resume_ref.sh`
   check that it refuses while the program runs, and that the run after it
   finds no checkpoint.
+- **Snapshots from outside the program.** A tool,
+  `debasher_snapshot_resident`, starts a snapshot in a running program, with
+  or without a `Supervisor`, once or every given number of seconds, and waits
+  for it to close at every node (see "`debasher_snapshot_resident`: rounds
+  from outside the program"). The real-run tests of
+  `test/engine/test_snapshot_resident.py` start rounds in
+  `debasher_halt_ref.sh`, which has no `Supervisor`, and in
+  `debasher_chaos_ref.sh`, which has one, and check that a periodic run ends
+  with the program and that a round that cannot close is reported.
 - **Batch runs from a node.** A launcher node, of class `ProgramLauncher`,
   launches a general program, or a single process of a module, once for each
   request it receives, in a run directory of its own, with a queue on disk, a
@@ -3325,24 +3393,26 @@ Design ideas from Future work move here once they are actually built.
     it could release the FIFOs of that node's input channels at once.
 
   Not designed.
-- **Periodic snapshots from a node's own timer.** A node never starts a round
-  on its own, so a program in which nothing triggers `start_snapshot`
-  regularly closes no epoch, and its input logs grow until their size cap (see
-  "Pruning and the size cap"). The idea is an opt-in timer thread in
+- **Periodic snapshots from a node's own timer.** A node never starts a round on
+  its own: rounds come from the `Supervisor` or from outside the program, where
+  `debasher_snapshot_resident --every` starts them regularly (see
+  "`debasher_snapshot_resident`: rounds from outside the program"). That tool is
+  a process outside the program, which has to be started again whenever the
+  program is resumed. A timer in the node would make a program take its own
+  checkpoints with no actor outside it. The idea is an opt-in timer thread in
   `FBPProcess`, gated by a `SNAPSHOT_INTERVAL_SECS` class attribute or option
   (`None`, disabled, by default), that enters the same logic as a
-  `start_snapshot` trigger directly, as an in-process call and not as a
-  message. The module author would enable it only on a node that is a valid
-  initiator (see "Chandy-Lamport barrier propagation"), and it would work the
-  same with or without a `Supervisor`, which could still trigger rounds on
-  demand. Points to settle: the timer has to start its round through the same
-  hook as an item that arrives, so that the round has a `capture_pos` (see
-  "Arrival and positions"); its period has to be longer than a round, or
-  rounds keep replacing each other (see "A round that a newer one replaces" in
-  the Contract's limits); and the timers of several initiators would open
-  rounds of different epochs, which a node that both reach waits for
-  separately, so they need a common numbering, like that of a numbered trigger
-  (see the Glossary). Not built.
+  `start_snapshot` trigger directly, as an in-process call and not as a message.
+  The module author would enable it only on a node that is a valid initiator
+  (see "Chandy-Lamport barrier propagation"), and it would work the same with or
+  without a `Supervisor`, which could still trigger rounds on demand. Points to
+  settle: the timer has to start its round through the same hook as an item that
+  arrives, so that the round has a `capture_pos` (see "Arrival and positions");
+  its period has to be longer than a round, or rounds keep replacing each other
+  (see "A round that a newer one replaces" in the Contract's limits); and the
+  timers of several initiators would open rounds of different epochs, which a
+  node that both reach waits for separately, so they need a common numbering,
+  like that of a numbered trigger (see the Glossary). Not built.
 - **Progress in the heartbeat.** A node whose brain thread is alive but
   blocked is not detected (see "Stuck but alive" in the Contract's limits):
   the heartbeat says that its threads are alive, not that they make progress.
@@ -3429,7 +3499,8 @@ Design ideas from Future work move here once they are actually built.
     whose routing is deterministic;
   - the "Watch FIFO" action, whose `--mirror` a resident program refuses (see
     the Contract's limits);
-  - starting a snapshot or a halt, and stopping the program with
+  - starting a snapshot, once or periodically, with
+    `debasher_snapshot_resident`, and stopping the program with
     `debasher_stop_resident`;
   - showing the state of each node: heartbeats, relaunches, checkpoints and
     halted markers.

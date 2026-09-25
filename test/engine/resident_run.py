@@ -22,6 +22,7 @@ DEBASHER_EXEC = REPO_ROOT / "bin" / "debasher_exec"
 DEBASHER_STOP = REPO_ROOT / "bin" / "debasher_stop"
 DEBASHER_STOP_RESIDENT = REPO_ROOT / "bin" / "debasher_stop_resident"
 DEBASHER_RESET_RESIDENT = REPO_ROOT / "bin" / "debasher_reset_resident"
+DEBASHER_SNAPSHOT_RESIDENT = REPO_ROOT / "bin" / "debasher_snapshot_resident"
 
 real_run = pytest.mark.skipif(
     not os.environ.get("DEBASHER_RUN_CHAOS_TEST"),
