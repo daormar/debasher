@@ -221,7 +221,7 @@ snapshot_periodically()
     local next epoch status
     while debasher::_resident_tool_some_node_is_running "${absdirname}"; do
         next=$(( $(debasher::_resident_tool_now_secs) + every_secs ))
-        epoch=$(debasher::_resident_tool_now_ms)
+        epoch=$(debasher::_now_ms)
         snapshot_once "${absdirname}" "${epoch}" "${next}"
         status=$?
         case ${status} in
@@ -263,7 +263,7 @@ snapshot_resident_program()
     fi
 
     local epoch
-    epoch=$(debasher::_resident_tool_now_ms)
+    epoch=$(debasher::_now_ms)
     if snapshot_once "${absdirname}" "${epoch}" "${deadline}"; then
         echo "Round ${epoch} closed at every node of ${dirname}."
         return 0

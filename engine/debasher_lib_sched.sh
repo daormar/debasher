@@ -449,11 +449,9 @@ debasher::_get_elapsed_time_from_logfile()
     local start_date=$(debasher::_get_process_start_date "${log_filename}")
     local finish_date=$(debasher::_get_process_finish_date "${log_filename}")
 
-    if [ -n "${start_date}" ] && [ -n "${finish_date}" ]; then
-        local start_ms=$(date -d "${start_date}" +%s%3N)
-        local finish_ms=$(date -d "${finish_date}" +%s%3N)
-
-        local elapsed_ms=$((finish_ms - start_ms))
+    local elapsed_ms
+    if [ -n "${start_date}" ] && [ -n "${finish_date}" ] \
+        && elapsed_ms=$(debasher::_datetime_diff_ms "${start_date}" "${finish_date}"); then
         debasher::_format_elapsed_time "${elapsed_ms}"
     else
         echo "${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"

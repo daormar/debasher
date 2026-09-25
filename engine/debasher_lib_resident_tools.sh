@@ -32,16 +32,6 @@ debasher::_resident_tool_now_secs()
 }
 
 ########
-# The time in milliseconds: the number of the rounds these tools start, the
-# same numbering a Supervisor uses for the triggers it relays, which needs no
-# state kept between calls and stays above the epochs that initiators number
-# themselves.
-debasher::_resident_tool_now_ms()
-{
-    date +%s%3N
-}
-
-########
 # Waits until $1 (a file path) exists, or $2 (an epoch second) passes.
 debasher::_resident_tool_wait_for_file()
 {
@@ -296,10 +286,13 @@ debasher::_resident_tool_trigger_json()
 }
 
 ########
-# Writes the trigger $2 numbered with the epoch $3 into the control ports of
-# every node in DEBASHER_RESIDENT_TOOL_NODES (an initiator's own; most nodes
-# have none, and the round reaches them from elsewhere in the graph, see the
-# design doc's Glossary entry for "control ports file"). Waits (briefly,
+# Writes the trigger $2, numbered with the epoch $3, into the control ports
+# of every node in DEBASHER_RESIDENT_TOOL_NODES (an initiator's own; most
+# nodes have none, and the round reaches them from elsewhere in the graph,
+# see the design doc's Glossary entry for "control ports file"). The epoch is
+# the time in milliseconds (debasher::_now_ms), the numbering a Supervisor
+# uses for the triggers it relays: it needs no state kept between calls and
+# stays above the epochs that initiators number themselves. Waits (briefly,
 # against the deadline $4) for a node that has not written its control_ports
 # file yet, rather than giving up on it at once: a program can still be
 # starting up when this runs. A write that cannot be done within 5 seconds

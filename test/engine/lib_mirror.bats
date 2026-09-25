@@ -33,6 +33,8 @@ setup() {
     # Makefile suffix rule prepends -- absent here since this sources
     # the plain .sh source directly (see lib_programs.bats for why).
     SLEEP="$(command -v sleep)"
+    # now_ms below calls debasher::_now_ms, which shells out to "${PYTHON}".
+    PYTHON="$(command -v python3)"
 
     source "${ENGINE_BUILDDIR}/debasher_lib.sh"
 
@@ -233,7 +235,7 @@ wait_for_mirror_lines() {
 }
 
 now_ms() {
-    date +%s%3N
+    debasher::_now_ms
 }
 
 @test "debasher::_stop_fifo_mirror_taps stops a tap on its token at once, with no warning" {

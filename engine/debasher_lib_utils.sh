@@ -868,3 +868,39 @@ debasher::_get_deblib_vars_and_funcs_fname()
 
     echo "${dirname}/${DEBASHER_DEBLIB_VARS_AND_FUNCS_BASENAME}"
 }
+
+########
+# The time in milliseconds since the epoch. From Python, which the engine
+# already needs: `date +%s%3N` is a GNU extension (a BSD date prints "%3N"
+# as it is), and bash's EPOCHREALTIME needs bash 5, above the 4.3 that
+# configure asks for.
+debasher::_now_ms()
+{
+    "${PYTHON}" -c 'import time; print(time.time_ns() // 1000000)'
+}
+
+########
+# The local date and time to the millisecond, "YYYY-MM-DD HH:MM:SS.mmm": the
+# format of the lines that start and finish the log of a process. From
+# Python, for the same reason as debasher::_now_ms.
+debasher::_now_datetime_ms()
+{
+    "${PYTHON}" -c 'import datetime; print(datetime.datetime.now().isoformat(sep=" ", timespec="milliseconds"))'
+}
+
+########
+# The milliseconds from the local date and time $1 to $2, both in the format
+# of debasher::_now_datetime_ms. Returns 1, printing nothing, if either one is
+# not in that format. The dates are taken as local time, so a change to or
+# from daylight saving time between them is accounted for.
+debasher::_datetime_diff_ms()
+{
+    "${PYTHON}" -c '
+import datetime, sys
+try:
+    start, finish = (datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f") for s in sys.argv[1:3])
+except ValueError:
+    sys.exit(1)
+print(round((finish.timestamp() - start.timestamp()) * 1000))
+' "$1" "$2"
+}

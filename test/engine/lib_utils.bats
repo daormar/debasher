@@ -6,6 +6,9 @@
 
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
+    # The time helpers shell out to "${PYTHON}", normally supplied by the
+    # tool-path preamble of the scripts that source this library.
+    PYTHON="$(command -v python3)"
     source "${ENGINE_BUILDDIR}/debasher_lib_utils"
 }
 
@@ -43,4 +46,44 @@ setup() {
 @test "debasher::_is_absolute_path rejects a relative path" {
     run debasher::_is_absolute_path "foo/bar"
     [ "$status" -eq 1 ]
+}
+
+# --- time with milliseconds ---------------------------------------------
+
+@test "debasher::_now_ms is an integer between two readings of the clock" {
+    local before after now
+    before=$("${PYTHON}" -c 'import time; print(time.time_ns() // 1000000)')
+    now=$(debasher::_now_ms)
+    after=$("${PYTHON}" -c 'import time; print(time.time_ns() // 1000000)')
+    [[ "${now}" =~ ^[0-9]+$ ]]
+    [ "${before}" -le "${now}" ]
+    [ "${now}" -le "${after}" ]
+}
+
+@test "debasher::_now_datetime_ms is a local date and time to the millisecond" {
+    run debasher::_now_datetime_ms
+    [ "$status" -eq 0 ]
+    [[ "${output}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}$ ]]
+}
+
+@test "debasher::_datetime_diff_ms gives the milliseconds between two dates" {
+    run debasher::_datetime_diff_ms "2026-01-31 23:59:58.750" "2026-02-01 00:00:01.005"
+    [ "$status" -eq 0 ]
+    [ "${output}" = "2255" ]
+}
+
+@test "debasher::_datetime_diff_ms reads what debasher::_now_datetime_ms writes" {
+    local start finish
+    start=$(debasher::_now_datetime_ms)
+    finish=$(debasher::_now_datetime_ms)
+    run debasher::_datetime_diff_ms "${start}" "${finish}"
+    [ "$status" -eq 0 ]
+    [[ "${output}" =~ ^[0-9]+$ ]]
+}
+
+@test "debasher::_datetime_diff_ms rejects a date in another format" {
+    # What a BSD date wrote for "%3N" in the logs of an earlier version
+    run debasher::_datetime_diff_ms "2026-01-31 23:59:58.3N" "2026-02-01 00:00:01.005"
+    [ "$status" -eq 1 ]
+    [ -z "${output}" ]
 }

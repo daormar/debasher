@@ -292,11 +292,11 @@ mutation check, durability level) is defined in the Contract, where it is used.
   `Supervisor` stops on one too (see the "Clean-completion
   detection" subsection).
 - **`debasher_stop_resident`**: the tool that actually sends the stop signal
-  in a real program, the graceful counterpart to `debasher_stop` (section
-  4's own subsection of the same name has the full sequence). Waits for
-  every node's halted marker, then signals each; stops a `Supervisor`, if
-  the program has one, before touching any node it watches; falls back to
-  `debasher_stop`'s hard kill past its own `--timeout`.
+  in a real program, the graceful counterpart to `debasher_stop` (see
+  "`debasher_stop_resident`: the graceful stop tool" for the full sequence).
+  Waits for every node's halted marker, then signals each; stops a
+  `Supervisor`, if the program has one, before touching any node it watches;
+  falls back to `debasher_stop`'s hard kill past its own `--timeout`.
 - **`debasher_snapshot_resident`**: the tool that starts a snapshot in a
   running program from outside it, with or without a `Supervisor`, once or
   every given number of seconds (see "`debasher_snapshot_resident`: rounds

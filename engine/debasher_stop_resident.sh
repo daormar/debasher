@@ -308,7 +308,7 @@ stop_resident_program()
     capture_halted_marker_baselines "${absdirname}"
 
     if stop_supervisor_if_any "${absdirname}" "${deadline}" \
-        && debasher::_resident_tool_trigger_every_node "${absdirname}" shutdown "$(debasher::_resident_tool_now_ms)" "${deadline}" \
+        && debasher::_resident_tool_trigger_every_node "${absdirname}" shutdown "$(debasher::_now_ms)" "${deadline}" \
         && wait_for_every_halted_marker "${absdirname}" "${deadline}" \
         && stop_every_node_and_wait_for_finished "${absdirname}" "${deadline}"
     then
