@@ -785,12 +785,27 @@ does not measure coverage.
 
 # Control envelope
 
-Wire format: JSON Lines (one JSON object per line, `\n` as delimiter). Always
-serializing via `json.dumps` guarantees that a `\n` embedded in the `payload`
-comes out escaped, so the line delimiter is safe with any payload.
+Every message on a channel of a resident program is an envelope: one line
+holding a small JSON object that says what kind of message it is (`type`) and
+carries its content (`payload`). Wrapping everything in the same envelope lets
+the business data and the traffic that the design itself needs (the markers of
+a round, the commands to a node, the end of a writer, the resync after a crash)
+share the same line-based transport and still be told apart, and lets the
+reader thread of a port route each line by its type alone, without knowing
+anything about what the business logic sends. This section defines the format
+of the envelope ("Wire format"), what each field of each type means ("Fields of
+each type"), and which types travel on which channels ("Channel topology"). The
+mechanisms that produce and consume each type are described in their own
+sections, cited along the way.
 
-Five envelope types, each its own line/message (none nests inside another, so
-the reader thread can dispatch by looking only at `type`, without
+## Wire format
+
+The format is JSON Lines: one JSON object per line, with `\n` as delimiter.
+Always serializing via `json.dumps` guarantees that a `\n` embedded in the
+`payload` comes out escaped, so the line delimiter is safe with any payload.
+
+There are five envelope types, each its own line/message (none nests inside
+another, so the reader thread can dispatch by looking only at `type`, without
 interpreting `payload`):
 
 ```json
@@ -801,17 +816,19 @@ interpreting `payload`):
 {"type": "HELLO", "payload": {}}
 ```
 
+## Fields of each type
+
 - `DATA.seq`: the sender's per-channel sequence number (G5 in the Contract,
   see "Input log"), absent when the sender does not number what it sends.
 - `DATA.payload`: free-form, whatever the business logic wants;
   `process_data(port_name, packet)` (see "Base class `FBPProcess`") receives
   it already deserialized. The reader thread never looks at it.
 - `BARRIER.payload.epoch`: identifies the snapshot round; enough for the
-  initiator (the Chandy-Lamport subsection) to recognize, in a cycle,
-  that the marker coming back through its own input port is its own (no need to
-  carry the initiator's identity).
+  initiator (see "Chandy-Lamport barrier propagation") to recognize, in a
+  cycle, that the marker coming back through its own input port is its own (no
+  need to carry the initiator's identity).
 - `BARRIER.payload.halt`: reuses the same `BARRIER` as an ordered shutdown
-  (the Ordered shutdown subsection) instead of a snapshot.
+  (see "Ordered shutdown") instead of a snapshot.
 - `INTERACT.payload.command`/`args`: an open catalog, extended as needed by
   whichever sections trigger it (`start_snapshot`, `shutdown`, `heartbeat`,
   `checkpoint_saved`, ...). `start_snapshot` and `shutdown` take an optional
@@ -831,8 +848,16 @@ interpreting `payload`):
   construction (it is dedicated to that FIFO); it gets attached once the
   message enters the in-memory internal queue, not in the wire format.
 
-**Channel topology** (important: `DATA`/`BARRIER`/`CLOSE`/`HELLO` and
-`INTERACT` do NOT share a channel):
+## Channel topology
+
+Which types a channel carries depends on its kind (see "Channel kinds declared
+with the fifo"). `HELLO` and `CLOSE` belong to the transport, not to any kind
+of channel: every writer thread of the engine sends `HELLO` when it starts and
+`CLOSE` when it finishes for good, whatever its channel (a writer from outside
+the program may leave both out). The other three types split by kind: `DATA`
+and `BARRIER` travel only on business channels and on channels to an external
+port, `INTERACT` only on the heartbeat channels and on the channels of
+commands, so the two never share a channel:
 
 - Between business processes (`FBPProcess`), the normal FBP graph channels
   carry `DATA`/`CLOSE`/`HELLO` in normal operation, and `BARRIER` interleaved
@@ -843,12 +868,32 @@ interpreting `payload`):
   carries `INTERACT`: a single input port per node (not two), multiplexing
   `{"command": "heartbeat"}` and
   `{"command": "checkpoint_saved", "args": {"epoch": ..., "path": ...}}`
-  (the Checkpoint persistence subsection) on the same channel; there is
-  no real contention between the two (lightweight, infrequent messages), and
-  separate ports would only double the supervisor's manual wiring for no
-  benefit.
+  (see "Checkpoint persistence") on the same channel; there is no real
+  contention between the two (lightweight, infrequent messages), and separate
+  ports would only double the supervisor's manual wiring for no benefit.
+- From the supervisor to each initiator, a trigger port: a channel of commands
+  that the supervisor owns and defines with the tag `--control`, so that the
+  initiator reads it as a control port. It carries only `INTERACT`
+  (`start_snapshot`, `shutdown`, see "Trigger port(s)"), never a marker, so
+  the round it opens never waits on it. A `CLOSE` on it, sent when the
+  supervisor stops, does not close it: a supervisor relaunched by hand writes
+  its triggers there again.
+- From outside the program, the other channels of commands: the manual trigger
+  port of the supervisor, also tagged `--control`, whose `INTERACT` the
+  supervisor relays to every trigger port (see "Manual trigger channel"), and
+  any control port of a node that an actor outside the program writes into
+  directly (finding it through the node's control ports file). They carry only
+  `INTERACT`.
+- From outside the program into an external port of a node: `DATA`, like a
+  business channel, but no marker of its own, so a round never waits for it. A
+  source that knows the protocol may still write the marker of the round the
+  initiator opened, which is then read like on any other port. A `CLOSE` on it
+  closes it for good, since its writer is not expected to come back (see
+  external port in the Glossary).
 - The supervisor never sees a `BARRIER`: it does not take part in the barrier
-  protocol (the Chandy-Lamport subsection), it only speaks `INTERACT`.
+  protocol (see "Chandy-Lamport barrier propagation"), it only speaks
+  `INTERACT`. A `DATA` or `BARRIER` that reaches one of its channels anyway is
+  ignored with a warning.
 
 # Base class `FBPProcess`
 
