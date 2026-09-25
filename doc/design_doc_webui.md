@@ -98,9 +98,16 @@ in the design of resident programs.
   JSON in `.debasher/program.json` under the home directory.
 - **generated script** (script generado): the module that script generation
   writes as `<name>.sh` in the home directory.
-- **reserved name**: *to be written* (`is_reserved_name()`).
-- **user file**: *to be written* (a file of the home directory that is not a
-  reserved name).
+- **reserved name** (nombre reservado): a file or directory name that the
+  engine or the web UI manages, by a rule rather than a list
+  (`is_reserved_name()`): a name that starts with a dot, a name wrapped in
+  double underscores (`__exec__`, `__fifos__`, ...), and `command_line.sh`.
+- **user file** (fichero del usuario): a file or directory of the home
+  directory whose path has no reserved name, which the user manages through
+  the program files panel.
+- **run log** (log de la ejecución): `.debasher_webui_run.log` in the output
+  directory, where the web UI sends everything that `debasher_exec` prints
+  during a run it launched.
 
 ## Translation
 
@@ -135,8 +142,15 @@ in the design of resident programs.
 - **process status** (estado de un proceso): the state of each process as
   `debasher_status` reports it for the output directory, whoever launched the
   run; it colors the canvas.
-- **FIFO mirror**: *to be written* (the copy of a FIFO's traffic that "Watch
-  FIFO" shows).
+- **run in progress** (ejecución en curso): the state of an output directory
+  in which `debasher_status` reports at least one process as `IN-PROGRESS`,
+  whoever launched the run.
+- **FIFO mirror** (espejo de una FIFO): the log in which the engine copies every
+  line that a process writes into a FIFO defined with `--mirror`, which can be
+  read without taking the data from the FIFO's reader.
+- **unconnected FIFO** (FIFO sin conectar): a FIFO option with no edge and
+  whose label does not name a fanout family, whose other end is left to
+  someone outside the program, such as a person using "Talk to FIFOs".
 
 # Architecture
 
@@ -596,19 +610,195 @@ No test checks either round trip as a whole today (see "Future work").
 
 # Persistence and the program's directories
 
-*To be written.* The home directory and the output directory, what the UI
-writes in each, the program metadata, the generated script, the boundary
-between reserved names and user files that the program files panel respects,
-and the guards that keep a save or a reset of the output directory from
-destroying work (for example, no save while a run is in progress).
+A program uses two directories with different owners. The home directory
+belongs to the program and to the user: the web UI writes the program there,
+and the user keeps there the files the program needs. The output directory
+belongs to the engine: a run writes its results and the engine's own files
+there, and the web UI mostly reads it. The two are kept apart: the save dialog
+and the backend refuse to save into the output directory, and the editor of
+the output directory refuses the home directory. Otherwise a run would mix the
+engine's files with the program, and resetting the output directory would
+delete the program.
+
+## The home directory
+
+The home directory holds the program metadata (`.debasher/program.json`, the
+whole program model as JSON), the generated script (`<name>.sh`) and the user
+files.
+
+**Saving.** The user saves into a directory of their choice, which becomes the
+program's home directory. The backend writes the program metadata, then the
+generated script, and then copies the file of each `ext_alias` given as a
+relative path from the program's `sourceDir` into the home directory, at the
+same relative path: the engine resolves such a path against the directory of
+the module that declares it, so without the copy a program imported and saved
+elsewhere would lose its aliased scripts. When the program has been renamed
+since the last save, the backend first deletes the script with the old name,
+which it reads from the program metadata before overwriting it.
+
+A save is refused while there is a run in progress on the output directory.
+The engine reads the generated script again each time it starts a process, so
+overwriting it during a run would leave the processes already started on one
+version and the rest on another, with nothing to show it. The frontend checks
+this before sending the save; the backend does not.
+
+Running also saves. "Run program", "Run program (debug)" and "Check program
+options" all save the program metadata and the generated script into the home
+directory before calling `debasher_exec` (see "Launching a run"), so that the
+engine always runs the program as it is in the editor. Only "Run program"
+first checks that there is no run in progress; the other two are not blocked
+during a run, and so bypass the guard of the save.
+
+**Loading.** Loading reads the program metadata of a directory and opens the
+program exactly as it was saved, including `homeDir` and `outputDir`, which
+are absolute paths. A home directory that was copied or moved and is loaded
+from its new place therefore still names the old one, and the next save or run
+writes into the old place.
+
+## Reserved names and user files
+
+Inside the home directory, `is_reserved_name()` in `persistence.py` is the one
+source of truth about what belongs to the engine or to the web UI: the program
+metadata, the engine's files (`.conda`, `.sched_opts`, `__exec__`,
+`__fifos__`, `command_line.sh`, ...) if the engine ever writes there, and any
+file the engine adds later under the same conventions. It is a rule rather than
+a list so that it needs no change when the engine grows.
+
+The program files panel (`routers/program_files.py`) shows and manages the
+user files: it lists the tree, shows a text file (up to a fixed number of
+lines, and not a binary one), edits an existing file, creates a directory,
+deletes, renames or moves an entry, and uploads files of any type, which is
+also how the script of an `ext_alias` reaches a program that was not imported.
+It keeps three guarantees:
+
+- It never shows, enters or writes a reserved name, at any depth.
+- Every path is resolved inside the home directory, following symbolic links,
+  and a path that would leave it is refused. The panel never descends into a
+  directory that is a symbolic link.
+- The generated script is shown, read-only: the panel never edits, deletes,
+  moves or overwrites it, since the next save would regenerate it anyway.
+
+## The output directory
+
+The engine owns the output directory: `__exec__/` with each process's files
+(`.stdout`, `.sched_out`, `.opts`, ...), `__fifos__/` with the FIFOs, and its
+own state files. The web UI adds only the run log. It reads the rest (see
+"Execution and observation") and changes it in only one way: "Reset output
+directory" deletes everything inside it, keeping the directory itself. The
+reset does nothing, rather than fail, when the output directory is blank
+(which would otherwise resolve to the server's current directory), does not
+exist, is the root of the file system or the user's home, or is the program's
+home directory. It removes a symbolic link as itself and never follows it. The
+frontend refuses to reset while there is a run in progress, and to change the
+output directory while there is one: the status, the stop and the inspection
+actions all name the output directory, so changing it would leave the run out
+of reach of the web UI.
 
 # Execution and observation
 
-*To be written.* How the backend launches a run and returns at once, how the
-frontend learns how it went (the run phase and the process statuses, both by
-polling), and the tools behind each inspection action: a process's output and
-scheduler output, its resolved options, the FIFO mirror, writing into and
-reading from a FIFO ("Talk to FIFOs"), and stopping a run or one process.
+The web UI runs a program, follows it and inspects it only through the
+engine's tools and files on the output directory. It keeps no record of its
+own: whatever it shows, it asks the engine again (see "The backend keeps no
+state").
+
+## Launching a run
+
+"Run program" needs a home directory and an output directory. The frontend
+asks for the state of the output directory, and the backend (`/run`) checks it
+again: with a run in progress it answers with a conflict and does nothing.
+Otherwise it saves the program (see "The home directory") and builds the
+command:
+
+- `debasher_exec --pfile <generated script> --outdir <output directory>
+  --sched <scheduler>`;
+- the flags of `executionOptions` that are set (`--builtinsched-cpus`,
+  `--builtinsched-mem`, `--dflt-nodes`, `--dflt-throttle`,
+  `--rerun-outdated-procs`, `--conda-support`, `--docker-support`);
+- `--wait`, so that `debasher_exec` lives as long as the run;
+- the program options, each label followed by its value, except a flag, which
+  is given alone when its value is not empty and left out otherwise.
+
+The command runs with `DEBASHER_MOD_DIR` taken from the program's `envVars`,
+detached, with its output in the run log, and the backend answers at once.
+Nothing in the web UI shows the run log; it is there for diagnosis by hand.
+
+"Run program (debug)" runs `debasher_exec --debug`, which does everything but
+launch the processes, and "Check program options" runs it with
+`--check-proc-opts`. Both run to the end within the request, and the frontend
+shows what they print.
+
+## Following a run
+
+The frontend follows a run with two polls, both built on `debasher_status` on
+the output directory and both every five seconds. Polling is deliberate: the
+backend has nothing that could push a change, and the engine records state in
+files.
+
+**The run phase** follows only a run that this tab launched. It goes from
+`running` to `finished` when `debasher_status` reports every process finished,
+and to `unfinished` when it reports neither finished nor in progress twice in
+a row: a single reading of that kind also happens in the short gap between one
+process ending and the next starting. The output of `debasher_status` from the
+last reading is kept, to show why the run did not finish. The run phase
+belongs to the tab: closing or reloading the tab, leaving the editor, or
+dismissing the indicator of a running run stops it with `debasher_stop` (see
+"Where the state lives").
+
+**The process statuses** are read whenever the program has an output
+directory, whoever launched the run. The backend parses the per-process lines
+of `debasher_status` (`PROCESS: <name> ; STATUS: <status>`) and the canvas
+colors each canvas node by its process's status: `FINISHED`, `IN-PROGRESS`,
+`UNFINISHED`, `UNFINISHED_BUT_RUNNABLE` or `TO-DO`, and no color when there is
+nothing to report. A run in progress is defined from these statuses, not from
+the run phase, so the guards that depend on it (saving, resetting and changing
+the output directory) also hold for a run launched from another tab or from
+the command line.
+
+## Inspecting a process
+
+The context menu of a canvas node inspects what its process left in the
+output directory:
+
+- "Show stdout" and "Show scheduler output" run `debasher_get_stdout` and
+  `debasher_get_sched_out`.
+- "Show options" shows the process's `.opts` file, the options it was given,
+  one per line.
+- "Show inputs and outputs" parses that same file into the resolved value of
+  each option, which for a FIFO, a shared directory or a value descriptor is
+  the path the engine chose, not the model's `value`. Each value can be opened
+  as a path: the content of a file, or the listing of a directory, anywhere the
+  server's user can read.
+
+A process that ran as several tasks has one set of files per task. The backend
+lists the task indices from the names of the files in the process's directory
+under `__exec__`, which stays cheap for thousands of tasks, and the user picks
+one. Every output is cut at a fixed number of lines (10,000), with a warning.
+
+Some of these actions read the engine's files directly instead of through a
+tool: the `.opts` files, the task indices and, below, the FIFOs. They follow the
+names that the engine gives to its files in the output directory, and would
+have to change with them.
+
+## FIFOs
+
+**Watch FIFO** shows what a process writes into a FIFO defined with
+`--mirror`. It reads the FIFO mirror with `debasher_get_fifo_mirror` every two
+seconds, and so never takes anything from the FIFO's real reader.
+
+**Talk to FIFOs** lets a person act as the other end of the unconnected FIFOs
+of a running program: write a line into an input, or read a line from an
+output. It is only offered while this tab's run is running, and only for
+unconnected FIFOs, since reading a FIFO that another process also reads would
+steal its data. The backend finds the FIFO by the engine's convention,
+`__fifos__/<process>/<fifo name>`, and bounds each attempt to eight seconds,
+because opening a FIFO blocks until the other end is open: a write that times
+out means that no process is reading; a read that times out only means that
+nothing has been written yet, and the frontend tries again.
+
+## Stopping
+
+"Stop program" runs `debasher_stop` on the output directory, and "Stop
+process", in the context menu of a canvas node, runs it for that one process.
 
 # Frontend state and the canvas
 
@@ -677,6 +867,15 @@ and that a tab stops the run it launched when it closes.
 - **Refused programs and the saved script.** Generating the script before
   writing the program metadata, so that a program that script generation
   refuses leaves the home directory as it was.
+- **Guards in the backend.** Refusing in the backend, and not only in the
+  frontend, a save, a reset of the output directory or a change of it while
+  there is a run in progress, and blocking "Run program (debug)" and "Check
+  program options" during a run, which today save the generated script
+  without that check.
+- **A moved home directory.** Taking the home directory from the place the
+  program is loaded from rather than from the program metadata, and deciding
+  what a moved program should do with an output directory that still points
+  to the old place.
 - **What import loses.** Adding `define_infile_opt` to the grammar of import,
   so that a process with an input file given as a literal keeps its mode; and
   giving `_define_opt_deps` and `_program_type` a place in the model, the
