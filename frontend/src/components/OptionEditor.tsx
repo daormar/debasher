@@ -234,15 +234,20 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
     const savedFromProcessSpec = !isFlag && fromProcessSpec;
 
+    // A command-line option takes its value from the command line only,
+    // never through a channel (script_generation.py refuses the
+    // combination), whatever the disabled channel selector still holds.
+    const savedCommandLine = commandLine && !savedFromProcessSpec;
+
     updateOption(processId, option.id, {
       label,
       direction: getOptionDirection(label),
       dataType,
-      channel: isFlag ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel,
-      mirror: !isFlag && isFifo && direction === "output" && !connectedSourceLabel && mirror,
+      channel: isFlag || savedCommandLine ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel,
+      mirror: !isFlag && !savedCommandLine && isFifo && direction === "output" && !connectedSourceLabel && mirror,
       description,
       value: isFlag || isValueDescriptor ? "" : value,
-      commandLine: commandLine && !savedFromProcessSpec,
+      commandLine: savedCommandLine,
       fromProcessSpec: savedFromProcessSpec,
       mandatory: commandLine && !savedFromProcessSpec && mandatory && !isFlag,
       countSourceOptionId: isFanout ? (countSourceOptionId || undefined) : undefined,

@@ -89,8 +89,9 @@ in the design of resident programs.
 - **shared directory** (directorio compartido): a directory declared at module
   level, which every process that names it resolves to the same absolute path.
 - **command line option** (opción de línea de comandos): an option whose value
-  the user gives when the program is run (`ProgramOption.commandLine`), rather
-  than a value fixed in the program.
+  the user gives when the program is run (`ProgramOption.commandLine`), and
+  which takes it from nowhere else: the engine refuses a process that defines
+  it with a value of its own.
 - **program options** (opciones del programa): the values given to the command
   line options for the next run (`Program.programOptions`), keyed by label.
 - **edge, connection** (arista, conexión): a link from an output option of one
@@ -317,7 +318,9 @@ generated script has to write, not what the process will receive at run time:
 A few combinations make no sense, and the model keeps them out. A flag is
 always an input. `mirror` only applies to a `fifo` output. `value_desc` only
 applies to an output: the consumer of a value descriptor just connects to it.
-`fromProcessSpec` and `commandLine` exclude each other. A fanout family only
+`fromProcessSpec` and `commandLine` exclude each other, and a command line
+option has option channel `none`, since its value comes only from the command
+line. A fanout family only
 exists on a `standard` process, and names in `countSourceOptionId` a command
 line option of the same process that gives the count. The editor offers only
 the valid combinations, and script generation checks again those whose
@@ -461,12 +464,12 @@ rule that applies:
    named portably.
 9. Anything else: `define_opt` with the literal value.
 
-The order carries meaning. The option channel comes before the command line
-flag, so an option can be documented as a command line option in
-`_identify_cmdline_opts` and still take its value from a FIFO. A fanout family
-becomes a loop instead of one line: it reads the count from its command line
-option and defines one option per index, `define_opt` or `define_fifo_opt` on
-the writing side, `define_opt_from_proc_task_out` on the reading side.
+A command line option always gets its definition from rule 6, or from rule 1
+for a flag, since one with an option channel other than `none` is refused (see
+"What script generation refuses"). A fanout family becomes a loop instead of
+one line: it reads the count from its command line option and defines one
+option per index, `define_opt` or `define_fifo_opt` on the writing side,
+`define_opt_from_proc_task_out` on the reading side.
 
 In `standard` and `generator` mode each definition is written once, in
 `_define_opts` or in `_generate_opts`. In `array` mode the generated
@@ -475,15 +478,21 @@ option inside `for idx in "${!array[@]}"`, one task per iteration, even an
 option whose value does not depend on `idx`. In `manual` mode the user's
 function is written as it is, and the rules above do not apply.
 
-## Values are Bash words
+## Values are Bash words, descriptions are text
 
-Descriptions and option values are written between double quotes as they are,
-without escaping. This is deliberate: a value is a Bash word, evaluated when
-the options are defined, so it can use the variables that script generation
+Option values are written between double quotes as they are, without
+escaping. This is deliberate: a value is a Bash word, evaluated when the
+options are defined, so it can use the variables that script generation
 provides (`${array[$idx]}` in `array` mode, `$i` in a fanout family) and those
 of the preamble. It also means that a double quote, a backslash or a `$` meant
 literally has to be escaped by the user, and script generation does not check
 that the result is valid Bash.
+
+Descriptions (of the program, of each process and of each option) are text,
+never expressions, and script generation escapes the characters that keep a
+special meaning between double quotes (`\`, `"`, `$` and the backquote). A
+description therefore reaches the module documentation exactly as it was
+written, and a backquote in it is never run as a command.
 
 ## Code that a loaded module already provides
 
@@ -501,7 +510,8 @@ builds its function from the aliased one.
 
 Script generation raises an error, and writes no module, for a program that
 would produce a wrong one: an option both `fromProcessSpec` and a command line
-option; a fanout family that is a flag, a command line option or taken from
+option; a command line option with an option channel other than `none`; a
+fanout family that is a flag, a command line option or taken from
 the process specifications, whose count option is missing or is not a command
 line option, whose output is connected, mirrored or uses an option channel
 other than `none` or `fifo`, or whose input is not connected to a process in
@@ -560,7 +570,10 @@ comments. Import replaces each one by its verbatim source, read from the module
 with `debasher_get_verbatim_func_source`, and keeps the canonical form of a
 function whose verbatim source it cannot find. The code of a process may bundle
 several functions (the engine includes the helpers of the same file that the
-process calls), and each is replaced on its own.
+process calls), and each is replaced on its own. A body that the model keeps
+apart from its function (`arrayCode`, `generatorSizeCode` and the additional
+methods) loses the indentation that all its lines share, since script
+generation indents it again when it writes the function back.
 
 ## Recovering the options handler
 
@@ -607,7 +620,8 @@ With the processes read, import assembles the program:
   import adds an edge from each writer of a directory to each of its readers.
   `availableSharedDirs` is filled with every reachable shared directory.
 - **Preamble.** The module documentation has no notion of a preamble, so
-  import takes the text of the module before its first function definition.
+  import takes the text of the module before its first function definition,
+  leaving out the header line of a generated script.
 - **Specifications.** They come from the module documentation. The engine
   attributes that the model does not hold (`nodes`, `account`, `partition`,
   `throttle`) are dropped.
@@ -629,10 +643,8 @@ script generation writes: the flat definitions of `standard` mode, the fixed
 loop of `array` mode, the pair of functions of `generator` mode, and the
 functions of `manual` mode, which come back as they went. The processes, their
 options with their values, option channels and flags, the connections, the
-modes, the code, the additional methods and the specifications survive, with
-one exception: the grammar does not include `define_infile_opt`, so a process
-with an input file given as a literal comes back in `manual` mode, which
-behaves the same but leaves its option values out of the model. The order of
+modes, the code, the additional methods, the specifications and the
+descriptions survive. The order of
 the processes, and of the options of a process, follows the module
 documentation and may differ from the original. What lives only in the program
 metadata does not survive: the ids, which are new; the positions, which are
@@ -652,7 +664,14 @@ which the module documentation shows and import does not keep; the program
 type of `_program_type`; any code of the module after its first function that
 belongs to no process; and the specifications the model does not hold.
 
-No test checks either round trip as a whole today (see "Future work").
+`test/api/test_round_trip.py` checks both directions. From the model to a
+module and back, it builds programs that cover every options handler mode,
+option channel and kind of connection, generates and imports them, and
+compares the result with the program, leaving out what lives only in the
+program metadata. From a module to the model and back, it imports every
+module of `data/programs/`, generates it and imports it again, and requires
+the same model both times: import is a fixed point of the round trip, so
+nothing is lost, added or changed by going through it once more.
 
 # Persistence and the program's directories
 
@@ -926,6 +945,10 @@ try to do. Where a guarantee has a known gap, "Future work" lists it.
   only connections that the engine can resolve (see "Connections").
 - **No wrong module.** Script generation refuses a program whose module would
   be wrong, rather than writing it (see "What script generation refuses").
+- **Import is a fixed point.** Importing a generated module gives back the
+  model it was generated from, apart from what lives only in the program
+  metadata, and generating and importing an imported module changes nothing;
+  both are tested (see "What the round trip preserves").
 - **No lost code.** Leaving out the code that a loaded module already provides
   can only remove a duplicate; when the check cannot be made, the code is
   written (see "Code that a loaded module already provides").
@@ -1039,9 +1062,9 @@ and that a tab stops the run it launched when it closes.
 
 *To be completed.*
 
-- **Round trip tests.** A test that generates a module from each example
-  program, imports it and compares the result with the program, and one that
-  imports each module of `data/programs/`, generates it again and runs both.
+- **Round trip at run time.** Running each module of `data/programs/` and the
+  module generated from it, and comparing what they do, beyond the comparison
+  of models that `test/api/test_round_trip.py` makes.
 - **Refused programs and the saved script.** Generating the script before
   writing the program metadata, so that a program that script generation
   refuses leaves the home directory as it was.
@@ -1057,8 +1080,6 @@ and that a tab stops the run it launched when it closes.
   program is loaded from rather than from the program metadata, and deciding
   what a moved program should do with an output directory that still points
   to the old place.
-- **What import loses.** Adding `define_infile_opt` to the grammar of import,
-  so that a process with an input file given as a literal keeps its mode; and
-  giving `_define_opt_deps` and `_program_type` a place in the model, the
-  second being needed by resident programs (see "Declaring a resident
-  program").
+- **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
+  in the model; the second is needed by resident programs (see "Declaring a
+  resident program").

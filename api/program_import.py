@@ -35,6 +35,7 @@ from .models import (
     ProgramProcess,
 )
 from .option_handler_import import ConnectionRef, SharedDirRef, resolve_options_handler
+from .script_generation import SCRIPT_HEADER
 
 # Default layout for imported processes: debasher_doc_mod's output
 # carries no position information, so processes are laid out in layers
@@ -193,11 +194,22 @@ def _extract_preamble(script_path: Path) -> str:
     function definition" (see script_generation.py's _add_preamble),
     everything in the script itself up to (not including) its first
     top-level function definition is that same thing, read back out.
+
+    A script that script_generation.py wrote starts with its
+    SCRIPT_HEADER line, which is not part of the preamble: it is left
+    out, with the blank lines after it, so that importing a generated
+    script and generating it again does not add one more header to the
+    preamble every time.
     """
     try:
         lines = script_path.read_text().splitlines()
     except OSError:
         return ""
+
+    if lines and lines[0] == SCRIPT_HEADER:
+        lines = lines[1:]
+        while lines and not lines[0].strip():
+            lines = lines[1:]
 
     for index, line in enumerate(lines):
         if _FUNCTION_DEF_RE.match(line):
@@ -552,8 +564,8 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
             # fifo isn't direction-restricted — a process can legitimately
             # open an *input* on a fifo it rendezvous on by name rather
             # than a plain connection (see debasher_cycle_trigger_
-            # interactive.sh's worker, whose "-threshold" is a genuine
-            # mandatory cmdline int internally sourced from a fifo).
+            # interactive.sh's worker, whose "-threshold" is an input
+            # fifo that something outside the program writes).
             if option.direction == "output" and option.label in result.value_descriptor_labels:
                 option.channel = "value_desc"
             if option.label in result.fifo_labels:

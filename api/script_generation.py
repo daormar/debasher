@@ -90,6 +90,27 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
     return ";".join(parts)
 
 
+# Characters that keep a special meaning inside a double-quoted Bash
+# string: escaping them makes the string stand for exactly its text.
+_DOUBLE_QUOTED_SPECIAL_CHARS = ("\\", '"', "$", "`")
+
+
+def _double_quoted_text(text: str) -> str:
+    """
+    Escapes `text` for use inside a double-quoted Bash string, so that it
+    is taken as plain text, never expanded or run.
+
+    Used for descriptions, which are text: a description written as it is
+    would be expanded (a "$" or a pair of backquotes in it would change
+    it, or run a command, when the module is loaded), and one with a
+    double quote would break the module. Option values are not escaped:
+    they are Bash words on purpose (see _option_definition_line).
+    """
+    for char in _DOUBLE_QUOTED_SPECIAL_CHARS:
+        text = text.replace(char, "\\" + char)
+    return text
+
+
 def _add_preamble(preamble):
     if preamble:
         return [preamble]
@@ -100,7 +121,7 @@ def _add_preamble(preamble):
 def _add_document_module_func(name, description):
     lines = [f"{name}{MODULE_DOCUMENT_SUFFIX}()", "{"]
     if description:
-        lines.append(f'{INDENT}debasher::document_module "{description}"')
+        lines.append(f'{INDENT}debasher::document_module "{_double_quoted_text(description)}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
@@ -121,7 +142,7 @@ def _add_shared_dirs_func(name, shared_dirs):
 def _add_document_proc_func(process):
     lines = [f"{process.name}{PROCESS_METHOD_DOCUMENT_SUFFIX}()", "{"]
     if process.description:
-        lines.append(f'{INDENT}debasher::document_process "{process.description}"')
+        lines.append(f'{INDENT}debasher::document_process "{_double_quoted_text(process.description)}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
@@ -133,13 +154,13 @@ def _add_explain_opts_func(process):
     if process.options:
         for option in process.options:
             if option.dataType == "None":
-                lines.append(f'{INDENT}debasher::explain_flag "{option.label}" "{option.description}"')
+                lines.append(f'{INDENT}debasher::explain_flag "{option.label}" "{_double_quoted_text(option.description)}"')
             else:
                 # By convention throughout data/programs, e.g. "<int>",
                 # "<string>", purely the value's type; how it's
                 # delivered (option.channel) isn't encoded here, see
                 # markdown_parsing.py's _OPTION_TYPE_RE.
-                lines.append(f'{INDENT}debasher::explain_opt "{option.label}" "<{option.dataType}>" "{option.description}"')
+                lines.append(f'{INDENT}debasher::explain_opt "{option.label}" "<{option.dataType}>" "{_double_quoted_text(option.description)}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
@@ -397,12 +418,15 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     independently choosing the task-indexed variant based on its own
     source's mode. Every other case still returns exactly one line.
     """
-    # channel is checked ahead of commandLine: an option can be both a
-    # mandatory command-line option (for _identify_cmdline_opts/
-    # documentation purposes) and, in _define_opts, actually sourced
-    # from a fifo/value descriptor instead, see
-    # debasher_cycle_trigger_interactive.sh's worker, whose "-threshold"
-    # is exactly that.
+    # A command-line option takes its value from the command line and
+    # nowhere else: the engine refuses one that a process defines any
+    # other way (see debasher::_check_opt_names_vs_explain), so it can't
+    # also be delivered through an option channel.
+    if option.commandLine and option.channel != "none":
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" can\'t be both '
+            f'command-line and delivered through channel "{option.channel}".'
+        )
     if option.dataType == "None":
         if option.commandLine:
             return [f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
