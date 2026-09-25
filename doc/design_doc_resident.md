@@ -821,7 +821,7 @@ interpreting `payload`):
 - `DATA.seq`: the sender's per-channel sequence number (G5 in the Contract,
   see "Input log"), absent when the sender does not number what it sends.
 - `DATA.payload`: free-form, whatever the business logic wants;
-  `process_data(port_name, packet)` (see "Base class `FBPProcess`") receives
+  `process_data(port_name, packet)` (see "`FBPProcess` class") receives
   it already deserialized. The reader thread never looks at it.
 - `BARRIER.payload.epoch`: identifies the snapshot round; enough for the
   initiator (see "Chandy-Lamport barrier propagation") to recognize, in a
@@ -843,10 +843,10 @@ interpreting `payload`):
   writer, together with a leading blank line (see "resync line" in the
   Glossary; the transport decision of "Recovery from a node failure").
   Consumed by the reader thread.
-- No `port_name` field on any type: each reader thread (see "Base class
-  `FBPProcess`") already knows which port a message came from by
-  construction (it is dedicated to that FIFO); it gets attached once the
-  message enters the in-memory internal queue, not in the wire format.
+- No `port_name` field on any type: each reader thread (see "`FBPProcess`
+  class") already knows which port a message came from by construction (it is
+  dedicated to that FIFO); it gets attached once the message enters the
+  in-memory internal queue, not in the wire format.
 
 ## Channel topology
 
@@ -895,7 +895,46 @@ commands, so the two never share a channel:
   `INTERACT`. A `DATA` or `BARRIER` that reaches one of its channels anyway is
   ignored with a warning.
 
-# Base class `FBPProcess`
+# `FBPProcess` class
+
+`FBPProcess` is the class from which every business node of a resident program
+derives: a long-running process with a state of its own, which exchanges
+envelopes with its peers over FIFOs, takes part in the rounds that capture a
+consistent snapshot, keeps a log of what it receives and, after a crash,
+returns to where it was from its latest checkpoint and that log. A module
+defines a node by writing a subclass of it that redefines a few hooks (see
+"Defining a node"). The runtime library ships two such subclasses of its own,
+`DirectoryWatcher` (see "Observing the outside world") and `ProgramLauncher`
+(see "`ProgramLauncher`: batch runs from a node").
+
+`FBPProcess` derives in turn from `_PortWorker`
+(`engine/debasher_runtime_transport.py`), which it shares with the
+`Supervisor` (see "`Supervisor` class"). `_PortWorker` holds what any process
+of a resident program needs to talk over its FIFOs, whatever its role:
+
+- parsing `argv` into `self.opts`, taking the ports from the engine and
+  checking them;
+- the logger, `self.log`, and the computational specifications that set class
+  attributes of the process (see "Limits of a node");
+- opening the FIFOs, one reader thread per input port feeding the shared
+  inbound queue, one writer thread per output port with its own outbound queue
+  (both of them handling `HELLO` and `CLOSE`, see "Channel topology"), and the
+  brain thread, whose loop each subclass supplies;
+- `start_threads()` and `stop_threads()`, which start and stop all of them.
+
+It knows nothing of rounds, checkpoints or the input log. `FBPProcess` adds all
+of that on top: the heartbeat thread, the barrier logic, the dispatch of
+`INTERACT` commands, the input log (a reader thread hands what it reads to
+`FBPProcess`, which records it in the log before queuing it for the brain
+thread), the checkpoints, and the startup sequence of `run()`, which restores
+the node and replays its log.
+
+The rest of this section starts with an overview of the class, then covers how
+a node is defined, its limits and how it observes the outside world, and ends
+with the pieces that make a node recoverable: state capture, startup, barrier
+propagation, ordered shutdown and checkpoint persistence.
+
+## Overview of the class
 
 - **Where the code lives**: `engine/debasher_runtime_lib.py` is the module that
   a resident process's heredoc imports
@@ -929,9 +968,9 @@ commands, so the two never share a channel:
   `EXTERNAL_PORTS` and `SUPERVISOR_PORT` (a single name) beside them. A node
   run by the engine takes all five from it, and its class must not declare
   any (see "Ports from the engine"); a node built without the engine, as the
-  unit tests build them, declares them as class attributes. `FBPProcess`
-  parses `argv` generically when it is built, into a `self.opts` name -> value
-  dict (the engine's existing `-optname value` CLI convention, untouched);
+  unit tests build them, declares them as class attributes. `_PortWorker`
+  parses `argv` generically when the node is built, into a `self.opts` name ->
+  value dict (the engine's existing `-optname value` CLI convention, untouched);
   `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those entries are FIFO paths
   to open reader/writer threads on. Any other option (e.g. a plain
   `-threshold` value, or one from the command line of the program) stays
@@ -962,7 +1001,7 @@ commands, so the two never share a channel:
   (this method is only ever called for `DATA`; `BARRIER`/`INTERACT` dispatch is
   handled generically and never reaches it); `capture_node_state()`,
   `restore_node_state(state)` (logical state only), `initialize_runtime()`
-  (rebuilding external resources, see the Startup sequence subsection below).
+  (rebuilding external resources, see "Startup sequence: `run()`").
 - **Generic barrier logic** (valid for 1 or N input ports): on receiving the
   first `BARRIER` marker for an epoch (on any input port, or as the initiator),
   capture state and forward the marker on every output port; track the set of
@@ -985,17 +1024,18 @@ commands, so the two never share a channel:
   ignored, it never aborts the process (the command catalog, "Control
   envelope", is deliberately open-ended).
 - **Logging**: `FBPProcess` exposes a preconfigured `self.log` (Python's stdlib
-  `logging`), same pattern as the existing `dispatch` process in
-  `data/programs/dynamic_fanout_dispatcher.py` (stderr output, format including
-  thread name, useful here since the process is inherently multi-threaded). The
-  base class itself logs its own lifecycle events (thread start/stop, barrier
-  epoch open/close, checkpoint saved, heartbeat) with it, the natural successor
-  to the `echo` statements `data/programs/debasher_cycle*.sh` use today for
-  visibility. Level is configurable via a plain `-log-level` option, declared by
-  the module author in `_explain_opts`/`_define_opts` exactly like any other
-  option (same convention `debasher_dynamic_fanout_fifos.sh` already uses): no
-  new engine mechanism, it is just another entry in `self.opts`; a sensible
-  default applies if the module does not declare it.
+  `logging`), which `_PortWorker` sets up, same pattern as the existing
+  `dispatch` process in `data/programs/dynamic_fanout_dispatcher.py` (stderr
+  output, format including thread name, useful here since the process is
+  inherently multi-threaded). The framework itself logs its own lifecycle
+  events (thread start/stop, barrier epoch open/close, checkpoint saved,
+  heartbeat) with it, the natural successor to the `echo` statements
+  `data/programs/debasher_cycle*.sh` use today for visibility. Level is
+  configurable via a plain `-log-level` option, declared by the module author
+  in `_explain_opts`/`_define_opts` exactly like any other option (same
+  convention `debasher_dynamic_fanout_fifos.sh` already uses): no new engine
+  mechanism, it is just another entry in `self.opts`; a sensible default
+  applies if the module does not declare it.
 - **Periodic self-triggered snapshots (opt-in)**: nothing otherwise ever closes
   an epoch on its own; without this, the input log's safety cap (see "Input
   log") becomes the normal failure mode instead of an actual safety net for any
@@ -1006,7 +1046,7 @@ commands, so the two never share a channel:
   `start_snapshot` uses directly, bypassing the `INTERACT` channel entirely
   since it is an in-process trigger, not a message. The module author enables it
   only on whichever node it has already established is a valid initiator (see
-  the Chandy-Lamport subsection below). Works identically whether or not a
+  "Chandy-Lamport barrier propagation"). Works identically whether or not a
   `Supervisor` is present; a `Supervisor`, if present, can still trigger
   `start_snapshot` on demand independently; the two are not mutually exclusive.
 
@@ -1459,7 +1499,7 @@ class requires, is refused with an error.
 
 ## Recovery: startup and replay
 
-A relaunched node's startup (`run()`, see "Base class `FBPProcess`") opens
+A relaunched node's startup (`run()`, see "`FBPProcess` class") opens
 its FIFOs, restores
 the latest checkpoint if there is one, calls `restore_node_state()` and
 `initialize_runtime()`, opens the input log and replays it, then starts its
@@ -1504,7 +1544,7 @@ a safety net, not the normal way old history goes away, which is
 pruning: exceeding it raises in the reader thread, before anything is
 written, like any other death of a thread, and should never trip in ordinary
 operation, since it would mean that no epoch has closed in a long time, which
-the periodic snapshots described in "Base class `FBPProcess`" are there to
+the periodic snapshots described in "`FBPProcess` class" are there to
 prevent.
 
 ## `CLOSE` and closed ports
@@ -1519,7 +1559,7 @@ reasons: a reader that ended would leave the heartbeat unhealthy for good
 once its producer finished, and a node whose peer sent `CLOSE`, ended its
 reader, and was later relaunched would fill that peer's pipe with nobody
 reading, since the old reader is gone. Dropping instead of ending
-solves both. A control port (see "Base class `FBPProcess`") is the
+solves both. A control port (see "`FBPProcess` class") is the
 exception: its reader goes on
 delivering what follows a `CLOSE`, and the `CLOSE` is neither recorded nor
 restored, since its writer, such as the `Supervisor`, may come back.
@@ -1608,9 +1648,9 @@ process, no fifo-open/close races, nothing to force on via `--mirror`.
 
 # `Supervisor` class
 
-(Reuses `FBPProcess`'s thread-per-port pattern via a shared base, see "Base
-class `FBPProcess`", but does not take part in the barrier as a business
-node.)
+(Derives, like `FBPProcess`, from `_PortWorker`, which gives it the same
+thread-per-port plumbing (see "`FBPProcess` class"), but does not take part in
+the barrier as a business node.)
 
 ## Port declaration and node identity
 
@@ -1642,12 +1682,11 @@ node.)
 
 ## Class relationship: shared `_PortWorker` base
 
-- **`FBPProcess` and `Supervisor` both inherit from a new `_PortWorker` base
-  class**, factored out of `FBPProcess`'s existing thread topology (see "Base
-  class `FBPProcess`"): generic `start_threads()`/ `stop_threads()`, the
-  shared inbound queue, one outbound queue per output port. None of the
-  barrier/checkpoint/input-log logic moves into it, that stays in `FBPProcess`
-  itself; `Supervisor` gets the same mechanical thread-per-port plumbing without
+- **`FBPProcess` and `Supervisor` both derive from `_PortWorker`** (see
+  "`FBPProcess` class"): generic `start_threads()`/`stop_threads()`, the shared
+  inbound queue, one outbound queue per output port. None of the
+  barrier/checkpoint/input-log logic is in it, that is in `FBPProcess` alone;
+  `Supervisor` gets the same mechanical thread-per-port plumbing without
   inheriting anything about barriers, since it is not a barrier participant.
 
 ## Trigger port(s): initiator(s) for snapshot/shutdown
@@ -1672,8 +1711,8 @@ node.)
   closing the channel for good, so that the triggers of one relaunched by hand
   still arrive.
 - This is a convenience, not the only way to trigger a round: `FBPProcess`'s own
-  opt-in periodic self-triggered snapshot (`SNAPSHOT_INTERVAL_SECS`, see "Base
-  class `FBPProcess`") and a direct external `INTERACT` write into an
+  opt-in periodic self-triggered snapshot (`SNAPSHOT_INTERVAL_SECS`, see
+  "`FBPProcess` class") and a direct external `INTERACT` write into an
   initiator's own FIFO (e.g. via
   Talk-to-FIFOs) both remain independent of whether a `Supervisor` exists at all
   or how it is configured.
@@ -2357,7 +2396,7 @@ that design.
 
 An earlier claim, that the kernel resolves the reconnection with a blocked
 neighbor with no additional mechanism, only held for restarting the whole
-program: the smoke tests of "Base class `FBPProcess`" and "Input log"
+program: the smoke tests of "`FBPProcess` class" and "Input log"
 relaunched with a new `debasher_exec` against the same outdir, which
 recreates every FIFO. For one
 node crashing while its neighbors keep running, an `FBPProcess` reader (a
