@@ -108,8 +108,19 @@ in the design of resident programs.
   into a runnable module (`script_generation.py`).
 - **import** (importación): rebuilding the program model from an existing
   module (`program_import.py` and the modules it relies on).
-- **round trip**: *to be written* (import followed by generation, or the
-  reverse).
+- **module documentation** (documentación del módulo): the Markdown that
+  `debasher_doc_mod` prints about a module after loading it: its name,
+  description and shared directories, and for each process its options, its
+  option definition functions, its code, its methods and its specifications.
+- **canonical form** (forma canónica): how Bash prints a function back with
+  `declare -f`, without its comments and with its own indentation. Two
+  functions with the same canonical form behave the same.
+- **verbatim source** (fuente literal): a function exactly as it is written in
+  its file, comments and indentation included, as
+  `debasher_get_verbatim_func_source` reads it.
+- **round trip** (ida y vuelta): script generation followed by import, or
+  import followed by script generation (see "What the round trip
+  preserves").
 
 ## Execution and observation
 
@@ -338,21 +349,250 @@ its processes are then generated one by one, like any other.
 
 # From the model to a module: script generation
 
-*To be written.* How `script_generation.py` emits a runnable module from a
-program: the order of the generated functions, how each part of the model maps
-to engine calls, and what it refuses to generate.
+Script generation (`generate_script()` in `script_generation.py`) turns a
+program into the text of a DeBasher module. The backend runs it on every save
+and before every run, and writes the result as the generated script. It
+depends on nothing but the program model, except for one check that queries
+the engine (see "Code that a loaded module already provides"). The generated
+script starts with the line `# AUTOMATICALLY GENERATED DEBASHER SCRIPT`: the
+next save overwrites any change made to it by hand, and the way to bring such a
+change into the program is to import the script.
+
+## Layout of the generated module
+
+The generated module holds, in this order:
+
+1. The header line, then the preamble, as it is.
+2. `<name>_document`, with the program's description, and
+   `<name>_shared_dirs`, with one `define_shared_dir` per shared directory.
+3. For each process, in the order of the model: `_document`, `_explain_opts`
+   (one `explain_opt` per option, or `explain_flag` for a flag),
+   `_identify_cmdline_opts` (one `opt_is_cmdline` or
+   `opt_is_non_mandatory_cmdline` per command line option), the option
+   definition functions of its options handler mode (see "Option
+   definitions"), its code, and one function for each additional method that
+   has a body. Code in Bash is written as it is; code in another language
+   becomes a heredoc variable `<process>_<suffix>` (`_py`, `_r`, `_perl`,
+   `_groovy`), which the engine wraps in a function.
+4. `<name>_program`, with one `add_debasher_process` per process, carrying its
+   computational specifications (`cpus=... mem=... time=...`) and its
+   additional specifications (`force=yes;processdeps=...;alias=...`), or one
+   `add_debasher_program` for each group that is still whole.
+
+A function with nothing to say gets the body `:`, since the engine expects it
+to exist. What the model holds about runs or about the canvas stays out of the
+module: `envVars`, `executionOptions` and `programOptions` go to the engine's
+tools when they run (see "Execution and observation"), and positions, ids and
+the two directories only matter to the web UI.
+
+## Option definitions
+
+In `standard`, `array` and `generator` mode, script generation writes one
+definition for each option (one per edge for a fan-in), taken from the first
+rule that applies:
+
+1. A flag: `define_flag`, or `define_cmdline_flag_if_given` if it is a
+   command line option.
+2. Option channel `value_desc`: `define_value_desc_opt`.
+3. Option channel `fifo`: `define_fifo_opt` with the FIFO's name, and
+   `--mirror` if `mirror` is set.
+4. Option channel `shared_dir`: `define_opt_from_shared_dir` with the
+   directory's name, whatever its edges.
+5. `fromProcessSpec`: `define_procspec_opt` with the attribute's name.
+6. A command line option: `define_cmdline_opt`, or `define_cmdline_infile_opt`
+   for a file, with the suffix `_if_given` when it is not mandatory.
+7. A connected option: `define_opt_from_proc_out` for each of its edges, or
+   `define_opt_from_proc_task_out` with the task index when both ends run in
+   `array` or `generator` mode.
+8. An input file: `define_infile_opt`, which resolves a relative path against
+   the module's own directory, so that a file shipped with the program can be
+   named portably.
+9. Anything else: `define_opt` with the literal value.
+
+The order carries meaning. The option channel comes before the command line
+flag, so an option can be documented as a command line option in
+`_identify_cmdline_opts` and still take its value from a FIFO. A fanout family
+becomes a loop instead of one line: it reads the count from its command line
+option and defines one option per index, `define_opt` or `define_fifo_opt` on
+the writing side, `define_opt_from_proc_task_out` on the reading side.
+
+In `standard` and `generator` mode each definition is written once, in
+`_define_opts` or in `_generate_opts`. In `array` mode the generated
+`_define_opts` runs the user's code that builds `array`, then defines every
+option inside `for idx in "${!array[@]}"`, one task per iteration, even an
+option whose value does not depend on `idx`. In `manual` mode the user's
+function is written as it is, and the rules above do not apply.
+
+## Values are Bash words
+
+Descriptions and option values are written between double quotes as they are,
+without escaping. This is deliberate: a value is a Bash word, evaluated when
+the options are defined, so it can use the variables that script generation
+provides (`${array[$idx]}` in `array` mode, `$i` in a fanout family) and those
+of the preamble. It also means that a double quote, a backslash or a `$` meant
+literally has to be escaped by the user, and script generation does not check
+that the result is valid Bash.
+
+## Code that a loaded module already provides
+
+A process imported from a module can carry code that one of the modules its
+preamble loads already defines. Before writing the code of each process,
+script generation asks `debasher_get_proc_info` for the canonical form of the
+process's code as the preamble alone defines it, and for the canonical form of
+the process's own code. If both exist and are equal, the generated module
+leaves the code out and relies on the loaded module. If either query fails, it
+writes the code: the check can only save a duplicate, never lose code. A
+process with an `alias` or an `ext_alias` gets no code at all, since the engine
+builds its function from the aliased one.
+
+## What script generation refuses
+
+Script generation raises an error, and writes no module, for a program that
+would produce a wrong one: an option both `fromProcessSpec` and a command line
+option; a fanout family that is a flag, a command line option or taken from
+the process specifications, whose count option is missing or is not a command
+line option, whose output is connected, mirrored or uses an option channel
+other than `none` or `fifo`, or whose input is not connected to a process in
+`array` or `generator` mode; and a connection to a fanout family from a
+process in another mode. The save writes the program metadata before it
+generates the script, so a program that script generation refuses is still
+saved, and the home directory keeps the script of the previous save.
+
+## Environment variables of a program
+
+The environment variables editor shows, besides the program's own `envVars`,
+every variable that the module and the modules it loads define. Script
+generation serves this too: the backend generates the module into a temporary
+directory, gives each process that has no code yet a function that does
+nothing (the engine refuses to load a module with a process without code), runs
+`debasher_doc_mod --show-all-envvars` on it and discards it. That module never
+reaches the home directory, and it skips the check of "Code that a loaded
+module already provides", which would be wasted on it.
 
 # From a module to the model: import
 
-*To be written.* How `program_import.py` rebuilds a program from an existing
-module, through the documentation the engine extracts from it
-(`debasher_doc_mod`, `debasher_get_proc_info`) and the parsing of the option
-definition functions.
+Import (`import_program_from_script()` in `program_import.py`) rebuilds a
+program from an existing module. It does not interpret the module itself: it
+asks the engine, which loads the module and describes it, and reads the answer.
+Only the option definition functions and the preamble are read as text. The
+imported program is not saved: it opens in the editor, and the user saves it
+into a home directory.
+
+## What the engine reports
+
+Import runs `debasher_doc_mod` on the module with every section of the module
+documentation turned on, and reads from it the program's name, description and
+shared directories, and for each process its description, its explained
+options (label, data type, description, command line and mandatory flags), its
+option definition functions, its code and its language, its additional
+methods and its specifications.
+
+`debasher_doc_mod` learns the processes by loading the module and running its
+`_program` function, which has two consequences. The module has to load: the
+`DEBASHER_MOD_DIR` given in the import dialog is passed to the engine, and kept
+in the program's `envVars` so that it goes on working. And a module that
+composes others with `add_debasher_program` comes back flattened: the
+processes of the modules it composes become ordinary processes of the imported
+program, and are not a group.
+
+The functions in the module documentation are in canonical form, without
+comments. Import replaces each one by its verbatim source, read from the module
+with `debasher_get_verbatim_func_source`, and keeps the canonical form of a
+function whose verbatim source it cannot find. The code of a process may bundle
+several functions (the engine includes the helpers of the same file that the
+process calls), and each is replaced on its own.
+
+## Recovering the options handler
+
+The option definition functions are the one part of a module that import
+parses (`option_handler_import.py`). It matches them against a closed grammar:
+the calls that define an option (`define_opt`, `define_fifo_opt`,
+`define_opt_from_proc_out`, `define_cmdline_opt`, and the rest of that family)
+with literal arguments, between the fixed lines that open and close the
+function. From the shape of the functions it decides the mode:
+
+- `_generate_opts_size` exists: `generator` mode. Its body, without its fixed
+  opening lines, becomes `generatorSizeCode` as it is, and `_generate_opts` is
+  parsed with the grammar.
+- `_define_opts` is a flat sequence of those calls, with fanout family loops
+  allowed among them: `standard` mode.
+- `_define_opts` has exactly the shape that script generation writes for
+  `array` mode: `array` mode, with the code that builds the array as
+  `arrayCode`.
+- Anything else: `manual` mode, with the functions kept as their verbatim
+  source.
+
+What the grammar recognizes gives the values, the option channels, the flags
+`mirror` and `fromProcessSpec`, and the connections. A function kept in
+`manual` mode is still scanned for connections anywhere in its text, so that
+the canvas can draw them; script generation writes that function as it is, so
+a connection that the scan misses or invents costs a wrong line on the canvas,
+never a wrong module.
+
+## Building the program
+
+With the processes read, import assembles the program:
+
+- **Options.** Each explained option becomes an option, its direction taken
+  from its label. An option that a connection names but that no `explain_opt`
+  declares, common in `array` mode, gets a minimal option of type `string` so
+  that the edge has somewhere to attach.
+- **Connections.** Each recovered connection becomes an edge, and a connection
+  to a process outside the program is dropped. A connection by task index whose
+  source does not run in `array` or `generator` mode cannot be written again as
+  it was, so its target falls back to `manual` mode.
+- **Shared directories.** An option whose value names a shared directory,
+  literally or through a variable that the engine resolves, becomes a
+  `shared_dir` option when that directory is one the program can reach, and
+  import adds an edge from each writer of a directory to each of its readers.
+  `availableSharedDirs` is filled with every reachable shared directory.
+- **Preamble.** The module documentation has no notion of a preamble, so
+  import takes the text of the module before its first function definition.
+- **Specifications.** They come from the module documentation. The engine
+  attributes that the model does not hold (`nodes`, `account`, `partition`,
+  `throttle`) are dropped.
+- **Layout.** The module says nothing about positions, so import places the
+  processes in layers by the depth of their connections, left to right in
+  the order of the module documentation. The number of passes is bounded, so a
+  cycle ends with some layering rather than none.
+- **The rest.** `sourceDir` is the module's directory, the home and output
+  directories are left empty, the scheduler is `BUILTIN` and there are no
+  program options.
 
 ## What the round trip preserves
 
-*To be written.* What is guaranteed to survive importing a module and
-generating it again, and what is normalized or lost on the way.
+The two translations are designed so that each can read what the other
+writes.
+
+**From the model to a module and back.** Import recognizes the shapes that
+script generation writes: the flat definitions of `standard` mode, the fixed
+loop of `array` mode, the pair of functions of `generator` mode, and the
+functions of `manual` mode, which come back as they went. The processes, their
+options with their values, option channels and flags, the connections, the
+modes, the code, the additional methods and the specifications survive, with
+one exception: the grammar does not include `define_infile_opt`, so a process
+with an input file given as a literal comes back in `manual` mode, which
+behaves the same but leaves its option values out of the model. The order of
+the processes, and of the options of a process, follows the module
+documentation and may differ from the original. What lives only in the program
+metadata does not survive: the ids, which are new; the positions, which are
+laid out again; the groups, which come back flattened; the environment
+variables, except the `DEBASHER_MOD_DIR` given to import; the execution
+options and program options; and the home and output directories. A `manual`
+function that happens to fit the grammar of `standard` mode comes back in
+`standard` mode, which defines the same options.
+
+**From a module to the model and back.** A module that import recognizes comes
+back with the same behavior, but written the way script generation writes it:
+the option definition functions of a recognized mode lose their comments and
+their layout, while the functions kept in `manual` mode, the code and the
+methods keep their verbatim source. Some things a module can say have no place
+in the model and are lost: the explicit dependency types of `_define_opt_deps`,
+which the module documentation shows and import does not keep; the program
+type of `_program_type`; any code of the module after its first function that
+belongs to no process; and the specifications the model does not hold.
+
+No test checks either round trip as a whole today (see "Future work").
 
 # Persistence and the program's directories
 
@@ -429,4 +669,16 @@ and that a tab stops the run it launched when it closes.
 
 # Future work
 
-*To be written.*
+*To be completed.*
+
+- **Round trip tests.** A test that generates a module from each example
+  program, imports it and compares the result with the program, and one that
+  imports each module of `data/programs/`, generates it again and runs both.
+- **Refused programs and the saved script.** Generating the script before
+  writing the program metadata, so that a program that script generation
+  refuses leaves the home directory as it was.
+- **What import loses.** Adding `define_infile_opt` to the grammar of import,
+  so that a process with an input file given as a literal keeps its mode; and
+  giving `_define_opt_deps` and `_program_type` a place in the model, the
+  second being needed by resident programs (see "Declaring a resident
+  program").
