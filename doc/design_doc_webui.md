@@ -114,10 +114,10 @@ in the design of resident programs.
 - **preamble** (preámbulo): Bash code that the generated module carries
   verbatim before its own functions, typically the `load_debasher_module` lines
   of the modules it builds on.
-- **group** (grupo): the processes that "Add program" brings in from another
-  module in one operation, which the generated module declares with a single
-  `add_debasher_program` while none of them has been edited or removed (see
-  "Groups").
+- **group** (grupo): the processes that "Add program" brings in, in one
+  operation, from another program saved with the web UI, which the generated
+  module declares with a single `add_debasher_program` while none of them has
+  been edited or removed (see "Groups").
 
 ## Files and directories
 
@@ -146,8 +146,9 @@ in the design of resident programs.
 
 - **script generation** (generación del script): turning the program model
   into a runnable module (`script_generation.py`).
-- **import** (importación): rebuilding the program model from an existing
-  module (`program_import.py` and the modules it relies on).
+- **import** (importación): rebuilding the program model from a module that
+  has no program metadata, such as one written by hand (`program_import.py`
+  and the modules it relies on).
 - **module documentation** (documentación del módulo): the Markdown that
   `debasher_doc_mod` prints about a module after loading it: its name,
   description and shared directories, and for each process its options, its
@@ -383,16 +384,20 @@ process, and a `standard` process has only one.
 
 ## Groups
 
-"Add program" brings every process of another module into the program in one
-operation, and marks each of them with the same `groupSource`: the module's
-name, a `groupId` shared by all of them and the `groupSize`. While all the
-processes of a group are still present and none has been edited, script
-generation declares them with a single `add_debasher_program` of that module,
-and the module stays the one place where they are defined. The engine cannot
-express a module minus one process, or with one process changed, so editing the
-content of any process of the group, removing one, or connecting an input of
-one to something new first asks the user, and then dissolves the whole group:
-its processes are then generated one by one, like any other.
+"Add program" brings every process of another program saved with the web UI
+into the current one, in one operation. It reads that program's metadata from
+its home directory, like loading does, not its module, and marks each of its
+processes with the same `groupSource`: the other program's name, a `groupId`
+shared by all of them, the `groupSize`, and the other program's home
+directory, which it also adds to `DEBASHER_MOD_DIR` so that the engine finds
+its generated script. While all the processes of a group are still present and
+none has been edited, script generation declares them with a single
+`add_debasher_program` of the other program's module, and that module stays
+the one place where they are defined. The engine cannot express a module minus
+one process, or with one process changed, so editing the content of any
+process of the group, removing one, or connecting an input of one to something
+new first asks the user, and then dissolves the whole group: its processes are
+then generated one by one, like any other.
 
 # From the model to a module: script generation
 
@@ -524,6 +529,14 @@ asks the engine, which loads the module and describes it, and reads the answer.
 Only the option definition functions and the preamble are read as text. The
 imported program is not saved: it opens in the editor, and the user saves it
 into a home directory.
+
+Import is how a module that the web UI did not produce enters it: a module
+written by hand, without the web UI, or a generated script that was changed
+by hand after the web UI wrote it. A program built and saved with the web UI
+is never imported: loading it, or adding it to another program with "Add
+program", reads its program metadata, which holds the whole program model,
+while import can only rebuild what the module says (see "What the round trip
+preserves").
 
 ## What the engine reports
 
