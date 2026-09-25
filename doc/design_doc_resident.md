@@ -57,7 +57,7 @@ it comes the design of the mechanism that provides them, in the sections that
 follow, cited in the text by name ("Input log", "Recovery from a node
 failure", and so on).
 
-# Glossary (Glosario)
+# Glossary
 
 The precise meaning of the words this document uses, in the order in which they
 build on each other; the Spanish equivalent is in parentheses. In Spanish
