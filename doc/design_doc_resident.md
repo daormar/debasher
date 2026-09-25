@@ -1677,8 +1677,9 @@ holds ("Holding the business channels"). It then follows a node through its
 failures: how it is found down or finished ("Failure detection",
 "Clean-completion detection"), relaunched ("Relaunching a downed node") and
 finally given up on ("Escalation on a permanent node failure", "Failing loudly
-instead of retrying"). It ends with the two tools that act on a whole resident
-program from outside, one to stop it gracefully and one to reset it.
+instead of retrying"). The tool that stops a resident program gracefully,
+which the `Supervisor` calls when it gives up on a node, is described with the
+one that resets a program, in "Tools for resident programs".
 
 ## Port declaration and node identity
 
@@ -2110,6 +2111,21 @@ every other `Supervisor` log line already is, rather than only the tool's
 own stderr line, which that redirect would otherwise have thrown away
 entirely (the same reasoning as `on_node_down`'s own `DEVNULL` redirect, see
 "Relaunching a downed node").
+
+# Tools for resident programs
+
+A resident program does not end on its own: its nodes run until they are told
+to stop, and they keep their state across runs, in checkpoints, input logs and
+halted markers that the engine's general tools know nothing about. Two tools,
+installed in `bin` next to `debasher_exec` and `debasher_stop`, act on such a
+program as a whole, from outside it. `debasher_stop_resident` stops a running
+program gracefully: it halts it in one round, so that every node can later
+resume where it stopped, where `debasher_stop` would kill every process at
+once. `debasher_reset_resident` takes a stopped program back to its first run:
+it sets aside, or deletes, the state that its nodes keep, so that the next
+`debasher_exec` starts every node afresh. The `Supervisor` also uses the first
+one, to stop what remains of a program once it gives up on a node (see
+"Escalation on a permanent node failure").
 
 ## `debasher_stop_resident`: the graceful stop tool
 
