@@ -110,6 +110,32 @@ debasher::_add_sched_to_serialized_cmdline()
 }
 
 ########
+# Sets to the given value every occurrence of an option in a command line
+# serialized by debasher::_serialize_args, and echoes the result.
+#
+# $1 - Serialized command line.
+# $2 - Option name.
+# $3 - Option value.
+debasher::_set_opt_value_in_serialized_cmdline()
+{
+    local serialized_cmdline=$1
+    local opt=$2
+    local value=$3
+
+    debasher::_deserialize_args "${serialized_cmdline}"
+    local args=( "${DEBASHER_DESERIALIZED_ARGS[@]}" )
+
+    local i
+    for (( i = 0; i + 1 < ${#args[@]}; i++ )); do
+        if [ "${args[i]}" = "${opt}" ]; then
+            args[i+1]="${value}"
+        fi
+    done
+
+    debasher::_serialize_args "${args[@]}"
+}
+
+########
 debasher::_get_abspfile_from_command_line_file()
 {
     # Initialize variables
@@ -1336,8 +1362,16 @@ debasher::add_debasher_program()
 {
     # Initialize variables
     local modname=$1
-    debasher::_determine_full_module_name "${modname}"
-    local pfile="${DEBASHER_RESOLVED_MODNAME}"
+
+    # The module must have been loaded already: take the file it was
+    # loaded from, since searching for the name again from the current
+    # directory, which is not the one it was loaded from, could find a
+    # different file
+    local pfile
+    if ! pfile=$(debasher::_get_loaded_module_fname "${modname}"); then
+        debasher::_determine_full_module_name "${modname}"
+        pfile="${DEBASHER_RESOLVED_MODNAME}"
+    fi
 
     # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution

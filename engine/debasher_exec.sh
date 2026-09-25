@@ -66,7 +66,9 @@ usage()
     echo "                          [--wait] [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with program processes to be executed (see"
-    echo "                          manual for additional information)"
+    echo "                          manual for additional information); a relative path"
+    echo "                          is looked for in the current directory and then in"
+    echo "                          the directories of DEBASHER_MOD_DIR"
     echo "--outdir <string>         Output directory"
     echo "--sched <string>          Scheduler used to execute the program (if not given,"
     echo "                          it is determined using information gathered during"
@@ -225,13 +227,9 @@ check_pars()
         echo "Error! --pfile parameter not given!" >&2
         exit 1
     else
-        if [ ! -f "${pfile}" ]; then
-            echo "Error! file ${pfile} does not exist" >&2
-            exit 1
-        else
-            # Absolutize file path
-            pfile=$(debasher::_get_absolute_path "${pfile}")
-        fi
+        # Resolve the program file to an absolute path (it may be found
+        # through DEBASHER_MOD_DIR)
+        pfile=$(debasher::_resolve_pfile "${pfile}") || exit 1
     fi
 
     if [ ${outdir_given} -eq 0 ]; then
@@ -1288,6 +1286,12 @@ command_line=$(debasher::_serialize_args "$0" "$@")
 read_pars "$@" || exit 1
 
 check_pars || exit 1
+
+# The command line saved in the output directory gives the resolved
+# program file, not the one given: the tools that operate on the
+# directory later (debasher_status, debasher_stop, ...) find the program
+# from it, and they may not run with the same DEBASHER_MOD_DIR
+command_line=$(debasher::_set_opt_value_in_serialized_cmdline "${command_line}" "--pfile" "${pfile}")
 
 set_debasher_output_dir "${outd}" || exit 1
 

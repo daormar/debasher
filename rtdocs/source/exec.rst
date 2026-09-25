@@ -24,7 +24,12 @@ if executed as follows:
 ``debasher_exec`` only has two mandatory input options:
 
 * ``--pfile <string>``: allows to define the DeBasher file specifying
-  the program to be executed.
+  the program to be executed. A relative path is looked for in the
+  current directory and, if it is not there, in the directories of the
+  ``DEBASHER_MOD_DIR`` environment variable, as ``load_debasher_module``
+  does for a module. The other tools that take a program file
+  (``debasher_exec_process``, ``debasher_doc_mod`` and
+  ``debasher_proc_dataset``) look for it in the same way.
 
 * ``--outdir <string>``: specifies the name of the output directory.
 

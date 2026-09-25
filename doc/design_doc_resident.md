@@ -2460,11 +2460,15 @@ program, `PFILE`, or, with `PROCESS`, a single process of that module (see
 "A single process"), and may give the runs root, `RUNS_ROOT`, an absolute
 path; by default it is the output directory of the process, which the engine
 keeps across launches of a node (see "Ordered shutdown") and exports to it as
-`DEBASHER_PROCESS_OUTDIR`. `PFILE` is resolved as an external alias is: a
-path relative to the directory of the module that declares the node, where a
-program keeps its files, which the engine exports to the node as
-`DEBASHER_PROCESS_MODULE_DIR`; an absolute path is accepted with a warning,
-since it ties the program to one machine. A node whose `PFILE` is not a file
+`DEBASHER_PROCESS_OUTDIR`. `PFILE` is found as the module that declares the
+node would find a module it loads: a relative path is looked for in the
+directory of that module, where a program keeps its files, which the engine
+exports to the node as `DEBASHER_PROCESS_MODULE_DIR`, and then in the
+directories of `DEBASHER_MOD_DIR`, so that a program can launch one that
+another module keeps, at the price of depending on how the machine is set up.
+The node runs the engine's own search for this, `debasher_resolve_pfile`, from
+the directory of the module. An absolute path is accepted with a warning,
+since it ties the program to one machine. A node whose `PFILE` is not found
 stops when it is created. Every input port that carries data is a port of
 requests; the output port `DONE_PORT` (`outdone` by default), if the node has
 it, tells when a batch run ends (see "The end of a batch run as an input
@@ -2995,11 +2999,7 @@ Design ideas from Future work move here once they are actually built.
 - **What a launcher node leaves out** (see "`ProgramLauncher`: batch runs
   from a node"). A command to launch again a batch run that failed, since its
   `observe()` never does it on its own; and priorities, or a limit shared by
-  several launcher nodes, beyond the `max_concurrent_runs` of each. Also whether
-  `PFILE` should be able to name a program outside the directory of its own
-  module other than by an absolute path, for example one found through
-  `DEBASHER_MOD_DIR`: that would let a program use the modules of others,
-  at the price of depending on how the machine is set up.
+  several launcher nodes, beyond the `max_concurrent_runs` of each.
 - **Dynamic process launching**: the architecture described in this document
   does not, from the outset, support dynamically launching processes. "General"
   programs already sketch a mechanism for this (see

@@ -96,9 +96,10 @@ def _read_pid(path):
 
 class ProgramLauncher(FBPProcess):
     """
-    A subclass names the general program to launch, PFILE: a path relative to
-    the directory of the module that declares the node, where a program keeps
-    its files, as an external alias is; an absolute one is accepted with a
+    A subclass names the general program to launch, PFILE, as a module that
+    declares the node would load it: a relative path is looked for in the
+    directory of that module, where a program keeps its files, and then in
+    the directories of DEBASHER_MOD_DIR; an absolute one is accepted with a
     warning, since it ties the program to one machine. With PROCESS, the
     name of a process of that module, it launches that process alone, with
     debasher_exec_process, instead of the whole program. It may give
@@ -160,9 +161,11 @@ class ProgramLauncher(FBPProcess):
 
     def _find_pfile(self):
         """
-        PFILE as an absolute path, resolved against the directory of the
-        module that declares the node (DEBASHER_PROCESS_MODULE_DIR), as the
-        engine resolves an external alias.
+        PFILE as an absolute path. A relative one is resolved by
+        debasher_resolve_pfile, run from the directory of the module that
+        declares the node (DEBASHER_PROCESS_MODULE_DIR): the engine's own
+        search for a module, which looks in the current directory and then
+        in the directories of DEBASHER_MOD_DIR.
         """
         if os.path.isabs(self.PFILE):
             self.log.warning(
@@ -170,20 +173,30 @@ class ProgramLauncher(FBPProcess):
                 "portable across machines",
                 self.PFILE,
             )
-            path = self.PFILE
-        else:
-            module_dir = os.environ.get("DEBASHER_PROCESS_MODULE_DIR")
-            if not module_dir:
-                raise RuntimeError(
-                    f"{type(self).__name__}: DEBASHER_PROCESS_MODULE_DIR is not set in the "
-                    "environment, cannot resolve the general program against the directory "
-                    "of the module (only set by the engine's builtin scheduler when it "
-                    "launches a process)"
-                )
-            path = os.path.join(module_dir, self.PFILE)
-        if not os.path.isfile(path):
-            raise ValueError(f"{type(self).__name__}: the general program {path} is not a file")
-        return os.path.realpath(path)
+            if not os.path.isfile(self.PFILE):
+                raise ValueError(f"{type(self).__name__}: the general program {self.PFILE} is not a file")
+            return os.path.realpath(self.PFILE)
+        module_dir = os.environ.get("DEBASHER_PROCESS_MODULE_DIR")
+        if not module_dir:
+            raise RuntimeError(
+                f"{type(self).__name__}: DEBASHER_PROCESS_MODULE_DIR is not set in the "
+                "environment, cannot resolve the general program against the directory "
+                "of the module (only set by the engine's builtin scheduler when it "
+                "launches a process)"
+            )
+        result = subprocess.run(
+            [self._libexec_tool("debasher_resolve_pfile"), self.PFILE],
+            cwd=module_dir,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise ValueError(
+                f"{type(self).__name__}: the general program {self.PFILE} is not a file in the "
+                f"directory of the module nor in DEBASHER_MOD_DIR: {result.stderr.strip()}"
+            )
+        return os.path.realpath(result.stdout.strip())
 
     def _outdir(self):
         outdir = os.environ.get("DEBASHER_PROCESS_OUTDIR")
@@ -474,6 +487,16 @@ class ProgramLauncher(FBPProcess):
                 "launches a process)"
             )
         return os.path.join(bindir, name)
+
+    def _libexec_tool(self, name):
+        libexecdir = os.environ.get("DEBASHER_LIBEXECDIR")
+        if not libexecdir:
+            raise RuntimeError(
+                f"{type(self).__name__}: DEBASHER_LIBEXECDIR is not set in the environment, "
+                f"cannot locate {name} (only set by the engine's builtin scheduler when it "
+                "launches a process)"
+            )
+        return os.path.join(libexecdir, name)
 
     # The shell command that runs a single process and writes its exit code
     # into the run directory, $1, once it ends, through a temporary file

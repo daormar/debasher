@@ -61,6 +61,21 @@ _FAKE_DEBASHER_STATUS = """#!/bin/bash
 exit "$(cat "$2/fake_status")"
 """
 
+# A stand-in for debasher_resolve_pfile: looks for the program in the
+# current directory and then in the directories of DEBASHER_MOD_DIR, as the
+# engine's search for a module does, and prints its absolute path.
+_FAKE_DEBASHER_RESOLVE_PFILE = """#!/bin/bash
+IFS=: read -r -a dirs <<< "${DEBASHER_MOD_DIR}"
+for dir in . "${dirs[@]}"; do
+    if [ -f "${dir}/$1" ]; then
+        realpath "${dir}/$1"
+        exit 0
+    fi
+done
+echo "File not found: $1" >&2
+exit 1
+"""
+
 
 @pytest.fixture
 def outdir(tmp_path, monkeypatch):
@@ -81,6 +96,13 @@ def outdir(tmp_path, monkeypatch):
         fake.write_text(text)
         fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("DEBASHER_BINDIR", str(bindir))
+    libexecdir = tmp_path / "libexec"
+    libexecdir.mkdir()
+    fake = libexecdir / "debasher_resolve_pfile"
+    fake.write_text(_FAKE_DEBASHER_RESOLVE_PFILE)
+    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("DEBASHER_LIBEXECDIR", str(libexecdir))
+    monkeypatch.delenv("DEBASHER_MOD_DIR", raising=False)
     # The directory of the module that declares the node, where the general
     # program lives too
     module_dir = tmp_path / "program"
@@ -150,6 +172,18 @@ def test_a_launcher_node_needs_its_program():
 
 def test_a_relative_program_is_found_in_the_directory_of_the_module(outdir, tmp_path):
     assert _node()._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
+
+
+def test_a_relative_program_is_found_through_debasher_mod_dir(outdir, tmp_path, monkeypatch):
+    class Shared(lib.ProgramLauncher):
+        PFILE = "shared.sh"
+
+    shared_dir = tmp_path / "shared"
+    shared_dir.mkdir()
+    (shared_dir / "shared.sh").write_text("# a general program of another module\n")
+    monkeypatch.setenv("DEBASHER_MOD_DIR", str(shared_dir))
+    node = Shared(opts={"requests": "/dev/null"})
+    assert node._pfile == str((shared_dir / "shared.sh").resolve())
 
 
 def test_an_absolute_program_is_accepted_with_a_warning(outdir, tmp_path, caplog):

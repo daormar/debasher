@@ -1,5 +1,5 @@
 EXTRA_DIST = lib_utils.bats lib_processes.bats lib_programs.bats	\
-lib_mirror.bats builtin_sched_lib.bats				\
+lib_modules.bats lib_mirror.bats builtin_sched_lib.bats		\
 conftest.py test_envelope.py test_fbpprocess.py test_thread_topology.py	\
 test_barrier.py test_checkpoint.py test_run.py test_supervisor.py	\
 test_input_log.py test_arrival_positions.py test_recovery.py test_send_data.py	\
