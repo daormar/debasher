@@ -720,6 +720,7 @@ debasher::_process_is_defined()
 ########
 debasher::_uses_option_generator()
 {
+    local processname=$1
     local uses_option_generator_nr
     debasher::_get_generate_opts_size_funcname "${processname}" uses_option_generator_nr
 
@@ -947,48 +948,37 @@ debasher::_define_opts_for_process()
         local processname=$(debasher::_extract_processname_from_process_spec "${process_spec}")
         local process_outdir=$(debasher::_get_process_outdir "${processname}")
 
-        # Check if process dependencies were pre-specified for all processes
-        if debasher::_all_process_deps_pre_specified; then
-            # There are no process dependencies to be determined, so it is
-            # only necessary to update option list length
+        # Obtain the generator functions and the number of tasks
+        local define_opts_generator_gen_opts_size_fname
+        debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
+        local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
+        local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
 
-            # Obtain define_opts_array function name and call it
-            local define_opts_generator_gen_opts_size_fname
-            debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
-            local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
+        # Iterate over array tasks. This is done even when all process
+        # dependencies were given, as save_opt_list does for a process
+        # without a generator: a fifo the generator defines with
+        # define_fifo_opt_generator is registered as a side effect of
+        # calling it in this shell, and the readers of that fifo are then
+        # found through the output options information of its owner task
+        local task_idx
+        for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
+            # Call option generator
+            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
 
-            # Set option list length
-            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
-        else
-            # There are process dependencies to be determined, so it is
-            # necessary to update output options information
+            # Update output options information
+            debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
+        done
 
-            # Obtain define_opts_array function name and call it
-            local define_opts_generator_gen_opts_size_fname
-            debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
-            local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
-            local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
-
-            # Iterate over array tasks
-            local task_idx
-            for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
-                # Call option generator
-                ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
-
-                # Update output options information
-                debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
-            done
-
-            # Set option list length
-            DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
-        fi
+        # Set option list length
+        DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
     }
 
     # Initialize variables
     local cmdline=$1
     local process_spec=$2
+    local processname=$(debasher::_extract_processname_from_process_spec "${process_spec}")
 
-    if debasher::_uses_option_generator "$processname"; then
+    if debasher::_uses_option_generator "${processname}"; then
         debasher::_define_opts_generator "${cmdline}" "${process_spec}"
     else
         debasher::_define_opts_loop "${cmdline}" "${process_spec}"
@@ -1080,7 +1070,10 @@ debasher::_get_actual_opt_names_for_first_task()
                     shift
                     continue
                 fi
-                echo "${token}"
+                # printf, not echo: echo would take an option named
+                # "-n", "-e" or "-E" as one of its own flags and print
+                # nothing
+                printf '%s\n' "${token}"
                 shift
                 [ $# -eq 0 ] && continue
                 debasher::_str_is_option "$1" && continue
@@ -1468,7 +1461,9 @@ debasher::_get_end_idx_in_range()
 # Check whether the argument at position $1 is a candidate to generate
 # a process dependency. Returns 0 and writes the associated option index
 # into the caller-provided variable if it is a candidate; returns 1
-# otherwise.
+# otherwise. The locals below must not share a name with the caller's
+# variable (the callers pass "j"): the nameref would resolve to the local
+# one instead, and the caller's variable would never be written.
 debasher::_deserialized_args_idx_is_dep_candidate()
 {
     local i=$1
@@ -1479,12 +1474,12 @@ debasher::_deserialized_args_idx_is_dep_candidate()
         return 1
     fi
 
-    local j=$((i-1))
-    if [ $j -lt 0 ]; then
+    local opt_idx=$((i-1))
+    if [ ${opt_idx} -lt 0 ]; then
         return 1
     fi
 
-    local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
+    local opt="${DEBASHER_DESERIALIZED_ARGS[opt_idx]}"
     if ! debasher::_str_is_option "${opt}" || debasher::_str_is_output_option "${opt}"; then
         return 1
     fi
@@ -1493,7 +1488,7 @@ debasher::_deserialized_args_idx_is_dep_candidate()
         return 1
     fi
 
-    idx_ref=$j
+    idx_ref=${opt_idx}
     return 0
 }
 
@@ -1761,13 +1756,22 @@ debasher::_register_fifos_used_by_process()
             augm_fifoname=$(debasher::_get_augm_fifoname_from_absname "${value}")
             [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || continue
 
-            local proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}"
-            local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+            # The option through which the task that owns the fifo defines it
+            # does not make the task a user of it (a fifo fed from outside
+            # that the owner reads, defined through an input option). Any
+            # other option does: that of another task of the same array, and
+            # that of the owner itself when it reads what it writes (a
+            # self-loop)
+            local this_task="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+            if [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" = "${this_task}" ] \
+                   && [ "${DEBASHER_DESERIALIZED_ARGS[j]}" = "${DEBASHER_FIFO_OWNER_OPTS["${augm_fifoname}"]:-}" ]; then
+                continue
+            fi
 
-            [ "${processowner}" = "${processname}" ] && continue
-
-            # The current process is not the owner of the FIFO: register it as a user
-            DEBASHER_FIFO_USERS["${augm_fifoname}"]=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}
+            # Register the current task as a user of the fifo, and the option
+            # through which it uses it
+            DEBASHER_FIFO_USERS["${augm_fifoname}"]=${this_task}
+            DEBASHER_FIFO_USER_OPTS["${augm_fifoname}"]=${DEBASHER_DESERIALIZED_ARGS[j]}
         done
     }
 
@@ -1917,13 +1921,13 @@ debasher::_default_reset_outfiles_for_process_array()
 ########
 debasher::_display_begin_process_message()
 {
-    echo "Process started at $(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+    echo "Process started at $(debasher::_now_datetime_ms)" >&2
 }
 
 ########
 debasher::_display_end_process_message()
 {
-    echo "Process finished at $(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+    echo "Process finished at $(debasher::_now_datetime_ms)" >&2
 }
 
 ########

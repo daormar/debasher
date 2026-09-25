@@ -37,7 +37,9 @@ usage()
     echo "                          [--show-impl] [--show-specs]"
     echo "                          [--resolve-var <string>]... [--help]"
     echo ""
-    echo "-m <string>               Module file name"
+    echo "-m <string>               Module file name (a relative path is looked for in"
+    echo "                          the current directory and then in the directories"
+    echo "                          of DEBASHER_MOD_DIR)"
     echo "-s <string>               Process name whose information should be obtained"
     echo "--show-shdirs             Show shared directories defined directly by the module"
     echo "--show-all-shdirs         Show every shared directory reachable from the program"
@@ -135,10 +137,9 @@ check_pars()
         echo "Error! -m parameter not given!" >&2
         exit 1
     else
-        if [ ! -f "${module_fname}" ]; then
-            echo "Error! module file does not exist" >&2
-            exit 1
-        fi
+        # Resolve the module file to an absolute path (it may be found
+        # through DEBASHER_MOD_DIR)
+        module_fname=$(debasher::_resolve_pfile "${module_fname}") || exit 1
     fi
 }
 
@@ -166,6 +167,10 @@ obtain_info_for_module()
     if [ "${showallenvvars_given}" -eq 1 ]; then
         envvars_after=$(compgen -v)
     fi
+
+    # Resolve the program type (as debasher_exec does before executing
+    # the program function)
+    debasher::_resolve_program_type "${module_fname}" || return 1
 
     # Execute program function for module
     debasher::_exec_program_func_for_module "${module_fname}"

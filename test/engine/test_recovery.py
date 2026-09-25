@@ -1,0 +1,960 @@
+import errno
+import json
+import os
+import select
+import shutil
+import threading
+import time
+
+import pytest
+
+import debasher_runtime_inputlog as inputlog
+import debasher_runtime_lib as lib
+import debasher_runtime_transport as transport
+
+
+def _wait_until(predicate, timeout=5.0, interval=0.01):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
+
+
+@pytest.fixture(autouse=True)
+def execdir(tmp_path, monkeypatch):
+    # The node's own directory. A relaunched node gets the same one.
+    monkeypatch.setenv("DEBASHER_PROCESS_EXECDIR", str(tmp_path / "node"))
+    return tmp_path / "node"
+
+
+class _Fanin(lib.FBPProcess):
+    """
+    A node whose state is the whole history of what it processed, in order,
+    so that any difference in what it received, or in the order it processed
+    it, shows up in the state.
+    """
+
+    INPUT_PORTS = ["a", "b"]
+
+    def __init__(self, *args, **kwargs):
+        self.seen = []
+        self.positions = []
+        super().__init__(*args, **kwargs)
+
+    def process_data(self, port_name, packet):
+        self.seen.append((port_name, packet))
+        self.positions.append(self._current_pos)
+
+    def capture_node_state(self):
+        return {"seen": [list(item) for item in self.seen]}
+
+    def restore_node_state(self, node_state):
+        self.seen = [tuple(item) for item in node_state["seen"]]
+
+    def initialize_runtime(self):
+        pass
+
+
+def _opts(tmp_path, ports=("a", "b")):
+    opts = {}
+    for port in ports:
+        path = str(tmp_path / f"{port}.fifo")
+        if not os.path.exists(path):
+            os.mkfifo(path)
+        opts[port] = path
+    return opts
+
+
+def _arrive(proc, port, envelope_type, payload):
+    """Delivers one item the way a reader thread does, once the node has its log open."""
+    if proc._input_log is None:
+        proc._open_input_log(0)
+    line = json.dumps({"type": envelope_type, "payload": payload})
+    proc._on_arrival(port, lib.Envelope(envelope_type, payload), line)
+
+
+_ROUND = {"epoch": 0, "halt": False}
+
+
+def _round(epoch, halt=False):
+    return {"epoch": epoch, "halt": halt}
+
+
+def _process(proc, items):
+    """Delivers the items and lets the brain thread process everything that is queued."""
+    for port, envelope_type, payload in items:
+        _arrive(proc, port, envelope_type, payload)
+    proc._inbound_queue.put(lib._STOP)
+    brain = threading.Thread(target=proc._brain_loop)
+    brain.start()
+    brain.join(5)
+    assert not brain.is_alive()
+
+
+def _crash(proc):
+    """A killed process leaves no open descriptor behind, and does nothing else."""
+    proc._input_log.close()
+
+
+def _relaunch(tmp_path, cls=_Fanin, ports=("a", "b")):
+    node = cls(opts=_opts(tmp_path, ports))
+    node._stop_requested.set()
+    node.run()
+    return node
+
+
+def _data(port, value):
+    return (port, lib.TYPE_DATA, value)
+
+
+# --- a node comes back to the state it would have had ---------------------
+
+
+def test_a_node_that_crashes_before_its_first_checkpoint_recovers_everything_it_had_received(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _data("b", 2), _data("a", 3)])
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path)
+    assert relaunched.seen == [("a", 1), ("b", 2), ("a", 3)]
+    assert relaunched.capture_node_state() == live.capture_node_state()
+
+
+def test_recovery_reproduces_the_order_across_ports_not_port_by_port(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _data("b", 2), _data("a", 3), _data("b", 4)])
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path)
+    assert relaunched.seen == [("a", 1), ("b", 2), ("a", 3), ("b", 4)]
+
+
+def test_a_message_that_was_still_waiting_in_the_queue_when_the_node_crashed_is_not_lost(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _data("b", 2)])
+    # Three more arrive while the brain thread is busy with something else: they are
+    # written to the log the moment they arrive, and the node dies before it gets to them.
+    for item in (_data("a", 3), _data("b", 4), _data("a", 5)):
+        _arrive(live, *item)
+    assert live.seen == [("a", 1), ("b", 2)]
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path)
+    assert relaunched.seen == [("a", 1), ("b", 2), ("a", 3), ("b", 4), ("a", 5)]
+
+
+def test_a_message_processed_after_the_snapshot_and_before_the_round_closes_is_recovered(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(
+        live,
+        [
+            _data("a", 10),
+            ("a", lib.TYPE_BARRIER, _ROUND),  # the state is captured here
+            _data("b", 90),  # in transit at the cut, processed while the round is open
+            ("b", lib.TYPE_BARRIER, _ROUND),  # the round closes and the checkpoint is written
+        ],
+    )
+    assert live.seen == [("a", 10), ("b", 90)]
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path)
+    # The checkpoint holds only what came before the capture; the rest comes back from the log.
+    assert relaunched.seen == [("a", 10), ("b", 90)]
+
+
+def test_recovery_after_a_checkpoint_replays_only_what_came_after_it(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(
+        live,
+        [
+            _data("a", 1),
+            _data("b", 2),
+            ("a", lib.TYPE_BARRIER, _ROUND),  # position 3
+            ("b", lib.TYPE_BARRIER, _ROUND),  # position 4, the round closes
+            _data("a", 5),  # position 5
+            _data("b", 6),  # position 6
+        ],
+    )
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path)
+    assert relaunched.seen == live.seen == [("a", 1), ("b", 2), ("a", 5), ("b", 6)]
+    # Only the two messages after position 3 were executed again.
+    assert relaunched.positions == [5, 6]
+
+
+def test_after_a_halt_the_node_resumes_in_the_state_it_had_when_it_stopped(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(
+        live,
+        [
+            _data("a", 1),
+            ("a", lib.TYPE_BARRIER, _round(0, halt=True)),  # position 2, the state is captured
+            _data("b", 2),  # in transit at the cut, processed before the round closes
+            ("b", lib.TYPE_BARRIER, _round(0, halt=True)),  # the round closes and the node stops
+        ],
+    )
+    assert live._halted.is_set()
+    assert live.seen == [("a", 1), ("b", 2)]
+    _crash(live)
+
+    resumed = _relaunch(tmp_path)
+    assert resumed.seen == [("a", 1), ("b", 2)]
+    # What is executed again is exactly what the node had processed after capturing its state.
+    assert resumed.positions == [3]
+
+
+def test_recovery_restores_the_latest_checkpoint_and_numbering_goes_on_after_the_log(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), ("a", lib.TYPE_BARRIER, _ROUND), ("b", lib.TYPE_BARRIER, _ROUND), _data("b", 2)])
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path)
+    assert relaunched._last_epoch == 0
+    # The log holds four records, so the next item gets position 5.
+    assert relaunched._input_log.next_pos == 5
+
+
+def test_the_log_holds_every_kind_of_item_but_only_data_is_replayed(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(
+        live,
+        [
+            _data("a", 1),
+            ("a", lib.TYPE_INTERACT, {"command": "unknown", "args": {}}),
+            _data("b", 2),
+            ("a", lib.TYPE_CLOSE, {}),
+        ],
+    )
+    _crash(live)
+
+    kinds = [r.envelope.type for r in lib._InputLog(str(tmp_path / "node" / "log"), 10**9, 10**9).replay(0)]
+    assert kinds == ["DATA", "INTERACT", "DATA", "CLOSE"]
+    relaunched = _relaunch(tmp_path)
+    assert relaunched.seen == [("a", 1), ("b", 2)]
+
+
+def test_recovery_reads_the_log_and_writes_nothing_to_it(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _data("b", 2)])
+    _crash(live)
+    log_dir = tmp_path / "node" / "log"
+    before = {n: (log_dir / n).read_bytes() for n in os.listdir(log_dir)}
+
+    _relaunch(tmp_path)
+    assert {n: (log_dir / n).read_bytes() for n in os.listdir(log_dir)} == before
+
+
+def test_a_torn_tail_left_by_the_crash_is_ignored_and_numbering_goes_on(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _data("b", 2)])
+    _crash(live)
+    segment = tmp_path / "node" / "log" / "1.log"
+    with open(segment, "ab") as f:
+        f.write(b'{"pos": 3, "port": "a", "env": {"type": "DA')
+
+    relaunched = _relaunch(tmp_path)
+    assert relaunched.seen == [("a", 1), ("b", 2)]
+    assert relaunched._input_log.next_pos == 3
+
+
+def test_recovery_fails_loudly_when_the_log_has_a_hole(tmp_path):
+    class _Small(_Fanin):
+        INPUT_LOG_SEGMENT_BYTES = 200
+
+    live = _Small(opts=_opts(tmp_path))
+    _process(live, [_data("a", n) for n in range(1, 13)])
+    _crash(live)
+    names = sorted(os.listdir(tmp_path / "node" / "log"), key=lambda n: int(n[: -len(".log")]))
+    assert len(names) >= 3
+    os.remove(tmp_path / "node" / "log" / names[1])
+
+    node = _Small(opts=_opts(tmp_path))
+    node._stop_requested.set()
+    with pytest.raises(ValueError, match="missing"):
+        node.run()
+
+
+# --- the size of the log stays bounded --------------------------------------
+
+
+def test_the_log_is_pruned_after_checkpoints_and_recovery_still_works(tmp_path):
+    class _Pruning(_Fanin):
+        INPUT_LOG_SEGMENT_BYTES = 300
+        CHECKPOINT_RETENTION = 2
+
+    live = _Pruning(opts=_opts(tmp_path))
+    items = []
+    for epoch in range(6):
+        items += [_data("a", epoch * 10 + 1), _data("b", epoch * 10 + 2)]
+        items += [("a", lib.TYPE_BARRIER, _round(epoch)), ("b", lib.TYPE_BARRIER, _round(epoch))]
+    items += [_data("a", 100)]
+    _process(live, items)
+    _crash(live)
+
+    names = sorted(os.listdir(tmp_path / "node" / "log"), key=lambda n: int(n[: -len(".log")]))
+    assert int(names[0][: -len(".log")]) > 1, "the oldest segments should have been deleted"
+    checkpoints = sorted(os.listdir(tmp_path / "node" / "checkpoints"))
+    assert len(checkpoints) == 2
+
+    # Every checkpoint that is kept can still be recovered from: the log holds
+    # everything after the position that each one reflects, not only the newest.
+    for name in checkpoints:
+        with open(tmp_path / "node" / "checkpoints" / name) as f:
+            capture_pos = json.load(f)["capture_pos"]
+        assert list(lib._InputLog(str(tmp_path / "node" / "log"), 10**9, 10**9).replay(capture_pos))
+
+    relaunched = _relaunch(tmp_path, _Pruning)
+    assert relaunched.seen == live.seen
+
+
+def test_a_retained_checkpoint_that_cannot_be_read_aborts_the_prune_with_an_error(tmp_path):
+    class _Keeping(_Fanin):
+        CHECKPOINT_RETENTION = 2
+
+    node = _Keeping(opts=_opts(tmp_path))
+    node._open_input_log(0)
+    node._save_checkpoint(0, {"seen": []}, {}, 0, [], {}, {}, {})
+    node._save_checkpoint(1, {"seen": []}, {}, 0, [], {}, {}, {})
+    # Saving epoch 2 keeps epochs 2 and 1, so epoch 1 is the oldest one kept.
+    (tmp_path / "node" / "checkpoints" / "1.json").write_text("not json")
+
+    with pytest.raises(RuntimeError, match="cannot read"):
+        node._save_checkpoint(2, {"seen": []}, {}, 0, [], {}, {}, {})
+    # The checkpoint that was being saved is on disk all the same.
+    assert (tmp_path / "node" / "checkpoints" / "2.json").exists()
+
+
+# --- failures while writing the log ------------------------------------------
+
+
+def _send(path, *envelopes):
+    with open(path, "w") as w:
+        for line in envelopes:
+            w.write(line + "\n")
+
+
+def test_a_log_that_reaches_its_cap_ends_the_reader_thread_and_keeps_what_it_holds(tmp_path):
+    class _Capped(_Fanin):
+        INPUT_LOG_MAX_BYTES = 600
+
+    opts = _opts(tmp_path)
+    node = _Capped(opts=opts)
+    node.start_threads()
+    try:
+        _send(opts["a"], *[lib.encode_data(n) for n in range(30)])
+        assert _wait_until(lambda: not node._reader_threads["a"].is_alive())
+        # The heartbeat would not report this node as healthy any more.
+        assert not node._all_threads_alive()
+        held = [r.envelope.payload for r in node._input_log.replay(0)]
+        assert held == list(range(len(held))) and 0 < len(held) < 30
+        # Everything that was logged reached the brain thread, in order.
+        assert _wait_until(lambda: len(node.seen) == len(held))
+        assert [packet for _, packet in node.seen] == held
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_after_a_failed_write_no_reader_thread_can_append_behind_the_fragment(tmp_path, monkeypatch):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        _send(opts["a"], lib.encode_data("first"))
+        assert _wait_until(lambda: node.seen == [("a", "first")])
+
+        real_write_all = inputlog._write_all
+
+        def failing_write_all(fd, data):
+            os.write(fd, data[: len(data) // 2])
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        monkeypatch.setattr(inputlog, "_write_all", failing_write_all)
+        _send(opts["a"], lib.encode_data("torn"))
+        assert _wait_until(lambda: not node._reader_threads["a"].is_alive())
+
+        # The fault is gone, but the other port's reader is refused as well.
+        monkeypatch.setattr(inputlog, "_write_all", real_write_all)
+        _send(opts["b"], lib.encode_data("behind the fragment"))
+        assert _wait_until(lambda: not node._reader_threads["b"].is_alive())
+    finally:
+        node.stop_threads(timeout=2)
+
+    # What the log holds is the record before the failure, and the fragment is a torn tail.
+    assert [r.envelope.payload for r in lib._InputLog(str(tmp_path / "node" / "log"), 10**9, 10**9).replay(0)] == ["first"]
+    relaunched = _relaunch(tmp_path)
+    assert relaunched.seen == [("a", "first")]
+
+
+# --- how the log gets opened -------------------------------------------------
+
+
+def test_an_item_that_arrives_before_the_log_is_open_is_refused(tmp_path):
+    node = _Fanin(opts=_opts(tmp_path))
+    with pytest.raises(RuntimeError, match="input log"):
+        node._on_arrival("a", lib.Envelope(lib.TYPE_DATA, 1), lib.encode_data(1))
+
+
+def test_a_node_driven_without_run_gets_its_log_opened_by_start_threads(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        _send(opts["a"], lib.encode_data("x"))
+        assert _wait_until(lambda: node.seen == [("a", "x")])
+        assert node._input_log is not None
+        assert [r.pos for r in node._input_log.replay(0)] == [1]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+# --- the ports whose writer has said CLOSE ------------------------------------
+#
+# Three input ports. The items below are the ones of a node whose round opens at
+# the marker on b (position 4). Port a closed before it (position 3) and port c
+# after it (position 6), with a message of c in between (position 5).
+
+
+class _Three(_Fanin):
+    INPUT_PORTS = ["a", "b", "c"]
+
+
+_THREE = ("a", "b", "c")
+
+
+def _close(port):
+    return (port, lib.TYPE_CLOSE, {})
+
+
+def _marker(port, epoch=0):
+    return (port, lib.TYPE_BARRIER, _round(epoch))
+
+
+_A_ROUND_OPENING_BETWEEN_TWO_CLOSES = [
+    _data("a", 1),
+    _data("b", 10),
+    _close("a"),
+    _marker("b"),
+    _data("c", 100),
+    _close("c"),
+    _data("b", 20),
+]
+
+
+def _read_checkpoint(node, epoch):
+    with open(os.path.join(node._checkpoints_dir(), f"{epoch}.json")) as f:
+        return json.load(f)
+
+
+def test_a_checkpoint_holds_the_ports_whose_close_the_node_had_processed_when_the_round_opened(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    # Every item is in the log before the brain thread starts, so the reader threads have
+    # already seen the CLOSE of c when the round opens; the node has not got to it yet.
+    _process(live, _A_ROUND_OPENING_BETWEEN_TWO_CLOSES)
+    assert live._closed_ports == {"a", "c"}
+
+    checkpoint = _read_checkpoint(live, 0)
+    assert checkpoint["capture_pos"] == 4
+    assert checkpoint["closed_ports"] == ["a"]
+
+
+def test_a_relaunched_node_knows_again_which_ports_had_closed(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    _process(live, _A_ROUND_OPENING_BETWEEN_TWO_CLOSES)
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path, _Three, _THREE)
+    # a comes from the checkpoint, c from the CLOSE that the log holds after it.
+    assert relaunched._closed_ports == {"a", "c"}
+    assert relaunched.capture_node_state() == live.capture_node_state()
+
+
+def test_a_port_closed_long_ago_is_still_closed_once_the_log_that_recorded_its_close_is_gone(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    _process(live, [_data("a", 1), _close("a"), _marker("b"), _marker("c")])
+    _crash(live)
+    # What pruning does to every segment that ends at or below the checkpoint's position.
+    shutil.rmtree(os.path.join(os.environ["DEBASHER_PROCESS_EXECDIR"], "log"))
+
+    relaunched = _relaunch(tmp_path, _Three, _THREE)
+    assert relaunched._closed_ports == {"a"}
+
+
+def test_a_replay_that_finds_a_message_after_the_close_of_its_port_fails_loudly(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _close("a"), _data("a", 2)])
+    _crash(live)
+
+    with pytest.raises(ValueError, match="already received CLOSE"):
+        _relaunch(tmp_path)
+
+
+def test_a_message_after_a_close_that_the_checkpoint_recorded_also_fails_loudly(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _close("a"), _marker("b")])
+    _arrive(live, "a", lib.TYPE_DATA, 2)
+    _crash(live)
+
+    with pytest.raises(ValueError, match="already received CLOSE"):
+        _relaunch(tmp_path)
+
+
+def test_after_a_relaunch_the_readers_of_closed_ports_drop_what_their_writers_send(tmp_path):
+    opts = _opts(tmp_path)
+    live = _Fanin(opts=opts)
+    _process(live, [_data("a", 1), _close("a")])
+    _crash(live)
+
+    node = _Fanin(opts=opts)
+    runner = threading.Thread(target=node.run, daemon=True)
+    runner.start()
+    try:
+        assert _wait_until(lambda: len(node._reader_threads) == 2)
+        # The writer of a is relaunched and says more; the writer of b has never said CLOSE.
+        with open(opts["a"], "w") as w:
+            w.write("\n" + lib.encode_hello() + "\n" + lib.encode_data(2) + "\n")
+        with open(opts["b"], "w") as w:
+            w.write(lib.encode_data(3) + "\n")
+        assert _wait_until(lambda: ("b", 3) in node.seen)
+        time.sleep(0.3)  # what the reader of a was sent has been read by now
+
+        assert node.seen == [("a", 1), ("b", 3)]
+        assert [(r.port, r.envelope.type) for r in node._input_log.replay(0)] == [
+            ("a", "DATA"),
+            ("a", "CLOSE"),
+            ("b", "DATA"),
+        ]
+        assert node._reader_threads["a"].is_alive()
+    finally:
+        node._stop_requested.set()
+        runner.join(5)
+
+
+_TWO_ROUNDS_AROUND_TWO_CLOSES = _A_ROUND_OPENING_BETWEEN_TWO_CLOSES + [_marker("b", 1)]
+
+
+def test_a_round_that_a_close_completes_writes_the_checkpoint_of_the_cut(tmp_path):
+    live = _Three(opts=_opts(tmp_path, _THREE))
+    _process(live, _TWO_ROUNDS_AROUND_TWO_CLOSES)
+
+    first = _read_checkpoint(live, 0)
+    assert first["capture_pos"] == 4
+    assert first["closed_ports"] == ["a"]
+    assert first["node_state"] == {"seen": [["a", 1], ["b", 10]]}
+    assert first["channel_state"] == {"c": [100]}
+
+    # a and c had both closed when the second round opened, so it had nothing to wait for.
+    second = _read_checkpoint(live, 1)
+    assert second["capture_pos"] == 8
+    assert second["closed_ports"] == ["a", "c"]
+    assert second["channel_state"] == {}
+
+
+def test_a_halt_completes_when_the_last_port_it_waits_for_closes(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [("a", lib.TYPE_BARRIER, _round(0, halt=True)), _close("b")])
+
+    assert live._halted.is_set()
+    assert _read_checkpoint(live, 0)["channel_state"] == {"b": []}
+
+
+class _Commanded(_Fanin):
+    INPUT_PORTS = ["a", "commands"]
+    CONTROL_PORTS = ["commands"]
+
+
+class _OnlyCommands(_Fanin):
+    INPUT_PORTS = ["commands"]
+    CONTROL_PORTS = ["commands"]
+
+
+def test_a_control_port_that_said_close_is_not_restored_as_closed(tmp_path):
+    ports = ("a", "commands")
+    live = _Commanded(opts=_opts(tmp_path, ports))
+    # One Supervisor stopped before the round and another one after it.
+    _process(live, [_close("commands"), _marker("a"), _close("commands")])
+    assert _read_checkpoint(live, 0)["closed_ports"] == []
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path, _Commanded, ports)
+    assert relaunched._closed_ports == set()
+
+
+def test_the_trigger_of_a_supervisor_relaunched_after_a_recovery_still_reaches_the_node(tmp_path):
+    opts = _opts(tmp_path, ("commands",))
+    live = _OnlyCommands(opts=opts)
+    _process(live, [_close("commands")])
+    _crash(live)
+
+    node = _OnlyCommands(opts=opts)
+    runner = threading.Thread(target=node.run, daemon=True)
+    runner.start()
+    try:
+        assert _wait_until(lambda: len(node._reader_threads) == 1)
+        with open(opts["commands"], "w") as w:
+            w.write("\n" + lib.encode_hello() + "\n" + lib.encode_interact("start_snapshot") + "\n")
+        # The round opens and, with nothing else to wait for, closes: its checkpoint is written.
+        assert _wait_until(lambda: os.path.exists(os.path.join(node._checkpoints_dir(), "0.json")))
+    finally:
+        node._stop_requested.set()
+        runner.join(5)
+
+
+def test_a_node_that_has_halted_starts_no_more_rounds(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(
+        live,
+        [
+            ("a", lib.TYPE_BARRIER, _round(0, halt=True)),
+            ("b", lib.TYPE_BARRIER, _round(0, halt=True)),  # the halt closes here
+            ("trigger", lib.TYPE_INTERACT, {"command": "start_snapshot", "args": {}}),
+        ],
+    )
+
+    assert live._halted.is_set()
+    assert live._barrier_epoch is None
+    assert not os.path.exists(os.path.join(live._checkpoints_dir(), "1.json"))
+
+
+# --- a relaunched node holds its fifos while it recovers ---------------------
+#
+# A fifo keeps what was written to it and not yet read only while some process holds it
+# open. A relaunched node takes a while before its threads run (it restores its
+# checkpoint, initializes and replays its log), and during that time its neighbor may be
+# the only process that holds the fifo: if the neighbor crashes too, what it had sent
+# would be destroyed. The tests hold the recovery still at one step, crash the neighbor
+# there, and check that nothing it had sent is lost.
+
+
+_RECOVERY_STEPS = ["restore", "initialize", "replay"]
+
+
+class _HeldRecovery(lib.FBPProcess):
+    """
+    A node whose recovery can be held still at one of its steps, so that a test can do
+    something to its neighbors while the recovery is going on. Its state is what it saw.
+    """
+
+    INPUT_PORTS = ["inf"]
+
+    def __init__(self, *args, **kwargs):
+        self.seen = []
+        self.hold_at = None
+        self.recovering = True
+        self.held = threading.Event()
+        self.release = threading.Event()
+        super().__init__(*args, **kwargs)
+
+    def _hold(self, step):
+        if self.hold_at == step:
+            self.held.set()
+            assert self.release.wait(10), "the test never released the recovery"
+
+    def restore_node_state(self, node_state):
+        self._hold("restore")
+        self.seen = list(node_state["seen"])
+
+    def initialize_runtime(self):
+        self._hold("initialize")
+
+    def process_data(self, port_name, packet):
+        if self.recovering:  # the replay runs before the threads start
+            self._hold("replay")
+        self.seen.append(packet)
+
+    def capture_node_state(self):
+        return {"seen": list(self.seen)}
+
+    def start_threads(self):
+        self.recovering = False
+        super().start_threads()
+
+
+class _HeldRelay(_HeldRecovery):
+    OUTPUT_PORTS = ["outf"]
+
+    def process_data(self, port_name, packet):
+        super().process_data(port_name, packet)
+        self.send_data("outf", packet)
+
+
+def _drain_data(path, expected, timeout=5.0):
+    """Opens a reader on the fifo and returns the DATA payloads it finds, until `expected` are there."""
+    rfd, ghost_fd = transport._open_fifo_reader(path)
+    try:
+        os.set_blocking(rfd, False)
+        buffered, payloads = b"", []
+        deadline = time.monotonic() + timeout
+        while len(payloads) < expected and time.monotonic() < deadline:
+            if select.select([rfd], [], [], 0.05)[0]:
+                buffered += os.read(rfd, 65536)
+                while b"\n" in buffered:
+                    line, buffered = buffered.split(b"\n", 1)
+                    if line.strip():
+                        envelope = lib.decode_envelope(line.decode())
+                        if envelope.type == lib.TYPE_DATA:
+                            payloads.append(envelope.payload)
+        return payloads
+    finally:
+        os.close(rfd)
+        os.close(ghost_fd)
+
+
+def _recover_held(node, step, while_held):
+    """Runs the node's recovery, holds it at `step`, calls `while_held()` there, and lets it finish."""
+    node.hold_at = step
+    runner = threading.Thread(target=node.run)
+    runner.start()
+    try:
+        assert node.held.wait(5), "the recovery never reached the step"
+        while_held()
+        node.release.set()
+    finally:
+        node.release.set()
+    return runner
+
+
+@pytest.mark.parametrize("step", _RECOVERY_STEPS)
+def test_what_a_writer_sent_to_a_relaunched_reader_survives_the_writer_crashing_while_it_recovers(tmp_path, step):
+    opts = _opts(tmp_path, ("inf",))
+    live = _HeldRecovery(opts=opts)
+    _process(live, [_data("inf", 1), ("inf", lib.TYPE_BARRIER, _ROUND), _data("inf", 3)])
+    _crash(live)
+
+    # The reader is down and the writer is alive and holds the fifo, so what it sends waits.
+    writer = transport._open_fifo_writer(opts["inf"])
+    for value in (10, 20, 30):
+        transport._write_all(writer[0], lib.encode_data(value) + "\n")
+
+    relaunched = _HeldRecovery(opts=opts)
+
+    def the_writer_crashes():
+        for fd in writer:
+            os.close(fd)
+
+    runner = _recover_held(relaunched, step, the_writer_crashes)
+    try:
+        assert _wait_until(lambda: relaunched.seen[-3:] == [10, 20, 30])
+        assert relaunched.seen == [1, 3, 10, 20, 30]
+    finally:
+        relaunched._stop_requested.set()
+        runner.join(10)
+
+
+@pytest.mark.parametrize("step", _RECOVERY_STEPS)
+def test_what_a_relaunched_writer_had_in_its_fifo_survives_its_reader_crashing_while_it_recovers(tmp_path, step):
+    opts = _opts(tmp_path, ("inf", "outf"))
+    live = _HeldRelay(opts=opts)
+    # _process() drives the brain loop directly, with no writer thread of its
+    # own running: send_data("outf", 1) numbers and queues "1" (seq 1) but
+    # nothing ever writes it, so the checkpoint that the BARRIER closes right
+    # after finds it still in the outbound backlog (G5). "3" arrives after
+    # that capture and is only in the input log.
+    _process(live, [_data("inf", 1), ("inf", lib.TYPE_BARRIER, _ROUND), _data("inf", 3)])
+    _crash(live)
+
+    # The reader is alive and holds the fifo. The writer that crashed had sent it three
+    # messages that it has not read.
+    reader = transport._open_fifo_reader(opts["outf"])
+    dead_writer = transport._open_fifo_writer(opts["outf"])
+    for value in (10, 20, 30):
+        transport._write_all(dead_writer[0], lib.encode_data(value) + "\n")
+    for fd in dead_writer:
+        os.close(fd)
+
+    relaunched = _HeldRelay(opts=opts)
+
+    def the_reader_crashes():
+        for fd in reader:
+            os.close(fd)
+
+    runner = _recover_held(relaunched, step, the_reader_crashes)
+    try:
+        # What the crashed writer had sent (10, 20, 30), then what the
+        # checkpoint's outbound backlog re-sends before anything else (1,
+        # never written the first time), then what the replay of the input
+        # log sends again (3).
+        assert _drain_data(opts["outf"], 5) == [10, 20, 30, 1, 3]
+    finally:
+        relaunched._stop_requested.set()
+        runner.join(10)
+
+
+def test_a_node_that_opened_its_fifos_before_starting_its_threads_does_not_open_them_again(tmp_path):
+    proc = _Fanin(opts=_opts(tmp_path))
+    proc._open_fifos()
+    readers = dict(proc._reader_fds)
+    assert set(readers) == {"a", "b"}
+
+    proc.start_threads()
+    try:
+        assert proc._reader_fds == readers
+    finally:
+        proc.stop_threads()
+
+
+# --- a reader logs the messages of a block at once ----------------------------
+
+
+def _write_raw(path, text):
+    """Writes `text` into the fifo with one write, so that a reader gets it whole."""
+    fd = os.open(path, os.O_WRONLY)
+    try:
+        os.write(fd, text.encode())
+    finally:
+        os.close(fd)
+
+
+def _numbered(*seqs):
+    return "".join(lib.encode_data(seq * 10, seq=seq) + "\n" for seq in seqs)
+
+
+def test_the_messages_of_a_block_reach_the_log_in_one_write(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    calls = []
+    real_append_many = node._input_log.append_many
+
+    def spying_append_many(records):
+        calls.append([line for _, line in records])
+        return real_append_many(records)
+
+    node._input_log.append_many = spying_append_many
+    try:
+        _write_raw(opts["a"], _numbered(1, 2, 3))
+        assert _wait_until(lambda: len(node.seen) == 3)
+        assert [len(call) for call in calls] == [3]
+        assert [r.envelope.seq for r in node._input_log.replay(0)] == [1, 2, 3]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_line_cut_between_two_blocks_waits_for_the_rest(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        text = _numbered(1, 2)
+        cut = len(lib.encode_data(10, seq=1)) + 5
+        fd = os.open(opts["a"], os.O_WRONLY)
+        try:
+            os.write(fd, text[:cut].encode())
+            assert _wait_until(lambda: len(node.seen) == 1)
+            time.sleep(0.2)
+            assert len(node.seen) == 1
+            os.write(fd, text[cut:].encode())
+        finally:
+            os.close(fd)
+        assert _wait_until(lambda: len(node.seen) == 2)
+        assert [packet for _, packet in node.seen] == [10, 20]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_duplicate_in_the_middle_of_a_block_is_dropped(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        _write_raw(opts["a"], _numbered(1, 2, 2, 3))
+        assert _wait_until(lambda: len(node.seen) == 3)
+        time.sleep(0.2)
+        assert [packet for _, packet in node.seen] == [10, 20, 30]
+        assert [r.envelope.seq for r in node._input_log.replay(0)] == [1, 2, 3]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_gap_in_the_middle_of_a_block_logs_what_came_before_it_and_ends_the_reader(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        _write_raw(opts["a"], _numbered(1, 2, 4, 5))
+        assert _wait_until(lambda: not node._reader_threads["a"].is_alive())
+        assert _wait_until(lambda: len(node.seen) == 2)
+        assert [packet for _, packet in node.seen] == [10, 20]
+        assert [r.envelope.seq for r in node._input_log.replay(0)] == [1, 2]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+def test_a_message_longer_than_a_block_arrives_whole(tmp_path):
+    opts = _opts(tmp_path)
+    node = _Fanin(opts=opts)
+    node.start_threads()
+    try:
+        big = "x" * 200_000
+        text = lib.encode_data(big, seq=1) + "\n" + lib.encode_data("after", seq=2) + "\n"
+        fd = os.open(opts["a"], os.O_WRONLY)
+        try:
+            data = text.encode()
+            while data:
+                data = data[os.write(fd, data):]
+        finally:
+            os.close(fd)
+        assert _wait_until(lambda: len(node.seen) == 2)
+        assert [packet for _, packet in node.seen] == [big, "after"]
+    finally:
+        node.stop_threads(timeout=2)
+
+
+# --- sleep(): the pace of a node, live and not while replaying -------------
+
+
+class _Pacer(_Fanin):
+    """A node that waits STEP_SECS in every call, as a node that emits on its
+    own through a self-loop sets its pace."""
+
+    STEP_SECS = 0.0
+
+    def process_data(self, port_name, packet):
+        self.sleep(self.STEP_SECS)
+        super().process_data(port_name, packet)
+
+
+class _SlowPacer(_Pacer):
+    STEP_SECS = 5.0
+
+
+def test_sleep_does_not_wait_while_the_node_replays_its_log(tmp_path):
+    live = _Pacer(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _data("b", 2), _data("a", 3)])
+    _crash(live)
+
+    # Not told to stop before the replay, unlike _relaunch: a stop would end
+    # any wait too, and hide whether the replay waited at all.
+    relaunched = _SlowPacer(opts=_opts(tmp_path))
+    runner = threading.Thread(target=relaunched.run)
+    start = time.monotonic()
+    runner.start()
+    try:
+        assert _wait_until(lambda: len(relaunched.seen) == 3, timeout=2.0)
+        assert time.monotonic() - start < 2.0
+    finally:
+        relaunched._stop_requested.set()
+        runner.join(5)
+    assert not runner.is_alive()
+    assert relaunched.seen == [("a", 1), ("b", 2), ("a", 3)]
+
+
+def test_sleep_waits_while_the_node_is_live(tmp_path):
+    node = _Pacer(opts=_opts(tmp_path))
+    start = time.monotonic()
+    node.sleep(0.2)
+    assert time.monotonic() - start >= 0.2
+
+
+def test_sleep_returns_early_once_the_node_is_told_to_stop(tmp_path):
+    node = _Pacer(opts=_opts(tmp_path))
+    sleeper = threading.Thread(target=node.sleep, args=(30,))
+    start = time.monotonic()
+    sleeper.start()
+    time.sleep(0.1)
+    node._stop_requested.set()
+    sleeper.join(5)
+    assert not sleeper.is_alive()
+    assert time.monotonic() - start < 2.0

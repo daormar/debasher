@@ -25,6 +25,7 @@ print_desc()
     echo "debasher_exec_process executes a program process"
     echo "Usage: debasher_exec_process <prgfile> <processname> [-- [<process_opts>] ]"
     echo "Notes: if \`[-- [<process_opts>] ]\` is not given, the tool shows process information and exits"
+    echo "       a relative <prgfile> is looked for in the current directory and then in the directories of DEBASHER_MOD_DIR"
 }
 
 ########
@@ -34,14 +35,15 @@ if [ $# -lt 2 ]; then
     exit 1
 fi
 
-# Read parameters
-pfile=$1
+# Read parameters, resolving the program file to an absolute path (it
+# may be found through DEBASHER_MOD_DIR)
+pfile=$(debasher::_resolve_pfile "$1") || exit 1
 shift
 processname=$1
 shift
 
 echo "Loading debasher modules..." >&2
-debasher::load_debasher_module "${pfile}" "${pfile}" || exit 1
+debasher::load_debasher_module "${pfile}" || exit 1
 echo "" >&2
 
 echo "Executing program function given in module..." >&2

@@ -257,6 +257,38 @@ EOF
     [[ -v actual["-verbose"] ]]
 }
 
+@test "debasher::_get_actual_opt_names_for_first_task keeps generator option names that echo would take as its own flags" {
+    genproc3_generate_opts_size()
+    {
+        echo 1
+    }
+
+    genproc3_generate_opts()
+    {
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-n" "4" optlist
+        define_opt "-e" "x" optlist
+        define_flag "-E" optlist
+        save_opt_list optlist
+    }
+
+    DEBASHER_INITIAL_PROCESS_SPEC["genproc3"]="genproc3"
+    DEBASHER_PROGRAM_OUTDIR="/tmp/bats-debasher-outdir"
+
+    local -A actual=()
+    debasher::_get_actual_opt_names_for_first_task "" "genproc3" actual
+    [ "${#actual[@]}" -eq 3 ]
+    [[ -v actual["-n"] ]]
+    [[ -v actual["-e"] ]]
+    [[ -v actual["-E"] ]]
+}
+
 @test "debasher::_get_actual_opt_names_for_first_task's extra generate_opts call leaves no DEBASHER_OPT_LIST_* array behind" {
     genproc2_generate_opts_size()
     {
@@ -374,4 +406,231 @@ EOF
     run debasher::_check_opt_names_vs_explain ""
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: process notithproc defines option -x1, which is not declared in its explain_opts"* ]]
+}
+
+# --- define_fifo_opt in an array defined in a loop ---------------------
+
+@test "debasher::define_fifo_opt registers each fifo of an array defined in a loop as owned by its own task" {
+    declare -gA DEBASHER_PROGRAM_FIFOS DEBASHER_FIFO_USERS DEBASHER_FIFO_MIRRORED
+    declare -gA DEBASHER_FIFO_KINDS DEBASHER_FIFO_OWNER_OPTS
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN DEBASHER_OUT_VALUE_TO_PROCESSES
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    loopfifoproc_define_opts()
+    {
+        local idx
+        for (( idx = 0; idx < 3; idx++ )); do
+            local optlist=""
+            define_fifo_opt "-outf" "loopfifoproc_out_${idx}" optlist || return 1
+            save_opt_list optlist
+        done
+    }
+    # save_opt_list relies on lookups that return 1 in the ordinary case (no
+    # option generator), which bats's errexit would treat as a failure.
+    set +e
+    loopfifoproc_define_opts "" "" "loopfifoproc" "${BATS_TEST_TMPDIR}"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_0"]}" = "loopfifoproc${sep}0" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_1"]}" = "loopfifoproc${sep}1" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["loopfifoproc/loopfifoproc_out_2"]}" = "loopfifoproc${sep}2" ]
+}
+
+@test "debasher::_define_opts_for_process registers the fifos of a generator even when all process dependencies were given" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    genfifoproc_generate_opts_size()
+    {
+        echo 3
+    }
+
+    genfifoproc_generate_opts()
+    {
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+        local task_idx=$5
+        local optlist=""
+
+        define_fifo_opt_generator "-outf" "genfifoproc_out_${task_idx}" "${task_idx}" optlist || return 1
+        save_opt_list optlist
+    }
+
+    local spec="genfifoproc cpus=1 mem=32 time=00:01:00 ${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP} processdeps=none"
+    DEBASHER_INITIAL_PROCESS_SPEC["genfifoproc"]="${spec}"
+    DEBASHER_PROGRAM_PROCESSES["genfifoproc"]=1
+
+    set +e
+    debasher::_define_opts_for_process "" "${spec}"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["genfifoproc"]}" -eq 3 ]
+    [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_0"]}" = "genfifoproc${sep}0" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_1"]}" = "genfifoproc${sep}1" ]
+    [ "${DEBASHER_PROGRAM_FIFOS["genfifoproc/genfifoproc_out_2"]}" = "genfifoproc${sep}2" ]
+
+    # The readers of each fifo are found through the output values of its
+    # owner task, so those have to be recorded as well
+    local fifo="$(debasher::_get_absolute_fifoname genfifoproc genfifoproc_out_1)"
+    [ "${DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]}" = "genfifoproc${sep}1" ]
+}
+
+@test "debasher::_define_opts_for_process takes the process name from the given process spec, not from a variable of its caller" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    genonlyproc_generate_opts_size()
+    {
+        echo 2
+    }
+
+    genonlyproc_generate_opts()
+    {
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-id" "${task_idx}" optlist || return 1
+        save_opt_list optlist
+    }
+
+    local spec="genonlyproc cpus=1 mem=32 time=00:01:00"
+    DEBASHER_INITIAL_PROCESS_SPEC["genonlyproc"]="${spec}"
+
+    # A caller whose own processname variable names another process, one
+    # without a generator
+    local processname="loopproc"
+    set +e
+    debasher::_define_opts_for_process "" "${spec}"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["genonlyproc"]}" -eq 2 ]
+    [ -z "${DEBASHER_PROCESS_OPT_LIST_LEN["loopproc"]+x}" ]
+}
+
+# --- users of the fifos --------------------------------------------------
+
+@test "debasher::_deserialized_args_idx_is_dep_candidate writes the option index into the caller's variable j" {
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=(["/abs/fifo"]="fanin")
+    DEBASHER_DESERIALIZED_ARGS=("-n" "3" "-from_fanin" "/abs/fifo")
+    # The callers name their variable j, as here
+    caller() {
+        local j=""
+        debasher::_deserialized_args_idx_is_dep_candidate 3 j || return 1
+        echo "${j}"
+    }
+
+    run caller
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "2" ]
+}
+
+@test "debasher::_register_fifos_used_by_process registers the reader of a fifo that its owner writes" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname fanin fanin_to_loop)"
+    DEBASHER_PROGRAM_FIFOS["fanin/fanin_to_loop"]="fanin${sep}0"
+    DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    # fanin writes it through its output option (-outloop, say)
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["loop"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-n${DEBASHER_ARG_SEP}3${DEBASHER_ARG_SEP}-from_fanin${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "loop"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]}" = "loop${sep}0" ]
+    [ "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_to_loop"]}" = "-from_fanin" ]
+}
+
+@test "debasher::_register_fifos_used_by_process registers another task of the same array as a user" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname worker worker_out_0)"
+    DEBASHER_PROGRAM_FIFOS["worker/worker_out_0"]="worker${sep}0"
+    DEBASHER_FIFO_USERS["worker/worker_out_0"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="worker${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["worker"]=2
+    # Task 0 writes the fifo, task 1 reads it.
+    debasher::_get_opts_for_process_and_task() {
+        if [ "$3" -eq 0 ]; then
+            echo "-outnext${DEBASHER_ARG_SEP}${fifo}"
+        else
+            echo "-n${DEBASHER_ARG_SEP}3${DEBASHER_ARG_SEP}-from_prev${DEBASHER_ARG_SEP}${fifo}"
+        fi
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "worker"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["worker/worker_out_0"]}" = "worker${sep}1" ]
+    [ "${DEBASHER_FIFO_USER_OPTS["worker/worker_out_0"]}" = "-from_prev" ]
+}
+
+@test "debasher::_register_fifos_used_by_process registers the owner that reads its own fifo through another option (a self-loop)" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname counter counter_self)"
+    DEBASHER_PROGRAM_FIFOS["counter/counter_self"]="counter${sep}0"
+    DEBASHER_FIFO_USERS["counter/counter_self"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_OWNER_OPTS["counter/counter_self"]="-outself"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="counter${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["counter"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-self${DEBASHER_ARG_SEP}${fifo}${DEBASHER_ARG_SEP}-outself${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "counter"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["counter/counter_self"]}" = "counter${sep}0" ]
+    [ "${DEBASHER_FIFO_USER_OPTS["counter/counter_self"]}" = "-self" ]
+}
+
+@test "debasher::_register_fifos_used_by_process leaves outside the user of a fifo that its owner defines through an input option" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname fanin fanin_ext)"
+    DEBASHER_PROGRAM_FIFOS["fanin/fanin_ext"]="fanin${sep}0"
+    DEBASHER_FIFO_USERS["fanin/fanin_ext"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_OWNER_OPTS["fanin/fanin_ext"]="-ext"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["fanin"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-ext${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "fanin"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_FIFO_USERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]
+    [ -z "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_ext"]+x}" ]
 }

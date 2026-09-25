@@ -61,6 +61,16 @@ debasher::_get_program_funcname()
 }
 
 ########
+debasher::_get_program_type_funcname()
+{
+    local absmodname=$1
+
+    local modname=$(debasher::_get_modname_from_absmodname "${absmodname}")
+
+    debasher::_get_module_funcname "${modname}" "${DEBASHER_MODULE_METHOD_NAME_PROGRAM_TYPE}"
+}
+
+########
 debasher::_get_ui_program_metadata_fname()
 {
     local dir=$1
@@ -146,23 +156,22 @@ debasher::_search_mod_in_dirs()
 {
     local module=$1
 
-    # Obtain array with directories
+    # Obtain array with directories: the current directory first, then
+    # the ones listed in DEBASHER_MOD_DIR
     debasher::_deserialize_args_given_sep "${DEBASHER_MOD_DIR}" "${DEBASHER_MOD_DIR_SEP}"
-
-    # Add current directory
-    DEBASHER_DESERIALIZED_ARGS+=( "." )
+    local dirs=( "." "${DEBASHER_DESERIALIZED_ARGS[@]}" )
 
     # Reset the list of rejected same-named candidates so a later error
     # message reports only what this search actually found
     DEBASHER_REJECTED_MOD_CANDIDATES=()
 
-    # Search module in directories listed in DEBASHER_MOD_DIR (plus the
-    # current directory), stopping at the first hit -- unlike a
-    # PATH-style search, the *first* matching directory wins
+    # Search module in those directories, stopping at the first hit, so
+    # that a module in the current directory is never shadowed by a
+    # same-named one in DEBASHER_MOD_DIR
     local dir
     local fname
     local fullmodname=""
-    for dir in "${DEBASHER_DESERIALIZED_ARGS[@]}"; do
+    for dir in "${dirs[@]}"; do
         for fname in "${dir}/${module}" "${dir}/${module}.sh"; do
             if [ -f "${fname}" ]; then
                 fullmodname="${fname}"
@@ -172,7 +181,9 @@ debasher::_search_mod_in_dirs()
 
         # Not found directly under $dir: also look one level below, for
         # a module the DeBasher UI saved into its own output directory
-        debasher::_search_mod_in_immediate_subdirs "${dir}" "${module}"
+        # (by its name without the extension, whether or not it was
+        # given with it)
+        debasher::_search_mod_in_immediate_subdirs "${dir}" "${module%.sh}"
         if [ -n "${DEBASHER_SUBDIR_MOD_MATCH}" ]; then
             fullmodname="${DEBASHER_SUBDIR_MOD_MATCH}"
             break
@@ -211,6 +222,46 @@ debasher::_determine_full_module_name()
 }
 
 ########
+debasher::_report_module_not_found()
+{
+    # $1 - module name, as given
+    # $2 - path it was resolved to (see debasher::_determine_full_module_name)
+    local module=$1
+    local fullmodname=$2
+
+    echo "File not found: ${fullmodname} (module \"${module}\"; consider setting an appropriate value for DEBASHER_MOD_DIR environment variable)">&2
+    if [ ${#DEBASHER_REJECTED_MOD_CANDIDATES[@]} -gt 0 ]; then
+        echo "Note: found the following same-named file(s) one level below a DEBASHER_MOD_DIR entry, but none was recognized as a DeBasher UI program directory (missing or mismatched ${DEBASHER_UI_PROGRAM_DIRNAME}/${DEBASHER_UI_PROGRAM_METADATA_FNAME}):" >&2
+        local candidate
+        for candidate in "${DEBASHER_REJECTED_MOD_CANDIDATES[@]}"; do
+            echo "  - ${candidate}" >&2
+        done
+    fi
+}
+
+########
+# Resolves the program file given to a tool (debasher_exec --pfile,
+# debasher_exec_process, ...) as load_debasher_module resolves a
+# module: an absolute path is taken as is, and a relative one is looked
+# for in the current directory and then in the directories of
+# DEBASHER_MOD_DIR. Echoes the absolute path of the file, or reports it
+# as not found and returns 1.
+#
+# $1 - Program file, as given.
+debasher::_resolve_pfile()
+{
+    local pfile=$1
+
+    debasher::_determine_full_module_name "${pfile}"
+    if [ ! -f "${DEBASHER_RESOLVED_MODNAME}" ]; then
+        debasher::_report_module_not_found "${pfile}" "${DEBASHER_RESOLVED_MODNAME}"
+        return 1
+    fi
+
+    debasher::_get_absolute_path "${DEBASHER_RESOLVED_MODNAME}"
+}
+
+########
 debasher::_module_is_loaded()
 {
     local fullmodname=$1
@@ -224,6 +275,28 @@ debasher::_module_is_loaded()
     done
 
     # The given module name was not found
+    return 1
+}
+
+########
+# Echoes the file a loaded module was loaded from, given its name as
+# load_debasher_module was given it (with or without the ".sh"
+# extension, or as a path), or returns 1 if no loaded module has that
+# name.
+debasher::_get_loaded_module_fname()
+{
+    local module=$1
+
+    local modname=$(debasher::_get_modname_from_absmodname "${module}")
+
+    local absmodname
+    for absmodname in "${DEBASHER_PROGRAM_MODULES[@]}"; do
+        if [ "$(debasher::_get_modname_from_absmodname "${absmodname}")" = "${modname}" ]; then
+            echo "${absmodname}"
+            return 0
+        fi
+    done
+
     return 1
 }
 
@@ -271,14 +344,7 @@ debasher::load_debasher_module()
             DEBASHER_PROGRAM_MODULES+=("${fullmodname}")
         fi
     else
-        echo "File not found: ${fullmodname} (module \"${module}\"; consider setting an appropriate value for DEBASHER_MOD_DIR environment variable)">&2
-        if [ ${#DEBASHER_REJECTED_MOD_CANDIDATES[@]} -gt 0 ]; then
-            echo "Note: found the following same-named file(s) one level below a DEBASHER_MOD_DIR entry, but none was recognized as a DeBasher UI program directory (missing or mismatched ${DEBASHER_UI_PROGRAM_DIRNAME}/${DEBASHER_UI_PROGRAM_METADATA_FNAME}):" >&2
-            local candidate
-            for candidate in "${DEBASHER_REJECTED_MOD_CANDIDATES[@]}"; do
-                echo "  - ${candidate}" >&2
-            done
-        fi
+        debasher::_report_module_not_found "${module}" "${fullmodname}"
         exit 1
     fi
 }
@@ -375,6 +441,13 @@ debasher::_show_module_documentation()
         echo "Warning: no document function was defined" >&2
         echo "" >&2
     fi
+
+    # Print the program type (DEBASHER_PROGRAM_TYPE must have been
+    # resolved beforehand, see debasher::_resolve_program_type)
+    echo "## Program Type"
+    echo ""
+    echo "\`${DEBASHER_PROGRAM_TYPE}\`"
+    echo ""
 
     if [ "${show_shrdirs}" = 1 ]; then
         echo "## Shared Directories"

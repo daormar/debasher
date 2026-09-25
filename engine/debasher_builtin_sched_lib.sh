@@ -171,9 +171,17 @@ debasher_builtin_sched::_revise_rerun_proc_status()
     # Iterate over defined processes
     local processname
     for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
-        # If process is marked as rerun and it was finished, its process completion is reset
+        # If process is marked as rerun and it was finished, its process
+        # completion is reset. So it is for any process of a resident program
+        # that is not running, in particular an array with only some tasks
+        # finished: each task is a node, and every one of them resumes, not
+        # only those without a .finished
         if debasher::_process_marked_as_rerun ${processname}; then
-            if [ ${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
+            local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+            if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] \
+                   || { [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ] \
+                            && [ "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
+                            && [ "${status}" != "${DEBASHER_TODO_PROCESS_STATUS}" ]; }; then
                 debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
                 DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${DEBASHER_UNFINISHED_PROCESS_STATUS}
             fi
@@ -1033,11 +1041,21 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 }
 
 ########
-debasher_builtin_sched::_print_pid_to_file()
+debasher_builtin_sched::_print_script_trap()
 {
-    if [ "${BUILTIN_SCHED_PID_FILENAME}" != "" ]; then
-        echo $$ > "${BUILTIN_SCHED_PID_FILENAME}"
-    fi
+    # Ignored, not left at bash's default (terminate): a graceful stop
+    # (see FBPProcess's own SIGTERM handler, engine/debasher_runtime_fbp.py)
+    # signals this whole process group, not a lone PID, so that it reaches
+    # a resident process's own Python interpreter wherever it actually
+    # sits in the fork tree (the pipeline in
+    # debasher_builtin_sched::_execute_funct_plus_postfunct forks at least
+    # one subshell of its own). This script, the process group's leader
+    # and the one named in .id, has to survive that same broadcast, or it
+    # would die right here instead of going on to run
+    # _signal_process_completion once its own child actually exits, and
+    # .finished would never appear. A hard kill (SIGKILL, used by
+    # debasher_stop) cannot be trapped and is unaffected by this.
+    echo "trap '' TERM"
 }
 
 ########
@@ -1052,7 +1070,89 @@ debasher_builtin_sched::_print_script_header()
     echo "DEBASHER_DIR_NAME=\"${dirname}\""
     echo "DEBASHER_PROCESS_NAME=${processname}"
     echo "DEBASHER_NUM_TASKS=${num_tasks}"
-    echo "debasher_builtin_sched::_print_pid_to_file"
+}
+
+########
+# Writes the resolved options of the task, DEBASHER_DESERIALIZED_ARGS, to its
+# ".opts" file (the webui's "See options" inspect action).
+debasher_builtin_sched::_write_opts_file()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    local opts_fname=$(debasher::_get_process_opts_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
+    debasher::_print_opts_as_qstrings "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${opts_fname}"
+}
+
+########
+# Resets the output directory of the process before it runs, through its own
+# reset function if it has one, or by emptying it. Not for a node of a
+# resident program: what the directory holds is part of what the node has
+# done so far, like its checkpoints and its input log, and a launch of the
+# node resumes it, whether it is the Supervisor's relaunch after a crash or a
+# new run after a halt.
+debasher_builtin_sched::_reset_outdir()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+    local reset_funct=$(debasher::_get_reset_funcname ${processname})
+
+    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    if [ "${reset_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
+    elif [ "${opt_array_size}" -eq 1 ]; then
+        debasher::_default_reset_outfiles_for_process "${dirname}" "${processname}"
+    else
+        debasher::_default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
+    fi
+}
+
+########
+# Exports what the process reads about itself from the environment. Exported,
+# not plain assignments, so that they survive both the process's own wrapper
+# function and whatever it execs in turn (e.g. a resident process's "python
+# -c ..." heredoc).
+debasher_builtin_sched::_export_process_env()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    # Its own __exec__/<processname>/ directory (e.g. for checkpoints),
+    # without any option needing to be wired for it, its output directory
+    # (e.g. for what a launcher node keeps across launches), and the
+    # directory of the module that declares it, against which a relative
+    # path of the program resolves, as an external alias does.
+    export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    export DEBASHER_PROCESS_OUTDIR=$(debasher::_get_process_outdir_given_dirname "${dirname}" "${processname}")
+    export DEBASHER_PROCESS_MODULE_DIR="${DEBASHER_PROCESS_PFILE_DIR[${processname}]:-}"
+    # The tasks of an array share that directory, so a task also gets its
+    # own index, to name what it keeps there the way the engine names its
+    # per-task files (<process>_<idx>.id); empty for a process that is not
+    # an array.
+    if [ "${opt_array_size}" -gt 1 ]; then
+        export DEBASHER_PROCESS_TASK_IDX="${task_idx}"
+    else
+        export DEBASHER_PROCESS_TASK_IDX=""
+    fi
+    # The computational specifications of the process, so that a resident
+    # process's heredoc reads its own limits from them (see
+    # DEBASHER_RESIDENT_COMP_SPEC_NAMES). The generated script carries the
+    # specification of every process, so a relaunch gets them too.
+    export DEBASHER_PROCESS_COMP_SPECS=$(debasher::_get_process_comp_specs "${processname}")
+    # The ports of the task, for a node or the Supervisor of a resident
+    # program, which takes them from here instead of declaring them in its
+    # class (see debasher::_register_resident_task_ports); empty for any
+    # other process
+    export DEBASHER_PROCESS_PORTS="${DEBASHER_RESIDENT_TASK_PORTS[${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}]:-}"
 }
 
 ########
@@ -1064,20 +1164,20 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     local opt_array_size=$4
     local task_idx=$5
     local skip_funct=$(debasher::_get_skip_funcname ${processname})
-    local reset_funct=$(debasher::_get_reset_funcname ${processname})
     local post_funct=$(debasher::_get_post_funcname ${processname})
 
     # Get serialized arguments
-    local sargs=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}")
+    local sargs
+    sargs=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}") || {
+        echo "Error: the options of ${processname} (task ${task_idx}) could not be generated" >&2
+        return 1
+    }
 
     # Convert serialized process options to array (result is placed into
     # the DEBASHER_DESERIALIZED_ARGS variable)
     debasher::_deserialize_args "${sargs}"
 
-    # Dump resolved options to the process's ".opts" file (webui "See
-    # options" inspect action)
-    local opts_fname=$(debasher::_get_process_opts_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
-    debasher::_print_opts_as_qstrings "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${opts_fname}"
+    debasher_builtin_sched::_write_opts_file "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 
     # Execute process skip function if it was provided
     if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
@@ -1086,16 +1186,7 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
 
     debasher::_display_begin_process_message
 
-    # Reset output directory
-    if [ "${reset_funct}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        if [ "${opt_array_size}" -eq 1 ]; then
-            debasher::_default_reset_outfiles_for_process "${dirname}" "${processname}"
-        else
-            debasher::_default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
-        fi
-    else
-        ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
-    fi
+    debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 
     # Start mirror taps (if any) for fifos this process owns and writes
     # to (see debasher::_start_fifo_mirror_taps_for_process) — must run
@@ -1104,10 +1195,10 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # each mirrored option's shim path instead.
     debasher::_start_fifo_mirror_taps_for_process "${processname}"
 
-    # Execute process function
-
-    DEBASHER_PROCESS_STDOUT_FILENAME=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
-    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${DEBASHER_PROCESS_STDOUT_FILENAME}"
+    # Execute process function, keeping its stdout
+    debasher_builtin_sched::_export_process_env "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
+    local stdout_filename=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
+    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${stdout_filename}"
 
     local funct_exit_code=${PIPESTATUS[0]}
 
@@ -1173,7 +1264,9 @@ debasher_builtin_sched::_write_env_vars_and_funcs()
     debasher::_write_env_vars_and_funcs "${dirname}"
 
     # Write builtin sched environment functions
-    declare -f debasher_builtin_sched::_print_pid_to_file
+    declare -f debasher_builtin_sched::_write_opts_file
+    declare -f debasher_builtin_sched::_reset_outdir
+    declare -f debasher_builtin_sched::_export_process_env
     declare -f debasher_builtin_sched::_execute_funct_plus_postfunct
     declare -f debasher::_seq_execute_builtin
     declare -f debasher_builtin_sched::_get_script_log_filenames
@@ -1193,6 +1286,10 @@ debasher_builtin_sched::_create_script()
     local BASH_SHEBANG=$(debasher::_init_bash_shebang_var)
     echo ${BASH_SHEBANG} > "${fname}" || return 1
 
+    # Ignore a graceful-stop SIGTERM at this (the process group leader's)
+    # level, before anything else runs (see _print_script_trap).
+    debasher_builtin_sched::_print_script_trap >> "${fname}" || return 1
+
     # Write environment variables
     debasher_builtin_sched::_write_env_vars_and_funcs "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
 
@@ -1207,23 +1304,6 @@ debasher_builtin_sched::_create_script()
 
     # Give execution permission
     chmod u+x "${fname}" || return 1
-}
-
-########
-debasher_builtin_sched::_wait_until_file_exists()
-{
-    local pid_file=$1
-    local max_num_iters=$2
-    local iterno=1
-
-    while [ ${iterno} -le ${max_num_iters} ]; do
-        if [ -f "${pid_file}" ]; then
-            return 0
-        fi
-        iterno=$((iterno + 1))
-    done
-
-    return 1
 }
 
 ########
@@ -1242,40 +1322,76 @@ debasher_builtin_sched::_launch()
         export BUILTIN_ARRAY_TASK_ID=${task_idx}
     fi
 
-    # Set variable indicating name of file storing PID
+    # Name of the file that stores the PID
     if [ ${task_idx} = ${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
         local pid_file=$(debasher::_get_processid_filename "${dirname}" ${processname})
-        export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     else
-        # Write pid
         local pid_file=$(debasher::_get_array_taskid_filename "${dirname}" ${processname} ${task_idx})
-        export BUILTIN_SCHED_PID_FILENAME="${pid_file}"
     fi
+
+    # If a previous incarnation of this same process/task left its PID
+    # behind, kill its whole process group before starting a new one:
+    # a relaunch triggered by a missed heartbeat does not prove the old
+    # one is actually gone (see debasher::_stop_pid), and launching a
+    # second copy while the first still holds its FIFOs would leave two
+    # live incarnations of the same node running at once. A no-op if it
+    # is already gone.
+    if [ -f "${pid_file}" ]; then
+        local old_pid=$("${CAT}" "${pid_file}" 2>/dev/null)
+        if [ -n "${old_pid}" ]; then
+            debasher::_stop_pid "${old_pid}" || true
+        fi
+    fi
+
+    # Tell the launched process where the installed helper tools live.
+    # debasher_libexecdir is deliberately not among the variables dumped
+    # into generated scripts (see debasher_get_deblib_vars_and_funcs), so
+    # a running process (e.g. a Supervisor relaunching a node through
+    # debasher_launch_process) cannot learn it any other way. Being a
+    # constant, unlike the two variables above, it needs no unset.
+    export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
+    # Same reasoning, for debasher_bindir: a Python heredoc process (a
+    # Supervisor calling debasher_stop_resident as a subprocess, see its
+    # own on_node_permanently_failed) has no other way to find a
+    # bin_SCRIPTS tool either. Found missing by a real debasher_exec run,
+    # 2026-09-22: a bare "debasher_stop_resident" (and, before it, the
+    # same call's own now-removed bare "debasher_stop" fallback) relied
+    # on PATH already including bin/, which nothing here ever put there,
+    # so the escalation thread crashed on FileNotFoundError before it
+    # could do anything, silently, unwaited-on since nothing joins it.
+    # This most likely explains the Conformance status entry recording
+    # sup.finished never appearing after a node gave up: the very
+    # fallback meant to end the program in exactly that case could never
+    # actually run.
+    export DEBASHER_BINDIR="${debasher_bindir}"
 
     # Execute file, with job control enabled just for this one launch
     # so it becomes its own process group (pgid == pid). The launched
     # script always forks at least one child of its own (the stdout-
-    # capturing tee pipeline every process runs through — see
-    # debasher_builtin_sched::_execute_funct_plus_postfunct — plus a
+    # capturing tee pipeline every process runs through, see
+    # debasher_builtin_sched::_execute_funct_plus_postfunct, plus a
     # mirrored fifo's background tap, if any); without a distinct
     # process group, killing just this pid (debasher::_stop_pid, used
     # by debasher_stop) leaves those children running as orphans. Job
-    # control is normally off in a non-interactive script — toggling it
+    # control is normally off in a non-interactive script: toggling it
     # only around the launch keeps the scope narrow.
     set -m
     "${file}" &
     local pid=$!
     set +m
 
-    # Wait for PID file to be created
-    local max_num_iters=10000
-    debasher_builtin_sched::_wait_until_file_exists "${pid_file}" ${max_num_iters} || return 1
+    # Record the PID here, not from inside the launched script: $! is
+    # the script's own PID (the background job execs it directly), so
+    # the file is complete as soon as this returns, however long the
+    # script takes to start. Written to a temporary file and renamed
+    # over the old one, so that a concurrent reader (debasher_stop, a
+    # relaunch) sees either the old PID or the new one, never an empty
+    # file.
+    echo ${pid} > "${pid_file}.tmp" || return 1
+    "${MV}" -f "${pid_file}.tmp" "${pid_file}" || return 1
 
     # Unset variables
-    if [ ${task_idx} != ${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK} ]; then
-        unset "${task_varname}"
-    fi
-    unset BUILTIN_SCHED_PID_FILENAME
+    unset BUILTIN_ARRAY_TASK_ID
 }
 
 ########
@@ -1542,6 +1658,22 @@ debasher_builtin_sched::execute_program_processes()
 
         # Select processes that should be executed
         if debasher_builtin_sched::_select_processes_to_be_exec "${dirname}"; then
+            # In oneshot mode, nothing ever waits for a process to finish
+            # (see below), so a later iteration can never end up with
+            # *more* available resources than this first one has right
+            # now -- if not everything that could be selected in round 1
+            # got selected, it never will be. Check before launching
+            # anything, rather than silently launching only a subset and
+            # returning as if the whole program had started.
+            if [ ${oneshot} -eq 1 -a ${iterno} -eq 1 ]; then
+                local -a debasher_builtin_sched_selected_arr=(${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES})
+                local num_selected_processes=${#debasher_builtin_sched_selected_arr[@]}
+                if [ ${num_selected_processes} -lt ${num_exec_processes} ]; then
+                    echo "Error: --builtinsched-oneshot requires enough resources (cpus, memory) to launch every process at once (${num_selected_processes} of ${num_exec_processes} fit); it never waits for one to finish to free up resources for the rest. Increase --builtinsched-cpus/--builtinsched-mem, or remove the restriction, and try again. Aborting..." >&2
+                    return 1
+                fi
+            fi
+
             # Execute processes
             debasher_builtin_sched::_exec_processes "${cmdline}" "${dirname}"
 

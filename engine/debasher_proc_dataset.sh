@@ -34,7 +34,9 @@ usage()
     echo "                       --prg-sopts <string> [--prg-opts <string>]"
     echo "                       [--help]"
     echo ""
-    echo "--pfile <string>       File with program processes to be executed"
+    echo "--pfile <string>       File with program processes to be executed (a relative"
+    echo "                       path is looked for in the current directory and then"
+    echo "                       in the directories of DEBASHER_MOD_DIR)"
     echo "--sched <string>       Scheduler used to execute the programs"
     echo "--dflt-nodes <string>  Default set of nodes used to execute the program"
     echo "--prg-sopts <string>   File containing a string with program options per"
@@ -98,7 +100,13 @@ check_pars()
         echo "Error! --pfile parameter not given!" >&2
         exit 1
     else
-        if [ ! -f "${pfile}" ]; then
+        # Resolve the program file to an absolute path (it may be found
+        # through DEBASHER_MOD_DIR); the commands generated may still
+        # run where it exists
+        local resolved_pfile
+        if resolved_pfile=$(debasher::_resolve_pfile "${pfile}" 2> /dev/null); then
+            pfile="${resolved_pfile}"
+        else
             echo "Warning! file ${pfile} does not exist" >&2
         fi
     fi

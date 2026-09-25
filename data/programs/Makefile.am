@@ -12,7 +12,7 @@ debasher_counter.sh debasher_simple_process.sh				\
 debasher_value_pass_example.sh debasher_file_example.sh			\
 debasher_fifo_example.sh debasher_shared_dir_example.sh			\
 debasher_array_example.sh debasher_array_example_original.sh		\
-debasher_generator_example.sh						\
+debasher_generator_example.sh debasher_fifo_generator_example.sh	\
 debasher_skip_example.sh debasher_conda_example.sh			\
 debasher_docker_example.sh debasher_subprogram_example.sh		\
 debasher_explicit_deps_example.sh debasher_telegram_morrison.sh		\
@@ -27,6 +27,7 @@ debasher_cycle_state.sh debasher_cycle_dyn_sched.sh			\
 debasher_cycle_trigger_interactive.sh debasher_net_reconf_1.sh		\
 debasher_net_reconf_2.sh debasher_dynamic_fanout.sh			\
 debasher_dynamic_fanout_fifos.sh dynamic_fanout_dispatcher.py		\
-debasher_dynamic_fanout_parallel.sh debasher_dynamic_fanout_taskdone.sh
+debasher_dynamic_fanout_parallel.sh debasher_dynamic_fanout_taskdone.sh	\
+debasher_dynamic_fanout_fifos_gen.sh
 
 EXTRA_DIST= $(prgfiles_DATA)

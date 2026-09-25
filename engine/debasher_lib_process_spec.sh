@@ -53,6 +53,26 @@ debasher::_program_process_spec_is_ok()
         return 1
     fi
 
+    # The limits that a resident process reads, when given, must be positive
+    # numbers: checked here, when the program is loaded, rather than by the
+    # node when it starts, after it has been launched
+    local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
+    local specname
+    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES}; do
+        local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
+        if [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && ! debasher::_str_is_positive_number "${value}"; then
+            echo "Error: ${specname} computational specification of process ${processname} must be a positive number, got \"${value}\"" >&2
+            return 1
+        fi
+    done
+    local batch_sched=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}")
+    if [ "${batch_sched}" != "${DEBASHER_ATTR_NOT_FOUND}" ] \
+           && [ "${batch_sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ] \
+           && [ "${batch_sched}" != "${DEBASHER_SLURM_SCHEDULER}" ]; then
+        echo "Error: ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME} computational specification of process ${processname} must be ${DEBASHER_BUILTIN_SCHEDULER} or ${DEBASHER_SLURM_SCHEDULER}, got \"${batch_sched}\"" >&2
+        return 1
+    fi
+
     return 0
 }
 
@@ -69,6 +89,14 @@ debasher::extract_process_comp_specs()
     # process
     read -r first rest <<< "$specs"
     echo "$rest"
+}
+
+########
+debasher::_get_process_comp_specs()
+{
+    local processname=$1
+
+    debasher::extract_process_comp_specs "${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
 }
 
 ########
@@ -243,26 +271,6 @@ debasher::_extract_ext_alias_from_process_spec()
     local process_spec=$1
     local process_additional_specs=$(debasher::extract_process_additional_specs "${process_spec}")
     debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias"
-}
-
-########
-debasher::_all_process_deps_pre_specified()
-{
-    local processname
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # Retrieve process specification
-        local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
-
-        # Extract dependencies from process specification
-        local procdeps=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
-
-        # Check if dependencies were given
-        if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-            return 1
-        fi
-    done
-
-    return 0
 }
 
 ########

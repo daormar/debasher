@@ -51,6 +51,15 @@ DEBASHER_MODULE_METHOD_SEP="_"
 DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP="|||"
 DEBASHER_LEGACY_PROCSPECS_SEP=" "
 DEBASHER_PROCSPECS_SEP=";"
+# Computational specifications that only a resident program reads (see
+# _PortWorker._apply_comp_specs): limits of a node, the heartbeat timeout of
+# a Supervisor, the startup deadline of a node, or of every node for a
+# Supervisor, and the batch runs a launcher node runs at a time, given per
+# process with add_debasher_process. Each, when given, is a positive number.
+DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backlog_fail_mb gil_switch_interval_ms heartbeat_timeout_s startup_timeout_s max_concurrent_runs"
+# The scheduler with which a launcher node runs its batch runs, one of those
+# debasher_exec takes in --sched; the built-in one when not given
+DEBASHER_BATCH_SCHED_COMP_SPEC_NAME="batch_sched"
 DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX=".__VAL_DESCRIPTOR__"
 DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX="__PROC_OUT_OPT_DESCRIPTOR__"
 DEBASHER_SCHED_OPTS_DIRNAME=".sched_opts"
@@ -201,13 +210,24 @@ DEBASHER_PROCESS_METHODS+=("${DEBASHER_PROCESS_FUNCNAMES[@]}" "${DEBASHER_PROCES
 DEBASHER_MODULE_METHOD_NAME_DOCUMENT="${DEBASHER_MODULE_METHOD_SEP}document"
 DEBASHER_MODULE_METHOD_NAME_SHRDIRS="${DEBASHER_MODULE_METHOD_SEP}shared_dirs"
 DEBASHER_MODULE_METHOD_NAME_PROGRAM="${DEBASHER_MODULE_METHOD_SEP}program"
+DEBASHER_MODULE_METHOD_NAME_PROGRAM_TYPE="${DEBASHER_MODULE_METHOD_SEP}program_type"
 
 # ARRAY OF ALL MODULE METHOD NAMES
 DEBASHER_MODULE_METHODS=(
     "${DEBASHER_MODULE_METHOD_NAME_DOCUMENT}"
     "${DEBASHER_MODULE_METHOD_NAME_SHRDIRS}"
     "${DEBASHER_MODULE_METHOD_NAME_PROGRAM}"
+    "${DEBASHER_MODULE_METHOD_NAME_PROGRAM_TYPE}"
 )
+
+# PROGRAM TYPES
+#
+# "general" (default, when a module declares no `_program_type` method)
+# is today's one-shot, DAG-scheduled program. "resident" is the new
+# long-running, stateful kind (see to_do_fbp.md): its processes must be
+# Python classes deriving from FBPProcess or Supervisor.
+DEBASHER_PROGRAM_TYPE_GENERAL="general"
+DEBASHER_PROGRAM_TYPE_RESIDENT="resident"
 
 # FIFO-RELATED CONSTANTS
 DEBASHER_EXTERNAL_FIFO_USER="__EXTERNAL__${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
@@ -222,6 +242,9 @@ DEBASHER_SHUTDOWN_TOKEN="__SHUTDOWN_TOKEN__"
 # "cycle"-style processes do), so a mirror tap's own termination can't
 # depend on it.
 DEBASHER_FIFO_MIRROR_STOP_TOKEN="__FIFO_MIRROR_TAP_STOP__"
+# How long debasher::_stop_fifo_mirror_taps waits for a tap to stop on its
+# token, and then again for it to end on SIGTERM, before going further.
+DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=2
 
 # RERUN REASONS
 DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_user_owner"
@@ -231,6 +254,7 @@ DEBASHER_NEW_PROC_RERUN_REASON="new_process"
 DEBASHER_INPUT_CHANGE_RERUN_REASON="input_change"
 DEBASHER_PROPAGATE_FIFO_RERUN_REASON="propagate_fifo"
 DEBASHER_PROPAGATE_DEPS_RERUN_REASON="propagate_dependencies"
+DEBASHER_RESIDENT_RESUME_RERUN_REASON="resident_resume"
 
 # PROCESS DEPENDENCIES
 DEBASHER_NONE_PROCESSDEP_TYPE="none"
@@ -411,6 +435,13 @@ declare DEBASHER_RESOLVED_MODNAME
 # function that is invoked
 declare -a DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK
 
+# Declare variable to store the current program's type (general or
+# resident, see DEBASHER_PROGRAM_TYPE_* above); only the top-level
+# pfile's `_program_type` method (if any) is ever resolved and
+# invoked, so a composed sub-module's own `_program_type` has no
+# effect
+declare DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+
 # Declare associative array to store processes added to a program
 declare -A DEBASHER_PROGRAM_PROCESSES
 
@@ -456,6 +487,38 @@ declare -A DEBASHER_FIFO_USERS
 # --mirror flag (see debasher::_start_fifo_mirror_taps_for_process)
 declare -A DEBASHER_FIFO_MIRRORED
 
+# Declare associative array with the tag of each tagged fifo (by augmented
+# name), "control" or "external", given to define_fifo_opt or
+# define_fifo_opt_generator as --control or --external: the reader's end of
+# the fifo is a control port or an external port of a resident program's
+# node, and a fifo fed from outside is owned by its reader (see the design
+# doc's "Channel kinds declared with the fifo")
+declare -A DEBASHER_FIFO_KINDS
+DEBASHER_FIFO_KIND_CONTROL="control"
+DEBASHER_FIFO_KIND_EXTERNAL="external"
+
+# Declare associative array with the option through which the owner of each
+# fifo (by augmented name) defines it: an output option ("-out...") if the
+# owner writes it, an input option if it reads it
+declare -A DEBASHER_FIFO_OWNER_OPTS
+
+# Declare associative array with the option through which the process at the
+# other end of each fifo (by augmented name) uses it, when that process is
+# part of the program: an input option, since it reads the fifo
+declare -A DEBASHER_FIFO_USER_OPTS
+
+# Declare associative array with the role of each process of a resident
+# program, "supervisor" or "fbpprocess" (see
+# debasher::_validate_resident_program_processes)
+declare -A DEBASHER_RESIDENT_PROCESS_ROLES
+
+# Declare associative array with the ports of each task of the FBPProcess
+# nodes and of the Supervisor of a resident program (by
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>), which the wrapper of the
+# task exports to it as DEBASHER_PROCESS_PORTS (see
+# debasher::_register_resident_task_ports)
+declare -A DEBASHER_RESIDENT_TASK_PORTS
+
 # Declare general scheduler-related variables
 declare DEBASHER_SCHEDULER
 declare -A DEBASHER_RERUN_PROCESSES
@@ -480,6 +543,7 @@ declare -A DEBASHER_EXIT_CODE
 . "${debasher_pkglibdir}"/debasher_lib_process_spec
 . "${debasher_pkglibdir}"/debasher_lib_processes
 . "${debasher_pkglibdir}"/debasher_lib_opts
+. "${debasher_pkglibdir}"/debasher_lib_mirror
 . "${debasher_pkglibdir}"/debasher_lib_sched
 . "${debasher_pkglibdir}"/debasher_lib_conda
 . "${debasher_pkglibdir}"/debasher_lib_docker

@@ -208,8 +208,11 @@ through the module's own source file. It is introduced in the
 
 The ``-m <string>`` option gives the module file, and the optional
 ``-s <string>`` option restricts the output to a single process
-(omitted, every process the module defines is documented). The
-remaining options select which information is included in the report:
+(omitted, every process the module defines is documented). The report
+always opens with the module's name and description, followed by a
+``Program Type`` section giving the program type (``general`` or
+``resident``). The remaining options select which information is
+included in the report:
 
 * ``--show-opts``: process options, as documented by ``explain_opts``.
 * ``--show-opthnd``: the option-handler method actually used

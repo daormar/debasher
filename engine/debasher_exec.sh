@@ -66,7 +66,9 @@ usage()
     echo "                          [--wait] [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with program processes to be executed (see"
-    echo "                          manual for additional information)"
+    echo "                          manual for additional information); a relative path"
+    echo "                          is looked for in the current directory and then in"
+    echo "                          the directories of DEBASHER_MOD_DIR"
     echo "--outdir <string>         Output directory"
     echo "--sched <string>          Scheduler used to execute the program (if not given,"
     echo "                          it is determined using information gathered during"
@@ -225,13 +227,9 @@ check_pars()
         echo "Error! --pfile parameter not given!" >&2
         exit 1
     else
-        if [ ! -f "${pfile}" ]; then
-            echo "Error! file ${pfile} does not exist" >&2
-            exit 1
-        else
-            # Absolutize file path
-            pfile=$(debasher::_get_absolute_path "${pfile}")
-        fi
+        # Resolve the program file to an absolute path (it may be found
+        # through DEBASHER_MOD_DIR)
+        pfile=$(debasher::_resolve_pfile "${pfile}") || exit 1
     fi
 
     if [ ${outdir_given} -eq 0 ]; then
@@ -337,11 +335,67 @@ initialize_procspec()
 
     local pfile=$1
 
+    debasher::_resolve_program_type "${pfile}" || exit 1
+
     debasher::_exec_program_func_for_module "${pfile}" || exit 1
 
     echo "Initialization complete" >&2
 
     echo "" >&2
+}
+
+########
+# A "resident" program (long-running, stateful processes, see
+# to_do_fbp.md) only ever runs under the built-in scheduler, in
+# oneshot mode: debasher_exec launches every process and returns
+# immediately rather than waiting for them to finish, since they are
+# not expected to ever finish on their own. This is forced here,
+# rather than left for the caller (frontend or otherwise) to remember
+# to pass --builtinsched-oneshot/--sched BUILTIN, so the behavior is
+# correct regardless of how debasher_exec is invoked.
+enforce_resident_program_scheduling()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    echo "# Program type is '${DEBASHER_PROGRAM_TYPE_RESIDENT}': forcing the built-in scheduler in oneshot mode..." >&2
+
+    if [ ${sched_given} -eq 1 ] && [ "${sched_opt}" != "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+        echo "Error! a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program only supports the built-in scheduler (requested: ${sched_opt})" >&2
+        return 1
+    fi
+
+    # Resource limits (--builtinsched-cpus/--builtinsched-mem) are not
+    # forced to be unrestricted here: a resident program is free to use
+    # them like any other. Since oneshot mode never waits for a process
+    # to finish (see debasher_builtin_sched::execute_program_processes),
+    # it cannot correct course if not everything fits in one round --
+    # that case is instead detected there and aborted before anything
+    # gets launched, rather than silently launching only a subset.
+    debasher::_set_debasher_scheduler "${DEBASHER_BUILTIN_SCHEDULER}" || return 1
+    builtin_sched_oneshot_given=1
+
+    echo "" >&2
+}
+
+########
+# The command line saved in the output directory (see print_command_line)
+# is where the tools that operate on it later (debasher_status,
+# debasher_stop, debasher_stats, ...) learn which scheduler the program
+# runs with. When --sched was not given, the scheduler in use was chosen
+# here (the default of the machine, or the one forced for the program
+# type), so it is added to the saved command line: otherwise those tools
+# would have to work it out again, and would not necessarily get the same
+# answer.
+record_effective_scheduler_in_command_line()
+{
+    local sched=$(debasher::_get_scheduler)
+    if [ -z "${sched}" ]; then
+        return 0
+    fi
+
+    command_line=$(debasher::_add_sched_to_serialized_cmdline "${command_line}" "${sched}")
 }
 
 ########
@@ -688,6 +742,14 @@ check_process_opts()
     # Register fifo users
     register_fifo_users "${cmdline}" || return 1
 
+    # Check the tags of the fifos, now that the other end of every fifo is
+    # known (see debasher::_validate_program_fifo_kinds)
+    debasher::_validate_program_fifo_kinds || return 1
+
+    # Give each node of a resident program its ports, which the checks above
+    # guarantee are consistent (see debasher::_register_resident_task_ports)
+    debasher::_register_resident_task_ports || return 1
+
     # Print info about fifos
     debasher::_show_program_fifos > "${program_fifos_file}" || return 1
 
@@ -759,6 +821,8 @@ register_all_rerun_processes()
     if debasher::_program_uses_fifos ; then
         debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner "${dirname}" || exit 1
     fi
+
+    debasher::_define_rerun_processes_due_to_resident_resume "${dirname}" || exit 1
 
     debasher::_propagate_rerun_processes "${dirname}" || exit 1
 
@@ -1223,6 +1287,12 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
+# The command line saved in the output directory gives the resolved
+# program file, not the one given: the tools that operate on the
+# directory later (debasher_status, debasher_stop, ...) find the program
+# from it, and they may not run with the same DEBASHER_MOD_DIR
+command_line=$(debasher::_set_opt_value_in_serialized_cmdline "${command_line}" "--pfile" "${pfile}")
+
 set_debasher_output_dir "${outd}" || exit 1
 
 create_basic_dirs || exit 1
@@ -1233,6 +1303,12 @@ load_module "${pfile}" || exit 1
 
 # Initialize process specification
 initialize_procspec "${pfile}" || exit 1
+
+debasher::_validate_resident_program_processes || exit 1
+
+enforce_resident_program_scheduling || exit 1
+
+record_effective_scheduler_in_command_line || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts || exit 1

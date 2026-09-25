@@ -1,7 +1,14 @@
 import pytest
-from fastapi import HTTPException
 
-from api.routers.fs_browse import ListDirsRequest, list_dirs
+# The router under test imports fastapi, which the system Python used by
+# `make check` may not have (the API's own requirements live in the
+# project's virtualenv, see api/README.md). Skip this module in that case
+# instead of failing the collection of the whole test directory.
+pytest.importorskip("fastapi")
+
+from fastapi import HTTPException  # noqa: E402
+
+from api.routers.fs_browse import ListDirsRequest, list_dirs  # noqa: E402
 
 
 def test_list_dirs_lists_only_subdirectories(tmp_path):

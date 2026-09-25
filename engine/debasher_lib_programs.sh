@@ -81,6 +81,61 @@ debasher::_get_sched_from_command_line_file()
 }
 
 ########
+# Adds "--sched <sched>" to a command line serialized with
+# debasher::_serialize_args, unless it already carries a --sched option,
+# and echoes the result. debasher_exec uses it to save, in the command
+# line file of the output directory, the scheduler the program actually
+# runs with: the tools that operate on that directory later
+# (debasher_status, debasher_stop, ...) learn the scheduler from that
+# file, and what they would otherwise work out for themselves (the
+# machine's default, which depends on the environment they run in, or a
+# scheduler that debasher_exec forced for the program type) can differ
+# from it.
+#
+# $1 - Serialized command line.
+# $2 - Scheduler to add if the command line does not give one.
+debasher::_add_sched_to_serialized_cmdline()
+{
+    local serialized_cmdline=$1
+    local sched=$2
+
+    # Whole-argument match: the separator on both sides keeps "--sched"
+    # from matching inside another argument.
+    local wrapped="${DEBASHER_ARG_SEP}${serialized_cmdline}${DEBASHER_ARG_SEP}"
+    if [[ "${wrapped}" == *"${DEBASHER_ARG_SEP}--sched${DEBASHER_ARG_SEP}"* ]]; then
+        echo "${serialized_cmdline}"
+    else
+        echo "${serialized_cmdline}${DEBASHER_ARG_SEP}--sched${DEBASHER_ARG_SEP}${sched}"
+    fi
+}
+
+########
+# Sets to the given value every occurrence of an option in a command line
+# serialized by debasher::_serialize_args, and echoes the result.
+#
+# $1 - Serialized command line.
+# $2 - Option name.
+# $3 - Option value.
+debasher::_set_opt_value_in_serialized_cmdline()
+{
+    local serialized_cmdline=$1
+    local opt=$2
+    local value=$3
+
+    debasher::_deserialize_args "${serialized_cmdline}"
+    local args=( "${DEBASHER_DESERIALIZED_ARGS[@]}" )
+
+    local i
+    for (( i = 0; i + 1 < ${#args[@]}; i++ )); do
+        if [ "${args[i]}" = "${opt}" ]; then
+            args[i+1]="${value}"
+        fi
+    done
+
+    debasher::_serialize_args "${args[@]}"
+}
+
+########
 debasher::_get_abspfile_from_command_line_file()
 {
     # Initialize variables
@@ -123,6 +178,59 @@ debasher::_exec_program_func_for_module()
 
     # Remove program file from stack
     unset 'DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]'
+}
+
+########
+# Public: Sets the type of the program being defined ("general" or
+# "resident", see DEBASHER_PROGRAM_TYPE_* in debasher_lib.sh). Meant to
+# be called from a module's `_program_type` method.
+#
+# $1 - Program type.
+#
+# Examples
+#
+#    program_type "resident"
+debasher::program_type()
+{
+    local type=$1
+
+    if [ "${type}" != "${DEBASHER_PROGRAM_TYPE_GENERAL}" ] && [ "${type}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        echo "Error: invalid program type '${type}' (expected '${DEBASHER_PROGRAM_TYPE_GENERAL}' or '${DEBASHER_PROGRAM_TYPE_RESIDENT}'). Aborting execution..." >&2
+        exit 1
+    fi
+
+    DEBASHER_PROGRAM_TYPE="${type}"
+}
+
+########
+# Public: Sets the type of the program being defined.
+#
+# $1 - Program type.
+#
+# Examples
+#
+#    program_type "resident"
+#
+# The function does not return any value
+program_type() { debasher::program_type "$@"; }
+
+########
+# Resolves and, if defined, invokes the top-level pfile's
+# `_program_type` method, leaving DEBASHER_PROGRAM_TYPE at its default
+# ("general") when the method is absent. Only ever called for the
+# top-level pfile (see initialize_procspec in debasher_exec.sh): a
+# composed sub-module's own `_program_type`, if it has one, is never
+# resolved and so has no effect.
+debasher::_resolve_program_type()
+{
+    local pfile=$1
+
+    local program_type_funcname
+    program_type_funcname=$(debasher::_get_program_type_funcname "${pfile}")
+
+    if debasher::_func_exists "${program_type_funcname}"; then
+        ${program_type_funcname} || return 1
+    fi
 }
 
 ########
@@ -234,6 +342,539 @@ debasher::_is_heredoc_process()
 }
 
 ########
+# Like debasher::_search_heredoc_provider, but fixed to the Python
+# heredoc forms specifically (DEBASHER_PROCESS_FUNCNAME_PYEXEC /
+# DEBASHER_PROCESS_VARNAME_PYEXEC), not any other heredoc language.
+# Echoes "<name> func" or "<name> var" and returns 0 if found; returns
+# 1 with no output otherwise (including when the process is a heredoc
+# process in a different language).
+debasher::_get_python_heredoc_provider()
+{
+    local processname=$1
+
+    debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_FUNCNAME_PYEXEC}" "${DEBASHER_PROCESS_VARNAME_PYEXEC}"
+}
+
+########
+# Echoes the raw Python source of a process's Python heredoc (function
+# or legacy variable provider). A "resident" program (see to_do_fbp.md)
+# requires every one of its processes to provide its code this way, so
+# its source can be located and analyzed without ever running it or
+# needing a real file on disk. Returns 1, with no output, if the
+# process has no Python heredoc provider at all (a regular/alias/
+# ext_alias process, or a heredoc in a different language).
+debasher::_get_resident_process_source()
+{
+    local processname=$1
+
+    local provider_info
+    provider_info=$(debasher::_get_python_heredoc_provider "${processname}") || return 1
+
+    local provider kind
+    read -r provider kind <<< "${provider_info}"
+
+    if [ "${kind}" = "func" ]; then
+        "${provider}"
+    else
+        echo "${!provider}"
+    fi
+}
+
+########
+# Echoes the source of the (small, self-contained) Python program that
+# classifies a resident process's role from its source, read from
+# stdin: prints exactly one of "supervisor", "fbpprocess" or "unknown"
+# to stdout. It looks for a top-level class definition whose bases
+# resolve -- following plain "import"/"from ... import ... as ..."
+# aliasing -- to the literal names "Supervisor" or "FBPProcess" (the
+# two base classes to_do_fbp.md defines for resident processes), or
+# "ProgramLauncher" or "DirectoryWatcher", nodes of the runtime library
+# that derive from FBPProcess (one launches a general program for each
+# request, the other sends a request for each file that arrives). This
+# is a static check: ast.parse never imports or executes the given
+# source, unlike a real "issubclass" check, which was deliberately
+# ruled out for this (see to_do_fbp.md) since it would need to run
+# inside each process's own conda/docker environment just to answer a
+# type question, before the program has even been launched.
+debasher::_resident_role_classifier_src()
+{
+    cat <<'EOF'
+import ast
+import sys
+
+BASE_ROLES = {
+    "Supervisor": "supervisor",
+    "FBPProcess": "fbpprocess",
+    "ProgramLauncher": "fbpprocess",
+    "DirectoryWatcher": "fbpprocess",
+}
+
+
+def resolved_base_names(tree):
+    """Local name -> canonical base name, following import aliasing."""
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in BASE_ROLES:
+                    aliases[alias.asname or alias.name] = alias.name
+    return aliases
+
+
+def base_identifier(base_node):
+    if isinstance(base_node, ast.Name):
+        return base_node.id
+    if isinstance(base_node, ast.Attribute):
+        return base_node.attr
+    return None
+
+
+def classify(source):
+    tree = ast.parse(source)
+
+    aliases = resolved_base_names(tree)
+    found_role = None
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for base in node.bases:
+            name = base_identifier(base)
+            if name is None:
+                continue
+            canonical = aliases.get(name, name)
+            role = BASE_ROLES.get(canonical)
+            if role == "supervisor":
+                return "supervisor"
+            if role == "fbpprocess" and found_role is None:
+                found_role = "fbpprocess"
+    return found_role or "unknown"
+
+
+def main():
+    try:
+        print(classify(sys.stdin.read()))
+    except SyntaxError as exc:
+        print(f"Error: invalid Python source ({exc})", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+EOF
+}
+
+########
+# Classifies a resident program's process as "supervisor",
+# "fbpprocess" or "unknown" by running debasher::_resident_role_classifier_src
+# against the process's Python heredoc source (see
+# debasher::_get_resident_process_source). Returns 1, with an error on
+# stderr, if the process is not a Python heredoc process at all, or if
+# its source is not valid Python.
+debasher::_classify_resident_process_role()
+{
+    local processname=$1
+
+    local source
+    if ! source=$(debasher::_get_resident_process_source "${processname}"); then
+        echo "Error: process ${processname} does not provide its code as a Python heredoc, required for a resident program" >&2
+        return 1
+    fi
+
+    printf '%s' "${source}" | "${PYTHON}" -c "$(debasher::_resident_role_classifier_src)"
+}
+
+########
+# Validates every process of a "resident" program (see to_do_fbp.md):
+# each one must classify (via debasher::_classify_resident_process_role)
+# as either "supervisor" or "fbpprocess", and at most one process may
+# be a "supervisor" (a supervisor is optional -- like ext2/3/4
+# journaling -- but never more than one). A no-op, returning 0
+# immediately, when DEBASHER_PROGRAM_TYPE is not "resident". Exits
+# with an error message on the first violation found.
+debasher::_validate_resident_program_processes()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    local processname
+    local supervisor_processname=""
+
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local role
+        role=$(debasher::_classify_resident_process_role "${processname}") || return 1
+        DEBASHER_RESIDENT_PROCESS_ROLES["${processname}"]="${role}"
+
+        case "${role}" in
+            supervisor)
+                if [ -n "${supervisor_processname}" ]; then
+                    echo "Error: a resident program can have at most one Supervisor process, but both ${supervisor_processname} and ${processname} are" >&2
+                    return 1
+                fi
+                supervisor_processname="${processname}"
+                ;;
+            fbpprocess)
+                :
+                ;;
+            *)
+                echo "Error: process ${processname} does not derive from FBPProcess or Supervisor, required for a resident program" >&2
+                return 1
+                ;;
+        esac
+    done
+}
+
+########
+# Checks the tags of the program's fifos (see DEBASHER_FIFO_KINDS) once
+# every process has defined its options and the other end of every fifo is
+# known (see debasher::_register_fifos_used_by_process). A general program
+# may not use them. In a resident program they have to be used as they say,
+# and a round has to be able to reach every node (see the design doc's
+# "Channel kinds declared with the fifo"). Prints an error and returns 1 on
+# the first violation found.
+debasher::_validate_program_fifo_kinds()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        local augm_fifoname
+        for augm_fifoname in "${!DEBASHER_FIFO_KINDS[@]}"; do
+            echo "Error: fifo ${augm_fifoname} is tagged --${DEBASHER_FIFO_KINDS[${augm_fifoname}]}, which only a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program may use" >&2
+            return 1
+        done
+        return 0
+    fi
+
+    debasher::_validate_resident_channels
+}
+
+########
+# The name of a node for a message: the process name, or
+# <process>:<idx> for a task of an array (as debasher_stop_resident's -x
+# names it). $1 is a node as the fifo registries store it,
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>.
+debasher::_resident_node_display_name()
+{
+    local node=$1
+    local processname="${node%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local idx="${node#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+    if [ "$(debasher::_get_numtasks_for_process "${processname}")" -eq 1 ]; then
+        echo "${processname}"
+    else
+        echo "${processname}:${idx}"
+    fi
+}
+
+########
+# Builds the graph of the business channels of a resident program, task
+# by task, from the fifo registries and tags, and checks it:
+#
+# 1. Every tagged fifo is used as its tag says: one tagged --external has
+#    its other end outside the program, and one tagged --control either has
+#    its other end outside or is owned by the Supervisor and read by a node.
+#    The owner of a fifo writes it, through an output option ("-out..."),
+#    except a tagged fifo fed from outside, which it reads through an input
+#    option.
+# 2. Every node (every task of every FBPProcess) can be reached from an
+#    initiator, a node that reads a fifo tagged --control, through the
+#    fifos without a tag, each from its owner, which writes it, to the node
+#    at its other end, which reads it.
+#
+# A fifo without a tag whose other end is outside the program is a channel
+# to someone outside (a node that writes its results out), and so is one
+# whose other end is the Supervisor (a heartbeat channel): neither is an
+# edge of the graph. Needs DEBASHER_RESIDENT_PROCESS_ROLES, filled by
+# debasher::_validate_resident_program_processes.
+debasher::_validate_resident_channels()
+{
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    # Every task of every business node
+    local -A is_node=()
+    local processname idx num_tasks
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
+        num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        for (( idx = 0; idx < num_tasks; idx++ )); do
+            is_node["${processname}${sep}${idx}"]=1
+        done
+    done
+
+    # Edges of the graph, and the initiators
+    local -A successors=()
+    local -A reached=()
+    local -a queue=()
+    local augm_fifoname owner user kind reader owner_proc user_proc owner_opt
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+        user="${DEBASHER_FIFO_USERS[${augm_fifoname}]}"
+        kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
+        owner_proc="${owner%%${sep}*}"
+        user_proc="${user%%${sep}*}"
+        case "${kind}" in
+            "")
+                if [ -n "${is_node[${owner}]+x}" ] && [ -n "${is_node[${user}]+x}" ]; then
+                    successors["${owner}"]+=" ${user}"
+                fi
+                ;;
+            "${DEBASHER_FIFO_KIND_EXTERNAL}")
+                if [ "${user}" != "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                    echo "Error: fifo ${augm_fifoname} is tagged --external, but process ${user_proc} of the program uses it: a fifo fed from outside the program has no other end inside it" >&2
+                    return 1
+                fi
+                ;;
+            "${DEBASHER_FIFO_KIND_CONTROL}")
+                if [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                    reader="${owner}"
+                elif [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${owner_proc}]:-}" = "supervisor" ] && [ -n "${is_node[${user}]+x}" ]; then
+                    reader="${user}"
+                else
+                    echo "Error: fifo ${augm_fifoname} is tagged --control, but it is neither fed from outside the program nor written by the Supervisor to a node" >&2
+                    return 1
+                fi
+                if [ -n "${is_node[${reader}]+x}" ] && [ -z "${reached[${reader}]+x}" ]; then
+                    reached["${reader}"]=1
+                    queue+=("${reader}")
+                fi
+                ;;
+        esac
+
+        # The option through which the owner defines the fifo says whether it
+        # writes or reads it
+        owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]:-}"
+        if [ -n "${kind}" ] && [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+            if debasher::_str_is_output_option "${owner_opt}"; then
+                echo "Error: fifo ${augm_fifoname} is tagged --${kind} and fed from outside the program, so process ${owner_proc} reads it, but defines it through the output option ${owner_opt}" >&2
+                return 1
+            fi
+        elif ! debasher::_str_is_output_option "${owner_opt}"; then
+            echo "Error: fifo ${augm_fifoname} is defined by process ${owner_proc} through the input option ${owner_opt}: a fifo is defined by the process that writes it, through an output option (-out...), unless it is fed from outside the program and tagged --external or --control" >&2
+            return 1
+        fi
+    done
+
+    # Every node a round can reach, from the initiators
+    local head=0 node next
+    while [ "${head}" -lt "${#queue[@]}" ]; do
+        node="${queue[head]}"
+        head=$((head + 1))
+        for next in ${successors[${node}]:-}; do
+            if [ -z "${reached[${next}]+x}" ]; then
+                reached["${next}"]=1
+                queue+=("${next}")
+            fi
+        done
+    done
+
+    local -a unreached=()
+    for node in "${!is_node[@]}"; do
+        if [ -z "${reached[${node}]+x}" ]; then
+            unreached+=("$(debasher::_resident_node_display_name "${node}")")
+        fi
+    done
+    if [ "${#unreached[@]}" -gt 0 ]; then
+        local sorted
+        sorted=$(printf '%s\n' "${unreached[@]}" | "${SORT}" | "${TR}" '\n' ' ')
+        echo "Error: no round can reach ${sorted% }: a round starts at a node that reads a fifo tagged --control and goes on through the fifos without a tag, from their owner to the node at the other end" >&2
+        return 1
+    fi
+}
+
+########
+# Prints the role of the process of a node end as the fifo registries store
+# it, <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx> (see
+# DEBASHER_RESIDENT_PROCESS_ROLES), or nothing for the end outside the
+# program.
+debasher::_resident_node_role()
+{
+    local node=$1
+    echo "${DEBASHER_RESIDENT_PROCESS_ROLES[${node%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}]:-}"
+}
+
+########
+# Prints the blank-separated words of $1 sorted and separated by commas.
+debasher::_sorted_comma_list()
+{
+    local words=$1
+    [ -n "${words// /}" ] || return 0
+    local sorted
+    sorted=$(printf '%s\n' ${words} | "${SORT}")
+    echo "${sorted//$'\n'/,}"
+}
+
+########
+# Fills DEBASHER_RESIDENT_TASK_PORTS with the ports of every task of every
+# FBPProcess of a resident program, and of the Supervisor, taken from the
+# fifo registries and tags (see the design doc's "Ports from the engine"). A
+# port is the name of the option without its leading dashes, as the
+# process's own options name it. The wrapper of each task exports its entry
+# as DEBASHER_PROCESS_PORTS. For a node, which of its options are input,
+# output, control and external ports, and which output port goes to the
+# Supervisor:
+#
+#   input=<ports>;output=<ports>;control=<ports>;external=<ports>;supervisor=<port>
+#
+# For the Supervisor, the heartbeat channel of each node, as <node>=<port>
+# with the node named as debasher::_resident_node_display_name names it,
+# the output ports to the initiators it triggers, the input port of a manual
+# trigger fed from outside, and the startup deadline of each node that gives
+# one in its computational specifications (startup_timeout_s), as
+# <node>=<seconds>, and the fifos of the business channels, those without a
+# tag between two nodes, which it holds open so that what they hold outlives
+# the crash of both nodes of a channel, as names relative to the fifo
+# directory of the program, <owner process>/<fifo>:
+#
+#   nodes=<node>=<port>,...;trigger=<ports>;manual_trigger=<port>;startup=<node>=<seconds>,...;hold=<fifos>
+#
+# each list sorted and separated by commas, and possibly empty. A no-op when
+# the program is not resident. Needs the checks of
+# debasher::_validate_resident_channels to have passed, and
+# DEBASHER_RESIDENT_PROCESS_ROLES. Returns 1, with an error, if a task has
+# more than one output port read by the Supervisor (a node has a single
+# heartbeat channel), if the Supervisor has more than one manual trigger, or
+# if it defines a fifo that is neither.
+debasher::_register_resident_task_ports()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    # The ports found so far, blank-separated, by <node><sep><field>
+    local -A ports=()
+    # $1: node, $2: field, $3: option
+    debasher::_add_resident_task_port()
+    {
+        local port="${3#-}"
+        ports["$1${sep}$2"]+=" ${port#-}"
+    }
+
+    # The fifos of the business channels, blank-separated
+    local held=""
+
+    local augm_fifoname owner user kind owner_opt user_opt hb_port node_label startup
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+        user="${DEBASHER_FIFO_USERS[${augm_fifoname}]}"
+        kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
+        owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]}"
+        user_opt="${DEBASHER_FIFO_USER_OPTS[${augm_fifoname}]:-}"
+
+        # The owner's end: an output port, unless the fifo is tagged and fed
+        # from outside the program, in which case the owner reads it
+        if [ "$(debasher::_resident_node_role "${owner}")" = "fbpprocess" ]; then
+            if [ -n "${kind}" ] && [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                # The tag, "control" or "external", is also the name of the field
+                debasher::_add_resident_task_port "${owner}" input "${owner_opt}"
+                debasher::_add_resident_task_port "${owner}" "${kind}" "${owner_opt}"
+            else
+                debasher::_add_resident_task_port "${owner}" output "${owner_opt}"
+                if [ "$(debasher::_resident_node_role "${user}")" = "supervisor" ]; then
+                    debasher::_add_resident_task_port "${owner}" supervisor "${owner_opt}"
+                fi
+            fi
+        fi
+
+        # The other end, when a node of the program reads the fifo: an input
+        # port, and a control port too if the fifo is tagged --control
+        if [ "$(debasher::_resident_node_role "${user}")" = "fbpprocess" ]; then
+            debasher::_add_resident_task_port "${user}" input "${user_opt}"
+            if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
+                debasher::_add_resident_task_port "${user}" control "${user_opt}"
+            fi
+        fi
+
+        # A business channel: a fifo without a tag between two nodes
+        if [ -z "${kind}" ] \
+               && [ "$(debasher::_resident_node_role "${owner}")" = "fbpprocess" ] \
+               && [ "$(debasher::_resident_node_role "${user}")" = "fbpprocess" ]; then
+            held+=" ${augm_fifoname}"
+        fi
+
+        # The Supervisor's end. It reads the heartbeat channel of a node, the
+        # one fifo without a tag that a node writes to it (the checks above
+        # refuse a tagged one). It defines a trigger to a node, tagged
+        # --control, or its manual trigger, tagged --control and fed from
+        # outside, and nothing else.
+        if [ "$(debasher::_resident_node_role "${user}")" = "supervisor" ]; then
+            hb_port="${user_opt#-}"
+            node_label=$(debasher::_resident_node_display_name "${owner}")
+            debasher::_add_resident_task_port "${user}" nodes "${node_label}=${hb_port#-}"
+            startup=$(debasher::extract_attr_from_process_comp_specs "$(debasher::extract_process_comp_specs "${DEBASHER_INITIAL_PROCESS_SPEC[${owner%%${sep}*}]:-}")" startup_timeout_s)
+            if [ "${startup}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+                debasher::_add_resident_task_port "${user}" startup "${node_label}=${startup}"
+            fi
+        fi
+        if [ "$(debasher::_resident_node_role "${owner}")" = "supervisor" ]; then
+            if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ] && [ "${user}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+                debasher::_add_resident_task_port "${owner}" manual_trigger "${owner_opt}"
+            elif [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
+                debasher::_add_resident_task_port "${owner}" trigger "${owner_opt}"
+            else
+                echo "Error: the Supervisor ${owner%%${sep}*} defines fifo ${augm_fifoname}, but the only fifos a Supervisor defines are its triggers to nodes and its manual trigger fed from outside the program, both tagged --control" >&2
+                return 1
+            fi
+        fi
+    done
+
+    # One entry for every task, also for one with no port at all, so that
+    # every node of the program takes its ports from here
+    local processname idx num_tasks node field list entry
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
+        num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        for (( idx = 0; idx < num_tasks; idx++ )); do
+            node="${processname}${sep}${idx}"
+            entry=""
+            for field in input output control external supervisor; do
+                list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
+                if [ "${field}" = "supervisor" ] && [[ "${list}" == *,* ]]; then
+                    echo "Error: node $(debasher::_resident_node_display_name "${node}") has more than one output read by the Supervisor (${list}), but a node has a single heartbeat channel" >&2
+                    return 1
+                fi
+                entry+=";${field}=${list}"
+            done
+            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry#;}"
+        done
+    done
+
+    # The same for the Supervisor, if there is one
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "supervisor" ] || continue
+        num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        for (( idx = 0; idx < num_tasks; idx++ )); do
+            node="${processname}${sep}${idx}"
+            entry=""
+            ports["${node}${sep}hold"]="${held}"
+            for field in nodes trigger manual_trigger startup hold; do
+                list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
+                if [ "${field}" = "manual_trigger" ] && [[ "${list}" == *,* ]]; then
+                    echo "Error: the Supervisor ${processname} has more than one manual trigger fed from outside the program (${list})" >&2
+                    return 1
+                fi
+                entry+=";${field}=${list}"
+            done
+            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry#;}"
+        done
+    done
+}
+
+########
+# Python heredoc processes only: source prepended ahead of the
+# heredoc's own text so it can "import debasher_runtime_lib" (and
+# anything else installed alongside it) -- mirrors the
+# sys.path.append(...) lines the ".py:" suffix rule in
+# engine/Makefile.am already adds for standalone installed Python
+# tools, which a "python -c ..." heredoc invocation would otherwise
+# never get. Single-quoted Python string literals, deliberately, so
+# this can be embedded as-is inside the outer double-quoted "-c"
+# argument built by debasher::_create_heredoc_func_body below without
+# any quote-escaping gymnastics.
+debasher::_python_heredoc_sys_path_prelude()
+{
+    echo "import sys"$'\n'"sys.path.append('${debasher_pythondir}')"$'\n'"sys.path.append('${debasher_pkgpythondir}')"
+}
+
+########
 debasher::_create_heredoc_func_body()
 {
     local processname=$1
@@ -246,10 +887,21 @@ debasher::_create_heredoc_func_body()
             local provider_name=${provider% *}
             local provider_kind=${provider##* }
             printf -v escaped_interpreter '%q' "${DEBASHER_HEREDOC_INTERPRETERS[$i]}"
+
+            # $(...) strips trailing newlines, so debasher::_python_heredoc_sys_path_prelude's
+            # own trailing newline (if any) can't be relied on to separate it from the heredoc
+            # text that follows -- prelude_sep supplies that separator explicitly instead,
+            # and stays empty (no stray blank line) for every other heredoc language.
+            local prelude="" prelude_sep=""
+            if [ "${DEBASHER_HEREDOC_LANGUAGES[$i]}" = "python" ]; then
+                prelude=$(debasher::_python_heredoc_sys_path_prelude)
+                prelude_sep=$'\n'
+            fi
+
             if [ "${provider_kind}" = "func" ]; then
-                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\$(${provider_name})\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"${prelude}${prelude_sep}\$(${provider_name})\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
             else
-                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"\${${provider_name}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
+                echo "${escaped_interpreter} ${DEBASHER_HEREDOC_INTERPRETER_OPTS[$i]} \"${prelude}${prelude_sep}\${${provider_name}}\" ${DEBASHER_HEREDOC_EOP_MARKERS[$i]} \"\$@\""
             fi
             return 0
         fi
@@ -710,8 +1362,16 @@ debasher::add_debasher_program()
 {
     # Initialize variables
     local modname=$1
-    debasher::_determine_full_module_name "${modname}"
-    local pfile="${DEBASHER_RESOLVED_MODNAME}"
+
+    # The module must have been loaded already: take the file it was
+    # loaded from, since searching for the name again from the current
+    # directory, which is not the one it was loaded from, could find a
+    # different file
+    local pfile
+    if ! pfile=$(debasher::_get_loaded_module_fname "${modname}"); then
+        debasher::_determine_full_module_name "${modname}"
+        pfile="${DEBASHER_RESOLVED_MODNAME}"
+    fi
 
     # Execute program function for module and store output entries in a
     # temporary file (the purpose is to enable function execution

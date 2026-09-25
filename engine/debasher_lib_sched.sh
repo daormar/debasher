@@ -280,6 +280,26 @@ debasher::_stop_pid()
 }
 
 ########
+debasher::_stop_pid_gracefully()
+{
+    local pid=$1
+
+    # SIGTERM, not SIGKILL, and still the whole process group, for the
+    # same reason as _stop_pid: without it, a single-pid SIGTERM only
+    # reaches this process's own wrapper script (see
+    # debasher_builtin_sched::_print_script_trap), never a resident
+    # process's own Python interpreter, which sits below it in the fork
+    # tree. The wrapper survives this same broadcast (that trap again) so
+    # it can still finish its own post-processing once whatever it is
+    # running actually exits (FBPProcess and Supervisor both install a
+    # SIGTERM handler of their own for exactly this, see
+    # engine/debasher_runtime_fbp.py and engine/debasher_runtime_supervisor.py).
+    kill -TERM -- "-$pid" > /dev/null 2>&1 || return 1
+
+    return 0
+}
+
+########
 debasher::_id_exists()
 {
     local id=$1
@@ -335,7 +355,17 @@ debasher::_write_env_vars_and_funcs()
 
         # Write initialized variables
         declare -p DEBASHER_SCHEDULER
+        declare -p DEBASHER_PROGRAM_TYPE
+        # The directories where modules are searched, as debasher_exec had
+        # them, so that a process launched again from another environment
+        # (a node relaunched by hand) finds the modules its own launches
+        # would
+        if [ -n "${DEBASHER_MOD_DIR+x}" ]; then
+            declare -p DEBASHER_MOD_DIR
+        fi
         declare -p DEBASHER_INITIAL_PROCESS_SPEC
+        declare -p DEBASHER_PROCESS_PFILE_DIR
+        declare -p DEBASHER_RESIDENT_TASK_PORTS
         declare -p DEBASHER_PROGRAM_OUTDIR
         declare -p DEBASHER_MEMOIZED_OPTS
         declare -p DEBASHER_OUT_VALUE_TO_PROCESSES
@@ -419,11 +449,9 @@ debasher::_get_elapsed_time_from_logfile()
     local start_date=$(debasher::_get_process_start_date "${log_filename}")
     local finish_date=$(debasher::_get_process_finish_date "${log_filename}")
 
-    if [ -n "${start_date}" ] && [ -n "${finish_date}" ]; then
-        local start_ms=$(date -d "${start_date}" +%s%3N)
-        local finish_ms=$(date -d "${finish_date}" +%s%3N)
-
-        local elapsed_ms=$((finish_ms - start_ms))
+    local elapsed_ms
+    if [ -n "${start_date}" ] && [ -n "${finish_date}" ] \
+        && elapsed_ms=$(debasher::_datetime_diff_ms "${start_date}" "${finish_date}"); then
         debasher::_format_elapsed_time "${elapsed_ms}"
     else
         echo "${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"

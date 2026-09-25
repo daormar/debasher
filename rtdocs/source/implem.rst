@@ -920,7 +920,8 @@ the loaded modules.
 modules will be loaded from the current directory if they
 exist. Otherwise, they are searched in the directories indicated in the
 ``DEBASHER_MOD_DIR`` environment variable (using the ``:`` symbol as
-separator).
+separator). The program file given to ``debasher_exec`` is looked for in
+the same way.
 
 After loading the required modules, the option related code can be
 modified just by redefining the corresponding functions.
@@ -1028,6 +1029,8 @@ repository.
 
    generator
 
+   fifo_generator
+
    subprogram
 
    host_workflow
@@ -1051,3 +1054,5 @@ repository.
    dynamic_fanout
 
    dynamic_fanout_fifos
+
+   dynamic_fanout_fifos_gen
