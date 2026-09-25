@@ -13,15 +13,40 @@ says so.
 
 # Introduction
 
-*To be written.* What the web UI is for (building, running and observing
-DeBasher programs from a browser, without writing the Bash module by hand),
-who uses it, and what this document covers: the parts of the design that carry
-an invariant (the program model, the translation between the model and a
-module, persistence, execution and observation), not the layout of each dialog.
-It then says how the document is organized: first the design as it is today,
-then the extension to resident programs, which is designed here before it is
-built (see "Resident programs in the web UI"), and relies on the design of
-resident programs in `doc/design_doc_resident.md`.
+The web UI lets a person build, run and observe a DeBasher program from a
+browser, without writing its module by hand: each process is a box on a
+canvas, each connection an edge between two of them, and the web UI translates
+the drawing into a module and runs it with the engine's own tools. This
+document describes the parts of its design that carry an invariant: the
+program model, the translation between the model and a module, the program's
+directories, and how a program is run and observed. It does not describe the
+layout of each dialog or the look of the canvas.
+
+**Scope: general and resident programs.** The engine runs two types of program,
+general and resident (see the Glossary), and the web UI knows only the first
+one today. Every section before "Resident programs in the web UI" describes
+the design for general programs, and what it says holds for them. A resident
+program, whose design is in `doc/design_doc_resident.md`, follows rules of its
+own in several places: it is always run by the built-in scheduler, its
+processes are meant to outlive any browser tab, and it is stopped, snapshotted
+and reset with tools of its own. The section on resident programs says, for
+each part of the design described before it, whether it applies to resident
+programs unchanged, changes, or is replaced, and nothing in the earlier
+sections should be read as holding for resident programs unless that section
+says so.
+
+The document is organized as follows. The Glossary defines the terms it uses.
+"Architecture" presents the three layers of the web UI and where its state
+lives. "The program model" describes the data that the frontend edits and the
+backend receives. The two sections that follow describe the translation
+between the model and a module in each direction, and what survives a round
+trip. "Persistence and the program's directories" describes what the web UI
+keeps on disk, and "Execution and observation" how it runs a program and
+follows it. "Frontend state and the canvas" describes the frontend's own
+state, and "Guarantees and non-goals" gathers the guarantees stated along the
+way. "Resident programs in the web UI" designs the extension to resident
+programs before it is built, and "Future work" lists what is known to be
+missing.
 
 # Glossary
 
@@ -35,6 +60,14 @@ in the design of resident programs.
 
 ## Program model
 
+- **general program** (programa general): a DeBasher program whose module
+  declares no program type, or declares `general`: a set of processes that a
+  run executes to completion, on any scheduler. Every section before
+  "Resident programs in the web UI" is about general programs.
+- **resident program** (programa residente): a program whose module declares
+  the type `resident` in its `_program_type` function: long-lived, stateful
+  processes joined by FIFOs, always run by the built-in scheduler, as described
+  in `doc/design_doc_resident.md`.
 - **program model** (modelo del programa): the program as the web UI sees it, a
   tree of plain data defined twice with the same shape, as Pydantic models in
   `api/models.py` and as TypeScript types in `frontend/src/models/`, and sent
@@ -817,6 +850,12 @@ and what it deliberately does not try to do.
 resident program is not a run that starts and finishes: its processes stay
 alive, keep state, recover from crashes and go through rounds. The UI has to
 build such a program, launch it, observe it while it lives and act on it.
+
+The sections before this one describe general programs only (see the
+Introduction). This section is where a resident program departs from them: for
+each part of that design (the program model, script generation and import, the
+program's directories, execution and observation), it says whether the part
+applies unchanged, changes, or is replaced by a rule of its own.
 
 ## Declaring a resident program
 
