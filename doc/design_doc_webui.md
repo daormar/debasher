@@ -1232,8 +1232,8 @@ options, the preamble of the program and its environment variables.
 
 ## Script generation and import of a resident program
 
-*In part: the code of a node is designed, and the Supervisor wiring, the fifo
-tags and the program type are still to be written.*
+*In part: the code of a node and the Supervisor wiring are designed, and the
+fifo tags and the program type are still to be written.*
 
 **The code of a node, generated.** Script generation writes the code of a node
 as the heredoc function of its process, `<process>_heredoc_py` (see "Layout of
@@ -1292,9 +1292,68 @@ hand comes back with the same behavior, but laid out the way script generation
 writes it: the hooks follow the rest of the class body, and the blank lines
 between the parts are those that script generation writes.
 
-**To be written.** How import recognizes the Supervisor wiring of a module
-written by hand, which the program model does not hold, and how both
-directions handle the fifo tags and the program type.
+**The Supervisor wiring, generated.** Script generation writes the options of
+the Supervisor wiring with fixed labels, which no option of the user may take:
+
+- on every node, `-outhb`, the output of its heartbeat channel;
+- on the `Supervisor`, `-<process>_hb`, the input that reads the heartbeat
+  channel of a node, or the fanout family `-<process>_hbith` for an `array` or
+  `generator` process;
+- on the `Supervisor`, `-out<process>_trig`, the trigger port to an
+  initiator, or the fanout family `-out<process>_trigith`;
+- on every initiator, `-trigger`, the input of its control port, connected to
+  the trigger port of the `Supervisor` or, without one, written from outside
+  the program;
+- on the `Supervisor`, `-manual`, its manual trigger port, and the flag
+  `-no_hold_fifos`, together with the command line options that count its
+  fanout families.
+
+The name of the process comes first in a label of the `Supervisor`, never
+last: a process named `smith` would otherwise give `-hb_smith`, which ends in
+`ith` and would be taken for a fanout family.
+
+**The Supervisor wiring, imported.** Import recognizes the Supervisor wiring of
+a module by the rules with which the engine gives each process its ports (see
+"Ports from the engine" in `doc/design_doc_resident.md`), from what it already
+reads of the options, and from the node kind of each process: which process
+defines each fifo, which one uses it, and with which fifo tag. It removes from
+the program every option of it, whatever its label, and keeps only what the
+program model holds:
+
+- a fifo without a tag that a node writes and the `Supervisor` reads is a
+  heartbeat channel, and both of its options go;
+- a fifo tagged `--control` that the `Supervisor` writes and a node reads is a
+  trigger port: both of its options go, and the node becomes an initiator;
+- a fifo tagged `--control` that the `Supervisor` defines and reads, written
+  from outside the program, is its manual trigger port, and goes;
+- without a `Supervisor`, an input of a node tagged `--control` and written
+  from outside the program is the control port of an initiator: it goes, and
+  the node becomes an initiator;
+- the flag `-no_hold_fifos` of the `Supervisor`, and the command line options
+  that only count its fanout families, go too.
+
+The labels and the fifo names of the wiring that script generation writes
+again may differ from those of the module, and a manual trigger port and
+`-no_hold_fifos` are added when the module had none. None of this changes what
+the program does, since the runtime takes the ports of a process from the
+engine by their role, not by their label. The one exception is the code of a
+node that names an option of the wiring, such as `self.opts["outhb"]`: import
+finds the port name quoted in the heredoc of the node and refuses it, since
+the label may change.
+
+**What import refuses of the Supervisor wiring.** With the same kind of
+explanation as for the code of a node, import refuses a program whose
+`Supervisor` has code of its own (a method or an attribute in its class, such
+as its own `on_node_down`), since the web UI does not edit the `Supervisor`
+and has nowhere to keep it; a program whose `Supervisor` has an option that is
+none of the above; and a node whose option definition functions are outside
+the grammar of import, which in a general program would become `manual` mode,
+a mode that a resident program does not offer. A program whose wiring is
+incomplete, a node without a heartbeat channel for example, never reaches
+import: the engine refuses to load it.
+
+**To be written.** How both directions handle the fifo tags and the program
+type.
 
 ## The directories of a resident program
 
