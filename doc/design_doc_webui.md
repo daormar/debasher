@@ -1484,6 +1484,26 @@ store").
 - **The output directory of a moved program.** Deciding what a program
   loaded from a new place should do with an output directory that still
   points to the old one.
+- **A prompt for writing the code of a process.** A button on a process
+  that composes, from the program model, a prompt to copy into an AI tool of
+  the user's choice: the description of the process and of its program, its
+  node kind, its options with their direction, data type, option channel and
+  description, what reaches each connected input (the description of the
+  output it comes from), the signature of the function or hook to write, how
+  a process of its language reads its options, and, for a node of a resident
+  program, the obligations of the contract that its code has to keep (a
+  deterministic `process_data`, sending only from it, a complete
+  `capture_node_state` and an exact `restore_node_state`). Nothing leaves the
+  machine: the user copies the prompt, and pastes the answer into the editor.
+- **An assistant on the documentation of DeBasher.** A chat in the web UI
+  that answers questions about DeBasher from its documentation (the
+  documentation of the project, the design documents and the module
+  documentation of the modules at hand), through a model of an AI service with
+  a key that the user gives. Not designed. It needs a place for the key that
+  fits a server with no authentication, never the program metadata; it sends
+  the documentation, and maybe the program, to a service outside the machine,
+  which the user has to know; and its answers are only as good as a
+  documentation kept in step with the code.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.
