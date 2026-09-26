@@ -2411,7 +2411,12 @@ node:
   also a control port if the fifo is tagged `--control`.
 - The output port whose other end is the `Supervisor` is the node's
   `SUPERVISOR_PORT`. A node with more than one is refused when the program is
-  loaded, since a node has a single heartbeat channel.
+  loaded, since a node has a single heartbeat channel. In a program with a
+  `Supervisor`, a node with none is refused too: it would run unsupervised,
+  with nothing to say so. This is what a task of an array beyond those the
+  `Supervisor` connects to would do, when the option that sizes the
+  heartbeat channels of the `Supervisor` says fewer tasks than the array
+  builds.
 
 For the `Supervisor`, the same fifos seen from its end:
 
@@ -3068,8 +3073,10 @@ Design ideas from Future work move here once they are actually built.
   "Dynamic process launching" in Future work. Nothing in the engine is
   specific to it:
   - Ports. Each node gets the ports of the family from its options, and the
-    `Supervisor` a heartbeat channel for each task that has one, so that it
-    watches as many nodes as `-w` says (see "Ports from the engine").
+    `Supervisor` a heartbeat channel for each task, so that it watches as
+    many nodes as `-w` says. A task that the `Supervisor` does not connect
+    to, because the array builds more tasks than `-w` says, makes the
+    engine refuse the program (see "Ports from the engine").
   - The barrier, `CLOSE` and the input log loop over the declared lists of
     ports: a fan-in node is the case of several pending ports, and a fan-out
     node forwards the marker on every output port.

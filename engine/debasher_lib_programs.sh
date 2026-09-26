@@ -729,8 +729,10 @@ debasher::_sorted_comma_list()
 # debasher::_validate_resident_channels to have passed, and
 # DEBASHER_RESIDENT_PROCESS_ROLES. Returns 1, with an error, if a task has
 # more than one output port read by the Supervisor (a node has a single
-# heartbeat channel), if the Supervisor has more than one manual trigger, or
-# if it defines a fifo that is neither.
+# heartbeat channel), or none while the program has a Supervisor (the node
+# would run unsupervised, with nothing to say so, as a task of an array
+# beyond those the Supervisor connects to would), if the Supervisor has more
+# than one manual trigger, or if it defines a fifo that is neither.
 debasher::_register_resident_task_ports()
 {
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
@@ -816,9 +818,18 @@ debasher::_register_resident_task_ports()
         fi
     done
 
+    # The Supervisor, if there is one: every node then needs a heartbeat
+    # channel to it
+    local supervisor="" processname
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        if [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "supervisor" ]; then
+            supervisor="${processname}"
+        fi
+    done
+
     # One entry for every task, also for one with no port at all, so that
     # every node of the program takes its ports from here
-    local processname idx num_tasks node field list entry
+    local idx num_tasks node field list entry
     for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
         [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
         num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
@@ -829,6 +840,10 @@ debasher::_register_resident_task_ports()
                 list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
                 if [ "${field}" = "supervisor" ] && [[ "${list}" == *,* ]]; then
                     echo "Error: node $(debasher::_resident_node_display_name "${node}") has more than one output read by the Supervisor (${list}), but a node has a single heartbeat channel" >&2
+                    return 1
+                fi
+                if [ "${field}" = "supervisor" ] && [ -z "${list}" ] && [ -n "${supervisor}" ]; then
+                    echo "Error: node $(debasher::_resident_node_display_name "${node}") has no output read by the Supervisor ${supervisor}, but in a program with a Supervisor every node has a heartbeat channel: without one, the node would run unsupervised" >&2
                     return 1
                 fi
                 entry+=";${field}=${list}"

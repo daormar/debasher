@@ -707,15 +707,19 @@ add_fifo() {
     add_fifo worker/worker_out_1 "$(end_of worker 1)" "$(end_of worker 0)" "" -outg -peer
     add_fifo counter/counter_self "$(end_of counter)" "$(end_of counter)" "" -outself -self
     add_fifo start/start_hb "$(end_of start)" "$(end_of sup)" "" -outhb -hb_start
+    add_fifo worker/worker_hb_0 "$(end_of worker 0)" "$(end_of sup)" "" -outhb -hb_worker0
+    add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
+    add_fifo counter/counter_hb "$(end_of counter)" "$(end_of sup)" "" -outhb -hb_counter
 
     debasher::_register_resident_task_ports
-    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start;trigger=outtrig;manual_trigger=;startup=;hold=counter/counter_self,start/start_out_0,start/start_out_1,worker/worker_out_1" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=counter=hb_counter,start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=;startup=;hold=counter/counter_self,start/start_out_0,start/start_out_1,worker/worker_out_1" ]
 }
 
 @test "debasher::_register_resident_task_ports refuses a Supervisor with two manual triggers" {
     set_up_registries
     add_process a fbpprocess
     add_process sup supervisor
+    add_fifo a/a_hb "$(end_of a)" "$(end_of sup)" "" -outhb -hb_a
     add_fifo sup/sup_manual "$(end_of sup)" outside control -manual
     add_fifo sup/sup_manual2 "$(end_of sup)" outside control -manual2
 
@@ -745,6 +749,24 @@ add_fifo() {
     run debasher::_register_resident_task_ports
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: node a has more than one output read by the Supervisor (outhb,outhb2)"* ]]
+}
+
+@test "debasher::_register_resident_task_ports refuses a node with no heartbeat channel in a program with a Supervisor" {
+    # The array has one task more than the Supervisor connects to, as when
+    # the option that sizes its heartbeat channels says 2 and the array
+    # builds 3 tasks: worker:2 would run unsupervised.
+    set_up_registries
+    add_process start fbpprocess
+    add_process worker fbpprocess 3
+    add_process sup supervisor
+    add_fifo start/start_hb "$(end_of start)" "$(end_of sup)" "" -outhb -hb_start
+    add_fifo worker/worker_hb_0 "$(end_of worker 0)" "$(end_of sup)" "" -outhb -hb_worker0
+    add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
+    add_fifo worker/worker_hb_2 "$(end_of worker 2)" outside "" -outhb
+
+    run debasher::_register_resident_task_ports
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: node worker:2 has no output read by the Supervisor sup, but in a program with a Supervisor every node has a heartbeat channel"* ]]
 }
 
 @test "debasher::_register_resident_task_ports is a no-op for a general program" {

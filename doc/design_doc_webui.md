@@ -1138,9 +1138,21 @@ Without a `Supervisor`, each initiator gets instead an input of its own with
 the fifo tag `control`, written from outside the program, where
 `debasher_snapshot_resident` and `debasher_stop_resident` write their triggers.
 The labels of these options are reserved, and no option of the user may take
-them. How many heartbeat channels an `array` or `generator` process needs is
-only known when its options are defined, and how script generation writes them
-belongs to "Script generation and import of a resident program".
+them.
+
+How many tasks an `array` or `generator` process has is only known when its
+options are defined, so the `Supervisor` reads the heartbeat channels of such a
+node as a fanout family, as a `standard` process reads the tasks of an array
+(see "Option definitions"), and sends to the tasks of an initiator of that kind
+the same way. The family is counted by the command line option that counts the
+fanout family the node is connected to, directly or through the tasks of another
+array. A resident program with a `Supervisor` and a node of that kind that
+reaches no such family has no count for it, and script generation refuses it.
+The node has to build exactly as many tasks as the option says. A task too few
+makes the engine refuse the program, since the `Supervisor` would connect to a
+task that does not exist, and so does a task too many, which would otherwise run
+unsupervised: in a program with a `Supervisor`, the engine refuses a node with
+no heartbeat channel.
 
 **Initiators.** `ProgramProcess.initiator` marks a node as an initiator, where
 a round starts. A program made of independent subgraphs needs one initiator in
