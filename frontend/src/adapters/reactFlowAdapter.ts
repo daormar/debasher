@@ -306,12 +306,56 @@ export function programToReactFlowEdges(
 }
 
 /**
+ * Whether `to` can be reached from `from` (or is `from` itself) through
+ * edges whose source option is not a fifo. Each such edge makes its
+ * target wait for its source to finish (an afterok dependency of the
+ * engine), while a fifo edge makes no dependency at all (see
+ * debasher::_get_procdeps_for_process_task), so a cycle made only of
+ * edges like these is one the engine refuses with "circular dependency
+ * detected".
+ */
+function reachesWithoutFifo(program: Program, from: string, to: string): boolean {
+
+  const channelOf = (processId: string, optionId: string) =>
+    program.processes
+      .find(process => process.id === processId)
+      ?.options.find(option => option.id === optionId)?.channel;
+
+  const visited = new Set<string>();
+  const pending = [from];
+
+  while (pending.length > 0) {
+    const processId = pending.pop()!;
+    if (processId === to) {
+      return true;
+    }
+    if (visited.has(processId)) {
+      continue;
+    }
+    visited.add(processId);
+    for (const edge of program.edges) {
+      if (
+        edge.sourceProcessId === processId &&
+        channelOf(edge.sourceProcessId, edge.sourceOptionId) !== "fifo"
+      ) {
+        pending.push(edge.targetProcessId);
+      }
+    }
+  }
+
+  return false;
+
+}
+
+/**
  * Whether a connection is allowed: it must go from an output option to
  * an input option. Both may belong to the same process: a self-loop,
- * which the engine accepts like any other connection (it never becomes
- * a scheduling dependency of the process on itself), and which lets a
- * process feed itself through a fifo. An output may always feed
- * multiple inputs (fan-out). An
+ * which lets a process feed itself. Every cycle, a self-loop included,
+ * needs at least one edge from a fifo: a connection that is not from a
+ * fifo is refused when it would close a cycle of connections that are
+ * not from a fifo either, since the engine refuses such a cycle (see
+ * reachesWithoutFifo). An output may always feed multiple inputs
+ * (fan-out). An
  * input, by default, accepts at most one connected output — except a
  * "shared_dir" input (and not a fanout-family one, which keeps its own
  * single-source pairing rule), which may accept several, one per writer
@@ -400,6 +444,13 @@ export function isValidProgramConnection(
     if (!sourceOptionDef!.value || sourceOptionDef!.value !== targetOptionDef!.value) {
       return false;
     }
+  }
+
+  if (
+    sourceOptionDef?.channel !== "fifo" &&
+    reachesWithoutFifo(program, target, source)
+  ) {
+    return false;
   }
 
   return (

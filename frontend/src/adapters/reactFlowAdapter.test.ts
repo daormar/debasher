@@ -83,6 +83,52 @@ describe("isValidProgramConnection", () => {
       })
     ).toBe(true);
   });
+
+  it("refuses a self-loop from an output that is not a fifo", () => {
+    const writer = process("writer", [
+      option("writer-in", "-in"),
+      option("writer-outf", "-outf", { dataType: "file", value: "out.txt" }),
+    ]);
+    expect(
+      isValidProgramConnection(program([writer]), {
+        source: "writer",
+        sourceHandle: "writer-outf",
+        target: "writer",
+        targetHandle: "writer-in",
+      })
+    ).toBe(false);
+  });
+
+  // a -> b by file, and b -> a closes the cycle: refused by file, accepted
+  // when b writes a fifo.
+  function cycle(bOutChannel: "none" | "fifo") {
+    const a = process("a", [option("a-in", "-in"), option("a-out", "-out", { value: "a.txt" })]);
+    const b = process(
+      "b",
+      [option("b-in", "-in"), option("b-out", "-out", { channel: bOutChannel, value: "b_out" })],
+      200
+    );
+    const withAToB: Program = {
+      ...program([a, b]),
+      edges: [
+        { id: "ab", sourceProcessId: "a", sourceOptionId: "a-out", targetProcessId: "b", targetOptionId: "b-in" },
+      ],
+    };
+    return isValidProgramConnection(withAToB, {
+      source: "b",
+      sourceHandle: "b-out",
+      target: "a",
+      targetHandle: "a-in",
+    });
+  }
+
+  it("refuses a connection that closes a cycle with no fifo", () => {
+    expect(cycle("none")).toBe(false);
+  });
+
+  it("accepts a connection that closes a cycle through a fifo", () => {
+    expect(cycle("fifo")).toBe(true);
+  });
 });
 
 describe("computeFlippedOptionIds", () => {

@@ -68,6 +68,19 @@ in the design of resident programs.
   the type `resident` in its `_program_type` function: long-lived, stateful
   processes joined by FIFOs, always run by the built-in scheduler, as described
   in `doc/design_doc_resident.md`.
+- **node kind** (tipo de nodo): the class of the engine's runtime library that
+  a process of a resident program derives from (`ProgramProcess.nodeKind`):
+  `FBPProcess`, `ProgramLauncher`, `DirectoryWatcher` or `Supervisor` (see
+  "The program model of a resident program").
+- **node preamble** (preámbulo del nodo): the Python code of a node before its
+  class, such as imports and helper functions. Not to be confused with the
+  preamble of the program, which is Bash.
+- **class body** (cuerpo de la clase): the part of the class of a node that is
+  not a hook: class attributes, the constructor and helper methods.
+- **Supervisor wiring** (cableado del Supervisor): the channels between the
+  `Supervisor` and the nodes (heartbeat channels, trigger ports and the manual
+  trigger port), which script generation derives and the program model does
+  not hold.
 - **program model** (modelo del programa): the program as the web UI sees it, a
   tree of plain data defined twice with the same shape, as Pydantic models in
   `api/models.py` and as TypeScript types in `frontend/src/models/`, and sent
@@ -330,25 +343,23 @@ violation would produce a wrong module, refusing to generate it.
 
 ## Connections
 
-An edge goes from an output option to an input option of another process. The
-edges are the one source of truth about what is connected. The value of a
-connected input, its connection sentinel, is derived from them: the store
-recomputes it from the edges after every change to the program, so renaming a
-process or an option never leaves a sentinel that names the old one, and a
-program loaded with values out of step with its edges is repaired on load.
-Script generation also reads the edges, and emits one definition per edge; the
-sentinel is only its fallback when no edge matches. A `shared_dir` input is the
-exception: its value stays the name of its directory, and its edges only
-document on the canvas a dependency that the engine derives on its own from
-every writer resolving to the same path.
+An edge goes from an output option of a process to an input option of another
+process or of the same one. The edges are the one source of truth about what is
+connected. The value of a connected input, its connection sentinel, is derived
+from them: the store recomputes it from the edges after every change to the
+program, so renaming a process or an option never leaves a sentinel that names
+the old one, and a program loaded with values out of step with its edges is
+repaired on load. Script generation also reads the edges, and emits one
+definition per edge; the sentinel is only its fallback when no edge matches. A
+`shared_dir` input is the exception: its value stays the name of its directory,
+and its edges only document on the canvas a dependency that the engine derives
+on its own from every writer resolving to the same path.
 
 The canvas accepts a new connection only when it keeps the program valid for
 the engine:
 
 - It goes from an output to an input. Both may belong to the same process,
-  a self-loop: the engine accepts it like any other connection and never
-  makes a process depend on itself, so a process can feed itself, typically
-  through a FIFO.
+  a self-loop, so that a process can feed itself.
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same
@@ -357,12 +368,23 @@ the engine:
   name the same directory.
 - A fanout family pairs only with a process in `array` or `generator` mode,
   and never with another fanout family.
+- It closes no cycle, a self-loop included, made only of edges that do not
+  come from a FIFO.
 
-Nothing forbids a cycle. Every cycle has at least one edge whose target sits at
-or above its source on the canvas, a self-loop included, and the canvas routes
-such an edge around the processes instead of through them. For two processes
-that answer each other through FIFOs, it instead moves the handles of the
-answering pair to the other side, so that the edge stays short.
+The last rule follows the engine. A connection that does not come from a FIFO
+makes its target wait for its source to finish, while one from a FIFO makes no
+dependency at all, so that both ends run at the same time. The engine refuses a
+cycle of dependencies when it loads the program, and so accepts a cycle only
+when at least one of its edges comes from a FIFO. It does not refuse a
+self-loop that does not come from a FIFO, since it drops the dependency of a
+process on itself, but such a process would only read the file it writes, and
+the canvas refuses it with the rest.
+
+Every cycle has at least one edge whose target sits at or above its source on
+the canvas, a self-loop included, and the canvas routes such an edge around
+the processes instead of through them. For two processes that answer each
+other through FIFOs, it instead moves the handles of the answering pair to the
+other side, so that the edge stays short.
 
 ## Options handler modes
 
@@ -1030,10 +1052,11 @@ try to do. Where a guarantee has a known gap, "Future work" lists it.
 
 # Resident programs in the web UI
 
-*Not yet designed.* The extension of the web UI to resident programs. A
-resident program is not a run that starts and finishes: its processes stay
-alive, keep state, recover from crashes and go through rounds. The UI has to
-build such a program, launch it, observe it while it lives and act on it.
+*Designed in part, not built.* The extension of the web UI to resident
+programs. A resident program is not a run that starts and finishes: its
+processes stay alive, keep state, recover from crashes and go through rounds.
+The UI has to build such a program, launch it, observe it while it lives and
+act on it.
 
 The sections before this one describe general programs only (see the
 Introduction). This section is where a resident program departs from them: for
@@ -1041,44 +1064,185 @@ each part of that design (the program model, script generation and import, the
 program's directories, execution and observation), it says whether the part
 applies unchanged, changes, or is replaced by a rule of its own.
 
-## Declaring a resident program
+## The program model of a resident program
 
-*To be written.* The program type, the fifo tags (`--control`, `--external`),
-the `Supervisor` and its trigger ports, and how the model, script generation
-and import represent them.
+A resident program is edited with the same program model as a general one. The
+model gains a few fields, and some of what a general program may hold is not
+offered.
+
+**Program type.** `Program.programType` is `general` or `resident`, and
+`general` for program metadata saved without it. The user chooses it in a
+dialog when creating a program, and it never changes afterwards: the two types
+accept different processes and connections, and turning one into the other
+would leave in the program what the new type refuses. Script generation writes
+the module's `_program_type` function for a resident program, and import reads
+it.
+
+**Node kinds.** Every process of a resident program is a node of one node kind
+(`ProgramProcess.nodeKind`), chosen when the process is added: `FBPProcess`, a
+business node; `ProgramLauncher`, which launches a general program for every
+request it receives; `DirectoryWatcher`, which brings in the files that arrive
+in a directory; and `Supervisor`, which a program has at most once. They are
+the classes of the engine's runtime library with the same names (see
+`doc/design_doc_resident.md`). The engine derives the role of a process from
+the base of its class, and the web UI stores the kind instead: the user never
+writes the class declaration, which script generation writes from the kind, so
+the kind and the code cannot disagree.
+
+**The code of a node.** A node is always written in Python, with no choice of
+language. Its code is made of parts, each edited on its own, which script
+generation assembles into the process's heredoc, ending with the lines that
+create the object and call `run()`:
+
+- the node preamble: the code before the class, such as imports, helper
+  functions and constants;
+- the class body: the class attributes (the interval of the heartbeat, the
+  directory that a `DirectoryWatcher` watches, the general program of a
+  `ProgramLauncher`, ...), the constructor, which gives the node state its
+  first value, and helper methods;
+- one body for each hook: `process_data`, `capture_node_state`,
+  `restore_node_state`, `initialize_runtime` and `observe`.
+
+An `FBPProcess` has to give the first four hooks, and `observe` only if it
+watches something outside the program, together with its observe port in the
+class body. A `ProgramLauncher` and a `DirectoryWatcher` already implement
+every hook, so each body given for them overrides that of their class, and
+what they mostly need are class attributes. The class body never declares the
+ports of the node: the engine gives each node its ports from the options of the
+module, and stops a node whose class declares them.
+
+**The `Supervisor`.** It is added like any node, with the node kind
+`Supervisor`, and refused when the program already has one. The user edits
+nothing of it but its computational specifications, `heartbeat_timeout_s` and
+`startup_timeout_s`: script generation writes its whole class and all its
+options. Among them is the flag `-no_hold_fifos`, a command line option, so
+that each run can choose whether the `Supervisor` holds the business channels
+(see "Holding the business channels" in `doc/design_doc_resident.md`).
+
+**The Supervisor wiring.** The channels between the `Supervisor` and the nodes
+are not part of the program model. Script generation derives them every time
+from whether the program has a `Supervisor`, from its nodes and from which of
+them are initiators, as the store derives the connection sentinels from the
+edges, so adding or removing a node needs no change to the `Supervisor`. They
+are:
+
+- a heartbeat channel from every node, one for each task of an `array` or
+  `generator` process: an output of the node, read by an input of the
+  `Supervisor`;
+- a trigger port to every initiator: an output of the `Supervisor` with the
+  fifo tag `control`, read by an input of the initiator;
+- the manual trigger port: an input of the `Supervisor` with the fifo tag
+  `control`, written from outside the program.
+
+Without a `Supervisor`, each initiator gets instead an input of its own with
+the fifo tag `control`, written from outside the program, where
+`debasher_snapshot_resident` and `debasher_stop_resident` write their triggers.
+The labels of these options are reserved, and no option of the user may take
+them. How many heartbeat channels an `array` or `generator` process needs is
+only known when its options are defined, and how script generation writes them
+belongs to "Script generation and import of a resident program".
+
+**Initiators.** `ProgramProcess.initiator` marks a node as an initiator, where
+a round starts. A program made of independent subgraphs needs one initiator in
+each. The engine refuses, when it loads the program, one with a node that no
+initiator reaches through the business channels, and the editor leaves that
+check to it.
+
+**Options of a node.** The options of a node other than the `Supervisor` are of
+four sorts:
+
+- a business output: an output with option channel `fifo` and no fifo tag,
+  which the node writes. With no connection, its reader is outside the
+  program, as for a node that writes its results out;
+- a business input: an input connected to a business output, of another node
+  or of the same one through a self-loop;
+- an external input: an input with option channel `fifo` and the fifo tag
+  `external` (`ProgramOption.fifoTag`), written by a source outside the
+  program, which takes no connection. A node acts only on what it receives,
+  so what starts the activity of a program always comes in through an
+  external input;
+- a configuration option: an option with option channel `none` that no
+  connection feeds (a literal, a command line option or an attribute of the
+  process specifications), which the node reads from its options.
+
+The fifo tag `control` is never set by the user: only the Supervisor wiring
+writes it. The option channels `value_desc` and `shared_dir` and the flag
+`mirror` are not offered: the engine refuses `--mirror` in a resident program,
+and a connection that is not a FIFO makes the reader wait for the writer to
+finish, a dependency that the engine refuses in a resident program, whose
+processes it launches all at once.
+
+**Connections.** The canvas accepts a connection in a resident program only
+from a business output to a business input, of another node or of the same
+node. An external input takes none, and the Supervisor wiring is never drawn
+by hand.
+
+**Options handler modes.** `standard`, `array` and `generator` apply as in a
+general program, and each task of an `array` or `generator` process is a node
+of its own. `manual` is not offered, since in that mode the user writes the
+option definition function whole, and the Supervisor wiring has to be added to
+the function of every node. Fanout families apply unchanged.
+
+**Specifications.** `ComputationalSpecs` gains optional fields, shown only for
+the node kinds that read them: the limits of a node (`input_log_max_mb`,
+`out_backlog_max_mb`, `out_backlog_fail_mb`, `gil_switch_interval_ms`) and
+`startup_timeout_s` for every node, `max_concurrent_runs` and `batch_sched`
+for a `ProgramLauncher`, and `heartbeat_timeout_s` and `startup_timeout_s` for
+the `Supervisor`. The engine checks their values when it loads the program.
+
+**Groups.** "Add program" brings in only a program of the same type. In a
+resident program it brings in the processes one by one, never as a group: a
+module added with `add_debasher_program` carries its own Supervisor wiring,
+while the wiring of the whole program has to be derived again with the new
+nodes. A program that already has a `Supervisor` refuses a program that brings
+another.
+
+**What applies unchanged.** The ids, names and positions of the processes, the
+rule that gives an option its direction, command line options and program
+options, the preamble of the program and its environment variables.
+
+## Script generation and import of a resident program
+
+*To be written.* The `_program_type` function, the heredoc assembled from the
+code of a node, the Supervisor wiring (including the heartbeat channels of the
+tasks of an `array` or `generator` process), the fifo tags, and what import
+recovers from a module written by hand.
+
+## The directories of a resident program
+
+*To be written.* The home directory, unchanged; the output directory, which
+holds the state of the nodes across runs; `debasher_reset_resident` in place of
+"Reset output directory"; and saving a program whose output directory holds
+state.
+
+## Running a resident program
+
+*To be written.* Launching and resuming with `debasher_exec`, the orderly stop
+with `debasher_stop_resident` and the hard kill with `debasher_stop`, and
+snapshots with `debasher_snapshot_resident`.
+
+## Observing and talking to a live program
+
+*To be written.* The process statuses, what the UI reads from the execdir of
+each node (checkpoints, input log, halted marker) and from the log of the
+`Supervisor`; "Watch FIFO", which has no FIFO mirror to read; and "Talk to
+FIFOs", which writes envelopes into external inputs and control ports.
+
+## A program that outlives the tab
+
+*To be written.* What replaces the rule that a tab stops the run it launched,
+and what happens to a live program when the backend or the tab goes away and
+comes back.
 
 ## The canvas of a resident program
 
-*To be written.* How cycles, control and external ports, and the `Supervisor`
-are drawn, and how a self-loop is drawn, since the canvas draws none today.
-
-## Launching, stopping and resetting
-
-*To be written.* What replaces the actions of a general program:
-`debasher_stop_resident` for an orderly stop, `debasher_reset_resident` for a
-clean start, and resuming from the checkpoints of the last stop.
-
-## Rounds and snapshots
-
-*To be written.* Starting a round from the UI (`debasher_snapshot_resident`)
-and showing the rounds that have closed.
-
-## Observing a live program
-
-*To be written.* What the UI shows of a living program and where it reads it
-from: the state of each node, its incarnations and relaunches, its checkpoints
-and its input log, and the failures the program reports loudly.
-
-## Talking to a live program
-
-*To be written.* Writing into external and control ports from the UI, using
-the control ports file to find them.
-
-## The backend and a long-lived program
-
-*To be written.* What happens to a resident program when the backend or the
-browser tab goes away and comes back, given that the backend keeps no state
-and that a tab stops the run it launched when it closes.
+*To be written.* How each node kind, the Supervisor wiring and the self-loop
+are drawn: a distinct box for each node kind, a mark (an eye) on a node that
+defines `observe`, a mark (a bolt) on a trigger port instead of the round
+handle, and the Supervisor wiring hidden until it is shown from the context
+menu of the `Supervisor`. Whatever a canvas node draws from its process has to
+be part of the structural key (see "Keeping the canvas in step with the
+store").
 
 # Future work
 
@@ -1102,5 +1266,5 @@ and that a tab stops the run it launched when it closes.
   loaded from a new place should do with an output directory that still
   points to the old one.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
-  in the model; the second is needed by resident programs (see "Declaring a
-  resident program").
+  in the model; the second is needed by resident programs (see "The program
+  model of a resident program").
