@@ -1,0 +1,172 @@
+{
+  "id": "d62d81cd-15db-47ce-8e45-5b91ff948b18",
+  "name": "webui_fifo_sum",
+  "description": "Example built with the web UI: a process writes the numbers from 1 to n into a fifo, and another adds them up.",
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": false,
+    "dockerSupport": false
+  },
+  "programOptions": {
+    "-n": "10"
+  },
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "1b28339f-26ff-4702-b74d-fbb01bdae614",
+      "name": "numbers",
+      "description": "Writes the numbers from 1 to n into a fifo, one per line.",
+      "position": {
+        "x": 120.0,
+        "y": 100.0
+      },
+      "options": [
+        {
+          "id": "8ac17e83-f8d7-4b92-b24a-5558f9024353",
+          "label": "-n",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "mirror": false,
+          "description": "how many numbers to write",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "44c74c84-d40b-4323-91de-69dd83415295",
+          "label": "-outnums",
+          "direction": "output",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "description": "fifo with one number per line",
+          "value": "numbers",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "numbers()\n{\n    local n=$(read_opt_value_from_func_args \"-n\" \"$@\")\n    local outnums=$(read_opt_value_from_func_args \"-outnums\" \"$@\")\n\n    seq 1 \"${n}\" > \"${outnums}\"\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00"
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null
+    },
+    {
+      "id": "e86fa44e-a121-48cb-8782-52fc45de8feb",
+      "name": "sum",
+      "description": "Adds the numbers it reads from a fifo and writes the result into a file.",
+      "position": {
+        "x": 120.0,
+        "y": 320.0
+      },
+      "options": [
+        {
+          "id": "4c7d927b-c659-4912-9d8c-652ac17010fd",
+          "label": "-nums",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "none",
+          "mirror": false,
+          "description": "fifo with the numbers to add",
+          "value": "[numbers;-outnums]",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "a4cf8324-0c3c-43c7-8a37-0eb350f50850",
+          "label": "-outf",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "none",
+          "mirror": false,
+          "description": "file with the sum",
+          "value": "${process_outdir}/sum.txt",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "sum()\n{\n    local nums=$(read_opt_value_from_func_args \"-nums\" \"$@\")\n    local outf=$(read_opt_value_from_func_args \"-outf\" \"$@\")\n\n    awk '{ total += $1 } END { print total }' \"${nums}\" > \"${outf}\"\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00"
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "6281cef2-3721-46d6-bc69-360a9f66d11d",
+      "sourceProcessId": "1b28339f-26ff-4702-b74d-fbb01bdae614",
+      "sourceOptionId": "44c74c84-d40b-4323-91de-69dd83415295",
+      "targetProcessId": "e86fa44e-a121-48cb-8782-52fc45de8feb",
+      "targetOptionId": "4c7d927b-c659-4912-9d8c-652ac17010fd"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-SUBDIRS= programs conda_envs
+SUBDIRS= programs webui_programs conda_envs
 
 EXTRA_DIST = debasher_check_installation.sh
 

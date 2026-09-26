@@ -479,6 +479,10 @@ def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge])
     with a bounded (not necessarily "correct", since no single layering
     is correct for a cycle) result rather than hanging.
 
+    A self-loop (a process connected to itself) says nothing about the
+    order of two processes, and relaxing it would only push its process
+    one layer down on every pass, so it is left out.
+
     Processes sharing a layer are placed side by side, left to right in
     their original script order, for a deterministic layout.
     """
@@ -488,6 +492,8 @@ def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge])
         changed = False
         for edge in edges:
             if edge.sourceProcessId not in layer or edge.targetProcessId not in layer:
+                continue
+            if edge.sourceProcessId == edge.targetProcessId:
                 continue
             candidate = layer[edge.sourceProcessId] + 1
             if candidate > layer[edge.targetProcessId]:

@@ -275,6 +275,32 @@ def test_a_fanout_family_survives_the_round_trip(tmp_path):
     _assert_model_round_trip(program, tmp_path)
 
 
+def test_a_self_loop_survives_the_round_trip_and_keeps_its_layer(tmp_path):
+    counter = _process(
+        "counter",
+        [
+            _option("-self", value="[counter;-outself]"),
+            _option("-outself", channel="fifo", value="counter_self"),
+            _option("-outsink", channel="fifo", value="counter_sink"),
+        ],
+    )
+    sink = _process("sink", [_option("-in", value="[counter;-outsink]")])
+    program = _program(
+        "rt_selfloop",
+        [counter, sink],
+        [_edge("counter", "-outself", "counter", "-self"), _edge("counter", "-outsink", "sink", "-in")],
+    )
+
+    _assert_model_round_trip(program, tmp_path)
+
+    # The self-loop does not push its process down: it stays in the first
+    # layer, above the process it feeds.
+    reimported = _generate_and_import(program, str(tmp_path))
+    y = {process.name: process.position.y for process in reimported.processes}
+    assert y["counter"] < y["sink"]
+    assert y["counter"] == min(y.values())
+
+
 def test_shared_directories_survive_the_round_trip(tmp_path):
     writer = _process("writer", [_option("-outd", channel="shared_dir", value="shared")])
     reader = _process("reader", [_option("-ind", channel="shared_dir", value="shared")])

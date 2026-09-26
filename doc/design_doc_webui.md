@@ -102,6 +102,8 @@ in the design of resident programs.
   process and the option it reads from.
 - **fan-in** (convergencia): more than one connection into the same input
   option.
+- **self-loop** (bucle propio): a connection from an output option of a
+  process to an input option of the same process.
 - **options handler mode** (modo del gestor de opciones): how a process defines
   its options and so how many tasks it runs: `standard`, `array`, `generator` or
   `manual` (see "Options handler modes").
@@ -343,8 +345,10 @@ every writer resolving to the same path.
 The canvas accepts a new connection only when it keeps the program valid for
 the engine:
 
-- It goes from an output to an input of a different process. The canvas
-  draws no connection from a process to itself.
+- It goes from an output to an input. Both may belong to the same process,
+  a self-loop: the engine accepts it like any other connection and never
+  makes a process depend on itself, so a process can feed itself, typically
+  through a FIFO.
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same
@@ -355,10 +359,10 @@ the engine:
   and never with another fanout family.
 
 Nothing forbids a cycle. Every cycle has at least one edge whose target sits at
-or above its source on the canvas, and the canvas routes such an edge around
-the processes instead of through them. For two processes that answer each other
-through FIFOs, it instead moves the handles of the answering pair to the other
-side, so that the edge stays short.
+or above its source on the canvas, a self-loop included, and the canvas routes
+such an edge around the processes instead of through them. For two processes
+that answer each other through FIFOs, it instead moves the handles of the
+answering pair to the other side, so that the edge stays short.
 
 ## Options handler modes
 
@@ -628,7 +632,8 @@ With the processes read, import assembles the program:
 - **Layout.** The module says nothing about positions, so import places the
   processes in layers by the depth of their connections, left to right in
   the order of the module documentation. The number of passes is bounded, so a
-  cycle ends with some layering rather than none.
+  cycle ends with some layering rather than none. A self-loop says nothing
+  about the order of two processes, and is left out of the layering.
 - **The rest.** `sourceDir` is the module's directory, the home and output
   directories are left empty, the scheduler is `BUILTIN` and there are no
   program options.
@@ -715,10 +720,23 @@ first checks that there is no run in progress; the other two are not blocked
 during a run, and so bypass the guard of the save.
 
 **Loading.** Loading reads the program metadata of a directory and opens the
-program exactly as it was saved, including `homeDir` and `outputDir`, which
-are absolute paths. A home directory that was copied or moved and is loaded
-from its new place therefore still names the old one, and the next save or run
-writes into the old place.
+program as it was saved, except for `homeDir`, which becomes the absolute path
+of the directory it is loaded from, whatever the metadata recorded. A home
+directory that was copied or moved is therefore saved and run where it now
+is. `outputDir` is kept as it was saved: a program loaded from a new place
+still names the output directory it had, which is not always what its user
+wants (see "Future work").
+
+**Programs shipped with DeBasher.** `data/webui_programs/` holds programs
+built with the web UI, installed under the package's data directory, one home
+directory each, with its program metadata and its generated script. They are
+loaded, never imported, and so keep everything the program model holds. None
+of them records an output directory or a source directory, since a path of
+the machine they were built on means nothing on another. An installed one is
+usually not writable, so the user saves it into a home directory of their
+own before changing it. `test/api/test_webui_programs.py` checks that each
+of them loads from where it is and that its generated script is the one that
+script generation writes from its metadata today.
 
 ## Reserved names and user files
 
@@ -961,6 +979,9 @@ try to do. Where a guarantee has a known gap, "Future work" lists it.
 
 - **Two directories apart.** A program is never saved into its output
   directory, and the output directory is never set to the home directory.
+- **A program lives where it is loaded from.** Its home directory is the
+  directory it was loaded from, even if it was copied or moved there (see
+  "The home directory").
 - **User files are the user's.** The program files panel never touches a
   reserved name, never leaves the home directory, and never changes the
   generated script (see "Reserved names and user files").
@@ -1003,8 +1024,9 @@ try to do. Where a guarantee has a known gap, "Future work" lists it.
 - **Importing any module faithfully.** Import recognizes a closed grammar, and
   keeps the rest as it is rather than trying to understand it (see "What the
   round trip preserves").
-- **A program directory that can be moved.** The program metadata records
-  absolute paths (see "The home directory").
+- **An output directory that follows a moved program.** A program loaded
+  from a new place keeps the output directory it was saved with (see "The
+  home directory").
 
 # Resident programs in the web UI
 
@@ -1076,10 +1098,9 @@ and that a tab stops the run it launched when it closes.
 - **The group on the canvas.** Adding the group to the structural key of the
   canvas, so that a dissolved group loses its color and badge at once (see
   "Keeping the canvas in step with the store").
-- **A moved home directory.** Taking the home directory from the place the
-  program is loaded from rather than from the program metadata, and deciding
-  what a moved program should do with an output directory that still points
-  to the old place.
+- **The output directory of a moved program.** Deciding what a program
+  loaded from a new place should do with an output directory that still
+  points to the old one.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model; the second is needed by resident programs (see "Declaring a
   resident program").

@@ -307,8 +307,11 @@ export function programToReactFlowEdges(
 
 /**
  * Whether a connection is allowed: it must go from an output option to
- * an input option, and the two options must belong to different
- * processes. An output may always feed multiple inputs (fan-out). An
+ * an input option. Both may belong to the same process: a self-loop,
+ * which the engine accepts like any other connection (it never becomes
+ * a scheduling dependency of the process on itself), and which lets a
+ * process feed itself through a fifo. An output may always feed
+ * multiple inputs (fan-out). An
  * input, by default, accepts at most one connected output — except a
  * "shared_dir" input (and not a fanout-family one, which keeps its own
  * single-source pairing rule), which may accept several, one per writer
@@ -333,8 +336,7 @@ export function isValidProgramConnection(
     !source ||
     !target ||
     !sourceHandle ||
-    !targetHandle ||
-    source === target
+    !targetHandle
   ) {
     return false;
   }
