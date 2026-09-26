@@ -3490,6 +3490,18 @@ Design ideas from Future work move here once they are actually built.
   means interpreting `start_snapshot` and `shutdown`: how to add that for the
   triggers that a person writes is not clear, and it would only cover the nodes
   that report to the `Supervisor`. Not designed.
+- **Resuming with a changed program.** `debasher_exec` resumes a resident
+  program from the checkpoints and input logs in its output directory with
+  whatever module it is given, even one changed since that state was written:
+  a `restore_node_state` that no longer reads the old node state, a
+  `process_data` that replays the input log to another result, other ports, or
+  another number of tasks from the command line all go unnoticed (see "Fan-out
+  and fan-in sized from the command line" in Extensions). The web UI compares
+  the program with the one that produced the state before it launches it (see
+  "The directories of a resident program" in `doc/design_doc_webui.md`), but a
+  program launched from the command line has no such check. The engine could
+  record, at every launch, what the state depends on, and warn or refuse when
+  a resume differs from it. Not designed.
 - **Resident programs in the frontend.** The visual editor (`frontend/`) and
   the API behind it (`api/`) know nothing about resident programs: the program
   model has no program type, `api/program_import.py` and

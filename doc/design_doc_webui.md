@@ -157,6 +157,15 @@ in the design of resident programs.
 - **run log** (log de la ejecución): `.debasher_webui_run.log` in the output
   directory, where the web UI sends everything that `debasher_exec` prints
   during a run it launched.
+- **program state** (estado del programa): what the nodes of a resident
+  program keep across runs in its output directory, their checkpoints, input
+  logs and halted markers and the output directories of their processes: what
+  `debasher_reset_resident` takes away (see "The directories of a resident
+  program").
+- **launch record** (registro del lanzamiento): the copy of the generated
+  script and of the program options that every launch of a resident program
+  leaves in its output directory, against which the next launch compares the
+  program.
 
 ## Translation
 
@@ -1370,10 +1379,60 @@ function, which behaves the same.
 
 ## The directories of a resident program
 
-*To be written.* The home directory, unchanged; the output directory, which
-holds the state of the nodes across runs; `debasher_reset_resident` in place of
-"Reset output directory"; and saving a program whose output directory holds
-state.
+**The home directory** is the same as for a general program (see "The home
+directory"): the program metadata, the generated script and the user files,
+with the same guarantees.
+
+**The output directory** holds, besides what a general run leaves there, the
+program state: what each node keeps across runs, its checkpoints, its input
+log and its halted marker, in its execdir, and the output directory of its
+process, which the engine does not empty when it launches a node again (see
+"Ordered shutdown" in `doc/design_doc_resident.md`). A resident program is
+resumed from that state every time it is launched on the same output
+directory, so the output directory of a resident program is part of the
+program in a way that the output directory of a general program is not. The
+rules that keep the two directories apart apply unchanged.
+
+**Resetting.** "Reset output directory" gives way to "Reset program state",
+which runs `debasher_reset_resident` on the output directory: it takes the
+program state away, for every task of every process, and the next launch
+starts every node afresh. By default the tool sets the state aside under
+`__reset__/<timestamp>/` in the output directory, since a checkpoint that is
+lost cannot be made again, and the dialog offers to delete it instead
+(`--delete`). As for a general program, the frontend refuses to reset while
+there is a run in progress, and the tool refuses it too. What is set aside
+stays in the output directory until the user deletes it.
+
+**Launching a program with state.** A node resumes from its checkpoint and
+replays its input log with the code that the program has when it is launched,
+not the code that produced them. A program changed since its state was
+produced may therefore not resume correctly: a new `restore_node_state` may
+not read an old node state, a new `process_data` replays the input log to
+another result, and a checkpoint keys its bookkeeping by the names of the
+ports, which the engine does not compare with the ports the node has now. A
+change of the command line options, such as the number of tasks of an array,
+needs a fresh start too. While the program lives, it cannot change, since a
+save is refused while there is a run in progress. Between a stop and the next
+launch it can, and saving stays free: the check is made when the program is
+launched.
+
+- Every launch leaves in the output directory the launch record, a copy of the
+  generated script and of the program options with which it was launched.
+- When "Run program" finds program state in the output directory, and the
+  generated script or the program options differ from the launch record, the
+  frontend asks whether to resume with the changed program, the user answering
+  for its compatibility, or to reset the program state first and start afresh.
+- The comparison leaves out the `_document` functions, so that a change of a
+  description asks nothing. The positions on the canvas are not in the script.
+- With program state and no launch record, as when the state comes from a run
+  launched outside the web UI, the frontend asks all the same, and says that it
+  cannot tell which program produced the state.
+
+The backend finds the program state by the names that the engine gives to it
+in the output directory, the same that `debasher_reset_resident` takes away,
+and would have to change with them. The check sees only the generated script
+and the program options: a change in a module that the preamble loads goes
+unseen.
 
 ## Running a resident program
 
