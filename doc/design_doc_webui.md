@@ -157,6 +157,9 @@ in the design of resident programs.
 - **run log** (log de la ejecución): `.debasher_webui_run.log` in the output
   directory, where the web UI sends everything that `debasher_exec` prints
   during a run it launched.
+- **snapshot log** (log de los snapshots): `.debasher_webui_snapshots.log` in
+  the output directory of a resident program, where the web UI sends
+  everything that the `debasher_snapshot_resident --every` it starts prints.
 - **program state** (estado del programa): what the nodes of a resident
   program keep across runs in its output directory, their checkpoints, input
   logs and halted markers and the output directories of their processes: what
@@ -197,13 +200,21 @@ in the design of resident programs.
 - **store** (almacén): the state of the frontend in a tab (`ProgramContext`):
   the program being edited and what the tab knows about its runs.
 - **run phase** (fase de la ejecución): the state of a run launched from this
-  tab, as the tab follows it (`ProgramRunPhase`).
+  tab, as the tab follows it (`ProgramRunPhase`). For a resident program, the
+  state of the program derived from the process statuses, whoever launched
+  it (see "Running a resident program").
 - **process status** (estado de un proceso): the state of each process as
   `debasher_status` reports it for the output directory, whoever launched the
   run; it colors the canvas.
 - **run in progress** (ejecución en curso): the state of an output directory
   in which `debasher_status` reports at least one process as `IN-PROGRESS`,
   whoever launched the run.
+- **orderly stop** (parada ordenada): the stop of a resident program with
+  `debasher_stop_resident`, which halts every node in one round before
+  stopping it, so that the next launch resumes the program with nothing lost.
+- **hard kill** (parada forzada): the stop of a program with `debasher_stop`,
+  which kills every process at once; for a resident program, what its FIFOs
+  held may be lost.
 - **FIFO mirror** (espejo de una FIFO): the log in which the engine copies every
   line that a process writes into a FIFO defined with `--mirror`, which can be
   read without taking the data from the FIFO's reader.
@@ -1391,7 +1402,9 @@ process, which the engine does not empty when it launches a node again (see
 resumed from that state every time it is launched on the same output
 directory, so the output directory of a resident program is part of the
 program in a way that the output directory of a general program is not. The
-rules that keep the two directories apart apply unchanged.
+rules that keep the two directories apart apply unchanged. Besides the run
+log, the web UI adds to it the launch record (see below) and the snapshot log
+(see "Running a resident program").
 
 **Resetting.** "Reset output directory" gives way to "Reset program state",
 which runs `debasher_reset_resident` on the output directory: it takes the
@@ -1436,9 +1449,220 @@ unseen.
 
 ## Running a resident program
 
-*To be written.* Launching and resuming with `debasher_exec`, the orderly stop
-with `debasher_stop_resident` and the hard kill with `debasher_stop`, and
-snapshots with `debasher_snapshot_resident`.
+A resident program is launched with `debasher_exec` and followed with
+`debasher_status`, as a general one, but a run of it never finishes on its own:
+its nodes run until they are stopped, and each launch on the same output
+directory resumes them. This subsection says, for each action of "Execution
+and observation" that runs or stops a program, whether it applies unchanged,
+changes, or is replaced.
+
+**Launching and resuming.** "Run program" launches a resident program with
+`debasher_exec` (see "Launching a run"), and resumes it with the same command:
+on an output directory with program state, the engine launches again every
+process that is not in progress, and each node resumes from its checkpoint.
+For a resident program the engine forces the built-in scheduler in oneshot
+mode, in which `debasher_exec` launches every process at once and ends without
+waiting for any. The command changes accordingly:
+
+- `--sched BUILTIN` always, since the engine refuses any other scheduler, and
+  the execution options offer no choice of scheduler;
+- no `--wait`, which does nothing with the built-in scheduler;
+- `--builtinsched-cpus` and `--builtinsched-mem` as for a general program: the
+  engine refuses the launch, before starting any process, when the processes
+  do not all fit in them at once;
+- no `--dflt-throttle`, since every task of a node has to run at once, nor
+  `--rerun-outdated-procs`, since a resume already launches every process
+  again;
+- no `--dflt-nodes`, which only the Slurm scheduler reads, nor
+  `--conda-support` or `--docker-support`, all three meant for general
+  programs. The batch runs that a `ProgramLauncher` launches are general
+  programs, where these options would apply, but a `ProgramLauncher` cannot
+  give them today (see "Future work" in `doc/design_doc_resident.md`).
+
+**The launch within the request.** Since `debasher_exec` ends as soon as every
+process is launched, `/run` waits for it, instead of starting it detached, and
+answers with its exit code and what it printed, which the frontend shows when
+the launch fails. A program that the engine refuses when it loads it, such as a
+node that no initiator reaches, is thus reported at once, as "Run program
+(debug)" reports it, and not only in the run log. The output of
+`debasher_exec` still goes to the run log, a file, and the backend reads it
+once `debasher_exec` ends: a pipe would be inherited by the processes it
+launches, and the request would wait for them.
+
+**The launch record at launch time.** `/run` goes through these steps:
+
+1. With a run in progress, it answers with a conflict and does nothing, as for
+   a general program.
+2. With program state in the output directory and a launch record that differs
+   from the program, or none, it answers with a conflict, unless the request
+   says that the user chose to resume with the changed program (see "The
+   directories of a resident program"). The frontend asks before sending the
+   request, and the backend checks again, since it keeps no state and another
+   tab may have launched the program in between. A user who chooses to start
+   afresh has the frontend reset the program state first and then send the
+   request.
+3. It saves the program and generates the script.
+4. It runs `debasher_exec`.
+5. It writes the launch record only when `debasher_exec` ends with 0, and
+   leaves the previous one otherwise.
+
+The last step errs on the side of asking. Take a program P1 that left program
+state and the launch record R1, changed into P2 and launched. When the launch
+fails before starting any process, the state is still that of P1, and R1 has
+to stay so that the next launch asks again. When it fails after starting some
+node, part of the state is already that of P2, and R1 only makes the next
+launch ask when it need not. A record written before the launch, or after any
+launch, would do the reverse: miss a question when the state comes from
+another program.
+
+"Run program (debug)" and "Check program options" apply unchanged.
+
+**Stopping in order.** "Stop program" is replaced by the orderly stop, which
+runs `debasher_stop_resident -d <output directory>` with its default timeout:
+the tool halts every node in one round, then stops the nodes, the `Supervisor`
+first (see "`debasher_stop_resident`: the graceful stop tool" in
+`doc/design_doc_resident.md`). It runs within the request, which lasts until
+the program has stopped, up to about the timeout of the tool, and the frontend
+shows the program as stopping and offers no other action on it meanwhile. A
+tab closed during the stop does not interrupt it. The options `-x` and
+`--keep-supervisor` are not offered, since they exist for the escalation of the
+`Supervisor`. The frontend tells the user what the exit code of the tool means:
+
+- 0: an orderly stop. Every node halted in the same round, and the next launch
+  resumes the program with nothing lost.
+- 2: the orderly stop did not end within the timeout, and the tool fell back to
+  the hard kill of `debasher_stop`. The program has ended, but was killed: each
+  node resumes from its last checkpoint and its input log, and what the FIFOs
+  held may be lost, at most what a pipe holds for each business channel, which
+  the nodes that read them report as a gap in the sequence numbers when they
+  resume.
+- 1: an error of usage or setup, reported with what the tool printed.
+
+**Killing.** "Kill program" runs `debasher_stop` on the output directory, the
+hard kill, after the user confirms it with the same warning as for exit code 2.
+It stays as an action of its own, next to "Stop program", for a program known
+to be stuck, whose orderly stop would only reach the hard kill after the
+timeout.
+
+Both actions are offered only while there is a run in progress, where "Stop
+program" for a general program needs only an output directory. The orderly
+stop of a program with no node alive would find no reader for its triggers,
+and would end in a hard kill that kills nothing, reported as exit code 2.
+
+**Restarting a node.** "Stop process" runs `debasher_stop -p <process>`, which
+kills every task of the process at once. In a resident program that is a crash
+of the node, not a stop: the node leaves no mark of a clean end, and the
+`Supervisor` relaunches it, from its last checkpoint and its input log (see
+"Relaunching a downed node" in `doc/design_doc_resident.md`). The action is
+named for what it does, "Restart node", and is offered as follows:
+
+- In a program with a `Supervisor`, on every node but the `Supervisor`, after
+  the user confirms it with a warning: the node restarts from its last
+  checkpoint and replays its input log, and what its FIFOs hold is kept by
+  the peers at their other ends (see "Ghost connections" in
+  `doc/design_doc_resident.md`). Only a channel whose two ends are restarted
+  together, a self-loop of the node or a channel between two tasks of the
+  process, relies on the `Supervisor` to hold it, and may lose what it held
+  when the program was launched with `-no_hold_fifos`, which the warning then
+  says. It serves to free a node that is stuck, or to try the recovery of a
+  program. A node restarted again and again before it sends a heartbeat
+  counts for the `Supervisor` as a node that crashes after every relaunch, and
+  after a few times the `Supervisor` gives up on it and stops the program (see
+  "Escalation on a permanent node failure" in `doc/design_doc_resident.md`).
+- Not on the `Supervisor`, which nothing supervises: the nodes would go on
+  without anyone to relaunch them or to hold their FIFOs, until the next stop.
+- Not in a program without a `Supervisor`, where nothing would relaunch the
+  node: it would stay down until the whole program is stopped and launched
+  again, since `debasher_exec` launches nothing while there is a run in
+  progress. Meanwhile each node that writes to it blocks once the pipe is
+  full, and its outbound backlog grows until the node fails.
+
+On an `array` or `generator` process the action restarts every task, since
+`debasher_stop` stops a process as a whole.
+
+**Snapshots.** The nodes of a resident program write checkpoints and prune
+their input logs only when a round closes, and a round starts only when a
+trigger comes from outside the program. `debasher_snapshot_resident` writes
+that trigger (see "`debasher_snapshot_resident`: rounds from outside the
+program" in `doc/design_doc_resident.md`). With no rounds, the input logs grow
+until their size cap stops the nodes. The web UI starts rounds in two ways.
+
+"Take snapshot" starts one round: it runs
+`debasher_snapshot_resident -d <output directory>` within the request, with
+the default timeout of the tool, and shows what its exit code means. With 0,
+the round closed at every node, and the frontend shows its epoch. With 2, the
+round did not close at some node, because the node is down, has halted or has
+a halt open, and the frontend names the nodes. With 1, an error of usage or
+setup. The action is offered only while
+there is a run in progress, and works as well on a program launched from the
+command line.
+
+Periodic snapshots are off by default, and the user turns them on with
+`executionOptions.snapshotEverySecs`, a field of the execution options of a
+resident program, saved in the program metadata. The dialog says what an empty
+field means (no rounds but those of "Take snapshot", and input logs that grow
+until their size cap), and that the period has to be longer than a round
+takes, or each round replaces the one before it and none closes. With a
+period, `/run`, once `debasher_exec` has ended with 0, starts
+`debasher_snapshot_resident -d <output directory> --every <period>` detached,
+in a session of its own, with its output in the snapshot log, and answers
+without waiting for it. The tool ends by itself once no node of the program
+runs, whatever stopped the program, so nothing has to stop it and the backend
+keeps nothing of it. Every launch from the web UI starts it again, as a program
+that is resumed needs.
+
+- The period cannot change while the program lives, since changing it would
+  mean finding the running tool, which leaves no PID on disk. A new period
+  applies from the next launch.
+- The period is not part of the launch record: it does not change which
+  program state the program can resume from.
+- The web UI starts one periodic tool for each launch. A second one, started
+  by hand on the same output directory, would start rounds that replace the
+  rounds of the first. The tool does not refuse it today (see "Future work"
+  in `doc/design_doc_resident.md`).
+- A round of "Take snapshot" during periodic snapshots replaces the open
+  periodic round, or is replaced by the next one, and the tool reports which
+  round did not close.
+
+**The run phase of a resident program.** The run phase of a general program
+follows only a run launched from the tab, and becomes `finished` once every
+process has finished. Neither holds for a resident program. After an orderly
+stop every node has ended cleanly, and `debasher_status` reports every process
+finished, although the program has not finished but stopped, and resumes at
+the next launch. And a program that outlives the tab has to show as alive to
+any tab that opens it. The run phase of a resident program is therefore
+derived from the process statuses, which are read whoever launched the program
+(see "Following a run"), and takes these values:
+
+- `new`: there is no program state in the output directory, and the next
+  launch starts every node afresh.
+- `live`: at least one process is in progress. A node that is down, or being
+  relaunched by the `Supervisor`, shows in the color of its canvas node, not
+  in the run phase.
+- `stopped`: no process is in progress, and there is program state. The
+  frontend tells a program stopped in order, every process of which is
+  finished, from one stopped abruptly, some process of which is not: after a
+  hard kill, a `Supervisor` that gave up on a node, which stays down, or a node
+  that failed in a program without a `Supervisor`. The user thus knows,
+  before launching it again, whether the program may have lost something
+  when it stopped.
+- `launching` and `stopping`: while a request of this tab to launch the
+  program, or to stop or kill it, has not been answered.
+
+A program may stop with no action of the web UI, when its `Supervisor` gives up
+on a node, and the run phase goes from `live` to `stopped` at the next reading.
+The rule of two readings in a row does not apply: it covers the gap between one
+process ending and the next starting, and the processes of a resident program
+all start at once.
+
+**The guards.** The guards that depend on a run in progress apply unchanged,
+since they already read the process statuses and not the run phase: while the
+program is `live`, the frontend refuses to save, to reset the program state and
+to change the output directory, and `/run` refuses to launch. What changes is
+which actions are offered only while the program is `live`: "Stop program",
+"Kill program", "Restart node" and "Take snapshot". What the tab does with a
+live program when it is closed, reloaded or leaves the editor is in "A program
+that outlives the tab".
 
 ## Observing and talking to a live program
 
@@ -1504,6 +1728,15 @@ store").
   the documentation, and maybe the program, to a service outside the machine,
   which the user has to know; and its answers are only as good as a
   documentation kept in step with the code.
+- **Relaunching a node by hand.** An action of the context menu of a node
+  of a resident program without a `Supervisor`, which relaunches a node that
+  is down with `debasher_launch_process`, as the `Supervisor` does. With it,
+  "Restart node" could also be offered in such a program. The peers of the
+  node hold its FIFOs while it is down, so only a channel whose two ends are
+  down together, such as a self-loop, may lose what it held.
+- **Restarting one task of a node.** "Restart node" on a single task of an
+  `array` or `generator` process, which needs `debasher_stop` to stop one
+  task.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.

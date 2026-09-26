@@ -3224,10 +3224,20 @@ Design ideas from Future work move here once they are actually built.
 
 # Future work
 
+- **A single periodic `debasher_snapshot_resident`.** Two `--every` on the
+  same output directory start rounds that replace each other, so that none
+  closes (see "A round that a newer one replaces" in the Contract's limits).
+  The tool could leave its PID in the output directory while it runs, and
+  refuse a second `--every` while that PID is alive; the web UI could then
+  also find it, to change the period of a program that is running.
 - **What a launcher node leaves out** (see "`ProgramLauncher`: batch runs
   from a node"). A command to launch again a batch run that failed, since its
-  `observe()` never does it on its own; and priorities, or a limit shared by
-  several launcher nodes, beyond the `max_concurrent_runs` of each.
+  `observe()` never does it on its own; priorities, or a limit shared by
+  several launcher nodes, beyond the `max_concurrent_runs` of each; and a way
+  to give the batch runs the execution options of `debasher_exec`, such as
+  `--conda-support`, `--docker-support` and `--dflt-nodes`, as `batch_sched`
+  gives them their scheduler: the `opts` of a request are the options of the
+  general program, pairs of an option and its value.
 - **Dynamic process launching**: the architecture described in this document
   does not, from the outset, support dynamically launching processes. "General"
   programs already sketch a mechanism for this (see
