@@ -1232,10 +1232,69 @@ options, the preamble of the program and its environment variables.
 
 ## Script generation and import of a resident program
 
-*To be written.* The `_program_type` function, the heredoc assembled from the
-code of a node, the Supervisor wiring (including the heartbeat channels of the
-tasks of an `array` or `generator` process), the fifo tags, and what import
-recovers from a module written by hand.
+*In part: the code of a node is designed, and the Supervisor wiring, the fifo
+tags and the program type are still to be written.*
+
+**The code of a node, generated.** Script generation writes the code of a node
+as the heredoc function of its process, `<process>_heredoc_py` (see "Layout of
+the generated module"), which holds, in this order:
+
+1. `from debasher_runtime_lib import <kind>`, for its node kind;
+2. the node preamble;
+3. `class <Name>(<kind>):`, with the name of the class derived from the
+   process (see "The program model of a resident program");
+4. the class body;
+5. each hook that has a body, with its fixed signature:
+   `process_data(self, port_name, packet)`, `capture_node_state(self)`,
+   `restore_node_state(self, node_state)`, `initialize_runtime(self)` and
+   `observe(self)`;
+6. `<Name>().run()`.
+
+The class body and the bodies of the hooks are kept without the indentation
+that all their lines share, and script generation indents them again. The
+`Supervisor` has no parts: its class is written as `class <Name>(Supervisor):`
+with the body `pass`, followed by the line that runs it.
+
+**The code of a node, imported.** Import reads the heredoc of each node, as
+the engine prints it, and parses it with Python's `ast` module, without
+running it. The class of the node is the one class that derives from a class of
+the runtime library, as the engine requires, and its base gives the node kind.
+From it:
+
+- the node preamble is the text before the class, comments included, less the
+  line `from debasher_runtime_lib import <kind>` when it has exactly that form;
+- a method of the class is a hook when it has the name of a hook, its fixed
+  signature and no decorator, and its body is kept, comments included;
+- the class body is the rest of the class, in its order. A method with the name
+  of a hook and another signature, such as `process_data(self, port, pkt)`,
+  stays in it as an ordinary method, and works as it did;
+- after the class comes only the line that runs it, which script generation
+  writes again. The same line under `if __name__ == "__main__":` is taken for
+  it, since the engine runs the heredoc as the main module.
+
+**What import refuses.** A heredoc that script generation could not write
+again from these parts is refused: code after the class other than the line
+that runs it; a class with a decorator, more than one base or a keyword such as
+`metaclass=`; and a statement of the class body that uses a hook it follows,
+such as `handler = process_data`, which would come before the hook once
+script generation writes the hooks after the rest of the class body. Import
+then refuses the whole program and lists every node that does not fit, each
+with its line, the shape that the web UI expects and how to change the code to
+fit it. Such a module is a valid resident program, which the engine runs; only
+the web UI cannot hold it. This is where import departs from "What import does
+not understand, it keeps": the code of a node has no counterpart of the
+`manual` mode of the options handler, since the parts of a node already cover
+what a node can do, and a mode of its own would need an editor of its own.
+
+**The round trip of the code of a node.** A node built with the web UI comes
+back from script generation and import with the same parts. A node written by
+hand comes back with the same behavior, but laid out the way script generation
+writes it: the hooks follow the rest of the class body, and the blank lines
+between the parts are those that script generation writes.
+
+**To be written.** How import recognizes the Supervisor wiring of a module
+written by hand, which the program model does not hold, and how both
+directions handle the fifo tags and the program type.
 
 ## The directories of a resident program
 
