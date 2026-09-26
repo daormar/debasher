@@ -635,25 +635,29 @@ def _add_opts_handler(process, process_modes, connections_by_option):
 
 
 # A process implemented in anything but bash isn't a bash function at
-# all: the engine recognizes it via a variable named
-# "<processname>_<suffix>" (debasher_lib.sh's DEBASHER_PROCESS_VARNAMES/
-# DEBASHER_HEREDOC_LANGUAGES) holding the raw interpreter source, and
-# auto-generates the actual "<processname>()" wrapper around it
-# (debasher::_create_process_func_heredoc), see
-# debasher::_is_heredoc_process in engine/debasher_lib_programs.sh.
-_HEREDOC_LANGUAGE_SUFFIXES = {
-    "python": "py",
-    "r": "r",
-    "perl": "perl",
-    "groovy": "groovy",
+# all: the engine recognizes it via a function named
+# "<processname>_heredoc_<suffix>" (debasher_lib.sh's
+# DEBASHER_PROCESS_FUNCNAMES/DEBASHER_HEREDOC_LANGUAGES) that prints the
+# raw interpreter source, and auto-generates the actual "<processname>()"
+# wrapper around it (debasher::_create_process_func_heredoc), see
+# debasher::_is_heredoc_process in engine/debasher_lib_programs.sh. The
+# engine also accepts the legacy variable form, "<processname>_<suffix>",
+# which import still reads, but a Bash variable name cannot contain the
+# "." of a namespaced process ("mymodule.hello_py=..." runs as a command),
+# so script generation always writes the function.
+_HEREDOC_FUNCNAME_SUFFIXES = {
+    "python": "heredoc_py",
+    "r": "heredoc_r",
+    "perl": "heredoc_perl",
+    "groovy": "heredoc_groovy",
 }
 
 
 def _code_definition_lines(process_name: str, language: str, code: str) -> list[str]:
     if language == "bash":
         return [code]
-    suffix = _HEREDOC_LANGUAGE_SUFFIXES[language]
-    return [f"{process_name}_{suffix}=$(cat <<'EOF'", code, "EOF", ")"]
+    suffix = _HEREDOC_FUNCNAME_SUFFIXES[language]
+    return [f"{process_name}_{suffix}()", "{", "    cat <<'EOF'", code, "EOF", "}"]
 
 
 def _add_exec_func(process):
@@ -833,7 +837,7 @@ def _own_code_canonicalized(process_name: str, language: str, code: str, debashe
     _module_provided_code's output despite process.code being free-typed
     rather than already in debasher_doc_mod/debasher_get_proc_info's own
     printed format. Wrapped the same way _add_exec_func embeds it (a
-    heredoc variable assignment for a non-bash language), so
+    heredoc function for a non-bash language), so
     debasher_get_proc_info recognizes it the same way it would in the
     generated script.
     """

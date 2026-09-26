@@ -453,8 +453,12 @@ The generated module holds, in this order:
    definition functions of its options handler mode (see "Option
    definitions"), its code, and one function for each additional method that
    has a body. Code in Bash is written as it is; code in another language
-   becomes a heredoc variable `<process>_<suffix>` (`_py`, `_r`, `_perl`,
-   `_groovy`), which the engine wraps in a function.
+   becomes a heredoc function `<process>_heredoc_<suffix>` (`py`, `r`,
+   `perl`, `groovy`) that prints it, which the engine wraps in the
+   function of the process. The engine also accepts the older form, a
+   variable `<process>_<suffix>`, which import reads, but a Bash variable
+   name cannot contain the dot of a namespaced process, so script
+   generation never writes it.
 4. `<name>_program`, with one `add_debasher_process` per process, carrying its
    computational specifications (`cpus=... mem=... time=...`) and its
    additional specifications (`force=yes;processdeps=...;alias=...`), or one
@@ -685,11 +689,13 @@ function that happens to fit the grammar of `standard` mode comes back in
 back with the same behavior, but written the way script generation writes it:
 the option definition functions of a recognized mode lose their comments and
 their layout, while the functions kept in `manual` mode, the code and the
-methods keep their verbatim source. Some things a module can say have no place
-in the model and are lost: the explicit dependency types of `_define_opt_deps`,
-which the module documentation shows and import does not keep; the program
-type of `_program_type`; any code of the module after its first function that
-belongs to no process; and the specifications the model does not hold.
+methods keep their verbatim source. Code in another language that the module
+held in a heredoc variable comes back in a heredoc function. Some things a
+module can say have no place in the model and are lost: the explicit dependency
+types of `_define_opt_deps`, which the module documentation shows and import
+does not keep; the program type of `_program_type`; any code of the module after
+its first function that belongs to no process; and the specifications the model
+does not hold.
 
 `test/api/test_round_trip.py` checks both directions. From the model to a
 module and back, it builds programs that cover every options handler mode,

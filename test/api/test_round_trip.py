@@ -301,6 +301,26 @@ def test_a_self_loop_survives_the_round_trip_and_keeps_its_layer(tmp_path):
     assert y["counter"] == min(y.values())
 
 
+def test_code_of_a_namespaced_process_in_another_language_survives_the_round_trip(tmp_path):
+    # A Bash variable name cannot contain the "." of a namespace, so the
+    # code has to be written as a heredoc function, not as a variable.
+    pyproc = _process(
+        "mymodule.pyproc",
+        [_option("-s", value="hi")],
+        language="python",
+        code="import sys\nprint(sys.argv)",
+    )
+    rproc = _process(
+        "mymodule.rproc",
+        [_option("-s", value="hi")],
+        language="r",
+        code="print(commandArgs())",
+    )
+    program = _program("rt_namespaced_heredoc", [pyproc, rproc], [])
+
+    _assert_model_round_trip(program, tmp_path)
+
+
 def test_shared_directories_survive_the_round_trip(tmp_path):
     writer = _process("writer", [_option("-outd", channel="shared_dir", value="shared")])
     reader = _process("reader", [_option("-ind", channel="shared_dir", value="shared")])

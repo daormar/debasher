@@ -44,7 +44,8 @@ RESERVED_PROCESS_METHOD_SUFFIXES = [
 ]
 
 # Mirrors DEBASHER_HEREDOC_SUFFIXES: language suffixes reserved for
-# heredoc process variables (e.g. "<name>_py").
+# heredoc processes, whose code is the function "<name>_heredoc_py" (or,
+# in the legacy form, the variable "<name>_py"), so both end in them.
 RESERVED_HEREDOC_SUFFIXES = ["py", "r", "perl", "groovy"]
 
 # Mirrors the individual DEBASHER_MODULE_METHOD_NAME_* constants.

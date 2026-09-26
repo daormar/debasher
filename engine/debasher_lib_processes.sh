@@ -381,22 +381,29 @@ debasher::_show_proc_implem_delegate()
 }
 
 ########
-# debasher::_show_proc_implem helper: prints processname's heredoc
-# variable ("<processname>_<py|r|perl|groovy>") as a fenced code block
-# tagged with its language. Returns 1 if no such variable exists.
+# debasher::_show_proc_implem helper: prints the source of processname's
+# heredoc as a fenced code block tagged with its language, whichever form
+# provides it: the function "<processname>_heredoc_<py|r|perl|groovy>",
+# which prints it, or the legacy variable "<processname>_<py|r|perl|groovy>",
+# which holds it (see debasher::_search_heredoc_provider, which prefers
+# the function, as the engine does when it runs the process). Returns 1
+# if the process has neither.
 debasher::_show_proc_implem_heredoc()
 {
     local processname=$1
 
-    local i
+    local i provider_info provider kind
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
-        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-            echo '```'${DEBASHER_HEREDOC_LANGUAGES[$i]}
-            echo "${!proc_varname}"
-            echo '```'
-            return 0
+        provider_info=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_FUNCNAMES[$i]}" "${DEBASHER_PROCESS_VARNAMES[$i]}") || continue
+        read -r provider kind <<< "${provider_info}"
+        echo '```'${DEBASHER_HEREDOC_LANGUAGES[$i]}
+        if [ "${kind}" = "func" ]; then
+            "${provider}"
+        else
+            echo "${!provider}"
         fi
+        echo '```'
+        return 0
     done
 
     return 1

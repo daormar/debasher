@@ -808,3 +808,40 @@ EOF
     [ "${status}" -eq 0 ]
     [ -z "${output}" ]
 }
+
+# --- debasher::_show_proc_implem_heredoc ---------------------------------
+
+@test "debasher::_show_proc_implem_heredoc shows the source of a heredoc function" {
+    fnproc_heredoc_py()
+    {
+        cat <<'PYEOF'
+import sys
+print(sys.argv)
+PYEOF
+    }
+
+    run debasher::_show_proc_implem_heredoc fnproc
+    [ "${status}" -eq 0 ]
+    [ "${output}" = $'```python\nimport sys\nprint(sys.argv)\n```' ]
+}
+
+@test "debasher::_show_proc_implem_heredoc shows the source of the heredoc function of a namespaced process" {
+    mymodule.nsproc_heredoc_r()
+    {
+        cat <<'REOF'
+print(commandArgs())
+REOF
+    }
+
+    run debasher::_show_proc_implem_heredoc mymodule.nsproc
+    [ "${status}" -eq 0 ]
+    [ "${output}" = $'```r\nprint(commandArgs())\n```' ]
+}
+
+@test "debasher::_show_proc_implem_heredoc shows the source of a legacy heredoc variable" {
+    varproc_py=$'import sys\nprint(sys.argv)'
+
+    run debasher::_show_proc_implem_heredoc varproc
+    [ "${status}" -eq 0 ]
+    [ "${output}" = $'```python\nimport sys\nprint(sys.argv)\n```' ]
+}
