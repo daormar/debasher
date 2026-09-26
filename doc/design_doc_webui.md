@@ -1232,9 +1232,6 @@ options, the preamble of the program and its environment variables.
 
 ## Script generation and import of a resident program
 
-*In part: the code of a node and the Supervisor wiring are designed, and the
-fifo tags and the program type are still to be written.*
-
 **The code of a node, generated.** Script generation writes the code of a node
 as the heredoc function of its process, `<process>_heredoc_py` (see "Layout of
 the generated module"), which holds, in this order:
@@ -1352,8 +1349,24 @@ a mode that a resident program does not offer. A program whose wiring is
 incomplete, a node without a heartbeat channel for example, never reaches
 import: the engine refuses to load it.
 
-**To be written.** How both directions handle the fifo tags and the program
-type.
+**The fifo tags.** Script generation writes the fifo tag `--external` as the
+last argument of the `define_fifo_opt` of an external input, where it writes
+`--mirror` in a general program, and `--control` only in the Supervisor wiring.
+The grammar of import reads either tag in that same place, as it reads
+`--mirror`. An `--external` becomes the `fifoTag` of the option. A `--control`
+is always part of the Supervisor wiring, which import removes: the engine
+refuses, when it loads the program, a fifo tagged `--control` that neither the
+`Supervisor` writes to a node nor a node reads from outside the program, and
+those two are the trigger ports and the control ports of the wiring.
+
+**The program type.** For a resident program, script generation writes the
+module's `<name>_program_type` function, with the body
+`program_type "resident"`, after `<name>_shared_dirs`. For a general program it
+writes none, since a module without one is general. Import reads the type from
+the section "Program Type" of the module documentation, where
+`debasher_doc_mod` prints the type that the engine resolved, so a module that
+declares `program_type "general"` comes back as a general program without the
+function, which behaves the same.
 
 ## The directories of a resident program
 
@@ -1413,5 +1426,5 @@ store").
   loaded from a new place should do with an output directory that still
   points to the old one.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
-  in the model; the second is needed by resident programs (see "The program
-  model of a resident program").
+  in the model. The second is needed by resident programs, and "Script
+  generation and import of a resident program" designs it.
