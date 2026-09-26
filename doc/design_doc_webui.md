@@ -1117,6 +1117,17 @@ what they mostly need are class attributes. The class body never declares the
 ports of the node: the engine gives each node its ports from the options of the
 module, and stops a node whose class declares them.
 
+The class is named after the process, in CamelCase (`counter` gives `Counter`,
+`org.ns.count_words` gives `OrgNsCountWords`), as the engine requires (see
+"Defining a node" in `doc/design_doc_resident.md`), and the editor shows its
+declaration above the class body, read only. The model therefore holds no name
+for it, and import needs none: a module that loads already names its class
+this way. The editor refuses a process name whose class would hide a class of
+the runtime library or a Python builtin, such as `supervisor` or `type_error`.
+Whether the class hides a name that the node preamble binds depends on the
+preamble, which may change after the process is named, so the engine checks it
+when it loads the program.
+
 **The `Supervisor`.** It is added like any node, with the node kind
 `Supervisor`, and refused when the program already has one. The user edits
 nothing of it but its computational specifications, `heartbeat_timeout_s` and
