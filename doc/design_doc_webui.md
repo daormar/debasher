@@ -1666,10 +1666,144 @@ that outlives the tab".
 
 ## Observing and talking to a live program
 
-*To be written.* The process statuses, what the UI reads from the execdir of
-each node (checkpoints, input log, halted marker) and from the log of the
-`Supervisor`; "Watch FIFO", which has no FIFO mirror to read; and "Talk to
-FIFOs", which writes envelopes into external inputs and control ports.
+A resident program is observed through the same process statuses as a general
+one, and through what each node keeps in its execdir: its checkpoints, its
+input log and its halted marker. This subsection says which actions of
+"Execution and observation" apply to a live program, which change, and what the
+web UI reads of the state of a node.
+
+**The process statuses.** The canvas colors each node by the status of its
+process, read with `debasher_status` every five seconds, as for a general
+program (see "Following a run"). The statuses are the same, but mean something
+of their own in a resident program, which the legend of the canvas says:
+
+- `IN-PROGRESS`: the node is alive, which it still is after a halt and until
+  its stop signal.
+- `FINISHED`: the node ended cleanly, after an orderly stop.
+- `UNFINISHED`: the node is down. In a live program, the `Supervisor` is
+  relaunching it or has given up on it, or, without a `Supervisor`, nothing
+  will bring it back. In a program that is not live, it stopped abruptly.
+- `UNFINISHED_BUT_RUNNABLE`: shown as `UNFINISHED`, since in a resident program
+  no process waits to be run later.
+- `TO-DO`: the node has not been launched.
+
+The status is that of a process, not of each of its tasks: an `array` or
+`generator` process is `IN-PROGRESS` while any of its tasks is alive, even
+with another one down. What the status does not tell is shown by "Show node
+state" (see below), for each task, and not on the canvas,
+where a status for each task would multiply the reading every five seconds by
+the number of tasks. Whether a node that is down is being relaunched or has
+been given up is known only to the `Supervisor`, which writes it in its log,
+and the web UI does not guess it.
+
+**Inspecting a process.** The actions of "Inspecting a process" apply
+unchanged, with the same choice of task for an `array` or `generator`
+process: "Show stdout", "Show scheduler output", which for the `Supervisor` is
+its log, "Show options" and "Show inputs and outputs".
+
+**Inspecting a node.** "Show node state", a new action of the context menu of
+a node, shows what the node keeps in its execdir, read only, in three views:
+
+- The summary: whether the task is alive, finished or down, read as
+  `debasher_status` reads it but for the task alone, the epoch of the latest
+  checkpoint and when it was written, the halted marker, the size of the input
+  log against its cap, how many records lie above the `capture_pos` of the
+  latest checkpoint (what the node would replay if it crashed now), and the size
+  of the outbound backlog against its limits, the cap and the limits being those
+  in force for the node, which it leaves in its execdir when it starts. These
+  are the figures that warn of a coming failure: with no rounds, the input log
+  grows until its cap stops the node, and with a reader that does not read, the
+  outbound backlog grows until it does.
+- The checkpoints: the list of those that the node retains and, for the one
+  chosen, its `node_state`, formatted, together with the messages in transit
+  that it holds, `channel_state` and `out_backlog`, counted by port.
+- The input log: its latest records, which the user can filter by port, cut
+  at the same number of lines as the other outputs.
+
+The backend reads none of these files itself. An engine tool,
+`debasher_inspect_resident -d <output directory> -p <process> [-t <index>]`,
+reads them for it, with a command for each view (`summary`,
+`checkpoint <epoch>` and `log`), and prints what it reads as JSON. The files
+of a node follow rules that the tool applies as the node does when it
+recovers: a last record torn by a crash does not count, a segment of the input
+log that the node prunes while the tool reads it is skipped, and a checkpoint
+of another schema version is reported as such. The same tool serves from the
+command line. It is not built yet (see "Future work" in
+`doc/design_doc_resident.md`).
+
+**The batch runs of a `ProgramLauncher`.** "Show batch runs", an action of the
+context menu of a launcher node, lists the batch runs that the node has
+registered, one row each: its name, its run directory, its state (registered,
+running, finished, failed with its exit code, or stopped before it ended) and
+its exit code. From a row the user can read its `launcher.log`, read what
+`debasher_status` says of its run directory when the batch run is a whole
+general program, and open the run directory as any other path (see
+"Inspecting a process"). The state of a batch run is the one that the node
+itself deduces from the run directory (see "Launching from the queue on disk"
+in `doc/design_doc_resident.md`), and the same engine tool computes it, with a
+command of its own, `runs`, from the code of the launcher node, so that the
+rule is written once. Launching again a batch run that failed is not offered
+until the engine has a command for it (see "Future work" in
+`doc/design_doc_resident.md`).
+
+**A `DirectoryWatcher`** has no view of its own. The files that it has asked
+to launch are in its node state, which "Show node state" shows, and the
+directory it watches is the value of its option `-watchdir`, which "Show inputs
+and outputs" opens.
+
+**Watching a FIFO.** "Watch FIFO" is not offered, since the engine refuses
+`--mirror` in a resident program, and there is no FIFO mirror to read. The
+input log of a node takes its place for the channels read inside the program:
+the records of one port are what arrived through that channel, and reading them
+takes nothing from it. What a node writes out of the program, through a
+business output with no reader, is recorded nowhere; "Talk to FIFOs" reads it.
+
+**Talking to FIFOs.** "Talk to FIFOs" stays, and changes in what it offers and
+in what it writes and reads, since every line on a channel of a resident
+program is an envelope, a JSON object of one line (see "Control envelope" in
+`doc/design_doc_resident.md`). It is offered while the program is `live`,
+whoever launched it, and not only while a run of the tab is running, and only
+for two sorts of FIFO:
+
+- An external input, into which the user writes.
+- A business output with no connection, from which the user reads.
+
+The control ports, the manual trigger port of the `Supervisor` and the rest of
+the Supervisor wiring are not offered. Their commands have actions of their
+own, "Take snapshot" and "Stop program", which number a trigger and send it to
+every initiator at once, where a command written by hand into one port would
+open a round that never closes.
+
+**Writing.** The user gives the payload, and the backend wraps it in a `DATA`
+envelope with no sequence number, since what comes from outside the program is
+not numbered, and writes it as one line: `{"type": "DATA", "payload": ...}`.
+The dialog has two modes. In JSON mode, the default, the user writes any JSON
+value, over several lines if need be, which the backend parses and serializes
+again on one line, and `process_data` receives it with its type: an object, a
+list, a number. Text that does not parse is refused, and nothing is written. In
+text mode what the user writes is sent as a JSON string. A raw line is never
+written: a reader takes a line that is not JSON for the fragment of a writer
+that died in the middle of a message, and a second one in a row kills its
+thread, and with it the node. A write ends once the line is in the pipe, not
+once the node has logged it, which its input log shows afterwards, and it is
+bounded as for a general program.
+
+The web UI never writes a `CLOSE` into an external input. A `CLOSE` closes the
+port for good, across every resume until the program state is reset, and the
+code of the node never learns of it, since no hook reports it (see "Future
+work" in `doc/design_doc_resident.md`). A source that wants to tell a node that
+it has finished sends a `DATA` with a payload that the node understands.
+
+**Reading.** The backend reads the FIFO one line at a time, as for a general
+program, and decodes each envelope. Within the same bound it skips the blank
+lines and the `HELLO` with which every incarnation of a writer starts, and
+answers with the type and the payload of the first other envelope. The
+frontend shows the payload of a `DATA`, with its sequence number, marks a
+`BARRIER` as the marker of a round and a `CLOSE` as the end of the writer.
+Reading takes the message from the channel, as it does for a general program,
+and so competes with any other reader outside the program. A business output
+that nobody reads fills its pipe, and then the outbound backlog of its node,
+until the node fails; "Show node state" shows the backlog growing.
 
 ## A program that outlives the tab
 
@@ -1728,6 +1862,15 @@ store").
   the documentation, and maybe the program, to a service outside the machine,
   which the user has to know; and its answers are only as good as a
   documentation kept in step with the code.
+- **Closing an external input.** An action of "Talk to FIFOs" that writes a
+  `CLOSE` into an external input, to tell a node that its source has
+  finished, once the engine has a hook that lets the code of a node learn that
+  a port closed.
+- **A batch run opened as a program.** Loading the general program of a
+  launcher node with a run directory as its output directory, to follow the
+  batch run on the canvas, colored by the statuses of its processes. The
+  general program may not have been made with the web UI, and opening it must
+  not write into its directory.
 - **Relaunching a node by hand.** An action of the context menu of a node
   of a resident program without a `Supervisor`, which relaunches a node that
   is down with `debasher_launch_process`, as the `Supervisor` does. With it,

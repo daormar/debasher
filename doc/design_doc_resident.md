@@ -3224,6 +3224,30 @@ Design ideas from Future work move here once they are actually built.
 
 # Future work
 
+- **A tool to inspect a node.**
+  `debasher_inspect_resident -d <outdir> -p <process> [-t <idx>]`, which
+  prints as JSON what a node keeps in its execdir, with a command for each
+  view: `summary` (whether the task is alive, finished or down, as
+  `debasher_status` tells it for a whole process, the epoch of the latest
+  checkpoint, the halted marker, the size of the input log against
+  `INPUT_LOG_MAX_BYTES`, the records above `capture_pos`, and the size of the
+  outbound backlog against its limits), `checkpoint <epoch>`, `log` (the
+  latest records, optionally of one port) and, for a launcher node, `runs`
+  (its batch runs and the state of each, computed with the code of
+  `debasher_runtime_launcher.py`). It reads the files by the rules of
+  recovery, with the code of `debasher_runtime_inputlog.py`: a torn last record
+  does not count, a segment pruned while it reads is skipped, and a checkpoint
+  of another schema version is reported. The limits of a node depend on its
+  class and its computational specifications, so the node would write the ones
+  in force into its execdir when it starts, as it writes its control ports file.
+  The web UI relies on it (see "Observing and talking to a live program" in
+  `doc/design_doc_webui.md`).
+- **What the `Supervisor` knows of each node, on disk.** Whether a node that
+  is down is being relaunched, how many relaunches it has had, and whether the
+  `Supervisor` has given up on it, today only in the log of the `Supervisor`,
+  written also into a file that a tool can read, so that the web UI can show
+  it (see "Observing and talking to a live program" in
+  `doc/design_doc_webui.md`).
 - **A single periodic `debasher_snapshot_resident`.** Two `--every` on the
   same output directory start rounds that replace each other, so that none
   closes (see "A round that a newer one replaces" in the Contract's limits).
