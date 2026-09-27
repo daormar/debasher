@@ -7,12 +7,16 @@ removed, changed (parameters differ) or unchanged.
 
 Options file format, one process per line:
 
-    PROCESS: <name> ; OPTIONS: <flag> <value> [<flag> <value> ...]
+    PROCESS: <name> ; NUM_TASKS: <n> ; OPTIONS: <flag> <value> [<flag> <value> ...]
 
 Array processes give one set of options per array element, separated
-by "|||":
+by "|||", for their first elements only (debasher_exec writes at most
+ten), followed by "..." when there are more:
 
-    PROCESS: <name> ; OPTIONS: <opts elem 0> ||| <opts elem 1> ||| ...
+    PROCESS: <name> ; NUM_TASKS: <n> ; OPTIONS: <opts elem 0> ||| <opts elem 1> ||| ... ...
+
+The NUM_TASKS field is optional, so that a file written before it
+existed can still be read.
 
 Design notes (see accompanying discussion):
   - All options are compared as-is (no distinction between "user"
@@ -20,8 +24,12 @@ Design notes (see accompanying discussion):
   - Comparison is done on parsed flag -> value dictionaries, not on
     raw strings, so whitespace and flag ordering do not matter.
   - Array processes are compared as a whole: any difference in the
-    number of elements, or in any single element, marks the whole
-    process as changed (no per-element granularity).
+    number of tasks, or in any single element listed, marks the whole
+    process as changed (no per-element granularity). The elements of
+    an array are assumed to be uniform, so only the first ones are
+    listed and compared, while the number of tasks covers them all.
+    When either file lacks NUM_TASKS, only the listed elements are
+    compared.
   - Array elements are matched by the "-id" flag when present in all
     elements, falling back to positional order otherwise.
 
@@ -33,12 +41,23 @@ extra decoration. Use --human for a readable summary instead.
 import argparse
 import shlex
 import sys
-from typing import Dict, List
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 SPECIAL_ARRAY_TOKEN = "..."
 
 Instance = Dict[str, str]
-Opts = Dict[str, List[Instance]]
+
+
+@dataclass
+class ProcessOpts:
+    """The options of one process: its number of tasks, when the file
+    records it, and the options of the elements it lists."""
+    num_tasks: Optional[int]
+    instances: List[Instance]
+
+
+Opts = Dict[str, ProcessOpts]
 
 
 class OptsParseError(Exception):
@@ -99,6 +118,15 @@ def parse_opts_file(path: str) -> Opts:
             options_part = options_part.strip()
             if not process_part.startswith("PROCESS:"):
                 raise OptsParseError(f"{path}:{lineno}: missing 'PROCESS:' before ';'")
+            num_tasks = None
+            if options_part.startswith("NUM_TASKS:"):
+                num_tasks_part, _, options_part = options_part.partition(";")
+                num_tasks_str = num_tasks_part[len("NUM_TASKS:"):].strip()
+                try:
+                    num_tasks = int(num_tasks_str)
+                except ValueError:
+                    raise OptsParseError(f"{path}:{lineno}: invalid number of tasks '{num_tasks_str}'")
+                options_part = options_part.strip()
             if not options_part.startswith("OPTIONS:"):
                 raise OptsParseError(f"{path}:{lineno}: missing 'OPTIONS:' after ';'")
 
@@ -111,7 +139,7 @@ def parse_opts_file(path: str) -> Opts:
             options_str = options_part[len("OPTIONS:"):].strip()
             element_strs = [chunk.strip() for chunk in options_str.split("|||")]
             instances = [parse_options(chunk) for chunk in element_strs]
-            opts[name] = instances
+            opts[name] = ProcessOpts(num_tasks, instances)
     return opts
 
 
@@ -120,14 +148,20 @@ def instance_key(instance: Instance, index: int) -> str:
     return instance.get("-id", f"__pos{index}__")
 
 
-def instances_differ(old_instances: List[Instance], new_instances: List[Instance]) -> bool:
-    """Return True if a process's set of instances differs between the two
-    options files.
+def process_opts_differ(old: ProcessOpts, new: ProcessOpts) -> bool:
+    """Return True if a process's options differ between the two options
+    files.
 
     Works uniformly for scalar processes (a single instance) and array
-    processes (multiple instances): any difference in element count or
-    in any matched element's content marks the whole process as changed.
+    processes (multiple instances): any difference in the number of
+    tasks, in the number of elements listed or in any matched element's
+    content marks the whole process as changed.
     """
+    if old.num_tasks is not None and new.num_tasks is not None and old.num_tasks != new.num_tasks:
+        return True
+
+    old_instances = old.instances
+    new_instances = new.instances
     if len(old_instances) != len(new_instances):
         return True
 
@@ -151,7 +185,7 @@ def compare_opts(old_opts: Opts, new_opts: Opts):
     changed_procs = []
     unchanged_procs = []
     for name in common_procs:
-        if instances_differ(old_opts[name], new_opts[name]):
+        if process_opts_differ(old_opts[name], new_opts[name]):
             changed_procs.append(name)
         else:
             unchanged_procs.append(name)

@@ -669,6 +669,13 @@ check_process_opts()
         done
     }
 
+    # Prints, for each process, its number of tasks and the options of
+    # its first tasks, up to the given maximum. The result goes to
+    # program.opts too, which debasher_compare_opts compares with the
+    # one of the previous run to detect input changes: the options of an
+    # array are assumed to be uniform across its tasks, so a change is
+    # looked for in the first tasks only, while a change in the number of
+    # tasks is always detected.
     show_process_opts()
     {
         local cmdline=$1
@@ -678,11 +685,13 @@ check_process_opts()
         local processname
         for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             # Store process options in an array for visualization
+            local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
             local serial_process_opts=$(debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}")
 
             # Print info about options
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}"
+            local line="PROCESS: ${processname} ; NUM_TASKS: ${num_tasks} ; OPTIONS: ${serial_process_opts}"
+            echo "${line}" >&2
+            echo "${line}"
         done
     }
 

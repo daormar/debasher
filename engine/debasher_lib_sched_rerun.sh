@@ -116,10 +116,9 @@ debasher::_define_forced_rerun_processes()
         local process_spec="${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}"
 
         # Register process as forced to rerun if appliable
-        local process_forced=$(debasher::_extract_force_from_process_spec "$process_spec" "force")
-        if [ ${process_forced} = "yes" ]; then
-            DEBASHER_FORCED_RERUN_PROCESSES+="${PROCESSNAME}"
-            debasher::_mark_process_as_rerun $processname ${DEBASHER_FORCED_RERUN_REASON}
+        local process_forced=$(debasher::_extract_force_from_process_spec "$process_spec")
+        if [ "${process_forced}" = "yes" ]; then
+            debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_FORCED_RERUN_REASON}"
         fi
     done
 }
@@ -162,10 +161,9 @@ debasher::_check_script_is_older_than_modules()
     # Check if script exists
     if [ -f "${script_filename}" ]; then
         # script exists
-        script_older=0
-        local mod
-        for mod in "${!DEBASHER_PROGRAM_MODULES[@]}"; do
-            fullmod="${DEBASHER_PROGRAM_MODULES[$mod]}"
+        local script_older=0
+        local fullmod
+        for fullmod in "${DEBASHER_PROGRAM_MODULES[@]}"; do
             if [ "${script_filename}" -ot "${fullmod}" ]; then
                 script_older=1
                 echo "Warning: ${script_filename} is older than module ${fullmod}" >&2
@@ -192,21 +190,21 @@ debasher::_define_rerun_processes_due_to_code_update()
 
     # Read information about the processes to be executed
     local processname
-    for processname in "${DEBASHER_PROGRAM_PROCESSES[@]}"; do
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Extract process information
         local status=$(debasher::_get_process_status "${dirname}" "${processname}")
         local script_filename=$(debasher::_get_script_filename "${dirname}" "${processname}")
 
         # Handle checkings depending of process status
         if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
-            if check_script_is_older_than_modules "${script_filename}"; then
+            if debasher::_check_script_is_older_than_modules "${script_filename}"; then
                 echo "Warning: last execution of process ${processname} used outdated modules">&2
                 debasher::_mark_process_as_rerun "$processname" "${DEBASHER_OUTDATED_CODE_RERUN_REASON}"
             fi
         fi
 
         if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
-            if check_script_is_older_than_modules "${script_filename}"; then
+            if debasher::_check_script_is_older_than_modules "${script_filename}"; then
                 echo "Warning: current execution of process ${processname} is using outdated modules">&2
             fi
         fi

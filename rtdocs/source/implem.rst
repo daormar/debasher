@@ -623,8 +623,8 @@ be:
 .. code-block:: bash
 
     # Checking process options...
-    PROCESS: file_writer ; OPTIONS: -s Hello\ World\! -outf <path_to_out_dir>/out/file_writer/out.txt
-    PROCESS: file_reader ; OPTIONS: -inf <path_to_out_dir>/out/file_writer/out.txt
+    PROCESS: file_writer ; NUM_TASKS: 1 ; OPTIONS: -s Hello\ World\! -outf <path_to_out_dir>/out/file_writer/out.txt
+    PROCESS: file_reader ; NUM_TASKS: 1 ; OPTIONS: -inf <path_to_out_dir>/out/file_writer/out.txt
 
 .. _program_definition :
 
