@@ -760,3 +760,102 @@ EOF
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"cannot both be satisfied"* ]]
 }
+
+# --- options: names, values, flags ------------------------------------------
+
+@test "debasher::_str_is_option takes a dash followed by a letter or an underscore for an option, and a negative number for a value" {
+    local opt
+    for opt in -a --out -_x --b1; do
+        debasher::_str_is_option "${opt}" || { echo "not an option: ${opt}"; return 1; }
+    done
+    for opt in -5 -0.5 --1 - "" value; do
+        ! debasher::_str_is_option "${opt}" || { echo "an option: ${opt}"; return 1; }
+    done
+}
+
+@test "debasher::define_opt refuses an option name that does not start with a letter or an underscore" {
+    local optlist=""
+    run debasher::define_opt "-5" "x" optlist
+    [ "${status}" -ne 0 ]
+}
+
+@test "debasher::read_opt_value_from_func_args reads a negative number and an empty value" {
+    [ "$(debasher::read_opt_value_from_func_args -n -n -5 -e '' -f)" = "-5" ]
+    [ "$(debasher::read_opt_value_from_func_args -e -n -5 -e '' -f)" = "" ]
+    [ "$(debasher::read_opt_value_from_func_args -f -n -5 -e '' -f)" = "${DEBASHER_VOID_VALUE}" ]
+}
+
+@test "save_opt_list keeps a negative value, an empty value, and a flag given last" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    valproc_define_opts()
+    {
+        local optlist=""
+        define_opt "-n" "-5" optlist || return 1
+        define_opt "-e" "" optlist || return 1
+        define_flag "-f" optlist || return 1
+        save_opt_list optlist
+    }
+    set +e
+    valproc_define_opts "" "" valproc "${BATS_TEST_TMPDIR}"
+    set -e
+
+    local -n list="$(debasher::_get_opt_list_name valproc 0)"
+    [ "${list[-n]}" = "-5" ]
+    [[ -v list[-e] ]]
+    [ "${list[-e]}" = "" ]
+    [ "${list[-f]}" = "${DEBASHER_VOID_VALUE}" ]
+
+    # The options a task receives keep the empty value and the flag apart
+    set +e
+    debasher::_load_curr_opt_list_loop "" valproc
+    set -e
+    debasher::_deserialize_args "${DEBASHER_CURRENT_PROCESS_OPT_LIST[0]}"
+    [ "$(debasher::read_opt_value_from_func_args -e "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "" ]
+    [ "$(debasher::read_opt_value_from_func_args -f "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "${DEBASHER_VOID_VALUE}" ]
+    [ "$(debasher::read_opt_value_from_func_args -n "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "-5" ]
+}
+
+@test "debasher::_sep_serialized_to_qstr prints an empty value as an empty quoted word" {
+    local sargs="-e${DEBASHER_ARG_SEP}${DEBASHER_ARG_SEP}-f"
+    run debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${sargs}"
+    [ "${output}" = "-e '' -f " ]
+    run debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" ""
+    [ "${output}" = "" ]
+}
+
+@test "debasher::_print_program_opts shows the type of each option" {
+    declare -gA DEBASHER_PROGRAM_OPT_DESC=() DEBASHER_PROGRAM_OPT_TYPE=() DEBASHER_PROGRAM_OPT_CATEG=()
+    declare -gA DEBASHER_PROGRAM_CATEG_MAP=() DEBASHER_PROGRAM_OPT_IS_CMDLINE=()
+    typedproc_explain_opts()
+    {
+        explain_opt "-s" "<string>" "String to show"
+    }
+    typedproc_explain_opts
+
+    run debasher::_print_program_opts 0
+    [[ "${output}" == *"-s <string> String to show [typedproc]"* ]]
+}
+
+# --- process of the caller -------------------------------------------------
+
+@test "debasher::_get_processname_from_caller prefers a registered process over a helper named like a method" {
+    declare -gA DEBASHER_PROGRAM_PROCESSES=(["myproc"]=1)
+    io_define_opts()
+    {
+        debasher::_get_processname_from_caller "_define_opts"
+    }
+    myproc_define_opts()
+    {
+        io_define_opts
+    }
+
+    run myproc_define_opts
+    [ "${output}" = "myproc" ]
+}
+
+@test "debasher::_is_valid_processname names the method a process name collides with" {
+    run debasher::_is_valid_processname "proc_define_opts"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"collides with method '_define_opts'"* ]]
+}

@@ -275,18 +275,23 @@ debasher::_processname_contains_invalid_characters()
 }
 
 ########
+# Writes into the caller-provided variable the process method suffix
+# that the given name ends with, if any, and returns 0 in that case.
 debasher::_processname_contains_reserved_suffixes()
 {
     local processname="$1"
+    local -n suffix_ref=$2
 
     # Check process methods (this also covers the HEREDOC language
     # suffixes, e.g. "_py", since DEBASHER_PROCESS_METHODS includes
-    # them -- see debasher_lib.sh)
+    # them, see debasher_lib.sh)
+    local method
     for method in "${DEBASHER_PROCESS_METHODS[@]}"; do
         # The empty "exec" entry has no suffix: every process name
         # trivially "ends with" it, so it is skipped.
         [ -z "${method}" ] && continue
         if [[ "$processname" == *"$method" ]]; then
+            suffix_ref=${method}
             return 0
         fi
     done
@@ -301,13 +306,14 @@ debasher::_is_valid_processname()
 
     # Check characters
     if debasher::_processname_contains_invalid_characters "${processname}"; then
-        echo "Process name ${processname} contains invalid characters. The name should only contain letters, digits or the underscore character" >&2
+        echo "Process name ${processname} contains invalid characters. The name should be one or more dot-separated parts, each made of letters, digits or the underscore character and not starting with a digit" >&2
         return 1
     fi
 
     # Check suffixes
-    if debasher::_processname_contains_reserved_suffixes "${processname}"; then
-        echo "Process name '${processname}' collides with method '${method}'" >&2
+    local reserved_suffix
+    if debasher::_processname_contains_reserved_suffixes "${processname}" reserved_suffix; then
+        echo "Process name '${processname}' collides with method '${reserved_suffix}'" >&2
         return 1
     fi
 

@@ -39,6 +39,7 @@ extra decoration. Use --human for a readable summary instead.
 """
 
 import argparse
+import re
 import shlex
 import sys
 from dataclasses import dataclass
@@ -46,7 +47,7 @@ from typing import Dict, List, Optional
 
 SPECIAL_ARRAY_TOKEN = "..."
 
-Instance = Dict[str, str]
+Instance = Dict[str, Optional[str]]
 
 
 @dataclass
@@ -64,6 +65,13 @@ class OptsParseError(Exception):
     pass
 
 
+def is_option(token: str) -> bool:
+    """Whether a token is an option name, by the engine's own rule (see
+    debasher::_str_is_option): a dash or two followed by a letter or an
+    underscore."""
+    return re.match(r"--?[A-Za-z_]", token) is not None
+
+
 def parse_options(options_str: str) -> Instance:
     """Parse a string of '-flag value -flag value ...' into a dict.
 
@@ -73,30 +81,35 @@ def parse_options(options_str: str) -> Instance:
     here backslash-escaped (or quoted) as a single token, e.g.
     'Hello\\ World\\!'. shlex.split() undoes that escaping the same
     way a POSIX shell would, so tokens are compared on their actual
-    (unescaped) content. Note: this does not cover bash's $'...'
-    ANSI-C quoting (used for values containing control characters such
-    as newlines/tabs), and like before, values are assumed to never
-    start with '-' (e.g. negative numbers are not supported); those
-    are known limitations.
+    (unescaped) content. An option is told from a value as the engine
+    does (see is_option), so a negative number is a value. A flag maps
+    to None and an option given an empty value maps to "", so the two
+    are told apart. Note: this does not cover bash's $'...' ANSI-C
+    quoting (used for values containing control characters such as
+    newlines/tabs), a known limitation.
     """
     try:
         tokens = shlex.split(options_str)
     except ValueError as exc:
         raise OptsParseError(f"could not tokenize options '{options_str}': {exc}")
     result: Instance = {}
+    # A process with no options was once written as a lone '' (an empty
+    # quoted word), which stands for no options at all
+    if tokens == [""]:
+        tokens = []
     i = 0
     while i < len(tokens):
         tok = tokens[i]
-        if not tok.startswith("-"):
+        if not is_option(tok):
             # For long process arrays, a special token may appear that
             # is ignored
             if tok != SPECIAL_ARRAY_TOKEN:
-                raise OptsParseError(f"unexpected token '{tok}', expected a flag starting with '-'")
-        if i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
+                raise OptsParseError(f"unexpected token '{tok}', expected an option")
+        if i + 1 < len(tokens) and not is_option(tokens[i + 1]):
             result[tok] = tokens[i + 1]
             i += 2
         else:
-            result[tok] = ""
+            result[tok] = None
             i += 1
     return result
 

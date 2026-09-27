@@ -202,3 +202,63 @@ def test_the_elapsed_time_of_an_array_gives_the_total_of_its_tasks(tmp_path, sch
     # -c 3 makes array_writer write four files, one per task
     task_time = r"\d+->\d+\.\d{3} ;"
     assert re.fullmatch(rf"\d+\.\d{{3}} : {task_time}( {task_time}){{3}}", elapsed), stats.stdout
+
+
+# A process that writes the values it receives into its output directory
+VALUES_MODULE = """\
+values_explain_opts()
+{
+    explain_opt "-n" "<int>" "A negative number"
+    explain_opt "-e" "<string>" "An empty value"
+    explain_flag "-f" "A flag"
+}
+
+values_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-n" "-5" optlist || return 1
+    define_opt "-e" "" optlist || return 1
+    define_flag "-f" optlist || return 1
+    save_opt_list optlist
+}
+
+values()
+{
+    local n=$(read_opt_value_from_func_args "-n" "$@")
+    local e=$(read_opt_value_from_func_args "-e" "$@")
+    local f=no
+    read_flag_from_func_args "-f" "$@" && f=yes
+    echo "n=[${n}] e=[${e}] f=[${f}]"
+}
+
+debasher_values_program()
+{
+    add_debasher_process "values" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_process_receives_a_negative_number_an_empty_value_and_a_flag_given_last(tmp_path):
+    pfile = tmp_path / "debasher_values.sh"
+    pfile.write_text(VALUES_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    stdout = (outdir / "__exec__" / "values" / "values.stdout").read_text()
+    assert stdout == "n=[-5] e=[] f=[yes]\n"
+
+
+SKIP_EXAMPLE = REPO_ROOT / "data" / "programs" / "debasher_skip_example.sh"
+
+
+def test_the_skip_example_reads_the_value_its_writer_passes(tmp_path):
+    outdir = tmp_path / "out"
+    # The sum is even, so value_reader is not skipped
+    result = run_exec("--pfile", str(SKIP_EXAMPLE), "--outdir", str(outdir), "-num-a", "1", "-num-b", "3")
+    assert result.returncode == 0, result.stderr
+
+    reader_out = next((outdir / "value_reader").glob("*.out"))
+    assert reader_out.read_text() == "5\n"

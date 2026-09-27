@@ -822,7 +822,7 @@ debasher::_gen_opts_for_process_and_task()
             fi
 
             local opt=${elem}
-            local value=""
+            local value=${DEBASHER_VOID_VALUE}
             local next_idx=$((i+1))
             if [ $next_idx -lt ${#tokens[@]} ] && ! debasher::_str_is_option "${tokens[$next_idx]}"; then
                 value=${tokens[$next_idx]}
@@ -849,7 +849,7 @@ debasher::_gen_opts_for_process_and_task()
             fi
 
             result+=("${opt}")
-            [ -n "${candidates[0]}" ] && result+=("${candidates[0]}")
+            [ "${candidates[0]}" != "${DEBASHER_VOID_VALUE}" ] && result+=("${candidates[0]}")
         done
 
         unset DEBASHER_DESERIALIZED_ARGS

@@ -789,10 +789,7 @@ missing.
       value_reader_skip()
       {
           # Initialize variables
-          local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
-
-          # Read value from descriptor
-          local value=$(read_value_from_desc "${val_desc}")
+          local value=$(read_opt_value_from_func_args "-val-desc" "$@")
 
           # Skip if the read value is odd
           if ((value % 2 == 1)); then

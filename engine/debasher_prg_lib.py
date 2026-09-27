@@ -553,12 +553,9 @@ class ProcessGraph:
         return opt_to_processes
 
     def str_is_option(self, string):
-        if not string:
-            return False
-        if string[0] == "-" or string[0:2] == "--":
-            return True
-        else:
-            return False
+        # Same rule as debasher::_str_is_option: a dash or two followed by
+        # a letter or an underscore, so that a negative number is a value
+        return re.match(r"--?[A-Za-z_]", string) is not None
 
     def str_is_output_option(self, string):
         if not string:

@@ -479,14 +479,14 @@ debasher::_str_is_positive_number()
 }
 
 ########
+# An option is "-" or "--" followed by a letter or an underscore, so that
+# a value that starts with a dash, such as a negative number, is not
+# taken for an option (see debasher::_optname_is_correct).
 debasher::_str_is_option()
 {
     local str=$1
-    if [ "${str:0:1}" = "-" ] || [ "${str:0:2}" = "--" ]; then
-        return 0
-    else
-        return 1
-    fi
+
+    [[ "${str}" =~ ^--?[A-Za-z_] ]]
 }
 
 ########
@@ -577,36 +577,48 @@ debasher::_get_debasher_exec_path()
 }
 
 ########
-debasher::_get_processname_from_caller()
-{
-    local caller_method_name=$1
-
-    for element in "${FUNCNAME[@]}"; do
-        if [[ "$element" == *"${caller_method_name}" ]]; then
-            local processname=${element%"${caller_method_name}"}
-            echo "${processname}"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-########
+# Finds the process whose method (named by its suffix, such as
+# _define_opts) is in the call stack, and writes its name into the
+# caller-provided variable. A function of the stack whose name merely
+# ends in that suffix, such as a helper called io_define_opts, could be
+# taken for a method of a process called io: the innermost function
+# that is the method of a registered process is preferred, and the
+# innermost match of any kind is used only when none is, as when a
+# method is called outside of a program.
 debasher::_get_processname_from_caller_nameref()
 {
     local caller_method_name=$1
     local -n var_ref=$2
 
+    local first_match=""
+    local found=0
+    local element
     for element in "${FUNCNAME[@]}"; do
         if [[ "$element" == *"${caller_method_name}" ]]; then
-            var_ref=${element%"${caller_method_name}"}
-            return 0
+            local candidate=${element%"${caller_method_name}"}
+            if [[ -v DEBASHER_PROGRAM_PROCESSES["${candidate}"] ]]; then
+                var_ref=${candidate}
+                return 0
+            fi
+            if [ ${found} -eq 0 ]; then
+                first_match=${candidate}
+                found=1
+            fi
         fi
     done
 
-    var_ref=""
-    return 1
+    var_ref=${first_match}
+    [ ${found} -eq 1 ]
+}
+
+########
+debasher::_get_processname_from_caller()
+{
+    local caller_method_name=$1
+
+    local processname
+    debasher::_get_processname_from_caller_nameref "${caller_method_name}" processname || return 1
+    echo "${processname}"
 }
 
 ########

@@ -52,3 +52,22 @@ def test_an_invalid_number_of_tasks_is_an_error(tmp_path):
     path.write_text("PROCESS: single ; NUM_TASKS: many ; OPTIONS: -s hello\n")
     with pytest.raises(compare_opts_mod.OptsParseError):
         compare_opts_mod.parse_opts_file(str(path))
+
+
+def test_a_flag_and_an_option_with_an_empty_value_differ(tmp_path):
+    flag = "PROCESS: p ; NUM_TASKS: 1 ; OPTIONS: -x\n"
+    empty = "PROCESS: p ; NUM_TASKS: 1 ; OPTIONS: -x ''\n"
+    assert _compare(tmp_path, flag, empty)["changed"] == ["p"]
+
+
+def test_a_negative_number_is_a_value(tmp_path):
+    path = tmp_path / "program.opts"
+    path.write_text("PROCESS: p ; NUM_TASKS: 1 ; OPTIONS: -n -5 -f\n")
+    opts = compare_opts_mod.parse_opts_file(str(path))
+    assert opts["p"].instances == [{"-n": "-5", "-f": None}]
+
+
+def test_a_process_with_no_options_is_read(tmp_path):
+    old = "PROCESS: p ; OPTIONS: ''\n"
+    new = "PROCESS: p ; NUM_TASKS: 1 ; OPTIONS: \n"
+    assert _compare(tmp_path, old, new)["unchanged"] == ["p"]

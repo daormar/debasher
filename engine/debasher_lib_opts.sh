@@ -122,10 +122,13 @@ debasher::_sep_serialized_to_qstr()
     local preproc_sargs
     preproc_sargs="${sargs//${sep}/$'\n'}"
     local array=()
-    while IFS= read -r; do
-        [[ -n "${REPLY}" ]] && array+=("${REPLY}")
-    done <<< "${preproc_sargs}"
-    printf '%q ' "${array[@]}"
+    if [ -n "${sargs}" ]; then
+        # An empty element is an option given an empty value, printed as ''
+        while IFS= read -r; do
+            array+=("${REPLY}")
+        done <<< "${preproc_sargs}"
+        printf '%q ' "${array[@]}"
+    fi
 }
 
 ########
@@ -286,7 +289,7 @@ debasher::_get_opt_value_from_func_args()
         fi
 
         # If the next token is itself an option, this option has no value
-        if [ "${1:0:1}" = "-" ] || [ "${1:0:2}" = "--" ]; then
+        if debasher::_str_is_option "$1"; then
             echo "${DEBASHER_VOID_VALUE}"
             return 1
         fi
@@ -768,10 +771,10 @@ debasher::_print_program_opts()
             # Check if option belongs to current category
             if [ ${DEBASHER_PROGRAM_OPT_CATEG[${key}]} = $categ ]; then
                 # Print option
-                if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ]; then
+                if [ -z "${DEBASHER_PROGRAM_OPT_TYPE[$key]}" ]; then
                     echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
                 else
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]} [${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
                 fi
             fi
         done
@@ -1480,8 +1483,8 @@ debasher::_optname_is_correct()
         debasher::errmsg "$funcname: option name could not be the empty string"
         return 1
     else
-        if [[ ! "${opt}" =~ ^(-|--) ]]; then
-            debasher::errmsg "$funcname: option name should start with '-' or '--'"
+        if ! debasher::_str_is_option "${opt}"; then
+            debasher::errmsg "$funcname: option name should be '-' or '--' followed by a letter or an underscore (${opt})"
             return 1
         fi
     fi
@@ -1671,6 +1674,11 @@ debasher::_get_value_descriptor_name()
 # $1 - Option name.
 # $2 - Name of variable that will store the information about the option to be added.
 #
+# The process writes its value with write_value_to_desc. A process that
+# reads it, through an option defined with define_opt_from_proc_out,
+# gets the value itself from read_opt_value_from_func_args, which reads
+# the descriptor on its own.
+#
 # Examples
 #
 #   debasher::define_value_desc_opt "-o" "optlist"
@@ -1699,6 +1707,11 @@ debasher::define_value_desc_opt()
 #
 # $1 - Option name.
 # $2 - Name of variable that will store the information about the option to be added.
+#
+# The process writes its value with write_value_to_desc. A process that
+# reads it, through an option defined with define_opt_from_proc_out,
+# gets the value itself from read_opt_value_from_func_args, which reads
+# the descriptor on its own.
 #
 # Examples
 #
@@ -1974,8 +1987,8 @@ debasher::_split_opt_multival()
 #
 # $1 - Name of the associative array storing the option list.
 # $2 - Option name.
-# $3 - Raw value to record (a literal, an empty string for a flag, or
-#      a process-output descriptor).
+# $3 - Raw value to record (a literal, possibly empty,
+#      DEBASHER_VOID_VALUE for a flag, or a process-output descriptor).
 debasher::_merge_opt_value()
 {
     local -n ref=$1
@@ -2039,14 +2052,12 @@ debasher::save_opt_list()
             local opt="${token}"
             shift
 
-            # No token left after this option: nothing more to process
-            [ $# -eq 0 ] && continue
-
-            # If the next token is itself an option, this option has no
-            # value; record it as empty and don't shift, so it's picked
-            # up as a new option next iteration
-            if debasher::_str_is_option "$1"; then
-                debasher::_merge_opt_value "${opt_list_name}" "${opt}" ""
+            # An option followed by nothing, or by another option, is a
+            # flag, recorded as DEBASHER_VOID_VALUE so that it is told
+            # apart from an option given an empty value; the next option
+            # is not shifted, so it's picked up next iteration
+            if [ $# -eq 0 ] || debasher::_str_is_option "$1"; then
+                debasher::_merge_opt_value "${opt_list_name}" "${opt}" "${DEBASHER_VOID_VALUE}"
                 continue
             fi
 
@@ -2281,7 +2292,7 @@ debasher::_load_curr_opt_list_loop()
             done
 
             # Define option
-            if [ -z "${value}" ]; then
+            if [ "${value}" = "${DEBASHER_VOID_VALUE}" ]; then
                 debasher::define_flag "${opt}" "_load_curr_opt_list_loop_optlist"
             else
                 debasher::define_opt "${opt}" "${value}" "_load_curr_opt_list_loop_optlist"
@@ -2403,7 +2414,6 @@ debasher::_read_value_from_desc()
     cat "${value_descriptor}"
 }
 
-read_value_to_desc() { debasher::read_value_to_desc "$@"; }
 
 ########
 # The directory with the options of every task of the processes: the

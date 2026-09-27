@@ -9,7 +9,8 @@ Value Pass Example
     # value descriptor using write_value_to_desc, after declaring that
     # descriptor with define_value_desc_opt. value_reader then obtains
     # the same descriptor through define_opt_from_proc_out, reads the
-    # value with read_value_from_desc, increments it and writes the
+    # value with read_opt_value_from_func_args, which reads the
+    # descriptor on its own, increments it and writes the
     # result to its own output file. The following examples build on
     # this same value_writer and value_reader pair to show process
     # skipping and explicit dependency declarations.
