@@ -282,8 +282,8 @@ A run launched from a tab lives as long as the tab follows it. Closing or
 reloading the tab stops it (the tab sends `/api/execution/stop` as it unloads),
 and so does leaving the editor for the home screen. A run that the tab did not
 launch is observed through the process statuses, but closing the tab never
-stops it. Resident programs have to revisit this rule, since their processes are
-meant to outlive any tab (see "Resident programs in the web UI").
+stops it. Resident programs replace this rule, since their processes are meant
+to outlive any tab (see "A program that outlives the tab").
 
 # The program model
 
@@ -1807,9 +1807,117 @@ until the node fails; "Show node state" shows the backlog growing.
 
 ## A program that outlives the tab
 
-*To be written.* What replaces the rule that a tab stops the run it launched,
-and what happens to a live program when the backend or the tab goes away and
-comes back.
+A resident program is meant to live longer than any tab that follows it, and
+longer than the backend that launched it. The rule that a tab stops the run it
+launched (see "Where the state lives") holds for general programs only. This
+subsection says what replaces it, and what happens to a live program when the
+tab or the backend goes away and comes back.
+
+**The tab.** Nothing that happens to a tab stops a resident program: closing or
+reloading it, leaving the editor, or dismissing the indicator of the program.
+Only "Stop program", "Kill program" and the escalation of the `Supervisor` stop
+it (see "Running a resident program"). The tab asks nothing when it is closed:
+the browser shows only a generic warning, which could not say that the program
+goes on, and would show it every time, when going on is what a resident
+program is for.
+
+Leaving the editor while the program is `live` shows a short notice, which
+blocks nothing: the program goes on in its output directory, and is stopped by
+opening it again and using "Stop program". This is the only moment at which the
+web UI can say where the program lives. The backend keeps no record of it, and
+the home screen cannot list the live programs, since it does not know which
+output directories exist. A program is found again by loading it from its home
+directory: its program metadata holds its output directory, and its run phase
+comes from the process statuses of that directory.
+
+A request of the tab that is still pending when the tab goes away, to launch
+or to stop the program, goes on in the backend to its end. The tab loses the
+answer, and whichever tab opens the program next sees the result in the process
+statuses.
+
+**The backend.** A live program depends on the backend for nothing: once
+`debasher_exec` has ended, its nodes, its `Supervisor` and the periodic
+`debasher_snapshot_resident` run on their own. What the backend has to ensure
+is that nothing it starts dies with it, or in the middle of what it was doing.
+Two things could make it so. What the backend starts belongs to the session of
+the server, even if the built-in scheduler puts each process in a process group
+of its own, and a signal that stops the server, from its terminal for example,
+could reach it. And a tool whose output goes into a pipe read by the backend
+dies of `SIGPIPE` at its next line once the backend is gone: an orderly stop cut
+that way could leave the `Supervisor` stopped and the nodes alive, with nobody
+to relaunch them.
+
+So every tool that acts on a live resident program (`debasher_exec`,
+`debasher_stop_resident`, `debasher_stop` and `debasher_snapshot_resident`,
+once or with `--every`) runs in a session of its own, as the batch runs of a
+`ProgramLauncher` do, and writes into a file, never into a pipe:
+`debasher_exec` into the run log, the periodic snapshots into the snapshot log,
+and the stop, the hard kill and a single snapshot into a temporary file of
+their own, since two tabs may run them at the same time, which the backend
+reads when the tool ends and then deletes. Whatever the program launches later,
+the relaunches of the `Supervisor` included, inherits the session of
+`debasher_exec`, away from the server.
+
+A request that the backend does not finish, because it went away in the
+middle, still reaches its end in the tool; only its answer is lost:
+
+- a launch ends, but its launch record is not written, and the next launch
+  compares the program with the record left before it, which errs on the
+  side of asking (see "Running a resident program");
+- a stop ends with the program stopped, which the run phase shows once the
+  backend is back;
+- a round of "Take snapshot" closes or not, which "Show node state" shows;
+- a temporary file that the backend did not delete stays in the temporary
+  directory of the system, with no other effect.
+
+When the backend comes back there is nothing to recover, since it keeps no
+state: the next reading of the process statuses shows the program as it is.
+General programs keep their own rule: they are stopped with their tab, and
+nothing of this applies to them.
+
+**Opening a live program again.** A tab opens a live program by loading it
+from its home directory, like any program: its program metadata gives the
+output directory, the process statuses give the run phase `live`, and every
+action on a live program is offered, whoever launched it, another tab or the
+command line. What the tab does not have is the answer to a request of another
+tab; the run log of a launch that it did not make is still there to read. The
+period of the periodic snapshots comes from the program metadata, which a save
+cannot change while the program is `live`, so it is the period of the launch,
+unless the program was launched from the command line, with no periodic
+snapshots of the web UI; the dialog of the execution options therefore says
+that a period applies from the next launch from the web UI.
+
+A live program can be edited in the tab, but not saved (see "Running a
+resident program"). Its changes are saved once it has stopped, and the next
+launch compares them with the launch record.
+
+Two tabs on the same live program are not coordinated, as for a general
+program (see "Non-goals"). What the engine's files guard still holds: a second
+launch is refused while there is a run in progress. Two orderly stops at the
+same time, or an orderly stop and "Restart node", are not coordinated by the
+web UI; a single orderly stop for each output directory is left to the engine
+(see "Future work" in `doc/design_doc_resident.md`).
+
+**What is not guaranteed.**
+
+- **A restart of the machine.** Every process of the program dies with it, and
+  nothing launches the program again when the machine starts. The program then
+  shows as stopped abruptly, since its processes did not end, and "Run program"
+  resumes it. As after a hard kill, what the pipes held is lost, which the nodes
+  that read them report as a gap in the sequence numbers. Starting resident
+  programs with the machine would need mechanisms of the operating system that
+  are not portable.
+- **Being told that the program stopped.** A program that stops by itself, when
+  its `Supervisor` gives up on a node, while no tab follows it, is not reported
+  to anyone. The next tab that opens it sees it in its run phase.
+- **A list of the live programs.** A live program is found by loading it from
+  its home directory; the web UI keeps no record of the programs it launched,
+  since the backend keeps no state.
+- **A `Supervisor` that nothing supervises.** If the `Supervisor` dies, its
+  canvas node shows `UNFINISHED`, and the web UI does not relaunch it: the
+  program goes on without relaunches until its next stop, as the failure model
+  of `doc/design_doc_resident.md` says (see "Supervising the `Supervisor`" in
+  its Future work).
 
 ## The canvas of a resident program
 

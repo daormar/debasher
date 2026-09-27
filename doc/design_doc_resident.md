@@ -3248,6 +3248,12 @@ Design ideas from Future work move here once they are actually built.
   written also into a file that a tool can read, so that the web UI can show
   it (see "Observing and talking to a live program" in
   `doc/design_doc_webui.md`).
+- **A single orderly stop at a time.** `debasher_stop_resident` taking a lock
+  in the output directory, so that a second orderly stop of the same program,
+  from another tab of the web UI or from the command line, waits for the first
+  or is refused, instead of stopping the `Supervisor` and writing its own
+  `shutdown` in the middle of the first (see "A program that outlives the tab"
+  in `doc/design_doc_webui.md`).
 - **A single periodic `debasher_snapshot_resident`.** Two `--every` on the
   same output directory start rounds that replace each other, so that none
   closes (see "A round that a newer one replaces" in the Contract's limits).
