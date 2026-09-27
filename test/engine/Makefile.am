@@ -18,7 +18,8 @@ test_launcher.py test_launcher_ref.py debasher_launcher_ref.sh	\
 debasher_launcher_batch.sh					\
 test_observe.py test_watcher.py test_watch_ref.py			\
 debasher_watch_ref.sh debasher_watch_batch.sh			\
-test_channel_kinds.py test_hold_fifos.py test_compare_opts.py
+test_channel_kinds.py test_hold_fifos.py test_compare_opts.py	\
+test_exec_run.py
 
 check-local:
 if HAVE_BATS

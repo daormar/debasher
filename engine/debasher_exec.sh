@@ -649,7 +649,7 @@ check_process_opts()
 
                 # Write option array to file (line by line)
                 local opt_array_size=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}
-                local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${dirname}" "${processname}")
+                local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${processname}")
                 debasher::_write_opt_array "DEBASHER_CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
                 # Clear variables
@@ -719,7 +719,7 @@ check_process_opts()
     local program_fifos_file=$5
 
     # Clear scheduler options directory
-    local sched_opts_dir=$(debasher::get_sched_opts_dir_given_basedir "${dirname}")
+    local sched_opts_dir=$(debasher::_get_sched_opts_dir)
     "${RM}" -f "${sched_opts_dir}"/*
 
     # Initialize option information
@@ -849,18 +849,15 @@ print_rerun_processes()
 }
 
 ########
+# The lock file is left in place when the lock is released: removing it
+# would let a process that opened it before the removal lock the old
+# file while another one locks a new file of the same name, both
+# believing they hold the lock.
 release_lock()
 {
     local fd=$1
-    local file=$2
 
-    # Release the lock
-    "$FLOCK" -u "$fd" || return 1
-
-    # Try to acquire the lock again in non-blocking mode to safely remove the file
-    if "$FLOCK" -xn "$fd"; then
-        "$RM" -f "$file" || return 1
-    fi
+    "$FLOCK" -u "$fd"
 }
 
 ########
@@ -869,40 +866,61 @@ prepare_lock()
     local -n fd_ref=$1   # nameref: caller variable
     local file=$2
 
-    exec {fd_ref}>"$file" || return 1   # Bash assigns free fd, stores it in fd_ref
-    trap "release_lock $fd_ref '$file'" EXIT
+    exec {fd_ref}>>"$file" || return 1   # Bash assigns free fd, stores it in fd_ref
+    trap "release_lock $fd_ref" EXIT
 }
 
 ########
+# Takes the lock of the output directory, held until debasher_exec exits,
+# so that no two debasher_exec prepare or launch a run on the same output
+# directory at once. It is taken before anything is written there and
+# before checking for processes in progress, so that the check and what
+# follows it are one step for any other debasher_exec.
 ensure_exclusive_execution()
 {
     local outd=$1
     local lockfile="${outd}/lock"
 
     prepare_lock LOCKFD "$lockfile" || return 1
-    "$FLOCK" -xn "$LOCKFD" || return 1
+    if ! "$FLOCK" -xn "$LOCKFD"; then
+        echo "Error: another debasher_exec is preparing or running a program in ${outd}" >&2
+        return 1
+    fi
 }
 
 ########
+# Creates the output directory if necessary and makes the global outd
+# absolute, since everything derived from it after this point (the
+# scripts of the processes, their completion markers, the paths given to
+# them) must not depend on the working directory of the process that
+# reads it.
 set_debasher_output_dir()
 {
     echo "# Setting DeBasher output directory (the directory will be created if necessary)..." >&2
-
-    local outd=$1
 
     # Create directory
     if [ ! -d "${outd}" ]; then
         "${MKDIR}" -p "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
     fi
 
-    # Get absolute file path (very important so as to ensure correct
-    # execution of processes)
+    # Get absolute file path
     outd=$(debasher::_get_absolute_path "${outd}")
 
     # Set outd as the output directory of debasher
     debasher::_set_debasher_outdir "${outd}"
 
     echo "" >&2
+}
+
+########
+# debasher_exec --check-proc-opts computes the options of every task as a
+# run would, but writes them into a temporary directory removed on exit
+# instead of the .sched_opts directory of the output directory, which the
+# tasks of a run in progress read.
+use_temporary_sched_opts_dir()
+{
+    DEBASHER_SCHED_OPTS_DIR=$("${MKTEMP}" -d) || { echo "Error! cannot create temporary directory" >&2; return 1; }
+    trap '"${RM}" -rf "${DEBASHER_SCHED_OPTS_DIR}"' EXIT
 }
 
 ########
@@ -1291,7 +1309,17 @@ check_pars || exit 1
 # from it, and they may not run with the same DEBASHER_MOD_DIR
 command_line=$(debasher::_set_opt_value_in_serialized_cmdline "${command_line}" "--pfile" "${pfile}")
 
-set_debasher_output_dir "${outd}" || exit 1
+set_debasher_output_dir || exit 1
+
+# Everything but showing or checking the options may write into the
+# output directory, and takes its lock first
+if [ ${show_cmdline_opts_given} -eq 0 ] && [ ${check_proc_opts_given} -eq 0 ]; then
+    ensure_exclusive_execution "${outd}" || exit 1
+fi
+
+if [ ${check_proc_opts_given} -eq 1 ]; then
+    use_temporary_sched_opts_dir || exit 1
+fi
 
 create_basic_dirs || exit 1
 
@@ -1363,9 +1391,6 @@ fi
 
 gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
 
-# NOTE: exclusive execution should be ensured after creating the output directory
-ensure_exclusive_execution "${outd}" || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
-
 create_mod_shared_dirs || exit 1
 
 if [ ${conda_support_given} -eq 1 ]; then
@@ -1403,7 +1428,7 @@ else
             print_post_exec_wait_help
         fi
     else
-        revise_rerun_proc_status "${outd}" || return 1
+        revise_rerun_proc_status "${outd}" || exit 1
         prepare_files_and_dirs_for_processes "${outd}"
         launch_program_processes "${command_line}" "${outd}" || exit 1
         if [ "${wait}" -eq 1 ]; then

@@ -909,7 +909,7 @@ debasher::_get_opts_for_process_and_task()
         local proc_outdir=$(debasher::_get_process_outdir "${processname}")
         debasher::_gen_opts_for_process_and_task  "${cmdline}" "${processname}" "${proc_outdir}" "${generate_opts_funcname}" "${task_idx}"
     else
-        local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${DEBASHER_PROGRAM_OUTDIR}" "${processname}")
+        local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${processname}")
         debasher::_get_file_opts_for_process_and_task "${opts_fname}" "${task_idx}"
     fi
 }

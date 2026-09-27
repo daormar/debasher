@@ -394,6 +394,10 @@ declare -A DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED
 # Declare variable to store name of output directory
 declare DEBASHER_PROGRAM_OUTDIR
 
+# Declare variable that, when set, replaces the .sched_opts directory of
+# the output directory (see debasher::_get_sched_opts_dir)
+declare DEBASHER_SCHED_OPTS_DIR
+
 # Declare array to store file names of loaded modules
 declare -a DEBASHER_PROGRAM_MODULES
 

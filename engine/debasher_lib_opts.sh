@@ -2406,25 +2406,24 @@ debasher::_read_value_from_desc()
 read_value_to_desc() { debasher::read_value_to_desc "$@"; }
 
 ########
-debasher::get_sched_opts_dir_given_basedir()
-{
-    local dirname=$1
-
-    echo "${dirname}/${DEBASHER_SCHED_OPTS_DIRNAME}"
-}
-
-########
+# The directory with the options of every task of the processes: the
+# .sched_opts directory of the output directory, or
+# DEBASHER_SCHED_OPTS_DIR when set, as debasher_exec --check-proc-opts
+# does so as to leave the output directory of a run untouched.
 debasher::_get_sched_opts_dir()
 {
-    debasher::get_sched_opts_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
+    if [ -n "${DEBASHER_SCHED_OPTS_DIR}" ]; then
+        echo "${DEBASHER_SCHED_OPTS_DIR}"
+    else
+        echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_SCHED_OPTS_DIRNAME}"
+    fi
 }
 
 ########
 debasher::_get_sched_opts_fname_for_process()
 {
-    local dirname=$1
-    local processname=$2
+    local processname=$1
 
-    local sched_opts_dir=$(debasher::get_sched_opts_dir_given_basedir "${dirname}")
+    local sched_opts_dir=$(debasher::_get_sched_opts_dir)
     echo "${sched_opts_dir}/${DEBASHER_SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX}${processname}"
 }
