@@ -279,6 +279,113 @@ EOF
     [[ "${output}" != *"unary operator"* ]]
 }
 
+@test "_hold_back_fifo_ends_without_peer leaves out an end whose other end waits for a process to end" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r"]="afterok:x")
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1 ["x"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO" ["x"]="TO-DO")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}" ["x"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[x]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer keeps both ends when both are candidates, and an end whose other end runs" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0" ["v/g"]="v${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0" ["v/g"]="s${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1 ["v"]=1 ["s"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO" ["v"]="IN-PROGRESS" ["s"]="TO-DO")
+    local none="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${none}" ["r"]="${none}" ["s"]="${none}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[r]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[s]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer follows a chain of fifos and keeps an end whose other end is outside" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["c"]="afterok:x")
+    # a -> b -> c, and c waits for a dependency; e writes out of the program
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["a/f"]="a${sep}0" ["b/g"]="b${sep}0" ["e/h"]="e${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["a/f"]="b${sep}0" ["b/g"]="c${sep}0" ["e/h"]="${DEBASHER_EXTERNAL_FIFO_END}")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["a"]=1 ["b"]=1 ["c"]=1 ["e"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["a"]="TO-DO" ["b"]="TO-DO" ["c"]="TO-DO" ["e"]="TO-DO")
+    local none="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["a"]="${none}" ["b"]="${none}" ["e"]="${none}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[a]+x}" ]
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[b]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[e]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer removes only the task of an array whose other end cannot start" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r1"]="afterok:x")
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["arr/f0"]="arr${sep}0" ["arr/f1"]="arr${sep}1")
+    declare -gA DEBASHER_FIFO_READERS=(["arr/f0"]="r0${sep}0" ["arr/f1"]="r1${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["arr"]=3 ["r0"]=1 ["r1"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["arr"]="TO-DO" ["r0"]="TO-DO" ["r1"]="TO-DO")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["arr"]="0 1 2" ["r0"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[arr]}" = "0 2" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[r0]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer keeps an end whose other end only waits for it to start" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r"]="after:w")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer leaves out an end whose other end does not fit in the free resources" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=2
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    debasher_builtin_sched::_get_available_cpus() { echo 1; }
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_CPUS=(["w"]=1 ["r"]=2)
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r"]="after:w")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+}
+
 # --- skipping a task --------------------------------------------------------
 
 @test "_execute_funct_plus_postfunct counts a skipped task as finished without running the process or its post method" {

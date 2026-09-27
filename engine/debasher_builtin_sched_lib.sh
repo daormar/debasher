@@ -577,6 +577,40 @@ debasher_builtin_sched::_check_comp_res()
 }
 
 ########
+# Whether a dependency of the given type on the given process holds, from
+# the current status of that process
+debasher_builtin_sched::_dep_holds()
+{
+    local deptype=$1
+    local depsname=$2
+    local depstatus=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
+
+    case ${deptype} in
+        ${DEBASHER_AFTER_PROCESSDEP_TYPE})
+            [ ${depstatus} != ${DEBASHER_TODO_PROCESS_STATUS} -a ${depstatus} != ${DEBASHER_UNFINISHED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTEROK_PROCESSDEP_TYPE})
+            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE})
+            [ ${depstatus} = ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTERANY_PROCESSDEP_TYPE})
+            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} -o ${depstatus} = ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE})
+            # NOTE: DEBASHER_AFTERCORR_PROCESSDEP_TYPE dependency type currently
+            # treated in the same way as DEBASHER_AFTEROK_PROCESSDEP_TYPE
+            # dependency
+            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+########
 debasher_builtin_sched::_check_process_deps()
 {
     local processname=$1
@@ -596,41 +630,9 @@ debasher_builtin_sched::_check_process_deps()
         local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
         local depsname=$(debasher::_get_processname_part_in_dep ${dep})
 
-        # Process dependency
-        depstatus=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
-
         # Process exit code
         local dep_ok=1
-        case ${deptype} in
-            ${DEBASHER_AFTER_PROCESSDEP_TYPE})
-                if [ ${depstatus} = ${DEBASHER_TODO_PROCESS_STATUS} -o  ${depstatus} = ${DEBASHER_UNFINISHED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTEROK_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTERANY_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a ${depstatus} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE})
-                # NOTE: DEBASHER_AFTERCORR_PROCESSDEP_TYPE dependency type currently
-                # treated in the same way as DEBASHER_AFTEROK_PROCESSDEP_TYPE
-                # dependency
-                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-        esac
+        debasher_builtin_sched::_dep_holds "${deptype}" "${depsname}" || dep_ok=0
 
         # Return value depending on the dependency separator used
         case "${separator}" in
@@ -752,6 +754,192 @@ debasher_builtin_sched::_get_executable_processes()
             # process is an array
             debasher_builtin_sched::_update_executable_array_process "${dirname}" ${processname} ${status}
         fi
+    done
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, is
+# a candidate of this round (see debasher_builtin_sched::_get_executable_processes)
+debasher_builtin_sched::_task_is_candidate()
+{
+    local task=$1
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    [[ -v BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"] ]] || return 1
+
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        return 0
+    fi
+    [[ " ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]} " == *" ${task_idx} "* ]]
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, is
+# running or has finished
+debasher_builtin_sched::_task_is_running_or_finished()
+{
+    local dirname=$1
+    local task=$2
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    local status
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+        [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] || [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
+    else
+        status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${processname}" "${task_idx}")
+        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}" ] || [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS}" ]
+    fi
+}
+
+########
+# Whether a process has started, or has a task among the candidates of this
+# round, so that an after dependency on it holds once the round is launched
+debasher_builtin_sched::_process_starts_or_runs()
+{
+    local processname=$1
+    local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+
+    [[ -v BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"] ]] \
+        || [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
+        || [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, can
+# start once the candidates of this round have started: it runs, has
+# finished or is a candidate; or it waits to be launched, fits in the free
+# cpus and memory, and every dependency of its process that does not hold
+# yet is an after dependency on a process that starts in this round or runs
+# already. A task in held_back, which the caller keeps, was left out of this
+# round and cannot.
+debasher_builtin_sched::_task_can_start_soon()
+{
+    local dirname=$1
+    local task=$2
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    [[ -v held_back["${task}"] ]] && return 1
+    debasher_builtin_sched::_task_is_candidate "${task}" && return 0
+    debasher_builtin_sched::_task_is_running_or_finished "${dirname}" "${task}" && return 0
+
+    # Waiting to be launched
+    local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
+    else
+        [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] && return 1
+        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
+        local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${processname}" "${task_idx}")
+        [ "${task_status}" = "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" ] || return 1
+        [ "$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" "${processname}")" -gt 0 ] || return 1
+    fi
+
+    # Fits in the free resources
+    debasher_builtin_sched::_check_comp_res "${processname}" || return 1
+
+    # Waits, at most, for processes that start in this round or run already
+    local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
+    local separator=$(debasher::_get_processdeps_separator ${processdeps})
+    local processdeps_blanks
+    if [ "${separator}" = "" ]; then
+        processdeps_blanks=${processdeps}
+    else
+        processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps})
+    fi
+    local dep any_ok=0
+    for dep in ${processdeps_blanks}; do
+        local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
+        local depsname=$(debasher::_get_processname_part_in_dep ${dep})
+        local dep_ok=0
+        if debasher_builtin_sched::_dep_holds "${deptype}" "${depsname}"; then
+            dep_ok=1
+        elif [ "${deptype}" = "${DEBASHER_AFTER_PROCESSDEP_TYPE}" ] && debasher_builtin_sched::_process_starts_or_runs "${depsname}"; then
+            dep_ok=1
+        fi
+        if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ]; then
+            [ ${dep_ok} -eq 1 ] && any_ok=1
+        else
+            [ ${dep_ok} -eq 0 ] && return 1
+        fi
+    done
+    if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ] && [ ${any_ok} -eq 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
+########
+# Removes a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>,
+# from the candidates of this round
+debasher_builtin_sched::_remove_candidate_task()
+{
+    local task=$1
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        unset 'BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"]'
+        return 0
+    fi
+
+    local remaining="" idx
+    for idx in ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}; do
+        [ "${idx}" = "${task_idx}" ] && continue
+        remaining="${remaining:+${remaining} }${idx}"
+    done
+    if [ -z "${remaining}" ]; then
+        unset 'BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"]'
+    else
+        BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"]=${remaining}
+    fi
+}
+
+########
+# Removes from the candidates of this round every task at one end of a fifo
+# whose other end, a task of the program, cannot start once the round has
+# started (see debasher_builtin_sched::_task_can_start_soon), and repeats
+# until nothing changes, since the fifos of a program can form chains. A
+# task launched while the other end still waits for a process to end, or for
+# cpus and memory, would block when opening the fifo, holding its own cpus
+# and memory, which the other end or the process it waits for may need. An
+# other end that only waits for processes to start, such as the end itself
+# through an after dependency, starts in a later round, and the end may go
+# first. The knapsack solver takes an end missing from its items for one
+# that has already run, which only holds once this is done.
+debasher_builtin_sched::_hold_back_fifo_ends_without_peer()
+{
+    local dirname=$1
+
+    local -A held_back=()
+    local changed=1
+    while [ ${changed} -eq 1 ]; do
+        changed=0
+        local augm_fifoname
+        for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+            local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+            local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
+            [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
+            [ "${owner}" = "${reader}" ] && continue
+
+            local end peer
+            for end in "${owner}" "${reader}"; do
+                if [ "${end}" = "${owner}" ]; then
+                    peer=${reader}
+                else
+                    peer=${owner}
+                fi
+                if debasher_builtin_sched::_task_is_candidate "${end}" \
+                       && ! debasher_builtin_sched::_task_can_start_soon "${dirname}" "${peer}"; then
+                    debasher_builtin_sched::_remove_candidate_task "${end}"
+                    held_back["${end}"]=1
+                    changed=1
+                fi
+            done
+        done
     done
 }
 
@@ -1017,6 +1205,9 @@ debasher_builtin_sched::_select_processes_to_be_exec()
     # Obtain set of processes that can be executed
     local -A BUILTIN_SCHED_EXECUTABLE_PROCESSES
     debasher_builtin_sched::_get_executable_processes "${dirname}"
+
+    # Leave out the ends of fifos whose other end cannot start yet
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${dirname}"
 
     if [ ${builtin_sched_debug} -eq 1 ]; then
         local process_status=$(debasher_builtin_sched::_get_debug_process_status_info)
