@@ -4,8 +4,7 @@ debasher_status debasher_stats debasher_exec_process debasher_doc_mod	\
 debasher_proc_dataset debasher_reformat_status				\
 debasher_stop_resident debasher_reset_resident debasher_snapshot_resident
 
-libexec_SCRIPTS= debasher_get_vars_and_funcs			\
-debasher_get_deblib_vars_and_funcs debasher_check_prg_files	\
+libexec_SCRIPTS= debasher_check_prg_files			\
 debasher_compare_opts debasher_solve_knapsack_greedy		\
 debasher_gen_knapsack_problem debasher_gen_telegram_data	\
 debasher_list_deblib_pub_funcs debasher_list_proc_names		\
@@ -40,7 +39,6 @@ debasher_lib_resident_tools.sh						\
 debasher_builtin_sched_lib.sh debasher_exec.sh debasher_exec_batch.sh	\
 debasher_get_stdout.sh debasher_get_sched_out.sh			\
 debasher_get_fifo_mirror.sh						\
-debasher_get_vars_and_funcs.sh debasher_get_deblib_vars_and_funcs.sh	\
 debasher_check_prg_files.py debasher_stop.sh debasher_stop_resident.sh	\
 debasher_reset_resident.sh debasher_snapshot_resident.sh		\
 debasher_status.sh						\

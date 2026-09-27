@@ -202,13 +202,7 @@ debasher::_write_env_vars_and_funcs_slurm()
 {
     local dirname=$1
 
-    # Write general environment variables and functions
     debasher::_write_env_vars_and_funcs "${dirname}"
-
-    # Write slurm scheduler environment functions
-    declare -f debasher::_write_env_vars_and_funcs_slurm
-    declare -f debasher::_seq_execute_slurm
-    declare -f debasher::_get_script_log_filenames_slurm
 }
 
 ########
@@ -226,7 +220,7 @@ debasher::_create_slurm_script()
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
     # Write environment variables
-    debasher::_write_env_vars_and_funcs_slurm "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
+    debasher::_write_env_vars_and_funcs_slurm "${dirname}" >> "${fname}" || return 1
 
     # Print header
     debasher::_print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
@@ -1101,7 +1095,7 @@ debasher::_seq_execute_slurm()
         echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
         # Write environment variables
-        debasher::_write_env_vars_and_funcs_slurm "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
+        debasher::_write_env_vars_and_funcs_slurm "${dirname}" >> "${fname}" || return 1
 
         # Add call to command or function
         echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1

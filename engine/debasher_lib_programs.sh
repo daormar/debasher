@@ -1353,17 +1353,6 @@ debasher::add_debasher_process()
 add_debasher_process() { debasher::add_debasher_process "$@"; }
 
 ########
-debasher::_get_newly_created_process_funcs()
-{
-    local processname
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        if [ "${DEBASHER_PROGRAM_PROCESSES[${processname}]}" != "${DEBASHER_REGULAR_PROCESS_TYPE}" ]; then
-            declare -f "${processname}"
-        fi
-    done
-}
-
-########
 debasher::add_debasher_program()
 {
     # Initialize variables

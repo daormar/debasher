@@ -1269,16 +1269,7 @@ debasher_builtin_sched::_write_env_vars_and_funcs()
 {
     local dirname=$1
 
-    # Write general environment variables and functions
     debasher::_write_env_vars_and_funcs "${dirname}"
-
-    # Write builtin sched environment functions
-    declare -f debasher_builtin_sched::_write_opts_file
-    declare -f debasher_builtin_sched::_reset_outdir
-    declare -f debasher_builtin_sched::_export_process_env
-    declare -f debasher_builtin_sched::_execute_funct_plus_postfunct
-    declare -f debasher::_seq_execute_builtin
-    declare -f debasher_builtin_sched::_get_script_log_filenames
 }
 
 ########
@@ -1300,7 +1291,7 @@ debasher_builtin_sched::_create_script()
     debasher_builtin_sched::_print_script_trap >> "${fname}" || return 1
 
     # Write environment variables
-    debasher_builtin_sched::_write_env_vars_and_funcs "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
+    debasher_builtin_sched::_write_env_vars_and_funcs "${dirname}" >> "${fname}" || return 1
 
     # Print header
     debasher_builtin_sched::_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
@@ -1352,38 +1343,25 @@ debasher_builtin_sched::_launch()
         fi
     fi
 
-    # Tell the launched process where the installed helper tools live.
-    # debasher_libexecdir is deliberately not among the variables dumped
-    # into generated scripts (see debasher_get_deblib_vars_and_funcs), so
-    # a running process (e.g. a Supervisor relaunching a node through
-    # debasher_launch_process) cannot learn it any other way. Being a
-    # constant, unlike the two variables above, it needs no unset.
+    # Tell the programs that the launched process runs, such as a Python
+    # heredoc process (a Supervisor relaunching a node through
+    # debasher_launch_process, or calling debasher_stop_resident), where
+    # the installed tools live: the script has debasher_libexecdir and
+    # debasher_bindir as shell variables of its context, which do not
+    # reach the programs it runs, so they are exported under names of
+    # their own. Being constants, unlike the two variables above, they
+    # need no unset.
     export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
-    # Same reasoning, for debasher_bindir: a Python heredoc process (a
-    # Supervisor calling debasher_stop_resident as a subprocess, see its
-    # own on_node_permanently_failed) has no other way to find a
-    # bin_SCRIPTS tool either. Found missing by a real debasher_exec run,
-    # 2026-09-22: a bare "debasher_stop_resident" (and, before it, the
-    # same call's own now-removed bare "debasher_stop" fallback) relied
-    # on PATH already including bin/, which nothing here ever put there,
-    # so the escalation thread crashed on FileNotFoundError before it
-    # could do anything, silently, unwaited-on since nothing joins it.
-    # This most likely explains the Conformance status entry recording
-    # sup.finished never appearing after a node gave up: the very
-    # fallback meant to end the program in exactly that case could never
-    # actually run.
     export DEBASHER_BINDIR="${debasher_bindir}"
 
     # Execute file, with job control enabled just for this one launch
     # so it becomes its own process group (pgid == pid). The launched
-    # script always forks at least one child of its own (the stdout-
-    # capturing tee pipeline every process runs through, see
-    # debasher_builtin_sched::_execute_funct_plus_postfunct, plus a
-    # mirrored fifo's background tap, if any); without a distinct
-    # process group, killing just this pid (debasher::_stop_pid, used
-    # by debasher_stop) leaves those children running as orphans. Job
-    # control is normally off in a non-interactive script: toggling it
-    # only around the launch keeps the scope narrow.
+    # script usually forks children of its own (the programs its process
+    # runs, plus a mirrored fifo's background tap, if any); without a
+    # distinct process group, killing just this pid (debasher::_stop_pid,
+    # used by debasher_stop) leaves those children running as orphans.
+    # Job control is normally off in a non-interactive script: toggling
+    # it only around the launch keeps the scope narrow.
     set -m
     "${file}" &
     local pid=$!

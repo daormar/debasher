@@ -262,3 +262,63 @@ def test_the_skip_example_reads_the_value_its_writer_passes(tmp_path):
 
     reader_out = next((outdir / "value_reader").glob("*.out"))
     assert reader_out.read_text() == "5\n"
+
+
+# A module that reads a file next to it, by a relative path, when it is
+# loaded, and a process that prints what it read
+RELATIVE_READ_MODULE = """\
+PARAM_FROM_FILE=$(cat params.txt)
+
+show_param_explain_opts()
+{
+    explain_opt "-x" "<int>" "Unused value"
+}
+
+show_param_define_opts()
+{
+    local optlist=""
+    define_opt "-x" "1" optlist || return 1
+    save_opt_list optlist
+}
+
+show_param()
+{
+    echo "${PARAM_FROM_FILE}"
+}
+
+debasher_relread_program()
+{
+    add_debasher_process "show_param" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_a_process_sees_what_its_module_computed_when_debasher_exec_loaded_it(tmp_path, sched):
+    moddir = tmp_path / "module"
+    moddir.mkdir()
+    (moddir / "debasher_relread.sh").write_text(RELATIVE_READ_MODULE)
+    (moddir / "params.txt").write_text("value next to the module\n")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    outdir = tmp_path / "out"
+
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(
+        sched, "--pfile", str(moddir / "debasher_relread.sh"), "--outdir", str(outdir), *extra,
+        cwd=elsewhere,
+    )
+    assert result.returncode == 0, result.stderr
+
+    stdout = (outdir / "__exec__" / "show_param" / "show_param.stdout").read_text()
+    assert stdout == "value next to the module\n"
+    assert (outdir / ".exec_context.sh").exists()

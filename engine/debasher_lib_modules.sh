@@ -423,13 +423,6 @@ LINENO|REPLY|EUID|UID|PPID|BASHPID|SHLVL|HISTCMD|OPTIND|OPTARG|IFS) continue ;;
     done <<< "$after"
 }
 
-########
-debasher::_get_mod_vars_and_funcs_fname()
-{
-    local dirname=$1
-
-    echo "${dirname}/${DEBASHER_MOD_VARS_AND_FUNCS_BASENAME}"
-}
 
 ########
 # Public: Generates a description for a module.

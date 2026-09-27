@@ -334,53 +334,87 @@ debasher::_map_deptype_if_necessary()
 
 
 ########
+# Writes into the given file the context that the script of every process
+# starts with: the variables and functions of the shell that calls it,
+# which is debasher_exec once the program is fully defined, so that a
+# process sees exactly the engine, the modules and the program that
+# debasher_exec loaded (the code at the top level of a module runs once,
+# in debasher_exec, and its results travel to the processes as they
+# are). Left out are:
+#
+# - the variables that bash defines on its own, and the read-only ones,
+#   which cannot be declared again;
+# - the exported variables and functions, which a process inherits from
+#   its own environment (on Slurm, the one of the node where it runs),
+#   except PATH and the DEBASHER_* variables, which it gets as
+#   debasher_exec had them;
+# - the options of every task (DEBASHER_OPT_LIST_*), one array per task
+#   of an array process, which the tasks read from .sched_opts instead,
+#   and the scratch arrays that hold them while they are being read.
+#
+# The locals of this function start with _ctx_ and are left out as well.
+debasher::_write_exec_context()
+{
+    local _ctx_fname=$1
+
+    # Names of the variables bash defines on its own, from a bash started
+    # with an empty environment
+    local -A _ctx_excluded=()
+    local _ctx_name
+    while IFS= read -r _ctx_name; do
+        _ctx_excluded["${_ctx_name}"]=1
+    done < <(exec -c "${BASH}" --norc --noprofile -c 'compgen -v')
+
+    # Read-only variables
+    local _ctx_line
+    while IFS= read -r _ctx_line; do
+        if [[ "${_ctx_line}" =~ ^declare\ -[a-zA-Z]*\ ([A-Za-z_][A-Za-z_0-9]*) ]]; then
+            _ctx_excluded["${BASH_REMATCH[1]}"]=1
+        fi
+    done < <(readonly -p)
+
+    # Exported variables, but PATH and DEBASHER_*
+    while IFS= read -r _ctx_name; do
+        _ctx_excluded["${_ctx_name}"]=1
+    done < <(compgen -A export)
+    unset '_ctx_excluded[PATH]'
+
+    local -a _ctx_vars=()
+    while IFS= read -r _ctx_name; do
+        case "${_ctx_name}" in
+            _ctx_*|DEBASHER_OPT_LIST_*|DEBASHER_CURRENT_PROCESS_OPT_LIST|DEBASHER_DESERIALIZED_ARGS)
+                continue
+                ;;
+            DEBASHER_*)
+                ;;
+            *)
+                [[ -v _ctx_excluded["${_ctx_name}"] ]] && continue
+                ;;
+        esac
+        _ctx_vars+=("${_ctx_name}")
+    done < <(compgen -v)
+
+    # Functions, but the exported ones
+    local -a _ctx_funcs=()
+    local _ctx_decl _ctx_attrs
+    while read -r _ctx_decl _ctx_attrs _ctx_name; do
+        [[ "${_ctx_attrs}" == *x* ]] && continue
+        _ctx_funcs+=("${_ctx_name}")
+    done < <(declare -F)
+
+    {
+        declare -p "${_ctx_vars[@]}" || return 1
+        declare -f "${_ctx_funcs[@]}" || return 1
+    } > "${_ctx_fname}"
+}
+
+########
+# Writes the context of a process script (see debasher::_write_exec_context)
 debasher::_write_env_vars_and_funcs()
 {
-    debasher::_write_debasher_env_vars_and_funcs()
-    {
-        local dirname=$1
-
-        # Write DeBasher start variables and functions
-        local vars_and_funcs_fname=$(debasher::_get_deblib_vars_and_funcs_fname "${dirname}")
-        "${CAT}" "${vars_and_funcs_fname}"
-
-        # Write environment functions
-        declare -f debasher::mark_task_done
-        declare -f debasher::is_task_done
-
-        # Write initialized variables
-        declare -p DEBASHER_SCHEDULER
-        declare -p DEBASHER_PROGRAM_TYPE
-        # The directories where modules are searched, as debasher_exec had
-        # them, so that a process launched again from another environment
-        # (a node relaunched by hand) finds the modules its own launches
-        # would
-        if [ -n "${DEBASHER_MOD_DIR+x}" ]; then
-            declare -p DEBASHER_MOD_DIR
-        fi
-        declare -p DEBASHER_INITIAL_PROCESS_SPEC
-        declare -p DEBASHER_PROCESS_PFILE_DIR
-        declare -p DEBASHER_RESIDENT_TASK_PORTS
-        declare -p DEBASHER_PROGRAM_OUTDIR
-        declare -p DEBASHER_MEMOIZED_OPTS
-        declare -p DEBASHER_OUT_VALUE_TO_PROCESSES
-    }
-
-    debasher::_write_mod_env_vars_and_funcs()
-    {
-        local dirname=$1
-
-        local vars_and_funcs_fname=$(debasher::_get_mod_vars_and_funcs_fname "${dirname}")
-        "${CAT}" "${vars_and_funcs_fname}"
-    }
-
     local dirname=$1
 
-    # Write Debasher-related variables and functions
-    debasher::_write_debasher_env_vars_and_funcs "${dirname}"
-
-    # Write module-related variables and functions
-    debasher::_write_mod_env_vars_and_funcs "${dirname}"
+    "${CAT}" "$(debasher::_get_exec_context_fname "${dirname}")"
 }
 
 ########

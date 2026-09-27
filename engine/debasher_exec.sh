@@ -271,36 +271,13 @@ load_module()
 }
 
 ########
-get_deblib_vars_and_funcs()
+write_exec_context()
 {
-    echo "# Extracting DeBasher variables and functions..." >&2
+    echo "# Writing the context of the process scripts..." >&2
 
     local outd=$1
 
-    local vars_and_funcs_fname=$(debasher::_get_deblib_vars_and_funcs_fname "${outd}")
-    "${debasher_libexecdir}"/debasher_get_deblib_vars_and_funcs > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
-
-    echo "Extraction complete" >&2
-
-    echo "" >&2
-}
-
-########
-get_mod_vars_and_funcs()
-{
-    echo "# Extracting module variables and functions..." >&2
-
-    local outd=$1
-
-    local vars_and_funcs_fname=$(debasher::_get_mod_vars_and_funcs_fname "${outd}")
-
-    # Get variables and functions from program modules
-    "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${DEBASHER_PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
-
-    # Get newly created process functions
-    debasher::_get_newly_created_process_funcs >> "${vars_and_funcs_fname}"
-
-    echo "Extraction complete" >&2
+    debasher::_write_exec_context "$(debasher::_get_exec_context_fname "${outd}")" || { echo "Error: the context of the process scripts could not be written" >&2; return 1; }
 
     echo "" >&2
 }
@@ -1357,15 +1334,6 @@ depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 check_process_opts "${command_line}" "${outd}" "${program_opts_file}" \
                    "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
-# Write debasher library variables and functions
-get_deblib_vars_and_funcs "${outd}" || exit 1
-
-# Write module variables and functions (this function should be called
-# after calling gen_initial_procspec_file, since it executes the program
-# given in pfile input parameter, possibly defining new functions that
-# should be written as well)
-get_mod_vars_and_funcs "${outd}" || exit 1
-
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
 gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
 
@@ -1398,6 +1366,10 @@ register_all_rerun_processes "${outd}" "${program_opts_file}" "${old_program_opt
 print_rerun_processes || exit 1
 
 print_command_line "${outd}" "${command_line}" || exit 1
+
+# Write the context that the script of every process starts with, now
+# that the program is fully defined and before anything is launched
+write_exec_context "${outd}" || exit 1
 
 # Launch processes
 if [ ${debug} -eq 1 ]; then

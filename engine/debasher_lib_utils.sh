@@ -164,22 +164,6 @@ debasher::_expand_tildes()
 }
 
 ########
-debasher::_exclude_readonly_vars()
-{
-    "$AWK" -F "=" 'BEGIN{
-                         readonlyvars["BASHOPTS"]=1
-                         readonlyvars["BASH_VERSINFO"]=1
-                         readonlyvars["EUID"]=1
-                         readonlyvars["PPID"]=1
-                         readonlyvars["SHELLOPTS"]=1
-                         readonlyvars["UID"]=1
-                        }
-                        {
-                         if(!($1 in readonlyvars)) printf"%s\n",$0
-                        }'
-}
-
-########
 debasher::_exclude_other_vars()
 {
     "$AWK" -F "=" 'BEGIN{
@@ -882,11 +866,11 @@ debasher::_read_fifo_line()
 }
 
 ########
-debasher::_get_deblib_vars_and_funcs_fname()
+debasher::_get_exec_context_fname()
 {
     local dirname=$1
 
-    echo "${dirname}/${DEBASHER_DEBLIB_VARS_AND_FUNCS_BASENAME}"
+    echo "${dirname}/${DEBASHER_EXEC_CONTEXT_BASENAME}"
 }
 
 ########
