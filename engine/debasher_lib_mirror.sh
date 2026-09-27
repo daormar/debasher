@@ -163,6 +163,18 @@ debasher::_run_fifo_mirror_tap()
             exec 7<&- 8>&- 9>&-
             exit 0
         fi
+        # A last line that the writer did not end with a newline is read
+        # together with the stop token that follows it: it is forwarded as
+        # it was written, with no newline, and the tap stops
+        if [[ "${line}" == *"${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" ]]; then
+            line="${line%"${DEBASHER_FIFO_MIRROR_STOP_TOKEN}"}"
+            printf '%s' "${line}" >&9
+            until printf '%s' "${line}" >&8 2>/dev/null; do
+                "${SLEEP}" 0.02
+            done
+            exec 7<&- 8>&- 9>&-
+            exit 0
+        fi
         printf '%s\n' "${line}" >&9
         until printf '%s\n' "${line}" >&8 2>/dev/null; do
             "${SLEEP}" 0.02

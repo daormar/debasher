@@ -259,6 +259,27 @@ now_ms() {
     [ "$(cat "${readerout}")" = "one" ]
 }
 
+@test "debasher::_stop_fifo_mirror_taps forwards a last line without a newline as it was written, and stops the tap at once" {
+    start_registered_tap
+    local readerout="${BATS_TEST_TMPDIR}/reader_out"
+    cat "${realfifo}" > "${readerout}" 3>&- &
+    local reader_pid=$!
+    { printf 'a\nb' > "${shimfifo}"; } &
+    wait_for_mirror_lines 1
+
+    local start=$(now_ms)
+    debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
+    local status=$?
+    local elapsed=$(( $(now_ms) - start ))
+
+    [ "${status}" -eq 0 ]
+    [ "${elapsed}" -lt 1000 ]
+    [ ! -s "${BATS_TEST_TMPDIR}/stderr" ]
+    wait "${reader_pid}"
+    [ "$(od -An -c "${readerout}" | tr -d ' ')" = "a\nb" ]
+    [ "$(od -An -c "${mirrorfile}" | tr -d ' ')" = "a\nb" ]
+}
+
 @test "debasher::_stop_fifo_mirror_taps ends a tap whose reader is gone, with a warning, and does not fail" {
     # The reader of the real fifo reads one line and leaves; the owning
     # process then writes another, which the tap can never forward, so it
