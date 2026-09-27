@@ -1078,7 +1078,7 @@ try to do. Where a guarantee has a known gap, "Future work" lists it.
 
 # Resident programs in the web UI
 
-*Designed in part, not built.* The extension of the web UI to resident
+*Designed, not built.* The extension of the web UI to resident
 programs. A resident program is not a run that starts and finishes: its
 processes stay alive, keep state, recover from crashes and go through rounds.
 The UI has to build such a program, launch it, observe it while it lives and
@@ -1087,8 +1087,9 @@ act on it.
 The sections before this one describe general programs only (see the
 Introduction). This section is where a resident program departs from them: for
 each part of that design (the program model, script generation and import, the
-program's directories, execution and observation), it says whether the part
-applies unchanged, changes, or is replaced by a rule of its own.
+program's directories, execution and observation, and the canvas), it says
+whether the part applies unchanged, changes, or is replaced by a rule of its
+own.
 
 ## The program model of a resident program
 
@@ -1921,13 +1922,131 @@ web UI; a single orderly stop for each output directory is left to the engine
 
 ## The canvas of a resident program
 
-*To be written.* How each node kind, the Supervisor wiring and the self-loop
-are drawn: a distinct box for each node kind, a mark (an eye) on a node that
-defines `observe`, a mark (a bolt) on a trigger port instead of the round
-handle, and the Supervisor wiring hidden until it is shown from the context
-menu of the `Supervisor`. Whatever a canvas node draws from its process has to
-be part of the structural key (see "Keeping the canvas in step with the
-store").
+The canvas of a resident program draws the same processes and connections as
+that of a general one (see "From the store to the canvas"), and shows besides
+what a resident program adds: the node kind and the role of each node, the
+handles that its options take or not, the Supervisor wiring and the self-loop.
+As for the rest of the canvas, this subsection says what the canvas shows and
+the rules it keeps, not how it looks: a mark may be an icon, a label or a
+shape.
+
+**What a canvas node shows.** A canvas node of a general program already gives
+its background to the process status, the style of its border to the options
+handler mode and the color of its border, with a badge, to its group. A
+resident program has no groups and no `manual` mode, and what it adds is shown
+with marks of its own, which take none of those:
+
+- **The node kind**, always, with a mark in the head of the canvas node:
+  `FBPProcess`, `ProgramLauncher`, `DirectoryWatcher` or `Supervisor`. The
+  `Supervisor` also stands apart from the other canvas nodes at a glance, since
+  it is not a business node and the user does not edit its code.
+- **An initiator**, with a mark of its own, since rounds start there, and
+  since a node that no initiator reaches is what the engine refuses when it
+  loads the program; the user sees it without showing the Supervisor wiring.
+- **A node that observes the outside world**, with a mark of its own: an
+  `FBPProcess` with a body for `observe`, and every `ProgramLauncher` and
+  `DirectoryWatcher`, whose classes implement it. The observe port is a name,
+  not a fifo, and has no handle (see "Observing the outside world" in
+  `doc/design_doc_resident.md`).
+- **An `array` or `generator` process**, with the double border, as in a
+  general program, since each of its tasks is a node of its own.
+
+The color of the border and the badge of a group stay unused in a resident
+program, rather than taken for the node kind, so that the same mark never
+means two things depending on the type of the program.
+
+**The handles of a node.** In a general program every option has a handle,
+the inputs along the top and the outputs along the bottom. In a resident
+program an option has a handle only when a connection can reach it, since the
+canvas accepts only a connection from a business output to a business input
+(see "The program model of a resident program"), and a handle shows what the
+option is:
+
+- A business output has a handle along the bottom. With no connection it is
+  read outside the program, and a mark says so: something outside has to read
+  it, or the outbound backlog of the node grows until the node fails, and it is
+  where "Talk to FIFOs" reads.
+- A business input has a handle along the top, which accepts one connection,
+  from a business output.
+- An external input is drawn along the top with the other inputs, with a
+  handle that accepts no connection and a mark that says that it is written
+  from outside the program. It is where "Talk to FIFOs" writes, and where the
+  activity of the program comes in, which the canvas thus shows.
+- A configuration option has no handle, since no connection feeds it. The
+  canvas node lists it apart from the inputs, so that it does not look like an
+  input left unconnected.
+- The options of the Supervisor wiring are not in the program model, and have
+  no handle unless the wiring is shown.
+
+The side of each handle, and the pair of handles that the canvas moves between
+two processes that answer each other, are as in a general program. Every edge
+of a resident program comes from a FIFO, so every edge is dashed, which tells
+nothing apart here, but keeps one convention for both types of program.
+
+**The Supervisor wiring.** The Supervisor wiring is hidden by default: with
+many nodes its heartbeat channels would fill the canvas, and the user edits
+none of it. An action of the context menu of the `Supervisor` shows it and
+hides it again. Whether it is shown belongs to the tab, like the selection, and
+is not saved. A program without a `Supervisor` has nothing to show: the control
+ports of its initiators are written by the tools, not by the user, and the mark
+of an initiator already says where they are.
+
+The wiring shown is derived from the store, by the same rule with which script
+generation derives it: from whether the program has a `Supervisor`, from its
+nodes and from which of them are initiators (see "The program model of a
+resident program"). Drawing it needs that topology only, not the labels that
+script generation gives to its options, which the frontend therefore does not
+repeat. The canvas draws:
+
+- a heartbeat channel from every node to the `Supervisor`, a single edge for an
+  `array` or `generator` process, drawn as a fanout edge, since the
+  `Supervisor` reads its heartbeat channels as a fanout family;
+- a trigger port from the `Supervisor` to every initiator, whose handle on the
+  initiator carries a mark of its own instead of the round handle;
+- the manual trigger port of the `Supervisor`, as a handle marked as written
+  from outside the program, like an external input.
+
+The edges and handles of the wiring are read only: they are drawn apart from
+the business channels, cannot be selected or deleted, and accept no
+connection, so that the Supervisor wiring is never drawn by hand on the canvas
+either. The `Supervisor` itself is placed and moved like any node, and its
+position is saved; only its wiring is derived.
+
+**The self-loop.** A self-loop is how a node of a resident program feeds
+itself (see "The program model of a resident program"), and the canvas draws it
+next to its node: from its output handle, along the bottom, around the right
+side of the node, clear of its box, to its input handle, along the top. It
+does not take the lane of the back edges to the right of every process, which
+joins processes far apart, and along which a node that feeds itself would be
+hard to tell in a wide program. Several self-loops of the same node are drawn
+apart from each other, each at a height and a distance that follow the place
+of its handles, as the back edges that leave the same node are. The same
+drawing applies to a self-loop of a general program, which "From the store to
+the canvas" routes along the lane of the back edges.
+
+**The structural key and the legend.** The rule of "Keeping the canvas in step
+with the store" holds: whatever a canvas node draws from its process is part
+of the structural key, or the canvas node reads it from the store, as it reads
+the process status. What a resident program adds follows it this way:
+
+- The structural key gains, for each process, its node kind, whether it is an
+  initiator and whether it observes the outside world, which for an
+  `FBPProcess` depends on whether its body of `observe` is empty; for each
+  option, its option channel and its fifo tag, which decide whether it has a
+  handle and of what sort; and whether the Supervisor wiring is shown. The last
+  belongs to the tab, not to the program, but it adds and removes handles on
+  the canvas nodes, which the canvas library takes only when the list of
+  canvas nodes is refreshed.
+- The mark of a business output read outside the program depends on the
+  edges, which change with every connection and are not part of the
+  structural key. A canvas node reads it from the store, so that a connection
+  does not refresh the list of canvas nodes.
+
+The canvas of a resident program has a legend, which the user can fold. It says
+what each process status means in a resident program (see "Observing and
+talking to a live program"), and what each mark means: the node kind, an
+initiator, a node that observes the outside world, an external input, a
+business output read outside the program, and a trigger port.
 
 # Future work
 
@@ -1970,6 +2089,10 @@ store").
   the documentation, and maybe the program, to a service outside the machine,
   which the user has to know; and its answers are only as good as a
   documentation kept in step with the code.
+- **A legend for a general program.** A legend of the canvas like that of a
+  resident program (see "The canvas of a resident program"), which says what
+  the colors of the process statuses and the styles of the borders and edges
+  mean.
 - **Closing an external input.** An action of "Talk to FIFOs" that writes a
   `CLOSE` into an external input, to tell a node that its source has
   finished, once the engine has a hook that lets the code of a node learn that
