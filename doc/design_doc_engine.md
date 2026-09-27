@@ -1025,15 +1025,184 @@ that the dependency graph does not have.
 
 # FIFOs
 
+A FIFO lets two tasks exchange data while both run, instead of one waiting for
+a file that the other has finished writing. Its semantics come from the
+operating system, and they shape the whole design: opening a FIFO for writing
+blocks until some process opens it for reading, and the other way around; a
+write blocks while the FIFO holds as much as it can, until the reader takes
+some of it; nothing is kept on disk; and the reader sees the end of the data
+when the last writer closes the FIFO. The two ends of a FIFO therefore have to
+run at the same time and on the same machine, and neither can wait for the
+other to end. This section describes how a FIFO is declared and who owns it,
+how the engine makes both ends run together, how FIFOs carry cycles that the
+dependency graph never sees, how the traffic of a FIFO can be observed, and
+what happens when one end fails.
+
 ## Declaring and owning a FIFO
+
+A process declares a FIFO in its `_define_opts` method with
+`define_fifo_opt <option> <name> <optlist>`, or in its option generator with
+`define_fifo_opt_generator <option> <name> <task index> <optlist>`, which is
+the only one of the two that a generator may call. The task that declares the
+FIFO is its owner, and the value of the option is the absolute path of the
+FIFO, `__fifos__/<owner process>/<name>`. The path is named after the process
+and not after the task, so two tasks of an array that declare FIFOs of the same
+name are refused: each task of an array needs FIFO names of its own. Declaring
+the same FIFO again from the same task is not an error, since an option
+generator is called several times for the same task.
+
+The owner declares the FIFO through the output option through which it writes
+it. The reader takes the path through an input option, usually a connection to
+that output option (see "Connections between processes"). Once every option
+list is known, the engine registers, for each FIFO, its reader: the one task of
+the program that uses the path through an input option other than the one
+through which the owner declared it. The reader may be another task of the same
+array, or the owner itself through another option, a self-loop. A second
+reader is refused, since each line written into a FIFO reaches only one of the
+processes that read it, and the other would wait for lines that never come.
+A FIFO that no task of the program reads has an external end, left to someone
+outside the program, such as a person who reads it from a terminal.
+
+A FIFO whose writer is outside the program is declared by its reader, through
+an input option, with a tag that says so (`--control` or `--external`). Tags
+belong to resident programs, and a general program that uses one is refused
+(see `doc/design_doc_resident.md`).
+
+`program.fifos` lists every FIFO of the run: its name, the task that owns it,
+and the task that reads it or `__EXTERNAL__` for an external end. The engine
+creates a FIFO with `mkfifo` when it prepares the process of its owner, before
+the process is launched, removing the one that an earlier run left, so that
+every run of the owner starts with a new, empty FIFO.
 
 ## Running both ends together
 
+Neither end of a FIFO can wait for the other to end: the writer would block
+on opening the FIFO, or on writing into it, until the reader reads. This is
+why the dependency inferred through a FIFO has the type `none` (see
+"Inferring dependencies from options"): the two ends are independent tasks for
+the dependency graph, and it is the scheduler that has to run them at the same
+time.
+
+The built-in scheduler keeps an end of a FIFO out of a round until its other end
+can start with it. In each round, a task at one end of a FIFO is launched only
+when the other end, a task of the program, already runs, has finished, is
+launched in the same round, or waits only for processes to start, as a reader
+with an `after` dependency on the owner of its FIFO does, which then starts in
+the next round. Chains of FIFOs are followed to the end. An end that went first
+while its other end waited for another process to end would block on opening the
+FIFO and hold its CPUs and memory, possibly the ones that process needs, and the
+program would never finish. When resources are limited, the knapsack solver
+takes the ends of a FIFO, and every end of a chain of FIFOs, all together or
+none of them, and a round in which no group of ends fits in the free resources,
+with nothing else to launch, stops the run with an error (see "The built-in
+scheduler").
+
+One case remains open. An end that goes first because its other end only waits
+for it to start holds its resources while it waits, and if they are what the
+other end needs, the other end never fits: with 2 CPUs, a writer that asks for
+1 and a reader that asks for 2 and depends on it with `after`, the reader never
+starts and the run does not end.
+
+The Slurm scheduler cannot run both ends together: it places each job on a node
+of its own choosing, and the two ends of a FIFO only meet on the same machine. A
+program that uses FIFOs is refused under the Slurm scheduler when the run is
+prepared.
+
+Between runs, the two ends of a FIFO are kept in the same state (see
+"Reruns"). When a run starts and one end has finished while the other has not,
+both are marked to rerun, and a rerun mark on one end reaches the other, and
+from each of them the processes that depend on them. A run therefore never
+launches an end whose other end has finished and will not run again. The
+owner of a FIFO with an external end is run again on every run, since the
+engine cannot tell whether the outside got what it needed, and everything
+connected to it through dependencies or FIFOs runs again with it.
+
 ## Cycles through FIFOs
+
+A dependency through a FIFO adds no edge to the dependency graph, so processes
+that stream to one another in a loop are a valid program: the loop lives in the
+FIFOs, and the graph that the scheduler sees has no cycle. In
+`data/programs/debasher_cycle.sh`, `process_a` owns a FIFO that `process_b`
+reads, and `process_b` owns one that `process_a` reads:
+
+1. `process_a` writes the value 1 into its FIFO and reads from the other.
+2. `process_b` reads 1, writes 2 into its own FIFO and reads again.
+3. `process_a` reads 2, and the two go on until the value passes a limit.
+4. `process_a` then writes `DEBASHER_SHUTDOWN_TOKEN`, which `process_b` takes
+   as the end of the loop, and both return.
+
+The engine guarantees what makes such a loop possible: both processes start
+together, each FIFO exists before its owner runs, and each has one reader. It
+does not guarantee that the loop ends, or that it does not stop with each
+process waiting for the other: when the loop ends is decided by a protocol
+between the processes, for which the engine only provides
+`DEBASHER_SHUTDOWN_TOKEN` as a conventional value, and a loop in which every
+process waits to read before it writes blocks for good, with no error from the
+engine. Resident programs are built on such loops and give them what general
+programs lack, such as rounds, checkpoints and an orderly stop (see
+`doc/design_doc_resident.md`).
 
 ## Mirror taps
 
+A FIFO declared with `--mirror` can be observed while it carries data, without
+taking any line from its reader. It is a debugging aid for general programs:
+`--mirror` is refused in a resident program, and it is only allowed on an
+output option, since the mirror tap sits on the side of the writer.
+
+When a task of the owner starts, the engine replaces the value of the mirrored
+option in the arguments of the process function with the path of a shim FIFO,
+`__fifos__/.mirror/<owner>/<name>.shim`, and starts a mirror tap in the
+background. The tap reads the shim line by line and writes every line to the
+mirror log, `__fifos__/.mirror/<owner>/<name>.log`, and to the real FIFO. The
+reader, the option lists and the `.opts` file of the task keep the real path,
+and `debasher_get_fifo_mirror` prints the log of a FIFO, or follows it as it
+grows. The shim and the log are created, and the log emptied, with the FIFO,
+on every run of the owner.
+
+The tap keeps its three files open for its whole life. It opens the shim for
+reading and writing, so that the opens of the owner never block and lines
+written through several opens are not lost between them; POSIX leaves opening
+a FIFO for reading and writing undefined, and the engine relies on what Linux
+does, which is not to block. It opens the real FIFO once, so that its reader
+sees the end of the data only when the tap exits, and it ignores `SIGPIPE`
+and retries a write that fails, so that a reader that opens the FIFO anew for
+each line, and is briefly gone between two of them, gets every line.
+
+When the process function returns, the engine writes a stop token into the shim.
+The tap forwards everything before it, including a last line without a newline,
+which it forwards as it was written, and exits. A tap that has not stopped
+within two seconds, because it is stuck retrying a line that no reader will
+take, is ended with `SIGTERM`, and `SIGKILL` if needed, with a warning and
+without failing the task: the lines it could not forward are in the mirror log.
+A tap that stops on its token but exits with an error fails the task.
+
+A mirror changes how the owner runs. Its writes go to the shim, which the tap
+holds open, so the owner no longer blocks when no reader has opened the real
+FIFO yet, up to what the shim can hold. The tap copies a line to the log only
+after it has opened the real FIFO, that is, once a reader has opened it, so a
+FIFO that nobody reads leaves an empty log. And the tap forwards lines of text:
+a NUL byte does not reach the reader.
+
 ## When one end fails
+
+The engine does not watch the other end of a FIFO when one end fails, and what
+happens depends on when the failure comes:
+
+- **An end fails before opening the FIFO.** The other end blocks on its own
+  open for good. Its process stays `IN-PROGRESS`, the built-in scheduler waits
+  for it, and `debasher_exec` does not end. `debasher_stop` ends the program.
+- **The writer fails after writing some data.** The reader sees the end of the
+  data, and may finish successfully with what it got: a `FINISHED` reader does
+  not mean that it got everything the writer meant to send. The next run
+  reruns both ends, since one of them has not finished.
+- **The reader stops reading while the writer writes.** The writer gets
+  `SIGPIPE` on its next write, and its task ends.
+
+A task ended by `SIGPIPE`, like one whose process function calls `exit`, ends
+with no error message and without running its `_post` method, and leaves no
+completion marker, so its process is `UNFINISHED` (see "Executing a task").
+Noticing that one end has failed and stopping the other is left to the person
+who runs the program, and to future work.
 
 # Scheduling
 
