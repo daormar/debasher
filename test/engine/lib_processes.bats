@@ -683,6 +683,29 @@ EOF
     [[ "${output}" == *"unknown process dependency type: aftrok"* ]]
 }
 
+@test "debasher::_throttle_lets_all_tasks_run accepts no throttle and a throttle not smaller than the number of tasks" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=(["arr"]=4)
+    DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none"
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=4 ${sep} processdeps=none"
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=8 ${sep} processdeps=none"
+}
+
+@test "debasher::_throttle_lets_all_tasks_run refuses a throttle, its own or the default one, smaller than the number of tasks" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=(["arr"]=4)
+    DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=2 ${sep} processdeps=none"
+
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=3
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none"
+}
+
 @test "debasher::_deps_without_ids_can_hold takes a dependency on a launched process, or on a finished one but afternotok" {
     declare -A ids=(["a"]="101")
     debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }

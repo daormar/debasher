@@ -471,11 +471,25 @@ check_oneshot_precondition()
         fi
     }
 
+    check_process_oneshot_throttle()
+    {
+        local processname=$1
+        local process_spec=$2
+
+        if ! debasher::_throttle_lets_all_tasks_run "${processname}" "${process_spec}"; then
+            local throttle=$(debasher::_get_scheduler_throttle "$(debasher::_extract_throttle_from_process_spec "${process_spec}")")
+            local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+            echo "Error! --builtinsched-oneshot never waits for a task to end, but process \"${processname}\" has ${num_tasks} tasks and a throttle of ${throttle}, so some of them would never be launched; remove the throttle or raise it to the number of tasks" >&2
+            return 1
+        fi
+    }
+
     echo "# Checking program is compatible with --builtinsched-oneshot..." >&2
 
     local processname
     for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
         check_process_oneshot_deps "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || exit 1
+        check_process_oneshot_throttle "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || exit 1
     done
 
     echo "Check complete" >&2

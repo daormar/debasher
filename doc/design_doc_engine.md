@@ -1288,11 +1288,12 @@ counterpart. A dependency holds when the status of the producer says so:
 `afterany`, finished.
 
 With `--builtinsched-oneshot`, `debasher_exec` goes through its rounds with no
-pause, launching whatever can start, and ends as soon as nothing more can
-start without waiting for something to end. It refuses a program with any
-dependency other than `none` and `after`, which only the end of a process
-could satisfy, and a program whose first round does not fit in the budget at
-once, before launching anything.
+pause, launching whatever can start, and ends as soon as nothing more can start
+without waiting for something to end. Before launching anything, it refuses what
+only the end of a task could let through: a dependency other than `none` and
+`after`, a throttle, of the process or given with `--dflt-throttle`, smaller
+than the number of tasks of its process, and a first round that does not fit in
+the budget at once.
 
 ## The Slurm scheduler
 

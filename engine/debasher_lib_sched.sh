@@ -134,6 +134,28 @@ debasher::_get_scheduler_throttle()
 }
 
 ########
+# Whether the throttle of a process, its own or the default one (see
+# debasher::_get_scheduler_throttle), lets every task of the process run at
+# once: true for a process with no throttle, and for one whose throttle is
+# not smaller than its number of tasks. The built-in scheduler in oneshot
+# mode never waits for a task to end, so the tasks that a throttle holds
+# back would never be launched.
+#
+# $1 - Name of the process.
+# $2 - Final specification of the process.
+debasher::_throttle_lets_all_tasks_run()
+{
+    local processname=$1
+    local process_spec=$2
+
+    local throttle=$(debasher::_get_scheduler_throttle "$(debasher::_extract_throttle_from_process_spec "${process_spec}")")
+    [ "${throttle}" -eq "${DEBASHER_ARRAY_TASK_NOTHROTTLE}" ] && return 0
+
+    local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+    [ "${throttle}" -ge "${num_tasks}" ]
+}
+
+########
 debasher::_get_num_attempts()
 {
     # Initialize variables
