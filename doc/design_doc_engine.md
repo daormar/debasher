@@ -658,17 +658,232 @@ resources and the dependencies of a process from.
 
 # Options
 
+Everything that a task knows about its inputs and its outputs reaches it as
+options, and the engine learns the structure of the program from the same
+options: an input option whose value another process produces makes a
+dependency (see "The dependency graph"), and an option whose value is a FIFO
+joins two tasks (see "FIFOs"). This section describes how the option list of a
+task is built, what makes an option an output, how options connect processes,
+how a program takes values from its command line, how a process gets more than
+one task, and how the option list of a task travels from `debasher_exec` to the
+task.
+
 ## Defining the options of a task
+
+The `_define_opts` method of a process receives four arguments: the command
+line of `debasher_exec`, serialized; the specification of the process; its
+name; and the absolute path of its process output directory, where the process
+is expected to write what it produces. The method builds an option list by
+calling the `define_*` functions of the engine on a variable whose name has to
+end in `optlist`, and hands the list to `save_opt_list`, which registers it as
+the option list of the next task of the process:
+
+```
+file_writer_define_opts()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local optlist=""
+
+    define_cmdline_opt "${cmdline}" "-s" optlist || return 1
+    define_opt "-outf" "${process_outdir}/out.txt" optlist || return 1
+
+    save_opt_list optlist
+}
+```
+
+Each `define_*` function adds one option, and they differ in where the value
+comes from: a literal (`define_opt`, `define_flag`), a file shipped with the
+program (`define_infile_opt`), the command line (`define_cmdline_opt` and its
+variants), the process specification (`define_procspec_opt`), an output option
+of another process (`define_opt_from_proc_out`), a value descriptor
+(`define_value_desc_opt`), a shared directory (`define_opt_from_shared_dir`) or
+a FIFO (`define_fifo_opt`, see "Declaring and owning a FIFO").
+
+**Options and values.** A word of an option list is an option when it is `-` or
+`--` followed by a letter or an underscore, and a value otherwise, so `-5` is a
+value and `-v` is an option wherever it appears: no value can start with `-` and
+a letter. An option followed by another option, or by nothing, is a flag. The
+engine records a flag with a marker of its own, so that a flag and an option
+given the empty string as its value stay different all the way to the task.
+
+**One value per option.** An option list holds each option once. An option
+defined twice with the same value counts once; defined twice with different
+values, it is refused when the run is prepared, once the values that come from
+connections are known, so that two definitions that turn out to name the same
+file do not count as a conflict. A process that needs several values passes
+them in a single value, or through options of different names (see "Arrays and
+option generators").
+
+**Order.** The option list of a task is kept by option name, and the engine
+does not guarantee the order in which the task receives its options. A process
+reads each option by its name, with `read_opt_value_from_func_args` and
+`read_flag_from_func_args`, never by its position.
 
 ## Output options
 
+An output option is an option whose name starts with `-out` or `--out`. Its
+value names something that the task produces, usually a file or a directory
+under its process output directory. The engine does not check that the task
+produces it; what the name changes is how the engine treats the value.
+
+**Produced values.** While the run is prepared, the engine records every
+absolute path that an output option of some task holds, together with the
+tasks that hold it. This table is what dependencies are inferred from: an input
+option of another task whose value is one of those paths depends on the tasks
+that produce it (see "Inferring dependencies from options"). An output option
+whose value is not an absolute path produces nothing that another task can
+depend on.
+
+**Value descriptors.** Some processes produce a value rather than a file, such
+as a count or a name that another process needs as an option. An output option
+defined with `define_value_desc_opt` holds the path of a value descriptor,
+`.__VAL_DESCRIPTOR__<option>` in the process output directory, into which the
+task writes the value with `write_value_to_desc`. A task connected to that
+option receives the path, and `read_opt_value_from_func_args` gives it the
+content of the file instead, since the option through which it reads it is not
+an output option. The path is absolute, so the reading task depends on the
+writing one like on any file it produced, and reads the value only once it has
+been written.
+
+**Input files and shared directories.** `define_infile_opt` gives an option the
+path of a file shipped with the program, resolved against the directory of the
+module that added the process (see "Programs and subprograms") and required to
+exist. A shared directory is declared by a module, with `define_shared_dir` in
+its `_shared_dirs` method and never from a process method, and created in the
+output directory before any process runs. The `_shared_dirs` method of every
+loaded module is called, whether or not the module adds processes to the
+program. `define_opt_from_shared_dir` gives an option its absolute path. A
+shared directory is not an output of any process, so using it creates no
+dependency: processes that share one coordinate through it by other means.
+
 ## Connections between processes
+
+`define_opt_from_proc_out <option> <process> <output option>` defines an input
+option that takes the value of an output option of the first task of another
+process, and `define_opt_from_proc_task_out` does the same for a task of a
+given index. The option being defined may not be an output option, and the
+connected one has to be.
+
+The option does not get its value when it is defined, since the other process
+may not have defined its options yet: `_define_opts` is called for the
+processes in no particular order. It holds an output descriptor instead, a
+placeholder that names the process, the task and the option. Once every process
+has defined its options, the engine replaces each output descriptor with the
+value of the connected option, taken from the option list of that task, or by
+calling the option generator of the connected process for that task. A
+connection to a process, task or option that does not exist resolves to
+nothing and stops the preparation of the run.
+
+Once resolved, the value of a connection is a value like any other. The engine
+does not remember that it came from a connection: the dependency it creates is
+inferred from the value (an absolute path produced by the connected task makes
+a dependency, and a FIFO makes the task its reader), and an input option given
+the same path literally depends on the producer in the same way. A connection
+is the way to write that one task reads what another produces without
+repeating how the path is built.
 
 ## Command line options
 
+The command line of `debasher_exec` carries the options of the program along
+with those of `debasher_exec` itself, which ignores the options it does not
+know. A process takes a value from it in its `_define_opts` method:
+`define_cmdline_opt` requires the option to be given with a value and stops the
+preparation of the run otherwise; `define_cmdline_opt_if_given` and
+`define_cmdline_flag_if_given` add the option only when it is given;
+`define_cmdline_infile_opt` and its `_if_given` variant also require the value
+to name an existing file and make its path absolute; and `get_cmdline_opt`
+returns the value for the method to compute with.
+
+The command line is a single set of names shared by every process of the
+program and by `debasher_exec`: every process that reads `-s` gets the same
+value, which is how two processes share a parameter, and a program option with
+the name of an option of `debasher_exec` reads the value given to
+`debasher_exec`.
+
+A process declares its options in its `_explain_opts` method, with `explain_opt`
+and `explain_flag`, and marks which of them are command line options in its
+`_identify_cmdline_opts` method, with `opt_is_cmdline` for a mandatory one and
+`opt_is_non_mandatory_cmdline` for an optional one. The older
+`_explain_cmdline_opts` method declares command line options, all of them
+mandatory, with `explain_cmdline_opt`. The declarations document the program:
+`debasher_exec --show-cmdline-opts` lists the command line options of every
+process, by category, and `debasher_doc_mod` documents them. Whether a mandatory
+option is given is decided by `define_cmdline_opt` when the options are built,
+not by the declaration.
+
 ## Arrays and option generators
 
+**Arrays.** A `_define_opts` method that calls `save_opt_list` several times
+defines one task per call, in order: the process is an array process, and each
+option list is that of the task with the next task index. Every option list is
+built while the run is prepared and kept until the options are written for the
+tasks.
+
+**Option generators.** A process with an option generator does not build its
+option lists in advance. Its `_generate_opts_size` method, called with the
+same arguments as `_define_opts`, prints the number of tasks, and its
+`_generate_opts` method, called with those arguments and a task index, builds
+the option list of that one task and hands it to `save_opt_list`, which returns
+it instead of registering it. The engine calls the generator whenever it needs
+the options of a task: while the run is prepared, to record the values that the
+task produces, to find its FIFOs, to infer its dependencies and to resolve the
+connections of other processes to it, and again inside the task itself (see
+"How option values reach a task"). A generator is therefore called several
+times for each task, in different shells, and has to give the same option list
+every time for the same command line and task index. A FIFO defined by a
+generator is defined with `define_fifo_opt_generator`, which takes the task
+index; `define_fifo_opt` is refused inside a generator.
+
+**Checking the options against their declaration.** When a process has an
+`_explain_opts` or an `_explain_cmdline_opts` method, the options of its first
+task are checked against the declared ones while the run is prepared. An option
+that the task defines but the process does not declare stops the preparation, as
+it usually means a typo or a declaration out of date; a declared option that the
+first task does not define only gives a warning, since an option added only when
+it is given on the command line is often absent. Only the first task is checked,
+and the check assumes that the tasks of an array have the same option names. A
+process whose number of options depends on the run, such as `-outf0`, `-outf1`,
+and so on, declares the whole fanout family once, as `-outfith`, and any option
+made of the prefix and a number matches it.
+
 ## How option values reach a task
+
+For a process without an option generator, the option list of each task, with
+its connections resolved, is serialized as its words joined by the separator
+`<_ARG_SEP_>` and written as one line of `.sched_opts/sched_opts_<process>`, the
+line of a task being its task index plus one:
+
+```
+-inf<_ARG_SEP_>/path/to/outdir/file_writer/out.txt
+```
+
+A process with more than 10000 tasks has its lines split into files of 10000
+lines each, `sched_opts_<process>_<n>`. The task reads its line when it starts.
+For a process with an option generator there is no such file: the task calls the
+generator, which the execution context carries, resolves the connections of the
+option list as the preparation of the run does, from the lines of the connected
+processes or from their generators, and refuses an option with two different
+values.
+
+The task turns its option list back into an array of words and passes it as the
+arguments of the process function, and of the `_skip`, `_reset_outfiles` and
+`_post` methods. It also writes the options it received, quoted and one option
+per line, to `<process>.opts` in its exec directory, or `<process>_<index>.opts`
+for a task of an array process, for a person or a tool to inspect; the engine
+never reads that file back.
+
+`program.opts` gives, for every process, its number of tasks and the options of
+its first ten tasks. It is what a run compares with the one of the previous run
+on the same output directory to find the processes whose input changed (see
+"Reruns").
+
+The serialization sets two limits on a value: it cannot contain a newline,
+since the option list of a task is a line, nor the separator `<_ARG_SEP_>`. And
+since the lines hold absolute paths into the output directory, the options of a
+run belong to the directory where the run was prepared (see "Architecture").
 
 # The dependency graph
 
