@@ -305,3 +305,19 @@ EOF
     [[ "${output}" == *"skipped by its skip method; counted as finished"* ]]
     [ "$(cat "${marks}")" = "completion skipped 0" ]
 }
+
+# --- errors and warnings of the logs of a run -------------------------------
+
+@test "_filter_errwarns_in_script_log_files_pref lists the errors and warnings of the logs of a built-in run" {
+    GREP="$(command -v grep)"
+    AWK="$(command -v awk)"
+    DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
+    DEBASHER_PROGRAM_OUTDIR="${OUTDIR}"
+    printf '%s\n' "Process started" "Error: something failed" "Warning: something odd" > "${EXECDIR}/proc.sched_out"
+
+    run debasher::_filter_errwarns_in_script_log_files_pref "E> " "W> " "md"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"[${EXECDIR}/proc.sched_out](file://${EXECDIR}/proc.sched_out)"* ]]
+    [[ "${output}" == *"E> Error: something failed"* ]]
+    [[ "${output}" == *"W> Warning: something odd"* ]]
+}

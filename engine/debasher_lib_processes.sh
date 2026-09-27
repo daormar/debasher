@@ -1220,34 +1220,6 @@ debasher::_get_processdeps_separator()
 }
 
 ########
-debasher::_find_dependency_for_process()
-{
-    local process_spec=$1
-    local processname_part=$2
-
-    # Obtain process dependencies separated by blanks
-    local processdeps=$(debasher::_extract_processdeps_from_process_spec "$process_spec")
-    local separator=$(debasher::_get_processdeps_separator ${processdeps})
-    if [ "${separator}" = "" ]; then
-        local processdeps_blanks=${processdeps}
-    else
-        local processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps})
-    fi
-
-    # Process dependencies
-    local dep
-    for dep in ${processdeps_blanks}; do
-        local processname_part_in_dep=$(debasher::_get_processname_part_in_dep ${dep})
-        if [ "${processname_part_in_dep}" = "${processname_part}" ]; then
-            echo ${dep}
-            return 0
-        fi
-    done
-    echo ${DEBASHER_DEP_NOT_FOUND}
-    return 1
-}
-
-########
 debasher::_get_prg_exec_dir_for_process()
 {
     local dirname=$1
@@ -1360,39 +1332,6 @@ debasher::_get_process_schedout_filename()
 }
 
 ########
-debasher::_get_outd_for_dep()
-{
-    local dep=$1
-
-    if [ -z "${dep}" ]; then
-        echo ""
-    else
-        # Get name of output directory
-        local outd="${DEBASHER_PROGRAM_OUTDIR}"
-
-        # Get processname
-        local processname_part="${dep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
-        debasher::_get_process_outdir_given_dirname "${outd}" "${processname_part}"
-    fi
-}
-
-########
-debasher::_get_outd_for_dep_given_process_spec()
-{
-    local process_spec=$1
-    local depname=$2
-
-    local dep=$(debasher::_find_dependency_for_process "${process_spec}" $depname)
-    if [ ${dep} = ${DEBASHER_DEP_NOT_FOUND} ]; then
-        return 1
-    else
-        local outd=$(debasher::_get_outd_for_dep "${dep}")
-        echo "${outd}"
-        return 0
-    fi
-}
-
-########
 debasher::_get_deptype_part_in_dep()
 {
     local dep=$1
@@ -1412,48 +1351,6 @@ debasher::_get_processname_part_in_dep()
         local str_array
         IFS="${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}" read -r -a str_array <<< "${dep}"
         echo ${str_array[1]}
-    fi
-}
-
-########
-debasher::_task_array_elem_is_range()
-{
-    local elem=$1
-    local array
-    IFS='-' read -r -a array <<< "$elem"
-    numfields=${#array[@]}
-    if [ $numfields -eq 2 ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-########
-debasher::_get_start_idx_in_range()
-{
-    local elem=$1
-    local array
-    IFS='-' read -r -a array <<< "$elem"
-    numfields=${#array[@]}
-    if [ $numfields -eq 2 ]; then
-        echo ${array[0]}
-    else
-        echo "-1"
-    fi
-}
-
-########
-debasher::_get_end_idx_in_range()
-{
-    local elem=$1
-    local array
-    IFS='-' read -r -a array <<< "$elem"
-    numfields=${#array[@]}
-    if [ $numfields -eq 2 ]; then
-        echo ${array[1]}
-    else
-        echo "-1"
     fi
 }
 
@@ -1873,36 +1770,6 @@ debasher::_register_fifos_used_by_process()
         # The process is an array of tasks
         debasher::_register_fifos_used_by_task_array "${cmdline}" "${processname}" "${num_tasks}"
     fi
-}
-
-########
-debasher::_get_fifo_owners_for_process()
-{
-    local processname=$1
-    declare -A owners
-
-    # Iterate over fifo users
-    for augm_fifoname in "${!DEBASHER_FIFO_USERS[@]}"; do
-        local user=${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
-        local user_proc="${user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        if [ "${user_proc}" = "${processname}" ]; then
-            local owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
-            local owner_proc="${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-            owners["${owner_proc}"]=1
-        fi
-    done
-
-    # Obtain result
-    local result=""
-    for owner in "${!owners[@]}"; do
-        if [ -z "${result}" ]; then
-            result=${owner}
-        else
-            result="${result} ${owner}"
-        fi
-    done
-
-    echo "${result}"
 }
 
 ########

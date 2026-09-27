@@ -1418,8 +1418,8 @@ debasher::add_debasher_process()
 #    add_debasher_process "file_writer" "cpus=1 mem=32 time=00:01:00"
 #    add_debasher_process "my_proc" "cpus=1 mem=32 time=00:01:00" "alias=other_proc;alias_opt_map=-l-a:-l"
 #
-# The function prints the process definition to the standard output.
-# This process definition is later used debasher_exec to execute
+# The function stores the process specification in
+# DEBASHER_INITIAL_PROCESS_SPEC, which debasher_exec later uses to execute
 # the program.
 # Additionally, the function registers the process in a variable used
 # by the DeBasher library, and creates a wrapper function when an
@@ -1442,9 +1442,8 @@ debasher::add_debasher_program()
         pfile="${DEBASHER_RESOLVED_MODNAME}"
     fi
 
-    # Execute program function for module and store output entries in a
-    # temporary file (the purpose is to enable function execution
-    # without using any sub-shell)
+    # Execute the program function of the module in this shell, so that
+    # the processes it adds are registered in the same program
     debasher::_exec_program_func_for_module "${pfile}"
 }
 

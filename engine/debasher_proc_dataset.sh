@@ -204,8 +204,8 @@ process_pars()
         prg_opts_arr=()
     fi
 
-    # Get pipe_exec path
-    local pipe_exec_path
+    # Get debasher_exec path
+    local debasher_exec_path
     debasher_exec_path=$(debasher::_get_debasher_exec_path)
 
     # Read metadata file

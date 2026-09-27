@@ -164,22 +164,6 @@ debasher::_expand_tildes()
 }
 
 ########
-debasher::_exclude_other_vars()
-{
-    "$AWK" -F "=" 'BEGIN{
-                         othervars["DEBASHER_MEMOIZED_OPTS"]=1
-                         othervars["DEBASHER_OUT_VALUE_TO_PROCESSES"]=1
-                         othervars["DEBASHER_FIFO_USERS"]=1
-                         othervars["DEBASHER_PROGRAM_FIFOS"]=1
-                         othervars["DEBASHER_CURRENT_PROCESS_OPT_LIST"]=1 # This variable may become huge when working with arrays and is loaded from a separate file
-                         othervars["PROCESS_OPT_LIST"]=1 # This variable is not necessary and may become huge when working with arrays
-                        }
-                        {
-                         if(!($1 in othervars)) printf"%s\n",$0
-                        }'
-}
-
-########
 debasher::_replace_str_elem_sep_with_blank()
 {
     local sep=$1
@@ -300,7 +284,7 @@ debasher::_get_script_log_filenames()
             debasher::_get_script_log_filenames_slurm "${exec_dirname}"
             ;;
         ${DEBASHER_BUILTIN_SCHEDULER})
-            debasher_builtin_sched::get_script_log_filenames "${exec_dirname}"
+            debasher_builtin_sched::_get_script_log_filenames "${exec_dirname}"
             ;;
     esac
 }
@@ -371,7 +355,7 @@ debasher::_filter_errwarns_in_script_log_files_pref()
 ########
 debasher::_filter_errwarns_in_script_log_files()
 {
-    filter_warnings_in_script_log_files_pref "" "" "md"
+    debasher::_filter_errwarns_in_script_log_files_pref "" "" "md"
 }
 
 ########
@@ -855,14 +839,6 @@ debasher::_get_nth_file_line()
     local n=$2
 
     "${HEAD}" -n $n "${filename}" | "${TAIL}" -n 1
-}
-
-########
-debasher::_read_fifo_line()
-{
-    local fifoname=$1
-
-    "${SED}" -u 1q $1 < "${fifoname}"
 }
 
 ########

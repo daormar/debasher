@@ -25,7 +25,6 @@
 #############
 
 DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
-DB_EXEC_RERUN_PROCESSES_LIST_FNAME=".rerun_processes_due_to_deps.txt"
 DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT=5
 DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 
@@ -382,11 +381,10 @@ gen_final_procspec()
     echo "# Generate final process specification..." >&2
 
     local command_line=$1
-    local initial_procspec_file=$2
 
-    debasher::_gen_final_procspec "${command_line}" "${initial_procspec_file}"  || exit 1
+    debasher::_gen_final_procspec "${command_line}" || exit 1
 
-    debasher::_print_final_procspec "${command_line}" "${initial_procspec_file}"  || exit 1
+    debasher::_print_final_procspec "${command_line}" || exit 1
 
     echo "Generation complete" >&2
 

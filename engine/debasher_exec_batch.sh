@@ -161,10 +161,15 @@ absolutize_file_paths()
 }
 
 ########
+# Prints the percentage of the processes of a program that are not
+# finished, from the summary line of debasher_status ("* SUMMARY:
+# num_processes= N ; finished= F ; ..."): every process that is not
+# finished counts, whether it is unfinished, still to do or runnable
+# again.
 get_unfinished_process_perc()
 {
-    local pipe_status_output_file=$1
-    "$AWK" '{if ($1=="*") printf"%d",$(13)*100/$4}' "${pipe_status_output_file}"
+    local status_output_file=$1
+    "$AWK" '{if ($1=="*" && $3=="num_processes=" && $6=="finished=") printf"%d",($4-$7)*100/$4}' "${status_output_file}"
 }
 
 ########
@@ -262,24 +267,24 @@ exec_post_prg_finish_actions()
 }
 
 ########
-extract_outd_from_pipe_exec_cmd()
+extract_outd_from_debasher_exec_cmd()
 {
-    local pipe_exec_cmd=$1
+    local debasher_exec_cmd=$1
 
-    debasher::_get_opt_value_from_quoted_cmd "$pipe_exec_cmd" "--outdir"
+    debasher::_get_opt_value_from_quoted_cmd "$debasher_exec_cmd" "--outdir"
 }
 
 ########
 get_prg_status()
 {
-    local pipe_cmd_outd=$1
+    local prg_cmd_outd=$1
     local outd=$2
 
     # Check if final output directory was provided and also that this
     # directory is not the same as the original output directory
     if [ "${outd}" != "" ]; then
         # Get program directory after moving
-        local final_outdir=$(get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}")
+        local final_outdir=$(get_dest_dir_for_prg "${prg_cmd_outd}" "${outd}")
         if [ -d "${final_outdir}" ]; then
             # If output directory exists, it is assumed that the
             # program completed execution
@@ -288,10 +293,10 @@ get_prg_status()
     fi
 
     # If original output directory exists then check program status
-    if [ -d "${pipe_cmd_outd}" ]; then
+    if [ -d "${prg_cmd_outd}" ]; then
         # Obtain program status
         local tmpfile=$("${MKTEMP}")
-        "${debasher_bindir}"/debasher_status -d "${pipe_cmd_outd}" > "${tmpfile}" 2>&1
+        "${debasher_bindir}"/debasher_status -d "${prg_cmd_outd}" > "${tmpfile}" 2>&1
         exit_code=$?
 
         # Obtain percentage of unfinished processes
@@ -300,7 +305,7 @@ get_prg_status()
 
         # Evaluate exit code of debasher_status
         case $exit_code in
-            ${DEBASHER_PROGRAM_FINISHED_EXIT_CODE}) if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
+            ${DEBASHER_PROGRAM_FINISHED_EXIT_CODE}) if post_prg_finish_actions_are_executed "${prg_cmd_outd}"; then
                                                 return ${PRG_IS_COMPLETED}
                                             else
                                                 return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
@@ -309,7 +314,7 @@ get_prg_status()
             ${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE}) if [ ${unfinished_process_perc} -gt ${max_unfinished_process_perc} ]; then
                                                   return ${PRG_FAILED}
                                               else
-                                                  if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
+                                                  if post_prg_finish_actions_are_executed "${prg_cmd_outd}"; then
                                                       return ${PRG_IS_COMPLETED}
                                                   else
                                                       return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
@@ -327,15 +332,15 @@ get_prg_status()
 ########
 prg_has_processes_to_rerun()
 {
-    local pipe_exec_cmd=$1
-    local pipe_cmd_outd=$2
+    local debasher_exec_cmd=$1
+    local prg_cmd_outd=$2
     local outd=$3
 
     # Check if final output directory was provided and also that this
     # directory is not the same as the original output directory
     if [ "${outd}" != "" ]; then
         # Get program directory after moving
-        local final_outdir=$(get_dest_dir_for_prg "${pipe_cmd_outd}" "${outd}")
+        local final_outdir=$(get_dest_dir_for_prg "${prg_cmd_outd}" "${outd}")
         if [ -d "${final_outdir}" ]; then
             # If output directory exists, it is assumed that the
             # program completed execution
@@ -344,7 +349,7 @@ prg_has_processes_to_rerun()
     fi
 
     # Check if debasher_exec reports processes to be re-executed
-    local rerun_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_RERUN_PROCESSES_WARNING}")
+    local rerun_processes_warning=$(eval "${debasher_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_RERUN_PROCESSES_WARNING}")
     if [ ! -z "${rerun_processes_warning}" ]; then
         return 0
     else
@@ -355,18 +360,18 @@ prg_has_processes_to_rerun()
 ########
 get_initial_prg_status()
 {
-    local pipe_exec_cmd=$1
-    local pipe_cmd_outd=$2
+    local debasher_exec_cmd=$1
+    local prg_cmd_outd=$2
     local outd=$3
 
     # Check if program has processes to re-execute (this is only necessary
     # in the initial status check)
-    if prg_has_processes_to_rerun "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"; then
+    if prg_has_processes_to_rerun "${debasher_exec_cmd}" "${prg_cmd_outd}" "${outd}"; then
         return ${PRG_IS_NOT_COMPLETED}
     fi
 
     # Get program status
-    get_prg_status "${pipe_cmd_outd}" "${outd}"
+    get_prg_status "${prg_cmd_outd}" "${outd}"
 }
 
 ########
@@ -515,11 +520,11 @@ execute_batches()
     declare -A PROGRAM_COMMANDS
 
     # Process program execution commands...
-    while read -r pipe_exec_cmd; do
+    while read -r debasher_exec_cmd; do
 
         # Execute built-in tilde expansion to avoid problems with "~"
         # symbol in file and directory paths
-        pipe_exec_cmd=$(debasher::_expand_tildes "${pipe_exec_cmd}")
+        debasher_exec_cmd=$(debasher::_expand_tildes "${debasher_exec_cmd}")
 
         echo "* Processing line ${lineno}..." >&2
         echo "" >&2
@@ -533,14 +538,14 @@ execute_batches()
         echo "" >&2
 
         echo "** Extract output directory for program..." >&2
-        local pipe_cmd_outd
-        pipe_cmd_outd=$(extract_outd_from_pipe_exec_cmd "${pipe_exec_cmd}") || { echo "Error: program command does not contain --outdir option">&2; return 1; }
-        echo "${pipe_cmd_outd}"
+        local prg_cmd_outd
+        prg_cmd_outd=$(extract_outd_from_debasher_exec_cmd "${debasher_exec_cmd}") || { echo "Error: program command does not contain --outdir option">&2; return 1; }
+        echo "${prg_cmd_outd}"
         echo "" >&2
 
         echo "** Check correctness of output directory..." >&2
-        local base_pipe_cmd_outd=$("${DIRNAME}" "${pipe_cmd_outd}")
-        if debasher::_dirnames_are_equal "${outd}" "${base_pipe_cmd_outd}"; then
+        local base_prg_cmd_outd=$("${DIRNAME}" "${prg_cmd_outd}")
+        if debasher::_dirnames_are_equal "${outd}" "${base_prg_cmd_outd}"; then
             echo "Error: final output directory is equal to the directory containing the output directory for program">&2
             return 1;
         else
@@ -549,7 +554,7 @@ execute_batches()
         echo "" >&2
 
         echo "** Check if program already completed execution..." >&2
-        get_initial_prg_status "${pipe_exec_cmd}" "${pipe_cmd_outd}" "${outd}"
+        get_initial_prg_status "${debasher_exec_cmd}" "${prg_cmd_outd}" "${outd}"
         local exit_code=$?
         case $exit_code in
             ${PRG_IS_COMPLETED}) echo "yes">&2
@@ -564,19 +569,19 @@ execute_batches()
         echo "" >&2
 
         if [ ${exit_code} -eq ${PRG_REQUIRES_POST_FINISH_ACTIONS} ]; then
-            add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}"
+            add_cmd_to_assoc_array "${debasher_exec_cmd}" "${prg_cmd_outd}"
         fi
 
         if [ ${exit_code} -eq ${PRG_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PRG_FAILED} ]; then
             echo "**********************" >&2
             echo "** Execute program..." >&2
-            echo "${pipe_exec_cmd}" >&2
-            eval "${pipe_exec_cmd}" || return 1
+            echo "${debasher_exec_cmd}" >&2
+            eval "${debasher_exec_cmd}" || return 1
             echo "**********************" >&2
             echo "" >&2
 
             echo "** Add program command to associative array..." >&2
-            add_cmd_to_assoc_array "${pipe_exec_cmd}" "${pipe_cmd_outd}" || { echo "Error: program command does not contain --outdir option">&2 ; return 1; }
+            add_cmd_to_assoc_array "${debasher_exec_cmd}" "${prg_cmd_outd}" || { echo "Error: program command does not contain --outdir option">&2 ; return 1; }
             echo "" >&2
         fi
 

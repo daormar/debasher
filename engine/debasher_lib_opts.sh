@@ -2377,25 +2377,6 @@ debasher::_get_serial_process_opts()
 }
 
 ########
-debasher::_show_out_values_for_processes()
-{
-    for outval in "${!DEBASHER_OUT_VALUE_TO_PROCESSES[@]}"; do
-        echo "${outval} -> ${DEBASHER_OUT_VALUE_TO_PROCESSES[${outval}]}"
-    done
-}
-
-########
-debasher::_get_proc_out_opt_from_desc()
-{
-    local proc_out_opt_descriptor=$1
-
-    # Obtain process plus option info
-    local process_opt_info="${proc_out_opt_descriptor#$DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
-
-    echo ${PROCESS_TO_OUT_VALUE["${process_opt_info}"]}
-}
-
-########
 # Public: Writes value to value descriptor.
 #
 # $1 - Value to be written in the descriptor.
