@@ -885,14 +885,23 @@ third argument):
 * ``processdeps``: explicit dependencies on other processes (e.g.
   ``afterok:other_process``, ``aftercorr:other_process``, ``none``,
   ...), needed when a dependency is not already implied by an option
-  connection. See the ``explicit_deps``/``host_workflow_expl_deps``
-  examples.
+  connection. They replace the dependencies DeBasher would infer from
+  the options, instead of adding to them. See the
+  ``explicit_deps``/``host_workflow_expl_deps`` examples. The types are
+  those of Slurm: ``after`` (the other process started), ``afterok``
+  (it finished successfully), ``afternotok`` (it failed), ``afterany``
+  (it finished either way) and ``aftercorr`` (between two arrays, each
+  task waits for the task with the same index of the other process to
+  finish successfully). The built-in scheduler runs ``aftercorr`` as
+  ``afterok``, waiting for every task of the other array, which is
+  safe but gives up starting a task as soon as its own counterpart is
+  done; Slurm runs it task by task.
 * ``alias``/``ext_alias``: reuse another process's implementation (one
   already defined in the same module tree, or an external script file,
   respectively) as this process's own, instead of providing one
   directly. See the ``hello_world_alias``/``hello_world_ext_alias``
   examples.
-* ``alias_opt_map``: only valid alongside ``alias``/``ext_alias`` — a
+* ``alias_opt_map``: only valid alongside ``alias``/``ext_alias``: a
   comma-separated list of ``OLD:NEW`` option-label pairs, renaming this
   process's own option names into the ones the aliased implementation
   expects. See the ``alias_opt_map`` example.

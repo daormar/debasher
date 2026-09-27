@@ -90,7 +90,10 @@ DeBasher program. It is described in the :ref:`exec` Section, in its
 <string>`` (output directory) and ``-p <string>`` (name of a specific
 process) options covered there, ``debasher_status`` also accepts
 ``-i``, which additionally shows the scheduler id assigned to each
-process.
+process. Like ``debasher_stats`` and ``debasher_stop``, it takes the
+processes of the program from ``program.procspec`` in the output
+directory, not from the module, so it reports the processes that ran
+even if the module changed since.
 
 debasher_stats
 ^^^^^^^^^^^^^^^
