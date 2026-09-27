@@ -14,6 +14,8 @@ write_context() {
     cat > "${module}" <<'EOM'
 MODULE_VALUE="from the module"
 declare -A MODULE_MAP=([a key]="a value")
+declare -A MODULE_EMPTY_MAP
+declare MODULE_EMPTY_SCALAR
 module_func() { echo "module function"; }
 EOM
     env -i PATH="/usr/bin:/bin" HOME=/tmp FOREIGN_VAR=foreign DEBASHER_EXPORTED=kept \
@@ -60,4 +62,16 @@ EOM
     run env -i bash -c "source '${BATS_TEST_TMPDIR}/ctx.sh' && echo \"\${MODULE_MAP[a key]}\" && module_func"
     [ "${status}" -eq 0 ]
     [ "${output}" = "$(printf 'a value\nmodule function')" ]
+}
+
+@test "_write_exec_context declares the variables that have no value yet, keeping the type of an associative array" {
+    write_context
+
+    grep -q '^declare -A MODULE_EMPTY_MAP$' "${BATS_TEST_TMPDIR}/ctx.sh"
+    grep -q '^declare -- MODULE_EMPTY_SCALAR$' "${BATS_TEST_TMPDIR}/ctx.sh"
+    # A key with a dot, as the name of a namespaced process has, reads as
+    # an associative key, not as arithmetic
+    run env -i bash -c "source '${BATS_TEST_TMPDIR}/ctx.sh' && echo \"[\${MODULE_EMPTY_MAP[ns.proc]:-}]\""
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "[]" ]
 }

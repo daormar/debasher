@@ -379,8 +379,18 @@ debasher::_write_exec_context()
     done < <(compgen -A export)
     unset '_ctx_excluded[PATH]'
 
+    # The names come from declare -p, not from compgen -v, which leaves out
+    # a variable declared with no value: an associative array still empty
+    # when the context is written would otherwise reach the processes as
+    # an undeclared name, which bash takes for an indexed array
     local -a _ctx_vars=()
-    while IFS= read -r _ctx_name; do
+    local -A _ctx_seen=()
+    local _ctx_decl_line
+    while IFS= read -r _ctx_decl_line; do
+        [[ "${_ctx_decl_line}" =~ ^declare\ -[-a-zA-Z]*\ ([A-Za-z_][A-Za-z_0-9]*)(=|$) ]] || continue
+        _ctx_name=${BASH_REMATCH[1]}
+        [[ -v _ctx_seen["${_ctx_name}"] ]] && continue
+        _ctx_seen["${_ctx_name}"]=1
         case "${_ctx_name}" in
             _ctx_*|DEBASHER_OPT_LIST_*|DEBASHER_CURRENT_PROCESS_OPT_LIST|DEBASHER_DESERIALIZED_ARGS)
                 continue
@@ -391,8 +401,11 @@ debasher::_write_exec_context()
                 [[ -v _ctx_excluded["${_ctx_name}"] ]] && continue
                 ;;
         esac
+        # A line of a value that spans several lines could look like a
+        # declaration of its own: only a name that is declared counts
+        declare -p "${_ctx_name}" > /dev/null 2>&1 || continue
         _ctx_vars+=("${_ctx_name}")
-    done < <(compgen -v)
+    done < <(declare -p)
 
     # Functions, but the exported ones
     local -a _ctx_funcs=()

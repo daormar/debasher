@@ -563,3 +563,16 @@ def test_a_moved_output_directory_can_be_inspected_but_not_run_again(tmp_path):
     again = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(moved))
     assert again.returncode != 0
     assert "was run in" in again.stderr
+
+
+@pytest.mark.parametrize(
+    "example", ["debasher_namespace_example", "debasher_namespace_multidot_example"]
+)
+def test_a_program_with_namespaced_processes_runs(tmp_path, example):
+    outdir = tmp_path / "out"
+    pfile = REPO_ROOT / "data" / "programs" / f"{example}.sh"
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--gen-proc-graph")
+    assert result.returncode == 0, result.stderr
+
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert status.returncode == 0, status.stdout + status.stderr
