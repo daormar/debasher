@@ -151,8 +151,9 @@ relative to the output directory of the run.
   `_generate_opts` method builds the option list of one task whenever the
   engine asks for it, instead of registering every option list in advance.
 - **command line option** (opción de línea de comandos): an option whose value
-  a process takes from the command line of `debasher_exec`, declared in the
-  `_explain_cmdline_opts` method of the process.
+  a process takes from the command line of `debasher_exec`, which the process
+  marks as one in its `_identify_cmdline_opts` method, or declares in the
+  older `_explain_cmdline_opts` method.
 - **connection** (conexión): an input option defined with
   `define_opt_from_proc_out` or `define_opt_from_proc_task_out`, which takes
   the value of an output option of another process.
@@ -243,8 +244,10 @@ relative to the output directory of the run.
   them never do so on the same output directory at once.
 - **process output directory** (directorio de salida del proceso): the
   directory of a process under the output directory, named after the process
-  unless its `_outdir_basename` method gives another name. It is emptied, or
-  reset by the `_reset_outfiles` method, before each task runs.
+  unless its `_outdir_basename` method gives another name. Before each task
+  runs, the `_reset_outfiles` method of the process resets it; without that
+  method, the directory of a process with a single task is emptied, and that
+  of an array process, which its tasks share, is left as it is.
 - **exec directory** (directorio de ejecución): `__exec__/<process>`, where the
   engine keeps the process script, the logs, the ids and the completion
   markers of a process.
@@ -421,15 +424,237 @@ move.
 
 # Modules and programs
 
+A program is not written as a whole: it is assembled, while `debasher_exec`
+prepares a run, from modules that define processes and from the `_program`
+methods that add those processes to the program. This section describes how a
+module is found and loaded, what a process is made of, how a process can run
+code in another language or borrow the code of another process, how a program
+is composed of subprograms, and what the engine records about each process.
+
 ## Modules and how they load
+
+A module is a Bash file, and its name is the name of the file without the
+`.sh` extension. The engine finds the methods of a module by that name: the
+module `mymod.sh` has its program in `mymod_program`, its shared directories in
+`mymod_shared_dirs`, and so on. A module is loaded with `load_debasher_module`,
+which a module calls at its top level to load the modules it builds on, and
+which `debasher_exec` calls on the program file.
+
+**Finding a module.** An absolute path is taken as it is. A relative name is
+looked for in the directories of the module search path in order, the current
+directory first and then each directory of `DEBASHER_MOD_DIR` (a list
+separated by colons), and the first file found wins, so that a module in the
+current directory is never shadowed by one of the same name elsewhere. In each
+directory the engine tries the name as given and the name with `.sh`. It then
+looks one level below the directory for a program saved by the web UI, which
+it accepts only when the directory of the file holds a
+`.debasher/program.json` whose program has the same name, so that an unrelated
+file with the same name in some subdirectory is never taken for the module. A
+name found nowhere is looked for, last, in the directory where DeBasher is
+installed. The program file given to `debasher_exec` with `--pfile` is resolved
+in the same way, and the command line file records the absolute path it
+resolved to, so that the tools that later read the run do not depend on the
+module search path of whoever runs them.
+
+**Loading a module.** A module is sourced into the shell of the tool that loads
+it, with the directory of the module as the current directory while it loads.
+The modules it loads in turn are therefore looked for first next to it, and
+not in the directory from which `debasher_exec` was run. A module is identified
+by the absolute path of its file and is loaded only once: loading it again, as
+two modules that build on a third one do, has no effect. A module that is asked
+for while it is still loading, because modules load each other in a cycle, is
+refused, and the error names the whole cycle. The engine keeps the loaded
+modules in the order in which they finish loading, so that every module comes
+after the modules it loads.
+
+**What loading means for a run.** Everything that a module does at its top
+level, defining functions and variables and loading other modules, happens in
+the shell of `debasher_exec`, once, while the run is prepared. No task loads a
+module (see "Architecture"): what the top level of a module defines reaches the
+tasks through the execution context, and code at the top level that does
+something else, such as printing or creating a file, runs while the run is
+prepared and never in a task. Besides `debasher_exec`, only the tools that
+run a process function outside a run (`debasher_exec_process`) or document a
+module (`debasher_doc_mod`), and the tool that resets a resident program, load
+modules; the tools that read a run do not.
 
 ## Processes and their methods
 
+A process is a name and the functions that carry that name. The process
+function is the function named as the process itself, and each process method
+is a function named as the process followed by the suffix of the method. The
+engine looks a method up by its name at the moment it needs it, and does not
+register it anywhere: whether a process has a given method is whether a
+function of that name exists in the shell at that moment.
+
+A process name is one part or several joined by dots (`org.namespace.name`),
+each part made of letters, digits and underscores and not starting with a
+digit. The dots let modules written independently give their processes
+qualified names that do not clash, since every process of a program shares a
+single set of names (see "Programs and subprograms"). A name may not end with
+the suffix of a process method, since the function of the process `a_skip`
+would then be the skip method of a process `a`, and it may not contain the
+marker `__NSSEP__`, which the engine uses to turn a qualified name into the
+name of a Bash variable. A process can be added to a program only once, and a
+program has at most 5000 processes.
+
+The methods of a process, when the engine calls each one, and what happens
+when a process does not define it:
+
+| Method | Called | When absent |
+|---|---|---|
+| process function | by the task, with its options as arguments | the process cannot be added, unless it is a heredoc process or an alias |
+| `_define_opts` | while the run is prepared, to build the option list of every task | the process needs an option generator |
+| `_generate_opts_size`, `_generate_opts` | while the run is prepared, and by the task to build its own option list | the process uses `_define_opts` |
+| `_explain_opts` | to list the options of the program (`--show-cmdline-opts`) and to check the options that a task defines | the options of the process are not checked |
+| `_identify_cmdline_opts` | together with `_explain_opts`, to mark which options are command line options | the process has no command line options |
+| `_explain_cmdline_opts` | an older form of the two methods above, whose options are all command line options | the two methods above are used |
+| `_define_opt_deps` | while the dependencies are inferred, for each option on each producer | the inferred dependency type is used |
+| `_skip` | by the task, before the process output directory is reset, with the options of the task | the task is never skipped |
+| `_reset_outfiles` | by the task, before the process function, with the options of the task | the default reset (see "Executing a task") |
+| `_post` | by the task, after the process function, whether it failed or not | nothing runs after the process function |
+| `_outdir_basename` | whenever the process output directory is needed | the directory is named after the process |
+| `_conda_envs`, `_docker_imgs` | while the run is prepared, with `--conda-support` or `--docker-support` | the process needs no environment |
+| `_document` | by `debasher_doc_mod`, which documents a module | the process has no description |
+
+The methods that the task calls run inside the process script, with the code
+that the execution context carries; the others run in the shell of
+`debasher_exec` or of the tool that calls them. The sections that follow
+describe what each method does: the option methods in "Options", the
+dependency method in "The dependency graph", the task methods in "Executing a
+task" and the environment methods in "Conda and Docker environments".
+
 ## Processes in other languages, and aliases
+
+The process function is always a Bash function, but it need not contain the
+code of the process. When a process is added to the program,
+`add_debasher_process` builds the process function itself in two cases: for a
+heredoc process, whose code is in another language, and for an alias, whose
+code belongs to another process or to an external script. In both cases the
+other methods of the process are still Bash functions of its own.
+
+**Heredoc processes.** A heredoc process gives its code in a method named after
+the language, `_heredoc_py`, `_heredoc_r`, `_heredoc_perl` or `_heredoc_groovy`,
+which prints the code, usually from a quoted here-document. The older form, a
+variable named after the process with the suffix `_py`, `_r`, `_perl` or
+`_groovy` that holds the code, is still accepted. The process function that the
+engine builds runs the interpreter of the language, found when DeBasher was
+configured, with the code as its program (`-c` for Python, `-e` for the others)
+and the options of the task as its arguments. For Python, the engine puts in
+front of the code the lines that make its own Python library importable. The
+code is printed when the task runs, from the method that the execution context
+carries, so a heredoc process runs the code of the module as it was when the run
+was prepared, like any Bash process. When a process has heredoc code, it is a
+heredoc process, whatever other attributes it has.
+
+**Aliases.** A process with the additional specification `alias=<process>` has
+a process function that calls the process function of the named process with
+the same arguments. The named process only has to have a valid name and a
+process function; it need not be part of the program. An alias borrows only the
+process function: its options, its dependencies and every other method are its
+own, so the same code can run under two names with two sets of options. A
+process with `ext_alias=<file>` runs an external script instead, with the
+interpreter that the extension of the file names (`.sh`, `.py`, `.R`, `.pl` or
+`.groovy`); a file with another extension is refused when the process is added.
+A relative path is resolved against the directory of the module whose
+`_program` method adds the process, so that a program and the scripts that ship
+with it can be moved together; an absolute path is accepted with a warning that
+the program is not portable. The file has to exist when the process is added,
+and the process function runs it from its path, so the script is read when the
+task runs: it is the one piece of the code of a run that editing a file after
+the run was prepared can still change.
+
+Both kinds of alias accept `alias_opt_map=<old>:<new>,...`, which renames
+option names in the arguments before they reach the borrowed code: an argument
+equal to `<old>` is passed as `<new>`, and any other is passed unchanged. The
+map is checked when the process is added, each entry has to be a pair of option
+names and no name may be mapped twice, and a map without an alias or an
+external alias is refused.
+
+Every process of a resident program is a Python heredoc process whose class
+derives from the classes of the engine for that purpose, as
+`doc/design_doc_resident.md` describes.
 
 ## Programs and subprograms
 
+The program is defined by the `_program` method of the program file, which
+`debasher_exec` calls once the program file is loaded. That method adds each
+process with `add_debasher_process`, and adds the processes of other modules
+with `add_debasher_program <module>`, which calls the `_program` method of that
+module in the same shell. A subprogram is therefore not a separate program: its
+processes join the one program being defined, with no scope of their own, and
+connect to the other processes through their options like any other process.
+Their names have to be unique across the whole program, which is what qualified
+names are for. `add_debasher_program` takes the module from the file from
+which it was loaded, and so expects the calling module to have loaded it; the
+module is not searched for again from the current directory, which is no
+longer the directory of the module that loaded it.
+
+Only the processes that some `_program` method adds are part of the program. A
+module can define processes that no program adds; their functions are loaded,
+and reach the execution context, but the engine never schedules them.
+
+While a `_program` method runs, the engine records, for each process it adds,
+the directory of the module that the method belongs to. A relative path that
+belongs to a process, that of an external alias or the value of an option
+defined with `define_infile_opt`, is resolved against that directory, which is
+the directory of the module that added the process to the program, not
+necessarily the one that defines its functions.
+
+The type of the program comes from the `_program_type` method of the program
+file alone, called before its `_program` method; the `_program_type` method of
+a module added as a subprogram is never called. Without the method, the program
+is a general program.
+
 ## Process specifications
+
+`add_debasher_process` takes the name of the process, its computational
+specifications and, optionally, its additional specifications, each a list of
+`<name>=<value>` pairs:
+
+```
+add_debasher_process "file_reader" "cpus=1 mem=32 time=00:01:00"
+add_debasher_process "hello" "cpus=1 mem=32 time=00:01:00" "alias=hello_world"
+```
+
+The pairs of the additional specifications are separated by `;`, and so are
+those of the computational specifications, which also accept the older form
+separated by blanks. The engine keeps the specification of each process as a
+single line, the name, the computational specifications, the separator `|||`
+and the additional specifications, and reads each attribute from it when it
+needs it.
+
+The computational specifications are the resources that a process asks for.
+`cpus`, `mem` (in megabytes, or with a `K`, `M`, `G` or `T` suffix) and `time`
+have to be given for every process; `nodes`, `account` and `partition` matter
+to the Slurm scheduler only, and `throttle` limits how many tasks of an array
+process run at once. Under the Slurm scheduler, `mem` and `time` may be lists
+separated by commas, one value for each attempt; the built-in scheduler takes
+the first value. How each scheduler uses them is described in "Scheduling". A
+process can also pass one of its specifications to its tasks as an option
+(see "Defining the options of a task"). The additional specifications change
+how the engine treats the process:
+`processdeps` gives its explicit dependencies, `force=yes` marks it to rerun on
+every run, and `alias`, `ext_alias` and `alias_opt_map` are described above.
+
+The name, the process function and the aliases are checked when the process is
+added, since an error there leaves the program without a process. The rest of
+the specification is checked when the final process specification is built
+(stage 6 of "Architecture"): a process without `cpus`, `mem` or `time`, and a
+dependency on a process that is not part of the program, stop the preparation
+of the run. The final process specification is the specification of each
+process with its dependencies added as a `processdeps` attribute, the inferred
+ones, or `none` when there are none, unless explicit dependencies were given.
+`program.procspec` holds it, one line per process, in no particular order:
+
+```
+file_writer cpus=1 mem=32 time=00:01:00 |||  ; processdeps=none
+file_reader cpus=1 mem=32 time=00:01:00 |||  ; processdeps=afterok:file_writer
+```
+
+This file is the list of the processes of the run for every tool that reads
+it, and the final process specification is where each scheduler takes the
+resources and the dependencies of a process from.
 
 # Options
 
