@@ -87,3 +87,13 @@ setup() {
     [ "$status" -eq 1 ]
     [ -z "${output}" ]
 }
+
+@test "debasher::_str_is_positive_integer accepts integers above zero only" {
+    run debasher::_str_is_positive_integer "3"
+    [ "$status" -eq 0 ]
+    local value
+    for value in 0 -1 1.5 abc ""; do
+        run debasher::_str_is_positive_integer "${value}"
+        [ "$status" -ne 0 ] || { echo "accepted ${value}"; return 1; }
+    done
+}

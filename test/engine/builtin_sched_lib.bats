@@ -234,3 +234,47 @@ EOF
     [ "$status" -ne 0 ]
     [[ "$output" == *"batch_sched"*"BUILTIN or SLURM"* ]]
 }
+
+# --- process registration and task selection ------------------------------
+
+@test "_update_processname_to_idx_info registers a process once, without errors on a second call" {
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX=() DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME=()
+
+    run bash -c "$(declare -p DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME); $(declare -f debasher_builtin_sched::_update_processname_to_idx_info);
+        debasher_builtin_sched::_update_processname_to_idx_info a
+        debasher_builtin_sched::_update_processname_to_idx_info b
+        debasher_builtin_sched::_update_processname_to_idx_info a
+        echo \"\${DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[a]} \${DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[b]} \${#DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME[@]}\""
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "0 1 2" ]
+}
+
+@test "_get_max_num_tasks allows every task of an array without a throttle" {
+    # debasher_lib.sh declares it with a bare declare, local to setup()
+    declare -g DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE=(["arr"]="${DEBASHER_ARRAY_TASK_NOTHROTTLE}")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["arr"]=7)
+
+    run debasher_builtin_sched::_get_max_num_tasks "${OUTDIR}" arr
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "7" ]
+}
+
+# --- knapsack constraints -------------------------------------------------
+
+@test "_print_knapsack_pred_spec pairs the two ends of a fifo and skips a fifo with an external end" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0" ["e/g"]="e${sep}0")
+    declare -gA DEBASHER_FIFO_USERS=(["w/f"]="r${sep}0" ["e/g"]="${DEBASHER_EXTERNAL_FIFO_USER}")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1 ["e"]=1)
+    debasher_builtin_sched::_get_knapsack_name() {
+        echo "k_$1"
+    }
+
+    run debasher_builtin_sched::_print_knapsack_pred_spec
+    [ "${status}" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ " ${lines[*]} " == *"k_r k_w"* ]]
+    [[ " ${lines[*]} " == *"k_w k_r"* ]]
+    [[ "${output}" != *"unary operator"* ]]
+}

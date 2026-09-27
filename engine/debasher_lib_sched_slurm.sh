@@ -166,14 +166,15 @@ debasher::_print_script_body_slurm_sched()
     fi
 
     # Start mirror taps (if any) for fifos this process owns and writes
-    # to — see debasher::_start_fifo_mirror_taps_for_process and its
-    # builtin-scheduler call site for the full rationale.
+    # to (see debasher::_start_fifo_mirror_taps_for_process and its
+    # builtin-scheduler call site for the full rationale).
     echo "debasher::_start_fifo_mirror_taps_for_process ${processname}"
 
-    # Write function to be executed
+    # Write function to be executed: its standard output goes to its own
+    # file only, as with the built-in scheduler, not to the scheduler log
     echo "DEBASHER_PROCESS_STDOUT_FILENAME=\$(debasher::_get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\")"
-    echo "${processname} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" | \"${TEE}\" \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
-    echo "funct_exit_code=\${PIPESTATUS[0]}"
+    echo "${processname} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" > \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
+    echo "funct_exit_code=\$?"
     echo "debasher::_stop_fifo_mirror_taps || funct_exit_code=1"
     echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${processname} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${processname} successfully executed\" >&2; fi"
 

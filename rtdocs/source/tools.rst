@@ -162,8 +162,9 @@ debasher_get_sched_out
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 ``debasher_get_sched_out`` shows the scheduler output for a process,
-which includes its standard and error output together with
-scheduling-related information, and is therefore useful for debugging.
+which includes its error output together with scheduling-related
+information, and is therefore useful for debugging. Its standard output
+is not included: ``debasher_get_stdout`` shows it.
 It is introduced in the :ref:`quickstart_example` Section. As with
 ``debasher_get_stdout``, it takes ``-d <string>`` and ``-p <string>``,
 plus an optional ``-t <int>`` to select an individual task of a task

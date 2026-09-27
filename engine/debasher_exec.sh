@@ -65,17 +65,18 @@ usage()
     echo "                          the directories of DEBASHER_MOD_DIR"
     echo "--outdir <string>         Output directory"
     echo "--sched <string>          Scheduler used to execute the program (if not given,"
-    echo "                          it is determined using information gathered during"
-    echo "                          package configuration)"
+    echo "                          SLURM when sbatch is found in the PATH, BUILTIN"
+    echo "                          otherwise)"
     echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} by default)."
     echo "                          A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} means unlimited CPUs"
     echo "--builtinsched-mem <int>  Available memory in MB for built-in scheduler"
     echo "                          (${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} by default). A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} means unlimited memory"
     echo "--builtinsched-oneshot    Launch all processes in a single scheduling iteration and"
     echo "                          return immediately, without waiting for them to finish."
-    echo "                          Only valid with the built-in scheduler, unrestricted cpus"
-    echo "                          and memory, and a program whose processes have no explicit"
-    echo "                          dependencies between them (pure FIFO-based programs)"
+    echo "                          Only valid with the built-in scheduler, enough cpus and"
+    echo "                          memory to launch every process at once, and a program"
+    echo "                          whose processes have no explicit dependencies between"
+    echo "                          them (pure FIFO-based programs)"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the program"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--rerun-outdated-procs    Rerun those processes with outdated code"
@@ -144,8 +145,8 @@ read_pars()
             "--builtinsched-cpus") shift
                   if [ $# -ne 0 ]; then
                       builtin_sched_cpus=$1
-                      if ! debasher::_str_is_natural_number ${builtin_sched_cpus}; then
-                          echo "Value for --builtinsched_cpus option should be a natural number" >&2
+                      if [ "${builtin_sched_cpus}" != "${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}" ] && ! debasher::_str_is_positive_integer "${builtin_sched_cpus}"; then
+                          echo "Value for --builtinsched-cpus option should be a positive integer, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} for unlimited cpus" >&2
                           return 1
                       fi
                       builtin_sched_cpus_given=1
@@ -154,10 +155,12 @@ read_pars()
             "--builtinsched-mem") shift
                   if [ $# -ne 0 ]; then
                       builtin_sched_mem=$1
-                      builtin_sched_mem=$(debasher::_convert_mem_value_to_mb ${builtin_sched_mem}) || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
-                      if ! debasher::_str_is_natural_number ${builtin_sched_mem}; then
-                          echo "Value for --builtinsched_mem option should be a natural number" >&2
-                          return 1
+                      if [ "${builtin_sched_mem}" != "${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}" ]; then
+                          builtin_sched_mem=$(debasher::_convert_mem_value_to_mb "${builtin_sched_mem}") || { echo "Invalid memory specification for --builtinsched-mem option" >&2; return 1; }
+                          if ! debasher::_str_is_positive_integer "${builtin_sched_mem}"; then
+                              echo "Value for --builtinsched-mem option should be a positive amount of memory, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} for unlimited memory" >&2
+                              return 1
+                          fi
                       fi
                       builtin_sched_mem_given=1
                   fi
@@ -248,17 +251,6 @@ check_pars()
     if [ ${check_proc_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
         echo "Error! --check-proc-opts and --debug options cannot be given simultaneously"
         exit 1
-    fi
-
-    if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
-        if [ ${builtin_sched_cpus} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} ]; then
-            echo "Error! --builtinsched-oneshot cannot be used together with a restricted --builtinsched-cpus value" >&2
-            exit 1
-        fi
-        if [ ${builtin_sched_mem} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} ]; then
-            echo "Error! --builtinsched-oneshot cannot be used together with a restricted --builtinsched-mem value" >&2
-            exit 1
-        fi
     fi
 }
 
@@ -364,9 +356,9 @@ enforce_resident_program_scheduling()
     # forced to be unrestricted here: a resident program is free to use
     # them like any other. Since oneshot mode never waits for a process
     # to finish (see debasher_builtin_sched::execute_program_processes),
-    # it cannot correct course if not everything fits in one round --
-    # that case is instead detected there and aborted before anything
-    # gets launched, rather than silently launching only a subset.
+    # it cannot correct course if not everything fits in one round: that
+    # case is instead detected there and aborted before anything gets
+    # launched, rather than silently launching only a subset.
     debasher::_set_debasher_scheduler "${DEBASHER_BUILTIN_SCHEDULER}" || return 1
     builtin_sched_oneshot_given=1
 
@@ -559,11 +551,10 @@ configure_scheduler()
         echo "scheduler: ${sched_opt}" >&2
         echo "" >&2
     else
-        # If --sched option not given, the scheduler is first determined
-        # based on information gathered during package configuration
-        # (see debasher::_determine_scheduler function in debasher_lib.sh). Once the
-        # scheduler is determined, it will be set using the
-        # debasher::_set_debasher_scheduler function
+        # If --sched option not given, the scheduler is determined from
+        # what is available on this machine (see
+        # debasher::_determine_scheduler). This is the only place where it
+        # is decided: everything after it uses debasher::_get_scheduler
         echo "## Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
         local sched=$(debasher::_determine_scheduler)
         debasher::_set_debasher_scheduler "${sched}" || return 1
@@ -1415,12 +1406,12 @@ if [ ${debug} -eq 1 ]; then
     # Restore old process options (if they exist)
     restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
 else
-    sched=$(debasher::_determine_scheduler)
-    if [ ${builtin_sched_oneshot_given} -eq 1 -a ${sched} != ${DEBASHER_BUILTIN_SCHEDULER} ]; then
+    sched=$(debasher::_get_scheduler)
+    if [ ${builtin_sched_oneshot_given} -eq 1 ] && [ "${sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
         echo "Error! --builtinsched-oneshot can only be used with the built-in scheduler" >&2
         exit 1
     fi
-    if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
+    if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
         debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" "${builtin_sched_oneshot_given}" || exit 1
         if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
             print_post_exec_nowait_help

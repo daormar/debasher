@@ -83,23 +83,18 @@ debasher::_set_debasher_default_array_task_throttle()
 ########
 debasher::_determine_scheduler()
 {
-    # Check if schedulers were disabled
-    if [ ${DISABLE_SCHEDULERS} = "yes" ]; then
-        echo ${DEBASHER_BUILTIN_SCHEDULER}
-    else
-        # Check if scheduler was already specified
-        if [ -z "${DEBASHER_SCHEDULER}" ]; then
-            # Scheduler not specified: pick one based on what's actually
-            # available on this machine right now (not at package build
-            # time, see configure.ac)
-            if ! command -v "${SBATCH}" >/dev/null 2>&1; then
-                echo ${DEBASHER_BUILTIN_SCHEDULER}
-            else
-                echo ${DEBASHER_SLURM_SCHEDULER}
-            fi
+    # Check if scheduler was already specified
+    if [ -z "${DEBASHER_SCHEDULER}" ]; then
+        # Scheduler not specified: pick one based on what's actually
+        # available on this machine right now (not at package build
+        # time, see configure.ac)
+        if ! command -v "${SBATCH}" >/dev/null 2>&1; then
+            echo ${DEBASHER_BUILTIN_SCHEDULER}
         else
-            echo ${DEBASHER_SCHEDULER}
+            echo ${DEBASHER_SLURM_SCHEDULER}
         fi
+    else
+        echo ${DEBASHER_SCHEDULER}
     fi
 }
 

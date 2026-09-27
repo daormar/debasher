@@ -104,7 +104,7 @@ debasher_builtin_sched::_mem_within_limit()
 debasher_builtin_sched::_update_processname_to_idx_info()
 {
     local processname=$1
-    if [ ${DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]} = ""]; then
+    if [[ ! -v DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}] ]]; then
         local len=${#DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[@]}
         DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]=${len}
         DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME[${len}]=${processname}
@@ -684,12 +684,12 @@ debasher_builtin_sched::_process_can_be_executed()
 ########
 debasher_builtin_sched::_get_max_num_tasks()
 {
-    local processname=$1
+    local dirname=$1
+    local processname=$2
     local throttle=${DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE[${processname}]}
     if [ "${throttle}" -eq "${DEBASHER_ARRAY_TASK_NOTHROTTLE}" ]; then
-        local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
-        local result=$((array_size - num_inprogress_tasks))
-        echo ${result}
+        # Without a throttle, any task not launched yet can be launched
+        echo "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}"
     else
         local inprogress_tasks=$(debasher_builtin_sched::_get_inprogress_array_task_indices "${dirname}" $processname)
         local num_inprogress_tasks=$(debasher::_get_num_words_in_string "${inprogress_tasks}")
@@ -716,16 +716,17 @@ debasher_builtin_sched::_update_executable_non_array_process()
 ########
 debasher_builtin_sched::_update_executable_array_process()
 {
-    local processname=$1
-    local status=$2
+    local dirname=$1
+    local processname=$2
+    local status=$3
 
     if [ ${status} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a \
          ${status} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
         if debasher_builtin_sched::_process_can_be_executed ${processname}; then
-            local max_task_num=$(debasher_builtin_sched::_get_max_num_tasks ${processname})
+            local max_task_num=$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" ${processname})
             if [ ${max_task_num} -gt 0 ]; then
-                todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" ${processname})
-                todo_task_indices_truncated=$(debasher::_get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num})
+                local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" ${processname})
+                local todo_task_indices_truncated=$(debasher::_get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num})
                 if [ "${todo_task_indices_truncated}" != "" ]; then
                     BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${todo_task_indices_truncated}
                 fi
@@ -749,7 +750,7 @@ debasher_builtin_sched::_get_executable_processes()
             debasher_builtin_sched::_update_executable_non_array_process ${processname} ${status}
         else
             # process is an array
-            debasher_builtin_sched::_update_executable_array_process ${processname} ${status}
+            debasher_builtin_sched::_update_executable_array_process "${dirname}" ${processname} ${status}
         fi
     done
 }
@@ -848,13 +849,20 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
 {
     # Iterate over each executable process generating its required
     # information for the knapsack solver
-    local processname
+    local fifoname
     for fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        # A fifo whose other end is outside the program puts no constraint
+        # on what is launched together
+        if [ "${DEBASHER_FIFO_USERS["${fifoname}"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+            continue
+        fi
+
         # Get fifo owner info
         local owner_proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${fifoname}"]}"
         local owner_proc="${owner_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
         local owner_idx="${owner_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
         local owner_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${owner_proc}]}
+        local owner_knapsack_name
         if [ ${owner_array_size} -eq 1 ]; then
             owner_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${owner_proc})
         else
@@ -866,6 +874,7 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
         local user_proc="${user_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
         local user_idx="${user_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
         local user_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${user_proc}]}
+        local user_knapsack_name
         if [ ${user_array_size} -eq 1 ]; then
             user_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${user_proc})
         else
@@ -1198,9 +1207,9 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # Execute process function, keeping its stdout
     debasher_builtin_sched::_export_process_env "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
     local stdout_filename=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
-    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${stdout_filename}"
+    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${stdout_filename}"
 
-    local funct_exit_code=${PIPESTATUS[0]}
+    local funct_exit_code=$?
 
     # Stop mirror taps and fail the process if any of them died
     # abnormally, rather than silently losing mirrored output.
@@ -1661,7 +1670,7 @@ debasher_builtin_sched::execute_program_processes()
             # In oneshot mode, nothing ever waits for a process to finish
             # (see below), so a later iteration can never end up with
             # *more* available resources than this first one has right
-            # now -- if not everything that could be selected in round 1
+            # now: if not everything that could be selected in round 1
             # got selected, it never will be. Check before launching
             # anything, rather than silently launching only a subset and
             # returning as if the whole program had started.

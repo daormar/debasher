@@ -206,19 +206,6 @@ AC_SUBST(sortm)
 # Checks for doxygen
 AC_PATH_PROG(DOXYGEN,doxygen)
 
-# Adds an extra argument to configure (disable schedulers)
-AC_MSG_CHECKING(whether to disable job schedulers)
-AC_ARG_ENABLE(schedulers,[  --disable-schedulers   disable job schedulers], disable_schedulers=yes,
-              disable_schedulers=no)
-
-# Yes, schedulers are enabled
-if test "$disable_schedulers" = "yes"; then
-   AC_MSG_RESULT(yes)
-else
-   AC_MSG_RESULT(no)
-fi
-AC_SUBST(DISABLE_SCHEDULERS,$disable_schedulers)
-
 AC_ARG_ENABLE([frontend],
   [AS_HELP_STRING([--disable-frontend], [do not build/install the React Flow web interface])],
   [enable_frontend=$enableval], [enable_frontend=yes])

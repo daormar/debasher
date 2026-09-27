@@ -450,6 +450,14 @@ debasher::_convert_mem_value_to_mb()
 }
 
 ########
+debasher::_str_is_positive_integer()
+{
+    local str=$1
+
+    debasher::_str_is_natural_number "${str}" && [ "${str}" -gt 0 ]
+}
+
+########
 debasher::_str_is_natural_number()
 {
     local str=$1

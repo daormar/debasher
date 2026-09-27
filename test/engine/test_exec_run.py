@@ -1,11 +1,13 @@
 """
 Tests that run a general program for real with debasher_exec, as installed
-under bin/ by make install, on the built-in scheduler. Like the tests of
-resident programs, they are skipped unless DEBASHER_RUN_CHAOS_TEST is set.
+under bin/ by make install, on the built-in scheduler, and on Slurm where
+it is installed. Like the tests of resident programs, they are skipped
+unless DEBASHER_RUN_CHAOS_TEST is set.
 """
 
 import fcntl
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -112,3 +114,57 @@ def test_check_proc_opts_leaves_the_options_of_a_run_untouched(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "second" in result.stderr
     assert (sched_opts.read_text(), sched_opts.stat().st_mtime_ns) == before
+
+
+def run_exec_with_sched(sched, *args, cwd=None):
+    assert DEBASHER_EXEC.exists(), "bin/debasher_exec not built: run make install first"
+    return subprocess.run(
+        [str(DEBASHER_EXEC), *args, "--sched", sched], cwd=cwd, capture_output=True, text=True
+    )
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_the_standard_output_of_a_process_goes_to_its_stdout_file_only(tmp_path, sched):
+    outdir = tmp_path / "out"
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(
+        sched, "--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "marker_line", *extra
+    )
+    assert result.returncode == 0, result.stderr
+
+    execdir = outdir / "__exec__" / "hello_world"
+    assert (execdir / "hello_world.stdout").read_text() == "marker_line\n"
+    assert "marker_line" not in (execdir / "hello_world.sched_out").read_text()
+
+
+def test_minus_one_means_unlimited_cpus_and_memory(tmp_path):
+    result = run_exec(
+        "--pfile", str(HELLO_WORLD), "--outdir", str(tmp_path / "out"),
+        "--builtinsched-cpus", "-1", "--builtinsched-mem", "-1",
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_zero_cpus_is_refused(tmp_path):
+    result = run_exec(
+        "--pfile", str(HELLO_WORLD), "--outdir", str(tmp_path / "out"), "--builtinsched-cpus", "0"
+    )
+    assert result.returncode != 0
+    assert "positive integer" in result.stderr
+
+
+def test_oneshot_accepts_limits_that_fit_every_process(tmp_path):
+    result = run_exec(
+        "--pfile", str(HELLO_WORLD), "--outdir", str(tmp_path / "out"),
+        "--builtinsched-cpus", "1", "--builtinsched-mem", "64", "--builtinsched-oneshot",
+    )
+    assert result.returncode == 0, result.stderr
