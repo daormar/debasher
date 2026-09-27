@@ -454,6 +454,59 @@ debasher::_get_elapsed_time_from_logfile()
 }
 
 ########
+# Converts an elapsed time as debasher::_format_elapsed_time writes it
+# (seconds, a dot and three digits of milliseconds) into milliseconds.
+# Fails for anything else, such as an unknown elapsed time.
+debasher::_elapsed_time_to_ms()
+{
+    local elapsed=$1
+
+    if [[ ! "${elapsed}" =~ ^([0-9]+)\.([0-9]{3})$ ]]; then
+        return 1
+    fi
+    echo $(( 10#${BASH_REMATCH[1]} * 1000 + 10#${BASH_REMATCH[2]} ))
+}
+
+########
+# Prints the elapsed time of the finished tasks of an array process as
+# "<total> : <idx>-><time> ; <idx>-><time> ; ...", where the total is the
+# sum of the times of the tasks, or unknown when the time of any of them
+# is. The log of each task is the one printed by the function named in
+# $3, called with the output directory, the process name and the task
+# index, since each scheduler keeps it in its own place.
+debasher::_get_elapsed_time_for_array_process()
+{
+    local dirname=$1
+    local processname=$2
+    local task_logf_funcname=$3
+
+    local result=""
+    local total_ms=0
+    local total_known=1
+    local taskidx
+    for taskidx in $(debasher::_get_finished_array_task_indices "${dirname}" ${processname}); do
+        local log_filename=$("${task_logf_funcname}" "${dirname}" "${processname}" "${taskidx}")
+        local difft=$(debasher::_get_elapsed_time_from_logfile "${log_filename}")
+        local difft_ms
+        if difft_ms=$(debasher::_elapsed_time_to_ms "${difft}"); then
+            total_ms=$((total_ms + difft_ms))
+        else
+            total_known=0
+        fi
+        if [ -n "${result}" ]; then
+            result="${result} "
+        fi
+        result="${result}${taskidx}->${difft} ;"
+    done
+
+    local total=${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
+    if [ ${total_known} -eq 1 ]; then
+        total=$(debasher::_format_elapsed_time "${total_ms}")
+    fi
+    echo "${total} : ${result}"
+}
+
+########
 debasher::_get_elapsed_time_for_process()
 {
     local dirname=$1

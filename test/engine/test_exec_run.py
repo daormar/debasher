@@ -7,6 +7,7 @@ unless DEBASHER_RUN_CHAOS_TEST is set.
 
 import fcntl
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -168,3 +169,36 @@ def test_oneshot_accepts_limits_that_fit_every_process(tmp_path):
         "--builtinsched-cpus", "1", "--builtinsched-mem", "64", "--builtinsched-oneshot",
     )
     assert result.returncode == 0, result.stderr
+
+
+ARRAY_EXAMPLE = REPO_ROOT / "data" / "programs" / "debasher_array_example.sh"
+DEBASHER_STATS = REPO_ROOT / "bin" / "debasher_stats"
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_the_elapsed_time_of_an_array_gives_the_total_of_its_tasks(tmp_path, sched):
+    outdir = tmp_path / "out"
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(
+        sched, "--pfile", str(ARRAY_EXAMPLE), "--outdir", str(outdir), "-c", "3", *extra
+    )
+    assert result.returncode == 0, result.stderr
+
+    stats = subprocess.run(
+        [str(DEBASHER_STATS), "-d", str(outdir), "-p", "array_writer"],
+        capture_output=True,
+        text=True,
+    )
+    elapsed = stats.stdout.split("ELAPSED_TIME(s):", 1)[1].strip()
+    # -c 3 makes array_writer write four files, one per task
+    task_time = r"\d+->\d+\.\d{3} ;"
+    assert re.fullmatch(rf"\d+\.\d{{3}} : {task_time}( {task_time}){{3}}", elapsed), stats.stdout

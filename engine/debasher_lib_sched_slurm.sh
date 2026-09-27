@@ -385,9 +385,8 @@ debasher::_get_slurm_dependency_opt()
 ########
 debasher::_get_slurm_task_array_opt()
 {
-    local file=$1
-    local task_array_list=$2
-    local throttle=$3
+    local task_array_list=$1
+    local throttle=$2
 
     if [ ${throttle} -eq ${DEBASHER_ARRAY_TASK_NOTHROTTLE} ]; then
         echo "--array=${task_array_list}"
@@ -512,6 +511,7 @@ debasher::_slurm_launch_attempt()
     local prev_attempt_jids=$8
     local mem_attempt=$9
     local time_attempt=${10}
+    local file=$(debasher::_get_script_filename "${dirname}" ${processname})
 
     # Obtain augmented dependencies
     local attempt_deps=$(debasher::_slurm_get_attempt_deps ${prev_attempt_jids})
@@ -536,7 +536,7 @@ debasher::_slurm_launch_attempt()
     local partition_opt=$(debasher::_get_slurm_partition_opt ${partition})
     local dependency_opt=$(debasher::_get_slurm_dependency_opt "${augmented_deps}")
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${file} ${task_array_list} ${sched_throttle})
+        local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${task_array_list} ${sched_throttle})
     fi
 
     # Submit job (initially it is put on hold)
@@ -555,11 +555,11 @@ debasher::_slurm_launch_attempt()
     # further attempts
     if [ ${array_size} -gt 1 -a ${attempt_no} -ge 2 ]; then
         local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
-        debasher::_set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${processdeps}" || { return 1 ; echo "Error while launching attempt job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; }
+        debasher::_set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${processdeps}" || { echo "Error while launching attempt job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; return 1; }
     fi
 
     # Release job
-    $("$SCONTROL" release $jid)
+    "$SCONTROL" release "$jid" > /dev/null
     local exit_code=$?
 
     # Check for errors
@@ -602,7 +602,7 @@ debasher::_slurm_launch_preverif_job()
     local partition_opt=$(debasher::_get_slurm_partition_opt ${partition})
     local dependency_opt=$(debasher::_get_slurm_dependency_opt "${attempt_deps}")
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE})
+        local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE})
     fi
 
     # Submit preliminary verification job (the job will fail if all
@@ -621,17 +621,17 @@ debasher::_slurm_launch_preverif_job()
     if [ ${array_size} -gt 1 ]; then
         local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
         local additional_deps=""
-        debasher::_set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching preliminary verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; }
+        debasher::_set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { echo "Error while launching preliminary verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; return 1; }
     fi
 
     # Release job
-    $("$SCONTROL" release $jid)
+    "$SCONTROL" release "$jid" > /dev/null
     local exit_code=$?
 
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
         local command="$SCONTROL release $jid"
-        echo "Error while launching attempt job for process ${processname} (${command})" >&2
+        echo "Error while launching preliminary verification job for process ${processname} (${command})" >&2
         return 1
     fi
 
@@ -666,7 +666,7 @@ debasher::_slurm_launch_verif_job()
     local verjob_deps="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}:${preverif_jid}"
     local dependency_opt=$(debasher::_get_slurm_dependency_opt "${verjob_deps}")
     if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${file} ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE})
+        local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE})
     fi
 
     # Submit verification job (the job will succeed if preliminary
@@ -685,17 +685,17 @@ debasher::_slurm_launch_verif_job()
     if [ ${array_size} -gt 1 ]; then
         local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
         local additional_deps=""
-        debasher::_set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { return 1 ; echo "Error while launching verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; }
+        debasher::_set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { echo "Error while launching verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; return 1; }
     fi
 
     # Release job
-    $("$SCONTROL" release $jid)
+    "$SCONTROL" release "$jid" > /dev/null
     local exit_code=$?
 
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
         local command="$SCONTROL release $jid"
-        echo "Error while launching attempt job for process ${processname} (${command})" >&2
+        echo "Error while launching verification job for process ${processname} (${command})" >&2
         return 1
     fi
 
@@ -870,25 +870,36 @@ debasher::_get_process_log_filename_slurm()
 }
 
 ########
+# Prints the log of the last attempt of a job whose first attempt logs to
+# the given file: attempt n logs to that file plus the suffix of attempt n
+# (see debasher::_get_slurm_attempt_suffix), and the attempts run in
+# order, so the last one is the highest n whose log exists. The logs of
+# the attempts of a previous run are removed before a process is run again
+# (see debasher::_clean_process_files_slurm), so they are never counted.
+debasher::_get_last_attempt_logf_slurm()
+{
+    local logfname=$1
+
+    if [ ! -f "${logfname}" ]; then
+        echo ${DEBASHER_NOFILE}
+        return 0
+    fi
+
+    local attempt_no=1
+    while [ -f "${logfname}$(debasher::_get_slurm_attempt_suffix $((attempt_no + 1)))" ]; do
+        attempt_no=$((attempt_no + 1))
+    done
+    echo "${logfname}$(debasher::_get_slurm_attempt_suffix ${attempt_no})"
+}
+
+########
 debasher::_get_process_last_attempt_logf_slurm()
 {
     local dirname=$1
     local processname=$2
 
-    # Obtain number of log files
     local logfname=$(debasher::_get_process_log_filename "$dirname" $processname)
-    local numlogf=0
-    for f in "${logfname}"*; do
-        numlogf=$((numlogf + 1))
-    done
-
-    # Echo name of last attempt
-    if [ ${numlogf} -eq 0 ]; then
-        echo ${DEBASHER_NOFILE}
-    else
-        local suff=$(debasher::_get_slurm_attempt_suffix ${numlogf})
-        echo "${logfname}${suff}"
-    fi
+    debasher::_get_last_attempt_logf_slurm "${logfname}"
 }
 
 ########
@@ -934,20 +945,8 @@ debasher::_get_task_last_attempt_logf_slurm()
     local processname=$2
     local taskidx=$3
 
-    # Obtain number of log files
     local logfname=$(debasher::_get_task_log_filename "$dirname" "$processname" "$taskidx")
-    local numlogf=0
-    for f in "${logfname}*"; do
-        numlogf=$((numlogf + 1))
-    done
-
-    # Echo name of last attempt
-    if [ ${numlogf} -eq 0 ]; then
-        echo ${DEBASHER_NOFILE}
-    else
-        local suff=$(debasher::_get_slurm_attempt_suffix ${numlogf})
-        echo "${logfname}${suff}"
-    fi
+    debasher::_get_last_attempt_logf_slurm "${logfname}"
 }
 
 ########
@@ -980,7 +979,7 @@ debasher::_clean_process_files_slurm()
         local processname=$2
 
         local slurm_log_filename=$(debasher::_get_process_log_filename "${dirname}" ${processname})
-        "${RM}" -f "${slurm_log_filename}*"
+        "${RM}" -f "${slurm_log_filename}" "${slurm_log_filename}${DEBASHER_SLURM_EXEC_ATTEMPT_FEXT_STRING}"*
         local slurm_log_preverif=$(debasher::_get_process_log_preverif_filename_slurm "${dirname}" ${processname})
         "${RM}" -f "${slurm_log_preverif}"
         local slurm_log_verif=$(debasher::_get_process_log_verif_filename_slurm "${dirname}" ${processname})
@@ -996,9 +995,7 @@ debasher::_clean_process_files_slurm()
         local idx=$3
 
         local slurm_task_log_filename=$(debasher::_get_task_log_filename "${dirname}" "${processname}" "${idx}")
-        if [ -f "${slurm_task_log_filename}" ]; then
-            "${RM}" "${slurm_task_log_filename}"
-        fi
+        "${RM}" -f "${slurm_task_log_filename}" "${slurm_task_log_filename}${DEBASHER_SLURM_EXEC_ATTEMPT_FEXT_STRING}"*
     }
 
     local dirname=$1
@@ -1051,10 +1048,11 @@ debasher::_get_elapsed_time_for_process_slurm()
     local dirname=$1
     local processname=$2
 
-    # Obtain finished filename
-    local finished_filename=$(debasher::_get_process_finished_filename "${dirname}" ${processname})
+    # Obtain number of tasks completed (an array has one completion marker
+    # per task, and no marker named after the process alone)
+    local num_tasks_completed=$(debasher::_get_num_tasks_completed "${dirname}" ${processname})
 
-    if [ -f "${finished_filename}" ]; then
+    if [ "${num_tasks_completed}" -gt 0 ]; then
         # Get number of array tasks
         local num_tasks=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
 
@@ -1067,20 +1065,7 @@ debasher::_get_elapsed_time_for_process_slurm()
                 echo ${difft}
                ;;
             *)  # Process is a task array
-                local result=""
-                local taskidx
-                local sum_difft=0
-                for taskidx in $(debasher::_get_finished_array_task_indices "${dirname}" ${processname}); do
-                    local log_filename=$(debasher::_get_task_last_attempt_logf_slurm "${dirname}" ${processname} ${taskidx})
-                    local difft=$(debasher::_get_elapsed_time_from_logfile "${log_filename}")
-                    sum_difft=$((sum_difft + difft))
-                    if [ ! -z "${result}" ]; then
-                        result="${result} "
-                    fi
-                    result="${result}${taskidx}->${difft} ;"
-                done
-                result="${sum_difft} : ${result}"
-                echo ${result}
+                debasher::_get_elapsed_time_for_array_process "${dirname}" "${processname}" debasher::_get_task_last_attempt_logf_slurm
                 ;;
         esac
     else

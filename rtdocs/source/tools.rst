@@ -96,7 +96,10 @@ debasher_stats
 ^^^^^^^^^^^^^^^
 
 ``debasher_stats`` reports, for the processes of a DeBasher program,
-their status and the elapsed time in seconds until completion. It is
+their status and the elapsed time in seconds until completion. For an
+array process, it gives the total time of its finished tasks followed by
+the time of each one (``<total> : <idx>-><time> ; ...``), and the total
+is ``UNKNOWN`` when the time of any of its tasks is. It is
 described in the :ref:`exec` Section, in its `Program Statistics
 Generation` part. As with ``debasher_status``, the output directory is
 given with ``-d <string>`` and, optionally, a single process can be
