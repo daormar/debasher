@@ -634,3 +634,129 @@ EOF
     [ "${DEBASHER_FIFO_USERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]
     [ -z "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_ext"]+x}" ]
 }
+
+# --- process dependencies -------------------------------------------------
+
+@test "debasher::_merge_deptypes keeps the other type when one of them is none or after" {
+    local merged
+    debasher::_merge_deptypes "" "afterok" merged
+    [ "${merged}" = "afterok" ]
+    debasher::_merge_deptypes "none" "aftercorr" merged
+    [ "${merged}" = "aftercorr" ]
+    debasher::_merge_deptypes "aftercorr" "after" merged
+    [ "${merged}" = "aftercorr" ]
+    debasher::_merge_deptypes "after" "afterany" merged
+    [ "${merged}" = "afterany" ]
+    debasher::_merge_deptypes "after" "none" merged
+    [ "${merged}" = "after" ]
+}
+
+@test "debasher::_merge_deptypes gives afterok for any two of afterok, afterany and aftercorr" {
+    local merged
+    debasher::_merge_deptypes "aftercorr" "afterany" merged
+    [ "${merged}" = "afterok" ]
+    debasher::_merge_deptypes "afterany" "afterok" merged
+    [ "${merged}" = "afterok" ]
+    debasher::_merge_deptypes "afterok" "aftercorr" merged
+    [ "${merged}" = "afterok" ]
+}
+
+@test "debasher::_merge_deptypes gives afternotok for afternotok and afterany" {
+    local merged
+    debasher::_merge_deptypes "afterany" "afternotok" merged
+    [ "${merged}" = "afternotok" ]
+}
+
+@test "debasher::_merge_deptypes fails for afternotok together with afterok or aftercorr" {
+    local merged
+    run debasher::_merge_deptypes "afterok" "afternotok" merged
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"cannot both be satisfied"* ]]
+    run debasher::_merge_deptypes "afternotok" "aftercorr" merged
+    [ "${status}" -ne 0 ]
+}
+
+@test "debasher::_merge_deptypes fails for an unknown type" {
+    local merged
+    run debasher::_merge_deptypes "afterok" "aftrok" merged
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"unknown process dependency type: aftrok"* ]]
+}
+
+@test "debasher::_get_procdeps_for_process adds no dependency on a file when the callback returns none" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/a.txt"]="writer${sep}0"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/b.txt"]="other${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-a${DEBASHER_ARG_SEP}/abs/a.txt${DEBASHER_ARG_SEP}-b${DEBASHER_ARG_SEP}/abs/b.txt"
+    }
+    reader_define_opt_deps() {
+        [ "$2" = "writer" ] && echo "none"
+        return 0
+    }
+
+    run debasher::_get_procdeps_for_process "" "reader"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "afterok:other" ]
+}
+
+@test "debasher::_get_procdeps_for_process merges the dependencies of every task of an array on several producers" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    # prod is an array whose task i writes /abs/p<i>; single writes /abs/s
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/p0"]="prod${sep}0"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/p1"]="prod${sep}1"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/s"]="single${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["prod"]=2
+    DEBASHER_PROCESS_OPT_LIST_LEN["single"]=1
+    DEBASHER_PROCESS_OPT_LIST_LEN["cons"]=2
+    # Task i of cons reads /abs/p<i>, and task 0 also reads /abs/s, so the
+    # two tasks list different dependencies
+    debasher::_get_opts_for_process_and_task() {
+        if [ "$3" -eq 0 ]; then
+            echo "-p${DEBASHER_ARG_SEP}/abs/p0${DEBASHER_ARG_SEP}-s${DEBASHER_ARG_SEP}/abs/s"
+        else
+            echo "-p${DEBASHER_ARG_SEP}/abs/p1"
+        fi
+    }
+
+    run debasher::_get_procdeps_for_process "" "cons"
+    [ "${status}" -eq 0 ]
+    local -a deps
+    IFS=, read -r -a deps <<< "${output}"
+    [ "${#deps[@]}" -eq 2 ]
+    [[ " ${deps[*]} " == *" aftercorr:prod "* ]]
+    # single is not an array, so task 0 of cons cannot pair with a task of
+    # it
+    [[ " ${deps[*]} " == *" afterok:single "* ]]
+}
+
+@test "debasher::_get_procdeps_for_process fails when the tasks of an array ask for contradictory types on one producer" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/s"]="single${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["cons"]=2
+    debasher::_get_opts_for_process_and_task() {
+        echo "-s${DEBASHER_ARG_SEP}/abs/s${DEBASHER_ARG_SEP}-i${DEBASHER_ARG_SEP}$3"
+    }
+    # Task 0 waits for single to succeed, task 1 for it to fail
+    cons_define_opt_deps() {
+        if [ "${DEBASHER_DESERIALIZED_ARGS[3]}" = "0" ]; then
+            echo "afterok"
+        else
+            echo "afternotok"
+        fi
+    }
+
+    run debasher::_get_procdeps_for_process "" "cons"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"cannot both be satisfied"* ]]
+}

@@ -320,7 +320,7 @@ debasher::_gen_final_procspec()
         # Check if dependencies were given
         if [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # Dependencies not given, so they should be obtained
-            procdeps=$(debasher::_get_procdeps_for_process_cached "${cmdline}" "${process_spec}")
+            procdeps=$(debasher::_get_procdeps_for_process_cached "${cmdline}" "${process_spec}") || exit 1
 
             # Register dependencies
             DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=$(debasher::_get_processdeps_from_detailed_spec "${procdeps}")

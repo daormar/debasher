@@ -1493,6 +1493,79 @@ debasher::_deserialized_args_idx_is_dep_candidate()
 }
 
 ########
+debasher::_deptype_is_known()
+{
+    local deptype=$1
+
+    case "${deptype}" in
+        "${DEBASHER_NONE_PROCESSDEP_TYPE}"|"${DEBASHER_AFTER_PROCESSDEP_TYPE}"|\
+        "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}"|"${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"|\
+        "${DEBASHER_AFTERANY_PROCESSDEP_TYPE}"|"${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}")
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+########
+# Merges two dependency types that a process has on the same producer
+# into the weakest type that asks for everything both of them ask for,
+# and writes it into the caller-provided variable (no subshell). Every
+# type other than none implies after (the producer started); afterok
+# implies afterany and aftercorr; aftercorr together with afterany asks
+# for every task finished and the corresponding one successful, which
+# only afterok covers. Fails, with an error, for an unknown type and
+# for two types that no run of the producer satisfies at once (afterok
+# or aftercorr together with afternotok). An empty type counts as none.
+debasher::_merge_deptypes()
+{
+    local deptype_a=${1:-${DEBASHER_NONE_PROCESSDEP_TYPE}}
+    local deptype_b=${2:-${DEBASHER_NONE_PROCESSDEP_TYPE}}
+    local -n merged_ref=$3
+
+    local deptype
+    for deptype in "${deptype_a}" "${deptype_b}"; do
+        if ! debasher::_deptype_is_known "${deptype}"; then
+            echo "Error: unknown process dependency type: ${deptype}" >&2
+            return 1
+        fi
+    done
+
+    if [ "${deptype_a}" = "${deptype_b}" ]; then
+        merged_ref=${deptype_a}
+        return 0
+    fi
+
+    # none and after are implied by every other type
+    local weakest
+    for weakest in "${DEBASHER_NONE_PROCESSDEP_TYPE}" "${DEBASHER_AFTER_PROCESSDEP_TYPE}"; do
+        if [ "${deptype_a}" = "${weakest}" ]; then
+            merged_ref=${deptype_b}
+            return 0
+        fi
+        if [ "${deptype_b}" = "${weakest}" ]; then
+            merged_ref=${deptype_a}
+            return 0
+        fi
+    done
+
+    # The remaining types are afterok, afternotok, afterany and aftercorr
+    if [ "${deptype_a}" = "${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}" ] || [ "${deptype_b}" = "${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}" ]; then
+        if [ "${deptype_a}" = "${DEBASHER_AFTERANY_PROCESSDEP_TYPE}" ] || [ "${deptype_b}" = "${DEBASHER_AFTERANY_PROCESSDEP_TYPE}" ]; then
+            merged_ref=${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}
+            return 0
+        fi
+        echo "Error: process dependency types ${deptype_a} and ${deptype_b} on the same process cannot both be satisfied" >&2
+        return 1
+    fi
+
+    # Any two of afterok, afterany and aftercorr
+    merged_ref=${DEBASHER_AFTEROK_PROCESSDEP_TYPE}
+}
+
+########
 debasher::_get_procdeps_for_process()
 {
     # Writes the result into the caller-provided variable name (no subshell,
@@ -1510,28 +1583,6 @@ debasher::_get_procdeps_for_process()
             result_ref=""
         else
             result_ref=$("${define_opt_deps_funcname}" "${opt}" "${producer_process}")
-        fi
-    }
-
-    # Writes the result into the caller-provided variable name (no subshell,
-    # no fork: this avoids the cost of command substitution entirely).
-    debasher::_get_highest_priority_deptype()
-    {
-        local deptype_a=$1
-        local deptype_b=$2
-        local -n result_ref=$3
-
-        if [ -z "${deptype_a}" ]; then
-            deptype_a=${DEBASHER_NONE_PROCESSDEP_TYPE}
-        fi
-        if [ -z "${deptype_b}" ]; then
-            deptype_b=${DEBASHER_NONE_PROCESSDEP_TYPE}
-        fi
-
-        if [ "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_a]}" -gt "${DEBASHER_PROCESSDEP_PRIORITY[$deptype_b]}" ]; then
-            result_ref=${deptype_a}
-        else
-            result_ref=${deptype_b}
         fi
     }
 
@@ -1574,9 +1625,9 @@ debasher::_get_procdeps_for_process()
                 [ -z "${deptype}" ] && deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
                 [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
 
-                local highest_pri_deptype
-                debasher::_get_highest_priority_deptype "${depdict[$processowner]}" "${deptype}" highest_pri_deptype
-                depdict["${processowner}"]=${highest_pri_deptype}
+                local merged_deptype
+                debasher::_merge_deptypes "${depdict[$processowner]}" "${deptype}" merged_deptype || return 1
+                depdict["${processowner}"]=${merged_deptype}
                 continue
             fi
 
@@ -1600,16 +1651,21 @@ debasher::_get_procdeps_for_process()
                 local deptype
                 debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${proc}" deptype
                 if [ -z "${deptype}" ]; then
-                    if [ "$num_tasks" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                    # aftercorr pairs a task with the task of the same
+                    # index of another array, so both have to be arrays
+                    if [ "$num_tasks" -gt 1 ] && [ "${DEBASHER_PROCESS_OPT_LIST_LEN[${proc}]:-1}" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
                         deptype=${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}
                     else
                         deptype=${DEBASHER_AFTEROK_PROCESSDEP_TYPE}
                     fi
                 fi
+                # A none from the callback asks for no dependency at all,
+                # as it does for a fifo
+                [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
 
-                local highest_pri_deptype
-                debasher::_get_highest_priority_deptype "${depdict[$proc]}" "${deptype}" highest_pri_deptype
-                depdict["${proc}"]=${highest_pri_deptype}
+                local merged_deptype
+                debasher::_merge_deptypes "${depdict[$proc]}" "${deptype}" merged_deptype || return 1
+                depdict["${proc}"]=${merged_deptype}
             done
         done
 
@@ -1640,21 +1696,23 @@ debasher::_get_procdeps_for_process()
         # Iterate over tasks indices
         for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
             # Obtain dependencies for task
-            local prdeps_idx=$(debasher::_get_procdeps_for_process_task "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}" "${task_idx}")
+            local prdeps_idx
+            prdeps_idx=$(debasher::_get_procdeps_for_process_task "${cmdline}" "${processname}" "${define_opt_deps_funcname}" "${num_tasks}" "${task_idx}") || return 1
 
             # Iterate over dependencies
-            if [ -n "${prdeps_idx}" ]; then
-                while IFS=${DEBASHER_PROCESSDEPS_SEP_COMMA} read -r processdep; do
-                    # Extract dependency information
-                    local deptype="${processdep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
-                    local proc="${processdep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
+            local -a processdeps_idx
+            IFS=${DEBASHER_PROCESSDEPS_SEP_COMMA} read -r -a processdeps_idx <<< "${prdeps_idx}"
+            local processdep
+            for processdep in "${processdeps_idx[@]}"; do
+                # Extract dependency information
+                local deptype="${processdep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
+                local proc="${processdep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
 
-                    # Update associative array of dependencies
-                    local highest_pri_deptype
-                    debasher::_get_highest_priority_deptype "${depdict[$proc]}" "${deptype}" highest_pri_deptype
-                    depdict["${proc}"]=${highest_pri_deptype}
-                done <<< "${prdeps_idx}"
-            fi
+                # Update associative array of dependencies
+                local merged_deptype
+                debasher::_merge_deptypes "${depdict[$proc]}" "${deptype}" merged_deptype || return 1
+                depdict["${proc}"]=${merged_deptype}
+            done
         done
 
         # Instantiate processdeps variable
@@ -1709,7 +1767,7 @@ debasher::_get_procdeps_for_process_cached()
         local deps=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
         if [ "${deps}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
             # No dependencies are provided in specification
-            local deps=$(debasher::_get_procdeps_for_process "${cmdline}" "$processname")
+            deps=$(debasher::_get_procdeps_for_process "${cmdline}" "$processname") || return 1
             if [ -z "${deps}" ]; then
                 deps="${DEBASHER_NONE_PROCESSDEP_TYPE}"
             fi

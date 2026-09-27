@@ -36,12 +36,6 @@ DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 # Declare associative array to store process ids
 declare -A DB_EXEC_PROCESS_IDS
 
-# Declare string variable to store the process ids of all the program
-# processes. The variable is filled incrementally and, when launching a
-# particular process, it is necessary to provide the ids of its
-# dependencies
-DB_EXEC_PROCESS_ID_LIST=""
-
 #############################
 # OPTION HANDLING FUNCTIONS #
 #############################
@@ -1066,11 +1060,8 @@ get_processdeps_with_id_info_from_detailed_spec()
 ########
 get_processdeps_with_id_info()
 {
-    local curr_process_id_list=$1
-    local processdeps_spec=$2
+    local processdeps_spec=$1
     case ${processdeps_spec} in
-            "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}all") debasher::_apply_deptype_to_processids "${curr_process_id_list}" "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}"
-                    ;;
             "none") echo ""
                     ;;
             *) get_processdeps_with_id_info_from_detailed_spec "${processdeps_spec}"
@@ -1102,13 +1093,12 @@ launch_process()
         # Launch process
         local task_array_list=$(debasher::_get_task_array_list "${dirname}" "${processname}" "${opt_array_size}")
         local processdeps_spec=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
-        local processdeps=$(get_processdeps_with_id_info "${DB_EXEC_PROCESS_ID_LIST}" "${processdeps_spec}")
+        local processdeps=$(get_processdeps_with_id_info "${processdeps_spec}")
         debasher::_launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
         local primary_id=$(debasher::_get_primary_id "${launch_outvar}")
         DB_EXEC_PROCESS_IDS[${processname}]=${primary_id}
-        DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
 
         # Write id to file
         debasher::_write_process_id_info_to_file "${dirname}" "${processname}" "${launch_outvar}"
@@ -1119,7 +1109,6 @@ launch_process()
             local sid_info=$(debasher::_read_process_id_info_from_file "${dirname}" "${processname}") || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
             local global_id=$(debasher::_get_global_id "${sid_info}")
             DB_EXEC_PROCESS_IDS["${processname}"]=${global_id}
-            DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
         fi
     fi
 }
