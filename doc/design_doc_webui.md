@@ -2050,8 +2050,6 @@ business output read outside the program, and a trigger port.
 
 # Future work
 
-*To be completed.*
-
 - **Round trip at run time.** Running each module of `data/programs/` and the
   module generated from it, and comparing what they do, beyond the comparison
   of models that `test/api/test_round_trip.py` makes.
@@ -2111,6 +2109,44 @@ business output read outside the program, and a trigger port.
 - **Restarting one task of a node.** "Restart node" on a single task of an
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.
+- **Building the web UI for resident programs.** Building what "Resident
+  programs in the web UI" designs, and extending `test/api/test_round_trip.py`
+  to resident programs: the resident reference modules of `test/engine/` that
+  the web UI can hold, as fixed points of import, and resident programs built
+  from the model.
+- **What the web UI waits for from the engine.** Several parts of the design
+  of resident programs rely on engine work listed in the Future work of
+  `doc/design_doc_resident.md`: `debasher_inspect_resident`, with the limits
+  in force that each node writes into its execdir; what the `Supervisor`
+  knows of each node, written to disk; a single orderly stop at a time; a
+  single periodic `debasher_snapshot_resident`, which leaves its PID in the
+  output directory; the execution options of the batch runs of a
+  `ProgramLauncher`; a hook for the code of a node to learn that a port
+  closed; and a command to launch again a batch run that failed. Restarting
+  one task of a node needs, besides, `debasher_stop` to stop a single task.
+- **The consistent cut of an epoch.** A view of the whole program at a round
+  that closed: the node state and the channel state that every node keeps in
+  its checkpoint of that epoch, together, which is the state that the program
+  could really have been in (see "consistent cut" in the Glossary of
+  `doc/design_doc_resident.md`).
+- **Changing the period of the snapshots of a live program.** Stopping the
+  periodic `debasher_snapshot_resident` of a live program and starting it
+  again with another period, which needs the tool to leave its PID in the
+  output directory.
+- **The launch record and the modules of the preamble.** Widening the check
+  made at launch time to the modules that the preamble loads, whose changes
+  it does not see today (see "The directories of a resident program"), for
+  example with a digest of each one in the launch record.
+- **Templates of the code of a node.** A first code for the parts of a node
+  when it is added, as the templates of a general process give one
+  (`frontend/src/components/codeTemplates.ts`): a constructor that gives the
+  node state its first value, a `capture_node_state` that returns all of it
+  and a `restore_node_state` that sets it back, and a `process_data` with a
+  branch for each business input. For a node that sends to a fanout family, a
+  routing that is already deterministic, such as a counter kept in the node
+  state, since a routing that a replay may change would make the sequence
+  numbers of a channel label other messages (see "Fan-out and fan-in sized
+  from the command line" in `doc/design_doc_resident.md`).
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.

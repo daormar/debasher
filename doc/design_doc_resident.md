@@ -3542,40 +3542,8 @@ Design ideas from Future work move here once they are actually built.
   program launched from the command line has no such check. The engine could
   record, at every launch, what the state depends on, and warn or refuse when
   a resume differs from it. Not designed.
-- **Resident programs in the frontend.** The visual editor (`frontend/`) and
-  the API behind it (`api/`) know nothing about resident programs: the program
-  model has no program type, `api/program_import.py` and
-  `api/script_generation.py` neither read nor write `program_type "resident"`,
-  and nothing describes a process as an `FBPProcess` or a `Supervisor`.
-  Everything needed to build, run and inspect a resident program from the
-  frontend is left to do, among it:
-  - the program type, in the model and in both directions of the conversion
-    between the model and a module;
-  - the fifo tags, `--control` and `--external` (see "Channel kinds declared
-    with the fifo"), as an attribute of a fifo option, like `mirror`;
-  - the limits of a node in the computational specifications (see "Limits of
-    a node"): the model knows only `cpus`, `mem` and `time`, so a round trip
-    through the editor drops them;
-  - editing a node's class, showing its ports, and wiring the heartbeat
-    channels and the trigger ports of a `Supervisor`, which are fifos like any
-    other: the engine takes the ports of every process from its options and
-    their tags (see "Ports from the engine");
-  - launcher nodes (see "`ProgramLauncher`: batch runs from a node"): their
-    general program, their runs root, and their batch runs, shown from their
-    run directories;
-  - array processes, whose tasks are nodes of their own (see "Array processes"
-    in Extensions), and fan-outs and fan-ins sized from the command line (see
-    "Fan-out and fan-in sized from the command line" in Extensions): the loops
-    of `define_opts` over an option such as `-w`, which the frontend already
-    writes for a general program (`countSourceOptionId`, `_is_fanout_label`,
-    `isFanoutOption`), and a template of `process_data` for a fan-out node
-    whose routing is deterministic;
-  - the "Watch FIFO" action, whose `--mirror` a resident program refuses (see
-    the Contract's limits);
-  - starting a snapshot, once or periodically, with
-    `debasher_snapshot_resident`, and stopping the program with
-    `debasher_stop_resident`;
-  - showing the state of each node: heartbeats, relaunches, checkpoints and
-    halted markers.
-
-  Not designed.
+- **Resident programs in the frontend.** The web UI (`frontend/` and the API
+  behind it, `api/`) knows nothing about resident programs yet. How it builds,
+  runs, observes and draws them is designed in "Resident programs in the web
+  UI" of `doc/design_doc_webui.md`, and not built; the engine work that design
+  relies on is listed above.
