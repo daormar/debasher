@@ -683,6 +683,34 @@ EOF
     [[ "${output}" == *"unknown process dependency type: aftrok"* ]]
 }
 
+@test "debasher::_check_explicit_processdeps accepts none and lists with one separator" {
+    debasher::_check_explicit_processdeps "p" "none"
+    debasher::_check_explicit_processdeps "p" "afterok:a"
+    debasher::_check_explicit_processdeps "p" "afterok:a,after:ns.b"
+    debasher::_check_explicit_processdeps "p" "afterok:a?afternotok:b"
+}
+
+@test "debasher::_check_explicit_processdeps refuses an unknown type" {
+    run debasher::_check_explicit_processdeps "p" "afterok:a,afterbogus:b"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"unknown type: afterbogus"* ]]
+}
+
+@test "debasher::_check_explicit_processdeps refuses a dependency without a type or a process" {
+    run debasher::_check_explicit_processdeps "p" "a"
+    [ "${status}" -eq 1 ]
+    run debasher::_check_explicit_processdeps "p" "afterok:"
+    [ "${status}" -eq 1 ]
+    run debasher::_check_explicit_processdeps "p" ":a"
+    [ "${status}" -eq 1 ]
+}
+
+@test "debasher::_check_explicit_processdeps refuses both separators in one list" {
+    run debasher::_check_explicit_processdeps "p" "afterok:a,afterok:b?afterok:c"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"use one of them"* ]]
+}
+
 @test "debasher::_get_procdeps_for_process adds no dependency on a file when the callback returns none" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()

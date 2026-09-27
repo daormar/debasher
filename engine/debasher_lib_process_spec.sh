@@ -301,6 +301,48 @@ debasher::_get_processdeps_from_detailed_spec()
 }
 
 ########
+# Checks the explicit dependencies of a process, the value of its
+# processdeps additional specification: none, or a list of
+# <type>:<process> separated by "," (every one has to hold) or by "?"
+# (one of them is enough), but not by both, with a known dependency type
+# in each. Whether each process exists is checked by the caller. Prints
+# an error and returns 1 on the first violation found.
+debasher::_check_explicit_processdeps()
+{
+    local processname=$1
+    local procdeps=$2
+
+    [ "${procdeps}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && return 0
+
+    if [[ "${procdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_COMMA}"* && "${procdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}"* ]]; then
+        echo "Error: the dependencies of process ${processname} (${procdeps}) are separated by both \"${DEBASHER_PROCESSDEPS_SEP_COMMA}\" and \"${DEBASHER_PROCESSDEPS_SEP_INTERR}\"; use one of them" >&2
+        return 1
+    fi
+
+    local separator=$(debasher::_get_processdeps_separator "${procdeps}")
+    local -a deps_array
+    if [ -z "${separator}" ]; then
+        deps_array=("${procdeps}")
+    else
+        IFS="${separator}" read -r -a deps_array <<< "${procdeps}"
+    fi
+
+    local dep
+    for dep in "${deps_array[@]}"; do
+        local deptype="${dep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
+        local depproc="${dep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
+        if [ "${dep}" = "${deptype}" ] || [ -z "${deptype}" ] || [ -z "${depproc}" ]; then
+            echo "Error: dependency \"${dep}\" of process ${processname} is not of the form <type>${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}<process>" >&2
+            return 1
+        fi
+        if ! debasher::_deptype_is_known "${deptype}"; then
+            echo "Error: dependency \"${dep}\" of process ${processname} has an unknown type: ${deptype}" >&2
+            return 1
+        fi
+    done
+}
+
+########
 debasher::_gen_final_procspec()
 {
     local cmdline=$1
@@ -331,6 +373,7 @@ debasher::_gen_final_procspec()
             DEBASHER_FINAL_PROCESS_SPEC["${processname}"]="${augmented_process_spec}"
         else
             # Dependencies were given
+            debasher::_check_explicit_processdeps "${processname}" "${procdeps}" || exit 1
 
             # Register dependencies
             DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED["${processname}"]=$(debasher::_get_processdeps_from_detailed_spec "${procdeps}")
