@@ -265,7 +265,7 @@ EOF
 @test "_print_knapsack_pred_spec pairs the two ends of a fifo and skips a fifo with an external end" {
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0" ["e/g"]="e${sep}0")
-    declare -gA DEBASHER_FIFO_USERS=(["w/f"]="r${sep}0" ["e/g"]="${DEBASHER_EXTERNAL_FIFO_USER}")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0" ["e/g"]="${DEBASHER_EXTERNAL_FIFO_END}")
     declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1 ["e"]=1)
     debasher_builtin_sched::_get_knapsack_name() {
         echo "k_$1"

@@ -212,19 +212,19 @@ debasher::_define_rerun_processes_due_to_code_update()
 }
 
 ########
-debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner()
+debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader()
 {
     # Read input parameters
     local dirname=$1
 
     local augm_fifoname
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        # Obtain user process name
-        local fifo_user=${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
-        local user_procname="${fifo_user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        # Obtain reader process name
+        local fifo_reader=${DEBASHER_FIFO_READERS["${augm_fifoname}"]}
+        local reader_procname="${fifo_reader%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
-        # Obtain user process status
-        local user_status=$(debasher::_get_process_status ${dirname} "${user_procname}")
+        # Obtain reader process status
+        local reader_status=$(debasher::_get_process_status ${dirname} "${reader_procname}")
 
         # Obtain owner process name
         local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
@@ -233,15 +233,15 @@ debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner()
         # Obtain owner process status
         local owner_status=$(debasher::_get_process_status ${dirname} "${owner_procname}")
 
-        # If fifo user process is finished but fifo owner is not, or viceversa, then
+        # If fifo reader process is finished but fifo owner is not, or viceversa, then
         # mark both processes as rerun
-        if [[ "${user_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
-            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+        if [[ "${reader_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
+            debasher::_mark_process_as_rerun "${reader_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
             debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
         fi
 
-        if [[ "${user_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
-            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+        if [[ "${reader_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}"  && "${owner_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]]; then
+            debasher::_mark_process_as_rerun "${reader_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
             debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
         fi
     done
@@ -255,22 +255,22 @@ debasher::_propagate_rerun_mark_due_to_fifos_iter()
 
     local augm_fifoname
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        # Obtain user process name
-        local fifo_user=${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
-        local user_procname="${fifo_user%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        # Obtain reader process name
+        local fifo_reader=${DEBASHER_FIFO_READERS["${augm_fifoname}"]}
+        local reader_procname="${fifo_reader%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
         # Obtain owner process name
         local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
         local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
-        # Mark fifo owner process as rerun if the user is already marked
-        if debasher::_process_marked_as_rerun "${user_procname}"; then
+        # Mark fifo owner process as rerun if the reader is already marked
+        if debasher::_process_marked_as_rerun "${reader_procname}"; then
             debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
         fi
 
-        # Mark fifo user process as rerun if the owner is already marked
+        # Mark fifo reader process as rerun if the owner is already marked
         if debasher::_process_marked_as_rerun "${owner_procname}"; then
-            debasher::_mark_process_as_rerun "${user_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
+            debasher::_mark_process_as_rerun "${reader_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
         fi
     done
 }

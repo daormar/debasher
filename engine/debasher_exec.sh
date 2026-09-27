@@ -676,7 +676,7 @@ check_process_opts()
         done
     }
 
-    register_fifo_users()
+    register_fifo_readers()
     {
         local cmdline=$1
 
@@ -685,7 +685,7 @@ check_process_opts()
             local processname
             for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
                 # Register fifos
-                debasher::_register_fifos_used_by_process "${cmdline}" "${processname}" || return 1
+                debasher::_register_fifos_read_by_process "${cmdline}" "${processname}" || return 1
             done
         fi
     }
@@ -723,8 +723,8 @@ check_process_opts()
     # Show process options
     show_process_opts "${cmdline}" "${DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${program_opts_file}" || return 1
 
-    # Register fifo users
-    register_fifo_users "${cmdline}" || return 1
+    # Register fifo readers
+    register_fifo_readers "${cmdline}" || return 1
 
     # Check the tags of the fifos, now that the other end of every fifo is
     # known (see debasher::_validate_program_fifo_kinds)
@@ -803,7 +803,7 @@ register_all_rerun_processes()
     fi
 
     if debasher::_program_uses_fifos ; then
-        debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner "${dirname}" || exit 1
+        debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${dirname}" || exit 1
     fi
 
     debasher::_define_rerun_processes_due_to_resident_resume "${dirname}" || exit 1

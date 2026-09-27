@@ -36,7 +36,6 @@ ASSOC_ARRAY_KEY_LEN = "__LEN__"
 PROCESS_TASKIDX_SEP = "__PROCESS_TASKIDX_SEP__"
 OPT_PROCESS_SEP = "__OPT_PROCESS_SEP__"
 OPTPROC_HUB_SUFFIX = "__OPTPROC_HUB_SUFFIX"
-EXTERNAL_FIFO_USER="EXTERNAL" + ASSOC_ARRAY_ELEM_SEP + "0"
 CLUSTER_STYLE = "filled"
 CLUSTER_FILL_COLOR = "lightgrey"
 PROCESS_NODE_SHAPE = "box"
@@ -412,7 +411,7 @@ class ProcessGraph:
         self.prgopts_exh = self.load_prgopt_exh(self.prgopts_exhaustive_file)
         self.process_out_values = self.get_process_out_values(self.prgopts_exh)
         self.fifos_file = self.get_fifos_fname(prg_files_pref)
-        self.fifo_owners, self.fifo_users = self.load_fifos(self.fifos_file)
+        self.fifo_owners, self.fifo_readers = self.load_fifos(self.fifos_file)
 
     def get_prgopts_exh_fname(self, prefix):
         return prefix + "." + PRGOPTS_EXHAUSTIVE_FEXT
@@ -472,7 +471,7 @@ class ProcessGraph:
 
     def load_fifos(self, fifos_fname):
         fifo_owners = {}
-        fifo_users = {}
+        fifo_readers = {}
 
         file = open(fifos_fname, 'r')
         # read file entry by entry
@@ -483,15 +482,15 @@ class ProcessGraph:
             fifo_owner_elems = self.get_process_taskidx_elems_prg_file(words[1])
             fifo_owner = fifo_owner_elems[0]
             fifo_owner_taskidx = fifo_owner_elems[1]
-            fifo_user_elems = self.get_process_taskidx_elems_prg_file(words[2])
-            fifo_user = fifo_user_elems[0]
-            fifo_user_taskidx = fifo_user_elems[1]
+            fifo_reader_elems = self.get_process_taskidx_elems_prg_file(words[2])
+            fifo_reader = fifo_reader_elems[0]
+            fifo_reader_taskidx = fifo_reader_elems[1]
 
             # Populate dictionaries
             fifo_owners[augm_fifoname] = fifo_owner, fifo_owner_taskidx
-            fifo_users[augm_fifoname] = fifo_user, fifo_user_taskidx
+            fifo_readers[augm_fifoname] = fifo_reader, fifo_reader_taskidx
 
-        return fifo_owners, fifo_users
+        return fifo_owners, fifo_readers
 
     def print(self):
         # Print header
@@ -725,7 +724,7 @@ class ProcessGraph:
                 print('"'+ processname +'"', "->", '"'+ opt_graph +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             else:
                 print('"'+ processname +'"', "->", '"'+ opt_graph +'"', ";")
-        elif self.process_is_fifo_user(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
+        elif self.process_is_fifo_reader(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
             print('"'+ opt_graph +'"', "->", '"'+ processname +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
         else:
             print('"'+ opt_graph +'"', "->", '"'+ processname +'"', ";")
@@ -750,7 +749,7 @@ class ProcessGraph:
                 if task_idx == 0:
                     print('"'+ processname +'"', "->", '"'+ opt_hub +'"', ";")
                 print('"'+ opt_hub +'"', "->", '"'+ opt_graph +'"', ";")
-        elif self.process_is_fifo_user(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
+        elif self.process_is_fifo_reader(process_info, opt_val) or self.process_is_fifo_owner(process_info, opt_val):
             print('"'+ opt_graph +'"', "->", '"'+ opt_hub +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
             if task_idx == 0:
                 print('"'+ opt_hub +'"', "->", '"'+ processname +'"', "[ style=" + FIFO_ARC_STYLE + " ] ;")
@@ -777,13 +776,13 @@ class ProcessGraph:
             else:
                 return False
 
-    def process_is_fifo_user(self, process_info, abs_fifoname):
+    def process_is_fifo_reader(self, process_info, abs_fifoname):
         if not os.path.isabs(abs_fifoname):
             return False
         else:
             base_fname = self.get_augm_fifoname(abs_fifoname)
-            if base_fname in self.fifo_users:
-                if process_info == self.get_process_taskidx_string(*self.fifo_users[base_fname]):
+            if base_fname in self.fifo_readers:
+                if process_info == self.get_process_taskidx_string(*self.fifo_readers[base_fname]):
                     return True
                 else:
                     return False
@@ -800,7 +799,7 @@ class ProcessGraph:
         # Print arcs if required
         if not self.str_is_output_option(opt) and os.path.isabs(opt_val):
             if opt_val in self.process_out_values:
-                if self.process_is_fifo_user(process_info, opt_val):
+                if self.process_is_fifo_reader(process_info, opt_val):
                     self.print_opt_to_opt_fifo(process_info, opt, opt_val)
                 else:
                     self.print_opt_to_opt_file(process_info, opt, opt_val)
@@ -813,7 +812,7 @@ class ProcessGraph:
         orig_opt_graph = self.get_opt_graph(orig_opt, orig_process_info)
 
         # Obtain destination node
-        dest_process_info = self.get_process_taskidx_string(*self.fifo_users[base_fname])
+        dest_process_info = self.get_process_taskidx_string(*self.fifo_readers[base_fname])
         dest_opt = self.get_fifo_opt(dest_process_info, opt_val)
         dest_opt_graph = self.get_opt_graph(dest_opt, dest_process_info)
 

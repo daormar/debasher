@@ -826,9 +826,9 @@ debasher::_define_fifo_task_idx()
     # Store name of FIFO in associative arrays
     DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]=${owner_task}
 
-    # Register FIFO user as external initially (this registration will
-    # be corrected later when analyzing the FIFOs used by each process)
-    DEBASHER_FIFO_USERS["${augm_fifoname}"]=${DEBASHER_EXTERNAL_FIFO_USER}
+    # Register FIFO reader as external initially (this registration will
+    # be corrected later when analyzing the FIFOs read by each process)
+    DEBASHER_FIFO_READERS["${augm_fifoname}"]=${DEBASHER_EXTERNAL_FIFO_END}
 
     # Flag fifo as mirrored if requested (see
     # debasher::_start_fifo_mirror_taps_for_process)
@@ -1804,7 +1804,7 @@ debasher::_show_program_fifos()
 {
     local augm_fifoname
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        echo "${augm_fifoname}" ${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]} ${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
+        echo "${augm_fifoname}" ${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]} ${DEBASHER_FIFO_READERS["${augm_fifoname}"]}
     done
 }
 

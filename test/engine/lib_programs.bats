@@ -454,9 +454,9 @@ EOF
 # process has defined its options and the other end of every fifo is known.
 
 set_up_registries() {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_KINDS=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_KINDS=()
     declare -gA DEBASHER_FIFO_MIRRORED=() DEBASHER_RESIDENT_PROCESS_ROLES=()
-    declare -gA DEBASHER_FIFO_OWNER_OPTS=() DEBASHER_FIFO_USER_OPTS=()
+    declare -gA DEBASHER_FIFO_OWNER_OPTS=() DEBASHER_FIFO_READER_OPTS=()
     declare -gA DEBASHER_RESIDENT_TASK_PORTS=()
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_INITIAL_PROCESS_SPEC=()
     DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
@@ -482,9 +482,9 @@ end_of() {
 add_fifo() {
     DEBASHER_PROGRAM_FIFOS["$1"]="$2"
     if [ "$3" = "outside" ]; then
-        DEBASHER_FIFO_USERS["$1"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+        DEBASHER_FIFO_READERS["$1"]="${DEBASHER_EXTERNAL_FIFO_END}"
     else
-        DEBASHER_FIFO_USERS["$1"]="$3"
+        DEBASHER_FIFO_READERS["$1"]="$3"
     fi
     if [ -n "${4:-}" ]; then
         DEBASHER_FIFO_KINDS["$1"]="$4"
@@ -497,7 +497,7 @@ add_fifo() {
         DEBASHER_FIFO_OWNER_OPTS["$1"]="-out"
     fi
     if [ "$3" != "outside" ]; then
-        DEBASHER_FIFO_USER_OPTS["$1"]="${6:--in}"
+        DEBASHER_FIFO_READER_OPTS["$1"]="${6:--in}"
     fi
 }
 
@@ -573,7 +573,7 @@ add_fifo() {
 
     run debasher::_validate_program_fifo_kinds
     [ "${status}" -eq 1 ]
-    [[ "${output}" == *"Error: fifo a/a_ext is tagged --external, but process b of the program uses it"* ]]
+    [[ "${output}" == *"Error: fifo a/a_ext is tagged --external, but process b of the program reads it"* ]]
 }
 
 @test "debasher::_validate_program_fifo_kinds refuses a control fifo between two nodes" {

@@ -411,7 +411,7 @@ EOF
 # --- define_fifo_opt in an array defined in a loop ---------------------
 
 @test "debasher::define_fifo_opt registers each fifo of an array defined in a loop as owned by its own task" {
-    declare -gA DEBASHER_PROGRAM_FIFOS DEBASHER_FIFO_USERS DEBASHER_FIFO_MIRRORED
+    declare -gA DEBASHER_PROGRAM_FIFOS DEBASHER_FIFO_READERS DEBASHER_FIFO_MIRRORED
     declare -gA DEBASHER_FIFO_KINDS DEBASHER_FIFO_OWNER_OPTS
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN DEBASHER_OUT_VALUE_TO_PROCESSES
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
@@ -440,7 +440,7 @@ EOF
 }
 
 @test "debasher::_define_opts_for_process registers the fifos of a generator even when all process dependencies were given" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
     declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
@@ -518,7 +518,7 @@ EOF
     [ -z "${DEBASHER_PROCESS_OPT_LIST_LEN["loopproc"]+x}" ]
 }
 
-# --- users of the fifos --------------------------------------------------
+# --- readers of the fifos -----------------------------------------------
 
 @test "debasher::_deserialized_args_idx_is_dep_candidate writes the option index into the caller's variable j" {
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=(["/abs/fifo"]="fanin")
@@ -535,14 +535,14 @@ EOF
     [ "${output}" = "2" ]
 }
 
-@test "debasher::_register_fifos_used_by_process registers the reader of a fifo that its owner writes" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+@test "debasher::_register_fifos_read_by_process registers the reader of a fifo that its owner writes" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname fanin fanin_to_loop)"
     DEBASHER_PROGRAM_FIFOS["fanin/fanin_to_loop"]="fanin${sep}0"
-    DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["fanin/fanin_to_loop"]="${DEBASHER_EXTERNAL_FIFO_END}"
     # fanin writes it through its output option (-outloop, say)
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["loop"]=1
@@ -551,22 +551,22 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "loop"
+    debasher::_register_fifos_read_by_process "" "loop"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]}" = "loop${sep}0" ]
-    [ "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_to_loop"]}" = "-from_fanin" ]
+    [ "${DEBASHER_FIFO_READERS["fanin/fanin_to_loop"]}" = "loop${sep}0" ]
+    [ "${DEBASHER_FIFO_READER_OPTS["fanin/fanin_to_loop"]}" = "-from_fanin" ]
 }
 
-@test "debasher::_register_fifos_used_by_process registers another task of the same array as a user" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+@test "debasher::_register_fifos_read_by_process registers another task of the same array as the reader" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname worker worker_out_0)"
     DEBASHER_PROGRAM_FIFOS["worker/worker_out_0"]="worker${sep}0"
-    DEBASHER_FIFO_USERS["worker/worker_out_0"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["worker/worker_out_0"]="${DEBASHER_EXTERNAL_FIFO_END}"
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="worker${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["worker"]=2
     # Task 0 writes the fifo, task 1 reads it.
@@ -579,22 +579,22 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "worker"
+    debasher::_register_fifos_read_by_process "" "worker"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["worker/worker_out_0"]}" = "worker${sep}1" ]
-    [ "${DEBASHER_FIFO_USER_OPTS["worker/worker_out_0"]}" = "-from_prev" ]
+    [ "${DEBASHER_FIFO_READERS["worker/worker_out_0"]}" = "worker${sep}1" ]
+    [ "${DEBASHER_FIFO_READER_OPTS["worker/worker_out_0"]}" = "-from_prev" ]
 }
 
-@test "debasher::_register_fifos_used_by_process registers the owner that reads its own fifo through another option (a self-loop)" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+@test "debasher::_register_fifos_read_by_process registers the owner that reads its own fifo through another option (a self-loop)" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname counter counter_self)"
     DEBASHER_PROGRAM_FIFOS["counter/counter_self"]="counter${sep}0"
-    DEBASHER_FIFO_USERS["counter/counter_self"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["counter/counter_self"]="${DEBASHER_EXTERNAL_FIFO_END}"
     DEBASHER_FIFO_OWNER_OPTS["counter/counter_self"]="-outself"
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="counter${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["counter"]=1
@@ -603,22 +603,22 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "counter"
+    debasher::_register_fifos_read_by_process "" "counter"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["counter/counter_self"]}" = "counter${sep}0" ]
-    [ "${DEBASHER_FIFO_USER_OPTS["counter/counter_self"]}" = "-self" ]
+    [ "${DEBASHER_FIFO_READERS["counter/counter_self"]}" = "counter${sep}0" ]
+    [ "${DEBASHER_FIFO_READER_OPTS["counter/counter_self"]}" = "-self" ]
 }
 
-@test "debasher::_register_fifos_used_by_process leaves outside the user of a fifo that its owner defines through an input option" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+@test "debasher::_register_fifos_read_by_process leaves outside the reader of a fifo that its owner defines through an input option" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname fanin fanin_ext)"
     DEBASHER_PROGRAM_FIFOS["fanin/fanin_ext"]="fanin${sep}0"
-    DEBASHER_FIFO_USERS["fanin/fanin_ext"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["fanin/fanin_ext"]="${DEBASHER_EXTERNAL_FIFO_END}"
     DEBASHER_FIFO_OWNER_OPTS["fanin/fanin_ext"]="-ext"
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["fanin"]=1
@@ -627,12 +627,12 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "fanin"
+    debasher::_register_fifos_read_by_process "" "fanin"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]
-    [ -z "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_ext"]+x}" ]
+    [ "${DEBASHER_FIFO_READERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]
+    [ -z "${DEBASHER_FIFO_READER_OPTS["fanin/fanin_ext"]+x}" ]
 }
 
 # --- process dependencies -------------------------------------------------
@@ -863,7 +863,7 @@ EOF
 # --- one owner and one reader per fifo --------------------------------------
 
 @test "define_fifo_opt refuses two tasks of an array that define fifos with the same name" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
     declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
@@ -883,7 +883,7 @@ EOF
 }
 
 @test "define_fifo_opt_generator may define the fifo of a task again, as a generator runs several times" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
     declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     regen_generate_opts()
@@ -898,7 +898,7 @@ EOF
 }
 
 @test "define_fifo_opt refuses --mirror on an option that is not an output option" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
     declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
@@ -913,14 +913,14 @@ EOF
     [[ "${output}" == *"its option -inf is not an output option"* ]]
 }
 
-@test "debasher::_register_fifos_used_by_process refuses a second reader of a fifo" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+@test "debasher::_register_fifos_read_by_process refuses a second reader of a fifo" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname writer out)"
     DEBASHER_PROGRAM_FIFOS["writer/out"]="writer${sep}0"
-    DEBASHER_FIFO_USERS["writer/out"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["writer/out"]="${DEBASHER_EXTERNAL_FIFO_END}"
     DEBASHER_FIFO_OWNER_OPTS["writer/out"]="-outf"
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="writer${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["reader1"]=1
@@ -930,14 +930,14 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "reader1"
+    debasher::_register_fifos_read_by_process "" "reader1"
     local status1=$?
     set -e
     [ "${status1}" -eq 0 ]
     # Registering the same reader again is not an error
-    run debasher::_register_fifos_used_by_process "" "reader1"
+    run debasher::_register_fifos_read_by_process "" "reader1"
     [ "${status}" -eq 0 ]
-    run debasher::_register_fifos_used_by_process "" "reader2"
+    run debasher::_register_fifos_read_by_process "" "reader2"
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"is read by reader1 task 0 (option -inf) and by reader2 task 0 (option -inf); a fifo has a single reader"* ]]
 }

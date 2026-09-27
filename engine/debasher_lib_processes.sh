@@ -1684,9 +1684,9 @@ debasher::_get_procdeps_for_process_cached()
 }
 
 ########
-debasher::_register_fifos_used_by_process()
+debasher::_register_fifos_read_by_process()
 {
-    debasher::_register_fifos_used_by_process_task()
+    debasher::_register_fifos_read_by_process_task()
     {
         local cmdline=$1
         local processname=$2
@@ -1712,7 +1712,7 @@ debasher::_register_fifos_used_by_process()
             [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || continue
 
             # The option through which the task that owns the fifo defines it
-            # does not make the task a user of it (a fifo fed from outside
+            # does not make the task a reader of it (a fifo fed from outside
             # that the owner reads, defined through an input option). Any
             # other option does: that of another task of the same array, and
             # that of the owner itself when it reads what it writes (a
@@ -1729,21 +1729,21 @@ debasher::_register_fifos_used_by_process()
             # takes. Registering the same task and option again is not an
             # error
             local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
-            local prev_user="${DEBASHER_FIFO_USERS["${augm_fifoname}"]:-${DEBASHER_EXTERNAL_FIFO_USER}}"
-            if [ "${prev_user}" != "${DEBASHER_EXTERNAL_FIFO_USER}" ] \
-                   && { [ "${prev_user}" != "${this_task}" ] || [ "${DEBASHER_FIFO_USER_OPTS["${augm_fifoname}"]:-}" != "${opt}" ]; }; then
-                echo "Error: fifo ${augm_fifoname} is read by ${prev_user//${DEBASHER_ASSOC_ARRAY_ELEM_SEP}/ task } (option ${DEBASHER_FIFO_USER_OPTS["${augm_fifoname}"]:-}) and by ${processname} task ${task_idx} (option ${opt}); a fifo has a single reader" >&2
+            local prev_reader="${DEBASHER_FIFO_READERS["${augm_fifoname}"]:-${DEBASHER_EXTERNAL_FIFO_END}}"
+            if [ "${prev_reader}" != "${DEBASHER_EXTERNAL_FIFO_END}" ] \
+                   && { [ "${prev_reader}" != "${this_task}" ] || [ "${DEBASHER_FIFO_READER_OPTS["${augm_fifoname}"]:-}" != "${opt}" ]; }; then
+                echo "Error: fifo ${augm_fifoname} is read by ${prev_reader//${DEBASHER_ASSOC_ARRAY_ELEM_SEP}/ task } (option ${DEBASHER_FIFO_READER_OPTS["${augm_fifoname}"]:-}) and by ${processname} task ${task_idx} (option ${opt}); a fifo has a single reader" >&2
                 return 1
             fi
 
-            # Register the current task as a user of the fifo, and the option
-            # through which it uses it
-            DEBASHER_FIFO_USERS["${augm_fifoname}"]=${this_task}
-            DEBASHER_FIFO_USER_OPTS["${augm_fifoname}"]=${DEBASHER_DESERIALIZED_ARGS[j]}
+            # Register the current task as the reader of the fifo, and the option
+            # through which it reads it
+            DEBASHER_FIFO_READERS["${augm_fifoname}"]=${this_task}
+            DEBASHER_FIFO_READER_OPTS["${augm_fifoname}"]=${DEBASHER_DESERIALIZED_ARGS[j]}
         done
     }
 
-    debasher::_register_fifos_used_by_task_array()
+    debasher::_register_fifos_read_by_task_array()
     {
         # Initialize variables
         local cmdline=$1
@@ -1754,7 +1754,7 @@ debasher::_register_fifos_used_by_process()
         # Iterate over tasks indices
         for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
             # Register fifos for task
-            debasher::_register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}" || return 1
+            debasher::_register_fifos_read_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}" || return 1
         done
     }
 
@@ -1765,10 +1765,10 @@ debasher::_register_fifos_used_by_process()
     local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
     if [ "${num_tasks}" -eq 1 ]; then
         # The process has only one task
-        debasher::_register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
+        debasher::_register_fifos_read_by_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
     else
         # The process is an array of tasks
-        debasher::_register_fifos_used_by_task_array "${cmdline}" "${processname}" "${num_tasks}"
+        debasher::_register_fifos_read_by_task_array "${cmdline}" "${processname}" "${num_tasks}"
     fi
 }
 

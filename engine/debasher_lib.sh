@@ -228,7 +228,11 @@ DEBASHER_PROGRAM_TYPE_GENERAL="general"
 DEBASHER_PROGRAM_TYPE_RESIDENT="resident"
 
 # FIFO-RELATED CONSTANTS
-DEBASHER_EXTERNAL_FIFO_USER="__EXTERNAL__${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
+#
+# The reader recorded for a fifo whose other end is outside the program (see
+# DEBASHER_FIFO_READERS): a reader outside when the owner writes the fifo, a
+# writer outside when the owner reads it
+DEBASHER_EXTERNAL_FIFO_END="__EXTERNAL__${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
 
 # FLOW-BASED PROGRAMMING CONSTANTS
 DEBASHER_SHUTDOWN_TOKEN="__SHUTDOWN_TOKEN__"
@@ -245,7 +249,7 @@ DEBASHER_FIFO_MIRROR_STOP_TOKEN="__FIFO_MIRROR_TAP_STOP__"
 DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=2
 
 # RERUN REASONS
-DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_user_owner"
+DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_owner_reader"
 DEBASHER_FORCED_RERUN_REASON="forced"
 DEBASHER_OUTDATED_CODE_RERUN_REASON="outdated_code"
 DEBASHER_NEW_PROC_RERUN_REASON="new_process"
@@ -472,9 +476,13 @@ declare -A DEBASHER_PROGRAM_SHDIRS
 # Declare associative arrays to store names of fifos
 declare -A DEBASHER_PROGRAM_FIFOS
 
-# Declare associative array to store users of fifos (The process
-# defining the FIFO with debasher::define_fifo_opt becomes the owner)
-declare -A DEBASHER_FIFO_USERS
+# Declare associative array to store the reader of each fifo (by augmented
+# name): the task of the program that reads it through an input option other
+# than the one through which its owner defines it, or
+# DEBASHER_EXTERNAL_FIFO_END when there is none and the other end of the fifo
+# is outside the program (the process defining the FIFO with
+# debasher::define_fifo_opt becomes the owner)
+declare -A DEBASHER_FIFO_READERS
 
 # Declare associative array flagging which fifos (by augmented name,
 # "<processname>/<fifoname>") were declared with define_fifo_opt's
@@ -499,7 +507,7 @@ declare -A DEBASHER_FIFO_OWNER_OPTS
 # Declare associative array with the option through which the process at the
 # other end of each fifo (by augmented name) uses it, when that process is
 # part of the program: an input option, since it reads the fifo
-declare -A DEBASHER_FIFO_USER_OPTS
+declare -A DEBASHER_FIFO_READER_OPTS
 
 # Declare associative array with the role of each process of a resident
 # program, "supervisor" or "fbpprocess" (see

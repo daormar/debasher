@@ -853,7 +853,7 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
     for fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
         # A fifo whose other end is outside the program puts no constraint
         # on what is launched together
-        if [ "${DEBASHER_FIFO_USERS["${fifoname}"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]; then
+        if [ "${DEBASHER_FIFO_READERS["${fifoname}"]}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
             continue
         fi
 
@@ -869,23 +869,23 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
             owner_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${owner_proc} ${owner_idx})
         fi
 
-        # Get fifo user info
-        local user_proc_plus_idx="${DEBASHER_FIFO_USERS["${fifoname}"]}"
-        local user_proc="${user_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        local user_idx="${user_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-        local user_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${user_proc}]}
-        local user_knapsack_name
-        if [ ${user_array_size} -eq 1 ]; then
-            user_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${user_proc})
+        # Get fifo reader info
+        local reader_proc_plus_idx="${DEBASHER_FIFO_READERS["${fifoname}"]}"
+        local reader_proc="${reader_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        local reader_idx="${reader_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+        local reader_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${reader_proc}]}
+        local reader_knapsack_name
+        if [ ${reader_array_size} -eq 1 ]; then
+            reader_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${reader_proc})
         else
-            user_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${user_proc} ${user_idx})
+            reader_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${reader_proc} ${reader_idx})
         fi
 
-        # Print knapsack predecessor specification entry (owner and user
+        # Print knapsack predecessor specification entry (owner and reader
         # are provided in both senses to ensure that both processes
         # should be executed together)
-        echo "${user_knapsack_name} ${owner_knapsack_name}"
-        echo "${owner_knapsack_name} ${user_knapsack_name}"
+        echo "${reader_knapsack_name} ${owner_knapsack_name}"
+        echo "${owner_knapsack_name} ${reader_knapsack_name}"
     done
 }
 
