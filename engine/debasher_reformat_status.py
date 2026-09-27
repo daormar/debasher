@@ -73,7 +73,7 @@ def check_pars(flags,values):
 def print_help():
     print("debasher_reformat_status [-p <string>] -f <int> -l <int> [-e <string>]", file=sys.stderr)
     print("", file=sys.stderr)
-    print("-p <string>          File with pipe_status output (if not given,", file=sys.stderr)
+    print("-p <string>          File with debasher_status output (if not given,", file=sys.stderr)
     print("                     input is read from stdin)", file=sys.stderr)
     print("-f <int>             Output format:", file=sys.stderr)
     print("                     ",ROW_WITH_HEADER_FORMAT,"-> one row with header, plain text", file=sys.stderr)

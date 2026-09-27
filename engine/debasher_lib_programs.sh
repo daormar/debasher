@@ -19,11 +19,25 @@
 #############################
 
 ########
+# Prints the working directory from which debasher_exec was run, which the
+# first line of the command line file gives as "cd" followed by the
+# directory quoted as printf %q does (see print_command_line in
+# debasher_exec), so that a directory with spaces or other special
+# characters is read back as it is.
 debasher::_get_orig_workdir()
 {
     local command_line_file=$1
-    local workdir=$($HEAD -1 ${command_line_file} | "$AWK" '{print $2}') ; debasher::pipe_fail || return 1
-    echo $workdir
+
+    local first_line
+    IFS= read -r first_line < "${command_line_file}" || return 1
+
+    local -a words
+    eval "words=(${first_line})" || return 1
+    if [ "${#words[@]}" -ne 2 ] || [ "${words[0]}" != "cd" ]; then
+        echo "Error: the first line of ${command_line_file} is not a cd to the working directory" >&2
+        return 1
+    fi
+    echo "${words[1]}"
 }
 
 ########
@@ -42,7 +56,7 @@ debasher::_get_orig_outdir_from_command_line_file()
     # Extract information from command line file
     local workdir
     workdir=$(debasher::_get_orig_workdir "${command_line_file}") || return 1
-    local cmdline
+    local qcmdline
     qcmdline=$(debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}") || return 1
     local outdir=$(debasher::_get_opt_value_from_quoted_cmd "$qcmdline" "--outdir")
 
@@ -67,8 +81,8 @@ debasher::_get_pfile_from_command_line_file()
 debasher::_get_currdir_from_command_line_file()
 {
     local command_line_file=$1
-    local currdir=$("${HEAD}" -1 "${command_line_file}" | "${AWK}" '{print $2}')
-    echo "${currdir}"
+
+    debasher::_get_orig_workdir "${command_line_file}"
 }
 
 ########
@@ -133,6 +147,66 @@ debasher::_set_opt_value_in_serialized_cmdline()
     done
 
     debasher::_serialize_args "${args[@]}"
+}
+
+########
+# Registers in DEBASHER_PROGRAM_PROCESSES the processes of the run in the
+# given output directory, as its final process specification lists them,
+# one per line, so that a tool that operates on a run knows its processes
+# without loading the module, which may have changed since the run. Fails
+# if the output directory holds no process specification.
+debasher::_load_processes_from_procspec()
+{
+    local dirname=$1
+    local procspec_file="${dirname}/${DEBASHER_PRG_PREF}.${DEBASHER_PROCSPEC_FEXT}"
+
+    if [ ! -f "${procspec_file}" ]; then
+        echo "Error: ${procspec_file} is missing, so the processes of the program are not known" >&2
+        return 1
+    fi
+
+    local line
+    while IFS= read -r line; do
+        [ -z "${line}" ] && continue
+        DEBASHER_PROGRAM_PROCESSES["${line%% *}"]=${DEBASHER_REGULAR_PROCESS_TYPE}
+    done < "${procspec_file}"
+}
+
+########
+# Fails, with an error, if the given process is not a process of the run
+# whose processes were registered by debasher::_load_processes_from_procspec
+debasher::_check_run_has_process()
+{
+    local processname=$1
+
+    if [[ ! -v DEBASHER_PROGRAM_PROCESSES["${processname}"] ]]; then
+        echo "Error: ${processname} is not a process of the program" >&2
+        return 1
+    fi
+}
+
+########
+# Fails, with an error, if the given output directory holds a run that was
+# made in another directory, the output directory having been moved or
+# copied since: the options of its tasks and the scripts of its processes
+# hold absolute paths into the directory where it was, so running or
+# relaunching its processes where it is now would use the old paths. An
+# output directory with no run yet passes.
+debasher::_check_outdir_not_moved()
+{
+    local absdirname=$1
+    local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    [ -f "${command_line_file}" ] || return 0
+
+    # The same directory, whatever the path used to reach it (.., a
+    # symbolic link), by device and inode
+    local orig_outdir
+    orig_outdir=$(debasher::_get_orig_outdir_from_command_line_file "${command_line_file}") || return 1
+    if [ ! "${orig_outdir}" -ef "${absdirname}" ]; then
+        echo "Error: the program in ${absdirname} was run in ${orig_outdir}, and its processes use paths there; move the output directory back, or run the program in a new output directory" >&2
+        return 1
+    fi
 }
 
 ########

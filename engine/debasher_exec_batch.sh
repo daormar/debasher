@@ -34,7 +34,7 @@ export RESERVED_HOOK_EXIT_CODE=200
 print_desc()
 {
     echo "debasher_exec_batch executes a batch of programs"
-    echo "type \"pipe_exec_batch --help\" to get usage information"
+    echo "type \"debasher_exec_batch --help\" to get usage information"
 }
 
 ########
@@ -43,12 +43,12 @@ usage()
     echo "debasher_exec_batch       -f <string> -m <int> [-o <string>] [-u <int>]"
     echo "                          [-k <string>] [--help]"
     echo ""
-    echo "-f <string>               File with a set of pipe_exec commands (one"
+    echo "-f <string>               File with a set of debasher_exec commands (one"
     echo "                          per line)"
     echo "-m <int>                  Maximum number of programs executed simultaneously"
     echo "-o <string>               Output directory where the program output should be"
     echo "                          moved (if not given, the output directories are"
-    echo "                          provided by the pipe_exec commands)"
+    echo "                          provided by the debasher_exec commands)"
     echo "-u <int>                  Maximum percentage of unfinished processes that is"
     echo "                          allowed when evaluating if program completed"
     echo "                          execution (0 by default)"
@@ -181,8 +181,8 @@ exec_hook()
     local exit_code=$?
 
     # unset variables
-    unset PRG_OUTD
-    unset PRG_CMD
+    unset DEBASHER_EXEC_BATCH_PRG_OUTD
+    unset DEBASHER_EXEC_BATCH_PRG_CMD
 
     return ${exit_code}
 }
@@ -298,7 +298,7 @@ get_prg_status()
         local unfinished_process_perc=$(get_unfinished_process_perc "${tmpfile}")
         "${RM}" "${tmpfile}"
 
-        # Evaluate exit code of pipe_status
+        # Evaluate exit code of debasher_status
         case $exit_code in
             ${DEBASHER_PROGRAM_FINISHED_EXIT_CODE}) if post_prg_finish_actions_are_executed "${pipe_cmd_outd}"; then
                                                 return ${PRG_IS_COMPLETED}
@@ -343,7 +343,7 @@ prg_has_processes_to_rerun()
         fi
     fi
 
-    # Check if pipe_exec reports processes to be re-executed
+    # Check if debasher_exec reports processes to be re-executed
     local rerun_processes_warning=$(eval "${pipe_exec_cmd}" --debug 2>&1 | "${GREP}" "${DEBASHER_RERUN_PROCESSES_WARNING}")
     if [ ! -z "${rerun_processes_warning}" ]; then
         return 0
@@ -508,7 +508,7 @@ wait_until_pending_prgs_complete()
 ########
 execute_batches()
 {
-    # Read file with pipe_exec commands
+    # Read file with debasher_exec commands
     lineno=1
 
     # Global variable declaration

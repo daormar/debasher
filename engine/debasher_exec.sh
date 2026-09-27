@@ -957,7 +957,7 @@ print_command_line()
     local outd=$1
     local command_line=$2
 
-    echo "cd $PWD" > "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    printf 'cd %q\n' "${PWD}" > "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
     debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${command_line}" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
     echo "" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 }
@@ -1241,9 +1241,9 @@ print_post_exec_nowait_help()
     echo "Program execution started, possible next steps:" >&2
     echo "- Inspect program execution status:" >&2
     echo "debasher_status -d <outdir>" >&2
-    echo "- Get standard output for a process:"
+    echo "- Get standard output for a process:" >&2
     echo "debasher_get_stdout -d <outdir> -p <process_name>" >&2
-    echo "- Get scheduler output for a process (useful for debugging):"
+    echo "- Get scheduler output for a process (useful for debugging):" >&2
     echo "debasher_get_sched_out -d <outdir> -p <process_name>" >&2
     echo "" >&2
 }
@@ -1298,6 +1298,7 @@ set_debasher_output_dir || exit 1
 # output directory, and takes its lock first
 if [ ${show_cmdline_opts_given} -eq 0 ] && [ ${check_proc_opts_given} -eq 0 ]; then
     ensure_exclusive_execution "${outd}" || exit 1
+    debasher::_check_outdir_not_moved "${outd}" || exit 1
 fi
 
 if [ ${check_proc_opts_given} -eq 1 ]; then

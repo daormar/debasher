@@ -489,3 +489,77 @@ def test_the_options_of_an_example_program_have_one_owner_and_one_reader_per_fif
     assert "a fifo has a single reader" not in result.stderr
     assert "each task needs a fifo name of its own" not in result.stderr
     assert "is not an output option" not in result.stderr
+
+
+DEBASHER_STATUS = REPO_ROOT / "bin" / "debasher_status"
+DEBASHER_GET_SCHED_OUT = REPO_ROOT / "bin" / "debasher_get_sched_out"
+FILE_EXAMPLE = REPO_ROOT / "data" / "programs" / "debasher_file_example.sh"
+
+
+def run_tool(tool, *args):
+    return subprocess.run([str(tool), *args], capture_output=True, text=True)
+
+
+def test_status_reports_the_processes_that_ran_even_after_the_module_changes(tmp_path):
+    pfile = tmp_path / "debasher_hello_world.sh"
+    pfile.write_text(HELLO_WORLD.read_text())
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    # The process is renamed in the module after the run
+    pfile.write_text(pfile.read_text().replace("hello_world", "renamed_world"))
+
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert status.returncode == 0, status.stdout + status.stderr
+    assert "PROCESS: hello_world ; STATUS: FINISHED" in status.stdout
+
+
+def test_status_of_one_process_gives_its_own_exit_code_and_refuses_an_unknown_one(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(FILE_EXAMPLE), "--outdir", str(outdir), "-s", "hi")
+    assert result.returncode == 0, result.stderr
+    # Make the reader look unfinished
+    for marker in (outdir / "__exec__" / "file_reader").glob("*.finished"):
+        marker.unlink()
+
+    assert run_tool(DEBASHER_STATUS, "-d", str(outdir), "-p", "file_writer").returncode == 0
+    assert run_tool(DEBASHER_STATUS, "-d", str(outdir), "-p", "file_reader").returncode != 0
+    unknown = run_tool(DEBASHER_STATUS, "-d", str(outdir), "-p", "nosuch")
+    assert unknown.returncode != 0
+    assert "nosuch is not a process of the program" in unknown.stderr
+
+
+def test_get_sched_out_fails_for_a_missing_file(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    missing = run_tool(DEBASHER_GET_SCHED_OUT, "-d", str(outdir), "-p", "nosuch")
+    assert missing.returncode != 0
+
+
+def test_a_program_runs_and_is_inspected_from_a_directory_with_spaces(tmp_path):
+    workdir = tmp_path / "dir with spaces"
+    workdir.mkdir()
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", "out", cwd=workdir)
+    assert result.returncode == 0, result.stderr
+
+    status = run_tool(DEBASHER_STATUS, "-d", str(workdir / "out"))
+    assert status.returncode == 0, status.stdout + status.stderr
+    assert "moved" not in status.stderr
+
+
+def test_a_moved_output_directory_can_be_inspected_but_not_run_again(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    moved = tmp_path / "moved"
+    outdir.rename(moved)
+
+    status = run_tool(DEBASHER_STATUS, "-d", str(moved))
+    assert status.returncode == 0, status.stdout + status.stderr
+
+    again = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(moved))
+    assert again.returncode != 0
+    assert "was run in" in again.stderr

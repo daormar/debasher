@@ -214,14 +214,14 @@ class DependencyGraph:
         # Return empty list of process dependencies if corresponding field was
         # not found
         if len(pdeps_str)==0:
-            return deps_syntax_ok, []
+            return deps_syntax_ok, '', []
 
         # Check that dependency separators (, and ?) are not mixed
         seps_mixed, separator = self.get_dep_separator(pdeps_str)
         if seps_mixed:
             deps_syntax_ok = False
             print("Error: dependency separators mixed in process dependency (", pdeps_str, ") at line number", entry_lineno, file=sys.stderr)
-            return deps_syntax_ok, []
+            return deps_syntax_ok, '', []
 
         # create list of process dependencies
         pdeps_list=[]
@@ -254,7 +254,7 @@ class DependencyGraph:
             return False, ''
 
     def syntax_ok(self):
-        return self.syntax_ok
+        return self.deps_syntax_ok
 
     PRNAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*$")
 
@@ -422,10 +422,9 @@ class ProcessGraph:
         file = open(prgopt_exh_fname, 'r')
         # read file entry by entry
         for entry in file:
-            # Extract entry information
-            words = entry.split()
-            process_info = words[0]
-            process_opts = "".join(words[2:])
+            # Extract entry information: "<process info> -> <options>",
+            # where the options may contain spaces
+            process_info, _, process_opts = entry.rstrip("\n").partition(" -> ")
 
             # Extract elements of process info
             process_info_elems = self.get_process_taskidx_elems_prg_file(process_info)
