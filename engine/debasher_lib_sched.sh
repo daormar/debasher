@@ -317,6 +317,60 @@ debasher::_id_exists()
 }
 
 ########
+# Whether the dependencies of a process can still hold when some of them
+# name processes that are not launched in this run, and so have no id to
+# give the scheduler (a scheduler, such as Slurm, that takes only the
+# dependencies on launched processes). A process with no id has either
+# finished in an earlier run, and a dependency on it holds unless it is
+# afternotok, which asks for it to have failed, or it has not finished and
+# is not launched either, and no dependency on it will ever hold. A
+# dependency on a process with an id is left to the scheduler. With ","
+# every dependency has to be able to hold, with "?" one is enough.
+#
+# $1 - Dependencies of the process, as its final specification gives them
+#      (the value of processdeps).
+# $2 - Output directory of the run.
+# $3 - Name of the associative array with the id of each launched process.
+debasher::_deps_without_ids_can_hold()
+{
+    local processdeps_spec=$1
+    local dirname=$2
+    local -n deps_ids_ref=$3
+
+    [ -z "${processdeps_spec}" ] && return 0
+    [ "${processdeps_spec}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && return 0
+
+    local separator=$(debasher::_get_processdeps_separator "${processdeps_spec}")
+    local -a deps_array
+    if [ -z "${separator}" ]; then
+        deps_array=("${processdeps_spec}")
+    else
+        IFS="${separator}" read -r -a deps_array <<< "${processdeps_spec}"
+    fi
+
+    local dep any_can=0
+    for dep in "${deps_array[@]}"; do
+        local deptype=$(debasher::_get_deptype_part_in_dep "${dep}")
+        local depproc=$(debasher::_get_processname_part_in_dep "${dep}")
+        local can=0
+        if [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] || [ -n "${deps_ids_ref[${depproc}]:-}" ]; then
+            can=1
+        elif [ "${deptype}" != "${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}" ] \
+                 && [ "$(debasher::_get_process_status "${dirname}" "${depproc}")" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+            can=1
+        fi
+        if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ]; then
+            [ ${can} -eq 1 ] && any_can=1
+        else
+            [ ${can} -eq 0 ] && return 1
+        fi
+    done
+    if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ]; then
+        [ ${any_can} -eq 1 ]
+    fi
+}
+
+########
 debasher::_map_deptype_if_necessary()
 {
     local deptype=$1

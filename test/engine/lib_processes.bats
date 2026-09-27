@@ -683,6 +683,25 @@ EOF
     [[ "${output}" == *"unknown process dependency type: aftrok"* ]]
 }
 
+@test "debasher::_deps_without_ids_can_hold takes a dependency on a launched process, or on a finished one but afternotok" {
+    declare -A ids=(["a"]="101")
+    debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }
+
+    debasher::_deps_without_ids_can_hold "none" "/o" ids
+    debasher::_deps_without_ids_can_hold "afternotok:a" "/o" ids
+    debasher::_deps_without_ids_can_hold "afterok:done,after:done,afterany:done,aftercorr:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afterok:a,afterok:pending" "/o" ids
+}
+
+@test "debasher::_deps_without_ids_can_hold needs one dependency that can hold with ?" {
+    declare -A ids=()
+    debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }
+
+    debasher::_deps_without_ids_can_hold "afternotok:done?afterok:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done?afterok:pending" "/o" ids
+}
+
 @test "debasher::_check_explicit_processdeps accepts none and lists with one separator" {
     debasher::_check_explicit_processdeps "p" "none"
     debasher::_check_explicit_processdeps "p" "afterok:a"

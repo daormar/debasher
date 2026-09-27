@@ -1094,13 +1094,22 @@ launch_process()
 
     # Decide whether the process should be executed
     if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
+        # Leave the process unlaunched, and so the processes that depend on
+        # it, when it depends on processes that are not launched in this run
+        # in a way that can never hold (see
+        # debasher::_deps_without_ids_can_hold)
+        local processdeps_spec=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
+        if ! debasher::_deps_without_ids_can_hold "${processdeps_spec}" "${dirname}" DB_EXEC_PROCESS_IDS; then
+            echo "Process ${processname} is not launched: its dependencies (${processdeps_spec}) cannot hold in this run" >&2
+            return 0
+        fi
+
         # Create script
         local opt_array_size=$(debasher::_get_numtasks_for_process "${processname}")
         debasher::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
         # Launch process
         local task_array_list=$(debasher::_get_task_array_list "${dirname}" "${processname}" "${opt_array_size}")
-        local processdeps_spec=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
         local processdeps=$(get_processdeps_with_id_info "${processdeps_spec}")
         debasher::_launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
