@@ -887,13 +887,141 @@ run belong to the directory where the run was prepared (see "Architecture").
 
 # The dependency graph
 
+The order in which the processes of a program run is not written anywhere: the
+engine infers it from the options of the tasks, as a set of dependencies
+between processes, and hands the dependencies to the scheduler, which launches
+a process once they hold. This section describes how dependencies are
+inferred, what each type asks for and how two types on the same producer
+combine, how a process replaces its inferred dependencies with explicit ones,
+and how the engine checks that the dependencies can be satisfied at all.
+
 ## Inferring dependencies from options
+
+While the run is prepared, once every option list is known and its connections
+resolved, the engine goes through the options of every task of every process. An
+input option whose value is an absolute path that an output option of another
+process holds (see "Output options") makes a dependency of the process on that
+producer, or on each of them when several processes produce the same path, and
+the value decides its type:
+
+- A file, or anything that is not a FIFO, gives `afterok`: the process waits
+  for every task of the producer to succeed. When both processes are array
+  processes and the option is read by the task with the same task index as the
+  producing one, the type is `aftercorr` instead: each task waits only for its
+  own counterpart.
+- A FIFO gives `none`, no dependency at all: the reader and the owner of a FIFO
+  have to run together, and a dependency between them would make one wait for
+  the other to end (see "Running both ends together").
+
+The option dependency method of the process, `_define_opt_deps`, can change the
+type of any of them. The engine calls it with the name of the option and the
+name of the producer, and takes the type it prints instead of the one above;
+printing nothing keeps the inferred type, and printing `none` removes the
+dependency. A reader of a FIFO that should not start before its owner has
+started, for example, gets `after` this way.
+
+A process never depends on itself: a value that it both produces and reads makes
+no dependency on it, so that a process can read what it writes. The dependencies
+of the tasks of a process are then merged into one dependency on each producer
+(see "Dependency types and how they merge"): the scheduler launches the tasks of
+a process when the dependencies of the process hold, and `aftercorr` is the one
+type that relates single tasks. An array whose tasks read the task of the same
+index of another array keeps `aftercorr`; if some task reads another index, the
+merge gives `afterok`, and the whole array waits for the whole producer.
 
 ## Dependency types and how they merge
 
+A dependency asks for something about the producer:
+
+| Type | Holds when |
+|---|---|
+| `none` | always: it is no dependency |
+| `after` | the producer has started |
+| `afterok` | every task of the producer has succeeded |
+| `afternotok` | the producer has failed |
+| `afterany` | the producer has ended, whether it succeeded or failed |
+| `aftercorr` | the task of the producer with the same task index has succeeded |
+
+The types are not independent: every type but `none` implies `after`, since a
+producer that has ended has started, and `afterok` implies both `afterany` and
+`aftercorr`. When a process has two dependencies on the same producer, from two
+options or from two tasks, the engine merges them into the weakest type that
+asks for everything both of them ask for:
+
+- Two equal types give that type, and `none` or `after` with any type gives the
+  other type.
+- Any two of `afterok`, `afterany` and `aftercorr` give `afterok`: every task
+  finished and the corresponding one successful is only covered by all of them
+  successful.
+- `afternotok` with `afterany` gives `afternotok`.
+- `afternotok` with `afterok` or `aftercorr` cannot hold in any run of the
+  producer, which cannot both fail and succeed, and stops the preparation of
+  the run, as does a type the engine does not know.
+
+The table gives the meaning that a program relies on. Two schedulers carry it
+out, and each departs from it in one known place, described in "Scheduling":
+the built-in scheduler treats `aftercorr` as `afterok`, so the tasks of an
+array wait for the whole producer, and a Slurm older than 16.05, which has no
+`aftercorr`, gets `afterok` in its place. Both only make a process wait longer
+than the program asked for, never less. A program run with
+`--builtinsched-oneshot`, which launches everything in a single round and
+never waits for a process to end, is refused when it has any dependency other
+than `none` and `after`.
+
 ## Explicit dependencies
 
+A process whose additional specifications include `processdeps` gets exactly
+the dependencies it gives, and no inferred one: the engine does not merge the
+two. The value is `none`, for no dependency, or a list of `<type>:<process>`
+separated by `,`, when every dependency has to hold, or by `?`, when one of them
+is enough:
+
+```
+specs="cpus=1 mem=32 time=00:01:00"
+add_debasher_process "r" "${specs}" "processdeps=afterok:w"
+add_debasher_process "c" "${specs}" "processdeps=afterok:a?after:b"
+```
+
+The value is checked when the final process specification is built: every
+element has to be of that form, with a type from the table above and a process
+of the program, and a list may not use both separators. Explicit dependencies
+serve what the options cannot say: a process that reads what another leaves in
+a shared directory, or an order between processes that exchange nothing. They
+also take the process out of the inference altogether, so a process that
+gives them has to give every dependency it needs.
+
 ## Topological order and cycles
+
+With the dependencies of every process known, the engine sorts the processes in
+topological order, a depth-first walk from each process to its producers in
+which a process comes after every process it depends on. The walk stops the
+preparation of the run when it comes back to a process it has not finished, a
+cycle of dependencies, which no scheduler could ever satisfy, and names the
+process where it found it. Processes that do not depend on each other come in
+no particular order.
+
+The Slurm scheduler submits the processes in this order, since the submission
+of a process names the jobs of its producers, which therefore have to exist
+already. The built-in scheduler does not use the order: in each round it
+launches whatever tasks have their dependencies satisfied at that moment (see
+"The built-in scheduler"). The check for cycles, though, runs for every
+scheduler, so a program with a cycle of dependencies is refused whatever
+scheduler would run it.
+
+A cycle through FIFOs is not a cycle of the dependency graph. The type of a
+dependency through a FIFO is `none` unless the option dependency method says
+otherwise, so processes that stream to one another in a loop have no edge
+between them, run concurrently, and the loop lives only in the FIFOs (see
+"Cycles through FIFOs"). An option dependency method that gives such a
+dependency a type other than `none` turns the loop back into a cycle of the
+graph, and the run is refused.
+
+Every run draws its dependency graph into `__graphs__/dependency_graph.dot`,
+from the final process specification, and into a PDF and an EPS file when
+Graphviz is installed. With `--gen-proc-graph` it also draws the process graph,
+`__graphs__/process_graph.dot`, whose edges are the connections between the
+options of the tasks, FIFOs included, and which therefore shows the cycles
+that the dependency graph does not have.
 
 # FIFOs
 
