@@ -464,3 +464,28 @@ def test_the_skip_of_an_array_is_decided_task_by_task(tmp_path):
     assert (execdir / "arr_2.stdout").read_text() == "ran 2\n"
     assert not (execdir / "arr_1.stdout").exists()
     assert not (execdir / "arr_3.stdout").exists()
+
+
+FIFO_EXAMPLE = REPO_ROOT / "data" / "programs" / "debasher_fifo_example.sh"
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_a_program_that_uses_fifos_is_refused_on_slurm(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec_with_sched("SLURM", "--pfile", str(FIFO_EXAMPLE), "--outdir", str(outdir))
+
+    assert result.returncode != 0
+    assert "uses fifos, which cannot be run with the SLURM scheduler" in result.stderr
+    assert not (outdir / "__exec__" / "fifo_writer" / "fifo_writer").exists()
+
+
+# The example programs, each with the command line options it needs
+EXAMPLE_PROGRAMS = sorted((REPO_ROOT / "data" / "programs").glob("debasher_*.sh"))
+
+
+@pytest.mark.parametrize("pfile", EXAMPLE_PROGRAMS, ids=lambda p: p.stem)
+def test_the_options_of_an_example_program_have_one_owner_and_one_reader_per_fifo(tmp_path, pfile):
+    result = run_exec("--pfile", str(pfile), "--outdir", str(tmp_path / "out"), "--check-proc-opts")
+    assert "a fifo has a single reader" not in result.stderr
+    assert "each task needs a fifo name of its own" not in result.stderr
+    assert "is not an output option" not in result.stderr

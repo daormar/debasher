@@ -1826,6 +1826,19 @@ debasher::_register_fifos_used_by_process()
                 continue
             fi
 
+            # A fifo has a single reader: each line written into it reaches
+            # only one of the processes that open it for reading, and a
+            # second reader would wait forever for the lines the first one
+            # takes. Registering the same task and option again is not an
+            # error
+            local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
+            local prev_user="${DEBASHER_FIFO_USERS["${augm_fifoname}"]:-${DEBASHER_EXTERNAL_FIFO_USER}}"
+            if [ "${prev_user}" != "${DEBASHER_EXTERNAL_FIFO_USER}" ] \
+                   && { [ "${prev_user}" != "${this_task}" ] || [ "${DEBASHER_FIFO_USER_OPTS["${augm_fifoname}"]:-}" != "${opt}" ]; }; then
+                echo "Error: fifo ${augm_fifoname} is read by ${prev_user//${DEBASHER_ASSOC_ARRAY_ELEM_SEP}/ task } (option ${DEBASHER_FIFO_USER_OPTS["${augm_fifoname}"]:-}) and by ${processname} task ${task_idx} (option ${opt}); a fifo has a single reader" >&2
+                return 1
+            fi
+
             # Register the current task as a user of the fifo, and the option
             # through which it uses it
             DEBASHER_FIFO_USERS["${augm_fifoname}"]=${this_task}
@@ -1844,7 +1857,7 @@ debasher::_register_fifos_used_by_process()
         # Iterate over tasks indices
         for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
             # Register fifos for task
-            debasher::_register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}"
+            debasher::_register_fifos_used_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}" || return 1
         done
     }
 

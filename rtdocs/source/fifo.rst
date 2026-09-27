@@ -8,12 +8,16 @@ FIFO Writer and FIFO Reader Example
     # plain file. fifo_writer declares its output FIFO with
     # define_fifo_opt instead of a regular path, and fifo_reader
     # obtains it the same way as before, through
-    # define_opt_from_proc_out. Because a FIFO must be open on both
-    # ends before either process can proceed, fifo_reader also
-    # implements define_opt_deps, explicitly declaring an "after"
-    # dependency on fifo_writer for its "-inf" option rather than
-    # relying on the default dependency DeBasher infers for a regular
-    # file.
+    # define_opt_from_proc_out. A FIFO must be open on both ends
+    # before either process can proceed, so an option connected to a
+    # FIFO gets no scheduling dependency by default: both processes are
+    # launched together, instead of the reader waiting for the writer to
+    # finish, as it would for a regular file. fifo_reader also
+    # implements define_opt_deps, declaring an "after" dependency on
+    # fifo_writer for its "-inf" option, which only makes the reader be
+    # launched once the writer has started. A FIFO has a single reader,
+    # and the two processes must run on the same machine, so a program
+    # that uses FIFOs cannot run with the Slurm scheduler.
 
     fifo_writer_document()
     {

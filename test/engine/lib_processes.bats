@@ -859,3 +859,85 @@ EOF
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"collides with method '_define_opts'"* ]]
 }
+
+# --- one owner and one reader per fifo --------------------------------------
+
+@test "define_fifo_opt refuses two tasks of an array that define fifos with the same name" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    samefifo_define_opts()
+    {
+        local idx
+        for (( idx = 0; idx < 2; idx++ )); do
+            local optlist=""
+            define_fifo_opt "-outf" "samename" optlist || return 1
+            save_opt_list optlist
+        done
+    }
+
+    run samefifo_define_opts "" "" samefifo "${BATS_TEST_TMPDIR}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"fifo samename of process samefifo is defined by task 0 and by task 1"* ]]
+}
+
+@test "define_fifo_opt_generator may define the fifo of a task again, as a generator runs several times" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    regen_generate_opts()
+    {
+        local optlist=""
+        define_fifo_opt_generator "-outf" "regen_$5" "$5" optlist || return 1
+    }
+
+    regen_generate_opts "" "" regen "${BATS_TEST_TMPDIR}" 1
+    run regen_generate_opts "" "" regen "${BATS_TEST_TMPDIR}" 1
+    [ "${status}" -eq 0 ]
+}
+
+@test "define_fifo_opt refuses --mirror on an option that is not an output option" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    mirrin_define_opts()
+    {
+        local optlist=""
+        define_fifo_opt "-inf" "watched" optlist --mirror || return 1
+    }
+
+    run mirrin_define_opts "" "" mirrin "${BATS_TEST_TMPDIR}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"its option -inf is not an output option"* ]]
+}
+
+@test "debasher::_register_fifos_used_by_process refuses a second reader of a fifo" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname writer out)"
+    DEBASHER_PROGRAM_FIFOS["writer/out"]="writer${sep}0"
+    DEBASHER_FIFO_USERS["writer/out"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_OWNER_OPTS["writer/out"]="-outf"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="writer${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader1"]=1
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader2"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-inf${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_used_by_process "" "reader1"
+    local status1=$?
+    set -e
+    [ "${status1}" -eq 0 ]
+    # Registering the same reader again is not an error
+    run debasher::_register_fifos_used_by_process "" "reader1"
+    [ "${status}" -eq 0 ]
+    run debasher::_register_fifos_used_by_process "" "reader2"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"is read by reader1 task 0 (option -inf) and by reader2 task 0 (option -inf); a fifo has a single reader"* ]]
+}

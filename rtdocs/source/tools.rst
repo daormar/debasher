@@ -178,19 +178,20 @@ debasher_get_fifo_mirror
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``debasher_get_fifo_mirror`` shows the mirrored content of a process's
-FIFO, i.e. a copy of everything written to or read from it, provided
-the FIFO was declared with the mirroring option of
-``define_fifo_opt``/``define_fifo_opt`` (see the :ref:`implem`
-Section for more information about FIFOs) and the owning process has
-already run.
+FIFO, i.e. a copy of everything the owning process wrote into it,
+provided the FIFO was declared with the mirroring option of
+``define_fifo_opt``/``define_fifo_opt_generator`` on an output option
+(see the :ref:`implem` Section for more information about FIFOs) and
+the owning process has already run.
 
 Its options are:
 
 * ``-d <string>``: output directory for program processes.
 * ``-p <string>``: name of the process owning the mirrored FIFO.
 * ``-f <string>``: name of the FIFO, as given to ``define_fifo_opt``.
-* ``-t <int>``: index of the task array, if the owning process is part
-  of one.
+* ``-t <int>``: accepted for uniformity with ``debasher_get_stdout``
+  and ``debasher_get_sched_out``, and ignored: the name of a FIFO
+  already tells apart the FIFOs of the tasks of an array.
 * ``--watch``: follow the file as it grows (like ``tail -f``) instead
   of printing its current contents and exiting.
 

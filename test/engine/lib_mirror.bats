@@ -262,11 +262,14 @@ now_ms() {
 @test "debasher::_stop_fifo_mirror_taps ends a tap whose reader is gone, with a warning, and does not fail" {
     # The reader of the real fifo reads one line and leaves; the owning
     # process then writes another, which the tap can never forward, so it
-    # never gets to the token.
+    # never gets to the token. The second line is written only once the
+    # reader has left: written with the first, the tap could forward both
+    # before the reader leaves, and then stop on the token by itself.
     DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=1
     start_registered_tap
-    write_lines_to_shim "one" "two"
+    write_to_shim "one"
     IFS= read -r _ < "${realfifo}"
+    write_to_shim "two"
     wait_for_mirror_lines 2
 
     local start=$(now_ms)

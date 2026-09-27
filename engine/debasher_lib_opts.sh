@@ -803,8 +803,28 @@ debasher::_define_fifo_task_idx()
     # Get augmented fifo name
     local augm_fifoname="${processname}/${fifoname}"
 
+    # A fifo is named after its owner process, not after the task of it
+    # that defines it, so two tasks of an array that define fifos with the
+    # same name would define the same fifo. Defining it again from the
+    # same task is not an error: an option generator runs several times
+    # for the same task
+    local owner_task="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+    if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] && [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" != "${owner_task}" ]; then
+        local prev_task="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+        echo "Error: fifo ${fifoname} of process ${processname} is defined by task ${prev_task} and by task ${task_idx}; each task needs a fifo name of its own" >&2
+        return 1
+    fi
+
+    # A mirror tap is set on the value of an output option (see
+    # debasher::_start_fifo_mirror_taps_for_process), so a mirrored fifo
+    # has to be defined through one
+    if [ "${mirrored}" = "1" ] && ! debasher::_str_is_output_option "${opt}"; then
+        echo "Error: fifo ${fifoname} of process ${processname} is mirrored, but its option ${opt} is not an output option (-out* or --out*)" >&2
+        return 1
+    fi
+
     # Store name of FIFO in associative arrays
-    DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}
+    DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]=${owner_task}
 
     # Register FIFO user as external initially (this registration will
     # be corrected later when analyzing the FIFOs used by each process)
@@ -879,8 +899,9 @@ debasher::_read_fifo_opt_flags()
 # $4 - (optional) "--mirror": also duplicate everything this process
 #      writes to the fifo into a separate, non-destructively readable
 #      mirror log file (see debasher::_start_fifo_mirror_taps_for_process).
-#      Only meaningful on the process that WRITES to the fifo. Not
-#      allowed in a resident program (the program aborts when loaded).
+#      Only allowed on an output option (-out* or --out*), through
+#      which the process writes to the fifo. Not allowed in a resident
+#      program (the program aborts when loaded).
 #      In a resident program, at most one of these tags may be given as
 #      well (refused in a general program when it is loaded):
 #      "--control": the reader's end of the fifo is a control port;
@@ -895,8 +916,8 @@ debasher::_read_fifo_opt_flags()
 #
 # Examples
 #
-#   debasher::define_fifo_opt "-o" "${fifoname}" "optlist"
-#   debasher::define_fifo_opt "-o" "${fifoname}" "optlist" --mirror
+#   debasher::define_fifo_opt "-outf" "${fifoname}" "optlist"
+#   debasher::define_fifo_opt "-outf" "${fifoname}" "optlist" --mirror
 #   debasher::define_fifo_opt "-trigger" "${fifoname}" "optlist" --control
 #
 # The function does not return any value
@@ -922,7 +943,7 @@ debasher::define_fifo_opt()
     local task_idx=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}
 
     # Define FIFO
-    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}"
+    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}" || exit 1
 
     # Get absolute name of FIFO
     local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
@@ -946,7 +967,7 @@ debasher::define_fifo_opt()
 #
 # Examples
 #
-#   define_fifo_opt "-o" "${fifoname}" "optlist"
+#   define_fifo_opt "-outf" "${fifoname}" "optlist"
 #
 # The function does not return any value
 define_fifo_opt() { debasher::define_fifo_opt "$@"; }
@@ -968,7 +989,7 @@ define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 #
 # Examples
 #
-#   debasher::define_fifo_opt_generator "-o" "${fifoname}" "${task_idx}" "optlist"
+#   debasher::define_fifo_opt_generator "-outf" "${fifoname}" "${task_idx}" "optlist"
 #
 # The function does not return any value
 debasher::define_fifo_opt_generator()
@@ -991,7 +1012,7 @@ debasher::define_fifo_opt_generator()
     local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
 
     # Define FIFO
-    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}"
+    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}" || exit 1
 
     # Get absolute name of FIFO
     local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
@@ -1017,7 +1038,7 @@ debasher::define_fifo_opt_generator()
 #
 # Examples
 #
-#   define_fifo_opt_generator "-o" "${fifoname}" "${task_idx}" "optlist"
+#   define_fifo_opt_generator "-outf" "${fifoname}" "${task_idx}" "optlist"
 #
 # The function does not return any value
 define_fifo_opt_generator() { debasher::define_fifo_opt_generator "$@"; }

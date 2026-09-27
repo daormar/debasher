@@ -6,8 +6,10 @@ Program with Cycles
     # This module shows that DeBasher workflows are not restricted to
     # acyclic graphs. process_a and process_b each declare their output
     # FIFO through define_fifo_opt and read the other's FIFO through
-    # define_opt_from_proc_out, so each one depends on the other and the
-    # resulting graph contains a cycle. At runtime the two processes run
+    # define_opt_from_proc_out, so the data flows in a cycle between
+    # them. The cycle lives in the FIFOs only: an option connected to a
+    # FIFO puts no scheduling dependency between the two processes, so
+    # the scheduler sees no cycle. At runtime the two processes run
     # concurrently and exchange values back and forth over the FIFOs
     # until process_a sends the DEBASHER_SHUTDOWN_TOKEN constant, at
     # which point process_b exits its loop and the program finishes.

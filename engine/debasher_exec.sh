@@ -283,6 +283,21 @@ write_exec_context()
 }
 
 ########
+# A fifo carries its data through the kernel of the machine where it is
+# opened, not through the filesystem that holds its name, even a shared
+# one: its two ends only meet when they run on the same machine, which
+# nothing makes the jobs of Slurm do. A program that uses fifos is
+# therefore refused on Slurm, instead of hanging with each end of a fifo
+# waiting for the other.
+ensure_scheduler_supports_fifos()
+{
+    if [ "$(debasher::_get_scheduler)" = "${DEBASHER_SLURM_SCHEDULER}" ] && debasher::_program_uses_fifos; then
+        echo "Error: this program uses fifos, which cannot be run with the ${DEBASHER_SLURM_SCHEDULER} scheduler (the two ends of a fifo only meet when they run on the same machine); use --sched ${DEBASHER_BUILTIN_SCHEDULER} instead" >&2
+        return 1
+    fi
+}
+
+########
 ensure_program_not_being_executed()
 {
     if there_are_in_progress_processes "${outd}"; then
@@ -672,7 +687,7 @@ check_process_opts()
             local processname
             for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
                 # Register fifos
-                debasher::_register_fifos_used_by_process "${cmdline}" "${processname}"
+                debasher::_register_fifos_used_by_process "${cmdline}" "${processname}" || return 1
             done
         fi
     }
@@ -1333,6 +1348,8 @@ depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
 check_process_opts "${command_line}" "${outd}" "${program_opts_file}" \
                    "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
+
+ensure_scheduler_supports_fifos || exit 1
 
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
 gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
