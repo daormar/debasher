@@ -147,12 +147,19 @@ debasher::_print_script_body_slurm_sched()
     echo "opts_fname=\$(debasher::_get_process_opts_filename $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${SLURM_ARRAY_TASK_ID}\")"
     echo "debasher::_print_opts_as_qstrings \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" > \"\${opts_fname}\""
 
-    # Write skip function if it was provided
-    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        echo "${skip_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" && { echo \"Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code \$?\" >&2; exit 1; }"
-    fi
-
     echo "debasher::_display_begin_process_message"
+
+    # A task that the skip method of its process skips counts as finished
+    # (see debasher_builtin_sched::_execute_funct_plus_postfunct)
+    local sign_process_completion_cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}")
+    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        echo "if ${skip_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\"; then"
+        echo "    echo \"Process ${processname} skipped by its skip method; counted as finished\" >&2"
+        echo "    ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
+        echo "    debasher::_display_end_process_message"
+        echo "    exit 0"
+        echo "fi"
+    fi
 
     # Reset output directory
     if [ "${reset_funct}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
@@ -187,7 +194,6 @@ debasher::_print_script_body_slurm_sched()
     echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
 
     # Signal process completion
-    local sign_process_completion_cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}")
     echo "${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
 }
 

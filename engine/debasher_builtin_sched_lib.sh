@@ -1188,12 +1188,18 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
 
     debasher_builtin_sched::_write_opts_file "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 
-    # Execute process skip function if it was provided
-    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        ${skip_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}" && { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
-    fi
-
     debasher::_display_begin_process_message
+
+    # A task that the skip method of its process skips counts as finished:
+    # it signals its completion without resetting its output directory or
+    # running the process or its post method, so that the processes that
+    # depend on it run with the outputs it already has
+    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ] && ${skip_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"; then
+        echo "Process ${processname} skipped by its skip method; counted as finished" >&2
+        debasher::_signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
+        debasher::_display_end_process_message
+        return 0
+    fi
 
     debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 

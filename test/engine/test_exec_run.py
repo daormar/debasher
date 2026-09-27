@@ -322,3 +322,145 @@ def test_a_process_sees_what_its_module_computed_when_debasher_exec_loaded_it(tm
     stdout = (outdir / "__exec__" / "show_param" / "show_param.stdout").read_text()
     assert stdout == "value next to the module\n"
     assert (outdir / ".exec_context.sh").exists()
+
+
+# A process that is always skipped, and one that depends on its output
+# file; the output of the skipped one exists from before
+SKIP_CHAIN_MODULE = """\
+producer_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+}
+
+producer_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "__PRODUCED_FILE__" optlist || return 1
+    save_opt_list optlist
+}
+
+producer_skip()
+{
+    return 0
+}
+
+producer()
+{
+    echo "produced by the process" > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+consumer_explain_opts()
+{
+    explain_opt "-inf" "<file>" "Input file"
+}
+
+consumer_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "producer" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+consumer()
+{
+    cat "$(read_opt_value_from_func_args "-inf" "$@")"
+}
+
+debasher_skipchain_program()
+{
+    add_debasher_process "producer" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "consumer" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_a_skipped_process_counts_as_finished_and_its_dependents_run(tmp_path, sched):
+    produced = tmp_path / "produced.txt"
+    produced.write_text("there from before\n")
+    pfile = tmp_path / "debasher_skipchain.sh"
+    pfile.write_text(SKIP_CHAIN_MODULE.replace("__PRODUCED_FILE__", str(produced)))
+    outdir = tmp_path / "out"
+
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), *extra)
+    assert result.returncode == 0, result.stderr
+
+    assert produced.read_text() == "there from before\n"
+    assert (outdir / "__exec__" / "producer" / "producer.finished").exists()
+    consumer_out = (outdir / "__exec__" / "consumer" / "consumer.stdout").read_text()
+    assert consumer_out == "there from before\n"
+
+
+def test_the_skip_example_finishes_when_value_reader_is_skipped(tmp_path):
+    outdir = tmp_path / "out"
+    # The sum is odd, so value_reader is skipped
+    result = run_exec("--pfile", str(SKIP_EXAMPLE), "--outdir", str(outdir), "-num-a", "1", "-num-b", "2")
+    assert result.returncode == 0, result.stderr
+
+    status = subprocess.run(
+        [str(REPO_ROOT / "bin" / "debasher_status"), "-d", str(outdir)], capture_output=True, text=True
+    )
+    assert status.returncode == 0, status.stdout + status.stderr
+
+
+# An array of four tasks whose odd tasks are skipped
+SKIP_ARRAY_MODULE = """\
+arr_explain_opts()
+{
+    explain_opt "-idx" "<int>" "Index of the task"
+}
+
+arr_define_opts()
+{
+    local i
+    for (( i = 0; i < 4; i++ )); do
+        local optlist=""
+        define_opt "-idx" "${i}" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+arr_skip()
+{
+    local idx=$(read_opt_value_from_func_args "-idx" "$@")
+    (( idx % 2 == 1 ))
+}
+
+arr()
+{
+    echo "ran $(read_opt_value_from_func_args "-idx" "$@")"
+}
+
+debasher_skiparray_program()
+{
+    add_debasher_process "arr" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_the_skip_of_an_array_is_decided_task_by_task(tmp_path):
+    pfile = tmp_path / "debasher_skiparray.sh"
+    pfile.write_text(SKIP_ARRAY_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    execdir = outdir / "__exec__" / "arr"
+    for idx in range(4):
+        assert (execdir / f"arr_{idx}.finished").exists()
+    assert (execdir / "arr_0.stdout").read_text() == "ran 0\n"
+    assert (execdir / "arr_2.stdout").read_text() == "ran 2\n"
+    assert not (execdir / "arr_1.stdout").exists()
+    assert not (execdir / "arr_3.stdout").exists()

@@ -278,3 +278,30 @@ EOF
     [[ " ${lines[*]} " == *"k_w k_r"* ]]
     [[ "${output}" != *"unary operator"* ]]
 }
+
+# --- skipping a task --------------------------------------------------------
+
+@test "_execute_funct_plus_postfunct counts a skipped task as finished without running the process or its post method" {
+    local marks="${BATS_TEST_TMPDIR}/marks"
+    debasher::_get_opts_for_process_and_task() {
+        echo "-x${DEBASHER_ARG_SEP}1"
+    }
+    debasher_builtin_sched::_write_opts_file() { :; }
+    debasher::_signal_process_completion() {
+        echo "completion $2 $3" >> "${marks}"
+    }
+    skipped() {
+        echo "process" >> "${marks}"
+    }
+    skipped_skip() {
+        return 0
+    }
+    skipped_post() {
+        echo "post" >> "${marks}"
+    }
+
+    run debasher_builtin_sched::_execute_funct_plus_postfunct "" "${OUTDIR}" skipped 1 0
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"skipped by its skip method; counted as finished"* ]]
+    [ "$(cat "${marks}")" = "completion skipped 0" ]
+}

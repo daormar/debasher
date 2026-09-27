@@ -782,7 +782,15 @@ missing.
 
 * ``skip``: decides, from the process's own options, whether to skip
   running it entirely for a given execution. **Returning 0 means the
-  process is skipped; any other exit code lets it run normally.**
+  process is skipped; any other exit code lets it run normally.** A
+  skipped process counts as finished: its output directory is left as
+  it is, neither the process nor its ``post`` method run, and the
+  processes that depend on it run with the outputs it already has. It
+  is decided task by task for an array. Like a process that ran, a
+  skipped one is not evaluated again by later executions unless it has
+  to run again (for instance, because its options changed). A process
+  that writes into a FIFO should not be skipped, since the process that
+  reads the FIFO would wait for it forever.
 
   .. code-block:: bash
 
