@@ -959,14 +959,13 @@ asks for everything both of them ask for:
   the run, as does a type the engine does not know.
 
 The table gives the meaning that a program relies on. Two schedulers carry it
-out, and each departs from it in one known place, described in "Scheduling":
-the built-in scheduler treats `aftercorr` as `afterok`, so the tasks of an
-array wait for the whole producer, and a Slurm older than 16.05, which has no
+out, and each departs from it in one known place, described in "Scheduling": the
+built-in scheduler treats `aftercorr` as `afterok`, so the tasks of an array
+wait for the whole producer, and a Slurm older than 16.05, which has no
 `aftercorr`, gets `afterok` in its place. Both only make a process wait longer
 than the program asked for, never less. A program run with
-`--builtinsched-oneshot`, which launches everything in a single round and
-never waits for a process to end, is refused when it has any dependency other
-than `none` and `after`.
+`--builtinsched-oneshot`, which never waits for a process to end, is refused
+when it has any dependency other than `none` and `after`.
 
 ## Explicit dependencies
 
@@ -1206,11 +1205,126 @@ who runs the program, and to future work.
 
 # Scheduling
 
+Once the run is prepared, the processes are handed to a scheduler, which
+launches the tasks of each process when their dependencies hold and keeps the
+ids that tell whether they still run. The engine has two schedulers: the
+built-in scheduler, which runs the tasks on the local machine, and the Slurm
+scheduler, which submits them to a Slurm cluster. This section describes what
+the rest of the engine asks of a scheduler, and how each of the two answers.
+
 ## The scheduler abstraction
+
+The scheduler of a run is decided once, while the run is prepared: the one
+named with `--sched` (`BUILTIN` or `SLURM`), or else the Slurm scheduler when
+`sbatch` is found on the machine where `debasher_exec` runs, and the built-in
+scheduler otherwise. The command line file records the scheduler that the run
+used, so that the tools that read the run later take the same one, wherever
+they run. A resident program always runs on the built-in scheduler.
+
+The rest of the engine does not depend on the scheduler, and asks it for a few
+things only: to write the process script of a process, to launch it, to give
+the ids of what it launched, to tell whether an id still runs, and to stop an
+id. The ids of a process are kept in its exec directory, in a `.id` file, and a
+process is `IN-PROGRESS` exactly when one of its ids still runs (see "Process
+status"). For the built-in scheduler an id is the process id of the script of
+a task; for the Slurm scheduler it is a job id. `debasher_stop` ends a run
+through the same operation, whatever its scheduler.
+
+Both schedulers take the dependencies of each process from the final process
+specification, and give them the meaning described in "Dependency types and
+how they merge", with the departures listed below. One case is common to both:
+a dependency on a process that is not launched in this run. Such a process has
+either finished in an earlier run, and a dependency on it holds, except
+`afternotok`, which asks for it to have failed; or it has not finished and is
+not launched either, and a dependency on it never holds. A process whose
+dependencies cannot hold for this reason is not launched, and neither are the
+processes that depend on it: they are left for a later run.
 
 ## The built-in scheduler
 
+The built-in scheduler is `debasher_exec` itself, which stays in a loop of
+rounds until no task is left to launch and none still runs. In each round it:
+
+1. Reads the status of every process from its exec directory, and returns to
+   the budget the CPUs and memory of the processes that have ended. A process
+   that was running in this run and has ended without finishing is taken as
+   failed, which is what `afternotok` and `afterany` look for.
+2. Finds the candidates of the round: the tasks that are not running and have
+   not finished or failed, whose process has its dependencies satisfied, that
+   fit on their own in the free CPUs and memory, and, in an array process,
+   that the throttle of the process allows.
+3. Leaves out the tasks at one end of a FIFO whose other end cannot start with
+   them (see "Running both ends together").
+4. Chooses the tasks to launch. With no limit on CPUs or memory, every
+   candidate is chosen. With a limit, the choice is a knapsack problem, which
+   a greedy solver answers: each task is an item whose weights are its CPUs
+   and its memory, whose value is 1, divided among the tasks of an array
+   process, and the ends of a FIFO, or of a chain of FIFOs, are chosen all
+   together or none of them. A round that has candidates but can choose none
+   of them stops the run with an error.
+5. Launches the chosen tasks, writing the process script of a process when
+   its first task is launched (see "Running a process"), and waits one second
+   before the next round, or five when the program has more than ten
+   processes.
+
+The budget is given with `--builtinsched-cpus` and `--builtinsched-mem`, and is
+unlimited by default. Every task of a process asks for the `cpus` and `mem` of
+its process specification, and the built-in scheduler takes the first value of
+each when they are lists. `time`, `nodes`, `account` and `partition` are not
+used.
+
+A task is launched as a background process of its own process group, whose
+process id goes to the `.id` file of the task, so that stopping it reaches
+everything it started. The script of the task ignores `SIGTERM` itself, so
+that a graceful stop sent to its whole group ends what it runs but lets it
+finish its own bookkeeping; `debasher_stop` sends `SIGKILL` to the group.
+
+The built-in scheduler gives the dependency types the meaning of the table,
+with one departure: it treats `aftercorr` as `afterok`, so the tasks of an
+array wait for every task of the producer, not only for their own
+counterpart. A dependency holds when the status of the producer says so:
+`after` once the producer has started, `afterok` once it has finished, and
+`afternotok` and `afterany` once it has failed in this run or, for
+`afterany`, finished.
+
+With `--builtinsched-oneshot`, `debasher_exec` goes through its rounds with no
+pause, launching whatever can start, and ends as soon as nothing more can
+start without waiting for something to end. It refuses a program with any
+dependency other than `none` and `after`, which only the end of a process
+could satisfy, and a program whose first round does not fit in the budget at
+once, before launching anything.
+
 ## The Slurm scheduler
+
+The Slurm scheduler submits every process of the run that has not finished and
+is not running as one Slurm job, in topological order, and `debasher_exec` then
+ends, unless `--wait` asks it to stay until no process is running. An array
+process is one job array, `--array=<task indices>`, with `%<throttle>` when it
+has a throttle; `--dflt-nodes` gives the nodes of the processes that do not set
+them, as `--dflt-throttle` gives the throttle for either scheduler. Every
+computational specification but `throttle` becomes an option of `sbatch`:
+`cpus`, `mem`, `time`, `account`, `partition` and `nodes`.
+
+Every job is submitted held, and released once its dependencies are in place,
+so that the dependencies of each task of a job array can be set before any of
+them starts. The dependencies of a process become Slurm dependencies on the
+job ids of its producers, with `,` and `?` kept as Slurm reads them, every
+dependency or any of them. A Slurm older than 16.05, which has no `aftercorr`,
+gets `afterok` in its place; a newer one gets `aftercorr` as it is.
+
+When `mem` or `time` is a list of values separated by commas, the process is
+submitted once for each attempt, as many attempts as the longer of the two lists
+has values, and a shorter list repeats its last value. Each attempt runs only if
+the attempts before it failed, task by task in a job array, so that a task that
+fails, for example for exceeding its memory or its time, is run again with the
+next values. With more than one attempt, two verification jobs follow the
+attempts and record whether one of them succeeded, and the processes that depend
+on this one wait for the last of those jobs.
+
+The Slurm scheduler refuses a program that uses FIFOs (see "Running both ends
+together"), and it has no `UNFINISHED_BUT_RUNNABLE` status: the tasks of a job
+array are submitted together, never some of them in one round and the rest in
+another (see "Process status").
 
 # Running a process
 
