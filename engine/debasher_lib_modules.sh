@@ -301,6 +301,25 @@ debasher::_get_loaded_module_fname()
 }
 
 ########
+debasher::_check_module_not_being_loaded()
+{
+    local fullmodname=$1
+
+    local being_loaded
+    for being_loaded in "${DEBASHER_MODULE_LOAD_STACK[@]}"; do
+        if [ "${being_loaded}" = "${fullmodname}" ]; then
+            local chain=""
+            local mod
+            for mod in "${DEBASHER_MODULE_LOAD_STACK[@]}" "${fullmodname}"; do
+                chain="${chain:+${chain} -> }$("${BASENAME}" "${mod}")"
+            done
+            echo "Error: modules load each other in a cycle (${chain})" >&2
+            return 1
+        fi
+    done
+}
+
+########
 # Public: Loads a DeBasher module.
 #
 # $1 - String containing the name of a module.
@@ -324,6 +343,12 @@ debasher::load_debasher_module()
 
     # Check that module file exists
     if [ -f "${fullmodname}" ]; then
+        # A module that is still being loaded and is asked for again was
+        # reached through a cycle of modules loading each other, which is
+        # an error: without it, the module would be loaded again, and so
+        # on without end
+        debasher::_check_module_not_being_loaded "${fullmodname}" || exit 1
+
         # Check that module has not been loaded previously
         if debasher::_module_is_loaded "${fullmodname}"; then
             :
@@ -335,12 +360,15 @@ debasher::load_debasher_module()
             pushd "${dirname}" > /dev/null
 
             # Load file
+            DEBASHER_MODULE_LOAD_STACK+=("${fullmodname}")
             . "${fullmodname}" || exit 1
+            unset 'DEBASHER_MODULE_LOAD_STACK[-1]'
 
             # Restore previous dir
             popd > /dev/null
 
-            # Store module file name in array
+            # Store module file name in array, once the modules it loads
+            # are, so that every module comes after the ones it loads
             DEBASHER_PROGRAM_MODULES+=("${fullmodname}")
         fi
     else

@@ -401,6 +401,10 @@ declare DEBASHER_SCHED_OPTS_DIR
 # Declare array to store file names of loaded modules
 declare -a DEBASHER_PROGRAM_MODULES
 
+# Declare array to store the file names of the modules being loaded, the
+# outermost first (see debasher::load_debasher_module)
+declare -a DEBASHER_MODULE_LOAD_STACK
+
 # Declare array to store, from the last module search, same-named
 # candidates found one level below a DEBASHER_MOD_DIR entry that were
 # rejected for not being a genuine DeBasher UI program directory (see
