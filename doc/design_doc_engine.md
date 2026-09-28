@@ -1616,4 +1616,119 @@ its own.
 
 # Guarantees and non-goals
 
+This section gathers the guarantees that the engine gives to a general
+program, stated along the way in the sections above, each with the section
+that describes it, and then the limits of those guarantees and what the engine
+leaves, by design, to the program or to whoever runs it.
+
+**Guarantees.**
+
+1. A run is prepared completely or not at all: an error while the modules are
+   loaded, the options built, the dependencies inferred or the specifications
+   checked stops `debasher_exec` before any process is launched (see
+   "Architecture").
+2. Only one `debasher_exec` prepares or runs a program in an output directory
+   at a time, and it refuses to start while a process of an earlier run in
+   that directory is still running (see "Architecture").
+3. A task runs the code of the modules as it was when its run was prepared;
+   only the external script of an alias is read when the task runs (see "The
+   process script: how code travels").
+4. The tools that read a run read it from its output directory alone: a module
+   changed or removed after the run does not change what they report. A moved
+   output directory can be read, and is refused by the tools that run its
+   processes (see "Tools that read a run").
+5. Every option of a task has a single value, and two definitions that give it
+   different values stop the preparation of the run (see "Defining the options
+   of a task").
+6. The dependency graph has no cycle, and explicit dependencies are well
+   formed and name processes of the program; a program that breaks either is
+   refused (see "The dependency graph").
+7. A process is never launched before its dependencies hold, with the meaning
+   of "Dependency types and how they merge": a scheduler may make it wait
+   longer, never less. A dependency on a process that is not launched in the
+   run holds only when that process has finished and the type is not
+   `afternotok`; otherwise the process, and those that depend on it, are left
+   for a later run (see "The scheduler abstraction").
+8. Every FIFO has one owner and at most one reader in the program, and it is
+   created again, empty, before its owner runs (see "Declaring and owning a
+   FIFO").
+9. Under the built-in scheduler, the two ends of a FIFO are launched in the
+   same round, or one once the other runs, or once the other only waits for it
+   to start; a program with FIFOs is refused under the Slurm scheduler (see
+   "Running both ends together").
+10. At the start of a run, the two ends of every FIFO are in the same state:
+    no run launches an end whose other end has finished and will not run again
+    (see "Running both ends together").
+11. A process is `FINISHED` only when every one of its tasks has succeeded or
+    was skipped (see "Process status").
+12. A mirror tap forwards every line that the owner writes, in order and as it
+    was written, to the reader and to the mirror log, and a tap that cannot
+    forward does not keep the owner from ending (see "Mirror taps").
+13. The oneshot mode of the built-in scheduler refuses, before launching
+    anything, a program that it could not run without waiting for something to
+    end (see "The built-in scheduler").
+14. A new run on an output directory runs every process that has not finished,
+    and every finished process that is forced, whose options changed, or whose
+    FIFO has an end that runs again, together with every process that depends
+    on them (see "Reruns").
+15. After `debasher_stop` on a whole program, no task of the run is running,
+    nothing is left that could launch one, and nothing is left half launched
+    (see "Tools that read a run").
+
+**Limits and non-goals.**
+
+- **Values.** A value of an option cannot contain a newline or the separator
+  `<_ARG_SEP_>`, nor start with `-` and a letter, and the order in which a
+  task receives its options is not kept (see "Defining the options of a
+  task").
+- **What counts as a change.** A changed input is a changed option: a file
+  changed in place under the same path is not one, and only the first ten
+  tasks of an array are compared. Outdated code is found only on request, by
+  the modification time of the modules, and against every module of the
+  program (see "Reruns").
+- **Cycles through FIFOs.** Whether a loop through FIFOs ends, and whether its
+  processes can block waiting for each other, is decided by the protocol
+  between the processes, not by the engine (see "Cycles through FIFOs").
+- **When one end of a FIFO fails.** The engine does not watch the other end,
+  which can block for good; stopping it is left to `debasher_stop` (see "When
+  one end fails").
+- **An end that goes first.** An end of a FIFO launched before the other,
+  because the other only waits for it to start, holds its resources while it
+  waits, and the other may then never fit (see "Running both ends together").
+- **`aftercorr` in the built-in scheduler.** It is run as `afterok`: the tasks
+  of an array wait for the whole producer (see "The built-in scheduler").
+- **Ending a task.** A process function that calls `exit`, or that a signal
+  kills, ends its whole task, with no `_post` method and no error message from
+  the engine (see "Executing a task").
+- **Process ids.** A process id that the system gives again to an unrelated
+  process can make a process of the built-in scheduler look `IN-PROGRESS`
+  (see "Process status").
+- **Names.** A process, or a shared directory, may have the name of a file of
+  the engine at the top of the output directory, and the engine does not
+  refuse it (see "The output directory").
+- **Mirror taps.** A mirror tap forwards lines of text, and relies on opening
+  a FIFO for reading and writing, which POSIX leaves undefined (see "Mirror
+  taps").
+- **Resident programs.** Their guarantees are those of
+  `doc/design_doc_resident.md`, which change or replace several of the above.
+
 # Future work
+
+What is known to be missing from the design, or left open by it:
+
+- **Watching the ends of a FIFO.** When one end of a FIFO fails, the built-in
+  scheduler could stop the other, instead of leaving it blocked until someone
+  runs `debasher_stop`.
+- **Resources of an end that goes first.** The end of a FIFO that is launched
+  before the other could have the resources of both reserved, or both could be
+  launched in the same round in dependency order, so that the other end always
+  fits.
+- **`aftercorr` task by task.** The built-in scheduler could launch each task
+  of an array as soon as its counterpart has succeeded, as Slurm does.
+- **Portable mirror taps.** A mirror tap that does not rely on opening a FIFO
+  for reading and writing.
+- **Finer change detection.** Comparing the contents of input files, all the
+  tasks of an array, and, for outdated code, only the module that defines each
+  process and the external scripts of aliases.
+- **Reserved names.** Refusing a process or a shared directory whose name is
+  that of a file of the engine in the output directory.
