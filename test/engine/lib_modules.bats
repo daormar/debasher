@@ -27,6 +27,7 @@ setup() {
     # debasher_lib.sh becomes local to setup() unless forced global here
     declare -ga DEBASHER_REJECTED_MOD_CANDIDATES
     declare -ga DEBASHER_PROGRAM_MODULES
+    declare -ga DEBASHER_MODULE_LOAD_STACK
 
     cwd_dir="${BATS_TEST_TMPDIR}/cwd"
     mod_dir="${BATS_TEST_TMPDIR}/mods"
@@ -142,4 +143,51 @@ setup() {
     run debasher::_resolve_pfile "prg.sh"
     [ "${status}" -eq 0 ]
     [ "${output}" = "${mod_dir}/some_outdir/prg.sh" ]
+}
+
+# --- debasher::load_debasher_module -------------------------------------
+
+@test "load_debasher_module loads a module loaded by two others once, after the modules it loads" {
+    cat > "${mod_dir}/mod_c.sh" <<'EOM'
+echo "loading c" >> "${LOAD_LOG}"
+EOM
+    cat > "${mod_dir}/mod_b.sh" <<'EOM'
+load_debasher_module mod_c
+echo "loading b" >> "${LOAD_LOG}"
+EOM
+    cat > "${mod_dir}/mod_a.sh" <<'EOM'
+load_debasher_module mod_b
+load_debasher_module mod_c
+echo "loading a" >> "${LOAD_LOG}"
+EOM
+    export LOAD_LOG="${BATS_TEST_TMPDIR}/load.log"
+    DEBASHER_MOD_DIR="${mod_dir}"
+
+    load_debasher_module mod_a 2> /dev/null
+
+    [ "$(cat "${LOAD_LOG}")" = "$(printf 'loading c\nloading b\nloading a')" ]
+    [ "${#DEBASHER_PROGRAM_MODULES[@]}" -eq 3 ]
+    [ "${DEBASHER_PROGRAM_MODULES[0]}" = "${mod_dir}/mod_c.sh" ]
+    [ "${DEBASHER_PROGRAM_MODULES[2]}" = "${mod_dir}/mod_a.sh" ]
+}
+
+@test "load_debasher_module fails, naming the cycle, when two modules load each other" {
+    echo "load_debasher_module mod_b" > "${mod_dir}/mod_a.sh"
+    echo "load_debasher_module mod_a" > "${mod_dir}/mod_b.sh"
+    DEBASHER_MOD_DIR="${mod_dir}"
+
+    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_a"
+    [ "${status}" -ne 0 ]
+    [ "${status}" -ne 124 ]
+    [[ "${output}" == *"modules load each other in a cycle (mod_a.sh -> mod_b.sh -> mod_a.sh)"* ]]
+}
+
+@test "load_debasher_module fails when a module loads itself" {
+    echo "load_debasher_module mod_self" > "${mod_dir}/mod_self.sh"
+    DEBASHER_MOD_DIR="${mod_dir}"
+
+    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_self"
+    [ "${status}" -ne 0 ]
+    [ "${status}" -ne 124 ]
+    [[ "${output}" == *"(mod_self.sh -> mod_self.sh)"* ]]
 }

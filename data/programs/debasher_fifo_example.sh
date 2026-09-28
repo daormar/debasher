@@ -120,23 +120,6 @@ fifo_reader_define_opts()
 }
 
 ########
-fifo_reader_define_opt_deps()
-{
-    # Initialize variables
-    local opt=$1
-    local producer_process=$2
-
-    case ${opt} in
-        "-inf")
-            echo "after"
-            ;;
-        *)
-            echo ""
-            ;;
-    esac
-}
-
-########
 fifo_reader()
 {
     # Initialize variables

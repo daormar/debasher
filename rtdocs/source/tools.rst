@@ -90,13 +90,19 @@ DeBasher program. It is described in the :ref:`exec` Section, in its
 <string>`` (output directory) and ``-p <string>`` (name of a specific
 process) options covered there, ``debasher_status`` also accepts
 ``-i``, which additionally shows the scheduler id assigned to each
-process.
+process. Like ``debasher_stats`` and ``debasher_stop``, it takes the
+processes of the program from ``program.procspec`` in the output
+directory, not from the module, so it reports the processes that ran
+even if the module changed since.
 
 debasher_stats
 ^^^^^^^^^^^^^^^
 
 ``debasher_stats`` reports, for the processes of a DeBasher program,
-their status and the elapsed time in seconds until completion. It is
+their status and the elapsed time in seconds until completion. For an
+array process, it gives the total time of its finished tasks followed by
+the time of each one (``<total> : <idx>-><time> ; ...``), and the total
+is ``UNKNOWN`` when the time of any of its tasks is. It is
 described in the :ref:`exec` Section, in its `Program Statistics
 Generation` part. As with ``debasher_status``, the output directory is
 given with ``-d <string>`` and, optionally, a single process can be
@@ -162,8 +168,9 @@ debasher_get_sched_out
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 ``debasher_get_sched_out`` shows the scheduler output for a process,
-which includes its standard and error output together with
-scheduling-related information, and is therefore useful for debugging.
+which includes its error output together with scheduling-related
+information, and is therefore useful for debugging. Its standard output
+is not included: ``debasher_get_stdout`` shows it.
 It is introduced in the :ref:`quickstart_example` Section. As with
 ``debasher_get_stdout``, it takes ``-d <string>`` and ``-p <string>``,
 plus an optional ``-t <int>`` to select an individual task of a task
@@ -174,19 +181,20 @@ debasher_get_fifo_mirror
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``debasher_get_fifo_mirror`` shows the mirrored content of a process's
-FIFO, i.e. a copy of everything written to or read from it, provided
-the FIFO was declared with the mirroring option of
-``define_fifo_opt``/``define_fifo_opt`` (see the :ref:`implem`
-Section for more information about FIFOs) and the owning process has
-already run.
+FIFO, i.e. a copy of everything the owning process wrote into it,
+provided the FIFO was declared with the mirroring option of
+``define_fifo_opt``/``define_fifo_opt_generator`` on an output option
+(see the :ref:`implem` Section for more information about FIFOs) and
+the owning process has already run.
 
 Its options are:
 
 * ``-d <string>``: output directory for program processes.
 * ``-p <string>``: name of the process owning the mirrored FIFO.
 * ``-f <string>``: name of the FIFO, as given to ``define_fifo_opt``.
-* ``-t <int>``: index of the task array, if the owning process is part
-  of one.
+* ``-t <int>``: accepted for uniformity with ``debasher_get_stdout``
+  and ``debasher_get_sched_out``, and ignored: the name of a FIFO
+  already tells apart the FIFOs of the tasks of an array.
 * ``--watch``: follow the file as it grows (like ``tail -f``) instead
   of printing its current contents and exiting.
 

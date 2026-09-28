@@ -96,33 +96,6 @@ debasher::_get_task_finished_filename()
 }
 
 ########
-debasher::_apply_deptype_to_processids()
-{
-    # Initialize variables
-    local processids=$1
-    local deptype=$2
-
-    # Apply deptype
-    local result=""
-    local separator=$(debasher::_get_processdeps_separator ${processids})
-    if [ "${separator}" = "" ]; then
-        local processids_blanks=${processids}
-    else
-        local processids_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processids})
-    fi
-    local id
-    for id in ${processids_blanks}; do
-        if [ -z "" ]; then
-            result=${deptype}:${id}
-        else
-            result=${result}"${separator}"${deptype}:${id}
-        fi
-    done
-
-    echo $result
-}
-
-########
 debasher::_get_list_of_pending_tasks_in_array()
 {
     # NOTE: a pending task here is just one that is not finished

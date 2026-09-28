@@ -64,7 +64,7 @@ if [ $# -eq 0 ]; then
 else
     if [ "$1" = "--" ]; then
         shift
-        echo "Executing: $processname $opts" >&2
+        echo "Executing: ${processname} $*" >&2
         "${processname}" "$@" || exit 1
     else
         print_desc >&2

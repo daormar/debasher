@@ -90,8 +90,8 @@ Three stages:
    since the project's Vite/React frontend needs a newer Node than Debian
    bookworm ships.
 2. `builder` (`debian:bookworm-slim`): builds engine + API the normal
-   autotools way (`autoreconf`, `./configure --disable-frontend
-   --disable-schedulers`, `make`, `make install DESTDIR=/out`).
+   autotools way (`autoreconf`, `./configure --disable-frontend`, `make`,
+   `make install DESTDIR=/out`).
    `--disable-frontend` is used because this stage has no npm; the frontend
    built in stage 1 is copied in separately instead.
 3. `runtime` (`debian:bookworm-slim`): copies the installed engine/API from

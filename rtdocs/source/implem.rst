@@ -623,8 +623,8 @@ be:
 .. code-block:: bash
 
     # Checking process options...
-    PROCESS: file_writer ; OPTIONS: -s Hello\ World\! -outf <path_to_out_dir>/out/file_writer/out.txt
-    PROCESS: file_reader ; OPTIONS: -inf <path_to_out_dir>/out/file_writer/out.txt
+    PROCESS: file_writer ; NUM_TASKS: 1 ; OPTIONS: -s Hello\ World\! -outf <path_to_out_dir>/out/file_writer/out.txt
+    PROCESS: file_reader ; NUM_TASKS: 1 ; OPTIONS: -inf <path_to_out_dir>/out/file_writer/out.txt
 
 .. _program_definition :
 
@@ -757,9 +757,11 @@ missing.
   (taken from the ``array`` example, where ``array_writer`` uses it to
   remove a stale output file from a previous run before recreating it.)
 
-* ``post``: run right after the process implementation finishes
-  successfully, e.g. for post-processing or cleanup. It also receives
-  the same options as the implementation:
+* ``post``: run right after the process implementation returns,
+  whether it succeeded or failed, e.g. for post-processing or cleanup.
+  It does not run when the implementation ends the whole task, by
+  calling ``exit`` or by being killed by a signal. It also receives the
+  same options as the implementation:
 
   .. code-block:: bash
 
@@ -782,17 +784,22 @@ missing.
 
 * ``skip``: decides, from the process's own options, whether to skip
   running it entirely for a given execution. **Returning 0 means the
-  process is skipped; any other exit code lets it run normally.**
+  process is skipped; any other exit code lets it run normally.** A
+  skipped process counts as finished: its output directory is left as
+  it is, neither the process nor its ``post`` method run, and the
+  processes that depend on it run with the outputs it already has. It
+  is decided task by task for an array. Like a process that ran, a
+  skipped one is not evaluated again by later executions unless it has
+  to run again (for instance, because its options changed). A process
+  that writes into a FIFO should not be skipped, since the process that
+  reads the FIFO would wait for it forever.
 
   .. code-block:: bash
 
       value_reader_skip()
       {
           # Initialize variables
-          local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
-
-          # Read value from descriptor
-          local value=$(read_value_from_desc "${val_desc}")
+          local value=$(read_opt_value_from_func_args "-val-desc" "$@")
 
           # Skip if the read value is odd
           if ((value % 2 == 1)); then
@@ -803,6 +810,36 @@ missing.
       }
 
   (see the ``skip`` example for the full module.)
+
+* ``define_opt_deps``: changes the type of the dependency that DeBasher
+  infers from one option on the process that produces its value. It
+  receives the name of the option and the name of that process, and
+  prints the type to use instead, ``none`` to have no dependency, or
+  nothing to keep the inferred one. By default, an option connected to
+  a file gives ``afterok`` and an option connected to a FIFO gives no
+  dependency, so that both ends of a FIFO start together:
+
+  .. code-block:: bash
+
+      stream_report_define_opt_deps()
+      {
+          # Initialize variables
+          local opt=$1
+          local producer_process=$2
+
+          case ${opt} in
+              "-inf")
+                  echo "afterany"
+                  ;;
+              *)
+                  echo ""
+                  ;;
+          esac
+      }
+
+  (see the ``define_opt_deps`` example, where a report runs whether the
+  process it reads from succeeded or failed, and a FIFO reader is
+  launched once its writer has started.)
 
 * ``outdir_basename``: echoes the basename to use for the process's own
   output directory, instead of the default (the process name itself):
@@ -880,14 +917,23 @@ third argument):
 * ``processdeps``: explicit dependencies on other processes (e.g.
   ``afterok:other_process``, ``aftercorr:other_process``, ``none``,
   ...), needed when a dependency is not already implied by an option
-  connection. See the ``explicit_deps``/``host_workflow_expl_deps``
-  examples.
+  connection. They replace the dependencies DeBasher would infer from
+  the options, instead of adding to them. See the
+  ``explicit_deps``/``host_workflow_expl_deps`` examples. The types are
+  those of Slurm: ``after`` (the other process started), ``afterok``
+  (it finished successfully), ``afternotok`` (it failed), ``afterany``
+  (it finished either way) and ``aftercorr`` (between two arrays, each
+  task waits for the task with the same index of the other process to
+  finish successfully). The built-in scheduler runs ``aftercorr`` as
+  ``afterok``, waiting for every task of the other array, which is
+  safe but gives up starting a task as soon as its own counterpart is
+  done; Slurm runs it task by task.
 * ``alias``/``ext_alias``: reuse another process's implementation (one
   already defined in the same module tree, or an external script file,
   respectively) as this process's own, instead of providing one
   directly. See the ``hello_world_alias``/``hello_world_ext_alias``
   examples.
-* ``alias_opt_map``: only valid alongside ``alias``/``ext_alias`` — a
+* ``alias_opt_map``: only valid alongside ``alias``/``ext_alias``: a
   comma-separated list of ``OLD:NEW`` option-label pairs, renaming this
   process's own option names into the ones the aliased implementation
   expects. See the ``alias_opt_map`` example.
@@ -1026,6 +1072,8 @@ repository.
    fwriter_freader
 
    fifo
+
+   define_opt_deps
 
    generator
 

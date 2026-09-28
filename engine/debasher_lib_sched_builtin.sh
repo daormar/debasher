@@ -111,17 +111,7 @@ debasher::_get_elapsed_time_for_process_builtin()
                 echo ${difft}
                 ;;
             *)  # Process is a task array
-                local result=""
-                local taskidx
-                for taskidx in $(debasher::_get_finished_array_task_indices "${dirname}" ${processname}); do
-                    local log_filename=$(debasher::_get_task_log_filename "${dirname}" ${processname} ${taskidx})
-                    local difft=$(debasher::_get_elapsed_time_from_logfile "${log_filename}")
-                    if [ ! -z "${result}" ]; then
-                        result="${result} "
-                    fi
-                    result="${result}${taskidx}->${difft} ;"
-                done
-                echo ${result}
+                debasher::_get_elapsed_time_for_array_process "${dirname}" "${processname}" debasher::_get_task_log_filename
                 ;;
         esac
     else

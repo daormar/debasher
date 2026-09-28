@@ -1,6 +1,6 @@
 EXTRA_DIST = lib_utils.bats lib_processes.bats lib_programs.bats	\
 lib_modules.bats lib_mirror.bats builtin_sched_lib.bats		\
-lib_resident_tools.bats						\
+lib_resident_tools.bats lib_sched.bats lib_sched_rerun.bats lib_sched_slurm.bats \
 conftest.py test_envelope.py test_fbpprocess.py test_thread_topology.py	\
 test_barrier.py test_checkpoint.py test_run.py test_supervisor.py	\
 test_input_log.py test_arrival_positions.py test_recovery.py test_send_data.py	\
@@ -18,7 +18,8 @@ test_launcher.py test_launcher_ref.py debasher_launcher_ref.sh	\
 debasher_launcher_batch.sh					\
 test_observe.py test_watcher.py test_watch_ref.py			\
 debasher_watch_ref.sh debasher_watch_batch.sh			\
-test_channel_kinds.py test_hold_fifos.py
+test_channel_kinds.py test_hold_fifos.py test_compare_opts.py test_prg_lib.py \
+test_exec_run.py
 
 check-local:
 if HAVE_BATS

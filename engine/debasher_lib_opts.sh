@@ -122,10 +122,13 @@ debasher::_sep_serialized_to_qstr()
     local preproc_sargs
     preproc_sargs="${sargs//${sep}/$'\n'}"
     local array=()
-    while IFS= read -r; do
-        [[ -n "${REPLY}" ]] && array+=("${REPLY}")
-    done <<< "${preproc_sargs}"
-    printf '%q ' "${array[@]}"
+    if [ -n "${sargs}" ]; then
+        # An empty element is an option given an empty value, printed as ''
+        while IFS= read -r; do
+            array+=("${REPLY}")
+        done <<< "${preproc_sargs}"
+        printf '%q ' "${array[@]}"
+    fi
 }
 
 ########
@@ -286,7 +289,7 @@ debasher::_get_opt_value_from_func_args()
         fi
 
         # If the next token is itself an option, this option has no value
-        if [ "${1:0:1}" = "-" ] || [ "${1:0:2}" = "--" ]; then
+        if debasher::_str_is_option "$1"; then
             echo "${DEBASHER_VOID_VALUE}"
             return 1
         fi
@@ -768,10 +771,10 @@ debasher::_print_program_opts()
             # Check if option belongs to current category
             if [ ${DEBASHER_PROGRAM_OPT_CATEG[${key}]} = $categ ]; then
                 # Print option
-                if [ -z ${DEBASHER_PROGRAM_OPT_TYPE[$opt]} ]; then
+                if [ -z "${DEBASHER_PROGRAM_OPT_TYPE[$key]}" ]; then
                     echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
                 else
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$opt]} [${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
                 fi
             fi
         done
@@ -800,12 +803,32 @@ debasher::_define_fifo_task_idx()
     # Get augmented fifo name
     local augm_fifoname="${processname}/${fifoname}"
 
-    # Store name of FIFO in associative arrays
-    DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}
+    # A fifo is named after its owner process, not after the task of it
+    # that defines it, so two tasks of an array that define fifos with the
+    # same name would define the same fifo. Defining it again from the
+    # same task is not an error: an option generator runs several times
+    # for the same task
+    local owner_task="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+    if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] && [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" != "${owner_task}" ]; then
+        local prev_task="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+        echo "Error: fifo ${fifoname} of process ${processname} is defined by task ${prev_task} and by task ${task_idx}; each task needs a fifo name of its own" >&2
+        return 1
+    fi
 
-    # Register FIFO user as external initially (this registration will
-    # be corrected later when analyzing the FIFOs used by each process)
-    DEBASHER_FIFO_USERS["${augm_fifoname}"]=${DEBASHER_EXTERNAL_FIFO_USER}
+    # A mirror tap is set on the value of an output option (see
+    # debasher::_start_fifo_mirror_taps_for_process), so a mirrored fifo
+    # has to be defined through one
+    if [ "${mirrored}" = "1" ] && ! debasher::_str_is_output_option "${opt}"; then
+        echo "Error: fifo ${fifoname} of process ${processname} is mirrored, but its option ${opt} is not an output option (-out* or --out*)" >&2
+        return 1
+    fi
+
+    # Store name of FIFO in associative arrays
+    DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]=${owner_task}
+
+    # Register FIFO reader as external initially (this registration will
+    # be corrected later when analyzing the FIFOs read by each process)
+    DEBASHER_FIFO_READERS["${augm_fifoname}"]=${DEBASHER_EXTERNAL_FIFO_END}
 
     # Flag fifo as mirrored if requested (see
     # debasher::_start_fifo_mirror_taps_for_process)
@@ -876,8 +899,9 @@ debasher::_read_fifo_opt_flags()
 # $4 - (optional) "--mirror": also duplicate everything this process
 #      writes to the fifo into a separate, non-destructively readable
 #      mirror log file (see debasher::_start_fifo_mirror_taps_for_process).
-#      Only meaningful on the process that WRITES to the fifo. Not
-#      allowed in a resident program (the program aborts when loaded).
+#      Only allowed on an output option (-out* or --out*), through
+#      which the process writes to the fifo. Not allowed in a resident
+#      program (the program aborts when loaded).
 #      In a resident program, at most one of these tags may be given as
 #      well (refused in a general program when it is loaded):
 #      "--control": the reader's end of the fifo is a control port;
@@ -892,8 +916,8 @@ debasher::_read_fifo_opt_flags()
 #
 # Examples
 #
-#   debasher::define_fifo_opt "-o" "${fifoname}" "optlist"
-#   debasher::define_fifo_opt "-o" "${fifoname}" "optlist" --mirror
+#   debasher::define_fifo_opt "-outf" "${fifoname}" "optlist"
+#   debasher::define_fifo_opt "-outf" "${fifoname}" "optlist" --mirror
 #   debasher::define_fifo_opt "-trigger" "${fifoname}" "optlist" --control
 #
 # The function does not return any value
@@ -919,7 +943,7 @@ debasher::define_fifo_opt()
     local task_idx=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}
 
     # Define FIFO
-    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}"
+    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}" || exit 1
 
     # Get absolute name of FIFO
     local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
@@ -943,7 +967,7 @@ debasher::define_fifo_opt()
 #
 # Examples
 #
-#   define_fifo_opt "-o" "${fifoname}" "optlist"
+#   define_fifo_opt "-outf" "${fifoname}" "optlist"
 #
 # The function does not return any value
 define_fifo_opt() { debasher::define_fifo_opt "$@"; }
@@ -965,7 +989,7 @@ define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 #
 # Examples
 #
-#   debasher::define_fifo_opt_generator "-o" "${fifoname}" "${task_idx}" "optlist"
+#   debasher::define_fifo_opt_generator "-outf" "${fifoname}" "${task_idx}" "optlist"
 #
 # The function does not return any value
 debasher::define_fifo_opt_generator()
@@ -988,7 +1012,7 @@ debasher::define_fifo_opt_generator()
     local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
 
     # Define FIFO
-    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}"
+    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}" || exit 1
 
     # Get absolute name of FIFO
     local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
@@ -1014,7 +1038,7 @@ debasher::define_fifo_opt_generator()
 #
 # Examples
 #
-#   define_fifo_opt_generator "-o" "${fifoname}" "${task_idx}" "optlist"
+#   define_fifo_opt_generator "-outf" "${fifoname}" "${task_idx}" "optlist"
 #
 # The function does not return any value
 define_fifo_opt_generator() { debasher::define_fifo_opt_generator "$@"; }
@@ -1480,8 +1504,8 @@ debasher::_optname_is_correct()
         debasher::errmsg "$funcname: option name could not be the empty string"
         return 1
     else
-        if [[ ! "${opt}" =~ ^(-|--) ]]; then
-            debasher::errmsg "$funcname: option name should start with '-' or '--'"
+        if ! debasher::_str_is_option "${opt}"; then
+            debasher::errmsg "$funcname: option name should be '-' or '--' followed by a letter or an underscore (${opt})"
             return 1
         fi
     fi
@@ -1671,6 +1695,11 @@ debasher::_get_value_descriptor_name()
 # $1 - Option name.
 # $2 - Name of variable that will store the information about the option to be added.
 #
+# The process writes its value with write_value_to_desc. A process that
+# reads it, through an option defined with define_opt_from_proc_out,
+# gets the value itself from read_opt_value_from_func_args, which reads
+# the descriptor on its own.
+#
 # Examples
 #
 #   debasher::define_value_desc_opt "-o" "optlist"
@@ -1699,6 +1728,11 @@ debasher::define_value_desc_opt()
 #
 # $1 - Option name.
 # $2 - Name of variable that will store the information about the option to be added.
+#
+# The process writes its value with write_value_to_desc. A process that
+# reads it, through an option defined with define_opt_from_proc_out,
+# gets the value itself from read_opt_value_from_func_args, which reads
+# the descriptor on its own.
 #
 # Examples
 #
@@ -1770,7 +1804,7 @@ debasher::_show_program_fifos()
 {
     local augm_fifoname
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        echo "${augm_fifoname}" ${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]} ${DEBASHER_FIFO_USERS["${augm_fifoname}"]}
+        echo "${augm_fifoname}" ${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]} ${DEBASHER_FIFO_READERS["${augm_fifoname}"]}
     done
 }
 
@@ -1974,8 +2008,8 @@ debasher::_split_opt_multival()
 #
 # $1 - Name of the associative array storing the option list.
 # $2 - Option name.
-# $3 - Raw value to record (a literal, an empty string for a flag, or
-#      a process-output descriptor).
+# $3 - Raw value to record (a literal, possibly empty,
+#      DEBASHER_VOID_VALUE for a flag, or a process-output descriptor).
 debasher::_merge_opt_value()
 {
     local -n ref=$1
@@ -2039,14 +2073,12 @@ debasher::save_opt_list()
             local opt="${token}"
             shift
 
-            # No token left after this option: nothing more to process
-            [ $# -eq 0 ] && continue
-
-            # If the next token is itself an option, this option has no
-            # value; record it as empty and don't shift, so it's picked
-            # up as a new option next iteration
-            if debasher::_str_is_option "$1"; then
-                debasher::_merge_opt_value "${opt_list_name}" "${opt}" ""
+            # An option followed by nothing, or by another option, is a
+            # flag, recorded as DEBASHER_VOID_VALUE so that it is told
+            # apart from an option given an empty value; the next option
+            # is not shifted, so it's picked up next iteration
+            if [ $# -eq 0 ] || debasher::_str_is_option "$1"; then
+                debasher::_merge_opt_value "${opt_list_name}" "${opt}" "${DEBASHER_VOID_VALUE}"
                 continue
             fi
 
@@ -2281,7 +2313,7 @@ debasher::_load_curr_opt_list_loop()
             done
 
             # Define option
-            if [ -z "${value}" ]; then
+            if [ "${value}" = "${DEBASHER_VOID_VALUE}" ]; then
                 debasher::define_flag "${opt}" "_load_curr_opt_list_loop_optlist"
             else
                 debasher::define_opt "${opt}" "${value}" "_load_curr_opt_list_loop_optlist"
@@ -2345,25 +2377,6 @@ debasher::_get_serial_process_opts()
 }
 
 ########
-debasher::_show_out_values_for_processes()
-{
-    for outval in "${!DEBASHER_OUT_VALUE_TO_PROCESSES[@]}"; do
-        echo "${outval} -> ${DEBASHER_OUT_VALUE_TO_PROCESSES[${outval}]}"
-    done
-}
-
-########
-debasher::_get_proc_out_opt_from_desc()
-{
-    local proc_out_opt_descriptor=$1
-
-    # Obtain process plus option info
-    local process_opt_info="${proc_out_opt_descriptor#$DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}"
-
-    echo ${PROCESS_TO_OUT_VALUE["${process_opt_info}"]}
-}
-
-########
 # Public: Writes value to value descriptor.
 #
 # $1 - Value to be written in the descriptor.
@@ -2403,28 +2416,26 @@ debasher::_read_value_from_desc()
     cat "${value_descriptor}"
 }
 
-read_value_to_desc() { debasher::read_value_to_desc "$@"; }
 
 ########
-debasher::get_sched_opts_dir_given_basedir()
-{
-    local dirname=$1
-
-    echo "${dirname}/${DEBASHER_SCHED_OPTS_DIRNAME}"
-}
-
-########
+# The directory with the options of every task of the processes: the
+# .sched_opts directory of the output directory, or
+# DEBASHER_SCHED_OPTS_DIR when set, as debasher_exec --check-proc-opts
+# does so as to leave the output directory of a run untouched.
 debasher::_get_sched_opts_dir()
 {
-    debasher::get_sched_opts_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
+    if [ -n "${DEBASHER_SCHED_OPTS_DIR}" ]; then
+        echo "${DEBASHER_SCHED_OPTS_DIR}"
+    else
+        echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_SCHED_OPTS_DIRNAME}"
+    fi
 }
 
 ########
 debasher::_get_sched_opts_fname_for_process()
 {
-    local dirname=$1
-    local processname=$2
+    local processname=$1
 
-    local sched_opts_dir=$(debasher::get_sched_opts_dir_given_basedir "${dirname}")
+    local sched_opts_dir=$(debasher::_get_sched_opts_dir)
     echo "${sched_opts_dir}/${DEBASHER_SCHED_OPTS_FNAME_FOR_PROCESS_PREFIX}${processname}"
 }

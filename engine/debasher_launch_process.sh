@@ -110,6 +110,8 @@ launch_process()
         task_idx=${taskidx}
     fi
 
+    debasher::_check_outdir_not_moved "${absdirname}" || return 1
+
     debasher_builtin_sched::_launch "${absdirname}" "${processname}" "${task_idx}"
 }
 

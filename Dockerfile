@@ -8,9 +8,9 @@
 #
 # This image is meant for demoing/evaluating DeBasher, not for production
 # use: it has no conda/docker-in-docker support for processes that need
-# their own environment (--disable-schedulers is also set, since SGE/Slurm
-# make no sense inside a container), and programs run as the "debasher"
-# user's home directory, which is not persisted unless you mount a volume.
+# their own environment, and programs run as the "debasher" user's home
+# directory, which is not persisted unless you mount a volume. Processes
+# run on the built-in scheduler, since the image has no Slurm.
 
 ########################################################################
 # Stage 1: frontend (Vite needs a newer Node than Debian bookworm ships)
@@ -42,9 +42,8 @@ COPY . .
 #
 # --disable-frontend: this stage has no npm, and the built frontend is
 # copied in separately from the frontend-builder stage below.
-# --disable-schedulers: SGE/Slurm are meaningless inside a container.
 RUN autoreconf -i -I m4 --force \
-    && ./configure --disable-frontend --disable-schedulers --prefix=/usr/local \
+    && ./configure --disable-frontend --prefix=/usr/local \
     && make \
     && make install DESTDIR=/out
 
