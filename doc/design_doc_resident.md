@@ -67,6 +67,10 @@ that exist in the code or that have been decided. Earlier text called the input
 log the "message log" and its replay "drain"; both names are gone from the code.
 The vocabulary of the guarantees (deterministic, idempotent, chaos test,
 mutation check, durability level) is defined in the Contract, where it is used.
+Terms of the engine that this glossary does not list, such as task, option
+list, output directory, process script or completion marker, have the meaning
+that the design of the engine (`doc/design_doc_engine.md`) gives them, and so
+do the entries below that refer to it.
 
 ## Program and topology
 
@@ -92,7 +96,8 @@ mutation check, durability level) is defined in the Contract, where it is used.
   delivers envelopes in the order in which they were sent. Business channels
   carry `DATA` and `BARRIER`; the channels to and from the `Supervisor` carry
   only `INTERACT`.
-- **fifo owner** (dueño de una fifo): the process whose `define_fifo_opt` (or
+- **fifo owner** (propietario de la fifo): the FIFO owner, as defined in the
+  design of the engine: the process whose `define_fifo_opt` (or
   `define_fifo_opt_generator`) creates a FIFO. It is the process that writes
   it, except for a fifo tagged `--control` or `--external` whose writer is
   outside the program, which its reader owns (see "Channel kinds declared with
@@ -170,15 +175,16 @@ mutation check, durability level) is defined in the Contract, where it is used.
 - **incarnation** (encarnación): one running instance of a node's process.
   Relaunching a node after a crash starts a new incarnation of the same node,
   which reuses its FIFOs, its directory and its checkpoints.
-- **execdir**: the node's own directory, `__exec__/<process_name>/` under the
-  program's output directory, exported to the process as
-  `DEBASHER_PROCESS_EXECDIR`. Its checkpoints and its input log live there. The
-  tasks of an array process share it, as they already share the engine's own
-  files, which carry the task's index (`<process_name>_<idx>.id`, `.sched_out`,
-  ...). A task gets its index too, exported as `DEBASHER_PROCESS_TASK_IDX`
-  (empty for a process that is not an array), and adds `_<idx>` to the name of
-  everything it keeps there: `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>`
-  and `control_ports_<idx>` (`_execdir_entry`).
+- **execdir**: the exec directory of the node's process, as defined in the
+  design of the engine, `__exec__/<process_name>/` under the program's output
+  directory, exported to the process as `DEBASHER_PROCESS_EXECDIR`. Its
+  checkpoints and its input log live there. The tasks of an array process share
+  it, as they already share the engine's own files, which carry the task's index
+  (`<process_name>_<idx>.id`, `.sched_out`, ...). A task gets its index too,
+  exported as `DEBASHER_PROCESS_TASK_IDX` (empty for a process that is not an
+  array), and adds `_<idx>` to the name of everything it keeps there:
+  `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>` and `control_ports_<idx>`
+  (`_execdir_entry`).
 - **limits of a node** (límites de un nodo): `INPUT_LOG_MAX_BYTES`,
   `OUT_BACKLOG_MAX_BYTES`, `OUT_BACKLOG_FAIL_BYTES` and
   `GIL_SWITCH_INTERVAL_SECS`, class attributes of `FBPProcess` that a module
@@ -443,9 +449,9 @@ mutation check, durability level) is defined in the Contract, where it is used.
 - **runs root** (raíz de ejecuciones): the directory under which a launcher
   node places its batch runs: the output directory of its process, or an
   absolute path that its class gives.
-- **run directory** (directorio de ejecución): the output directory of one
-  batch run, `<runs root>/<run>`, where `<run>` is a relative path that the
-  request names, or else the position of the request in the input log.
+- **run directory** (directorio de la ejecución por lotes): the output directory
+  of one batch run, `<runs root>/<run>`, where `<run>` is a relative path that
+  the request names, or else the position of the request in the input log.
 - **registration** (registro): `launch.json` in a run directory, which records
   which request of which life of a launcher node the directory belongs to.
 - **life** (vida): the time between two clean starts of a launcher node,
