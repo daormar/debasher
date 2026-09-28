@@ -757,9 +757,11 @@ missing.
   (taken from the ``array`` example, where ``array_writer`` uses it to
   remove a stale output file from a previous run before recreating it.)
 
-* ``post``: run right after the process implementation finishes
-  successfully, e.g. for post-processing or cleanup. It also receives
-  the same options as the implementation:
+* ``post``: run right after the process implementation returns,
+  whether it succeeded or failed, e.g. for post-processing or cleanup.
+  It does not run when the implementation ends the whole task, by
+  calling ``exit`` or by being killed by a signal. It also receives the
+  same options as the implementation:
 
   .. code-block:: bash
 

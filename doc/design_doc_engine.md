@@ -512,8 +512,9 @@ when a process does not define it:
 | `_define_opt_deps` | while the dependencies are inferred, for each option on each producer | the inferred dependency type is used |
 | `_skip` | by the task, before the process output directory is reset, with the options of the task | the task is never skipped |
 | `_reset_outfiles` | by the task, before the process function, with the options of the task | the default reset (see "Executing a task") |
-| `_post` | by the task, after the process function, whether it failed or not | nothing runs after the process function |
+| `_post` | by the task, once the process function returns, whether it succeeded or failed | nothing runs after the process function |
 | `_outdir_basename` | whenever the process output directory is needed | the directory is named after the process |
+| `_slurm_sigterm_handler` | by a task under the Slurm scheduler, when Slurm sends it `SIGTERM`, as when its time runs out | the task prints a message and exits with an error |
 | `_conda_envs`, `_docker_imgs` | while the run is prepared, with `--conda-support` or `--docker-support` | the process needs no environment |
 | `_document` | by `debasher_doc_mod`, which documents a module | the process has no description |
 
@@ -1329,13 +1330,145 @@ another (see "Process status").
 
 # Running a process
 
+A process runs as its tasks, each an execution of the process script that the
+engine writes for it. This section describes what the engine prepares for a
+process before it is launched, how the code of the program reaches the
+process script, what a task does from the moment it starts to the moment it
+leaves its completion marker, and how a process gets the Conda environments
+and Docker images it needs.
+
 ## Preparing a run
+
+Before the scheduler launches a process, the engine prepares it, and only a
+process that is neither finished nor running is prepared; a finished process
+that is not marked to rerun is left exactly as it is, with its outputs, logs
+and completion markers. For a process that is prepared:
+
+- A process that has never run gets its exec directory, `__exec__/<process>`.
+- A process that has run before loses the ids and the logs of its previous
+  run, and, for an array process, only those of the tasks that have not
+  finished, so that the finished tasks of an array are not run again. A
+  process marked to rerun has already lost its completion markers (see
+  "Reruns"), so none of its tasks counts as finished.
+- The FIFOs that the process owns are created again, empty (see "Declaring
+  and owning a FIFO").
+- Its process output directory is created if it does not exist. What it
+  holds from an earlier run is not removed here: each task resets it when it
+  starts (see "Executing a task").
 
 ## The process script: how code travels
 
+A task runs in a shell of its own, on the local machine or on a node of a
+cluster, which has not loaded any module and may not be able to. What it needs
+of the program travels in its process script, which the engine writes into
+the exec directory of the process when the process is launched. The script
+has three parts:
+
+- **The execution context**, a copy of `.exec_context.sh`, which
+  `debasher_exec` writes once the program is defined (see "Architecture"). It
+  holds every function defined in the shell of `debasher_exec`, those of the
+  modules and of the engine alike, and the variables of that shell: every
+  variable of the engine, and every variable the modules define. It leaves
+  out what the task gets anyway or must not get: the variables that Bash sets
+  by itself, read-only ones, exported variables and functions, which the task
+  inherits from its environment, and the option lists of the tasks, which
+  reach each task on their own (see "How option values reach a task").
+  A variable declared with no value, such as an associative array still
+  empty, is kept with its declaration, so that it reaches the task with its
+  type.
+- **A header** with the name of the script, the output directory, the name of
+  the process and its number of tasks. Under the Slurm scheduler it also
+  installs the handler of `SIGTERM`, the `_slurm_sigterm_handler` method of
+  the process or a default one that prints a message and exits with an error.
+  Under the built-in scheduler it makes the script ignore `SIGTERM` (see "The
+  built-in scheduler").
+- **A body** that runs one task, the one whose index the scheduler gives it
+  (`BUILTIN_ARRAY_TASK_ID` or `SLURM_ARRAY_TASK_ID`), with the steps of
+  "Executing a task", and sends its output and errors to the log of the task.
+
+Since the context is copied when the script is written, a task runs the code
+that the modules had when its run was prepared, and a later run, which writes
+a new context and new scripts, does not change the scripts of a run that is
+still going. The one piece of code read when the task runs is the external
+script of an alias (see "Processes in other languages, and aliases").
+
 ## Executing a task
 
+A task goes through the same steps under both schedulers:
+
+1. It gets its option list, from its line of `.sched_opts` or from the option
+   generator of its process (see "How option values reach a task"), and
+   writes it to its `.opts` file.
+2. It logs the time it started.
+3. If the process has a `_skip` method and the method, called with the options
+   of the task, returns success, the task writes its completion marker, logs
+   the time it ended and stops: its process output directory, its process
+   function and its `_post` method are left untouched, and it counts as
+   finished.
+4. It resets the process output directory: through the `_reset_outfiles`
+   method of the process, called with the options of the task, or, without
+   that method, by emptying it when the process has a single task. The tasks
+   of an array process share the directory, and without the method it is left
+   as it is. A process of a resident program is never reset, since its
+   directory holds what its node has done so far.
+5. It starts the mirror taps of the mirrored FIFOs it owns (see "Mirror
+   taps"), which only the built-in scheduler runs.
+6. It runs the process function with its options as arguments, and sends what
+   the function prints to its standard output to its `.stdout` file.
+7. It stops its mirror taps, and counts the task as failed if one of them
+   ended abnormally.
+8. It runs the `_post` method of the process, if there is one, with the
+   options of the task, whether the process function succeeded or failed. A
+   `_post` method that fails fails the task.
+9. If the process function failed, the task ends with an error. Otherwise it
+   writes its completion marker and logs the time it ended.
+
+Everything else that the task prints, the messages of the engine and the
+standard error of the process, goes to the log of the task,
+`<process>.sched_out` or `<process>_<index>.sched_out` under the built-in
+scheduler, and the file that Slurm writes under the Slurm scheduler. The start
+and end times in the log are what `debasher_stats` reads (see "Tools that read a
+run").
+
+The process function runs in the same shell as the task, not in a shell of its
+own. A process function that calls `exit`, or that is killed by a signal such
+as `SIGPIPE`, therefore ends the whole task: the remaining steps never run, so
+there is no `_post`, no error message from the engine and no completion
+marker, and the process is `UNFINISHED` (see "When one end fails"). A process
+function signals a failure by returning a status other than zero.
+
+Under the built-in scheduler, the task also exports, before it runs the
+process function, the directories and the facts that a process may read about
+itself without an option for them: its exec directory
+(`DEBASHER_PROCESS_EXECDIR`), its process output directory
+(`DEBASHER_PROCESS_OUTDIR`), the directory of the module that added it
+(`DEBASHER_PROCESS_MODULE_DIR`), its task index in an array process
+(`DEBASHER_PROCESS_TASK_IDX`), its computational specifications
+(`DEBASHER_PROCESS_COMP_SPECS`), and, for a node of a resident program, its
+ports (`DEBASHER_PROCESS_PORTS`). The resident runtime relies on them; the
+Slurm scheduler does not export them.
+
 ## Conda and Docker environments
+
+A process that needs a Conda environment or a Docker image declares it in its
+`_conda_envs` or `_docker_imgs` method, with `define_conda_env <name> <file>` or
+`pull_docker_img <image>`. The engine calls these methods only when the run is
+prepared with `--conda-support` or `--docker-support`, once for each process
+whatever its number of tasks, in the shell of `debasher_exec` and before any
+process is launched:
+
+- `define_conda_env` creates the environment from the `.yml` file when no
+  environment of that name exists, and leaves it alone otherwise. The file is
+  looked for in the directories of `DEBASHER_YML_DIR`, separated by colons,
+  and then among the environment files that DeBasher installs, and the output
+  of `conda` goes to `.conda/<name>.log` in the output directory.
+- `pull_docker_img` pulls the image when it is not already present.
+
+The engine only makes sure that the environment or the image exists. Using it
+is left to the process function, which activates the environment or runs the
+container itself, as `conda activate` or `docker run` would be used by hand.
+Without the options, the methods are not called, and the process function
+finds whatever the machine already has.
 
 # The state of a run
 
