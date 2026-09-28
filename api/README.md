@@ -5,15 +5,16 @@ serves the built frontend as well.
 
 ## Development
 
-Create a virtual environment and install the dependencies into it:
+From the repository root, create a virtual environment and install the
+dependencies into it:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r api/requirements.txt
 ```
 
-Then, from the repository root (with the virtual environment still
+Then, from the repository root too (with the virtual environment still
 activated):
 
 ```bash
@@ -30,8 +31,24 @@ deactivate
 ```
 
 It can be re-entered later with the same `source .venv/bin/activate`
-command — there's no need to recreate it, only re-run
-`pip install -r requirements.txt` after dependencies change.
+command: there's no need to recreate it, only to re-run
+`pip install -r api/requirements.txt` after dependencies change.
+
+### Tests
+
+The tests of the API need these same dependencies (pydantic 2 among
+them), so `make check` has to run them with the pytest of this virtual
+environment rather than that of the system. Install pytest into it and
+tell `./configure` which one to use:
+
+```bash
+.venv/bin/pip install pytest
+./configure PYTEST="$PWD/.venv/bin/pytest"
+```
+
+Running `./configure` with the virtual environment activated finds the
+same pytest first on `PATH`. A pytest whose Python has an older pydantic
+skips the test modules that need pydantic 2, and says why.
 
 ## Production
 

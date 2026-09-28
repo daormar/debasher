@@ -70,6 +70,11 @@ AC_PATH_PROGS(JAVA, java)
 # `make check`, it never fails the build)
 AC_PATH_PROGS(BATS, bats)
 AM_CONDITIONAL([HAVE_BATS], [test -n "$BATS"])
+# The Python suites need the dependencies of the API (api/requirements.txt,
+# pydantic 2 among them), which usually live in a virtual environment: its
+# pytest is given with ./configure PYTEST=<venv>/bin/pytest, or found first
+# on the PATH when the environment is activated for ./configure.
+AC_ARG_VAR([PYTEST], [pytest to run the Python test suites with, e.g. that of the virtual environment of api/README.md])
 AC_PATH_PROGS(PYTEST, pytest)
 AM_CONDITIONAL([HAVE_PYTEST], [test -n "$PYTEST"])
 

@@ -17,6 +17,19 @@ from pathlib import Path
 
 import pytest
 
+# The API reads and writes programs with pydantic 2 (api/requirements.txt).
+# A pytest whose Python has an older one, such as that of the system, skips
+# this module instead of failing it.
+import pydantic  # noqa: E402
+
+if int(pydantic.VERSION.split(".")[0]) < 2:
+    pytest.skip(
+        f"the API needs pydantic 2, and the Python of this pytest has {pydantic.VERSION}: "
+        "create the virtual environment of api/README.md, install pytest into it, and "
+        "run ./configure PYTEST=<venv>/bin/pytest",
+        allow_module_level=True,
+    )
+
 from api import persistence, script_generation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
