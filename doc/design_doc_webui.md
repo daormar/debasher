@@ -1000,7 +1000,9 @@ again from the store on every change.
 
 This section gathers the guarantees that the web UI gives today for general
 programs, stated in the sections above, and what it deliberately does not
-try to do. Where a guarantee has a known gap, "Future work" lists it.
+try to do. Where a guarantee has a known gap, "Future work" lists it. Those of
+resident programs, designed and not built, are gathered in "Guarantees and
+non-goals of a resident program".
 
 ## Guarantees
 
@@ -2047,6 +2049,92 @@ what each process status means in a resident program (see "Observing and
 talking to a live program"), and what each mark means: the node kind, an
 initiator, a node that observes the outside world, an external input, a
 business output read outside the program, and a trigger port.
+
+## Guarantees and non-goals of a resident program
+
+This subsection gathers the guarantees that the design of resident programs
+gives, stated in the subsections above, and what it deliberately does not try
+to do, as "Guarantees and non-goals" does for general programs. Those of
+general programs that the subsections above keep hold for resident programs
+too.
+
+**The program model and the round trip**
+
+- **The node kind and the code agree.** Script generation writes the class
+  declaration from the node kind, and the class is named after the process
+  (see "The program model of a resident program").
+- **The Supervisor wiring is always complete.** It is derived every time, and
+  never saved or drawn by hand, so adding or removing a node cannot leave it
+  half done (see "The program model of a resident program").
+- **Only connections that the engine accepts.** The canvas joins a business
+  output to a business input only, and offers neither `value_desc`,
+  `shared_dir` nor `--mirror` (see "The program model of a resident program").
+- **The code of a node is imported exactly, or refused.** Import keeps the
+  parts of a node, or refuses the program with an explanation for each node
+  that does not fit; it never keeps an approximation (see "Script generation
+  and import of a resident program").
+
+**The program's directories**
+
+- **No resume with a changed program without asking.** A launch on program
+  state compares the program with the launch record, and asks when they
+  differ or when there is no record; when in doubt it asks. A change in a
+  module that the preamble loads goes unseen (see "The directories of a
+  resident program").
+- **A reset loses no checkpoint unless asked to.** "Reset program state" sets
+  the program state aside by default (see "The directories of a resident
+  program").
+- **No change under a live program.** While the program is `live`, the
+  frontend refuses to save, to reset the program state and to change the
+  output directory (see "Running a resident program").
+
+**Execution and observation**
+
+- **A failed launch is reported at once.** `/run` waits for `debasher_exec`
+  and shows what it printed (see "Running a resident program").
+- **One live program per output directory.** A launch is refused while there
+  is a run in progress.
+- **A hard kill is never taken for an orderly stop.** The exit code with which
+  `debasher_stop_resident` reports that it fell back to `debasher_stop` is
+  shown as such (see "Running a resident program").
+- **Nothing that the web UI writes can bring a node down.** "Talk to FIFOs"
+  writes only `DATA` envelopes into external inputs, never a raw line, a
+  `CLOSE` or a command into a control port (see "Observing and talking to a
+  live program").
+- **Inspecting takes nothing from the program.** "Show node state" only reads,
+  with the rules of recovery, and the input log shows what arrived through a
+  channel without reading the channel (see "Observing and talking to a live
+  program").
+- **Any live program is observed and controlled**, whoever launched it (see
+  "Observing and talking to a live program").
+
+**A program that outlives the tab**
+
+- **Nothing that happens to a tab or to the backend stops the program, or
+  cuts a tool in the middle.** No event of a tab stops a resident program, and
+  every tool that acts on it runs in a session of its own and writes into a
+  file (see "A program that outlives the tab").
+- **Nothing is lost when the backend restarts**, as for a general program.
+
+**Non-goals**
+
+- **Coordinating two tabs.** Two orderly stops of the same program at the same
+  time, or a stop and "Restart node", are not coordinated by the web UI; a
+  single orderly stop at a time is left to the engine.
+- **Surviving a restart of the machine.** Nothing launches a resident program
+  again when the machine starts.
+- **Telling anyone that a program stopped by itself.** The next tab that opens
+  it sees it.
+- **A list of the live programs.** A live program is found by loading it.
+- **Supervising the `Supervisor`.** A `Supervisor` that dies is shown, not
+  relaunched.
+- **Holding any resident module.** A module whose `Supervisor` has code of its
+  own, or whose nodes do not fit the parts of a node, is refused, not
+  approximated.
+- **A status for each task on the canvas.** The canvas shows one status for
+  each process, and "Show node state" the state of each task.
+- **Changing the period of the snapshots of a live program.** A new period
+  applies from the next launch.
 
 # Future work
 
