@@ -1472,13 +1472,147 @@ finds whatever the machine already has.
 
 # The state of a run
 
+Everything that is known about a run is in its output directory (see
+"Architecture"): what `debasher_exec` wrote while preparing it, and what the
+scheduler and the tasks write while it goes on. This section lists what the
+directory holds, describes how the status of a process is derived from it,
+how a new run on the same directory decides what to run again, and what the
+tools that read a run take from it.
+
 ## The output directory
+
+The engine keeps its own files at the top of the output directory, with names
+that start with a dot, that are wrapped in double underscores, or that are
+fixed:
+
+| Path | Written by | Holds |
+|---|---|---|
+| `lock` | `debasher_exec`, when it starts | the lock of the directory, and the process id of the `debasher_exec` that holds it |
+| `command_line.sh` | `debasher_exec` | the directory it ran from and its command line, with the program file resolved and the scheduler recorded |
+| `.exec_context.sh` | `debasher_exec` | the execution context |
+| `program.procspec` | `debasher_exec` | the final process specification |
+| `program.opts`, `program.opts_old` | `debasher_exec` | the options of every process in this run and in the last run that ended normally |
+| `program.opts_exh` | `debasher_exec`, with `--gen-proc-graph` | the options of every task, for the process graph |
+| `program.fifos` | `debasher_exec` | the owner and the reader of every FIFO |
+| `.sched_opts/` | `debasher_exec` | the option list of every task of a process without an option generator |
+| `__graphs__/` | `debasher_exec` | the dependency graph, and the process graph when asked for |
+| `__fifos__/` | `debasher_exec` | the FIFOs, and, under `.mirror/`, the shim FIFOs and mirror logs |
+| `.conda/` | `debasher_exec`, with `--conda-support` | the logs of the Conda environments it created |
+| `.knapsack_*.txt` | the built-in scheduler | the input and the answer of the knapsack solver of the last round |
+| `__exec__/<process>/` | the scheduler and the tasks | the exec directory of each process |
+
+The exec directory of a process holds its process script, named after the
+process, and, for each task, its id, its options, its standard output, its log
+and its completion marker: `<process>.id`, `.opts`, `.stdout`, `.sched_out`
+and `.finished` for a process with a single task, and `<process>_<index>.id`
+and so on for the tasks of an array process. Under the Slurm scheduler, the
+logs are those that Slurm writes, one for each attempt.
+
+Everything else at the top of the directory belongs to the processes: the
+process output directory of each process, named after it or after what its
+`_outdir_basename` method gives, and the shared directories. They share the
+top of the directory with the files of the engine, and the engine refuses
+neither a process nor a shared directory whose name is one of those names.
 
 ## Process status
 
+The status of a process is derived, whenever it is asked for, from its exec
+directory and from the scheduler, and is kept nowhere:
+
+| Status | When |
+|---|---|
+| `TO-DO` | the process has no process script: it has never been launched |
+| `IN-PROGRESS` | one of the ids of the process still runs, as the scheduler says |
+| `FINISHED` | every task of the process has its completion marker |
+| `UNFINISHED_BUT_RUNNABLE` | built-in scheduler only: an array process with some tasks launched, none running, and some not launched yet |
+| `UNFINISHED` | any other case: the process was launched, nothing of it runs, and some task has no completion marker |
+
+A task writes its completion marker only when it ends well (see "Executing a
+task"), so a process is `FINISHED` only when every task succeeded or was
+skipped. An id runs when the process with that id exists, for the built-in
+scheduler, or when Slurm still lists the job, for the Slurm scheduler; a process
+id that the system gives again to an unrelated process after the task has ended
+can make the process look `IN-PROGRESS`. `UNFINISHED_BUT_RUNNABLE` is the state
+of an array that the built-in scheduler was launching a few tasks at a time,
+under a throttle or a budget of CPUs and memory, when its run stopped: the next
+run launches the tasks that are left. Under the Slurm scheduler the tasks of an
+array are submitted together, and the state does not arise.
+
+`debasher_status` prints the status of every process and a summary, and ends
+with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,
+and 3 otherwise; given `-p`, it counts only that process.
+
 ## Reruns
 
+A new run on an output directory launches the processes that are not finished,
+and runs again the finished processes that it marks to rerun, for one of these
+reasons:
+
+- **Forced.** The process has `force=yes` among its additional
+  specifications.
+- **Changed input.** The options of the process differ from those of the last
+  run that ended normally, as `program.opts` and `program.opts_old` give them:
+  any option, with any value, or the number of tasks. Only the options of the
+  first ten tasks of an array are compared, on the assumption that the tasks
+  of an array are alike. A process that the last run did not have is marked
+  too. What is compared is the options, not the files they name: a file
+  changed in place under the same path is not a changed input.
+- **Outdated code.** With `--rerun-outdated-procs`, a finished process whose
+  process script is older than any loaded module. The comparison is by the
+  modification time of the files, and against every module of the program, not
+  only the one that defines the process; an external script of an alias is not
+  compared.
+- **FIFO ends out of step.** One end of a FIFO has finished and the other has
+  not (see "Running both ends together"). The owner of a FIFO with an external
+  end is always marked when it has finished, since the engine cannot tell
+  whether the outside got what it needed.
+- **Resident resume.** In a resident program, every node that is not running
+  is marked, so that the program resumes from its checkpoints, as
+  `doc/design_doc_resident.md` describes.
+
+The marks then spread until nothing changes: from a process to every process
+that depends on it, and from one end of a FIFO to the other. A process marked
+to rerun loses its completion markers before the run is launched, so it is
+prepared and run as any unfinished process, every task of it.
+
+`program.opts_old` is written at the end of a run, once every process has been
+launched or, with the built-in scheduler, has ended. A run that is stopped or
+fails before that leaves the options of the run before it in place, so the
+next run compares with those, and a change it did not carry out is still found.
+
 ## Tools that read a run
+
+The tools that follow or act on a run read it from its output directory alone
+(see "Architecture"): they take the processes from `program.procspec`, the
+scheduler from `command_line.sh`, and everything else from the exec
+directories, and they neither load a module nor need the program file.
+
+- `debasher_status` gives the status of the processes (see "Process status"),
+  with `-i` their ids.
+- `debasher_stop` stops the run. Without `-p`, it first stops the
+  `debasher_exec` of the run if it still runs, whose process id is in the lock
+  file: it sends it `SIGTERM`, which makes the built-in scheduler, or the
+  Slurm scheduler while it submits jobs, launch nothing more from the next
+  round or process on, and `SIGKILL` if it has not ended within thirty
+  seconds, and waits until the lock is free. Only then does it stop every
+  process that is running, killing the process group of each task under the
+  built-in scheduler and cancelling its jobs under the Slurm scheduler. After
+  it, no task of the run runs and nothing is left that could launch one. With
+  `-p`, it stops the running tasks of that one process, and the rest of the
+  run goes on.
+- `debasher_stats` gives the time that each process, and each task of an
+  array, took, from the start and end times in their logs.
+- `debasher_get_stdout`, `debasher_get_sched_out` and
+  `debasher_get_fifo_mirror` print the standard output, the log, or the mirror
+  log of a process or of one of its tasks, or follow it as it grows.
+
+Two tools run processes of a run rather than read it, and refuse an output
+directory that has been moved: `debasher_exec` itself, and
+`debasher_launch_process`, which launches again one process or task of a run
+with the process script that the run wrote, as the `Supervisor` of a
+resident program does. `debasher_exec_process` runs one process function
+outside any run, after loading its module, which is useful to try a process on
+its own.
 
 # Guarantees and non-goals
 
