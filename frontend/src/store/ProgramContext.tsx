@@ -25,6 +25,8 @@ import { getOptionDirection } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
 import { buildConnectionSentinel } from "../models/edge";
 import type { Position } from "../models/position";
+import type { NodeCode, NodeKind } from "../models/node";
+import { emptyNodeCode, hasSupervisor } from "../models/node";
 import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 import { saveProgram } from "../storage/programStorage";
 import type { ProgramStatusResult } from "../api/executionApi";
@@ -101,7 +103,10 @@ interface ProgramContextType {
   // notice.
   dismissProgramRun: () => void;
 
-  addProcess: (name: string, info: ProcessInfo | null) => void;
+  // In a resident program `nodeKind` is the node kind of the new process,
+  // chosen when it is added: a node is written in Python, in the parts of
+  // NodeCode, and a Supervisor has no code of its own.
+  addProcess: (name: string, info: ProcessInfo | null, nodeKind?: NodeKind) => void;
 
   // Merges `loaded`'s processes/edges into the current program as a new
   // group (see "Add program"): every merged process is tagged with a
@@ -110,7 +115,12 @@ interface ProgramContextType {
   // (via window.alert) instead of merging if any of `loaded`'s process
   // names collide with an existing one, they can't be deduped by
   // renaming, since add_debasher_program only knows the source module's
-  // own original names.
+  // own original names. Only a program of the same type is merged. A
+  // resident program is merged process by process, never as a group: a
+  // module added with add_debasher_program would carry its own Supervisor
+  // wiring, while the wiring of the whole program has to be derived again
+  // with the new nodes. A program with a Supervisor refuses one that brings
+  // another.
   mergeProgram: (loaded: Program, sourceDir: string) => void;
 
   applyProcessInfo: (
@@ -178,6 +188,16 @@ interface ProgramContextType {
   setProcessCode: (
     processId: string,
     code: string
+  ) => void;
+
+  setNodeCode: (
+    processId: string,
+    nodeCode: NodeCode
+  ) => void;
+
+  setInitiator: (
+    processId: string,
+    initiator: boolean
   ) => void;
 
   setComputationalSpecs: (
@@ -644,7 +664,16 @@ export function ProgramProvider({
     setSelectedProcessId(processId);
   }
 
-  function addProcess(name: string, info: ProcessInfo | null) {
+  function addProcess(name: string, info: ProcessInfo | null, nodeKind?: NodeKind) {
+
+    const nodeFields: Partial<ProgramProcess> = nodeKind
+      ? {
+          nodeKind,
+          initiator: false,
+          nodeCode: nodeKind === "Supervisor" ? undefined : emptyNodeCode(),
+          language: "python",
+        }
+      : {};
 
     const process: ProgramProcess = {
 
@@ -677,6 +706,8 @@ export function ProgramProvider({
 
       additionalMethods: {},
 
+      ...nodeFields,
+
     };
 
     setProgram(current => ({
@@ -687,6 +718,27 @@ export function ProgramProvider({
   }
 
   function mergeProgram(loaded: Program, sourceDir: string) {
+
+    if (loaded.programType !== program.programType) {
+      window.alert(
+        `Cannot add program "${loaded.name}": it is a ${loaded.programType} ` +
+        `program, and this one is a ${program.programType} program. "Add ` +
+        `program" brings in only a program of the same type.`
+      );
+      return;
+    }
+
+    if (
+      program.programType === "resident" &&
+      hasSupervisor(program.processes) &&
+      hasSupervisor(loaded.processes)
+    ) {
+      window.alert(
+        `Cannot add program "${loaded.name}": it has a Supervisor, and this ` +
+        `program already has one. A program has at most one Supervisor.`
+      );
+      return;
+    }
 
     const collisionName = loaded.processes.find(process =>
       program.processes.some(
@@ -702,6 +754,8 @@ export function ProgramProvider({
       );
       return;
     }
+
+    const isResident = program.programType === "resident";
 
     const groupId = crypto.randomUUID();
 
@@ -740,12 +794,14 @@ export function ProgramProvider({
           x: process.position.x + offsetX,
           y: process.position.y,
         },
-        groupSource: {
-          programName: loaded.name,
-          groupId,
-          groupSize: loaded.processes.length,
-          sourceDir,
-        },
+        groupSource: isResident
+          ? undefined
+          : {
+              programName: loaded.name,
+              groupId,
+              groupSize: loaded.processes.length,
+              sourceDir,
+            },
       };
 
     });
@@ -764,7 +820,9 @@ export function ProgramProvider({
         .map(entry => entry.trim())
         .filter(Boolean);
 
-      const envVars = modDirEntries.includes(sourceDir)
+      // Merged process by process, a resident program loads nothing from
+      // the directory it came from.
+      const envVars = isResident || modDirEntries.includes(sourceDir)
         ? current.envVars
         : {
             ...current.envVars,
@@ -1097,6 +1155,44 @@ export function ProgramProvider({
       processes: current.processes.map(process =>
         process.id === processId
           ? { ...process, code }
+          : process
+      ),
+
+    }));
+
+  }
+
+  function setNodeCode(
+    processId: string,
+    nodeCode: NodeCode
+  ) {
+
+    setProgram(current => ({
+
+      ...current,
+
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, nodeCode }
+          : process
+      ),
+
+    }));
+
+  }
+
+  function setInitiator(
+    processId: string,
+    initiator: boolean
+  ) {
+
+    setProgram(current => ({
+
+      ...current,
+
+      processes: current.processes.map(process =>
+        process.id === processId
+          ? { ...process, initiator }
           : process
       ),
 
@@ -1585,6 +1681,10 @@ export function ProgramProvider({
     setProcessLanguage,
 
     setProcessCode,
+
+    setNodeCode,
+
+    setInitiator,
 
     setComputationalSpecs,
 

@@ -1,0 +1,208 @@
+import { useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+
+import { useProgram } from "../store/ProgramContext";
+import { languageExtension } from "./codeLanguages";
+import type { ProgramProcess } from "../models/process";
+import type { NodeCode, NodeKind } from "../models/node";
+import { NODE_HOOKS, emptyNodeCode, isRequiredHook, nodeClassName } from "../models/node";
+
+interface Props {
+  process: ProgramProcess;
+  onClose: () => void;
+}
+
+type Part = keyof NodeCode;
+
+/**
+ * The code of a node of a resident program, edited part by part: the node
+ * preamble, the class body and one body for each hook. The lines that
+ * script generation writes around them (the import of the node kind, the
+ * class declaration, the signature of each hook) are shown read only: the
+ * class is named after the process and derives from the node kind, so the
+ * user never writes it. Every part is edited without the indentation that
+ * script generation adds.
+ */
+export default function NodeCodeEditor({ process, onClose }: Props) {
+
+  const { setNodeCode } = useProgram();
+
+  const kind: NodeKind = process.nodeKind ?? "FBPProcess";
+
+  const className = nodeClassName(process.name);
+
+  const [draft, setDraft] =
+    useState<NodeCode>(() => ({ ...emptyNodeCode(), ...process.nodeCode }));
+
+  const [part, setPart] =
+    useState<Part>("classBody");
+
+  const parts: { part: Part; label: string; note?: string }[] = [
+    { part: "preamble", label: "Node preamble" },
+    { part: "classBody", label: "Class body" },
+    ...NODE_HOOKS.map(({ part: hook, name }) => ({
+      part: hook as Part,
+      label: name,
+      note: isRequiredHook(kind, hook)
+        ? "required"
+        : kind === "FBPProcess"
+          ? "only to observe the outside world"
+          : `overrides that of ${kind}`,
+    })),
+  ];
+
+  const hook = NODE_HOOKS.find(h => h.part === part);
+
+  // What script generation writes before the part being edited, shown
+  // above the editor so that the part reads in its place.
+  const context =
+    part === "preamble"
+      ? `from debasher_runtime_lib import ${kind}`
+      : hook
+        ? `class ${className}(${kind}):\n    ${hook.signature}`
+        : `class ${className}(${kind}):`;
+
+  function handleSave() {
+    setNodeCode(process.id, draft);
+    onClose();
+  }
+
+  return (
+
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0, 0, 0, 0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+    >
+
+      <div
+        style={{
+          width: "80%",
+          maxWidth: 1100,
+          background: "#fff",
+          borderRadius: 4,
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+
+        <h3 style={{ margin: 0 }}>
+          Node code: {process.name} ({kind})
+        </h3>
+
+        <div style={{ display: "flex", gap: 12 }}>
+
+          <nav
+            style={{
+              width: 220,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+            }}
+          >
+
+            {parts.map(({ part: p, label, note }) => (
+              <button
+                key={p}
+                onClick={() => setPart(p)}
+                style={{
+                  textAlign: "left",
+                  fontWeight: p === part ? "bold" : undefined,
+                  background: p === part ? "#e8eefc" : undefined,
+                }}
+              >
+                {label}
+                {draft[p].trim() ? " •" : ""}
+                {note && (
+                  <span style={{ display: "block", color: "#666", fontSize: 11, fontWeight: "normal" }}>
+                    {note}
+                  </span>
+                )}
+              </button>
+            ))}
+
+          </nav>
+
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+
+            <pre
+              style={{
+                margin: 0,
+                padding: "6px 8px",
+                background: "#f4f4f4",
+                color: "#666",
+                border: "1px solid #ddd",
+                fontSize: 13,
+              }}
+            >
+              {context}
+            </pre>
+
+            <div style={{ border: "1px solid #ccc" }}>
+
+              <CodeMirror
+
+                key={part}
+
+                value={draft[part]}
+
+                height="360px"
+
+                extensions={[
+                  languageExtension("python"),
+                ]}
+
+                onChange={value => setDraft(current => ({ ...current, [part]: value }))}
+
+              />
+
+            </div>
+
+            <div style={{ color: "#666", fontSize: 12 }}>
+              {part === "classBody"
+                ? "Class attributes, the constructor, which gives the node state its " +
+                  "first value, and helper methods. The ports of the node come from " +
+                  "its options: the class never declares them."
+                : part === "preamble"
+                  ? "Imports, helper functions and constants, before the class."
+                  : "The body of the hook, without its signature. An empty body " +
+                    "leaves the hook out."}
+            </div>
+
+          </div>
+
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+          }}
+        >
+
+          <button onClick={onClose}>
+            Cancel
+          </button>
+
+          <button onClick={handleSave}>
+            Save
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}

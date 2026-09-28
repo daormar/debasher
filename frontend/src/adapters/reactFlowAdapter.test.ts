@@ -148,3 +148,76 @@ describe("computeFlippedOptionIds", () => {
     expect(computeFlippedOptionIds(withLoop).size).toBe(0);
   });
 });
+
+describe("isValidProgramConnection in a resident program", () => {
+
+  function node(id: string, options: ProgramOption[], y = 0): ProgramProcess {
+    return { ...process(id, options, y), language: "python", nodeKind: "FBPProcess" };
+  }
+
+  const relay = node("relay", [
+    option("relay-in", "-inf"),
+    option("relay-ext", "-ext", { channel: "fifo", fifoTag: "external", value: "relay_ext" }),
+    option("relay-n", "-n", { commandLine: true }),
+    option("relay-outf", "-outf", { channel: "fifo", value: "relay_out" }),
+    option("relay-outv", "-outv", { value: "/tmp/v" }),
+  ]);
+
+  const collect = node("collect", [option("collect-in", "-inf")], 200);
+
+  function resident(processes: ProgramProcess[]): Program {
+    return { ...program(processes), programType: "resident" };
+  }
+
+  function connects(sourceHandle: string, target: string, targetHandle: string, source = "relay") {
+    return isValidProgramConnection(resident([relay, collect]), {
+      source,
+      target,
+      sourceHandle,
+      targetHandle,
+    });
+  }
+
+  it("joins a business output to an input of another node or of the same one", () => {
+    expect(connects("relay-outf", "collect", "collect-in")).toBe(true);
+    expect(connects("relay-outf", "relay", "relay-in")).toBe(true);
+  });
+
+  it("joins nothing from an output that is not a FIFO", () => {
+    expect(connects("relay-outv", "collect", "collect-in")).toBe(false);
+  });
+
+  it("joins nothing into an external input or a configuration option", () => {
+    expect(connects("relay-outf", "relay", "relay-ext")).toBe(false);
+    expect(connects("relay-outf", "relay", "relay-n")).toBe(false);
+  });
+
+  it("keeps a single connection into each business input", () => {
+    const withEdge: Program = {
+      ...resident([relay, collect]),
+      edges: [{
+        id: "e1",
+        sourceProcessId: "relay",
+        sourceOptionId: "relay-outf",
+        targetProcessId: "collect",
+        targetOptionId: "collect-in",
+      }],
+    };
+    expect(isValidProgramConnection(withEdge, {
+      source: "relay",
+      target: "collect",
+      sourceHandle: "relay-outf",
+      targetHandle: "collect-in",
+    })).toBe(false);
+  });
+
+  it("leaves a general program as it was", () => {
+    expect(isValidProgramConnection(program([relay, collect]), {
+      source: "relay",
+      target: "collect",
+      sourceHandle: "relay-outv",
+      targetHandle: "collect-in",
+    })).toBe(true);
+  });
+
+});

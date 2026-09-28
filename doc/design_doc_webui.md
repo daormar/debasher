@@ -1071,11 +1071,11 @@ non-goals of a resident program".
 
 # Resident programs in the web UI
 
-*Designed, not built.* The extension of the web UI to resident
-programs. A resident program is not a run that starts and finishes: its
-processes stay alive, keep state, recover from crashes and go through rounds.
-The UI has to build such a program, launch it, observe it while it lives and
-act on it.
+*Designed, and being built: a subsection that is built says so under its
+title.* The extension of the web UI to resident programs. A resident program
+is not a run that starts and finishes: its processes stay alive, keep state,
+recover from crashes and go through rounds. The UI has to build such a
+program, launch it, observe it while it lives and act on it.
 
 The sections before this one describe general programs only (see the
 Introduction). This section is where a resident program departs from them: for
@@ -1085,6 +1085,8 @@ whether the part applies unchanged, changes, or is replaced by a rule of its
 own.
 
 ## The program model of a resident program
+
+*Built.*
 
 A resident program is edited with the same program model as a general one. The
 model gains a few fields, and some of what a general program may hold is not
@@ -1144,11 +1146,12 @@ when it loads the program.
 
 **The `Supervisor`.** It is added like any node, with the node kind
 `Supervisor`, and refused when the program already has one. The user edits
-nothing of it but its computational specifications, `heartbeat_timeout_s` and
-`startup_timeout_s`: script generation writes its whole class and all its
-options. Among them is the flag `-no_hold_fifos`, a command line option, so
-that each run can choose whether the `Supervisor` holds the business channels
-(see "Holding the business channels" in `doc/design_doc_resident.md`).
+nothing of it but its name, its description and its computational
+specifications, `heartbeat_timeout_s` and `startup_timeout_s` among them:
+script generation writes its whole class and all its options. Among them is
+the flag `-no_hold_fifos`, a command line option, so that each run can choose
+whether the `Supervisor` holds the business channels (see "Holding the
+business channels" in `doc/design_doc_resident.md`).
 
 **The Supervisor wiring.** The channels between the `Supervisor` and the nodes
 are not part of the program model. Script generation derives them every time
@@ -1232,6 +1235,23 @@ the node kinds that read them: the limits of a node (`input_log_max_mb`,
 `startup_timeout_s` for every node, `max_concurrent_runs` and `batch_sched`
 for a `ProgramLauncher`, and `heartbeat_timeout_s` and `startup_timeout_s` for
 the `Supervisor`. The engine checks their values when it loads the program.
+
+**Additional specifications and methods.** A process of a resident program
+offers neither the additional specifications of a general process nor its
+additional methods. Of the first, `processdeps` is a dependency, which the
+engine refuses in a resident program, whose processes it launches all at once;
+`force` reruns a process that finished, where every launch of a resident
+program already launches every node again; and an alias or an external alias
+takes the code of the process from another one, which the engine does not
+follow in a resident program, since it looks for the Python heredoc of each
+process under the name of that process (see "Future work"). Of the second,
+`reset_outfiles`, `skip` and `post` act before or after a run of a process
+that finishes, which a node never does; `conda_envs` and `docker_imgs` give
+environments that a resident program is not launched with (see "Running a
+resident program"); and `outdir_basename` is left out so that the output
+directory of every node keeps the name that the engine gives it by default,
+by which the backend finds the program state (see "The directories of a
+resident program").
 
 **Groups.** "Add program" brings in only a program of the same type. In a
 resident program it brings in the processes one by one, never as a group: a
@@ -1381,6 +1401,19 @@ the section "Program Type" of the module documentation, where
 `debasher_doc_mod` prints the type that the engine resolved, so a module that
 declares `program_type "general"` comes back as a general program without the
 function, which behaves the same.
+
+**A node of a module, reused.** In a general program the dialog that names a
+new process suggests the processes that the modules of the preamble define,
+and copies the description, the options and the code of the one chosen. In a
+resident program it suggests only the nodes among them: the processes whose
+Python heredoc declares a class that derives from a class of the runtime
+library, never a `Supervisor`, which the user does not edit and which a
+program has once. The node chosen is copied by the rules of import: its node
+kind comes from the base of its class, its code is decomposed into the parts
+of a node, a node that does not fit them is refused with the same
+explanation, and the options of the Supervisor wiring are removed, since
+script generation derives them again. Its name is kept, so its class keeps the
+name that the engine requires.
 
 ## The directories of a resident program
 
@@ -2201,9 +2234,9 @@ too.
   written to disk; a single orderly stop at a time; a single periodic
   `debasher_snapshot_resident`, which leaves its PID in the output directory;
   the execution options of the batch runs of a `ProgramLauncher`; a hook for
-  the code of a node to learn that a port closed; and a command to launch
-  again a batch run that failed. Restarting one task of a node needs, besides,
-  `debasher_stop` to stop a single task.
+  the code of a node to learn that a port closed; a command to launch again a
+  batch run that failed; and an alias of a node. Restarting one task of a node
+  needs, besides, `debasher_stop` to stop a single task.
 - **The consistent cut of an epoch.** A view of the whole program at a round
   that closed: the node state and the channel state that every node keeps in
   its checkpoint of that epoch, together, which is the state that the program
@@ -2217,6 +2250,12 @@ too.
   made at launch time to the modules that the preamble loads, whose changes
   it does not see today (see "The directories of a resident program"), for
   example with a digest of each one in the launch record.
+- **The alias of a node.** Offering an alias or an external alias on a node of
+  a resident program, to run the code of a node under another name with its
+  options mapped, as two workers of the same code with options of their own.
+  It needs the engine to accept it (see "Future work" in
+  `doc/design_doc_resident.md`); the web UI would then only show the field
+  again on a node.
 - **Templates of the code of a node.** A first code for the parts of a node
   when it is added, as the templates of a general process give one
   (`frontend/src/components/codeTemplates.ts`): a constructor that gives the

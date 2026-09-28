@@ -2,6 +2,9 @@ import { useEffect, useId, useState } from "react";
 
 import { getProcessInfo, suggestProcessNames, validateProcessName } from "../api/processApi";
 import type { ProcessInfo } from "../models/process";
+import type { ProgramType } from "../models/program";
+import type { NodeKind } from "../models/node";
+import { NODE_KINDS, nodeNameProblem } from "../models/node";
 
 interface Props {
   title: string;
@@ -10,7 +13,17 @@ interface Props {
   existingNames: string[];
   preamble: string;
   envVars: Record<string, string>;
-  onConfirm: (name: string, info: ProcessInfo | null) => void;
+  // In a resident program the dialog suggests no process defined by the
+  // modules of the preamble (their code is not made of the parts of a
+  // node), and refuses a name whose class would hide a class of the
+  // runtime library or a Python builtin.
+  programType?: ProgramType;
+  // When adding a process to a resident program: the node kind is chosen
+  // here, once. `supervisorTaken` is whether the program already has its
+  // one Supervisor.
+  chooseNodeKind?: boolean;
+  supervisorTaken?: boolean;
+  onConfirm: (name: string, info: ProcessInfo | null, nodeKind?: NodeKind) => void;
   onClose: () => void;
 }
 
@@ -21,11 +34,19 @@ export default function ProcessNameDialog({
   existingNames,
   preamble,
   envVars,
+  programType = "general",
+  chooseNodeKind = false,
+  supervisorTaken = false,
   onConfirm,
   onClose,
 }: Props) {
 
   const suggestionsListId = useId();
+
+  const isResident = programType === "resident";
+
+  const [nodeKind, setNodeKind] =
+    useState<NodeKind>("FBPProcess");
 
   const [name, setName] =
     useState(initialName);
@@ -40,6 +61,10 @@ export default function ProcessNameDialog({
     useState<string | null>(null);
 
   useEffect(() => {
+
+    if (isResident) {
+      return;
+    }
 
     let cancelled = false;
 
@@ -57,7 +82,7 @@ export default function ProcessNameDialog({
       cancelled = true;
     };
 
-  }, [preamble, envVars]);
+  }, [preamble, envVars, isResident]);
 
   async function handleConfirm() {
 
@@ -74,6 +99,19 @@ export default function ProcessNameDialog({
 
     if (isDuplicate) {
       setError("A process with this name already exists.");
+      return;
+    }
+
+    if (isResident) {
+      const problem = nodeNameProblem(trimmedName);
+      if (problem) {
+        setError(`${problem} Choose another name.`);
+        return;
+      }
+    }
+
+    if (chooseNodeKind && nodeKind === "Supervisor" && supervisorTaken) {
+      setError("This program already has a Supervisor: a program has at most one.");
       return;
     }
 
@@ -99,7 +137,7 @@ export default function ProcessNameDialog({
         }
       }
 
-      onConfirm(trimmedName, info);
+      onConfirm(trimmedName, info, chooseNodeKind ? nodeKind : undefined);
       onClose();
     } catch (err) {
       setError(
@@ -171,6 +209,38 @@ export default function ProcessNameDialog({
           }}
 
         />
+
+        {chooseNodeKind && (
+
+          <>
+
+            <label style={{ fontSize: 14 }}>
+              Node kind
+            </label>
+
+            <select
+              value={nodeKind}
+              onChange={(event) => setNodeKind(event.target.value as NodeKind)}
+              style={{ width: "100%" }}
+            >
+              {NODE_KINDS.map(({ value, label }) => (
+                <option
+                  key={value}
+                  value={value}
+                  disabled={value === "Supervisor" && supervisorTaken}
+                >
+                  {label}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ color: "#666", fontSize: 12 }}>
+              {NODE_KINDS.find(kind => kind.value === nodeKind)?.description}
+            </div>
+
+          </>
+
+        )}
 
         <datalist id={suggestionsListId}>
           {suggestions.map(suggestion => (

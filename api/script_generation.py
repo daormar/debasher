@@ -1002,5 +1002,10 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
     away right after one debasher_doc_mod call, where the duplicate-code
     concern _find_redundant_exec_funcs exists for doesn't apply.
     """
+    if program.programType == "resident":
+        raise NotImplementedError(
+            f'Program "{program.name}" is a resident program, whose script generation '
+            "is not built yet: its program metadata is saved, but not its script."
+        )
     skip_exec_for = frozenset() if skip_redundant_check else _find_redundant_exec_funcs(program)
     return _build_script(program, skip_exec_for=skip_exec_for)

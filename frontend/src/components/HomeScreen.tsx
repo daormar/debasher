@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Program } from "../models/program";
+import type { Program, ProgramType } from "../models/program";
 import { createEmptyProgram } from "../storage/programStorage";
 import NewProgramDialog from "./NewProgramDialog";
 import LoadProgramDialog from "./LoadProgramDialog";
@@ -15,8 +15,8 @@ export default function HomeScreen({ onOpen }: Props) {
   const [isLoadProgramOpen, setLoadProgramOpen] = useState(false);
   const [isImportProgramOpen, setImportProgramOpen] = useState(false);
 
-  function handleCreate(name: string) {
-    onOpen(createEmptyProgram(name));
+  function handleCreate(name: string, programType: ProgramType) {
+    onOpen(createEmptyProgram(name, programType));
   }
 
   return (

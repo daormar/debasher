@@ -25,6 +25,8 @@ import GeneratorConfigEditor from "./GeneratorConfigEditor";
 import ArrayConfigEditor from "./ArrayConfigEditor";
 import ManualConfigEditor from "./ManualConfigEditor";
 import ProcessNameDialog from "./ProcessNameDialog";
+import NodeCodeEditor from "./NodeCodeEditor";
+import { isReservedNodeOptionLabel } from "../models/node";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
 import { isValidOptionLabel } from "../models/option";
 import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
@@ -43,6 +45,7 @@ export default function Inspector() {
     reorderOptionGroup,
     setProcessLanguage,
     setOptionsHandler,
+    setInitiator,
   } = useProgram();
 
   const sensors = useSensors(
@@ -82,6 +85,9 @@ export default function Inspector() {
   const [isChangeNameOpen, setChangeNameOpen] =
     useState(false);
 
+  const [isNodeCodeOpen, setNodeCodeOpen] =
+    useState(false);
+
 
   if (!selectedProcess) {
 
@@ -113,6 +119,23 @@ export default function Inspector() {
   // here can reorder options that are visually adjacent on the canvas
   // even when they're not the same direction.
   const flippedOptionIds = computeFlippedOptionIds(program);
+
+  // A resident program writes its nodes in Python, in the parts of a node,
+  // and offers neither the manual mode of the options handler nor the
+  // additional specifications and methods of a general process. Of its
+  // Supervisor, the user edits only the name, the description and the
+  // computational specifications: script generation writes the rest.
+  const isResident = program.programType === "resident";
+
+  const isSupervisor = selectedProcess.nodeKind === "Supervisor";
+
+  const optionsHandlerModes: OptionsHandlerMode[] = isResident
+    ? ["standard", "array", "generator"]
+    : ["standard", "array", "generator", "manual"];
+
+  const optionLabelReserved = isResident && isReservedNodeOptionLabel(optionLabel);
+
+  const canAddOption = isValidOptionLabel(optionLabel) && !optionLabelReserved;
 
   function handleOptionDragEnd(event: DragEndEvent) {
 
@@ -223,6 +246,38 @@ export default function Inspector() {
       />
 
 
+      {isResident && (
+        <div style={{ marginBottom: 8, fontSize: 14 }}>
+          Node kind: <strong>{selectedProcess.nodeKind}</strong>
+        </div>
+      )}
+
+
+      {isResident && !isSupervisor && (
+        <label
+          style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, fontSize: 14 }}
+          title="A round starts at an initiator. A program made of independent subgraphs needs one in each."
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(selectedProcess.initiator)}
+            onChange={(event) => setInitiator(selectedProcess.id, event.target.checked)}
+          />
+          Initiator (rounds start here)
+        </label>
+      )}
+
+
+      {isSupervisor && (
+        <p style={{ color: "#666", fontSize: 13 }}>
+          Script generation writes all of the code and the options of the
+          Supervisor, and derives its wiring to every node. Only its name,
+          its description and its computational specifications are edited
+          here.
+        </p>
+      )}
+
+
       {isChangeNameOpen && (
         <ProcessNameDialog
           title="Change process name"
@@ -233,6 +288,7 @@ export default function Inspector() {
             .map(process => process.name)}
           preamble={program.preamble}
           envVars={program.envVars}
+          programType={program.programType}
           onConfirm={(name, info) => {
             renameProcess(selectedProcess.id, name);
             if (info) {
@@ -243,6 +299,8 @@ export default function Inspector() {
         />
       )}
 
+
+      {!isSupervisor && (<>
 
       <h4 style={{ marginTop: 0, marginBottom: 8 }}>
         Options Handler
@@ -267,7 +325,7 @@ export default function Inspector() {
 
       >
 
-        {(["standard", "array", "generator", "manual"] as OptionsHandlerMode[]).map(mode => (
+        {optionsHandlerModes.map(mode => (
           <option key={mode} value={mode}>
             {mode}
           </option>
@@ -403,6 +461,7 @@ export default function Inspector() {
             processId={selectedProcess.id}
             option={editingOption}
             manualMode={selectedProcess.optionsHandler.mode === "manual"}
+            programType={program.programType}
             onClose={() => setEditingOptionId(null)}
           />
         );
@@ -437,7 +496,7 @@ export default function Inspector() {
 
         onClick={() => {
 
-          if (!isValidOptionLabel(optionLabel)) {
+          if (!canAddOption) {
             return;
           }
 
@@ -450,11 +509,19 @@ export default function Inspector() {
 
         }}
 
-        disabled={!isValidOptionLabel(optionLabel)}
+        disabled={!canAddOption}
 
       >
         Add
       </button>
+
+
+      {optionLabelReserved && (
+        <div style={{ color: "#b00020", fontSize: 13, marginTop: 4 }}>
+          {optionLabel.trim()} belongs to the Supervisor wiring, which script
+          generation writes: choose another label.
+        </div>
+      )}
 
 
       <hr />
@@ -464,6 +531,29 @@ export default function Inspector() {
         Code
       </h4>
 
+
+      {isResident ? (
+
+        <>
+
+          <div style={{ fontSize: 14, marginBottom: 8 }}>
+            Python: a class that derives from {selectedProcess.nodeKind}, in parts
+          </div>
+
+          <button onClick={() => setNodeCodeOpen(true)}>
+            Edit node code
+          </button>
+
+          {isNodeCodeOpen && (
+            <NodeCodeEditor
+              process={selectedProcess}
+              onClose={() => setNodeCodeOpen(false)}
+            />
+          )}
+
+        </>
+
+      ) : (<>
 
       <label>
         Language
@@ -549,6 +639,10 @@ export default function Inspector() {
         />
       )}
 
+      </>)}
+
+      </>)}
+
 
       <h4 style={{ marginTop: 16, marginBottom: 8 }}>
         Specifications
@@ -571,11 +665,13 @@ export default function Inspector() {
         </button>
 
 
-        <button
-          onClick={() => setAdditionalSpecsOpen(true)}
-        >
-          Additional Specifications
-        </button>
+        {!isResident && (
+          <button
+            onClick={() => setAdditionalSpecsOpen(true)}
+          >
+            Additional Specifications
+          </button>
+        )}
 
       </div>
 

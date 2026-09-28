@@ -10,6 +10,7 @@ import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
 import AddProgramDialog from "./AddProgramDialog";
 import RunMenu from "./RunMenu";
+import { hasSupervisor } from "../models/node";
 
 // Mirrors the shape of an identifier DeBasher can turn into function
 // names (<name>_document, <name>_shared_dirs, <name>_program) — no
@@ -175,6 +176,9 @@ export default function Toolbar({ onClose }: Props) {
           existingNames={program.processes.map(process => process.name)}
           preamble={program.preamble}
           envVars={program.envVars}
+          programType={program.programType}
+          chooseNodeKind={program.programType === "resident"}
+          supervisorTaken={hasSupervisor(program.processes)}
           onConfirm={addProcess}
           onClose={() => setNewProcessOpen(false)}
         />

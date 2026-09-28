@@ -21,6 +21,12 @@ export interface ProgramOption {
   // can poll, without stealing data from the fifo's real reader — see
   // api/models.py's ProgramOption.mirror.
   mirror: boolean;
+  // Only in a resident program, on an input with channel "fifo": "external"
+  // marks an external input, written by a source outside the program,
+  // which takes no connection. The other fifo tag of the engine,
+  // "control", belongs only to the Supervisor wiring, which script
+  // generation derives and the model never holds.
+  fifoTag?: "external";
   description: string;
   value: string;
   commandLine: boolean;

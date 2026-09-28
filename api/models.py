@@ -38,6 +38,13 @@ class ProgramOption(BaseModel):
     # right-click "Watch FIFO" action can show it without stealing data
     # from the fifo's real downstream reader.
     mirror: bool = False
+    # Only in a resident program, on an input with channel "fifo": the fifo
+    # tag "external" marks an external input, written by a source outside
+    # the program, which takes no connection (the engine's define_fifo_opt
+    # --external). The other fifo tag, "control", belongs only to the
+    # Supervisor wiring, which script generation derives and the model
+    # never holds.
+    fifoTag: Optional[Literal["external"]] = None
     description: str
     value: str
     commandLine: bool
@@ -70,6 +77,21 @@ class ComputationalSpecs(BaseModel):
     cpus: Optional[float] = None
     mem: Optional[float] = None
     time: Optional[str] = None
+    # Only for the node kinds of a resident program that read them, each
+    # named as the engine's computational specification it becomes (see
+    # "Limits of a node" in doc/design_doc_resident.md); None leaves the
+    # default of the class. The engine checks their values when it loads
+    # the program.
+    input_log_max_mb: Optional[float] = None
+    out_backlog_max_mb: Optional[float] = None
+    out_backlog_fail_mb: Optional[float] = None
+    gil_switch_interval_ms: Optional[float] = None
+    startup_timeout_s: Optional[float] = None
+    # A ProgramLauncher only.
+    max_concurrent_runs: Optional[int] = None
+    batch_sched: Optional[str] = None
+    # The Supervisor only.
+    heartbeat_timeout_s: Optional[float] = None
 
 
 class AliasOptMapping(BaseModel):
@@ -128,6 +150,27 @@ class GroupSource(BaseModel):
     sourceDir: str
 
 
+NodeKind = Literal["FBPProcess", "ProgramLauncher", "DirectoryWatcher", "Supervisor"]
+
+
+class NodeCode(BaseModel):
+    # The code of a node of a resident program, in parts that script
+    # generation assembles into the Python heredoc of its process: the
+    # node preamble, before the class; the class body, with the class
+    # attributes, the constructor and helper methods; and one body for each
+    # hook, empty when the node gives none. Every part is kept without the
+    # indentation that all its lines share. The class declaration is not a
+    # part: script generation writes it from the node kind and the name of
+    # the process.
+    preamble: str = ""
+    classBody: str = ""
+    processData: str = ""
+    captureNodeState: str = ""
+    restoreNodeState: str = ""
+    initializeRuntime: str = ""
+    observe: str = ""
+
+
 class ProgramProcess(BaseModel):
     id: str
     name: str
@@ -141,6 +184,13 @@ class ProgramProcess(BaseModel):
     additionalSpecs: AdditionalSpecs
     additionalMethods: AdditionalMethods = AdditionalMethods()
     groupSource: Optional[GroupSource] = None
+    # Only in a resident program: the node kind of the process, chosen when
+    # it is added; whether it is an initiator, where a round starts; and
+    # the parts of its code, which a Supervisor does not have (script
+    # generation writes its whole class).
+    nodeKind: Optional[NodeKind] = None
+    initiator: bool = False
+    nodeCode: Optional[NodeCode] = None
 
 
 class ProgramEdge(BaseModel):
@@ -169,6 +219,10 @@ class ExecutionOptions(BaseModel):
 class Program(BaseModel):
     id: str
     name: str
+    # Chosen when the program is created, and never changed afterwards: the
+    # two types accept different processes and connections. Program
+    # metadata saved without it is a general program.
+    programType: Literal["general", "resident"] = "general"
     description: str = ""
     preamble: str
     envVars: dict[str, str]

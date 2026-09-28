@@ -6,6 +6,8 @@ import type {
   OptionDataType,
   OptionChannel,
 } from "../models/option";
+import type { ProgramType } from "../models/program";
+import { isReservedNodeOptionLabel } from "../models/node";
 import {
   getOptionDirection,
   isValidOptionLabel,
@@ -17,6 +19,13 @@ interface Props {
   processId: string;
   option: ProgramOption;
   manualMode: boolean;
+  // In a resident program an option is a business output (an output
+  // through a FIFO), a business input (an input that a connection reaches),
+  // an external input (an input through a FIFO written from outside the
+  // program, tagged "external") or a configuration option (a direct
+  // value). Value descriptors, shared directories and FIFO mirrors are not
+  // offered, and the labels of the Supervisor wiring are reserved.
+  programType?: ProgramType;
   onClose: () => void;
 }
 
@@ -25,9 +34,11 @@ interface Props {
 // _TASK_INDEXED_MODES, which this mirrors for display purposes only.
 const TASK_INDEXED_MODES = new Set(["generator", "array"]);
 
-export default function OptionEditor({ processId, option, manualMode, onClose }: Props) {
+export default function OptionEditor({ processId, option, manualMode, programType = "general", onClose }: Props) {
 
   const { program, updateOption } = useProgram();
+
+  const isResident = programType === "resident";
 
   // A non-command-line, non-fanout input may gather from more than one
   // source (see isValidProgramConnection) — everything below keys off
@@ -131,6 +142,8 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
     useState(option.label);
 
   const direction = getOptionDirection(label);
+
+  const labelReserved = isResident && isReservedNodeOptionLabel(label);
 
   // Reactive to the label as it's being typed, so the "Count source"
   // field appears/disappears live as the user adds/removes the "ith"
@@ -239,12 +252,16 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
     // combination), whatever the disabled channel selector still holds.
     const savedCommandLine = commandLine && !savedFromProcessSpec;
 
+    const savedChannel =
+      isFlag || savedCommandLine ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel;
+
     updateOption(processId, option.id, {
       label,
       direction: getOptionDirection(label),
       dataType,
-      channel: isFlag || savedCommandLine ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel,
-      mirror: !isFlag && !savedCommandLine && isFifo && direction === "output" && !connectedSourceLabel && mirror,
+      channel: savedChannel,
+      mirror: !isResident && !isFlag && !savedCommandLine && isFifo && direction === "output" && !connectedSourceLabel && mirror,
+      fifoTag: isResident && savedChannel === "fifo" && direction === "input" ? "external" : undefined,
       description,
       value: isFlag || isValueDescriptor ? "" : value,
       commandLine: savedCommandLine,
@@ -315,6 +332,13 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
           }}
 
         />
+
+        {labelReserved && (
+          <div style={{ color: "#b00020", fontSize: 13 }}>
+            {label.trim()} belongs to the Supervisor wiring, which script
+            generation writes: choose another label.
+          </div>
+        )}
 
         {isFanout && (
 
@@ -593,19 +617,25 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
                   Direct value
                 </option>
 
-                {direction === "output" && (
+                {direction === "output" && !isResident && (
                   <option value="value_desc">
                     Value descriptor
                   </option>
                 )}
 
                 <option value="fifo">
-                  FIFO
+                  {!isResident
+                    ? "FIFO"
+                    : direction === "output"
+                      ? "FIFO (business output)"
+                      : "External input (FIFO written from outside the program)"}
                 </option>
 
-                <option value="shared_dir">
-                  Shared directory
-                </option>
+                {!isResident && (
+                  <option value="shared_dir">
+                    Shared directory
+                  </option>
+                )}
 
               </select>
 
@@ -615,7 +645,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
         )}
 
-        {isFifo && direction === "output" && (
+        {isFifo && direction === "output" && !isResident && (
 
           <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
 
@@ -738,7 +768,7 @@ export default function OptionEditor({ processId, option, manualMode, onClose }:
 
           <button
             onClick={handleSave}
-            disabled={!isValidOptionLabel(label)}
+            disabled={!isValidOptionLabel(label) || labelReserved}
           >
             Save
           </button>

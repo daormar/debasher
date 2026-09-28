@@ -10,6 +10,7 @@ import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
 import { isFanoutOption } from "../models/option";
+import { isBusinessInputCandidate, isBusinessOutput } from "../models/node";
 
 /**
  * Data stored inside every React Flow node.
@@ -395,6 +396,22 @@ export function isValidProgramConnection(
   const targetOptionDef = targetProcess?.options.find(
     option => option.id === targetHandle
   );
+
+  // A resident program accepts a connection only from a business output to
+  // an input that it makes a business input, of another node or of the
+  // same one: every channel between its nodes is a FIFO. An external input
+  // takes none, and the Supervisor wiring is never drawn by hand.
+  if (
+    program.programType === "resident" &&
+    !(
+      sourceOptionDef &&
+      targetOptionDef &&
+      isBusinessOutput(sourceOptionDef) &&
+      isBusinessInputCandidate(targetOptionDef)
+    )
+  ) {
+    return false;
+  }
 
   // A fanout family option (see isFanoutOption) on a "standard" process
   // may only pair with an "array"- or "generator"-mode process on the

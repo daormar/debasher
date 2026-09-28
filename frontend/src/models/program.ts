@@ -42,11 +42,17 @@ export interface ExecutionOptions {
 
 }
 
+// Chosen when the program is created, and never changed afterwards: the
+// two types accept different processes and connections.
+export type ProgramType = "general" | "resident";
+
 export interface Program {
 
   id: string;
 
   name: string;
+
+  programType: ProgramType;
 
   description: string;
 

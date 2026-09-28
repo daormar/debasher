@@ -3385,6 +3385,16 @@ Design ideas from Future work move here once they are actually built.
 
 # Future work
 
+- **An alias of a node.** Accepting in a resident program a process added with
+  `alias` or `ext_alias`, whose code is that of another process, so that the
+  same code runs as two nodes with options of their own. Today the engine
+  looks for the Python heredoc of every process under the name of that process
+  (`debasher::_get_resident_process_source`), finds none for an alias and
+  refuses the program. It needs that lookup to follow the alias, and the rule
+  that names the class of a node after its process to apply to the process
+  that holds the code, not to the alias, whose name the class cannot carry.
+  The web UI would offer it then (see "Future work" in
+  `doc/design_doc_webui.md`).
 - **What the `Supervisor` knows of each node, on disk.** Whether a node that
   is down is being relaunched, how many relaunches it has had, and whether the
   `Supervisor` has given up on it, today only in the log of the `Supervisor`,
