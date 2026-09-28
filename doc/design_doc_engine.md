@@ -77,216 +77,192 @@ relative to the output directory of the run.
 
 ## Modules and processes
 
-- **flow-based programming** (programación basada en flujos): building a
-  program as a network of components that exchange data through connections
-  defined outside them, so that the flow of data decides the order in which
-  they run.
-- **module** (módulo): a Bash file that defines processes and module methods,
-  loaded with `load_debasher_module`. A module that several others load is
-  loaded only once.
-- **module search path** (ruta de búsqueda de módulos): where a module given by
-  a relative name is looked for: the current directory, then each directory of
-  `DEBASHER_MOD_DIR`, then the directory where DeBasher is installed.
-- **module method** (método de módulo): a function `<module>_<suffix>` that the
-  engine calls on a module: `_document`, `_shared_dirs`, `_program` and
-  `_program_type`.
-- **program file** (fichero del programa): the module given to `debasher_exec`
-  with `--pfile`, whose `_program` method defines the program.
-- **program** (programa): the set of processes that the `_program` method of
-  the program file adds, directly or through subprograms.
-- **general program** (programa general): a program whose program file declares
-  no program type, or declares `general` in its `_program_type` method: its
-  processes run to completion, on any scheduler. The only type of program this
-  document covers.
-- **resident program** (programa residente): a program whose program file
-  declares the type `resident`: long-lived, stateful processes joined by FIFOs,
-  described in `doc/design_doc_resident.md`.
-- **subprogram** (subprograma): the processes that the `_program` method of
-  another module adds to the program, called through `add_debasher_program`.
-- **process** (proceso): a named unit of work of a program, a set of functions
-  that share its name as a prefix, added to the program with
-  `add_debasher_process`.
-- **qualified name** (nombre cualificado): a process name with dot-separated
-  qualifiers (`org.namespace.name`), which keeps apart the processes of
-  different modules.
-- **process method** (método de proceso): a function `<process>_<suffix>` that
-  the engine calls at a given moment, such as `_define_opts`,
-  `_explain_cmdline_opts`, `_skip`, `_post` or `_reset_outfiles` (see
-  "Processes and their methods").
-- **process function** (función del proceso): the method with no suffix, named
-  as the process itself, which does the work of each task.
-- **heredoc process** (proceso heredoc): a process whose code is in Python, R,
-  Perl or Groovy, given in a `_heredoc_py`, `_heredoc_r`, `_heredoc_perl` or
-  `_heredoc_groovy` method and run by the interpreter of that language.
-- **alias** (alias): a process that runs, under its own name and options, the
-  code of another process (the `alias` additional specification) or of an
-  external script (`ext_alias`).
-- **process specification** (especificación del proceso): what
-  `add_debasher_process` records about a process: its computational
-  specifications and its additional specifications.
-- **computational specification** (especificación computacional): a resource
-  that a process asks for: `cpus`, `mem` and `time`, always given, and
-  `nodes`, `account`, `partition` and `throttle`.
-- **additional specification** (especificación adicional): an attribute that
-  changes how the engine treats a process: `processdeps`, `force`, `alias`,
-  `ext_alias` and `alias_opt_map`.
+- **flow-based programming**: building a program as a network of components that
+  exchange data through connections defined outside them, so that the flow of
+  data decides the order in which they run.
+- **module**: a Bash file that defines processes and module methods, loaded with
+  `load_debasher_module`. A module that several others load is loaded only once.
+- **module search path**: where a module given by a relative name is looked for:
+  the current directory, then each directory of `DEBASHER_MOD_DIR`, then the
+  directory where DeBasher is installed.
+- **module method**: a function `<module>_<suffix>` that the engine calls on a
+  module: `_document`, `_shared_dirs`, `_program` and `_program_type`.
+- **program file**: the module given to `debasher_exec` with `--pfile`, whose
+  `_program` method defines the program.
+- **program**: the set of processes that the `_program` method of the program
+  file adds, directly or through subprograms.
+- **general program**: a program whose program file declares no program type, or
+  declares `general` in its `_program_type` method: its processes run to
+  completion, on any scheduler. The only type of program this document covers.
+- **resident program**: a program whose program file declares the type
+  `resident`: long-lived, stateful processes joined by FIFOs, described in
+  `doc/design_doc_resident.md`.
+- **subprogram**: the processes that the `_program` method of another module
+  adds to the program, called through `add_debasher_program`.
+- **process**: a named unit of work of a program, a set of functions that share
+  its name as a prefix, added to the program with `add_debasher_process`.
+- **qualified name**: a process name with dot-separated qualifiers
+  (`org.namespace.name`), which keeps apart the processes of different modules.
+- **process method**: a function `<process>_<suffix>` that the engine calls at a
+  given moment, such as `_define_opts`, `_explain_cmdline_opts`, `_skip`,
+  `_post` or `_reset_outfiles` (see "Processes and their methods").
+- **process function**: the method with no suffix, named as the process itself,
+  which does the work of each task.
+- **heredoc process**: a process whose code is in Python, R, Perl or Groovy,
+  given in a `_heredoc_py`, `_heredoc_r`, `_heredoc_perl` or `_heredoc_groovy`
+  method and run by the interpreter of that language.
+- **alias**: a process that runs, under its own name and options, the code of
+  another process (the `alias` additional specification) or of an external
+  script (`ext_alias`).
+- **process specification**: what `add_debasher_process` records about a
+  process: its computational specifications and its additional specifications.
+- **computational specification**: a resource that a process asks for: `cpus`,
+  `mem` and `time`, always given, and `nodes`, `account`, `partition` and
+  `throttle`.
+- **additional specification**: an attribute that changes how the engine treats
+  a process: `processdeps`, `force`, `alias`, `ext_alias` and `alias_opt_map`.
 
 ## Options and tasks
 
-- **option** (opción): a word of the form `-name` or `--name` given to a task,
-  followed by its value unless it is a flag.
-- **flag** (flag): an option with no value, which the engine tells apart from
-  an option whose value is empty.
-- **output option** (opción de salida): an option whose name starts with `-out`
-  or `--out`: its value names something that the task produces.
-- **input option** (opción de entrada): an option that is not an output option.
-- **option list** (lista de opciones): the options of one task, which the
-  `_define_opts` method of its process builds and registers with
-  `save_opt_list`.
-- **task** (tarea): one execution of the process function with one option list.
-- **array process** (proceso array): a process with more than one task. Each
-  task has a **task index** (índice de tarea), from 0.
-- **option generator** (generador de opciones): a process whose
-  `_generate_opts_size` method gives its number of tasks and whose
-  `_generate_opts` method builds the option list of one task whenever the
-  engine asks for it, instead of registering every option list in advance.
-- **command line option** (opción de línea de comandos): an option whose value
-  a process takes from the command line of `debasher_exec`, which the process
-  marks as one in its `_identify_cmdline_opts` method, or declares in the
-  older `_explain_cmdline_opts` method.
-- **connection** (conexión): an input option defined with
-  `define_opt_from_proc_out` or `define_opt_from_proc_task_out`, which takes
-  the value of an output option of another process.
-- **output descriptor** (descriptor de salida): the placeholder that a
-  connection holds when it is defined, replaced by the value of the connected
-  output option when the option list of the task is loaded.
-- **value descriptor** (descriptor de valor): a file in the process output
-  directory, named by an output option, into which a task writes a value with
-  `write_value_to_desc`, so that a connected task reads the value rather than
-  the path.
-- **shared directory** (directorio compartido): a directory that a module
-  declares in its `_shared_dirs` method, created in the output directory before
-  any process runs, whose absolute path every process gets with
-  `get_absolute_shdirname`.
-- **fanout family** (familia de fanout): an option name ending in `ith` in the
-  `_explain_opts` method of a process, such as `-outfith`, which stands for the
-  numbered options `-outf0`, `-outf1`, ... that its tasks define.
+- **option**: a word of the form `-name` or `--name` given to a task, followed
+  by its value unless it is a flag.
+- **flag**: an option with no value, which the engine tells apart from an option
+  whose value is empty.
+- **output option**: an option whose name starts with `-out` or `--out`: its
+  value names something that the task produces.
+- **input option**: an option that is not an output option.
+- **option list**: the options of one task, which the `_define_opts` method of
+  its process builds and registers with `save_opt_list`.
+- **task**: one execution of the process function with one option list.
+- **array process**: a process with more than one task. Each task has a **task
+  index**, from 0.
+- **option generator**: a process whose `_generate_opts_size` method gives its
+  number of tasks and whose `_generate_opts` method builds the option list of
+  one task whenever the engine asks for it, instead of registering every option
+  list in advance.
+- **command line option**: an option whose value a process takes from the
+  command line of `debasher_exec`, which the process marks as one in its
+  `_identify_cmdline_opts` method, or declares in the older
+  `_explain_cmdline_opts` method.
+- **connection**: an input option defined with `define_opt_from_proc_out` or
+  `define_opt_from_proc_task_out`, which takes the value of an output option of
+  another process.
+- **output descriptor**: the placeholder that a connection holds when it is
+  defined, replaced by the value of the connected output option when the option
+  list of the task is loaded.
+- **value descriptor**: a file in the process output directory, named by an
+  output option, into which a task writes a value with `write_value_to_desc`, so
+  that a connected task reads the value rather than the path.
+- **shared directory**: a directory that a module declares in its `_shared_dirs`
+  method, created in the output directory before any process runs, whose
+  absolute path every process gets with `get_absolute_shdirname`.
+- **fanout family**: an option name ending in `ith` in the `_explain_opts`
+  method of a process, such as `-outfith`, which stands for the numbered options
+  `-outf0`, `-outf1`, ... that its tasks define.
 
 ## Dependencies
 
-- **dependency** (dependencia): a condition on another process, the
-  **producer** (productor), that the tasks of a process wait for before they
-  are launched.
-- **dependency type** (tipo de dependencia): what a dependency waits for:
-  `none`, nothing; `after`, the producer has started; `afterok`, every task of
-  the producer has succeeded; `afternotok`, the producer has failed;
-  `afterany`, the producer has ended, whatever its result; `aftercorr`, the
-  task of the producer with the same task index has succeeded.
-- **inferred dependency** (dependencia inferida): a dependency that the engine
-  derives from an input option whose value is an absolute path that an output
-  option of another process holds: `afterok`, or `aftercorr` between two array
-  processes at the same task index, and `none` when the path is a FIFO.
-- **dependency merge** (fusión de dependencias): combining two dependency
-  types on the same producer into the weakest type that asks for everything
-  both of them ask for, or failing when no run of the producer can satisfy
-  both.
-- **option dependency method** (método de dependencias de opción): the process
-  method `_define_opt_deps`, which gives the dependency type of one option on
-  one producer in place of the inferred one.
-- **explicit dependencies** (dependencias explícitas): the `processdeps`
-  additional specification, which replaces every inferred dependency of the
-  process.
-- **dependency graph** (grafo de dependencias): the processes as vertices and
-  every dependency whose type is not `none` as an edge from the producer. It
-  has to be acyclic.
-- **topological order** (orden topológico): an order of the processes in which
-  every process comes after the producers it depends on.
-- **process graph** (grafo de procesos): the processes joined by all their
-  connections, FIFOs included, which `debasher_exec` draws only when asked to
-  (`--gen-proc-graph`).
+- **dependency**: a condition on another process, the **producer**, that the
+  tasks of a process wait for before they are launched.
+- **dependency type**: what a dependency waits for: `none`, nothing; `after`,
+  the producer has started; `afterok`, every task of the producer has succeeded;
+  `afternotok`, the producer has failed; `afterany`, the producer has ended,
+  whatever its result; `aftercorr`, the task of the producer with the same task
+  index has succeeded.
+- **inferred dependency**: a dependency that the engine derives from an input
+  option whose value is an absolute path that an output option of another
+  process holds: `afterok`, or `aftercorr` between two array processes at the
+  same task index, and `none` when the path is a FIFO.
+- **dependency merge**: combining two dependency types on the same producer into
+  the weakest type that asks for everything both of them ask for, or failing
+  when no run of the producer can satisfy both.
+- **option dependency method**: the process method `_define_opt_deps`, which
+  gives the dependency type of one option on one producer in place of the
+  inferred one.
+- **explicit dependencies**: the `processdeps` additional specification, which
+  replaces every inferred dependency of the process.
+- **dependency graph**: the processes as vertices and every dependency whose
+  type is not `none` as an edge from the producer. It has to be acyclic.
+- **topological order**: an order of the processes in which every process comes
+  after the producers it depends on.
+- **process graph**: the processes joined by all their connections, FIFOs
+  included, which `debasher_exec` draws only when asked to (`--gen-proc-graph`).
 
 ## FIFOs
 
-- **FIFO** (FIFO): a named pipe, `__fifos__/<owner process>/<name>`, through
-  which one task streams data to another while both run.
-- **FIFO owner** (propietario de la FIFO): the task that defines the FIFO with
-  `define_fifo_opt` or `define_fifo_opt_generator`, through the output option
-  it writes, except for a FIFO fed from outside the program, which its owner
-  reads. The engine creates the FIFO before its owner runs.
-- **FIFO reader** (lector de la FIFO): the task of the program that reads the
-  FIFO through an input option other than the one through which its owner
-  defines it. A FIFO has at most one (`DEBASHER_FIFO_READERS`).
-- **external end** (extremo externo): the end of a FIFO that no task of the
-  program holds: a reader outside when the owner writes the FIFO, a writer
-  outside when the owner reads it (`DEBASHER_EXTERNAL_FIFO_END`).
-- **cycle through FIFOs** (ciclo a través de FIFOs): processes that stream to
-  one another in a loop, which the engine allows because a FIFO adds no edge
-  to the dependency graph.
-- **mirror tap** (derivación espejo): for a FIFO defined with `--mirror`, the
-  helper that copies every line the owner writes both into the FIFO and into a
-  mirror log.
-- **shim FIFO** (FIFO intermedia): the FIFO that the owner of a mirrored FIFO
-  actually writes, and that its mirror tap reads, under `__fifos__/.mirror`.
-- **mirror log** (log espejo): the file where the mirror tap keeps a copy of
-  every line, which can be read without taking any line from the reader.
+- **FIFO**: a named pipe, `__fifos__/<owner process>/<name>`, through which one
+  task streams data to another while both run.
+- **FIFO owner**: the task that defines the FIFO with `define_fifo_opt` or
+  `define_fifo_opt_generator`, through the output option it writes, except for a
+  FIFO fed from outside the program, which its owner reads. The engine creates
+  the FIFO before its owner runs.
+- **FIFO reader**: the task of the program that reads the FIFO through an input
+  option other than the one through which its owner defines it. A FIFO has at
+  most one (`DEBASHER_FIFO_READERS`).
+- **external end**: the end of a FIFO that no task of the program holds: a
+  reader outside when the owner writes the FIFO, a writer outside when the owner
+  reads it (`DEBASHER_EXTERNAL_FIFO_END`).
+- **cycle through FIFOs**: processes that stream to one another in a loop, which
+  the engine allows because a FIFO adds no edge to the dependency graph.
+- **mirror tap**: for a FIFO defined with `--mirror`, the helper that copies
+  every line the owner writes both into the FIFO and into a mirror log.
+- **shim FIFO**: the FIFO that the owner of a mirrored FIFO actually writes, and
+  that its mirror tap reads, under `__fifos__/.mirror`.
+- **mirror log**: the file where the mirror tap keeps a copy of every line,
+  which can be read without taking any line from the reader.
 
 ## Runs
 
-- **run** (ejecución): one invocation of `debasher_exec` on an output
-  directory, which launches the processes that are not finished or are marked
-  to rerun.
-- **output directory** (directorio de salida): the directory given to
-  `debasher_exec` with `--outdir`, made absolute, which holds everything a run
-  writes. Once the processes are launched it is the only source of truth about
-  the run.
-- **lock** (cerrojo): the `lock` file of the output directory, which
-  `debasher_exec` holds while it prepares and launches a run, so that two of
-  them never do so on the same output directory at once.
-- **process output directory** (directorio de salida del proceso): the
-  directory of a process under the output directory, named after the process
-  unless its `_outdir_basename` method gives another name. Before each task
-  runs, the `_reset_outfiles` method of the process resets it; without that
-  method, the directory of a process with a single task is emptied, and that
-  of an array process, which its tasks share, is left as it is.
-- **exec directory** (directorio de ejecución): `__exec__/<process>`, where the
-  engine keeps the process script, the logs, the ids and the completion
-  markers of a process.
-- **process script** (script del proceso): the self-contained Bash script that
-  the engine writes for a process in its exec directory, and that the
-  scheduler runs for each of its tasks.
-- **execution context** (contexto de ejecución): `.exec_context.sh`, the
-  variables and functions of the shell of `debasher_exec` once the program is
-  defined, with which every process script starts.
-- **command line file** (fichero de la línea de comandos): `command_line.sh`,
-  the command line of the run, with the program file resolved and the
-  scheduler recorded, from which the tools reload the program.
-- **final process specification** (especificación final de procesos):
-  `program.procspec`, the process specifications with their dependencies
-  filled in. The tools take the set of processes of a run from it.
-- **scheduler** (planificador): what launches the tasks of a process once its
-  dependencies hold: the built-in scheduler or the Slurm scheduler.
-- **built-in scheduler** (planificador integrado): the scheduler that runs
-  tasks on the local machine within a budget of CPUs and memory, choosing
-  which ones to launch as a knapsack problem.
-- **Slurm scheduler** (planificador Slurm): the scheduler that submits each
-  process to Slurm as a job, or as a job array for an array process, with its
-  dependencies mapped to those of Slurm.
-- **attempt** (intento): one submission of a process to Slurm. A
-  comma-separated list of `mem` or `time` values gives each attempt a value of
-  its own.
-- **completion marker** (marca de fin): the `.finished` file that a task writes
-  in the exec directory when it ends successfully, or when the `_skip` method
-  of its process skips it.
-- **process status** (estado del proceso): the state of a process that the
-  engine derives from its exec directory: `TO-DO`, no process script yet;
-  `IN-PROGRESS`, the scheduler still holds one of its ids; `FINISHED`, every
-  task has a completion marker; `UNFINISHED_BUT_RUNNABLE`, for the built-in
-  scheduler only, an array process with tasks still to launch and none
-  running; `UNFINISHED`, any other case.
-- **rerun mark** (marca de reejecución): the decision to run a process again
-  although it has run before, for a reason (forced, changed input, outdated
-  code, the other end of one of its FIFOs runs again), propagated to the
-  processes that depend on it and to the other ends of its FIFOs.
+- **run**: one invocation of `debasher_exec` on an output directory, which
+  launches the processes that are not finished or are marked to rerun.
+- **output directory**: the directory given to `debasher_exec` with `--outdir`,
+  made absolute, which holds everything a run writes. Once the processes are
+  launched it is the only source of truth about the run.
+- **lock**: the `lock` file of the output directory, which `debasher_exec` holds
+  while it prepares and launches a run, so that two of them never do so on the
+  same output directory at once.
+- **process output directory**: the directory of a process under the output
+  directory, named after the process unless its `_outdir_basename` method gives
+  another name. Before each task runs, the `_reset_outfiles` method of the
+  process resets it; without that method, the directory of a process with a
+  single task is emptied, and that of an array process, which its tasks share,
+  is left as it is.
+- **exec directory**: `__exec__/<process>`, where the engine keeps the process
+  script, the logs, the ids and the completion markers of a process.
+- **process script**: the self-contained Bash script that the engine writes for
+  a process in its exec directory, and that the scheduler runs for each of its
+  tasks.
+- **execution context**: `.exec_context.sh`, the variables and functions of the
+  shell of `debasher_exec` once the program is defined, with which every process
+  script starts.
+- **command line file**: `command_line.sh`, the command line of the run, with
+  the program file resolved and the scheduler recorded, from which the tools
+  reload the program.
+- **final process specification**: `program.procspec`, the process
+  specifications with their dependencies filled in. The tools take the set of
+  processes of a run from it.
+- **scheduler**: what launches the tasks of a process once its dependencies
+  hold: the built-in scheduler or the Slurm scheduler.
+- **built-in scheduler**: the scheduler that runs tasks on the local machine
+  within a budget of CPUs and memory, choosing which ones to launch as a
+  knapsack problem.
+- **Slurm scheduler**: the scheduler that submits each process to Slurm as a
+  job, or as a job array for an array process, with its dependencies mapped to
+  those of Slurm.
+- **attempt**: one submission of a process to Slurm. A comma-separated list of
+  `mem` or `time` values gives each attempt a value of its own.
+- **completion marker**: the `.finished` file that a task writes in the exec
+  directory when it ends successfully, or when the `_skip` method of its process
+  skips it.
+- **process status**: the state of a process that the engine derives from its
+  exec directory: `TO-DO`, no process script yet; `IN-PROGRESS`, the scheduler
+  still holds one of its ids; `FINISHED`, every task has a completion marker;
+  `UNFINISHED_BUT_RUNNABLE`, for the built-in scheduler only, an array process
+  with tasks still to launch and none running; `UNFINISHED`, any other case.
+- **rerun mark**: the decision to run a process again although it has run
+  before, for a reason (forced, changed input, outdated code, the other end of
+  one of its FIFOs runs again), propagated to the processes that depend on it
+  and to the other ends of its FIFOs.
 
 # Architecture
 

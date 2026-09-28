@@ -64,172 +64,154 @@ refer to it.
 
 ## Program model
 
-- **general program** (programa general): as defined in the design of the
-  engine. Every section before "Resident programs in the web UI" is about
-  general programs.
-- **resident program** (programa residente): as defined in the design of the
-  engine: long-lived, stateful processes joined by FIFOs, always run by the
-  built-in scheduler, whose design is in `doc/design_doc_resident.md`.
-- **node kind** (tipo de nodo): the class of the engine's runtime library that
-  a process of a resident program derives from (`ProgramProcess.nodeKind`):
-  `FBPProcess`, `ProgramLauncher`, `DirectoryWatcher` or `Supervisor` (see
-  "The program model of a resident program").
-- **node preamble** (preámbulo del nodo): the Python code of a node before its
-  class, such as imports and helper functions. Not to be confused with the
-  preamble of the program, which is Bash.
-- **class body** (cuerpo de la clase): the part of the class of a node that is
-  not a hook: class attributes, the constructor and helper methods.
-- **Supervisor wiring** (cableado del Supervisor): the channels between the
-  `Supervisor` and the nodes (heartbeat channels, trigger ports and the manual
-  trigger port), which script generation derives and the program model does
-  not hold.
-- **program model** (modelo del programa): the program as the web UI sees it, a
-  tree of plain data defined twice with the same shape, as Pydantic models in
-  `api/models.py` and as TypeScript types in `frontend/src/models/`, and sent
-  as JSON between the two (see "The program model").
-- **program** (programa): the root of the program model (`Program`). It
-  becomes one DeBasher module, the program file of the runs that the web UI
-  launches, whose name is the program's name.
-- **process** (proceso): one process of the program (`ProgramProcess`), with
-  its options, its code and its specifications, which becomes a process in the
-  sense of the engine.
-- **option** (opción): one option of a process (`ProgramOption`), which becomes
-  an option in the sense of the engine, named by its **label** (etiqueta), the
-  option's name for the engine, such as `-infile`.
-- **direction** (dirección): whether an option is an `input` or an `output` of
-  its process.
-- **data type** (tipo de dato): the type of an option's value: `int`, `float`,
-  `string`, `file`, or `None` for a flag, an option that takes no value.
-- **option channel** (canal de la opción): how an option's value is delivered,
-  independent of its data type (`ProgramOption.channel`): `none` for a literal
-  value or a connection, `value_desc` for a value descriptor the engine
-  synthesizes, `fifo` for a named pipe, `shared_dir` for a shared directory.
-- **shared directory** (directorio compartido): as defined in the design of
-  the engine.
-- **command line option** (opción de línea de comandos): as defined in the
-  design of the engine, marked as one by `ProgramOption.commandLine`. It takes
-  its value from the command line and nowhere else: script generation refuses
-  an option that is both a command line option and delivered through an option
-  channel.
-- **program options** (opciones del programa): the values given to the command
-  line options for the next run (`Program.programOptions`), keyed by label.
-- **edge, connection** (arista, conexión): a link from an output option of one
-  process to an input option of another (`ProgramEdge`), which script
-  generation turns into a connection in the sense of the engine, so that the
-  second reads the value of the first (see "Connections").
-- **connection sentinel** (centinela de conexión): the value
-  `[<process>;<option>]` that a connected input option carries, naming the
-  process and the option it reads from.
-- **fan-in** (convergencia): more than one connection into the same input
-  option.
-- **self-loop** (bucle propio): a connection from an output option of a
-  process to an input option of the same process.
-- **options handler mode** (modo del gestor de opciones): how a process defines
-  its options and so how many tasks it runs: `standard`, `array`, `generator` or
-  `manual` (see "Options handler modes").
-- **task** (tarea): as defined in the design of the engine. A process in
-  `standard` mode runs one task; one in `array` or `generator` mode runs one per
-  element or index.
-- **fanout family** (familia de fanout): as defined in the design of the
-  engine. In the web UI, an option of a `standard` process whose label ends in
-  `ith`, such as `-outfith`, which stands for as many numbered options
-  (`-outf0`, `-outf1`, ...) as another option of the same process says at run
-  time.
-- **preamble** (preámbulo): Bash code that the generated module carries
-  verbatim before its own functions, typically the `load_debasher_module` lines
-  of the modules it builds on.
-- **group** (grupo): the processes that "Add program" brings in, in one
-  operation, from another program saved with the web UI, which the generated
-  module declares with a single `add_debasher_program` while none of them has
-  been edited or removed (see "Groups").
+- **general program**: as defined in the design of the engine. Every section
+  before "Resident programs in the web UI" is about general programs.
+- **resident program**: as defined in the design of the engine: long-lived,
+  stateful processes joined by FIFOs, always run by the built-in scheduler,
+  whose design is in `doc/design_doc_resident.md`.
+- **node kind**: the class of the engine's runtime library that a process of a
+  resident program derives from (`ProgramProcess.nodeKind`): `FBPProcess`,
+  `ProgramLauncher`, `DirectoryWatcher` or `Supervisor` (see "The program model
+  of a resident program").
+- **node preamble**: the Python code of a node before its class, such as imports
+  and helper functions. Not to be confused with the preamble of the program,
+  which is Bash.
+- **class body**: the part of the class of a node that is not a hook: class
+  attributes, the constructor and helper methods.
+- **Supervisor wiring**: the channels between the `Supervisor` and the nodes
+  (heartbeat channels, trigger ports and the manual trigger port), which script
+  generation derives and the program model does not hold.
+- **program model**: the program as the web UI sees it, a tree of plain data
+  defined twice with the same shape, as Pydantic models in `api/models.py` and
+  as TypeScript types in `frontend/src/models/`, and sent as JSON between the
+  two (see "The program model").
+- **program**: the root of the program model (`Program`). It becomes one
+  DeBasher module, the program file of the runs that the web UI launches, whose
+  name is the program's name.
+- **process**: one process of the program (`ProgramProcess`), with its options,
+  its code and its specifications, which becomes a process in the sense of the
+  engine.
+- **option**: one option of a process (`ProgramOption`), which becomes an option
+  in the sense of the engine, named by its **label**, the option's name for the
+  engine, such as `-infile`.
+- **direction**: whether an option is an `input` or an `output` of its process.
+- **data type**: the type of an option's value: `int`, `float`, `string`,
+  `file`, or `None` for a flag, an option that takes no value.
+- **option channel**: how an option's value is delivered, independent of its
+  data type (`ProgramOption.channel`): `none` for a literal value or a
+  connection, `value_desc` for a value descriptor the engine synthesizes, `fifo`
+  for a named pipe, `shared_dir` for a shared directory.
+- **shared directory**: as defined in the design of the engine.
+- **command line option**: as defined in the design of the engine, marked as one
+  by `ProgramOption.commandLine`. It takes its value from the command line and
+  nowhere else: script generation refuses an option that is both a command line
+  option and delivered through an option channel.
+- **program options**: the values given to the command line options for the next
+  run (`Program.programOptions`), keyed by label.
+- **edge, connection**: a link from an output option of one process to an input
+  option of another (`ProgramEdge`), which script generation turns into a
+  connection in the sense of the engine, so that the second reads the value of
+  the first (see "Connections").
+- **connection sentinel**: the value `[<process>;<option>]` that a connected
+  input option carries, naming the process and the option it reads from.
+- **fan-in**: more than one connection into the same input option.
+- **self-loop**: a connection from an output option of a process to an input
+  option of the same process.
+- **options handler mode**: how a process defines its options and so how many
+  tasks it runs: `standard`, `array`, `generator` or `manual` (see "Options
+  handler modes").
+- **task**: as defined in the design of the engine. A process in `standard` mode
+  runs one task; one in `array` or `generator` mode runs one per element or
+  index.
+- **fanout family**: as defined in the design of the engine. In the web UI, an
+  option of a `standard` process whose label ends in `ith`, such as `-outfith`,
+  which stands for as many numbered options (`-outf0`, `-outf1`, ...) as another
+  option of the same process says at run time.
+- **preamble**: Bash code that the generated module carries verbatim before its
+  own functions, typically the `load_debasher_module` lines of the modules it
+  builds on.
+- **group**: the processes that "Add program" brings in, in one operation, from
+  another program saved with the web UI, which the generated module declares
+  with a single `add_debasher_program` while none of them has been edited or
+  removed (see "Groups").
 
 ## Files and directories
 
-- **home directory** (directorio del programa): the directory where the
-  program lives (`Program.homeDir`): its program metadata, its generated script
-  and the user files.
-- **output directory** (directorio de salida): as defined in the design of the
-  engine (`Program.outputDir`).
-- **program metadata** (metadatos del programa): the program model saved as
-  JSON in `.debasher/program.json` under the home directory.
-- **generated script** (script generado): the module that script generation
-  writes as `<name>.sh` in the home directory.
-- **reserved name** (nombre reservado): a file or directory name that the
-  engine or the web UI manages, by a rule rather than a list
-  (`is_reserved_name()`): a name that starts with a dot, a name wrapped in
-  double underscores (`__exec__`, `__fifos__`, ...), and `command_line.sh`.
-- **user file** (fichero del usuario): a file or directory of the home
-  directory whose path has no reserved name, which the user manages through
-  the program files panel.
-- **run log** (log de la ejecución): `.debasher_webui_run.log` in the output
-  directory, where the web UI sends everything that `debasher_exec` prints
-  during a run it launched.
-- **snapshot log** (log de los snapshots): `.debasher_webui_snapshots.log` in
-  the output directory of a resident program, where the web UI sends
-  everything that the `debasher_snapshot_resident --every` it starts prints.
-- **program state** (estado del programa): what the nodes of a resident
-  program keep across runs in its output directory, their checkpoints, input
-  logs and halted markers and the output directories of their processes: what
-  `debasher_reset_resident` takes away (see "The directories of a resident
-  program").
-- **launch record** (registro del lanzamiento): the copy of the generated
-  script and of the program options that every launch of a resident program
-  leaves in its output directory, against which the next launch compares the
-  program.
+- **home directory**: the directory where the program lives (`Program.homeDir`):
+  its program metadata, its generated script and the user files.
+- **output directory**: as defined in the design of the engine
+  (`Program.outputDir`).
+- **program metadata**: the program model saved as JSON in
+  `.debasher/program.json` under the home directory.
+- **generated script**: the module that script generation writes as `<name>.sh`
+  in the home directory.
+- **reserved name**: a file or directory name that the engine or the web UI
+  manages, by a rule rather than a list (`is_reserved_name()`): a name that
+  starts with a dot, a name wrapped in double underscores (`__exec__`,
+  `__fifos__`, ...), and `command_line.sh`.
+- **user file**: a file or directory of the home directory whose path has no
+  reserved name, which the user manages through the program files panel.
+- **run log**: `.debasher_webui_run.log` in the output directory, where the web
+  UI sends everything that `debasher_exec` prints during a run it launched.
+- **snapshot log**: `.debasher_webui_snapshots.log` in the output directory of a
+  resident program, where the web UI sends everything that the
+  `debasher_snapshot_resident --every` it starts prints.
+- **program state**: what the nodes of a resident program keep across runs in
+  its output directory, their checkpoints, input logs and halted markers and the
+  output directories of their processes: what `debasher_reset_resident` takes
+  away (see "The directories of a resident program").
+- **launch record**: the copy of the generated script and of the program options
+  that every launch of a resident program leaves in its output directory,
+  against which the next launch compares the program.
 
 ## Translation
 
-- **script generation** (generación del script): turning the program model
-  into a runnable module (`script_generation.py`).
-- **import** (importación): rebuilding the program model from a module that
-  has no program metadata, such as one written by hand (`program_import.py`
-  and the modules it relies on).
-- **module documentation** (documentación del módulo): the Markdown that
-  `debasher_doc_mod` prints about a module after loading it: its name,
-  description and shared directories, and for each process its options, its
-  option definition functions, its code, its methods and its specifications.
-- **canonical form** (forma canónica): how Bash prints a function back with
-  `declare -f`, without its comments and with its own indentation. Two
-  functions with the same canonical form behave the same.
-- **verbatim source** (fuente literal): a function exactly as it is written in
-  its file, comments and indentation included, as
-  `debasher_get_verbatim_func_source` reads it.
-- **round trip** (ida y vuelta): script generation followed by import, or
-  import followed by script generation (see "What the round trip
-  preserves").
+- **script generation**: turning the program model into a runnable module
+  (`script_generation.py`).
+- **import**: rebuilding the program model from a module that has no program
+  metadata, such as one written by hand (`program_import.py` and the modules it
+  relies on).
+- **module documentation**: the Markdown that `debasher_doc_mod` prints about a
+  module after loading it: its name, description and shared directories, and for
+  each process its options, its option definition functions, its code, its
+  methods and its specifications.
+- **canonical form**: how Bash prints a function back with `declare -f`, without
+  its comments and with its own indentation. Two functions with the same
+  canonical form behave the same.
+- **verbatim source**: a function exactly as it is written in its file, comments
+  and indentation included, as `debasher_get_verbatim_func_source` reads it.
+- **round trip**: script generation followed by import, or import followed by
+  script generation (see "What the round trip preserves").
 
 ## Execution and observation
 
-- **run** (ejecución): as defined in the design of the engine.
-- **tab** (pestaña): one browser tab with the web UI open, holding its own
-  store.
-- **store** (almacén): the state of the frontend in a tab (`ProgramContext`):
-  the program being edited and what the tab knows about its runs.
-- **run phase** (fase de la ejecución): the state of a run launched from this
-  tab, as the tab follows it (`ProgramRunPhase`). For a resident program, the
-  state of the program derived from the process statuses, whoever launched
-  it (see "Running a resident program").
-- **process status** (estado de un proceso): as defined in the design of the
-  engine, as `debasher_status` reports it for the output directory, whoever
-  launched the run; it colors the canvas.
-- **run in progress** (ejecución en curso): the state of an output directory
-  in which `debasher_status` reports at least one process as `IN-PROGRESS`,
-  whoever launched the run.
-- **orderly stop** (parada ordenada): the stop of a resident program with
-  `debasher_stop_resident`, which halts every node in one round before
-  stopping it, so that the next launch resumes the program with nothing lost.
-- **hard kill** (parada forzada): the stop of a program with `debasher_stop`,
-  which stops the `debasher_exec` of the run if it still runs and then kills
-  every process at once; for a resident program, what its FIFOs held may be
-  lost.
-- **mirror log** (log espejo): as defined in the design of the engine: the log
-  in which a mirror tap copies every line that a process writes into a FIFO
-  defined with `--mirror`, which can be read without taking the data from the
-  FIFO's reader.
-- **unconnected FIFO** (FIFO sin conectar): a FIFO option with no edge and
-  whose label does not name a fanout family, whose other end is an external end
-  in the sense of the engine, left to someone outside the program, such as a
-  person using "Talk to FIFOs".
+- **run**: as defined in the design of the engine.
+- **tab**: one browser tab with the web UI open, holding its own store.
+- **store**: the state of the frontend in a tab (`ProgramContext`): the program
+  being edited and what the tab knows about its runs.
+- **run phase**: the state of a run launched from this tab, as the tab follows
+  it (`ProgramRunPhase`). For a resident program, the state of the program
+  derived from the process statuses, whoever launched it (see "Running a
+  resident program").
+- **process status**: as defined in the design of the engine, as
+  `debasher_status` reports it for the output directory, whoever launched the
+  run; it colors the canvas.
+- **run in progress**: the state of an output directory in which
+  `debasher_status` reports at least one process as `IN-PROGRESS`, whoever
+  launched the run.
+- **orderly stop**: the stop of a resident program with
+  `debasher_stop_resident`, which halts every node in one round before stopping
+  it, so that the next launch resumes the program with nothing lost.
+- **hard kill**: the stop of a program with `debasher_stop`, which stops the
+  `debasher_exec` of the run if it still runs and then kills every process at
+  once; for a resident program, what its FIFOs held may be lost.
+- **mirror log**: as defined in the design of the engine: the log in which a
+  mirror tap copies every line that a process writes into a FIFO defined with
+  `--mirror`, which can be read without taking the data from the FIFO's reader.
+- **unconnected FIFO**: a FIFO option with no edge and whose label does not name
+  a fanout family, whose other end is an external end in the sense of the
+  engine, left to someone outside the program, such as a person using "Talk to
+  FIFOs".
 
 # Architecture
 
