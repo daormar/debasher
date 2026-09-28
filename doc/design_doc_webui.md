@@ -56,18 +56,20 @@ design of resident programs are avoided here on their own, because the web UI
 already uses them for something else: a box on the canvas is a **canvas node**,
 never a bare "node", and how an option's value is delivered is its **option
 channel**, never a bare "channel". Bare, both words keep the meaning they have
-in the design of resident programs.
+in the design of resident programs. Terms of the engine that this glossary
+does not list, such as option list, FIFO owner, exec directory or completion
+marker, have the meaning that the design of the engine
+(`doc/design_doc_engine.md`) gives them, and so do the entries below that
+refer to it.
 
 ## Program model
 
-- **general program** (programa general): a DeBasher program whose module
-  declares no program type, or declares `general`: a set of processes that a
-  run executes to completion, on any scheduler. Every section before
-  "Resident programs in the web UI" is about general programs.
-- **resident program** (programa residente): a program whose module declares
-  the type `resident` in its `_program_type` function: long-lived, stateful
-  processes joined by FIFOs, always run by the built-in scheduler, as described
-  in `doc/design_doc_resident.md`.
+- **general program** (programa general): as defined in the design of the
+  engine. Every section before "Resident programs in the web UI" is about
+  general programs.
+- **resident program** (programa residente): as defined in the design of the
+  engine: long-lived, stateful processes joined by FIFOs, always run by the
+  built-in scheduler, whose design is in `doc/design_doc_resident.md`.
 - **node kind** (tipo de nodo): the class of the engine's runtime library that
   a process of a resident program derives from (`ProgramProcess.nodeKind`):
   `FBPProcess`, `ProgramLauncher`, `DirectoryWatcher` or `Supervisor` (see
@@ -86,11 +88,14 @@ in the design of resident programs.
   `api/models.py` and as TypeScript types in `frontend/src/models/`, and sent
   as JSON between the two (see "The program model").
 - **program** (programa): the root of the program model (`Program`). It
-  becomes one DeBasher module, whose name is the program's name.
+  becomes one DeBasher module, the program file of the runs that the web UI
+  launches, whose name is the program's name.
 - **process** (proceso): one process of the program (`ProgramProcess`), with
-  its options, its code and its specifications.
-- **option** (opción): one option of a process (`ProgramOption`), named by its
-  **label** (etiqueta), the option's name for the engine, such as `-infile`.
+  its options, its code and its specifications, which becomes a process in the
+  sense of the engine.
+- **option** (opción): one option of a process (`ProgramOption`), which becomes
+  an option in the sense of the engine, named by its **label** (etiqueta), the
+  option's name for the engine, such as `-infile`.
 - **direction** (dirección): whether an option is an `input` or an `output` of
   its process.
 - **data type** (tipo de dato): the type of an option's value: `int`, `float`,
@@ -99,17 +104,19 @@ in the design of resident programs.
   independent of its data type (`ProgramOption.channel`): `none` for a literal
   value or a connection, `value_desc` for a value descriptor the engine
   synthesizes, `fifo` for a named pipe, `shared_dir` for a shared directory.
-- **shared directory** (directorio compartido): a directory declared at module
-  level, which every process that names it resolves to the same absolute path.
-- **command line option** (opción de línea de comandos): an option whose value
-  the user gives when the program is run (`ProgramOption.commandLine`), and
-  which takes it from nowhere else: the engine refuses a process that defines
-  it with a value of its own.
+- **shared directory** (directorio compartido): as defined in the design of
+  the engine.
+- **command line option** (opción de línea de comandos): as defined in the
+  design of the engine, marked as one by `ProgramOption.commandLine`. It takes
+  its value from the command line and nowhere else: script generation refuses
+  an option that is both a command line option and delivered through an option
+  channel.
 - **program options** (opciones del programa): the values given to the command
   line options for the next run (`Program.programOptions`), keyed by label.
 - **edge, connection** (arista, conexión): a link from an output option of one
-  process to an input option of another (`ProgramEdge`), which makes the
-  second read the value of the first (see "Connections").
+  process to an input option of another (`ProgramEdge`), which script
+  generation turns into a connection in the sense of the engine, so that the
+  second reads the value of the first (see "Connections").
 - **connection sentinel** (centinela de conexión): the value
   `[<process>;<option>]` that a connected input option carries, naming the
   process and the option it reads from.
@@ -120,13 +127,14 @@ in the design of resident programs.
 - **options handler mode** (modo del gestor de opciones): how a process defines
   its options and so how many tasks it runs: `standard`, `array`, `generator` or
   `manual` (see "Options handler modes").
-- **task** (tarea): one execution of a process with one set of option values.
-  A process in `standard` mode runs one task; one in `array` or `generator` mode
-  runs one per element or index.
-- **fanout family** (familia de fanout): an option of a `standard` process whose
-  label ends in `ith`, such as `-outfith`, which stands for as many numbered
-  options (`-outf0`, `-outf1`, ...) as another option of the same process says
-  at run time.
+- **task** (tarea): as defined in the design of the engine. A process in
+  `standard` mode runs one task; one in `array` or `generator` mode runs one per
+  element or index.
+- **fanout family** (familia de fanout): as defined in the design of the
+  engine. In the web UI, an option of a `standard` process whose label ends in
+  `ith`, such as `-outfith`, which stands for as many numbered options
+  (`-outf0`, `-outf1`, ...) as another option of the same process says at run
+  time.
 - **preamble** (preámbulo): Bash code that the generated module carries
   verbatim before its own functions, typically the `load_debasher_module` lines
   of the modules it builds on.
@@ -140,9 +148,8 @@ in the design of resident programs.
 - **home directory** (directorio del programa): the directory where the
   program lives (`Program.homeDir`): its program metadata, its generated script
   and the user files.
-- **output directory** (directorio de salida): the directory where a run writes
-  its results and the engine keeps its own files for the run
-  (`Program.outputDir`).
+- **output directory** (directorio de salida): as defined in the design of the
+  engine (`Program.outputDir`).
 - **program metadata** (metadatos del programa): the program model saved as
   JSON in `.debasher/program.json` under the home directory.
 - **generated script** (script generado): the module that script generation
@@ -193,8 +200,7 @@ in the design of resident programs.
 
 ## Execution and observation
 
-- **run** (ejecución): one execution of a program by `debasher_exec` on an
-  output directory.
+- **run** (ejecución): as defined in the design of the engine.
 - **tab** (pestaña): one browser tab with the web UI open, holding its own
   store.
 - **store** (almacén): the state of the frontend in a tab (`ProgramContext`):
@@ -203,9 +209,9 @@ in the design of resident programs.
   tab, as the tab follows it (`ProgramRunPhase`). For a resident program, the
   state of the program derived from the process statuses, whoever launched
   it (see "Running a resident program").
-- **process status** (estado de un proceso): the state of each process as
-  `debasher_status` reports it for the output directory, whoever launched the
-  run; it colors the canvas.
+- **process status** (estado de un proceso): as defined in the design of the
+  engine, as `debasher_status` reports it for the output directory, whoever
+  launched the run; it colors the canvas.
 - **run in progress** (ejecución en curso): the state of an output directory
   in which `debasher_status` reports at least one process as `IN-PROGRESS`,
   whoever launched the run.
@@ -213,14 +219,17 @@ in the design of resident programs.
   `debasher_stop_resident`, which halts every node in one round before
   stopping it, so that the next launch resumes the program with nothing lost.
 - **hard kill** (parada forzada): the stop of a program with `debasher_stop`,
-  which kills every process at once; for a resident program, what its FIFOs
-  held may be lost.
-- **FIFO mirror** (espejo de una FIFO): the log in which the engine copies every
-  line that a process writes into a FIFO defined with `--mirror`, which can be
-  read without taking the data from the FIFO's reader.
+  which stops the `debasher_exec` of the run if it still runs and then kills
+  every process at once; for a resident program, what its FIFOs held may be
+  lost.
+- **mirror log** (log espejo): as defined in the design of the engine: the log
+  in which a mirror tap copies every line that a process writes into a FIFO
+  defined with `--mirror`, which can be read without taking the data from the
+  FIFO's reader.
 - **unconnected FIFO** (FIFO sin conectar): a FIFO option with no edge and
-  whose label does not name a fanout family, whose other end is left to
-  someone outside the program, such as a person using "Talk to FIFOs".
+  whose label does not name a fanout family, whose other end is an external end
+  in the sense of the engine, left to someone outside the program, such as a
+  person using "Talk to FIFOs".
 
 # Architecture
 
@@ -913,7 +922,7 @@ have to change with them.
 ## FIFOs
 
 **Watch FIFO** shows what a process writes into a FIFO defined with
-`--mirror`. It reads the FIFO mirror with `debasher_get_fifo_mirror` every two
+`--mirror`. It reads the mirror log with `debasher_get_fifo_mirror` every two
 seconds, and so never takes anything from the FIFO's real reader.
 
 **Talk to FIFOs** lets a person act as the other end of the unconnected FIFOs
@@ -1755,7 +1764,7 @@ directory it watches is the value of its option `-watchdir`, which "Show inputs
 and outputs" opens.
 
 **Watching a FIFO.** "Watch FIFO" is not offered, since the engine refuses
-`--mirror` in a resident program, and there is no FIFO mirror to read. The
+`--mirror` in a resident program, and there is no mirror log to read. The
 input log of a node takes its place for the channels read inside the program:
 the records of one port are what arrived through that channel, and reading them
 takes nothing from it. What a node writes out of the program, through a
