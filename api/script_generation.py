@@ -419,9 +419,9 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     source's mode. Every other case still returns exactly one line.
     """
     # A command-line option takes its value from the command line and
-    # nowhere else: the engine refuses one that a process defines any
-    # other way (see debasher::_check_opt_names_vs_explain), so it can't
-    # also be delivered through an option channel.
+    # nowhere else, so it can't also be delivered through an option
+    # channel: refused here, since the engine itself would take whatever
+    # value the process defined.
     if option.commandLine and option.channel != "none":
         raise ValueError(
             f'Option "{option.label}" on "{process.name}" can\'t be both '
