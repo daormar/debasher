@@ -1833,9 +1833,20 @@ debasher_builtin_sched::execute_program_processes()
 
     echo "* Executing program processes..." >&2
 
-    # Execute scheduling loop
+    # Execute scheduling loop. A SIGTERM, which debasher_stop sends before
+    # it stops the processes (see debasher::_stop_run_scheduler), asks the
+    # loop to launch nothing more: it is only noted here, and acted upon at
+    # the start of the next round, so that no task is left half launched
+    DEBASHER_BUILTIN_SCHED_STOP_REQUESTED=0
+    trap 'DEBASHER_BUILTIN_SCHED_STOP_REQUESTED=1' TERM
     local end=0
     while [ ${end} -eq 0 ]; do
+        if [ ${DEBASHER_BUILTIN_SCHED_STOP_REQUESTED} -eq 1 ]; then
+            echo "Stop requested: no more processes are launched" >&2
+            trap - TERM
+            return 1
+        fi
+
         if [ ${builtin_sched_debug} -eq 1 ]; then
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
         fi
@@ -1889,6 +1900,7 @@ debasher_builtin_sched::execute_program_processes()
 
         iterno=$((iterno + 1))
     done
+    trap - TERM
 
     echo "" >&2
 }

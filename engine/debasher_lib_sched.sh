@@ -134,6 +134,46 @@ debasher::_get_scheduler_throttle()
 }
 
 ########
+# Stops the debasher_exec that is preparing or running a program in an
+# output directory, if any, and waits until it has ended. That
+# debasher_exec holds the lock of the directory for as long as it runs, and
+# with the built-in scheduler it keeps launching tasks until the program
+# ends, so stopping the tasks that run would not stop the program: it is
+# stopped first. It is sent SIGTERM, which the built-in scheduler takes as a
+# request to launch nothing more, and SIGKILL if it has not ended within
+# DEBASHER_EXEC_STOP_GRACE_SECS. The lock being free is what proves that it
+# has ended: the tasks it launched do not hold the lock. Returns 1 if the
+# lock is still held after that.
+#
+# $1 - Absolute path of the output directory.
+debasher::_stop_run_scheduler()
+{
+    local dirname=$1
+    local lockfile="${dirname}/${DEBASHER_LOCK_BASENAME}"
+
+    [ -f "${lockfile}" ] || return 0
+    "${FLOCK}" -n "${lockfile}" true && return 0
+
+    local pid
+    pid=$("${CAT}" "${lockfile}")
+    if ! debasher::_str_is_positive_integer "${pid}"; then
+        echo "Error: the output directory ${dirname} is locked, but its lock file does not give the process that holds it" >&2
+        return 1
+    fi
+
+    echo "Stopping debasher_exec (process ${pid}), so that it launches nothing more..." >&2
+    kill -TERM "${pid}" 2>/dev/null || true
+    if ! "${FLOCK}" -w "${DEBASHER_EXEC_STOP_GRACE_SECS}" "${lockfile}" true; then
+        echo "Warning: debasher_exec (process ${pid}) did not stop within ${DEBASHER_EXEC_STOP_GRACE_SECS}s, killing it" >&2
+        kill -KILL "${pid}" 2>/dev/null || true
+        if ! "${FLOCK}" -w "${DEBASHER_EXEC_STOP_GRACE_SECS}" "${lockfile}" true; then
+            echo "Error: the output directory ${dirname} is still locked" >&2
+            return 1
+        fi
+    fi
+}
+
+########
 # Whether the throttle of a process, its own or the default one (see
 # debasher::_get_scheduler_throttle), lets every task of the process run at
 # once: true for a process with no throttle, and for one whose throttle is

@@ -120,6 +120,13 @@ process_stop_for_pfile()
     # Configure scheduler
     configure_scheduler $sched || return 1
 
+    # Stop the debasher_exec of the run first, if it still runs, so that it
+    # launches nothing once its processes are stopped. Not when a single
+    # process is stopped: the rest of the program goes on
+    if [ ${p_given} -eq 0 ]; then
+        debasher::_stop_run_scheduler "${absdirname}" || return 1
+    fi
+
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # If s option was given, continue to next iteration if process

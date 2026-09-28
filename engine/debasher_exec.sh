@@ -874,13 +874,18 @@ prepare_lock()
 ensure_exclusive_execution()
 {
     local outd=$1
-    local lockfile="${outd}/lock"
+    local lockfile="${outd}/${DEBASHER_LOCK_BASENAME}"
 
     prepare_lock LOCKFD "$lockfile" || return 1
     if ! "$FLOCK" -xn "$LOCKFD"; then
         echo "Error: another debasher_exec is preparing or running a program in ${outd}" >&2
         return 1
     fi
+
+    # The process id goes into the lock file, so that debasher_stop can
+    # stop this debasher_exec, the built-in scheduler of the run, before
+    # it stops the processes (see debasher::_stop_run_scheduler)
+    echo "$$" > "$lockfile" || return 1
 }
 
 ########
@@ -1153,13 +1158,27 @@ launch_program_processes()
     local cmdline=$1
     local dirname=$2
 
+    # A SIGTERM, which debasher_stop sends before it stops the processes
+    # (see debasher::_stop_run_scheduler), asks for nothing more to be
+    # launched: it is only noted here, and acted upon before the next
+    # process, so that a process is never left half launched (its job
+    # submitted, but held, or without its id written)
+    local stop_requested=0
+    trap 'stop_requested=1' TERM
+
     # WARNING: Before launching a particular process, its dependencies
     # should have been launched first. That's why the
     # processes are explored in topological order
     local processname
     for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
-        launch_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
+        if [ ${stop_requested} -eq 1 ]; then
+            echo "Stop requested: no more processes are launched" >&2
+            trap - TERM
+            return 1
+        fi
+        launch_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || { trap - TERM; return 1; }
     done
+    trap - TERM
 
     echo "" >&2
 }

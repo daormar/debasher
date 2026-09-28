@@ -248,6 +248,10 @@ DEBASHER_FIFO_MIRROR_STOP_TOKEN="__FIFO_MIRROR_TAP_STOP__"
 # token, and then again for it to end on SIGTERM, before going further.
 DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=2
 
+# How long debasher::_stop_run_scheduler waits for a debasher_exec to stop on
+# SIGTERM, and then again on SIGKILL, before giving up.
+DEBASHER_EXEC_STOP_GRACE_SECS=30
+
 # RERUN REASONS
 DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_owner_reader"
 DEBASHER_FORCED_RERUN_REASON="forced"
@@ -324,6 +328,7 @@ DEBASHER_HEREDOC_FEXTS=(
 DEBASHER_PRG_PREF="program"
 DEBASHER_PRG_COMMAND_LINE_BASENAME="command_line.sh"
 DEBASHER_EXEC_CONTEXT_BASENAME=".exec_context.sh"
+DEBASHER_LOCK_BASENAME="lock"
 DEBASHER_TASK_MARKER_PREFIX="DEBASHER_TASK_DONE_"
 
 # DIR_NAMES

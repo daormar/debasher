@@ -683,6 +683,65 @@ EOF
     [[ "${output}" == *"unknown process dependency type: aftrok"* ]]
 }
 
+# Holds the lock of the output directory $1 the way debasher_exec does, with
+# its process id in the lock file, until it gets SIGTERM, which it ignores
+# when $2 is "ignore"
+hold_lock() {
+    (
+        exec 9>>"$1/lock"
+        flock -x 9
+        echo "${BASHPID}" > "$1/lock"
+        if [ "${2:-}" = "ignore" ]; then
+            trap '' TERM
+        else
+            trap 'exit 0' TERM
+        fi
+        while :; do sleep 0.1; done
+    ) &
+    local i
+    for (( i = 0; i < 50; i++ )); do
+        ! flock -n "$1/lock" true && [ -s "$1/lock" ] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+@test "debasher::_stop_run_scheduler does nothing when no debasher_exec holds the lock" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    debasher::_stop_run_scheduler "${outd}"
+    : > "${outd}/lock"
+    debasher::_stop_run_scheduler "${outd}"
+}
+
+@test "debasher::_stop_run_scheduler stops the holder of the lock with SIGTERM and waits until the lock is free" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}"
+    local pid=$(cat "${outd}/lock")
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *"Warning"* ]]
+    flock -n "${outd}/lock" true
+    ! kill -0 "${pid}" 2>/dev/null
+}
+
+@test "debasher::_stop_run_scheduler kills a holder of the lock that does not stop on SIGTERM" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    DEBASHER_EXEC_STOP_GRACE_SECS=1
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}" ignore
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"did not stop within 1s"* ]]
+    flock -n "${outd}/lock" true
+}
+
 @test "debasher::_throttle_lets_all_tasks_run accepts no throttle and a throttle not smaller than the number of tasks" {
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=(["arr"]=4)
     DEBASHER_ARRAY_TASK_NOTHROTTLE=0
