@@ -12,12 +12,11 @@ FIFO Writer and FIFO Reader Example
     # before either process can proceed, so an option connected to a
     # FIFO gets no scheduling dependency by default: both processes are
     # launched together, instead of the reader waiting for the writer to
-    # finish, as it would for a regular file. fifo_reader also
-    # implements define_opt_deps, declaring an "after" dependency on
-    # fifo_writer for its "-inf" option, which only makes the reader be
-    # launched once the writer has started. A FIFO has a single reader,
-    # and the two processes must run on the same machine, so a program
-    # that uses FIFOs cannot run with the Slurm scheduler.
+    # finish, as it would for a regular file. The define_opt_deps
+    # example shows how a reader can still ask to be launched only once
+    # the writer has started. A FIFO has a single reader, and the two
+    # processes must run on the same machine, so a program that uses
+    # FIFOs cannot run with the Slurm scheduler.
 
     fifo_writer_document()
     {
@@ -93,22 +92,6 @@ FIFO Writer and FIFO Reader Example
 
         # Save option list
         save_opt_list optlist
-    }
-
-    fifo_reader_define_opt_deps()
-    {
-        # Initialize variables
-        local opt=$1
-        local producer_process=$2
-
-        case ${opt} in
-            "-inf")
-                echo "after"
-                ;;
-            *)
-                echo ""
-                ;;
-        esac
     }
 
     fifo_reader()

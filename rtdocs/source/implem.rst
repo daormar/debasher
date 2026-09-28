@@ -809,6 +809,36 @@ missing.
 
   (see the ``skip`` example for the full module.)
 
+* ``define_opt_deps``: changes the type of the dependency that DeBasher
+  infers from one option on the process that produces its value. It
+  receives the name of the option and the name of that process, and
+  prints the type to use instead, ``none`` to have no dependency, or
+  nothing to keep the inferred one. By default, an option connected to
+  a file gives ``afterok`` and an option connected to a FIFO gives no
+  dependency, so that both ends of a FIFO start together:
+
+  .. code-block:: bash
+
+      stream_report_define_opt_deps()
+      {
+          # Initialize variables
+          local opt=$1
+          local producer_process=$2
+
+          case ${opt} in
+              "-inf")
+                  echo "afterany"
+                  ;;
+              *)
+                  echo ""
+                  ;;
+          esac
+      }
+
+  (see the ``define_opt_deps`` example, where a report runs whether the
+  process it reads from succeeded or failed, and a FIFO reader is
+  launched once its writer has started.)
+
 * ``outdir_basename``: echoes the basename to use for the process's own
   output directory, instead of the default (the process name itself):
 
@@ -1040,6 +1070,8 @@ repository.
    fwriter_freader
 
    fifo
+
+   define_opt_deps
 
    generator
 
