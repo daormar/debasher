@@ -43,6 +43,36 @@ from debasher_runtime_transport import _write_all
 LogRecord = namedtuple("LogRecord", ["pos", "port", "envelope"])
 
 
+def _list_segment_files(directory):
+    """Returns [(first position, path)] of the segment files of the input log
+    in `directory`, oldest first."""
+    try:
+        names = os.listdir(directory)
+    except FileNotFoundError:
+        return []
+    found = []
+    for name in names:
+        if not name.endswith(".log"):
+            continue
+        try:
+            found.append((int(name[: -len(".log")]), os.path.join(directory, name)))
+        except ValueError:
+            continue
+    found.sort()
+    return found
+
+
+def _last_complete_line(data):
+    """The last line of the contents of a segment that ends in a newline,
+    without it, or None if there is none: whatever follows it is a torn
+    tail."""
+    end = data.rfind(b"\n")
+    if end < 0:
+        return None
+    start = data.rfind(b"\n", 0, end) + 1
+    return data[start:end]
+
+
 class LogCapReached(RuntimeError):
     """
     An append would take the input log over its size cap. `positions` are
@@ -120,20 +150,7 @@ class _InputLog:
 
     def _list_segments(self):
         """Returns [(first position, path)] of the segment files, oldest first."""
-        try:
-            names = os.listdir(self._dir)
-        except FileNotFoundError:
-            return []
-        found = []
-        for name in names:
-            if not name.endswith(".log"):
-                continue
-            try:
-                found.append((int(name[: -len(".log")]), os.path.join(self._dir, name)))
-            except ValueError:
-                continue
-        found.sort()
-        return found
+        return _list_segment_files(self._dir)
 
     @staticmethod
     def _parse_record(raw, where):
@@ -174,13 +191,12 @@ class _InputLog:
             first_pos, path = segments[-1]
             with open(path, "rb") as f:
                 data = f.read()
-            end = data.rfind(b"\n")
-            if end < 0:
+            line = _last_complete_line(data)
+            if line is None:
                 os.remove(path)
                 segments.pop()
                 continue
-            start = data.rfind(b"\n", 0, end) + 1
-            last_pos = self._parse_record(data[start:end], f"{path}, last record")[0]
+            last_pos = self._parse_record(line, f"{path}, last record")[0]
             if last_pos < first_pos:
                 raise ValueError(f"{path} is named for position {first_pos} but ends at {last_pos}")
             break
@@ -367,3 +383,98 @@ class _InputLog:
                 os.remove(self._segment_path(first_pos))
             except FileNotFoundError:
                 pass
+
+
+#####################
+# _InputLogReader   #
+#####################
+#
+# The input log as a tool outside the node reads it (debasher_inspect_resident),
+# while the node may be appending to it and pruning it: it changes nothing, and
+# applies the rules with which a node reads its own log when it recovers.
+
+# A line of a segment that ends in a newline but is not a record: what would
+# stop the recovery of the node, and what a reader shows in its place.
+BadLine = namedtuple("BadLine", ["path", "lineno", "error"])
+
+
+def _read_segment(path):
+    """The contents of a segment, or None if it is gone: pruned by the node
+    after the segments were listed."""
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+class _InputLogReader:
+    """
+    Reads the input log in `directory` without changing it. A record counts
+    only if its line ends in a newline, so a torn tail, left by a crash or
+    by a write in progress, is never seen, and a segment that is gone when it
+    is opened, pruned after the segments were listed, is skipped.
+    """
+
+    def __init__(self, directory):
+        self._dir = directory
+
+    def segments(self):
+        """[(first position, size in bytes)] of the segments on disk, oldest
+        first; one that is gone when its size is read is left out."""
+        found = []
+        for first_pos, path in _list_segment_files(self._dir):
+            try:
+                found.append((first_pos, os.path.getsize(path)))
+            except FileNotFoundError:
+                continue
+        return found
+
+    def first_pos(self):
+        """The position of the first complete record, or None if there is
+        none. Raises ValueError if that line is not a record."""
+        for first_pos, path in _list_segment_files(self._dir):
+            data = _read_segment(path)
+            if data is None:
+                continue
+            end = data.find(b"\n")
+            if end < 0:
+                continue
+            return _InputLog._parse_record(data[:end], f"{path}, line 1")[0]
+        return None
+
+    def last_pos(self):
+        """The position of the last complete record, read from the newest
+        segment that has one, as recovery reads it, or None if there is none.
+        Raises ValueError if that line is not a record."""
+        for first_pos, path in reversed(_list_segment_files(self._dir)):
+            data = _read_segment(path)
+            if data is None:
+                continue
+            line = _last_complete_line(data)
+            if line is None:
+                continue
+            return _InputLog._parse_record(line, f"{path}, last record")[0]
+        return None
+
+    def records_backwards(self):
+        """
+        Yields every complete record, from the newest to the oldest, as a
+        LogRecord(pos, port, envelope), or, for a line that ends in a newline
+        and does not parse, a BadLine(path, lineno, error) in its place.
+        """
+        for first_pos, path in reversed(_list_segment_files(self._dir)):
+            data = _read_segment(path)
+            if data is None:
+                continue
+            lines = data.split(b"\n")
+            # The last element follows the last newline: empty, or a torn
+            # tail.
+            for lineno in range(len(lines) - 1, 0, -1):
+                raw = lines[lineno - 1]
+                try:
+                    pos, port, envelope = _InputLog._parse_record(raw, f"{path}, line {lineno}")
+                except ValueError as exc:
+                    yield BadLine(path, lineno, str(exc))
+                    continue
+                yield LogRecord(pos, port, envelope)

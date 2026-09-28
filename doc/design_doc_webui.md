@@ -1702,12 +1702,14 @@ a node, shows what the node keeps in its execdir, read only, in three views:
   `debasher_status` reads it but for the task alone, the epoch of the latest
   checkpoint and when it was written, the halted marker, the size of the input
   log against its cap, how many records lie above the `capture_pos` of the
-  latest checkpoint (what the node would replay if it crashed now), and the size
-  of the outbound backlog against its limits, the cap and the limits being those
-  in force for the node, which it leaves in its execdir when it starts. These
-  are the figures that warn of a coming failure: with no rounds, the input log
-  grows until its cap stops the node, and with a reader that does not read, the
-  outbound backlog grows until it does.
+  latest checkpoint (what the node would replay if it crashed now), the size of
+  the outbound backlog against its limits, the cap and the limits being those
+  in force for the node, which it writes into its node info file, and whether
+  every thread of the node was alive at its latest heartbeat tick. These are
+  the figures that warn of a coming failure: with no rounds, the input log
+  grows until its cap stops the node, with a reader that does not read, the
+  outbound backlog grows until it does, and a node with a dead thread shows as
+  `IN-PROGRESS` while it does nothing.
 - The checkpoints: the list of those that the node retains and, for the one
   chosen, its `node_state`, formatted, together with the messages in transit
   that it holds, `channel_state` and `out_backlog`, counted by port.
@@ -1722,7 +1724,7 @@ of a node follow rules that the tool applies as the node does when it
 recovers: a last record torn by a crash does not count, a segment of the input
 log that the node prunes while the tool reads it is skipped, and a checkpoint
 of another schema version is reported as such. The same tool serves from the
-command line. It is not built yet (see "Future work" in
+command line (see "`debasher_inspect_resident`: what a node keeps" in
 `doc/design_doc_resident.md`).
 
 **The batch runs of a `ProgramLauncher`.** "Show batch runs", an action of the
@@ -2195,14 +2197,13 @@ too.
   from the model.
 - **What the web UI waits for from the engine.** Several parts of the design
   of resident programs rely on engine work listed in the Future work of
-  `doc/design_doc_resident.md`: `debasher_inspect_resident`, with the limits
-  in force that each node writes into its execdir; what the `Supervisor`
-  knows of each node, written to disk; a single orderly stop at a time; a
-  single periodic `debasher_snapshot_resident`, which leaves its PID in the
-  output directory; the execution options of the batch runs of a
-  `ProgramLauncher`; a hook for the code of a node to learn that a port
-  closed; and a command to launch again a batch run that failed. Restarting
-  one task of a node needs, besides, `debasher_stop` to stop a single task.
+  `doc/design_doc_resident.md`: what the `Supervisor` knows of each node,
+  written to disk; a single orderly stop at a time; a single periodic
+  `debasher_snapshot_resident`, which leaves its PID in the output directory;
+  the execution options of the batch runs of a `ProgramLauncher`; a hook for
+  the code of a node to learn that a port closed; and a command to launch
+  again a batch run that failed. Restarting one task of a node needs, besides,
+  `debasher_stop` to stop a single task.
 - **The consistent cut of an epoch.** A view of the whole program at a round
   that closed: the node state and the channel state that every node keeps in
   its checkpoint of that epoch, together, which is the state that the program

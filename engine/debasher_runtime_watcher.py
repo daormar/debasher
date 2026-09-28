@@ -64,6 +64,7 @@ class DirectoryWatcher(FBPProcess):
     OBSERVE_PORT = "arrivals"
     REQUESTS_PORT = "outrequests"
     FILE_OPTION = "-infile"
+    _RUNTIME_CLASS = "DirectoryWatcher"
 
     def __init__(self, argv=None, opts=None):
         super().__init__(argv, opts)

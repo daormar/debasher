@@ -25,6 +25,7 @@ import json
 import signal
 import sys
 import threading
+import time
 
 from debasher_runtime_envelope import (
     TYPE_BARRIER,
@@ -136,6 +137,11 @@ class FBPProcess(_PortWorker):
     OUT_BACKLOG_MAX_BYTES = 8 * 1024 * 1024
     OUT_BACKLOG_FAIL_BYTES = 64 * 1024 * 1024
 
+    # The class of the runtime library that a node derives from, which its
+    # node info file names (see _write_node_info): a subclass in the runtime
+    # library that a module derives from in turn sets its own.
+    _RUNTIME_CLASS = "FBPProcess"
+
     # The computational specifications of a process that set the limits
     # above for that process of a program (see _PortWorker._apply_comp_specs).
     _COMP_SPEC_ATTRS = {
@@ -161,6 +167,8 @@ class FBPProcess(_PortWorker):
 
         self._heartbeat_thread = None
         self._heartbeat_stop = threading.Event()
+        # When this incarnation started its threads (see start_threads).
+        self._started_at = None
 
         # The observation thread, started only for a class that defines
         # observe(), and what wakes it before its interval (observe_now).
@@ -252,6 +260,9 @@ class FBPProcess(_PortWorker):
         # with it (under the same lock) so that send_data checks
         # OUT_BACKLOG_FAIL_BYTES at no cost.
         self._unwritten_bytes = 0
+        # The same, for each output port, which the node info file reports
+        # (see _write_node_info) with no need to go through the backlog.
+        self._unwritten_port_bytes = {}
         self._out_backlog_lock = threading.Lock()
         # The epoch of the first round whose checkpoint was skipped because
         # of the size of the outbound backlog, since the last one written;
@@ -470,13 +481,17 @@ class FBPProcess(_PortWorker):
         that is driven without run() gets it opened here, empty of any
         checkpoint. Also writes this incarnation's control ports file (see
         _write_control_ports_file), since self.opts is enough for that on
-        its own, with no need to wait for any of the above.
+        its own, with no need to wait for any of the above, and its first
+        node info file (see _write_node_info), before the heartbeat thread
+        that writes it again is started.
         """
         self._write_control_ports_file()
         if self._input_log is None:
             self._open_input_log(0)
         self._closed_at_start_ports = frozenset(self._closed_ports)
         super().start_threads()
+        self._started_at = time.time()
+        self._write_node_info(self._all_threads_alive())
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
         if self._observes():
@@ -504,6 +519,51 @@ class FBPProcess(_PortWorker):
         with open(tmp_path, "w") as f:
             for port in self.CONTROL_PORTS:
                 f.write(self.opts[port] + "\n")
+        os.replace(tmp_path, path)
+
+    def _node_info_path(self):
+        return self._execdir_entry("node_info")
+
+    def _node_info_extra(self):
+        """What a subclass of the runtime library adds to the node info file,
+        under names of its own: nothing here."""
+        return {}
+
+    def _write_node_info(self, healthy):
+        """
+        Writes the node info file: what a tool outside the node (see
+        debasher_inspect_resident) needs to know of it and cannot read
+        anywhere else. The limits in force, which the class and the
+        computational specifications of the process decide, and the size of
+        the outbound backlog, which lives only in memory, and whose copy in a
+        checkpoint is missing precisely when it grows too large. Written when
+        the threads start and again at every tick of the heartbeat thread,
+        with `healthy` as that tick found it. Atomic (temp file + rename),
+        like a checkpoint. Nothing in the node reads it back: it is not part
+        of the state of the node.
+        """
+        with self._out_backlog_lock:
+            out_backlog_bytes = dict(self._unwritten_port_bytes)
+        info = {
+            "runtime_class": self._RUNTIME_CLASS,
+            "started_at": self._started_at,
+            "heartbeat_interval_secs": self.HEARTBEAT_INTERVAL_SECONDS,
+            "limits": {
+                "input_log_max_bytes": self.INPUT_LOG_MAX_BYTES,
+                "out_backlog_max_bytes": self.OUT_BACKLOG_MAX_BYTES,
+                "out_backlog_fail_bytes": self.OUT_BACKLOG_FAIL_BYTES,
+                "gil_switch_interval_secs": self.GIL_SWITCH_INTERVAL_SECS,
+            },
+            **self._node_info_extra(),
+            "updated_at": time.time(),
+            "healthy": healthy,
+            "out_backlog_bytes": out_backlog_bytes,
+            "checkpoints_skipped_since": self._checkpoints_skipped_since,
+        }
+        path = self._node_info_path()
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(info, f)
         os.replace(tmp_path, path)
 
     def stop_threads(self, timeout=None, close=True):
@@ -778,7 +838,7 @@ class FBPProcess(_PortWorker):
         line = encode_data(payload, seq=seq)
         with self._out_backlog_lock:
             if self._unwritten_bytes + len(line) > self.OUT_BACKLOG_FAIL_BYTES:
-                port_bytes = sum(len(entry) for _, entry in self._unwritten.get(tag, []))
+                port_bytes = self._unwritten_port_bytes.get(tag, 0)
                 raise RuntimeError(
                     f"{type(self).__name__}: the outbound backlog would go over "
                     f"OUT_BACKLOG_FAIL_BYTES ({self.OUT_BACKLOG_FAIL_BYTES} bytes) with this "
@@ -786,8 +846,7 @@ class FBPProcess(_PortWorker):
                     "a reader of this node is not reading (it was stopped, is down or "
                     "stuck, or is slower than this node)"
                 )
-            self._unwritten.setdefault(tag, []).append((seq, line))
-            self._unwritten_bytes += len(line)
+            self._add_to_out_backlog(tag, seq, line)
         self._out_seq[tag] = seq
         self._outbound_queues[tag].put(line)
 
@@ -806,6 +865,14 @@ class FBPProcess(_PortWorker):
             if backlog and backlog[0][1] == item:
                 backlog.pop(0)
                 self._unwritten_bytes -= len(item)
+                self._unwritten_port_bytes[tag] -= len(item)
+
+    def _add_to_out_backlog(self, tag, seq, line):
+        """Appends a numbered DATA line to the outbound backlog of `tag`,
+        keeping its sizes up to date. The caller holds _out_backlog_lock."""
+        self._unwritten.setdefault(tag, []).append((seq, line))
+        self._unwritten_bytes += len(line)
+        self._unwritten_port_bytes[tag] = self._unwritten_port_bytes.get(tag, 0) + len(line)
 
     def _close_payload(self, tag):
         """
@@ -832,8 +899,7 @@ class FBPProcess(_PortWorker):
                 seq = entry["seq"]
                 line = encode_data(entry["payload"], seq=seq)
                 with self._out_backlog_lock:
-                    self._unwritten.setdefault(tag, []).append((seq, line))
-                    self._unwritten_bytes += len(line)
+                    self._add_to_out_backlog(tag, seq, line)
                 self._outbound_queues[tag].put(line)
 
     def _snapshot_out_backlog(self):
@@ -868,6 +934,12 @@ class FBPProcess(_PortWorker):
             # actively announcing its own bad health.
             if healthy and self.SUPERVISOR_PORT is not None:
                 self._send_interact(self.SUPERVISOR_PORT, "heartbeat")
+            # A node info file that cannot be written is not a reason to stop
+            # the heartbeats: the node goes on, only its file goes stale.
+            try:
+                self._write_node_info(healthy)
+            except OSError as exc:
+                self.log.warning("cannot write the node info file: %r", exc)
         self.log.debug("heartbeat thread stopped")
 
     def _on_barrier(self, port_name, payload):

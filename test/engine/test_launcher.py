@@ -15,6 +15,7 @@ import time
 
 import pytest
 
+import debasher_runtime_launcher as launcher_mod
 import debasher_runtime_lib as lib
 
 
@@ -434,6 +435,127 @@ def test_a_batch_run_that_finished_without_its_debasher_exec_is_not_launched_aga
 
     assert _launches(outdir, "a") == []
     assert (outdir / "a" / "exit_code").read_text().strip() == "0"
+
+
+def test_the_exit_code_of_debasher_exec_outlives_a_crash_of_its_launcher(outdir, monkeypatch):
+    # debasher_exec refuses the options of the request while the node that
+    # launched it is gone: its shell leaves the exit code in the run
+    # directory, and the new incarnation ends the batch run as failed
+    # instead of launching it again.
+    monkeypatch.setenv("FAKE_SLEEP", "1")
+    monkeypatch.setenv("FAKE_EXIT", "3")
+    node = _node()
+    _request(node, 1, {"opts": {}, "run": "a"})
+    node._check_runs()
+    assert _wait_until(lambda: _launches(outdir, "a"))
+
+    relaunched = _node()
+    _check_until_ended(relaunched, outdir, "a")
+
+    assert (outdir / "a" / "exit_code").read_text().strip() == "3"
+    assert len(_launches(outdir, "a")) == 1
+
+
+# --- the state of a batch run, from its run directory alone ----------------
+
+
+def _dead_pid():
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    return dead.pid
+
+
+def _state(run_dir, single_process=False, status=None):
+    asked = []
+
+    def program_status(d):
+        asked.append(d)
+        return status
+
+    return launcher_mod._batch_run_state(str(run_dir), single_process, program_status), asked
+
+
+def test_a_run_with_no_pid_is_registered(tmp_path):
+    assert _state(tmp_path) == (("registered", None), [])
+
+
+def test_a_run_with_an_exit_code_has_ended(tmp_path):
+    (tmp_path / "exit_code").write_text("0\n")
+    assert _state(tmp_path)[0] == ("finished", 0)
+    (tmp_path / "exit_code").write_text("3\n")
+    assert _state(tmp_path)[0] == ("failed", 3)
+    assert _state(tmp_path, single_process=True)[0] == ("failed", 3)
+
+
+def test_a_run_whose_shell_is_alive_is_running(tmp_path):
+    shell = subprocess.Popen(["sleep", "10"])
+    try:
+        (tmp_path / "launcher.pid").write_text(f"{shell.pid}\n")
+        assert _state(tmp_path) == (("running", None), [])
+    finally:
+        shell.kill()
+        shell.wait()
+
+
+def test_a_shell_that_ended_is_told_by_its_file_even_before_it_is_waited_for(tmp_path):
+    # A zombie: the shell has ended, and its PID still shows as alive until
+    # its parent waits for it.
+    shell = subprocess.Popen(["sh", "-c", f"echo 4 > {tmp_path}/exit_code"])
+    try:
+        (tmp_path / "launcher.pid").write_text(f"{shell.pid}\n")
+        assert _wait_until(lambda: (tmp_path / "exit_code").exists())
+        time.sleep(0.1)
+        assert _state(tmp_path)[0] == ("failed", 4)
+    finally:
+        shell.wait()
+
+
+@pytest.mark.parametrize(
+    "status, state",
+    [
+        (None, ("running", None)),
+        (2, ("running", None)),
+        (0, ("finished", 0)),
+        (3, ("failed", 3)),
+    ],
+)
+def test_a_submitted_run_is_what_debasher_status_says(tmp_path, status, state):
+    (tmp_path / "launcher.pid").write_text(f"{_dead_pid()}\n")
+    (tmp_path / "submitted").touch()
+    assert _state(tmp_path, status=status) == (state, [str(tmp_path)])
+
+
+@pytest.mark.parametrize(
+    "status, state",
+    [
+        (None, ("running", None)),
+        (2, ("running", None)),
+        (0, ("finished", 0)),
+        (3, ("stopped", None)),
+        (1, ("stopped", None)),
+    ],
+)
+def test_a_run_whose_shell_is_gone_with_no_file_was_stopped(tmp_path, status, state):
+    (tmp_path / "launcher.pid").write_text(f"{_dead_pid()}\n")
+    assert _state(tmp_path, status=status) == (state, [str(tmp_path)])
+
+
+def test_a_single_process_whose_shell_is_gone_with_no_exit_code_was_stopped(tmp_path):
+    (tmp_path / "launcher.pid").write_text(f"{_dead_pid()}\n")
+    (tmp_path / "submitted").touch()  # never written for a single process
+    assert _state(tmp_path, single_process=True) == (("stopped", None), [])
+
+
+def test_the_node_info_of_a_launcher_node_names_its_batch_runs(outdir):
+    class Rooted(_ProcessLauncher):
+        RUNS_ROOT = "runs"
+
+    node = _node(Rooted)
+    assert node._node_info_extra() == {
+        "launcher": {"runs_root": os.path.abspath("runs"), "process": "align"}
+    }
+    assert _node()._node_info_extra() == {"launcher": {"runs_root": str(outdir), "process": None}}
+    assert node._RUNTIME_CLASS == "ProgramLauncher"
 
 
 # --- the end of a batch run --------------------------------------------------
