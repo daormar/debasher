@@ -151,11 +151,8 @@ value_reader_define_opts()
 value_reader()
 {
     # Initialize variables
-    local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
+    local value=$(read_opt_value_from_func_args "-val-desc" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-    # Read value from descriptor
-    value=$(read_value_from_desc "${val_desc}")
 
     # Increment value by 1
     ((value++))
@@ -168,11 +165,8 @@ value_reader()
 value_reader_skip()
 {
     # Initialize variables
-    local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
+    local value=$(read_opt_value_from_func_args "-val-desc" "$@")
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-    # Read value from descriptor
-    local value=$(read_value_from_desc "${val_desc}")
 
     # Skip if read value is odd
     if ((value % 2 == 0)); then

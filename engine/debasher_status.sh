@@ -110,33 +110,21 @@ process_status_for_pfile()
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
     local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
-    # Extract information from DEBASHER_PRG_COMMAND_LINE_BASENAME file
-    local pfile
-    pfile=$(debasher::_get_abspfile_from_command_line_file "${command_line_file}") || return 1
+    # Extract the scheduler from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local sched
     sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
 
-    # Get original output directory
-    local orig_outdir
-    orig_outdir=$(debasher::_get_orig_outdir_from_command_line_file "${command_line_file}") || return 1
-
-    # Show warning if directory provided as option is different than the
-    # original working directory
-    if debasher::_dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
-        local moved_outdir="no"
-    else
-        echo "Warning: program output directory was moved (original directory: ${orig_outdir})" >&2
-        local moved_outdir="yes"
+    # The processes of the program, as the run left them in the output
+    # directory: the module is not loaded, since it may have changed
+    # since the run, and nothing here depends on where the output
+    # directory was when the program ran
+    debasher::_load_processes_from_procspec "${absdirname}" || return 1
+    if [ ${p_given} -eq 1 ]; then
+        debasher::_check_run_has_process "${given_processname}" || return 1
     fi
-
-    # Load debasher modules
-    debasher::load_debasher_module "$pfile" || return 1
 
     # Configure scheduler
     configure_scheduler $sched || return 1
-
-    # Execute program function for module
-    debasher::_exec_program_func_for_module "${pfile}"
 
     # Read information about the processes to be executed
     local num_processes=0
@@ -146,14 +134,14 @@ process_status_for_pfile()
     local num_unfinished_but_runnable=0
     local num_todo=0
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # Increase number of processes
-        num_processes=$((num_processes + 1))
-
-        # If s option was given, continue to next iteration if process
+        # If p option was given, continue to next iteration if process
         # name does not match with the given one
-        if [ ${p_given} -eq 1 -a "${given_processname}" != $processname ]; then
+        if [ ${p_given} -eq 1 ] && [ "${given_processname}" != "${processname}" ]; then
             continue
         fi
+
+        # Increase number of processes
+        num_processes=$((num_processes + 1))
 
         # Check process status
         local status=$(debasher::_get_process_status "${absdirname}" ${processname})

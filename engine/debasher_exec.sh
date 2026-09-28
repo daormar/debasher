@@ -25,7 +25,6 @@
 #############
 
 DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY=10
-DB_EXEC_RERUN_PROCESSES_LIST_FNAME=".rerun_processes_due_to_deps.txt"
 DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_SHORT=5
 DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 
@@ -35,12 +34,6 @@ DB_EXEC_WAIT_FOR_PROCESSES_SLEEP_TIME_LONG=10
 
 # Declare associative array to store process ids
 declare -A DB_EXEC_PROCESS_IDS
-
-# Declare string variable to store the process ids of all the program
-# processes. The variable is filled incrementally and, when launching a
-# particular process, it is necessary to provide the ids of its
-# dependencies
-DB_EXEC_PROCESS_ID_LIST=""
 
 #############################
 # OPTION HANDLING FUNCTIONS #
@@ -71,17 +64,18 @@ usage()
     echo "                          the directories of DEBASHER_MOD_DIR"
     echo "--outdir <string>         Output directory"
     echo "--sched <string>          Scheduler used to execute the program (if not given,"
-    echo "                          it is determined using information gathered during"
-    echo "                          package configuration)"
+    echo "                          SLURM when sbatch is found in the PATH, BUILTIN"
+    echo "                          otherwise)"
     echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} by default)."
     echo "                          A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} means unlimited CPUs"
     echo "--builtinsched-mem <int>  Available memory in MB for built-in scheduler"
     echo "                          (${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} by default). A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} means unlimited memory"
     echo "--builtinsched-oneshot    Launch all processes in a single scheduling iteration and"
     echo "                          return immediately, without waiting for them to finish."
-    echo "                          Only valid with the built-in scheduler, unrestricted cpus"
-    echo "                          and memory, and a program whose processes have no explicit"
-    echo "                          dependencies between them (pure FIFO-based programs)"
+    echo "                          Only valid with the built-in scheduler, enough cpus and"
+    echo "                          memory to launch every process at once, and a program"
+    echo "                          whose processes have no explicit dependencies between"
+    echo "                          them (pure FIFO-based programs)"
     echo "--dflt-nodes <string>     Default set of nodes used to execute the program"
     echo "--dflt-throttle <string>  Default task throttle used when executing job arrays"
     echo "--rerun-outdated-procs    Rerun those processes with outdated code"
@@ -150,8 +144,8 @@ read_pars()
             "--builtinsched-cpus") shift
                   if [ $# -ne 0 ]; then
                       builtin_sched_cpus=$1
-                      if ! debasher::_str_is_natural_number ${builtin_sched_cpus}; then
-                          echo "Value for --builtinsched_cpus option should be a natural number" >&2
+                      if [ "${builtin_sched_cpus}" != "${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}" ] && ! debasher::_str_is_positive_integer "${builtin_sched_cpus}"; then
+                          echo "Value for --builtinsched-cpus option should be a positive integer, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} for unlimited cpus" >&2
                           return 1
                       fi
                       builtin_sched_cpus_given=1
@@ -160,10 +154,12 @@ read_pars()
             "--builtinsched-mem") shift
                   if [ $# -ne 0 ]; then
                       builtin_sched_mem=$1
-                      builtin_sched_mem=$(debasher::_convert_mem_value_to_mb ${builtin_sched_mem}) || { echo "Invalid memory specification for --builtinsched_mem option}" >&2; return 1; }
-                      if ! debasher::_str_is_natural_number ${builtin_sched_mem}; then
-                          echo "Value for --builtinsched_mem option should be a natural number" >&2
-                          return 1
+                      if [ "${builtin_sched_mem}" != "${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}" ]; then
+                          builtin_sched_mem=$(debasher::_convert_mem_value_to_mb "${builtin_sched_mem}") || { echo "Invalid memory specification for --builtinsched-mem option" >&2; return 1; }
+                          if ! debasher::_str_is_positive_integer "${builtin_sched_mem}"; then
+                              echo "Value for --builtinsched-mem option should be a positive amount of memory, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} for unlimited memory" >&2
+                              return 1
+                          fi
                       fi
                       builtin_sched_mem_given=1
                   fi
@@ -255,17 +251,6 @@ check_pars()
         echo "Error! --check-proc-opts and --debug options cannot be given simultaneously"
         exit 1
     fi
-
-    if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
-        if [ ${builtin_sched_cpus} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} ]; then
-            echo "Error! --builtinsched-oneshot cannot be used together with a restricted --builtinsched-cpus value" >&2
-            exit 1
-        fi
-        if [ ${builtin_sched_mem} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} ]; then
-            echo "Error! --builtinsched-oneshot cannot be used together with a restricted --builtinsched-mem value" >&2
-            exit 1
-        fi
-    fi
 }
 
 #######################################
@@ -285,38 +270,30 @@ load_module()
 }
 
 ########
-get_deblib_vars_and_funcs()
+write_exec_context()
 {
-    echo "# Extracting DeBasher variables and functions..." >&2
+    echo "# Writing the context of the process scripts..." >&2
 
     local outd=$1
 
-    local vars_and_funcs_fname=$(debasher::_get_deblib_vars_and_funcs_fname "${outd}")
-    "${debasher_libexecdir}"/debasher_get_deblib_vars_and_funcs > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
-
-    echo "Extraction complete" >&2
+    debasher::_write_exec_context "$(debasher::_get_exec_context_fname "${outd}")" || { echo "Error: the context of the process scripts could not be written" >&2; return 1; }
 
     echo "" >&2
 }
 
 ########
-get_mod_vars_and_funcs()
+# A fifo carries its data through the kernel of the machine where it is
+# opened, not through the filesystem that holds its name, even a shared
+# one: its two ends only meet when they run on the same machine, which
+# nothing makes the jobs of Slurm do. A program that uses fifos is
+# therefore refused on Slurm, instead of hanging with each end of a fifo
+# waiting for the other.
+ensure_scheduler_supports_fifos()
 {
-    echo "# Extracting module variables and functions..." >&2
-
-    local outd=$1
-
-    local vars_and_funcs_fname=$(debasher::_get_mod_vars_and_funcs_fname "${outd}")
-
-    # Get variables and functions from program modules
-    "${debasher_libexecdir}"/debasher_get_vars_and_funcs "${DEBASHER_PROGRAM_MODULES[@]}" > "${vars_and_funcs_fname}" 2> "${vars_and_funcs_fname}".log
-
-    # Get newly created process functions
-    debasher::_get_newly_created_process_funcs >> "${vars_and_funcs_fname}"
-
-    echo "Extraction complete" >&2
-
-    echo "" >&2
+    if [ "$(debasher::_get_scheduler)" = "${DEBASHER_SLURM_SCHEDULER}" ] && debasher::_program_uses_fifos; then
+        echo "Error: this program uses fifos, which cannot be run with the ${DEBASHER_SLURM_SCHEDULER} scheduler (the two ends of a fifo only meet when they run on the same machine); use --sched ${DEBASHER_BUILTIN_SCHEDULER} instead" >&2
+        return 1
+    fi
 }
 
 ########
@@ -370,9 +347,9 @@ enforce_resident_program_scheduling()
     # forced to be unrestricted here: a resident program is free to use
     # them like any other. Since oneshot mode never waits for a process
     # to finish (see debasher_builtin_sched::execute_program_processes),
-    # it cannot correct course if not everything fits in one round --
-    # that case is instead detected there and aborted before anything
-    # gets launched, rather than silently launching only a subset.
+    # it cannot correct course if not everything fits in one round: that
+    # case is instead detected there and aborted before anything gets
+    # launched, rather than silently launching only a subset.
     debasher::_set_debasher_scheduler "${DEBASHER_BUILTIN_SCHEDULER}" || return 1
     builtin_sched_oneshot_given=1
 
@@ -404,11 +381,10 @@ gen_final_procspec()
     echo "# Generate final process specification..." >&2
 
     local command_line=$1
-    local initial_procspec_file=$2
 
-    debasher::_gen_final_procspec "${command_line}" "${initial_procspec_file}"  || exit 1
+    debasher::_gen_final_procspec "${command_line}" || exit 1
 
-    debasher::_print_final_procspec "${command_line}" "${initial_procspec_file}"  || exit 1
+    debasher::_print_final_procspec "${command_line}" || exit 1
 
     echo "Generation complete" >&2
 
@@ -495,11 +471,25 @@ check_oneshot_precondition()
         fi
     }
 
+    check_process_oneshot_throttle()
+    {
+        local processname=$1
+        local process_spec=$2
+
+        if ! debasher::_throttle_lets_all_tasks_run "${processname}" "${process_spec}"; then
+            local throttle=$(debasher::_get_scheduler_throttle "$(debasher::_extract_throttle_from_process_spec "${process_spec}")")
+            local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+            echo "Error! --builtinsched-oneshot never waits for a task to end, but process \"${processname}\" has ${num_tasks} tasks and a throttle of ${throttle}, so some of them would never be launched; remove the throttle or raise it to the number of tasks" >&2
+            return 1
+        fi
+    }
+
     echo "# Checking program is compatible with --builtinsched-oneshot..." >&2
 
     local processname
     for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
         check_process_oneshot_deps "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || exit 1
+        check_process_oneshot_throttle "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || exit 1
     done
 
     echo "Check complete" >&2
@@ -565,11 +555,10 @@ configure_scheduler()
         echo "scheduler: ${sched_opt}" >&2
         echo "" >&2
     else
-        # If --sched option not given, the scheduler is first determined
-        # based on information gathered during package configuration
-        # (see debasher::_determine_scheduler function in debasher_lib.sh). Once the
-        # scheduler is determined, it will be set using the
-        # debasher::_set_debasher_scheduler function
+        # If --sched option not given, the scheduler is determined from
+        # what is available on this machine (see
+        # debasher::_determine_scheduler). This is the only place where it
+        # is decided: everything after it uses debasher::_get_scheduler
         echo "## Scheduler was not specified using \"--sched\" option, it will be automatically determined..." >&2
         local sched=$(debasher::_determine_scheduler)
         debasher::_set_debasher_scheduler "${sched}" || return 1
@@ -655,7 +644,7 @@ check_process_opts()
 
                 # Write option array to file (line by line)
                 local opt_array_size=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}
-                local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${dirname}" "${processname}")
+                local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${processname}")
                 debasher::_write_opt_array "DEBASHER_CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
 
                 # Clear variables
@@ -675,6 +664,13 @@ check_process_opts()
         done
     }
 
+    # Prints, for each process, its number of tasks and the options of
+    # its first tasks, up to the given maximum. The result goes to
+    # program.opts too, which debasher_compare_opts compares with the
+    # one of the previous run to detect input changes: the options of an
+    # array are assumed to be uniform across its tasks, so a change is
+    # looked for in the first tasks only, while a change in the number of
+    # tasks is always detected.
     show_process_opts()
     {
         local cmdline=$1
@@ -684,15 +680,17 @@ check_process_opts()
         local processname
         for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             # Store process options in an array for visualization
+            local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
             local serial_process_opts=$(debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}")
 
             # Print info about options
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}" >&2
-            echo "PROCESS: ${processname} ; OPTIONS: ${serial_process_opts} ${ellipsis}"
+            local line="PROCESS: ${processname} ; NUM_TASKS: ${num_tasks} ; OPTIONS: ${serial_process_opts}"
+            echo "${line}" >&2
+            echo "${line}"
         done
     }
 
-    register_fifo_users()
+    register_fifo_readers()
     {
         local cmdline=$1
 
@@ -701,7 +699,7 @@ check_process_opts()
             local processname
             for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
                 # Register fifos
-                debasher::_register_fifos_used_by_process "${cmdline}" "${processname}"
+                debasher::_register_fifos_read_by_process "${cmdline}" "${processname}" || return 1
             done
         fi
     }
@@ -716,7 +714,7 @@ check_process_opts()
     local program_fifos_file=$5
 
     # Clear scheduler options directory
-    local sched_opts_dir=$(debasher::get_sched_opts_dir_given_basedir "${dirname}")
+    local sched_opts_dir=$(debasher::_get_sched_opts_dir)
     "${RM}" -f "${sched_opts_dir}"/*
 
     # Initialize option information
@@ -739,8 +737,8 @@ check_process_opts()
     # Show process options
     show_process_opts "${cmdline}" "${DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${program_opts_file}" || return 1
 
-    # Register fifo users
-    register_fifo_users "${cmdline}" || return 1
+    # Register fifo readers
+    register_fifo_readers "${cmdline}" || return 1
 
     # Check the tags of the fifos, now that the other end of every fifo is
     # known (see debasher::_validate_program_fifo_kinds)
@@ -819,7 +817,7 @@ register_all_rerun_processes()
     fi
 
     if debasher::_program_uses_fifos ; then
-        debasher::_define_rerun_processes_due_to_proc_status_of_fifo_user_owner "${dirname}" || exit 1
+        debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${dirname}" || exit 1
     fi
 
     debasher::_define_rerun_processes_due_to_resident_resume "${dirname}" || exit 1
@@ -846,18 +844,15 @@ print_rerun_processes()
 }
 
 ########
+# The lock file is left in place when the lock is released: removing it
+# would let a process that opened it before the removal lock the old
+# file while another one locks a new file of the same name, both
+# believing they hold the lock.
 release_lock()
 {
     local fd=$1
-    local file=$2
 
-    # Release the lock
-    "$FLOCK" -u "$fd" || return 1
-
-    # Try to acquire the lock again in non-blocking mode to safely remove the file
-    if "$FLOCK" -xn "$fd"; then
-        "$RM" -f "$file" || return 1
-    fi
+    "$FLOCK" -u "$fd"
 }
 
 ########
@@ -866,40 +861,66 @@ prepare_lock()
     local -n fd_ref=$1   # nameref: caller variable
     local file=$2
 
-    exec {fd_ref}>"$file" || return 1   # Bash assigns free fd, stores it in fd_ref
-    trap "release_lock $fd_ref '$file'" EXIT
+    exec {fd_ref}>>"$file" || return 1   # Bash assigns free fd, stores it in fd_ref
+    trap "release_lock $fd_ref" EXIT
 }
 
 ########
+# Takes the lock of the output directory, held until debasher_exec exits,
+# so that no two debasher_exec prepare or launch a run on the same output
+# directory at once. It is taken before anything is written there and
+# before checking for processes in progress, so that the check and what
+# follows it are one step for any other debasher_exec.
 ensure_exclusive_execution()
 {
     local outd=$1
-    local lockfile="${outd}/lock"
+    local lockfile="${outd}/${DEBASHER_LOCK_BASENAME}"
 
     prepare_lock LOCKFD "$lockfile" || return 1
-    "$FLOCK" -xn "$LOCKFD" || return 1
+    if ! "$FLOCK" -xn "$LOCKFD"; then
+        echo "Error: another debasher_exec is preparing or running a program in ${outd}" >&2
+        return 1
+    fi
+
+    # The process id goes into the lock file, so that debasher_stop can
+    # stop this debasher_exec, the built-in scheduler of the run, before
+    # it stops the processes (see debasher::_stop_run_scheduler)
+    echo "$$" > "$lockfile" || return 1
 }
 
 ########
+# Creates the output directory if necessary and makes the global outd
+# absolute, since everything derived from it after this point (the
+# scripts of the processes, their completion markers, the paths given to
+# them) must not depend on the working directory of the process that
+# reads it.
 set_debasher_output_dir()
 {
     echo "# Setting DeBasher output directory (the directory will be created if necessary)..." >&2
-
-    local outd=$1
 
     # Create directory
     if [ ! -d "${outd}" ]; then
         "${MKDIR}" -p "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
     fi
 
-    # Get absolute file path (very important so as to ensure correct
-    # execution of processes)
+    # Get absolute file path
     outd=$(debasher::_get_absolute_path "${outd}")
 
     # Set outd as the output directory of debasher
     debasher::_set_debasher_outdir "${outd}"
 
     echo "" >&2
+}
+
+########
+# debasher_exec --check-proc-opts computes the options of every task as a
+# run would, but writes them into a temporary directory removed on exit
+# instead of the .sched_opts directory of the output directory, which the
+# tasks of a run in progress read.
+use_temporary_sched_opts_dir()
+{
+    DEBASHER_SCHED_OPTS_DIR=$("${MKTEMP}" -d) || { echo "Error! cannot create temporary directory" >&2; return 1; }
+    trap '"${RM}" -rf "${DEBASHER_SCHED_OPTS_DIR}"' EXIT
 }
 
 ########
@@ -953,7 +974,7 @@ print_command_line()
     local outd=$1
     local command_line=$2
 
-    echo "cd $PWD" > "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    printf 'cd %q\n' "${PWD}" > "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
     debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${command_line}" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
     echo "" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 }
@@ -1066,11 +1087,8 @@ get_processdeps_with_id_info_from_detailed_spec()
 ########
 get_processdeps_with_id_info()
 {
-    local curr_process_id_list=$1
-    local processdeps_spec=$2
+    local processdeps_spec=$1
     case ${processdeps_spec} in
-            "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}all") debasher::_apply_deptype_to_processids "${curr_process_id_list}" "${DEBASHER_AFTEROK_PROCESSDEP_TYPE}"
-                    ;;
             "none") echo ""
                     ;;
             *) get_processdeps_with_id_info_from_detailed_spec "${processdeps_spec}"
@@ -1095,20 +1113,28 @@ launch_process()
 
     # Decide whether the process should be executed
     if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
+        # Leave the process unlaunched, and so the processes that depend on
+        # it, when it depends on processes that are not launched in this run
+        # in a way that can never hold (see
+        # debasher::_deps_without_ids_can_hold)
+        local processdeps_spec=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
+        if ! debasher::_deps_without_ids_can_hold "${processdeps_spec}" "${dirname}" DB_EXEC_PROCESS_IDS; then
+            echo "Process ${processname} is not launched: its dependencies (${processdeps_spec}) cannot hold in this run" >&2
+            return 0
+        fi
+
         # Create script
         local opt_array_size=$(debasher::_get_numtasks_for_process "${processname}")
         debasher::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
 
         # Launch process
         local task_array_list=$(debasher::_get_task_array_list "${dirname}" "${processname}" "${opt_array_size}")
-        local processdeps_spec=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
-        local processdeps=$(get_processdeps_with_id_info "${DB_EXEC_PROCESS_ID_LIST}" "${processdeps_spec}")
+        local processdeps=$(get_processdeps_with_id_info "${processdeps_spec}")
         debasher::_launch "${dirname}" "${processname}" "${opt_array_size}" "${task_array_list}" "${process_spec}" "${processdeps}" "launch_outvar" || { echo "Error while launching process!" >&2 ; return 1; }
 
         # Update variables storing id information
         local primary_id=$(debasher::_get_primary_id "${launch_outvar}")
         DB_EXEC_PROCESS_IDS[${processname}]=${primary_id}
-        DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
 
         # Write id to file
         debasher::_write_process_id_info_to_file "${dirname}" "${processname}" "${launch_outvar}"
@@ -1119,7 +1145,6 @@ launch_process()
             local sid_info=$(debasher::_read_process_id_info_from_file "${dirname}" "${processname}") || { echo "Error while retrieving id of in-progress process" >&2 ; return 1; }
             local global_id=$(debasher::_get_global_id "${sid_info}")
             DB_EXEC_PROCESS_IDS["${processname}"]=${global_id}
-            DB_EXEC_PROCESS_ID_LIST="${DB_EXEC_PROCESS_ID_LIST}:${DB_EXEC_PROCESS_IDS[${processname}]}"
         fi
     fi
 }
@@ -1133,13 +1158,27 @@ launch_program_processes()
     local cmdline=$1
     local dirname=$2
 
+    # A SIGTERM, which debasher_stop sends before it stops the processes
+    # (see debasher::_stop_run_scheduler), asks for nothing more to be
+    # launched: it is only noted here, and acted upon before the next
+    # process, so that a process is never left half launched (its job
+    # submitted, but held, or without its id written)
+    local stop_requested=0
+    trap 'stop_requested=1' TERM
+
     # WARNING: Before launching a particular process, its dependencies
     # should have been launched first. That's why the
     # processes are explored in topological order
     local processname
     for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
-        launch_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
+        if [ ${stop_requested} -eq 1 ]; then
+            echo "Stop requested: no more processes are launched" >&2
+            trap - TERM
+            return 1
+        fi
+        launch_process "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || { trap - TERM; return 1; }
     done
+    trap - TERM
 
     echo "" >&2
 }
@@ -1242,9 +1281,9 @@ print_post_exec_nowait_help()
     echo "Program execution started, possible next steps:" >&2
     echo "- Inspect program execution status:" >&2
     echo "debasher_status -d <outdir>" >&2
-    echo "- Get standard output for a process:"
+    echo "- Get standard output for a process:" >&2
     echo "debasher_get_stdout -d <outdir> -p <process_name>" >&2
-    echo "- Get scheduler output for a process (useful for debugging):"
+    echo "- Get scheduler output for a process (useful for debugging):" >&2
     echo "debasher_get_sched_out -d <outdir> -p <process_name>" >&2
     echo "" >&2
 }
@@ -1293,7 +1332,18 @@ check_pars || exit 1
 # from it, and they may not run with the same DEBASHER_MOD_DIR
 command_line=$(debasher::_set_opt_value_in_serialized_cmdline "${command_line}" "--pfile" "${pfile}")
 
-set_debasher_output_dir "${outd}" || exit 1
+set_debasher_output_dir || exit 1
+
+# Everything but showing or checking the options may write into the
+# output directory, and takes its lock first
+if [ ${show_cmdline_opts_given} -eq 0 ] && [ ${check_proc_opts_given} -eq 0 ]; then
+    ensure_exclusive_execution "${outd}" || exit 1
+    debasher::_check_outdir_not_moved "${outd}" || exit 1
+fi
+
+if [ ${check_proc_opts_given} -eq 1 ]; then
+    use_temporary_sched_opts_dir || exit 1
+fi
 
 create_basic_dirs || exit 1
 
@@ -1340,14 +1390,7 @@ depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 check_process_opts "${command_line}" "${outd}" "${program_opts_file}" \
                    "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
-# Write debasher library variables and functions
-get_deblib_vars_and_funcs "${outd}" || exit 1
-
-# Write module variables and functions (this function should be called
-# after calling gen_initial_procspec_file, since it executes the program
-# given in pfile input parameter, possibly defining new functions that
-# should be written as well)
-get_mod_vars_and_funcs "${outd}" || exit 1
+ensure_scheduler_supports_fifos || exit 1
 
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
 gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
@@ -1364,9 +1407,6 @@ if [ "${gen_proc_graph_given}" -eq 1 ]; then
 fi
 
 gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
-
-# NOTE: exclusive execution should be ensured after creating the output directory
-ensure_exclusive_execution "${outd}" || { echo "Error: there was a problem while trying to ensure exclusive execution of pipe_exec" ; exit 1; }
 
 create_mod_shared_dirs || exit 1
 
@@ -1385,6 +1425,10 @@ print_rerun_processes || exit 1
 
 print_command_line "${outd}" "${command_line}" || exit 1
 
+# Write the context that the script of every process starts with, now
+# that the program is fully defined and before anything is launched
+write_exec_context "${outd}" || exit 1
+
 # Launch processes
 if [ ${debug} -eq 1 ]; then
     launch_program_processes_debug "${command_line}" "${outd}" || exit 1
@@ -1392,12 +1436,12 @@ if [ ${debug} -eq 1 ]; then
     # Restore old process options (if they exist)
     restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
 else
-    sched=$(debasher::_determine_scheduler)
-    if [ ${builtin_sched_oneshot_given} -eq 1 -a ${sched} != ${DEBASHER_BUILTIN_SCHEDULER} ]; then
+    sched=$(debasher::_get_scheduler)
+    if [ ${builtin_sched_oneshot_given} -eq 1 ] && [ "${sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
         echo "Error! --builtinsched-oneshot can only be used with the built-in scheduler" >&2
         exit 1
     fi
-    if [ ${sched} = ${DEBASHER_BUILTIN_SCHEDULER} ]; then
+    if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
         debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" "${builtin_sched_oneshot_given}" || exit 1
         if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
             print_post_exec_nowait_help
@@ -1405,7 +1449,7 @@ else
             print_post_exec_wait_help
         fi
     else
-        revise_rerun_proc_status "${outd}" || return 1
+        revise_rerun_proc_status "${outd}" || exit 1
         prepare_files_and_dirs_for_processes "${outd}"
         launch_program_processes "${command_line}" "${outd}" || exit 1
         if [ "${wait}" -eq 1 ]; then

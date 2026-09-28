@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# No --disable-schedulers: Slurm tool names are resolved via PATH at *run*
-# time, not baked in at build time (see configure.ac), so this package
-# works whether or not the machine building it has Slurm installed, and
-# correctly picks up Slurm on whatever cluster it's later installed on.
+# Slurm tool names are resolved via PATH at *run* time, not baked in at
+# build time (see configure.ac), so this package works whether or not the
+# machine building it has Slurm installed, and correctly picks up Slurm on
+# whatever cluster it's later installed on.
 #
 # No --disable-frontend: this source tarball is expected to be one built
 # with "make dist-vendored", which already contains a prebuilt

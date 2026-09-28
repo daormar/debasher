@@ -483,7 +483,7 @@ EOF
 # --- define_fifo_opt in an array defined in a loop ---------------------
 
 @test "debasher::define_fifo_opt registers each fifo of an array defined in a loop as owned by its own task" {
-    declare -gA DEBASHER_PROGRAM_FIFOS DEBASHER_FIFO_USERS DEBASHER_FIFO_MIRRORED
+    declare -gA DEBASHER_PROGRAM_FIFOS DEBASHER_FIFO_READERS DEBASHER_FIFO_MIRRORED
     declare -gA DEBASHER_FIFO_KINDS DEBASHER_FIFO_OWNER_OPTS
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN DEBASHER_OUT_VALUE_TO_PROCESSES
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
@@ -512,7 +512,7 @@ EOF
 }
 
 @test "debasher::_define_opts_for_process registers the fifos of a generator even when all process dependencies were given" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
     declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
@@ -590,7 +590,7 @@ EOF
     [ -z "${DEBASHER_PROCESS_OPT_LIST_LEN["loopproc"]+x}" ]
 }
 
-# --- users of the fifos --------------------------------------------------
+# --- readers of the fifos -----------------------------------------------
 
 @test "debasher::_deserialized_args_idx_is_dep_candidate writes the option index into the caller's variable j" {
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=(["/abs/fifo"]="fanin")
@@ -607,14 +607,14 @@ EOF
     [ "${output}" = "2" ]
 }
 
-@test "debasher::_register_fifos_used_by_process registers the reader of a fifo that its owner writes" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+@test "debasher::_register_fifos_read_by_process registers the reader of a fifo that its owner writes" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname fanin fanin_to_loop)"
     DEBASHER_PROGRAM_FIFOS["fanin/fanin_to_loop"]="fanin${sep}0"
-    DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["fanin/fanin_to_loop"]="${DEBASHER_EXTERNAL_FIFO_END}"
     # fanin writes it through its output option (-outloop, say)
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["loop"]=1
@@ -623,22 +623,22 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "loop"
+    debasher::_register_fifos_read_by_process "" "loop"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["fanin/fanin_to_loop"]}" = "loop${sep}0" ]
-    [ "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_to_loop"]}" = "-from_fanin" ]
+    [ "${DEBASHER_FIFO_READERS["fanin/fanin_to_loop"]}" = "loop${sep}0" ]
+    [ "${DEBASHER_FIFO_READER_OPTS["fanin/fanin_to_loop"]}" = "-from_fanin" ]
 }
 
-@test "debasher::_register_fifos_used_by_process registers another task of the same array as a user" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+@test "debasher::_register_fifos_read_by_process registers another task of the same array as the reader" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname worker worker_out_0)"
     DEBASHER_PROGRAM_FIFOS["worker/worker_out_0"]="worker${sep}0"
-    DEBASHER_FIFO_USERS["worker/worker_out_0"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["worker/worker_out_0"]="${DEBASHER_EXTERNAL_FIFO_END}"
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="worker${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["worker"]=2
     # Task 0 writes the fifo, task 1 reads it.
@@ -651,22 +651,22 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "worker"
+    debasher::_register_fifos_read_by_process "" "worker"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["worker/worker_out_0"]}" = "worker${sep}1" ]
-    [ "${DEBASHER_FIFO_USER_OPTS["worker/worker_out_0"]}" = "-from_prev" ]
+    [ "${DEBASHER_FIFO_READERS["worker/worker_out_0"]}" = "worker${sep}1" ]
+    [ "${DEBASHER_FIFO_READER_OPTS["worker/worker_out_0"]}" = "-from_prev" ]
 }
 
-@test "debasher::_register_fifos_used_by_process registers the owner that reads its own fifo through another option (a self-loop)" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+@test "debasher::_register_fifos_read_by_process registers the owner that reads its own fifo through another option (a self-loop)" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname counter counter_self)"
     DEBASHER_PROGRAM_FIFOS["counter/counter_self"]="counter${sep}0"
-    DEBASHER_FIFO_USERS["counter/counter_self"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["counter/counter_self"]="${DEBASHER_EXTERNAL_FIFO_END}"
     DEBASHER_FIFO_OWNER_OPTS["counter/counter_self"]="-outself"
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="counter${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["counter"]=1
@@ -675,22 +675,22 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "counter"
+    debasher::_register_fifos_read_by_process "" "counter"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["counter/counter_self"]}" = "counter${sep}0" ]
-    [ "${DEBASHER_FIFO_USER_OPTS["counter/counter_self"]}" = "-self" ]
+    [ "${DEBASHER_FIFO_READERS["counter/counter_self"]}" = "counter${sep}0" ]
+    [ "${DEBASHER_FIFO_READER_OPTS["counter/counter_self"]}" = "-self" ]
 }
 
-@test "debasher::_register_fifos_used_by_process leaves outside the user of a fifo that its owner defines through an input option" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_USER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+@test "debasher::_register_fifos_read_by_process leaves outside the reader of a fifo that its owner defines through an input option" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     local fifo="$(debasher::_get_absolute_fifoname fanin fanin_ext)"
     DEBASHER_PROGRAM_FIFOS["fanin/fanin_ext"]="fanin${sep}0"
-    DEBASHER_FIFO_USERS["fanin/fanin_ext"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+    DEBASHER_FIFO_READERS["fanin/fanin_ext"]="${DEBASHER_EXTERNAL_FIFO_END}"
     DEBASHER_FIFO_OWNER_OPTS["fanin/fanin_ext"]="-ext"
     DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
     DEBASHER_PROCESS_OPT_LIST_LEN["fanin"]=1
@@ -699,12 +699,448 @@ EOF
     }
 
     set +e
-    debasher::_register_fifos_used_by_process "" "fanin"
+    debasher::_register_fifos_read_by_process "" "fanin"
     local status=$?
     set -e
     [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_USERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_USER}" ]
-    [ -z "${DEBASHER_FIFO_USER_OPTS["fanin/fanin_ext"]+x}" ]
+    [ "${DEBASHER_FIFO_READERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]
+    [ -z "${DEBASHER_FIFO_READER_OPTS["fanin/fanin_ext"]+x}" ]
+}
+
+# --- process dependencies -------------------------------------------------
+
+@test "debasher::_merge_deptypes keeps the other type when one of them is none or after" {
+    local merged
+    debasher::_merge_deptypes "" "afterok" merged
+    [ "${merged}" = "afterok" ]
+    debasher::_merge_deptypes "none" "aftercorr" merged
+    [ "${merged}" = "aftercorr" ]
+    debasher::_merge_deptypes "aftercorr" "after" merged
+    [ "${merged}" = "aftercorr" ]
+    debasher::_merge_deptypes "after" "afterany" merged
+    [ "${merged}" = "afterany" ]
+    debasher::_merge_deptypes "after" "none" merged
+    [ "${merged}" = "after" ]
+}
+
+@test "debasher::_merge_deptypes gives afterok for any two of afterok, afterany and aftercorr" {
+    local merged
+    debasher::_merge_deptypes "aftercorr" "afterany" merged
+    [ "${merged}" = "afterok" ]
+    debasher::_merge_deptypes "afterany" "afterok" merged
+    [ "${merged}" = "afterok" ]
+    debasher::_merge_deptypes "afterok" "aftercorr" merged
+    [ "${merged}" = "afterok" ]
+}
+
+@test "debasher::_merge_deptypes gives afternotok for afternotok and afterany" {
+    local merged
+    debasher::_merge_deptypes "afterany" "afternotok" merged
+    [ "${merged}" = "afternotok" ]
+}
+
+@test "debasher::_merge_deptypes fails for afternotok together with afterok or aftercorr" {
+    local merged
+    run debasher::_merge_deptypes "afterok" "afternotok" merged
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"cannot both be satisfied"* ]]
+    run debasher::_merge_deptypes "afternotok" "aftercorr" merged
+    [ "${status}" -ne 0 ]
+}
+
+@test "debasher::_merge_deptypes fails for an unknown type" {
+    local merged
+    run debasher::_merge_deptypes "afterok" "aftrok" merged
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"unknown process dependency type: aftrok"* ]]
+}
+
+# Holds the lock of the output directory $1 the way debasher_exec does, with
+# its process id in the lock file, until it gets SIGTERM, which it ignores
+# when $2 is "ignore"
+hold_lock() {
+    (
+        exec 9>>"$1/lock"
+        flock -x 9
+        echo "${BASHPID}" > "$1/lock"
+        if [ "${2:-}" = "ignore" ]; then
+            trap '' TERM
+        else
+            trap 'exit 0' TERM
+        fi
+        while :; do sleep 0.1; done
+    ) &
+    local i
+    for (( i = 0; i < 50; i++ )); do
+        ! flock -n "$1/lock" true && [ -s "$1/lock" ] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+@test "debasher::_stop_run_scheduler does nothing when no debasher_exec holds the lock" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    debasher::_stop_run_scheduler "${outd}"
+    : > "${outd}/lock"
+    debasher::_stop_run_scheduler "${outd}"
+}
+
+@test "debasher::_stop_run_scheduler stops the holder of the lock with SIGTERM and waits until the lock is free" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}"
+    local pid=$(cat "${outd}/lock")
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *"Warning"* ]]
+    flock -n "${outd}/lock" true
+    ! kill -0 "${pid}" 2>/dev/null
+}
+
+@test "debasher::_stop_run_scheduler kills a holder of the lock that does not stop on SIGTERM" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    DEBASHER_EXEC_STOP_GRACE_SECS=1
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}" ignore
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"did not stop within 1s"* ]]
+    flock -n "${outd}/lock" true
+}
+
+@test "debasher::_throttle_lets_all_tasks_run accepts no throttle and a throttle not smaller than the number of tasks" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=(["arr"]=4)
+    DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none"
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=4 ${sep} processdeps=none"
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=8 ${sep} processdeps=none"
+}
+
+@test "debasher::_throttle_lets_all_tasks_run refuses a throttle, its own or the default one, smaller than the number of tasks" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=(["arr"]=4)
+    DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=2 ${sep} processdeps=none"
+
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=3
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none"
+}
+
+@test "debasher::_deps_without_ids_can_hold takes a dependency on a launched process, or on a finished one but afternotok" {
+    declare -A ids=(["a"]="101")
+    debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }
+
+    debasher::_deps_without_ids_can_hold "none" "/o" ids
+    debasher::_deps_without_ids_can_hold "afternotok:a" "/o" ids
+    debasher::_deps_without_ids_can_hold "afterok:done,after:done,afterany:done,aftercorr:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afterok:a,afterok:pending" "/o" ids
+}
+
+@test "debasher::_deps_without_ids_can_hold needs one dependency that can hold with ?" {
+    declare -A ids=()
+    debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }
+
+    debasher::_deps_without_ids_can_hold "afternotok:done?afterok:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done?afterok:pending" "/o" ids
+}
+
+@test "debasher::_check_explicit_processdeps accepts none and lists with one separator" {
+    debasher::_check_explicit_processdeps "p" "none"
+    debasher::_check_explicit_processdeps "p" "afterok:a"
+    debasher::_check_explicit_processdeps "p" "afterok:a,after:ns.b"
+    debasher::_check_explicit_processdeps "p" "afterok:a?afternotok:b"
+}
+
+@test "debasher::_check_explicit_processdeps refuses an unknown type" {
+    run debasher::_check_explicit_processdeps "p" "afterok:a,afterbogus:b"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"unknown type: afterbogus"* ]]
+}
+
+@test "debasher::_check_explicit_processdeps refuses a dependency without a type or a process" {
+    run debasher::_check_explicit_processdeps "p" "a"
+    [ "${status}" -eq 1 ]
+    run debasher::_check_explicit_processdeps "p" "afterok:"
+    [ "${status}" -eq 1 ]
+    run debasher::_check_explicit_processdeps "p" ":a"
+    [ "${status}" -eq 1 ]
+}
+
+@test "debasher::_check_explicit_processdeps refuses both separators in one list" {
+    run debasher::_check_explicit_processdeps "p" "afterok:a,afterok:b?afterok:c"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"use one of them"* ]]
+}
+
+@test "debasher::_get_procdeps_for_process adds no dependency on a file when the callback returns none" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/a.txt"]="writer${sep}0"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/b.txt"]="other${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-a${DEBASHER_ARG_SEP}/abs/a.txt${DEBASHER_ARG_SEP}-b${DEBASHER_ARG_SEP}/abs/b.txt"
+    }
+    reader_define_opt_deps() {
+        [ "$2" = "writer" ] && echo "none"
+        return 0
+    }
+
+    run debasher::_get_procdeps_for_process "" "reader"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "afterok:other" ]
+}
+
+@test "debasher::_get_procdeps_for_process merges the dependencies of every task of an array on several producers" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    # prod is an array whose task i writes /abs/p<i>; single writes /abs/s
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/p0"]="prod${sep}0"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/p1"]="prod${sep}1"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/s"]="single${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["prod"]=2
+    DEBASHER_PROCESS_OPT_LIST_LEN["single"]=1
+    DEBASHER_PROCESS_OPT_LIST_LEN["cons"]=2
+    # Task i of cons reads /abs/p<i>, and task 0 also reads /abs/s, so the
+    # two tasks list different dependencies
+    debasher::_get_opts_for_process_and_task() {
+        if [ "$3" -eq 0 ]; then
+            echo "-p${DEBASHER_ARG_SEP}/abs/p0${DEBASHER_ARG_SEP}-s${DEBASHER_ARG_SEP}/abs/s"
+        else
+            echo "-p${DEBASHER_ARG_SEP}/abs/p1"
+        fi
+    }
+
+    run debasher::_get_procdeps_for_process "" "cons"
+    [ "${status}" -eq 0 ]
+    local -a deps
+    IFS=, read -r -a deps <<< "${output}"
+    [ "${#deps[@]}" -eq 2 ]
+    [[ " ${deps[*]} " == *" aftercorr:prod "* ]]
+    # single is not an array, so task 0 of cons cannot pair with a task of
+    # it
+    [[ " ${deps[*]} " == *" afterok:single "* ]]
+}
+
+@test "debasher::_get_procdeps_for_process fails when the tasks of an array ask for contradictory types on one producer" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/s"]="single${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["cons"]=2
+    debasher::_get_opts_for_process_and_task() {
+        echo "-s${DEBASHER_ARG_SEP}/abs/s${DEBASHER_ARG_SEP}-i${DEBASHER_ARG_SEP}$3"
+    }
+    # Task 0 waits for single to succeed, task 1 for it to fail
+    cons_define_opt_deps() {
+        if [ "${DEBASHER_DESERIALIZED_ARGS[3]}" = "0" ]; then
+            echo "afterok"
+        else
+            echo "afternotok"
+        fi
+    }
+
+    run debasher::_get_procdeps_for_process "" "cons"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"cannot both be satisfied"* ]]
+}
+
+# --- options: names, values, flags ------------------------------------------
+
+@test "debasher::_str_is_option takes a dash followed by a letter or an underscore for an option, and a negative number for a value" {
+    local opt
+    for opt in -a --out -_x --b1; do
+        debasher::_str_is_option "${opt}" || { echo "not an option: ${opt}"; return 1; }
+    done
+    for opt in -5 -0.5 --1 - "" value; do
+        ! debasher::_str_is_option "${opt}" || { echo "an option: ${opt}"; return 1; }
+    done
+}
+
+@test "debasher::define_opt refuses an option name that does not start with a letter or an underscore" {
+    local optlist=""
+    run debasher::define_opt "-5" "x" optlist
+    [ "${status}" -ne 0 ]
+}
+
+@test "debasher::read_opt_value_from_func_args reads a negative number and an empty value" {
+    [ "$(debasher::read_opt_value_from_func_args -n -n -5 -e '' -f)" = "-5" ]
+    [ "$(debasher::read_opt_value_from_func_args -e -n -5 -e '' -f)" = "" ]
+    [ "$(debasher::read_opt_value_from_func_args -f -n -5 -e '' -f)" = "${DEBASHER_VOID_VALUE}" ]
+}
+
+@test "save_opt_list keeps a negative value, an empty value, and a flag given last" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    valproc_define_opts()
+    {
+        local optlist=""
+        define_opt "-n" "-5" optlist || return 1
+        define_opt "-e" "" optlist || return 1
+        define_flag "-f" optlist || return 1
+        save_opt_list optlist
+    }
+    set +e
+    valproc_define_opts "" "" valproc "${BATS_TEST_TMPDIR}"
+    set -e
+
+    local -n list="$(debasher::_get_opt_list_name valproc 0)"
+    [ "${list[-n]}" = "-5" ]
+    [[ -v list[-e] ]]
+    [ "${list[-e]}" = "" ]
+    [ "${list[-f]}" = "${DEBASHER_VOID_VALUE}" ]
+
+    # The options a task receives keep the empty value and the flag apart
+    set +e
+    debasher::_load_curr_opt_list_loop "" valproc
+    set -e
+    debasher::_deserialize_args "${DEBASHER_CURRENT_PROCESS_OPT_LIST[0]}"
+    [ "$(debasher::read_opt_value_from_func_args -e "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "" ]
+    [ "$(debasher::read_opt_value_from_func_args -f "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "${DEBASHER_VOID_VALUE}" ]
+    [ "$(debasher::read_opt_value_from_func_args -n "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "-5" ]
+}
+
+@test "debasher::_sep_serialized_to_qstr prints an empty value as an empty quoted word" {
+    local sargs="-e${DEBASHER_ARG_SEP}${DEBASHER_ARG_SEP}-f"
+    run debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${sargs}"
+    [ "${output}" = "-e '' -f " ]
+    run debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" ""
+    [ "${output}" = "" ]
+}
+
+@test "debasher::_print_program_opts shows the type of each option" {
+    declare -gA DEBASHER_PROGRAM_OPT_DESC=() DEBASHER_PROGRAM_OPT_TYPE=() DEBASHER_PROGRAM_OPT_CATEG=()
+    declare -gA DEBASHER_PROGRAM_CATEG_MAP=() DEBASHER_PROGRAM_OPT_IS_CMDLINE=()
+    typedproc_explain_opts()
+    {
+        explain_opt "-s" "<string>" "String to show"
+    }
+    typedproc_explain_opts
+
+    run debasher::_print_program_opts 0
+    [[ "${output}" == *"-s <string> String to show [typedproc]"* ]]
+}
+
+# --- process of the caller -------------------------------------------------
+
+@test "debasher::_get_processname_from_caller prefers a registered process over a helper named like a method" {
+    declare -gA DEBASHER_PROGRAM_PROCESSES=(["myproc"]=1)
+    io_define_opts()
+    {
+        debasher::_get_processname_from_caller "_define_opts"
+    }
+    myproc_define_opts()
+    {
+        io_define_opts
+    }
+
+    run myproc_define_opts
+    [ "${output}" = "myproc" ]
+}
+
+@test "debasher::_is_valid_processname names the method a process name collides with" {
+    run debasher::_is_valid_processname "proc_define_opts"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"collides with method '_define_opts'"* ]]
+}
+
+# --- one owner and one reader per fifo --------------------------------------
+
+@test "define_fifo_opt refuses two tasks of an array that define fifos with the same name" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    samefifo_define_opts()
+    {
+        local idx
+        for (( idx = 0; idx < 2; idx++ )); do
+            local optlist=""
+            define_fifo_opt "-outf" "samename" optlist || return 1
+            save_opt_list optlist
+        done
+    }
+
+    run samefifo_define_opts "" "" samefifo "${BATS_TEST_TMPDIR}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"fifo samename of process samefifo is defined by task 0 and by task 1"* ]]
+}
+
+@test "define_fifo_opt_generator may define the fifo of a task again, as a generator runs several times" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    regen_generate_opts()
+    {
+        local optlist=""
+        define_fifo_opt_generator "-outf" "regen_$5" "$5" optlist || return 1
+    }
+
+    regen_generate_opts "" "" regen "${BATS_TEST_TMPDIR}" 1
+    run regen_generate_opts "" "" regen "${BATS_TEST_TMPDIR}" 1
+    [ "${status}" -eq 0 ]
+}
+
+@test "define_fifo_opt refuses --mirror on an option that is not an output option" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_MIRRORED=()
+    declare -gA DEBASHER_FIFO_KINDS=() DEBASHER_FIFO_OWNER_OPTS=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    mirrin_define_opts()
+    {
+        local optlist=""
+        define_fifo_opt "-inf" "watched" optlist --mirror || return 1
+    }
+
+    run mirrin_define_opts "" "" mirrin "${BATS_TEST_TMPDIR}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"its option -inf is not an output option"* ]]
+}
+
+@test "debasher::_register_fifos_read_by_process refuses a second reader of a fifo" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local fifo="$(debasher::_get_absolute_fifoname writer out)"
+    DEBASHER_PROGRAM_FIFOS["writer/out"]="writer${sep}0"
+    DEBASHER_FIFO_READERS["writer/out"]="${DEBASHER_EXTERNAL_FIFO_END}"
+    DEBASHER_FIFO_OWNER_OPTS["writer/out"]="-outf"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="writer${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader1"]=1
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader2"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-inf${DEBASHER_ARG_SEP}${fifo}"
+    }
+
+    set +e
+    debasher::_register_fifos_read_by_process "" "reader1"
+    local status1=$?
+    set -e
+    [ "${status1}" -eq 0 ]
+    # Registering the same reader again is not an error
+    run debasher::_register_fifos_read_by_process "" "reader1"
+    [ "${status}" -eq 0 ]
+    run debasher::_register_fifos_read_by_process "" "reader2"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"is read by reader1 task 0 (option -inf) and by reader2 task 0 (option -inf); a fifo has a single reader"* ]]
 }
 
 # --- debasher::_check_opt_names_vs_explain, command-line options ---------

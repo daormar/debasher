@@ -234,3 +234,197 @@ EOF
     [ "$status" -ne 0 ]
     [[ "$output" == *"batch_sched"*"BUILTIN or SLURM"* ]]
 }
+
+# --- process registration and task selection ------------------------------
+
+@test "_update_processname_to_idx_info registers a process once, without errors on a second call" {
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX=() DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME=()
+
+    run bash -c "$(declare -p DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME); $(declare -f debasher_builtin_sched::_update_processname_to_idx_info);
+        debasher_builtin_sched::_update_processname_to_idx_info a
+        debasher_builtin_sched::_update_processname_to_idx_info b
+        debasher_builtin_sched::_update_processname_to_idx_info a
+        echo \"\${DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[a]} \${DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[b]} \${#DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME[@]}\""
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "0 1 2" ]
+}
+
+@test "_get_max_num_tasks allows every task of an array without a throttle" {
+    # debasher_lib.sh declares it with a bare declare, local to setup()
+    declare -g DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE=(["arr"]="${DEBASHER_ARRAY_TASK_NOTHROTTLE}")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["arr"]=7)
+
+    run debasher_builtin_sched::_get_max_num_tasks "${OUTDIR}" arr
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "7" ]
+}
+
+# --- knapsack constraints -------------------------------------------------
+
+@test "_print_knapsack_pred_spec pairs the two ends of a fifo and skips a fifo with an external end" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0" ["e/g"]="e${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0" ["e/g"]="${DEBASHER_EXTERNAL_FIFO_END}")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1 ["e"]=1)
+    debasher_builtin_sched::_get_knapsack_name() {
+        echo "k_$1"
+    }
+
+    run debasher_builtin_sched::_print_knapsack_pred_spec
+    [ "${status}" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ " ${lines[*]} " == *"k_r k_w"* ]]
+    [[ " ${lines[*]} " == *"k_w k_r"* ]]
+    [[ "${output}" != *"unary operator"* ]]
+}
+
+@test "_hold_back_fifo_ends_without_peer leaves out an end whose other end waits for a process to end" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r"]="afterok:x")
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1 ["x"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO" ["x"]="TO-DO")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}" ["x"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[x]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer keeps both ends when both are candidates, and an end whose other end runs" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0" ["v/g"]="v${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0" ["v/g"]="s${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1 ["v"]=1 ["s"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO" ["v"]="IN-PROGRESS" ["s"]="TO-DO")
+    local none="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${none}" ["r"]="${none}" ["s"]="${none}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[r]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[s]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer follows a chain of fifos and keeps an end whose other end is outside" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["c"]="afterok:x")
+    # a -> b -> c, and c waits for a dependency; e writes out of the program
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["a/f"]="a${sep}0" ["b/g"]="b${sep}0" ["e/h"]="e${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["a/f"]="b${sep}0" ["b/g"]="c${sep}0" ["e/h"]="${DEBASHER_EXTERNAL_FIFO_END}")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["a"]=1 ["b"]=1 ["c"]=1 ["e"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["a"]="TO-DO" ["b"]="TO-DO" ["c"]="TO-DO" ["e"]="TO-DO")
+    local none="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["a"]="${none}" ["b"]="${none}" ["e"]="${none}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[a]+x}" ]
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[b]+x}" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[e]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer removes only the task of an array whose other end cannot start" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r1"]="afterok:x")
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["arr/f0"]="arr${sep}0" ["arr/f1"]="arr${sep}1")
+    declare -gA DEBASHER_FIFO_READERS=(["arr/f0"]="r0${sep}0" ["arr/f1"]="r1${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["arr"]=3 ["r0"]=1 ["r1"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["arr"]="TO-DO" ["r0"]="TO-DO" ["r1"]="TO-DO")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["arr"]="0 1 2" ["r0"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[arr]}" = "0 2" ]
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[r0]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer keeps an end whose other end only waits for it to start" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r"]="after:w")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -n "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer leaves out an end whose other end does not fit in the free resources" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_BUILTIN_SCHED_CPUS=2
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    debasher_builtin_sched::_get_available_cpus() { echo 1; }
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_CPUS=(["w"]=1 ["r"]=2)
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["w"]=1 ["r"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["w"]="TO-DO" ["r"]="TO-DO")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["r"]="after:w")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
+}
+
+# --- skipping a task --------------------------------------------------------
+
+@test "_execute_funct_plus_postfunct counts a skipped task as finished without running the process or its post method" {
+    local marks="${BATS_TEST_TMPDIR}/marks"
+    debasher::_get_opts_for_process_and_task() {
+        echo "-x${DEBASHER_ARG_SEP}1"
+    }
+    debasher_builtin_sched::_write_opts_file() { :; }
+    debasher::_signal_process_completion() {
+        echo "completion $2 $3" >> "${marks}"
+    }
+    skipped() {
+        echo "process" >> "${marks}"
+    }
+    skipped_skip() {
+        return 0
+    }
+    skipped_post() {
+        echo "post" >> "${marks}"
+    }
+
+    run debasher_builtin_sched::_execute_funct_plus_postfunct "" "${OUTDIR}" skipped 1 0
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"skipped by its skip method; counted as finished"* ]]
+    [ "$(cat "${marks}")" = "completion skipped 0" ]
+}
+
+# --- errors and warnings of the logs of a run -------------------------------
+
+@test "_filter_errwarns_in_script_log_files_pref lists the errors and warnings of the logs of a built-in run" {
+    GREP="$(command -v grep)"
+    AWK="$(command -v awk)"
+    DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
+    DEBASHER_PROGRAM_OUTDIR="${OUTDIR}"
+    printf '%s\n' "Process started" "Error: something failed" "Warning: something odd" > "${EXECDIR}/proc.sched_out"
+
+    run debasher::_filter_errwarns_in_script_log_files_pref "E> " "W> " "md"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"[${EXECDIR}/proc.sched_out](file://${EXECDIR}/proc.sched_out)"* ]]
+    [[ "${output}" == *"E> Error: something failed"* ]]
+    [[ "${output}" == *"W> Warning: something odd"* ]]
+}

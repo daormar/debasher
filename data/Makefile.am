@@ -64,6 +64,5 @@ SUFFIXES= .sh
 	echo "GROOVY=\"$(GROOVY)\"" >> $@
 	echo "JAVA=\"$(JAVA)\"" >> $@
 	echo "DOT=\"$(DOT)\"" >> $@
-	echo "DISABLE_SCHEDULERS=\"$(DISABLE_SCHEDULERS)\"" >> $@
 	cat $< >> $@
 	chmod ugo+x $@

@@ -2340,7 +2340,7 @@ that output, or no process of the program does, and the other end is outside
 (`__EXTERNAL__` in the engine's fifo registry). The one exception is a fifo
 whose writer is outside the program: the process that reads it has to create
 it, through an input option, and the fifo carries a fifo tag. The engine's
-registries (`DEBASHER_PROGRAM_FIFOS` and `DEBASHER_FIFO_USERS`, written to
+registries (`DEBASHER_PROGRAM_FIFOS` and `DEBASHER_FIFO_READERS`, written to
 `program.fifos`) give the owner and the other end of every fifo, task by task,
 and the other end may be another task of the owner's own array; the option
 through which the owner defines each fifo is recorded too
@@ -2421,7 +2421,7 @@ node:
   defines it, or, for a tagged fifo fed from outside, an input port, which is
   also a control or an external port, as its tag says.
 - The process at the other end, when it is a node, has an input port on the
-  option through which it uses the fifo (`DEBASHER_FIFO_USER_OPTS`), which is
+  option through which it reads the fifo (`DEBASHER_FIFO_READER_OPTS`), which is
   also a control port if the fifo is tagged `--control`.
 - The output port whose other end is the `Supervisor` is the node's
   `SUPERVISOR_PORT`. A node with more than one is refused when the program is

@@ -118,8 +118,6 @@ DEBASHER_HEREDOC_INTERPRETER_OPTS=(
 
 # INVALID IDENTIFIERS
 DEBASHER_INVALID_SID="_INVALID_SID_"
-DEBASHER_INVALID_JID="_INVALID_JID_"
-DEBASHER_INVALID_PID="_INVALID_PID_"
 DEBASHER_INVALID_ARRAY_TID="_INVALID_ARRAY_TID_"
 
 # PROCESS STATUSES AND EXIT CODES
@@ -230,7 +228,11 @@ DEBASHER_PROGRAM_TYPE_GENERAL="general"
 DEBASHER_PROGRAM_TYPE_RESIDENT="resident"
 
 # FIFO-RELATED CONSTANTS
-DEBASHER_EXTERNAL_FIFO_USER="__EXTERNAL__${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
+#
+# The reader recorded for a fifo whose other end is outside the program (see
+# DEBASHER_FIFO_READERS): a reader outside when the owner writes the fifo, a
+# writer outside when the owner reads it
+DEBASHER_EXTERNAL_FIFO_END="__EXTERNAL__${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
 
 # FLOW-BASED PROGRAMMING CONSTANTS
 DEBASHER_SHUTDOWN_TOKEN="__SHUTDOWN_TOKEN__"
@@ -246,8 +248,12 @@ DEBASHER_FIFO_MIRROR_STOP_TOKEN="__FIFO_MIRROR_TAP_STOP__"
 # token, and then again for it to end on SIGTERM, before going further.
 DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=2
 
+# How long debasher::_stop_run_scheduler waits for a debasher_exec to stop on
+# SIGTERM, and then again on SIGKILL, before giving up.
+DEBASHER_EXEC_STOP_GRACE_SECS=30
+
 # RERUN REASONS
-DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_user_owner"
+DEBASHER_PROC_STATUS_FIFO_RERUN_REASON="process_status_fifo_owner_reader"
 DEBASHER_FORCED_RERUN_REASON="forced"
 DEBASHER_OUTDATED_CODE_RERUN_REASON="outdated_code"
 DEBASHER_NEW_PROC_RERUN_REASON="new_process"
@@ -267,22 +273,13 @@ DEBASHER_AFTERCORR_PROCESSDEP_TYPE="aftercorr"
 # OPTION RELATED CONSTANTS
 DEBASHER_OPT_FILE_LINES_PER_BLOCK=10000
 
-# ASSOCIATIVE ARRAY TO STORE PRIORITY OF PROCESS DEPENDENCIES
-declare -A DEBASHER_PROCESSDEP_PRIORITY
-DEBASHER_PROCESSDEP_PRIORITY[${DEBASHER_NONE_PROCESSDEP_TYPE}]=0
-DEBASHER_PROCESSDEP_PRIORITY[${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}]=1
-DEBASHER_PROCESSDEP_PRIORITY[${DEBASHER_AFTER_PROCESSDEP_TYPE}]=2
-DEBASHER_PROCESSDEP_PRIORITY[${DEBASHER_AFTERANY_PROCESSDEP_TYPE}]=3
-DEBASHER_PROCESSDEP_PRIORITY[${DEBASHER_AFTEROK_PROCESSDEP_TYPE}]=4
-DEBASHER_PROCESSDEP_PRIORITY[${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}]=4
-
 # PROCESS STATISTICS
 DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS="UNKNOWN"
 
 # PROGRAM STATUSES
 #
 # NOTE: exit code 1 is reserved for general errors when executing
-# pipe_status
+# debasher_status
 DEBASHER_PROGRAM_FINISHED_EXIT_CODE=0
 DEBASHER_PROGRAM_IN_PROGRESS_EXIT_CODE=2
 DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE=3
@@ -309,7 +306,6 @@ DEBASHER_PRGOPTS_OLD_FEXT="opts_old"
 DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT="opts_exh"
 DEBASHER_FIFOS_FEXT="fifos"
 DEBASHER_GRAPHS_FEXT="dot"
-DEBASHER_SCHED_SCRIPT_INPUT_FEXT="opts"
 DEBASHER_BASH_FEXT="sh"
 DEBASHER_PYTHON_FEXT="py"
 DEBASHER_PERL_FEXT="pl"
@@ -329,11 +325,10 @@ DEBASHER_HEREDOC_FEXTS=(
 )
 
 # FILE NAMES
-DEBASHER_INITIAL_PROCSPEC_BASENAME=".initial_program.${DEBASHER_PROCSPEC_FEXT}"
 DEBASHER_PRG_PREF="program"
 DEBASHER_PRG_COMMAND_LINE_BASENAME="command_line.sh"
-DEBASHER_DEBLIB_VARS_AND_FUNCS_BASENAME=".deblib_vars_and_funcs.sh"
-DEBASHER_MOD_VARS_AND_FUNCS_BASENAME=".mod_vars_and_funcs.sh"
+DEBASHER_EXEC_CONTEXT_BASENAME=".exec_context.sh"
+DEBASHER_LOCK_BASENAME="lock"
 DEBASHER_TASK_MARKER_PREFIX="DEBASHER_TASK_DONE_"
 
 # DIR_NAMES
@@ -403,8 +398,16 @@ declare -A DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED
 # Declare variable to store name of output directory
 declare DEBASHER_PROGRAM_OUTDIR
 
+# Declare variable that, when set, replaces the .sched_opts directory of
+# the output directory (see debasher::_get_sched_opts_dir)
+declare DEBASHER_SCHED_OPTS_DIR
+
 # Declare array to store file names of loaded modules
 declare -a DEBASHER_PROGRAM_MODULES
+
+# Declare array to store the file names of the modules being loaded, the
+# outermost first (see debasher::load_debasher_module)
+declare -a DEBASHER_MODULE_LOAD_STACK
 
 # Declare array to store, from the last module search, same-named
 # candidates found one level below a DEBASHER_MOD_DIR entry that were
@@ -478,9 +481,13 @@ declare -A DEBASHER_PROGRAM_SHDIRS
 # Declare associative arrays to store names of fifos
 declare -A DEBASHER_PROGRAM_FIFOS
 
-# Declare associative array to store users of fifos (The process
-# defining the FIFO with debasher::define_fifo_opt becomes the owner)
-declare -A DEBASHER_FIFO_USERS
+# Declare associative array to store the reader of each fifo (by augmented
+# name): the task of the program that reads it through an input option other
+# than the one through which its owner defines it, or
+# DEBASHER_EXTERNAL_FIFO_END when there is none and the other end of the fifo
+# is outside the program (the process defining the FIFO with
+# debasher::define_fifo_opt becomes the owner)
+declare -A DEBASHER_FIFO_READERS
 
 # Declare associative array flagging which fifos (by augmented name,
 # "<processname>/<fifoname>") were declared with define_fifo_opt's
@@ -505,7 +512,7 @@ declare -A DEBASHER_FIFO_OWNER_OPTS
 # Declare associative array with the option through which the process at the
 # other end of each fifo (by augmented name) uses it, when that process is
 # part of the program: an input option, since it reads the fifo
-declare -A DEBASHER_FIFO_USER_OPTS
+declare -A DEBASHER_FIFO_READER_OPTS
 
 # Declare associative array with the role of each process of a resident
 # program, "supervisor" or "fbpprocess" (see
@@ -522,7 +529,6 @@ declare -A DEBASHER_RESIDENT_TASK_PORTS
 # Declare general scheduler-related variables
 declare DEBASHER_SCHEDULER
 declare -A DEBASHER_RERUN_PROCESSES
-declare -a DEBASHER_FORCED_RERUN_PROCESSES
 declare DEBASHER_DEFAULT_NODES
 declare DEBASHER_ARRAY_TASK_NOTHROTTLE=0
 declare DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}

@@ -83,23 +83,18 @@ debasher::_set_debasher_default_array_task_throttle()
 ########
 debasher::_determine_scheduler()
 {
-    # Check if schedulers were disabled
-    if [ ${DISABLE_SCHEDULERS} = "yes" ]; then
-        echo ${DEBASHER_BUILTIN_SCHEDULER}
-    else
-        # Check if scheduler was already specified
-        if [ -z "${DEBASHER_SCHEDULER}" ]; then
-            # Scheduler not specified: pick one based on what's actually
-            # available on this machine right now (not at package build
-            # time, see configure.ac)
-            if ! command -v "${SBATCH}" >/dev/null 2>&1; then
-                echo ${DEBASHER_BUILTIN_SCHEDULER}
-            else
-                echo ${DEBASHER_SLURM_SCHEDULER}
-            fi
+    # Check if scheduler was already specified
+    if [ -z "${DEBASHER_SCHEDULER}" ]; then
+        # Scheduler not specified: pick one based on what's actually
+        # available on this machine right now (not at package build
+        # time, see configure.ac)
+        if ! command -v "${SBATCH}" >/dev/null 2>&1; then
+            echo ${DEBASHER_BUILTIN_SCHEDULER}
         else
-            echo ${DEBASHER_SCHEDULER}
+            echo ${DEBASHER_SLURM_SCHEDULER}
         fi
+    else
+        echo ${DEBASHER_SCHEDULER}
     fi
 }
 
@@ -136,6 +131,68 @@ debasher::_get_scheduler_throttle()
     else
         echo "${process_spec_throttle}"
     fi
+}
+
+########
+# Stops the debasher_exec that is preparing or running a program in an
+# output directory, if any, and waits until it has ended. That
+# debasher_exec holds the lock of the directory for as long as it runs, and
+# with the built-in scheduler it keeps launching tasks until the program
+# ends, so stopping the tasks that run would not stop the program: it is
+# stopped first. It is sent SIGTERM, which the built-in scheduler takes as a
+# request to launch nothing more, and SIGKILL if it has not ended within
+# DEBASHER_EXEC_STOP_GRACE_SECS. The lock being free is what proves that it
+# has ended: the tasks it launched do not hold the lock. Returns 1 if the
+# lock is still held after that.
+#
+# $1 - Absolute path of the output directory.
+debasher::_stop_run_scheduler()
+{
+    local dirname=$1
+    local lockfile="${dirname}/${DEBASHER_LOCK_BASENAME}"
+
+    [ -f "${lockfile}" ] || return 0
+    "${FLOCK}" -n "${lockfile}" true && return 0
+
+    local pid
+    pid=$("${CAT}" "${lockfile}")
+    if ! debasher::_str_is_positive_integer "${pid}"; then
+        echo "Error: the output directory ${dirname} is locked, but its lock file does not give the process that holds it" >&2
+        return 1
+    fi
+
+    echo "Stopping debasher_exec (process ${pid}), so that it launches nothing more..." >&2
+    kill -TERM "${pid}" 2>/dev/null || true
+    if ! "${FLOCK}" -w "${DEBASHER_EXEC_STOP_GRACE_SECS}" "${lockfile}" true; then
+        echo "Warning: debasher_exec (process ${pid}) did not stop within ${DEBASHER_EXEC_STOP_GRACE_SECS}s, killing it" >&2
+        kill -KILL "${pid}" 2>/dev/null || true
+        if ! "${FLOCK}" -w "${DEBASHER_EXEC_STOP_GRACE_SECS}" "${lockfile}" true; then
+            echo "Error: the output directory ${dirname} is still locked" >&2
+            return 1
+        fi
+    fi
+}
+
+########
+# Whether the throttle of a process, its own or the default one (see
+# debasher::_get_scheduler_throttle), lets every task of the process run at
+# once: true for a process with no throttle, and for one whose throttle is
+# not smaller than its number of tasks. The built-in scheduler in oneshot
+# mode never waits for a task to end, so the tasks that a throttle holds
+# back would never be launched.
+#
+# $1 - Name of the process.
+# $2 - Final specification of the process.
+debasher::_throttle_lets_all_tasks_run()
+{
+    local processname=$1
+    local process_spec=$2
+
+    local throttle=$(debasher::_get_scheduler_throttle "$(debasher::_extract_throttle_from_process_spec "${process_spec}")")
+    [ "${throttle}" -eq "${DEBASHER_ARRAY_TASK_NOTHROTTLE}" ] && return 0
+
+    local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+    [ "${throttle}" -ge "${num_tasks}" ]
 }
 
 ########
@@ -322,6 +379,60 @@ debasher::_id_exists()
 }
 
 ########
+# Whether the dependencies of a process can still hold when some of them
+# name processes that are not launched in this run, and so have no id to
+# give the scheduler (a scheduler, such as Slurm, that takes only the
+# dependencies on launched processes). A process with no id has either
+# finished in an earlier run, and a dependency on it holds unless it is
+# afternotok, which asks for it to have failed, or it has not finished and
+# is not launched either, and no dependency on it will ever hold. A
+# dependency on a process with an id is left to the scheduler. With ","
+# every dependency has to be able to hold, with "?" one is enough.
+#
+# $1 - Dependencies of the process, as its final specification gives them
+#      (the value of processdeps).
+# $2 - Output directory of the run.
+# $3 - Name of the associative array with the id of each launched process.
+debasher::_deps_without_ids_can_hold()
+{
+    local processdeps_spec=$1
+    local dirname=$2
+    local -n deps_ids_ref=$3
+
+    [ -z "${processdeps_spec}" ] && return 0
+    [ "${processdeps_spec}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && return 0
+
+    local separator=$(debasher::_get_processdeps_separator "${processdeps_spec}")
+    local -a deps_array
+    if [ -z "${separator}" ]; then
+        deps_array=("${processdeps_spec}")
+    else
+        IFS="${separator}" read -r -a deps_array <<< "${processdeps_spec}"
+    fi
+
+    local dep any_can=0
+    for dep in "${deps_array[@]}"; do
+        local deptype=$(debasher::_get_deptype_part_in_dep "${dep}")
+        local depproc=$(debasher::_get_processname_part_in_dep "${dep}")
+        local can=0
+        if [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] || [ -n "${deps_ids_ref[${depproc}]:-}" ]; then
+            can=1
+        elif [ "${deptype}" != "${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}" ] \
+                 && [ "$(debasher::_get_process_status "${dirname}" "${depproc}")" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+            can=1
+        fi
+        if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ]; then
+            [ ${can} -eq 1 ] && any_can=1
+        else
+            [ ${can} -eq 0 ] && return 1
+        fi
+    done
+    if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ]; then
+        [ ${any_can} -eq 1 ]
+    fi
+}
+
+########
 debasher::_map_deptype_if_necessary()
 {
     local deptype=$1
@@ -339,53 +450,100 @@ debasher::_map_deptype_if_necessary()
 
 
 ########
+# Writes into the given file the context that the script of every process
+# starts with: the variables and functions of the shell that calls it,
+# which is debasher_exec once the program is fully defined, so that a
+# process sees exactly the engine, the modules and the program that
+# debasher_exec loaded (the code at the top level of a module runs once,
+# in debasher_exec, and its results travel to the processes as they
+# are). Left out are:
+#
+# - the variables that bash defines on its own, and the read-only ones,
+#   which cannot be declared again;
+# - the exported variables and functions, which a process inherits from
+#   its own environment (on Slurm, the one of the node where it runs),
+#   except PATH and the DEBASHER_* variables, which it gets as
+#   debasher_exec had them;
+# - the options of every task (DEBASHER_OPT_LIST_*), one array per task
+#   of an array process, which the tasks read from .sched_opts instead,
+#   and the scratch arrays that hold them while they are being read.
+#
+# The locals of this function start with _ctx_ and are left out as well.
+debasher::_write_exec_context()
+{
+    local _ctx_fname=$1
+
+    # Names of the variables bash defines on its own, from a bash started
+    # with an empty environment
+    local -A _ctx_excluded=()
+    local _ctx_name
+    while IFS= read -r _ctx_name; do
+        _ctx_excluded["${_ctx_name}"]=1
+    done < <(exec -c "${BASH}" --norc --noprofile -c 'compgen -v')
+
+    # Read-only variables
+    local _ctx_line
+    while IFS= read -r _ctx_line; do
+        if [[ "${_ctx_line}" =~ ^declare\ -[a-zA-Z]*\ ([A-Za-z_][A-Za-z_0-9]*) ]]; then
+            _ctx_excluded["${BASH_REMATCH[1]}"]=1
+        fi
+    done < <(readonly -p)
+
+    # Exported variables, but PATH and DEBASHER_*
+    while IFS= read -r _ctx_name; do
+        _ctx_excluded["${_ctx_name}"]=1
+    done < <(compgen -A export)
+    unset '_ctx_excluded[PATH]'
+
+    # The names come from declare -p, not from compgen -v, which leaves out
+    # a variable declared with no value: an associative array still empty
+    # when the context is written would otherwise reach the processes as
+    # an undeclared name, which bash takes for an indexed array
+    local -a _ctx_vars=()
+    local -A _ctx_seen=()
+    local _ctx_decl_line
+    while IFS= read -r _ctx_decl_line; do
+        [[ "${_ctx_decl_line}" =~ ^declare\ -[-a-zA-Z]*\ ([A-Za-z_][A-Za-z_0-9]*)(=|$) ]] || continue
+        _ctx_name=${BASH_REMATCH[1]}
+        [[ -v _ctx_seen["${_ctx_name}"] ]] && continue
+        _ctx_seen["${_ctx_name}"]=1
+        case "${_ctx_name}" in
+            _ctx_*|DEBASHER_OPT_LIST_*|DEBASHER_CURRENT_PROCESS_OPT_LIST|DEBASHER_DESERIALIZED_ARGS)
+                continue
+                ;;
+            DEBASHER_*)
+                ;;
+            *)
+                [[ -v _ctx_excluded["${_ctx_name}"] ]] && continue
+                ;;
+        esac
+        # A line of a value that spans several lines could look like a
+        # declaration of its own: only a name that is declared counts
+        declare -p "${_ctx_name}" > /dev/null 2>&1 || continue
+        _ctx_vars+=("${_ctx_name}")
+    done < <(declare -p)
+
+    # Functions, but the exported ones
+    local -a _ctx_funcs=()
+    local _ctx_decl _ctx_attrs
+    while read -r _ctx_decl _ctx_attrs _ctx_name; do
+        [[ "${_ctx_attrs}" == *x* ]] && continue
+        _ctx_funcs+=("${_ctx_name}")
+    done < <(declare -F)
+
+    {
+        declare -p "${_ctx_vars[@]}" || return 1
+        declare -f "${_ctx_funcs[@]}" || return 1
+    } > "${_ctx_fname}"
+}
+
+########
+# Writes the context of a process script (see debasher::_write_exec_context)
 debasher::_write_env_vars_and_funcs()
 {
-    debasher::_write_debasher_env_vars_and_funcs()
-    {
-        local dirname=$1
-
-        # Write DeBasher start variables and functions
-        local vars_and_funcs_fname=$(debasher::_get_deblib_vars_and_funcs_fname "${dirname}")
-        "${CAT}" "${vars_and_funcs_fname}"
-
-        # Write environment functions
-        declare -f debasher::mark_task_done
-        declare -f debasher::is_task_done
-
-        # Write initialized variables
-        declare -p DEBASHER_SCHEDULER
-        declare -p DEBASHER_PROGRAM_TYPE
-        # The directories where modules are searched, as debasher_exec had
-        # them, so that a process launched again from another environment
-        # (a node relaunched by hand) finds the modules its own launches
-        # would
-        if [ -n "${DEBASHER_MOD_DIR+x}" ]; then
-            declare -p DEBASHER_MOD_DIR
-        fi
-        declare -p DEBASHER_INITIAL_PROCESS_SPEC
-        declare -p DEBASHER_PROCESS_PFILE_DIR
-        declare -p DEBASHER_RESIDENT_TASK_PORTS
-        declare -p DEBASHER_PROGRAM_OUTDIR
-        declare -p DEBASHER_MEMOIZED_OPTS
-        declare -p DEBASHER_OUT_VALUE_TO_PROCESSES
-    }
-
-    debasher::_write_mod_env_vars_and_funcs()
-    {
-        local dirname=$1
-
-        local vars_and_funcs_fname=$(debasher::_get_mod_vars_and_funcs_fname "${dirname}")
-        "${CAT}" "${vars_and_funcs_fname}"
-    }
-
     local dirname=$1
 
-    # Write Debasher-related variables and functions
-    debasher::_write_debasher_env_vars_and_funcs "${dirname}"
-
-    # Write module-related variables and functions
-    debasher::_write_mod_env_vars_and_funcs "${dirname}"
+    "${CAT}" "$(debasher::_get_exec_context_fname "${dirname}")"
 }
 
 ########
@@ -456,6 +614,59 @@ debasher::_get_elapsed_time_from_logfile()
     else
         echo "${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}"
     fi
+}
+
+########
+# Converts an elapsed time as debasher::_format_elapsed_time writes it
+# (seconds, a dot and three digits of milliseconds) into milliseconds.
+# Fails for anything else, such as an unknown elapsed time.
+debasher::_elapsed_time_to_ms()
+{
+    local elapsed=$1
+
+    if [[ ! "${elapsed}" =~ ^([0-9]+)\.([0-9]{3})$ ]]; then
+        return 1
+    fi
+    echo $(( 10#${BASH_REMATCH[1]} * 1000 + 10#${BASH_REMATCH[2]} ))
+}
+
+########
+# Prints the elapsed time of the finished tasks of an array process as
+# "<total> : <idx>-><time> ; <idx>-><time> ; ...", where the total is the
+# sum of the times of the tasks, or unknown when the time of any of them
+# is. The log of each task is the one printed by the function named in
+# $3, called with the output directory, the process name and the task
+# index, since each scheduler keeps it in its own place.
+debasher::_get_elapsed_time_for_array_process()
+{
+    local dirname=$1
+    local processname=$2
+    local task_logf_funcname=$3
+
+    local result=""
+    local total_ms=0
+    local total_known=1
+    local taskidx
+    for taskidx in $(debasher::_get_finished_array_task_indices "${dirname}" ${processname}); do
+        local log_filename=$("${task_logf_funcname}" "${dirname}" "${processname}" "${taskidx}")
+        local difft=$(debasher::_get_elapsed_time_from_logfile "${log_filename}")
+        local difft_ms
+        if difft_ms=$(debasher::_elapsed_time_to_ms "${difft}"); then
+            total_ms=$((total_ms + difft_ms))
+        else
+            total_known=0
+        fi
+        if [ -n "${result}" ]; then
+            result="${result} "
+        fi
+        result="${result}${taskidx}->${difft} ;"
+    done
+
+    local total=${DEBASHER_UNKNOWN_ELAPSED_TIME_FOR_PROCESS}
+    if [ ${total_known} -eq 1 ]; then
+        total=$(debasher::_format_elapsed_time "${total_ms}")
+    fi
+    echo "${total} : ${result}"
 }
 
 ########

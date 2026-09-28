@@ -104,7 +104,7 @@ debasher_builtin_sched::_mem_within_limit()
 debasher_builtin_sched::_update_processname_to_idx_info()
 {
     local processname=$1
-    if [ ${DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]} = ""]; then
+    if [[ ! -v DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}] ]]; then
         local len=${#DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[@]}
         DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX[${processname}]=${len}
         DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME[${len}]=${processname}
@@ -577,6 +577,40 @@ debasher_builtin_sched::_check_comp_res()
 }
 
 ########
+# Whether a dependency of the given type on the given process holds, from
+# the current status of that process
+debasher_builtin_sched::_dep_holds()
+{
+    local deptype=$1
+    local depsname=$2
+    local depstatus=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
+
+    case ${deptype} in
+        ${DEBASHER_AFTER_PROCESSDEP_TYPE})
+            [ ${depstatus} != ${DEBASHER_TODO_PROCESS_STATUS} -a ${depstatus} != ${DEBASHER_UNFINISHED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTEROK_PROCESSDEP_TYPE})
+            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE})
+            [ ${depstatus} = ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTERANY_PROCESSDEP_TYPE})
+            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} -o ${depstatus} = ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE})
+            # NOTE: DEBASHER_AFTERCORR_PROCESSDEP_TYPE dependency type currently
+            # treated in the same way as DEBASHER_AFTEROK_PROCESSDEP_TYPE
+            # dependency
+            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+########
 debasher_builtin_sched::_check_process_deps()
 {
     local processname=$1
@@ -596,41 +630,9 @@ debasher_builtin_sched::_check_process_deps()
         local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
         local depsname=$(debasher::_get_processname_part_in_dep ${dep})
 
-        # Process dependency
-        depstatus=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
-
         # Process exit code
         local dep_ok=1
-        case ${deptype} in
-            ${DEBASHER_AFTER_PROCESSDEP_TYPE})
-                if [ ${depstatus} = ${DEBASHER_TODO_PROCESS_STATUS} -o  ${depstatus} = ${DEBASHER_UNFINISHED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTEROK_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTERANY_PROCESSDEP_TYPE})
-                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a ${depstatus} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-            ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE})
-                # NOTE: DEBASHER_AFTERCORR_PROCESSDEP_TYPE dependency type currently
-                # treated in the same way as DEBASHER_AFTEROK_PROCESSDEP_TYPE
-                # dependency
-                if [ ${depstatus} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
-                    dep_ok=0
-                fi
-                ;;
-        esac
+        debasher_builtin_sched::_dep_holds "${deptype}" "${depsname}" || dep_ok=0
 
         # Return value depending on the dependency separator used
         case "${separator}" in
@@ -684,12 +686,12 @@ debasher_builtin_sched::_process_can_be_executed()
 ########
 debasher_builtin_sched::_get_max_num_tasks()
 {
-    local processname=$1
+    local dirname=$1
+    local processname=$2
     local throttle=${DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE[${processname}]}
     if [ "${throttle}" -eq "${DEBASHER_ARRAY_TASK_NOTHROTTLE}" ]; then
-        local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
-        local result=$((array_size - num_inprogress_tasks))
-        echo ${result}
+        # Without a throttle, any task not launched yet can be launched
+        echo "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}"
     else
         local inprogress_tasks=$(debasher_builtin_sched::_get_inprogress_array_task_indices "${dirname}" $processname)
         local num_inprogress_tasks=$(debasher::_get_num_words_in_string "${inprogress_tasks}")
@@ -716,16 +718,17 @@ debasher_builtin_sched::_update_executable_non_array_process()
 ########
 debasher_builtin_sched::_update_executable_array_process()
 {
-    local processname=$1
-    local status=$2
+    local dirname=$1
+    local processname=$2
+    local status=$3
 
     if [ ${status} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a \
          ${status} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
         if debasher_builtin_sched::_process_can_be_executed ${processname}; then
-            local max_task_num=$(debasher_builtin_sched::_get_max_num_tasks ${processname})
+            local max_task_num=$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" ${processname})
             if [ ${max_task_num} -gt 0 ]; then
-                todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" ${processname})
-                todo_task_indices_truncated=$(debasher::_get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num})
+                local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" ${processname})
+                local todo_task_indices_truncated=$(debasher::_get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num})
                 if [ "${todo_task_indices_truncated}" != "" ]; then
                     BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${todo_task_indices_truncated}
                 fi
@@ -749,8 +752,194 @@ debasher_builtin_sched::_get_executable_processes()
             debasher_builtin_sched::_update_executable_non_array_process ${processname} ${status}
         else
             # process is an array
-            debasher_builtin_sched::_update_executable_array_process ${processname} ${status}
+            debasher_builtin_sched::_update_executable_array_process "${dirname}" ${processname} ${status}
         fi
+    done
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, is
+# a candidate of this round (see debasher_builtin_sched::_get_executable_processes)
+debasher_builtin_sched::_task_is_candidate()
+{
+    local task=$1
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    [[ -v BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"] ]] || return 1
+
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        return 0
+    fi
+    [[ " ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]} " == *" ${task_idx} "* ]]
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, is
+# running or has finished
+debasher_builtin_sched::_task_is_running_or_finished()
+{
+    local dirname=$1
+    local task=$2
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    local status
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+        [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] || [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
+    else
+        status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${processname}" "${task_idx}")
+        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}" ] || [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS}" ]
+    fi
+}
+
+########
+# Whether a process has started, or has a task among the candidates of this
+# round, so that an after dependency on it holds once the round is launched
+debasher_builtin_sched::_process_starts_or_runs()
+{
+    local processname=$1
+    local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+
+    [[ -v BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"] ]] \
+        || [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
+        || [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, can
+# start once the candidates of this round have started: it runs, has
+# finished or is a candidate; or it waits to be launched, fits in the free
+# cpus and memory, and every dependency of its process that does not hold
+# yet is an after dependency on a process that starts in this round or runs
+# already. A task in held_back, which the caller keeps, was left out of this
+# round and cannot.
+debasher_builtin_sched::_task_can_start_soon()
+{
+    local dirname=$1
+    local task=$2
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    [[ -v held_back["${task}"] ]] && return 1
+    debasher_builtin_sched::_task_is_candidate "${task}" && return 0
+    debasher_builtin_sched::_task_is_running_or_finished "${dirname}" "${task}" && return 0
+
+    # Waiting to be launched
+    local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
+    else
+        [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] && return 1
+        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
+        local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${processname}" "${task_idx}")
+        [ "${task_status}" = "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" ] || return 1
+        [ "$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" "${processname}")" -gt 0 ] || return 1
+    fi
+
+    # Fits in the free resources
+    debasher_builtin_sched::_check_comp_res "${processname}" || return 1
+
+    # Waits, at most, for processes that start in this round or run already
+    local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
+    local separator=$(debasher::_get_processdeps_separator ${processdeps})
+    local processdeps_blanks
+    if [ "${separator}" = "" ]; then
+        processdeps_blanks=${processdeps}
+    else
+        processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps})
+    fi
+    local dep any_ok=0
+    for dep in ${processdeps_blanks}; do
+        local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
+        local depsname=$(debasher::_get_processname_part_in_dep ${dep})
+        local dep_ok=0
+        if debasher_builtin_sched::_dep_holds "${deptype}" "${depsname}"; then
+            dep_ok=1
+        elif [ "${deptype}" = "${DEBASHER_AFTER_PROCESSDEP_TYPE}" ] && debasher_builtin_sched::_process_starts_or_runs "${depsname}"; then
+            dep_ok=1
+        fi
+        if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ]; then
+            [ ${dep_ok} -eq 1 ] && any_ok=1
+        else
+            [ ${dep_ok} -eq 0 ] && return 1
+        fi
+    done
+    if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ] && [ ${any_ok} -eq 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
+########
+# Removes a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>,
+# from the candidates of this round
+debasher_builtin_sched::_remove_candidate_task()
+{
+    local task=$1
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        unset 'BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"]'
+        return 0
+    fi
+
+    local remaining="" idx
+    for idx in ${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}; do
+        [ "${idx}" = "${task_idx}" ] && continue
+        remaining="${remaining:+${remaining} }${idx}"
+    done
+    if [ -z "${remaining}" ]; then
+        unset 'BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"]'
+    else
+        BUILTIN_SCHED_EXECUTABLE_PROCESSES["${processname}"]=${remaining}
+    fi
+}
+
+########
+# Removes from the candidates of this round every task at one end of a fifo
+# whose other end, a task of the program, cannot start once the round has
+# started (see debasher_builtin_sched::_task_can_start_soon), and repeats
+# until nothing changes, since the fifos of a program can form chains. A
+# task launched while the other end still waits for a process to end, or for
+# cpus and memory, would block when opening the fifo, holding its own cpus
+# and memory, which the other end or the process it waits for may need. An
+# other end that only waits for processes to start, such as the end itself
+# through an after dependency, starts in a later round, and the end may go
+# first. The knapsack solver takes an end missing from its items for one
+# that has already run, which only holds once this is done.
+debasher_builtin_sched::_hold_back_fifo_ends_without_peer()
+{
+    local dirname=$1
+
+    local -A held_back=()
+    local changed=1
+    while [ ${changed} -eq 1 ]; do
+        changed=0
+        local augm_fifoname
+        for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+            local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+            local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
+            [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
+            [ "${owner}" = "${reader}" ] && continue
+
+            local end peer
+            for end in "${owner}" "${reader}"; do
+                if [ "${end}" = "${owner}" ]; then
+                    peer=${reader}
+                else
+                    peer=${owner}
+                fi
+                if debasher_builtin_sched::_task_is_candidate "${end}" \
+                       && ! debasher_builtin_sched::_task_can_start_soon "${dirname}" "${peer}"; then
+                    debasher_builtin_sched::_remove_candidate_task "${end}"
+                    held_back["${end}"]=1
+                    changed=1
+                fi
+            done
+        done
     done
 }
 
@@ -848,35 +1037,43 @@ debasher_builtin_sched::_print_knapsack_pred_spec()
 {
     # Iterate over each executable process generating its required
     # information for the knapsack solver
-    local processname
+    local fifoname
     for fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        # A fifo whose other end is outside the program puts no constraint
+        # on what is launched together
+        if [ "${DEBASHER_FIFO_READERS["${fifoname}"]}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
+            continue
+        fi
+
         # Get fifo owner info
         local owner_proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${fifoname}"]}"
         local owner_proc="${owner_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
         local owner_idx="${owner_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
         local owner_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${owner_proc}]}
+        local owner_knapsack_name
         if [ ${owner_array_size} -eq 1 ]; then
             owner_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${owner_proc})
         else
             owner_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${owner_proc} ${owner_idx})
         fi
 
-        # Get fifo user info
-        local user_proc_plus_idx="${DEBASHER_FIFO_USERS["${fifoname}"]}"
-        local user_proc="${user_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        local user_idx="${user_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-        local user_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${user_proc}]}
-        if [ ${user_array_size} -eq 1 ]; then
-            user_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${user_proc})
+        # Get fifo reader info
+        local reader_proc_plus_idx="${DEBASHER_FIFO_READERS["${fifoname}"]}"
+        local reader_proc="${reader_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        local reader_idx="${reader_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+        local reader_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${reader_proc}]}
+        local reader_knapsack_name
+        if [ ${reader_array_size} -eq 1 ]; then
+            reader_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${reader_proc})
         else
-            user_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${user_proc} ${user_idx})
+            reader_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${reader_proc} ${reader_idx})
         fi
 
-        # Print knapsack predecessor specification entry (owner and user
+        # Print knapsack predecessor specification entry (owner and reader
         # are provided in both senses to ensure that both processes
         # should be executed together)
-        echo "${user_knapsack_name} ${owner_knapsack_name}"
-        echo "${owner_knapsack_name} ${user_knapsack_name}"
+        echo "${reader_knapsack_name} ${owner_knapsack_name}"
+        echo "${owner_knapsack_name} ${reader_knapsack_name}"
     done
 }
 
@@ -1008,6 +1205,9 @@ debasher_builtin_sched::_select_processes_to_be_exec()
     # Obtain set of processes that can be executed
     local -A BUILTIN_SCHED_EXECUTABLE_PROCESSES
     debasher_builtin_sched::_get_executable_processes "${dirname}"
+
+    # Leave out the ends of fifos whose other end cannot start yet
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${dirname}"
 
     if [ ${builtin_sched_debug} -eq 1 ]; then
         local process_status=$(debasher_builtin_sched::_get_debug_process_status_info)
@@ -1179,12 +1379,18 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
 
     debasher_builtin_sched::_write_opts_file "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 
-    # Execute process skip function if it was provided
-    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        ${skip_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}" && { echo "Warning: execution of ${processname} will be skipped since the process skip function has finished with exit code $?" >&2 ; return 1; }
-    fi
-
     debasher::_display_begin_process_message
+
+    # A task that the skip method of its process skips counts as finished:
+    # it signals its completion without resetting its output directory or
+    # running the process or its post method, so that the processes that
+    # depend on it run with the outputs it already has
+    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ] && ${skip_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"; then
+        echo "Process ${processname} skipped by its skip method; counted as finished" >&2
+        debasher::_signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
+        debasher::_display_end_process_message
+        return 0
+    fi
 
     debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
 
@@ -1198,9 +1404,9 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # Execute process function, keeping its stdout
     debasher_builtin_sched::_export_process_env "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
     local stdout_filename=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
-    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" | "${TEE}" > "${stdout_filename}"
+    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${stdout_filename}"
 
-    local funct_exit_code=${PIPESTATUS[0]}
+    local funct_exit_code=$?
 
     # Stop mirror taps and fail the process if any of them died
     # abnormally, rather than silently losing mirrored output.
@@ -1260,16 +1466,7 @@ debasher_builtin_sched::_write_env_vars_and_funcs()
 {
     local dirname=$1
 
-    # Write general environment variables and functions
     debasher::_write_env_vars_and_funcs "${dirname}"
-
-    # Write builtin sched environment functions
-    declare -f debasher_builtin_sched::_write_opts_file
-    declare -f debasher_builtin_sched::_reset_outdir
-    declare -f debasher_builtin_sched::_export_process_env
-    declare -f debasher_builtin_sched::_execute_funct_plus_postfunct
-    declare -f debasher::_seq_execute_builtin
-    declare -f debasher_builtin_sched::_get_script_log_filenames
 }
 
 ########
@@ -1291,7 +1488,7 @@ debasher_builtin_sched::_create_script()
     debasher_builtin_sched::_print_script_trap >> "${fname}" || return 1
 
     # Write environment variables
-    debasher_builtin_sched::_write_env_vars_and_funcs "${dirname}" | debasher::_exclude_readonly_vars >> "${fname}" ; debasher::pipe_fail || return 1
+    debasher_builtin_sched::_write_env_vars_and_funcs "${dirname}" >> "${fname}" || return 1
 
     # Print header
     debasher_builtin_sched::_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
@@ -1343,38 +1540,25 @@ debasher_builtin_sched::_launch()
         fi
     fi
 
-    # Tell the launched process where the installed helper tools live.
-    # debasher_libexecdir is deliberately not among the variables dumped
-    # into generated scripts (see debasher_get_deblib_vars_and_funcs), so
-    # a running process (e.g. a Supervisor relaunching a node through
-    # debasher_launch_process) cannot learn it any other way. Being a
-    # constant, unlike the two variables above, it needs no unset.
+    # Tell the programs that the launched process runs, such as a Python
+    # heredoc process (a Supervisor relaunching a node through
+    # debasher_launch_process, or calling debasher_stop_resident), where
+    # the installed tools live: the script has debasher_libexecdir and
+    # debasher_bindir as shell variables of its context, which do not
+    # reach the programs it runs, so they are exported under names of
+    # their own. Being constants, unlike the two variables above, they
+    # need no unset.
     export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
-    # Same reasoning, for debasher_bindir: a Python heredoc process (a
-    # Supervisor calling debasher_stop_resident as a subprocess, see its
-    # own on_node_permanently_failed) has no other way to find a
-    # bin_SCRIPTS tool either. Found missing by a real debasher_exec run,
-    # 2026-09-22: a bare "debasher_stop_resident" (and, before it, the
-    # same call's own now-removed bare "debasher_stop" fallback) relied
-    # on PATH already including bin/, which nothing here ever put there,
-    # so the escalation thread crashed on FileNotFoundError before it
-    # could do anything, silently, unwaited-on since nothing joins it.
-    # This most likely explains the Conformance status entry recording
-    # sup.finished never appearing after a node gave up: the very
-    # fallback meant to end the program in exactly that case could never
-    # actually run.
     export DEBASHER_BINDIR="${debasher_bindir}"
 
     # Execute file, with job control enabled just for this one launch
     # so it becomes its own process group (pgid == pid). The launched
-    # script always forks at least one child of its own (the stdout-
-    # capturing tee pipeline every process runs through, see
-    # debasher_builtin_sched::_execute_funct_plus_postfunct, plus a
-    # mirrored fifo's background tap, if any); without a distinct
-    # process group, killing just this pid (debasher::_stop_pid, used
-    # by debasher_stop) leaves those children running as orphans. Job
-    # control is normally off in a non-interactive script: toggling it
-    # only around the launch keeps the scope narrow.
+    # script usually forks children of its own (the programs its process
+    # runs, plus a mirrored fifo's background tap, if any); without a
+    # distinct process group, killing just this pid (debasher::_stop_pid,
+    # used by debasher_stop) leaves those children running as orphans.
+    # Job control is normally off in a non-interactive script: toggling
+    # it only around the launch keeps the scope narrow.
     set -m
     "${file}" &
     local pid=$!
@@ -1649,9 +1833,20 @@ debasher_builtin_sched::execute_program_processes()
 
     echo "* Executing program processes..." >&2
 
-    # Execute scheduling loop
+    # Execute scheduling loop. A SIGTERM, which debasher_stop sends before
+    # it stops the processes (see debasher::_stop_run_scheduler), asks the
+    # loop to launch nothing more: it is only noted here, and acted upon at
+    # the start of the next round, so that no task is left half launched
+    DEBASHER_BUILTIN_SCHED_STOP_REQUESTED=0
+    trap 'DEBASHER_BUILTIN_SCHED_STOP_REQUESTED=1' TERM
     local end=0
     while [ ${end} -eq 0 ]; do
+        if [ ${DEBASHER_BUILTIN_SCHED_STOP_REQUESTED} -eq 1 ]; then
+            echo "Stop requested: no more processes are launched" >&2
+            trap - TERM
+            return 1
+        fi
+
         if [ ${builtin_sched_debug} -eq 1 ]; then
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
         fi
@@ -1661,7 +1856,7 @@ debasher_builtin_sched::execute_program_processes()
             # In oneshot mode, nothing ever waits for a process to finish
             # (see below), so a later iteration can never end up with
             # *more* available resources than this first one has right
-            # now -- if not everything that could be selected in round 1
+            # now: if not everything that could be selected in round 1
             # got selected, it never will be. Check before launching
             # anything, rather than silently launching only a subset and
             # returning as if the whole program had started.
@@ -1705,6 +1900,7 @@ debasher_builtin_sched::execute_program_processes()
 
         iterno=$((iterno + 1))
     done
+    trap - TERM
 
     echo "" >&2
 }

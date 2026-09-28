@@ -5,12 +5,12 @@ Process Skip Example
 
     # This module reuses the value_writer and value_reader processes
     # from the value pass example to demonstrate the skip method.
-    # value_reader_skip reads the same value descriptor as value_reader
-    # itself and returns 1 when the value is even, telling DeBasher to
-    # skip the process entirely for that run, or 0 when it is odd,
-    # letting value_reader execute normally. This shows how a process
-    # can decide, from its own options, whether it needs to run at all
-    # before the scheduler commits any resources to it.
+    # value_reader_skip reads the same value as value_reader itself and
+    # returns 0 when the value is odd, telling DeBasher to skip
+    # value_reader for that run, or 1 when it is even, letting it
+    # execute normally. This shows how a process can decide, from its
+    # own options, whether it needs to run at all. A skipped process
+    # counts as finished, so the processes that depend on it still run.
 
     value_writer_document()
     {
@@ -119,11 +119,8 @@ Process Skip Example
     value_reader()
     {
         # Initialize variables
-        local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
+        local value=$(read_opt_value_from_func_args "-val-desc" "$@")
         local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-        # Read value from descriptor
-        value=$(read_value_from_desc "${val_desc}")
 
         # Increment value by 1
         ((value++))
@@ -135,11 +132,8 @@ Process Skip Example
     value_reader_skip()
     {
         # Initialize variables
-        local val_desc=$(read_opt_value_from_func_args "-val-desc" "$@")
+        local value=$(read_opt_value_from_func_args "-val-desc" "$@")
         local outf=$(read_opt_value_from_func_args "-outf" "$@")
-
-        # Read value from descriptor
-        local value=$(read_value_from_desc "${val_desc}")
 
         # Skip if read value is odd
         if ((value % 2 == 0)); then

@@ -19,7 +19,7 @@ def is_reserved_name(name: str) -> bool:
     True for a file/directory name DeBasher itself manages inside a
     program's home directory: the hidden .debasher metadata dir, a
     dot-prefixed engine file (.debasher_webui_run.log, .conda,
-    .sched_opts, .deblib_vars_and_funcs.sh, .mod_vars_and_funcs.sh, ...),
+    .sched_opts, .exec_context.sh, ...),
     a __dunder__-wrapped engine directory (__exec__, __graphs__,
     __fifos__), or command_line.sh, the one engine-written name that
     follows neither convention.

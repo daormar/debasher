@@ -579,9 +579,9 @@ EOF
 # process has defined its options and the other end of every fifo is known.
 
 set_up_registries() {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_USERS=() DEBASHER_FIFO_KINDS=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_FIFO_KINDS=()
     declare -gA DEBASHER_FIFO_MIRRORED=() DEBASHER_RESIDENT_PROCESS_ROLES=()
-    declare -gA DEBASHER_FIFO_OWNER_OPTS=() DEBASHER_FIFO_USER_OPTS=()
+    declare -gA DEBASHER_FIFO_OWNER_OPTS=() DEBASHER_FIFO_READER_OPTS=()
     declare -gA DEBASHER_RESIDENT_TASK_PORTS=()
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_INITIAL_PROCESS_SPEC=()
     DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
@@ -607,9 +607,9 @@ end_of() {
 add_fifo() {
     DEBASHER_PROGRAM_FIFOS["$1"]="$2"
     if [ "$3" = "outside" ]; then
-        DEBASHER_FIFO_USERS["$1"]="${DEBASHER_EXTERNAL_FIFO_USER}"
+        DEBASHER_FIFO_READERS["$1"]="${DEBASHER_EXTERNAL_FIFO_END}"
     else
-        DEBASHER_FIFO_USERS["$1"]="$3"
+        DEBASHER_FIFO_READERS["$1"]="$3"
     fi
     if [ -n "${4:-}" ]; then
         DEBASHER_FIFO_KINDS["$1"]="$4"
@@ -622,7 +622,7 @@ add_fifo() {
         DEBASHER_FIFO_OWNER_OPTS["$1"]="-out"
     fi
     if [ "$3" != "outside" ]; then
-        DEBASHER_FIFO_USER_OPTS["$1"]="${6:--in}"
+        DEBASHER_FIFO_READER_OPTS["$1"]="${6:--in}"
     fi
 }
 
@@ -698,7 +698,7 @@ add_fifo() {
 
     run debasher::_validate_program_fifo_kinds
     [ "${status}" -eq 1 ]
-    [[ "${output}" == *"Error: fifo a/a_ext is tagged --external, but process b of the program uses it"* ]]
+    [[ "${output}" == *"Error: fifo a/a_ext is tagged --external, but process b of the program reads it"* ]]
 }
 
 @test "debasher::_validate_program_fifo_kinds refuses a control fifo between two nodes" {
@@ -995,4 +995,67 @@ fake_statuses() {
     debasher::_define_rerun_processes_due_to_resident_resume "/unused"
 
     [ "${#DEBASHER_RERUN_PROCESSES[@]}" -eq 0 ]
+}
+
+# --- the run left in an output directory -------------------------------------
+
+# Writes the command line file of a run made from ${1} with --outdir ${2}
+write_command_line_file() {
+    # Tool path of the preamble, read when the file is
+    TAIL="$(command -v tail)"
+    local outdir=$3
+    mkdir -p "${outdir}"
+    printf 'cd %q\n' "$1" > "${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    printf '%q ' debasher_exec --pfile /abs/prg.sh --outdir "$2" --sched BUILTIN >> "${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    echo "" >> "${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+}
+
+@test "debasher::_get_orig_workdir reads a working directory with spaces, and one written without quoting" {
+    local outdir="${BATS_TEST_TMPDIR}/out"
+    write_command_line_file "/work/dir with spaces" "out" "${outdir}"
+    run debasher::_get_orig_workdir "${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "/work/dir with spaces" ]
+
+    printf 'cd /plain/dir\nx\n' > "${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    run debasher::_get_orig_workdir "${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    [ "${output}" = "/plain/dir" ]
+}
+
+@test "debasher::_load_processes_from_procspec registers the processes of the run, and _check_run_has_process checks one" {
+    declare -gA DEBASHER_PROGRAM_PROCESSES=()
+    local outdir="${BATS_TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    printf '%s\n' "writer cpus=1 mem=32 time=00:01:00 ||| processdeps=none" \
+                  "ns.reader cpus=1 mem=32 time=00:01:00 ||| processdeps=afterok:writer" \
+                  > "${outdir}/${DEBASHER_PRG_PREF}.${DEBASHER_PROCSPEC_FEXT}"
+
+    debasher::_load_processes_from_procspec "${outdir}"
+    [ "${#DEBASHER_PROGRAM_PROCESSES[@]}" -eq 2 ]
+    debasher::_check_run_has_process "ns.reader"
+    run debasher::_check_run_has_process "missing"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"missing is not a process of the program"* ]]
+
+    run debasher::_load_processes_from_procspec "${BATS_TEST_TMPDIR}/nowhere"
+    [ "${status}" -ne 0 ]
+}
+
+@test "debasher::_check_outdir_not_moved accepts the directory of the run under any path, and refuses another one" {
+    local workdir="${BATS_TEST_TMPDIR}/work"
+    mkdir -p "${workdir}"
+    local outdir="${workdir}/out"
+    write_command_line_file "${workdir}" "../work/out" "${outdir}"
+
+    # No run yet
+    debasher::_check_outdir_not_moved "${BATS_TEST_TMPDIR}/empty"
+    # The same directory, through .. and through a symbolic link
+    debasher::_check_outdir_not_moved "${outdir}"
+    ln -s "${outdir}" "${BATS_TEST_TMPDIR}/link"
+    debasher::_check_outdir_not_moved "${BATS_TEST_TMPDIR}/link"
+    # A copy elsewhere
+    cp -r "${outdir}" "${BATS_TEST_TMPDIR}/copy"
+    run debasher::_check_outdir_not_moved "${BATS_TEST_TMPDIR}/copy"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"was run in"* ]]
 }
