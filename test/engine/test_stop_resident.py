@@ -10,8 +10,6 @@ import signal
 import subprocess
 import time
 
-import pytest
-
 from chaos_ref import (
     KILLABLE_NODES,
     launch_chaos,
@@ -28,6 +26,7 @@ from resident_run import (
     wait_for,
     wait_for_relaunch,
     wait_for_text,
+    wait_until,
     write_line,
 )
 
@@ -212,12 +211,22 @@ def test_debasher_stop_resident_forced_exit_code_on_the_hard_kill_fallback(outdi
 
     # The hard kill actually ran, SIGSTOP notwithstanding (SIGKILL is not
     # blockable and reaches a stopped process the same as a running one):
-    # every process the program launched must be gone.
+    # every process the program launched must be gone. debasher_stop does
+    # not wait for the processes it kills, and a process group can still be
+    # found for a moment after the SIGKILL, while its processes exit, so
+    # each one is given a few seconds to go away.
     for name in ("fanin", "loop", "sink", "sup"):
         pid = read_pid(id_file(outdir, name))
         assert pid is not None, f"{name} has no pid to check"
-        with pytest.raises(ProcessLookupError):
-            os.killpg(int(pid), 0)
+        assert wait_until(lambda: not _group_exists(int(pid)), timeout=5.0), f"{name} is still running"
+
+
+def _group_exists(pgid):
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failure(outdir):
