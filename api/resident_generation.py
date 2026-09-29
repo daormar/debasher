@@ -279,34 +279,42 @@ def _check_program(program: Program) -> None:
                 )
 
 
-def resident_program_for_generation(program: Program) -> Program:
+def _write_code(process: ProgramProcess) -> None:
+    """Writes a process as a Python heredoc, with none of the additional
+    specifications, methods or group that a resident program leaves out."""
+    process.language = "python"
+    process.code = supervisor_heredoc(process) if process.nodeKind == "Supervisor" else node_heredoc(process)
+    process.additionalSpecs = AdditionalSpecs(force=False)
+    process.additionalMethods = AdditionalMethods()
+    process.groupSource = None
+
+
+class _Wiring:
     """
-    A copy of the resident `program` ready for the script generation of a
-    general one: every process written as a Python heredoc, with no
-    additional specifications or methods, and the Supervisor wiring added as
-    options and connections. Raises ValueError for what a resident program
-    does not offer.
+    The Supervisor wiring of a copy of a resident program, added to it as
+    options and connections: to each node its heartbeat channel, to each
+    initiator its control port, and to the Supervisor, if there is one, the
+    other ends of both, its manual trigger port, -no_hold_fifos and the
+    command line options that count its fanout families.
     """
-    _check_program(program)
-    program = program.model_copy(deep=True)
 
-    for process in program.processes:
-        process.language = "python"
-        process.code = supervisor_heredoc(process) if process.nodeKind == "Supervisor" else node_heredoc(process)
-        process.additionalSpecs = AdditionalSpecs(force=False)
-        process.additionalMethods = AdditionalMethods()
-        process.groupSource = None
+    def __init__(self, program: Program):
+        self.program = program
+        self.supervisor = next((p for p in program.processes if p.nodeKind == "Supervisor"), None)
+        self.nodes = [p for p in program.processes if p.nodeKind != "Supervisor"]
+        self.edges = list(program.edges)
+        self.supervisor_options: list[ProgramOption] = []
+        # The command line options of the Supervisor that count its fanout
+        # families, by label: two families counted by the same option share
+        # it.
+        self.count_options: dict[str, ProgramOption] = {}
 
-    supervisor = next((p for p in program.processes if p.nodeKind == "Supervisor"), None)
-    nodes = [p for p in program.processes if p.nodeKind != "Supervisor"]
-    edges = list(program.edges)
-    supervisor_options: list[ProgramOption] = []
-    count_options: dict[str, ProgramOption] = {}
-
-    def supervisor_count_option(node) -> ProgramOption:
-        count = _count_source(program, node)
-        if count.label not in count_options:
-            count_options[count.label] = _option(
+    def count_option(self, node: ProgramProcess) -> ProgramOption:
+        """The option of the Supervisor that counts the tasks of `node`, an
+        array or generator node."""
+        count = _count_source(self.program, node)
+        if count.label not in self.count_options:
+            self.count_options[count.label] = _option(
                 count.label,
                 "input",
                 count.description,
@@ -314,39 +322,41 @@ def resident_program_for_generation(program: Program) -> Program:
                 commandLine=True,
                 mandatory=count.mandatory,
             )
-        return count_options[count.label]
+        return self.count_options[count.label]
 
-    for node in nodes:
-        mode = node.optionsHandler.mode
-        suffix = _task_suffix(mode)
-        is_array = mode in _TASK_INDEXED_MODES
-
+    def add_heartbeat(self, node: ProgramProcess) -> None:
+        """The heartbeat channel of a node: an output of the node, read by an
+        input of the Supervisor, or by a fanout family of it for an array or
+        generator node, one for each task."""
         heartbeat = _option(
             HEARTBEAT_LABEL,
             "output",
             "heartbeat channel to the Supervisor",
             channel="fifo",
-            value=f"{node.name}_hb{suffix}",
+            value=f"{node.name}_hb{_task_suffix(node.optionsHandler.mode)}",
         )
         node.options.append(heartbeat)
+        if self.supervisor is None:
+            return
+        if node.optionsHandler.mode in _TASK_INDEXED_MODES:
+            reader = _option(
+                heartbeat_label(node.name) + "ith",
+                "input",
+                f"heartbeat channel of the i'th task of {node.name}",
+                countSourceOptionId=self.count_option(node).id,
+            )
+        else:
+            reader = _option(heartbeat_label(node.name), "input", f"heartbeat channel of {node.name}")
+        self.supervisor_options.append(reader)
+        _connect(self.edges, node, heartbeat, self.supervisor, reader)
 
-        if supervisor is not None:
-            if is_array:
-                reader = _option(
-                    heartbeat_label(node.name) + "ith",
-                    "input",
-                    f"heartbeat channel of the i'th task of {node.name}",
-                    countSourceOptionId=supervisor_count_option(node).id,
-                )
-            else:
-                reader = _option(heartbeat_label(node.name), "input", f"heartbeat channel of {node.name}")
-            supervisor_options.append(reader)
-            _connect(edges, node, heartbeat, supervisor, reader)
-
-        if not node.initiator:
-            continue
-
-        if supervisor is None:
+    def add_control_port(self, node: ProgramProcess) -> None:
+        """The control port of an initiator: connected to a trigger port of
+        the Supervisor, a fanout family of it for an array or generator
+        initiator, or, without a Supervisor, written from outside the
+        program."""
+        suffix = _task_suffix(node.optionsHandler.mode)
+        if self.supervisor is None:
             node.options.append(
                 _option(
                     TRIGGER_LABEL,
@@ -357,19 +367,18 @@ def resident_program_for_generation(program: Program) -> Program:
                     value=f"{node.name}_trigger{suffix}",
                 )
             )
-            continue
-
+            return
         control = _option(TRIGGER_LABEL, "input", "control port of this initiator")
         node.options.append(control)
-        if is_array:
+        if node.optionsHandler.mode in _TASK_INDEXED_MODES:
             trigger = _option(
                 trigger_label(node.name) + "ith",
                 "output",
                 f"trigger port to the i'th task of {node.name}",
                 channel="fifo",
                 fifoTag="control",
-                value=f"{supervisor.name}_{node.name}_trig_${{i}}",
-                countSourceOptionId=supervisor_count_option(node).id,
+                value=f"{self.supervisor.name}_{node.name}_trig_${{i}}",
+                countSourceOptionId=self.count_option(node).id,
             )
         else:
             trigger = _option(
@@ -378,33 +387,53 @@ def resident_program_for_generation(program: Program) -> Program:
                 f"trigger port to {node.name}",
                 channel="fifo",
                 fifoTag="control",
-                value=f"{supervisor.name}_{node.name}_trig",
+                value=f"{self.supervisor.name}_{node.name}_trig",
             )
-        supervisor_options.append(trigger)
-        _connect(edges, supervisor, trigger, node, control)
+        self.supervisor_options.append(trigger)
+        _connect(self.edges, self.supervisor, trigger, node, control)
 
-    if supervisor is not None:
-        supervisor_options.append(
-            _option(
-                MANUAL_LABEL,
-                "input",
-                "manual trigger port, written from outside the program",
-                channel="fifo",
-                fifoTag="control",
-                value=f"{supervisor.name}_manual",
-            )
-        )
-        supervisor_options.append(
-            _option(
-                NO_HOLD_FIFOS_LABEL,
-                "input",
-                "do not hold the FIFOs of the business channels",
-                dataType="None",
-                commandLine=True,
-            )
-        )
-        supervisor_options.extend(count_options.values())
-        supervisor.options = supervisor_options
+    def finish(self) -> None:
+        """Gives the Supervisor its options, the ports of its own after
+        those that face the nodes, and the program its connections."""
+        if self.supervisor is not None:
+            self.supervisor.options = [
+                *self.supervisor_options,
+                _option(
+                    MANUAL_LABEL,
+                    "input",
+                    "manual trigger port, written from outside the program",
+                    channel="fifo",
+                    fifoTag="control",
+                    value=f"{self.supervisor.name}_manual",
+                ),
+                _option(
+                    NO_HOLD_FIFOS_LABEL,
+                    "input",
+                    "do not hold the FIFOs of the business channels",
+                    dataType="None",
+                    commandLine=True,
+                ),
+                *self.count_options.values(),
+            ]
+        self.program.edges = self.edges
 
-    program.edges = edges
+
+def resident_program_for_generation(program: Program) -> Program:
+    """
+    A copy of the resident `program` ready for the script generation of a
+    general one: every process written as a Python heredoc, with no
+    additional specifications or methods, and the Supervisor wiring added as
+    options and connections. Raises ValueError for what a resident program
+    does not offer.
+    """
+    _check_program(program)
+    program = program.model_copy(deep=True)
+    for process in program.processes:
+        _write_code(process)
+    wiring = _Wiring(program)
+    for node in wiring.nodes:
+        wiring.add_heartbeat(node)
+        if node.initiator:
+            wiring.add_control_port(node)
+    wiring.finish()
     return program
