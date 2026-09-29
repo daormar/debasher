@@ -443,29 +443,35 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
     return lines
 
 
-def _option_definition_line(process, option, process_modes, connections_by_option):
+def _check_option_sources(process, option) -> None:
     """
-    Returns the _define_opts/_generate_opts line(s) for `option`, a
-    list since a connected, non-command-line, non-fanout option may
-    have more than one incoming edge (fan-in): one
-    define_opt_from_proc_out[_task_out] call is emitted per connection
-    in connections_by_option (see _connections_by_option), each
-    independently choosing the task-indexed variant based on its own
-    source's mode. Every other case still returns exactly one line.
+    Refuses an option whose value would come from two places at once. A
+    command line option takes its value from the command line and nowhere
+    else, so it can be neither delivered through an option channel nor
+    taken from the process specifications: the engine itself would take
+    whatever value the process defined.
     """
-    # A command-line option takes its value from the command line and
-    # nowhere else, so it can't also be delivered through an option
-    # channel: refused here, since the engine itself would take whatever
-    # value the process defined.
     if option.commandLine and option.channel != "none":
         raise ValueError(
             f'Option "{option.label}" on "{process.name}" can\'t be both '
             f'command-line and delivered through channel "{option.channel}".'
         )
-    if option.dataType == "None":
-        if option.commandLine:
-            return [f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
-        return [f'debasher::define_flag "{option.label}" optlist || return 1']
+    if option.commandLine and option.fromProcessSpec:
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" can\'t be both '
+            '"from process spec" and command-line.'
+        )
+
+
+def _flag_lines(option) -> list[str]:
+    if option.commandLine:
+        return [f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
+    return [f'debasher::define_flag "{option.label}" optlist || return 1']
+
+
+def _channel_lines(option) -> list[str]:
+    """The line of an option delivered through an option channel, whatever
+    its connections."""
     if option.channel == "value_desc":
         return [f'debasher::define_value_desc_opt "{option.label}" optlist || return 1']
     if option.channel == "fifo":
@@ -479,98 +485,126 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
             f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist'
             f"{mirror_flag}{_fifo_tag_flag(option)} || return 1"
         ]
-    if option.channel == "shared_dir":
-        # Always define_opt_from_shared_dir, regardless of any edges
-        # into/out of this option, those exist purely to document the
-        # dependency in the canvas (see the frontend's
-        # isValidProgramConnection); the engine derives the real
-        # processdeps on its own, from every writer of the same
-        # directory resolving to an identical absolute path.
-        return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
-    if option.fromProcessSpec:
-        # Not a channel (see ProgramOption.fromProcessSpec's own
-        # docstring), mutually exclusive with commandLine, unlike the
-        # three channel checks above: a process-spec-sourced option's
-        # value comes from exactly one define_procspec_opt call, which
-        # can't also be a define_cmdline_opt call for the same label.
-        if option.commandLine:
+    # "shared_dir": always define_opt_from_shared_dir, regardless of any
+    # edges into/out of this option, those exist purely to document the
+    # dependency in the canvas (see the frontend's
+    # isValidProgramConnection); the engine derives the real processdeps
+    # on its own, from every writer of the same directory resolving to an
+    # identical absolute path.
+    return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
+
+
+def _procspec_lines(option) -> list[str]:
+    # Not a channel (see ProgramOption.fromProcessSpec's own docstring): a
+    # process-spec-sourced option's value comes from exactly one
+    # define_procspec_opt call.
+    return [f'debasher::define_procspec_opt "${{process_spec}}" "{option.label}" "{option.value}" optlist || return 1']
+
+
+def _cmdline_lines(option) -> list[str]:
+    # A file-typed command-line option gets the validating variant
+    # (checks the path exists and normalizes it to absolute), see
+    # debasher::define_cmdline_infile_opt[_if_given] in
+    # engine/debasher_lib_opts.sh.
+    base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
+    if option.mandatory:
+        return [f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1']
+    return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
+
+
+def _connection_lines(process, option, process_modes, connections_by_option) -> list[str]:
+    """
+    The lines of an option connected to the output of a process: the
+    consumer side of a scatter, when the output is a fanout family, or else
+    one define_opt_from_proc_out[_task_out] call for each connection.
+    """
+    conn_proc, conn_opt = _get_process_plus_opt(option)
+    if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
+        # Consumer side of a scatter connection: conn_opt is a fanout
+        # family declared on a "standard" process (e.g. "-outfith"), so it
+        # isn't a real option name by itself, the member this option
+        # actually reads is picked by this (_FANOUT_PARTNER_MODES, i.e.
+        # "array"- or "generator"-mode) process's own per-task loop
+        # variable. One save_opt_list call on the source side (unlike
+        # _TASK_INDEXED_MODES, which addresses N repeated calls of the SAME
+        # name), hence plain define_opt_from_proc_out rather than
+        # _task_out. Fanout options stay single-connection, so this is
+        # never fan-in.
+        if process.optionsHandler.mode not in _FANOUT_PARTNER_MODES:
             raise ValueError(
-                f'Option "{option.label}" on "{process.name}" can\'t be both '
-                '"from process spec" and command-line.'
+                f'Option "{option.label}" on "{process.name}" is connected to fanout '
+                f'family "{conn_opt}" on "{conn_proc}", but "{process.name}" is not '
+                '"array"- or "generator"-mode, v1 only supports standard <-> '
+                "array/generator fanout pairings."
             )
-        return [f'debasher::define_procspec_opt "${{process_spec}}" "{option.label}" "{option.value}" optlist || return 1']
-    if option.commandLine:
-        # A file-typed command-line option gets the validating variant
-        # (checks the path exists and normalizes it to absolute),
-        # see debasher::define_cmdline_infile_opt[_if_given] in
-        # engine/debasher_lib_opts.sh.
-        base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
-        if option.mandatory:
-            return [f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1']
-        return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
-    if _opt_is_connected_to_proc(option):
-        conn_proc, conn_opt = _get_process_plus_opt(option)
-        if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
-            # Consumer side of a scatter connection: conn_opt is a fanout
-            # family declared on a "standard" process (e.g. "-outfith"),
-            # so it isn't a real option name by itself, the member this
-            # option actually reads is picked by this (_FANOUT_PARTNER_MODES,
-            # i.e. "array"- or "generator"-mode) process's own per-task loop
-            # variable. One save_opt_list
-            # call on the source side (unlike _TASK_INDEXED_MODES, which
-            # addresses N repeated calls of the SAME name), hence plain
-            # define_opt_from_proc_out rather than _task_out. Fanout
-            # options stay single-connection, so this is never fan-in.
-            if process.optionsHandler.mode not in _FANOUT_PARTNER_MODES:
-                raise ValueError(
-                    f'Option "{option.label}" on "{process.name}" is connected to fanout '
-                    f'family "{conn_opt}" on "{conn_proc}", but "{process.name}" is not '
-                    '"array"- or "generator"-mode, v1 only supports standard <-> '
-                    "array/generator fanout pairings."
-                )
+        idx_var = _task_idx_var(process.optionsHandler.mode)
+        base_conn_opt = _fanout_base_label(conn_opt)
+        return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1']
+
+    # Plain connection: one define_opt_from_proc_out[_task_out] per edge
+    # into this option, usually just one, but a non-command-line input may
+    # gather from several (fan-in; see isValidProgramConnection in the
+    # frontend). Falls back to the single value-sentinel-derived
+    # connection if no matching edge was found, e.g. a hand-edited/stale
+    # file.
+    connections = connections_by_option.get(option.id) or [
+        (conn_proc, conn_opt, process_modes.get(conn_proc))
+    ]
+
+    lines = []
+    for src_proc, src_opt, src_mode in connections:
+        if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
             idx_var = _task_idx_var(process.optionsHandler.mode)
-            base_conn_opt = _fanout_base_label(conn_opt)
-            return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1']
+            lines.append(
+                f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{idx_var}}}" "{src_opt}" optlist || return 1'
+            )
+        else:
+            lines.append(
+                f'debasher::define_opt_from_proc_out "{option.label}" "{src_proc}" "{src_opt}" optlist || return 1'
+            )
+    return lines
 
-        # Plain connection: one define_opt_from_proc_out[_task_out] per
-        # edge into this option, usually just one, but a non-command-
-        # line input may gather from several (fan-in; see
-        # isValidProgramConnection in the frontend). Falls back to the
-        # single value-sentinel-derived connection if no matching edge
-        # was found, e.g. a hand-edited/stale file.
-        connections = connections_by_option.get(option.id) or [
-            (conn_proc, conn_opt, process_modes.get(conn_proc))
-        ]
 
-        lines = []
-        for src_proc, src_opt, src_mode in connections:
-            if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
-                idx_var = _task_idx_var(process.optionsHandler.mode)
-                lines.append(
-                    f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{idx_var}}}" "{src_opt}" optlist || return 1'
-                )
-            else:
-                lines.append(
-                    f'debasher::define_opt_from_proc_out "{option.label}" "{src_proc}" "{src_opt}" optlist || return 1'
-                )
-        return lines
+def _literal_lines(process, option) -> list[str]:
     if option.dataType == "file" and option.direction == "input":
         # Resolved relative to the .sh defining the process (see
-        # debasher::define_infile_opt in engine/debasher_lib_opts.sh);
-        # lets a baked-in file value point at something shipped
-        # alongside the program (e.g. via the webui's program-files
-        # browser) with a portable, relative path, the same way
-        # AdditionalSpecs.externalAlias already does for process
-        # scripts. Output-direction options fall through to the plain
-        # define_opt below instead: define_infile_opt requires the
-        # value to already exist on disk, which a "file"-typed output
-        # (e.g. "-outf") never does until the process itself creates
-        # it at run time.
+        # debasher::define_infile_opt in engine/debasher_lib_opts.sh); lets
+        # a baked-in file value point at something shipped alongside the
+        # program (e.g. via the webui's program-files browser) with a
+        # portable, relative path, the same way
+        # AdditionalSpecs.externalAlias already does for process scripts.
+        # Output-direction options fall through to the plain define_opt
+        # below instead: define_infile_opt requires the value to already
+        # exist on disk, which a "file"-typed output (e.g. "-outf") never
+        # does until the process itself creates it at run time.
         return [
             f'debasher::define_infile_opt "{option.label}" "{option.value}" optlist '
             f'"{process.name}" || return 1'
         ]
     return [f'debasher::define_opt "{option.label}" "{option.value}" optlist || return 1']
+
+
+def _option_definition_line(process, option, process_modes, connections_by_option):
+    """
+    Returns the _define_opts/_generate_opts line(s) for `option`: a list,
+    since a connected, non-command-line, non-fanout option may have more
+    than one incoming edge (fan-in), each written as a line of its own (see
+    _connection_lines). The order of the checks below is the precedence of
+    the sources of a value: a flag, an option channel, the process
+    specifications, the command line, a connection, and a literal value.
+    """
+    _check_option_sources(process, option)
+    if option.dataType == "None":
+        return _flag_lines(option)
+    if option.channel != "none":
+        return _channel_lines(option)
+    if option.fromProcessSpec:
+        return _procspec_lines(option)
+    if option.commandLine:
+        return _cmdline_lines(option)
+    if _opt_is_connected_to_proc(option):
+        return _connection_lines(process, option, process_modes, connections_by_option)
+    return _literal_lines(process, option)
 
 
 def _add_opts_definition_func(process, suffix, header_lines, process_modes, connections_by_option):
