@@ -1,3 +1,4 @@
+import { WIRING_EDGE_COLOR } from "../adapters/reactFlowAdapter";
 import type { NodeKind } from "../models/node";
 
 // The marks of a canvas node of a resident program, and of its legend. Each
@@ -5,6 +6,15 @@ import type { NodeKind } from "../models/node";
 // the same whatever fonts the browser has; data-mark names it.
 
 const MARK_COLOR = "#444";
+
+// The band behind the head of a canvas node of a resident program, which
+// groups its name, its node kind and its marks: translucent, so that the
+// background of the canvas node, the color of its process status, shows
+// through it in every status. The Supervisor's takes the blue gray of its
+// wiring, and its chip a darker shade of it, which white text reads on.
+export const HEAD_BAND_COLOR = "rgba(0, 0, 0, 0.05)";
+export const SUPERVISOR_HEAD_BAND_COLOR = `${WIRING_EDGE_COLOR}38`;
+const SUPERVISOR_CHIP_COLOR = "#5f7399";
 
 /** An initiator, where rounds start. */
 export function InitiatorMark() {
@@ -59,7 +69,8 @@ export function TriggerMark() {
 
 /**
  * The node kind, in the head of a canvas node. The Supervisor's stands apart,
- * since it is not a business node and the user does not edit its code.
+ * in the blue gray of its wiring, since it is not a business node and the
+ * user does not edit its code.
  */
 export function NodeKindChip({ kind }: { kind: NodeKind }) {
   const isSupervisor = kind === "Supervisor";
@@ -71,8 +82,8 @@ export function NodeKindChip({ kind }: { kind: NodeKind }) {
         fontSize: 10,
         padding: "1px 6px",
         borderRadius: 8,
-        border: `1px solid ${isSupervisor ? "#555" : "#bbb"}`,
-        background: isSupervisor ? "#555" : "#f4f4f4",
+        border: `1px solid ${isSupervisor ? SUPERVISOR_CHIP_COLOR : "#bbb"}`,
+        background: isSupervisor ? SUPERVISOR_CHIP_COLOR : "#f4f4f4",
         color: isSupervisor ? "#fff" : "#444",
         whiteSpace: "nowrap",
       }}

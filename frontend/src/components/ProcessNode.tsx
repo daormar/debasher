@@ -15,7 +15,15 @@ import { NO_HOLD_FIFOS_LABEL, nodeOptionRole, observesOutside } from "../models/
 import { WIRING_EDGE_COLOR, optionRow } from "../adapters/reactFlowAdapter";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
-import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark, TriggerMark } from "./NodeMarks";
+import {
+  HEAD_BAND_COLOR,
+  InitiatorMark,
+  NodeKindChip,
+  ObserveMark,
+  OutsideMark,
+  SUPERVISOR_HEAD_BAND_COLOR,
+  TriggerMark,
+} from "./NodeMarks";
 import { useProgram } from "../store/ProgramContext";
 import { SELECTED_NODE_COLOR, groupColor } from "../utils/groupColor";
 
@@ -188,7 +196,7 @@ function WiringHandleView({ handle }: { handle: WiringHandle }) {
 /**
  * The head of a canvas node of a resident program: its name, its node kind
  * and the marks of an initiator and of a node that observes the outside
- * world, on a band of its own for the Supervisor, and below them its
+ * world, on a band that groups them (see HEAD_BAND_COLOR), and below them its
  * configuration options, which have no handle.
  */
 function ResidentHead({
@@ -212,7 +220,9 @@ function ResidentHead({
           flexDirection: "column",
           alignItems: "center",
           gap: 4,
-          ...(isSupervisor ? { background: "#e4e4e4", borderRadius: 6, padding: "4px 8px" } : {}),
+          background: isSupervisor ? SUPERVISOR_HEAD_BAND_COLOR : HEAD_BAND_COLOR,
+          borderRadius: 6,
+          padding: "4px 8px",
         }}
       >
 
