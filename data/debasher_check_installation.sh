@@ -829,7 +829,7 @@ esac
 # is 6
 progname="webui_running_sum"
 check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
-                       "${progname}" "accumulate_numbers" "1 2 3" "accumulate_sum" "6"
+                       "${progname}" "numbers" "1 2 3" "sum" "6"
 case $? in
     0)
         ((checks_passed++))

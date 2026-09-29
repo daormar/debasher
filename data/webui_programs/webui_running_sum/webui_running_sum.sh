@@ -19,13 +19,13 @@ webui_running_sum_program_type()
 }
 
 
-accumulate_document()
+Accumulate_document()
 {
     debasher::document_process "Keeps the running sum of the numbers it receives, and sends each new sum out."
 }
 
 
-accumulate_explain_opts()
+Accumulate_explain_opts()
 {
     debasher::explain_opt "-numbers" "<string>" "numbers written from outside the program, one per message"
     debasher::explain_opt "-outsum" "<string>" "the running sum after each number, read outside the program"
@@ -34,13 +34,13 @@ accumulate_explain_opts()
 }
 
 
-accumulate_identify_cmdline_opts()
+Accumulate_identify_cmdline_opts()
 {
     :
 }
 
 
-accumulate_define_opts()
+Accumulate_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -49,16 +49,16 @@ accumulate_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    debasher::define_fifo_opt "-numbers" "accumulate_numbers" optlist --external || return 1
-    debasher::define_fifo_opt "-outsum" "accumulate_sum" optlist || return 1
-    debasher::define_fifo_opt "-outhb" "accumulate_hb" optlist || return 1
-    debasher::define_opt_from_proc_out "-trigger" "sup" "-outaccumulate_trig" optlist || return 1
+    debasher::define_fifo_opt "-numbers" "numbers" optlist --external || return 1
+    debasher::define_fifo_opt "-outsum" "sum" optlist || return 1
+    debasher::define_fifo_opt "-outhb" "Accumulate_hb" optlist || return 1
+    debasher::define_opt_from_proc_out "-trigger" "Sup" "-outAccumulate_trig" optlist || return 1
 
     save_opt_list optlist
 }
 
 
-accumulate_heredoc_py()
+Accumulate_heredoc_py()
 {
     cat <<'EOF'
 from debasher_runtime_lib import FBPProcess
@@ -89,28 +89,28 @@ EOF
 }
 
 
-sup_document()
+Sup_document()
 {
-    debasher::document_process "Watches accumulate and relaunches it if it goes down."
+    debasher::document_process "Watches Accumulate and relaunches it if it goes down."
 }
 
 
-sup_explain_opts()
+Sup_explain_opts()
 {
-    debasher::explain_opt "-accumulate_hb" "<string>" "heartbeat channel of accumulate"
-    debasher::explain_opt "-outaccumulate_trig" "<string>" "trigger port to accumulate"
+    debasher::explain_opt "-Accumulate_hb" "<string>" "heartbeat channel of Accumulate"
+    debasher::explain_opt "-outAccumulate_trig" "<string>" "trigger port to Accumulate"
     debasher::explain_opt "-manual" "<string>" "manual trigger port, written from outside the program"
     debasher::explain_flag "-no-hold-fifos" "do not hold the FIFOs of the business channels"
 }
 
 
-sup_identify_cmdline_opts()
+Sup_identify_cmdline_opts()
 {
     debasher::opt_is_non_mandatory_cmdline "-no-hold-fifos"
 }
 
 
-sup_define_opts()
+Sup_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -119,16 +119,16 @@ sup_define_opts()
     local process_outdir=$4
     local optlist=""
 
-    debasher::define_opt_from_proc_out "-accumulate_hb" "accumulate" "-outhb" optlist || return 1
-    debasher::define_fifo_opt "-outaccumulate_trig" "sup_accumulate_trig" optlist --control || return 1
-    debasher::define_fifo_opt "-manual" "sup_manual" optlist --control || return 1
+    debasher::define_opt_from_proc_out "-Accumulate_hb" "Accumulate" "-outhb" optlist || return 1
+    debasher::define_fifo_opt "-outAccumulate_trig" "Sup_Accumulate_trig" optlist --control || return 1
+    debasher::define_fifo_opt "-manual" "Sup_manual" optlist --control || return 1
     debasher::define_cmdline_flag_if_given "${cmdline}" "-no-hold-fifos" optlist || return 1
 
     save_opt_list optlist
 }
 
 
-sup_heredoc_py()
+Sup_heredoc_py()
 {
     cat <<'EOF'
 from debasher_runtime_lib import Supervisor
@@ -145,6 +145,6 @@ EOF
 
 webui_running_sum_program()
 {
-    add_debasher_process "accumulate" "cpus=1 mem=256 time=01:00:00" ""
-    add_debasher_process "sup" "cpus=1 mem=256 time=01:00:00" ""
+    add_debasher_process "Accumulate" "cpus=1 mem=256 time=01:00:00" ""
+    add_debasher_process "Sup" "cpus=1 mem=256 time=01:00:00" ""
 }

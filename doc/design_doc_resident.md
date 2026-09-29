@@ -1060,16 +1060,19 @@ options of the process from `argv`, and calls `run()`.
 The class is named after its process, in CamelCase: every part of the process
 name between dots and underscores, with its first letter in upper case
 (`counter` gives `Counter`, `org.ns.count_words` gives `OrgNsCountWords`). The
-runtime names the logger of the node after its class, so a line of a log says
-which process wrote it. The heredoc defines exactly one class that derives from
-a class of the runtime library, and its name hides nothing that the code of
-the node could need: not a class of the runtime library, not a Python builtin,
-and not a name that the heredoc binds at its top level, such as one that it
-imports. When the program is loaded, the engine checks all of this by parsing
-the heredoc (`debasher::_check_resident_class_name`) and refuses a process that
-breaks a rule, naming it. A process called `supervisor` or `type_error`
-therefore has to be renamed, since its class would hide `Supervisor` or
-`TypeError`.
+conversion leaves a name already in CamelCase as it is, so a node is named in
+CamelCase by convention (`Counter`), and its process and its class then share
+one name. A namespaced name always differs from its class, since the name of a
+class holds no dots. The runtime names the logger of the node after its class,
+so a line of a log says which process wrote it. The heredoc defines exactly one
+class that derives from a class of the runtime library, and its name hides
+nothing that the code of the node could need: not a class of the runtime
+library, not a Python builtin, and not a name that the heredoc binds at its top
+level, such as one that it imports. When the program is loaded, the engine
+checks all of this by parsing the heredoc
+(`debasher::_check_resident_class_name`) and refuses a process that breaks a
+rule, naming it. A process called `supervisor` or `type_error` therefore has to
+be renamed, since its class would hide `Supervisor` or `TypeError`.
 
 The class takes its ports from the engine (see "Ports from the engine") and
 redefines four hooks. Each runs on a known thread, which is what lets the

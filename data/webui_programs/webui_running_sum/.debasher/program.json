@@ -24,7 +24,7 @@
   "processes": [
     {
       "id": "866488ec-2406-40fb-b43e-d61f3f85ba41",
-      "name": "accumulate",
+      "name": "Accumulate",
       "description": "Keeps the running sum of the numbers it receives, and sends each new sum out.",
       "position": {
         "x": 120.0,
@@ -40,7 +40,7 @@
           "mirror": false,
           "fifoTag": "external",
           "description": "numbers written from outside the program, one per message",
-          "value": "accumulate_numbers",
+          "value": "numbers",
           "commandLine": false,
           "mandatory": false,
           "fromProcessSpec": false,
@@ -55,7 +55,7 @@
           "mirror": false,
           "fifoTag": null,
           "description": "the running sum after each number, read outside the program",
-          "value": "accumulate_sum",
+          "value": "sum",
           "commandLine": false,
           "mandatory": false,
           "fromProcessSpec": false,
@@ -113,8 +113,8 @@
     },
     {
       "id": "d8a77576-b184-4523-a153-f17f3f0b6a73",
-      "name": "sup",
-      "description": "Watches accumulate and relaunches it if it goes down.",
+      "name": "Sup",
+      "description": "Watches Accumulate and relaunches it if it goes down.",
       "position": {
         "x": 120.0,
         "y": 60.0

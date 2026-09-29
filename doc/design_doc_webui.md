@@ -1163,8 +1163,11 @@ The class is named after the process, in CamelCase (`counter` gives `Counter`,
 `org.ns.count_words` gives `OrgNsCountWords`), as the engine requires (see
 "Defining a node" in `doc/design_doc_resident.md`), and the editor shows its
 declaration above the class body, read only. The model therefore holds no name
-for it, and import needs none: a module that loads already names its class
-this way. The editor refuses a process name whose class would hide a class of
+for it, and import needs none: a module that loads already names its class this
+way. A process named in CamelCase, as the nodes of a resident program are by
+convention (`Counter`), shares its name with its class, since turning a name
+into CamelCase leaves such a name as it is; a namespaced one always differs from
+its class. The editor refuses a process name whose class would hide a class of
 the runtime library or a Python builtin, such as `supervisor` or `type_error`.
 Whether the class hides a name that the node preamble binds depends on the
 preamble, which may change after the process is named, so the engine checks it
