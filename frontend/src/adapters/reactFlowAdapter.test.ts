@@ -326,11 +326,11 @@ describe("supervisorWiring", () => {
     const { handles } = supervisorWiring(resident([first, second, sup]));
     expect(handles.first.map(h => h.kind)).toEqual(["heartbeat", "trigger"]);
     expect(handles.second.map(h => h.kind)).toEqual(["heartbeat"]);
-    expect(handles.sup.map(h => `${h.row}:${h.kind}:${h.label}`)).toEqual([
-      "top:heartbeat:first",
-      "top:heartbeat:second",
-      "top:manual:manual",
-      "bottom:trigger:first",
+    expect(handles.sup.map(h => `${h.row}:${h.label} ${h.tag}`)).toEqual([
+      "top:first heartbeat",
+      "top:second heartbeat",
+      "top:manual trigger",
+      "bottom:first trigger",
     ]);
   });
 

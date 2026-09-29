@@ -2095,8 +2095,10 @@ generation derives it: from whether the program has a `Supervisor`, from its
 nodes and from which of them are initiators (see "The program model of a
 resident program"). Drawing it needs that topology only, not the labels that
 script generation gives to its channels, which the frontend therefore does not
-repeat: each handle of the wiring on the `Supervisor` is named after its node.
-The canvas draws:
+repeat: each handle of the wiring on the `Supervisor` is named after its node,
+with a small tag after the name that says which channel it is, `heartbeat` or
+`trigger`, since both channels of an initiator carry its name. The canvas
+draws:
 
 - a heartbeat channel from every node to the `Supervisor`, a single edge for an
   `array` or `generator` process, drawn as a fanout edge, since the

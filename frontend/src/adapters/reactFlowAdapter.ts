@@ -77,6 +77,10 @@ export interface WiringHandle {
   row: "top" | "bottom";
   type: "source" | "target";
   label: string;
+  // On the Supervisor, where a heartbeat channel and a trigger port of the
+  // same node both carry its name, which channel the handle is, shown small
+  // after the label.
+  tag?: "heartbeat" | "trigger";
   kind: "heartbeat" | "trigger" | "manual";
 }
 
@@ -138,7 +142,7 @@ export function supervisorWiring(
     ];
 
     supervisorInputs.push(
-      { id: `wiring:hb:${node.id}`, row: "top", type: "target", label: node.name, kind: "heartbeat" }
+      { id: `wiring:hb:${node.id}`, row: "top", type: "target", label: node.name, tag: "heartbeat", kind: "heartbeat" }
     );
 
     edges.push(wiringEdge(`wiring:hb:${node.id}`, node, "wiring:hb", supervisor, `wiring:hb:${node.id}`, "target"));
@@ -150,7 +154,7 @@ export function supervisorWiring(
       );
 
       supervisorOutputs.push(
-        { id: `wiring:trigger:${node.id}`, row: "bottom", type: "source", label: node.name, kind: "trigger" }
+        { id: `wiring:trigger:${node.id}`, row: "bottom", type: "source", label: node.name, tag: "trigger", kind: "trigger" }
       );
 
       edges.push(wiringEdge(`wiring:trigger:${node.id}`, supervisor, `wiring:trigger:${node.id}`, node, "wiring:trigger", "source"));
@@ -163,7 +167,7 @@ export function supervisorWiring(
 
   handles[supervisor.id] = [
     ...supervisorInputs,
-    { id: "wiring:manual", row: "top", type: "target", label: "manual", kind: "manual" },
+    { id: "wiring:manual", row: "top", type: "target", label: "manual", tag: "trigger", kind: "manual" },
     ...supervisorOutputs,
   ];
 

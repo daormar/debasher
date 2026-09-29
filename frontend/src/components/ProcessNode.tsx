@@ -205,6 +205,11 @@ function WiringHandleView({ handle }: { handle: WiringHandle }) {
         }}
       >
         {handle.label}
+        {handle.tag && (
+          <span data-wiring-tag={handle.tag} style={{ marginLeft: 4, fontSize: 9, fontStyle: "normal" }}>
+            {handle.tag}
+          </span>
+        )}
       </span>
 
       {handle.row === "bottom" && handleElement}
