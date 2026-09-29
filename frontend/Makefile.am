@@ -38,8 +38,21 @@ distclean-local:
 
 endif
 
-EXTRA_DIST = src public index.html package.json package-lock.json \
+EXTRA_DIST = src public scripts index.html package.json package-lock.json \
              vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json
+
+# CRAP report of the frontend (scripts/crap_report.mjs), called by the
+# `crap` target of the root Makefile. Like check-local, it runs where npm
+# installed the dependencies of the frontend.
+.PHONY: crap
+if BUILD_FRONTEND
+crap:
+	test -d node_modules || $(NPM) ci
+	$(NPM) run --silent crap
+else
+crap:
+	@echo "npm not found: skipping the CRAP report of the frontend"
+endif
 
 # "make dist" always ships pure sources (no dist/), matching autotools
 # convention: a tarball you still need npm to build. "make dist-vendored"
