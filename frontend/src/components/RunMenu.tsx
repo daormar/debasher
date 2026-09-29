@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  checkLaunch,
   checkProgramOptions,
   getProgramStatus,
   runProgramDebug,
@@ -8,11 +9,13 @@ import {
   takeSnapshot,
 } from "../api/executionApi";
 import type { RunProgramResult } from "../api/executionApi";
+import { LaunchRecordConflict } from "../api/executionApi";
 import type { Program } from "../models/program";
 import { useProgram } from "../store/ProgramContext";
 import { HARD_KILL_CONSEQUENCES, orderlyStopOutcome, snapshotOutcome } from "../models/residentRun";
 import CommandOutputModal from "./CommandOutputModal";
 import ConfirmDialog from "./ConfirmDialog";
+import LaunchRecordDialog from "./LaunchRecordDialog";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
 import ProgramOptionsEditor from "./ProgramOptionsEditor";
@@ -142,6 +145,11 @@ export default function RunMenu() {
   const [isResetStateConfirmOpen, setResetStateConfirmOpen] =
     useState(false);
 
+  // "Run program" on program state that another program may have produced,
+  // waiting for the user's choice.
+  const [launchConfirm, setLaunchConfirm] =
+    useState<{ hasLaunchRecord: boolean } | null>(null);
+
   // "Reset program state": delete the program state instead of setting it
   // aside.
   const [deleteState, setDeleteState] =
@@ -168,18 +176,60 @@ export default function RunMenu() {
   const containerRef =
     useRef<HTMLDivElement>(null);
 
+  // "Run program" on a resident program asks first when its output
+  // directory holds program state that another program may have produced.
   async function handleRunProgram() {
 
     setActionError(null);
+
+    if (isResident) {
+
+      setPendingAction("Run program");
+
+      try {
+        const check = await checkLaunch(program);
+        if (check.needsConfirmation) {
+          setPendingAction(null);
+          setOpen(false);
+          setLaunchConfirm({ hasLaunchRecord: check.hasLaunchRecord });
+          return;
+        }
+      } catch (err) {
+        setPendingAction(null);
+        setActionError(err instanceof Error ? err.message : "Failed to run program.");
+        return;
+      }
+
+    }
+
+    await launch(false, true);
+
+  }
+
+  // `fromMenu`: the launch comes from the open menu, which shows an error
+  // inline; after the dialog of the launch record, it comes in a modal.
+  async function launch(resumeChangedProgram: boolean, fromMenu: boolean) {
+
     setPendingAction("Run program");
 
     let result: RunProgramResult;
 
     try {
-      result = await startProgramRun();
+      result = await startProgramRun(resumeChangedProgram);
     } catch (err) {
       setPendingAction(null);
-      setActionError(err instanceof Error ? err.message : "Failed to run program.");
+      // Another tab may have launched a changed program in between.
+      if (err instanceof LaunchRecordConflict) {
+        setOpen(false);
+        setLaunchConfirm({ hasLaunchRecord: err.hasLaunchRecord });
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Failed to run program.";
+      if (fromMenu) {
+        setActionError(message);
+      } else {
+        setCommandOutput({ title: "Run program", output: message });
+      }
       return;
     }
 
@@ -262,6 +312,39 @@ export default function RunMenu() {
     } finally {
       setPendingAction(null);
     }
+
+  }
+
+  function handleResumeChanged() {
+    setLaunchConfirm(null);
+    launch(true, false);
+  }
+
+  // Starting afresh resets the program state first, set aside as "Reset
+  // program state" does by default, and then launches.
+  async function handleStartAfresh() {
+
+    setLaunchConfirm(null);
+
+    try {
+      const reset = await resetProgramState(false);
+      if (reset.exitCode !== 0) {
+        setCommandOutput({
+          title: "Run program",
+          message: `The program state could not be reset: debasher_reset_resident ended with exit code ${reset.exitCode}. What it printed:`,
+          output: reset.output,
+        });
+        return;
+      }
+    } catch (err) {
+      setCommandOutput({
+        title: "Run program",
+        output: err instanceof Error ? err.message : "Failed to reset the program state.",
+      });
+      return;
+    }
+
+    await launch(false, false);
 
   }
 
@@ -567,6 +650,15 @@ export default function RunMenu() {
             {HARD_KILL_CONSEQUENCES}
           </p>
         </ConfirmDialog>
+      )}
+
+      {launchConfirm && (
+        <LaunchRecordDialog
+          hasLaunchRecord={launchConfirm.hasLaunchRecord}
+          onResume={handleResumeChanged}
+          onStartAfresh={handleStartAfresh}
+          onCancel={() => setLaunchConfirm(null)}
+        />
       )}
 
       {isResetStateConfirmOpen && (

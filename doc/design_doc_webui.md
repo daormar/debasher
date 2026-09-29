@@ -167,9 +167,10 @@ refer to it.
   `debasher_reset_resident` takes away (see "The directories of a resident
   program"). An empty output directory of a process is no program state: the
   engine creates it empty before a first run, and a reset leaves it so.
-- **launch record**: the copy of the generated script and of the program options
-  that every launch of a resident program leaves in its output directory,
-  against which the next launch compares the program.
+- **launch record**: `.debasher_webui_launch_record.json` in the output
+  directory of a resident program: the generated script with every description
+  left out, and the program options, of the last launch from the web UI whose
+  `debasher_exec` ended with 0. The next launch compares the program with it.
 
 ## Translation
 
@@ -1495,7 +1496,7 @@ requires.
 
 ## The directories of a resident program
 
-*In progress: "Reset program state" is built; the launch record is not.*
+*Built.*
 
 **The home directory** is the same as for a general program (see "The home
 directory"): the program metadata, the generated script and the user files,
@@ -1538,14 +1539,18 @@ save is refused while there is a run in progress. Between a stop and the next
 launch it can, and saving stays free: the check is made when the program is
 launched.
 
-- Every launch leaves in the output directory the launch record, a copy of the
-  generated script and of the program options with which it was launched.
+- Every launch from the web UI that ends well leaves the launch record in the
+  output directory.
 - When "Run program" finds program state in the output directory, and the
-  generated script or the program options differ from the launch record, the
-  frontend asks whether to resume with the changed program, the user answering
-  for its compatibility, or to reset the program state first and start afresh.
-- The comparison leaves out the `_document` functions, so that a change of a
-  description asks nothing. The positions on the canvas are not in the script.
+  program, compared as below, or the program options differ from the launch
+  record, the frontend asks whether to resume with the changed program, the user
+  answering for its compatibility, or to reset the program state first and start
+  afresh.
+- The comparison leaves out every description, of the program, of its
+  processes and of their options, so that a change of a description asks
+  nothing: the record holds the script generated with them left out, and the
+  program is compared the same way. The positions on the canvas are not in
+  the script.
 - With program state and no launch record, as when the state comes from a run
   launched outside the web UI, the frontend asks all the same, and says that it
   cannot tell which program produced the state.
@@ -1558,8 +1563,7 @@ unseen.
 
 ## Running a resident program
 
-*In progress: everything is built but what comes from "The directories of a
-resident program": the launch record.*
+*Built.*
 
 A resident program is launched with `debasher_exec` and followed with
 `debasher_status`, as a general one, but a run of it never finishes on its own:
@@ -1611,8 +1615,8 @@ launches, and the request would wait for them.
    directories of a resident program"). The frontend asks before sending the
    request, and the backend checks again, since it keeps no state and another
    tab may have launched the program in between. A user who chooses to start
-   afresh has the frontend reset the program state first and then send the
-   request.
+   afresh has the frontend reset the program state first, setting it aside as
+   "Reset program state" does by default, and then send the request.
 3. It saves the program and generates the script.
 4. It runs `debasher_exec`.
 5. It writes the launch record only when `debasher_exec` ends with 0, and

@@ -5,7 +5,8 @@ command of a general and of a resident program; the launch of a resident
 program, which /run waits for, in a session of its own and with its output
 in the run log, and whose failure it reports at once; the program state
 that tells a program never launched from one stopped, and "Reset program
-state", which takes it away; the orderly stop and
+state", which takes it away; the launch record, against which a launch on
+program state compares the program; the orderly stop and
 the hard kill of a resident program; "Restart node", a crash of the node
 that the Supervisor relaunches, or the backend without a Supervisor, as
 "Relaunch node" does under the relaunch lock; and the snapshots, one round
@@ -37,7 +38,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import node_relaunch, paths, program_state, tool_sessions  # noqa: E402
+from api import launch_record, node_relaunch, paths, program_state, tool_sessions  # noqa: E402
 from api.models import (  # noqa: E402
     AdditionalSpecs,
     ComputationalSpecs,
@@ -731,5 +732,138 @@ def test_a_program_killed_before_it_kept_anything_starts_afresh(tmp_path):
         assert execution.kill_program(program).exitCode == 0
 
         assert not execution.get_process_statuses(program).hasProgramState
+    finally:
+        _hard_kill(program)
+
+
+# --- the launch record ------------------------------------------------------------
+
+
+def _with_program_state(tmp_path):
+    _exec_dir(tmp_path / "out", "Relay", "checkpoints")
+
+
+def _with_code(program, process_data):
+    changed = program.model_copy(deep=True)
+    changed.processes[1].nodeCode.processData = process_data
+    return changed
+
+
+def test_the_comparison_leaves_out_every_description(tmp_path):
+    program = _relay(tmp_path)
+    described = program.model_copy(deep=True)
+    described.description = "a relay"
+    described.processes[0].description = "relays what comes from outside"
+    described.processes[0].options[0].description = "what comes from outside"
+
+    assert launch_record.compared_script(described) == launch_record.compared_script(program)
+    assert launch_record.compared_script(_with_code(program, "pass")) != launch_record.compared_script(program)
+
+
+def test_a_launch_that_ends_well_leaves_its_record(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
+    program = _relay(tmp_path)
+
+    assert execution.run_program(program).exitCode == 0
+
+    record = launch_record.read(program.outputDir)
+    assert record is not None
+    assert not launch_record.differs(record, program, [])
+
+
+def test_a_launch_that_fails_leaves_the_previous_record(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, "exit 1")
+    program = _relay(tmp_path)
+    (tmp_path / "out").mkdir()
+    launch_record.write(program.outputDir, program, [])
+    _with_program_state(tmp_path)
+    changed = _with_code(program, "pass")
+
+    assert execution.run_program(changed, resumeChangedProgram=True).exitCode == 1
+
+    assert launch_record.differs(launch_record.read(program.outputDir), changed, [])
+
+
+def test_the_same_program_resumes_its_state_without_asking(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
+    program = _relay(tmp_path)
+    assert execution.run_program(program).exitCode == 0
+    _with_program_state(tmp_path)
+
+    described = program.model_copy(deep=True)
+    described.processes[1].description = "a new description"
+
+    assert not execution.launch_check(described).needsConfirmation
+    assert execution.run_program(described).exitCode == 0
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda program: _with_code(program, "pass"),
+        lambda program: program.model_copy(update={"programOptions": {"-no-hold-fifos": "true"}}),
+    ],
+    ids=["code", "program-options"],
+)
+def test_a_changed_program_asks_before_resuming_its_state(tmp_path, monkeypatch, change):
+    _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
+    program = _relay(tmp_path)
+    assert execution.run_program(program).exitCode == 0
+    _with_program_state(tmp_path)
+    changed = change(program)
+
+    check = execution.launch_check(changed)
+    assert check.needsConfirmation and check.hasLaunchRecord
+
+    with pytest.raises(execution.HTTPException) as refused:
+        execution.run_program(changed)
+    assert refused.value.status_code == 409
+    assert refused.value.detail == {"code": "launch-record", "hasLaunchRecord": True}
+
+    assert execution.run_program(changed, resumeChangedProgram=True).exitCode == 0
+    assert not execution.launch_check(changed).needsConfirmation
+
+
+def test_program_state_with_no_record_asks_too(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
+    program = _relay(tmp_path)
+    _with_program_state(tmp_path)
+
+    check = execution.launch_check(program)
+    assert check.needsConfirmation and not check.hasLaunchRecord
+
+    with pytest.raises(execution.HTTPException) as refused:
+        execution.run_program(program)
+    assert refused.value.detail == {"code": "launch-record", "hasLaunchRecord": False}
+
+
+def test_a_program_with_no_state_never_asks(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
+    program = _relay(tmp_path)
+    assert execution.run_program(program).exitCode == 0
+
+    changed = _with_code(program, "pass")
+
+    assert not execution.launch_check(changed).needsConfirmation
+    assert execution.run_program(changed).exitCode == 0
+
+
+@_needs_engine
+def test_a_resumed_program_is_compared_with_its_launch_record(tmp_path):
+    program = _relay(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        assert execution.take_snapshot(program).exitCode == 0
+        assert execution.stop_program(program).exitCode == 0
+
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        assert execution.stop_program(program).exitCode == 0
+
+        with pytest.raises(execution.HTTPException) as refused:
+            execution.run_program(_with_code(program, "pass"))
+        assert refused.value.status_code == 409
     finally:
         _hard_kill(program)

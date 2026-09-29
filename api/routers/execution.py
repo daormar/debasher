@@ -9,7 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import file_inspection, node_relaunch, paths, persistence, program_state, tool_sessions
+from .. import file_inspection, launch_record, node_relaunch, paths, persistence, program_state, tool_sessions
 from ..models import Program
 from ..resident_supervisor_wiring import NO_HOLD_FIFOS_LABEL
 
@@ -126,15 +126,22 @@ def _prepare_debasher_exec_command(program: Program, mode_flag: str | None) -> l
     if mode_flag is not None:
         command.append(mode_flag)
 
+    return command + _program_option_args(program)
+
+
+def _program_option_args(program: Program) -> list[str]:
+    """The program options as debasher_exec is given them: each label
+    followed by its value, except a flag, which is given alone when its value
+    is not empty and left out otherwise."""
+    args: list[str] = []
     option_types = _command_line_option_types(program)
     for label, value in program.programOptions.items():
         if option_types.get(label) == "None":
             if value:
-                command.append(label)
+                args.append(label)
         else:
-            command += [label, value]
-
-    return command
+            args += [label, value]
+    return args
 
 
 def _run_debasher_exec(program: Program, mode_flag: str) -> str:
@@ -361,20 +368,69 @@ def _launch_resident_program(command: list[str], program: Program) -> RunProgram
     exit_code = tool_sessions.run_in_own_session(command, _debasher_env(program), log_path)
     output = _cap_lines(log_path.read_text(errors="replace"))
 
-    if exit_code == 0 and period is not None:
-        _start_periodic_snapshots(program, period)
+    if exit_code == 0:
+        # Only a launch that ended well leaves its record: after a failed
+        # one, the program state may still be that of the previous record,
+        # which has to stay so that the next launch asks again.
+        launch_record.write(program.outputDir, program, _program_option_args(program))
+        if period is not None:
+            _start_periodic_snapshots(program, period)
 
     return RunProgramResponse(started=exit_code == 0, exitCode=exit_code, output=output)
 
 
+class LaunchCheckResponse(BaseModel):
+    hasProgramState: bool
+    hasLaunchRecord: bool
+    # Whether the launch has to ask first: there is program state, and no
+    # launch record or one that differs from the program.
+    needsConfirmation: bool
+
+
+def _launch_check(program: Program) -> LaunchCheckResponse:
+    has_state = program_state.has_program_state(program.outputDir)
+    record = launch_record.read(program.outputDir)
+    needs_confirmation = has_state and (
+        record is None or launch_record.differs(record, program, _program_option_args(program))
+    )
+    return LaunchCheckResponse(
+        hasProgramState=has_state,
+        hasLaunchRecord=record is not None,
+        needsConfirmation=needs_confirmation,
+    )
+
+
+@router.post("/launch-check", response_model=LaunchCheckResponse)
+def launch_check(program: Program) -> LaunchCheckResponse:
+    """
+    Whether "Run program" on a resident program has to ask before launching:
+    the output directory holds program state, and the program differs from
+    the launch record (its descriptions left out), or there is no record, as
+    when the state comes from a run launched outside the web UI.
+    """
+    return _launch_check(program)
+
+
+# The code of the conflict with which /run answers when a resident program
+# would resume program state that a different program produced.
+LAUNCH_RECORD_CONFLICT = "launch-record"
+
+
 @router.post("/run", response_model=RunProgramResponse)
-def run_program(program: Program) -> RunProgramResponse:
+def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProgramResponse:
     """
     Launch a program run. A general program runs with debasher_exec
     --wait in the background, and this returns immediately: poll /status
     to find out when it's done. A resident program is launched with
     debasher_exec in oneshot mode, and this returns once it has ended,
     with its exit code and output.
+
+    A resident program whose output directory holds program state, and that
+    differs from the launch record or has none, is refused with a conflict
+    whose detail has the code "launch-record", unless `resumeChangedProgram`
+    says that the user chose to resume with the changed program. The
+    frontend asks before sending the request; this checks again, since
+    another tab may have launched the program in between.
     """
     state, _ = _get_program_state(program)
     if state == "in-progress":
@@ -382,6 +438,14 @@ def run_program(program: Program) -> RunProgramResponse:
             status_code=409,
             detail="A run is already in progress for this output directory.",
         )
+
+    if _is_resident(program) and not resumeChangedProgram:
+        check = _launch_check(program)
+        if check.needsConfirmation:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": LAUNCH_RECORD_CONFLICT, "hasLaunchRecord": check.hasLaunchRecord},
+            )
 
     command = _prepare_debasher_exec_command(
         program, None if _is_resident(program) else "--wait"

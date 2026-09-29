@@ -35,17 +35,42 @@ export interface RunProgramResult {
   output: string | null;
 }
 
+// /run refused to resume the program state of a resident program, since the
+// program differs from the launch record, or there is none: the user has to
+// choose between resuming with the changed program and starting afresh.
+export class LaunchRecordConflict extends Error {
+  readonly hasLaunchRecord: boolean;
+
+  constructor(hasLaunchRecord: boolean) {
+    super("The program state in the output directory was produced by another program.");
+    this.hasLaunchRecord = hasLaunchRecord;
+  }
+}
+
 // Launches the run of a general program in the background and returns as
 // soon as it's started: it does not wait for the program to finish. Poll
 // getProgramState() to find out when it's done. The launch of a resident
 // program is waited for, and returns once debasher_exec has launched every
-// process, or failed to.
-export async function runProgram(program: Program): Promise<RunProgramResult> {
-  const response = await fetch("/api/execution/run", {
+// process, or failed to; `resumeChangedProgram` says that the user chose to
+// resume the program state with a program that differs from the launch
+// record, which /run refuses otherwise with a LaunchRecordConflict.
+export async function runProgram(
+  program: Program,
+  resumeChangedProgram = false
+): Promise<RunProgramResult> {
+  const query = resumeChangedProgram ? "?resumeChangedProgram=true" : "";
+  const response = await fetch(`/api/execution/run${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
   });
+
+  if (response.status === 409) {
+    const body = await response.clone().json().catch(() => null);
+    if (body?.detail?.code === "launch-record") {
+      throw new LaunchRecordConflict(Boolean(body.detail.hasLaunchRecord));
+    }
+  }
 
   if (!response.ok) {
     throw new Error(
@@ -55,6 +80,28 @@ export async function runProgram(program: Program): Promise<RunProgramResult> {
 
   const { started, exitCode, output } = await response.json();
   return { started, exitCode: exitCode ?? null, output: output ?? null };
+}
+
+export interface LaunchCheckResult {
+  hasProgramState: boolean;
+  hasLaunchRecord: boolean;
+  // There is program state, and no launch record or one that differs from
+  // the program: "Run program" asks before launching.
+  needsConfirmation: boolean;
+}
+
+export async function checkLaunch(program: Program): Promise<LaunchCheckResult> {
+  const response = await fetch("/api/execution/launch-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to check the launch (${response.status})`));
+  }
+
+  return response.json();
 }
 
 export async function runProgramDebug(program: Program): Promise<string> {

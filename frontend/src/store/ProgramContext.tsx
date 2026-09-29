@@ -114,8 +114,10 @@ interface ProgramContextType {
   // callers can show it inline. Resolves once the run has launched,
   // not once it's finished; see runPhase for that. A resident program
   // resolves with the exit code of its launch and what it printed, and
-  // its run is not followed by runPhase, nor stopped with the tab.
-  startProgramRun: () => Promise<RunProgramResult>;
+  // its run is not followed by runPhase, nor stopped with the tab;
+  // `resumeChangedProgram` resumes its program state with a program that
+  // differs from the launch record (see runProgram).
+  startProgramRun: (resumeChangedProgram?: boolean) => Promise<RunProgramResult>;
 
   // The running-progress indicator's Close button: stops the run if
   // it's still going, otherwise just dismisses the finished/unfinished
@@ -593,12 +595,12 @@ export function ProgramProvider({
 
   }
 
-  async function startProgramRun() {
+  async function startProgramRun(resumeChangedProgram = false) {
 
     if (program.programType === "resident") {
       return withResidentRequest("launching", async () => {
         await ensureNoRunInProgress();
-        return runProgram(program);
+        return runProgram(program, resumeChangedProgram);
       });
     }
 
