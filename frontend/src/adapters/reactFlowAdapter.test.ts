@@ -10,6 +10,8 @@ import {
   computeFlippedOptionIds,
   isValidProgramConnection,
   programToReactFlowEdges,
+  programToReactFlowNodes,
+  supervisorWiring,
 } from "./reactFlowAdapter";
 
 function option(id: string, label: string, fields: Partial<ProgramOption> = {}): ProgramOption {
@@ -278,6 +280,62 @@ describe("programToReactFlowEdges", () => {
     });
     expect(outer.data).toEqual({ sourceLeftRank: 1, targetLeftRank: 1 });
     expect(inner.data).toEqual({ sourceLeftRank: 0, targetLeftRank: 0 });
+  });
+});
+
+describe("supervisorWiring", () => {
+  function residentNode(id: string, fields: Partial<ProgramProcess> = {}, y = 0): ProgramProcess {
+    return { ...process(id, [], y), language: "python", nodeKind: "FBPProcess", nodeCode: emptyNodeCode(), ...fields };
+  }
+
+  const sup = residentNode("sup", { nodeKind: "Supervisor", nodeCode: undefined }, 300);
+  const first = residentNode("first", { initiator: true });
+  const second = residentNode("second", { optionsHandler: { mode: "array" } }, 150);
+
+  function resident(processes: ProgramProcess[]): Program {
+    return { ...program(processes), programType: "resident" };
+  }
+
+  it("draws nothing in a program without a Supervisor, nor in a general one", () => {
+    expect(supervisorWiring(resident([first, second]))).toEqual({ handles: {}, edges: [] });
+    expect(supervisorWiring(program([first, second, sup]))).toEqual({ handles: {}, edges: [] });
+  });
+
+  it("gives every node a heartbeat channel and every initiator a trigger port", () => {
+    const { handles } = supervisorWiring(resident([first, second, sup]));
+    expect(handles.first.map(h => h.kind)).toEqual(["heartbeat", "trigger"]);
+    expect(handles.second.map(h => h.kind)).toEqual(["heartbeat"]);
+    expect(handles.sup.map(h => `${h.row}:${h.kind}:${h.label}`)).toEqual([
+      "top:heartbeat:first",
+      "top:heartbeat:second",
+      "top:manual:manual",
+      "bottom:trigger:first",
+    ]);
+  });
+
+  it("draws the edges read only, one fanout edge for a node of several tasks", () => {
+    const { edges } = supervisorWiring(resident([first, second, sup]));
+    expect(edges.map(e => `${e.source}->${e.target}`)).toEqual(["first->sup", "sup->first", "second->sup"]);
+    expect(edges.every(e => e.selectable === false && e.deletable === false)).toBe(true);
+    const fromArray = edges.find(e => e.source === "second")!;
+    expect(fromArray.type).toBe("fanout");
+    expect(fromArray.data).toMatchObject({ narrowEnd: "target" });
+  });
+
+  it("sends to the tasks of an initiator of several tasks as a fanout family", () => {
+    const arrayInitiator = { ...second, initiator: true };
+    const { edges } = supervisorWiring(resident([arrayInitiator, sup]));
+    const trigger = edges.find(e => e.source === "sup")!;
+    expect(trigger.type).toBe("fanout");
+    expect(trigger.data).toMatchObject({ narrowEnd: "source" });
+  });
+
+  it("gives the canvas nodes their handles only while the wiring is shown", () => {
+    const withWiring = resident([first, second, sup]);
+    expect(programToReactFlowNodes(withWiring).every(n => n.data.wiringHandles.length === 0)).toBe(true);
+    expect(programToReactFlowNodes(withWiring, true).find(n => n.id === "sup")!.data.wiringHandles).toHaveLength(4);
+    expect(canvasStructuralKey(withWiring, true)).not.toBe(canvasStructuralKey(withWiring));
+    expect(canvasStructuralKey(program([first]), true)).toBe(canvasStructuralKey(program([first])));
   });
 });
 

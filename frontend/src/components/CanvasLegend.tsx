@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { RESIDENT_STATUS_MEANINGS, processNodeBackground } from "../models/processStatus";
-import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark } from "./NodeMarks";
+import { WIRING_EDGE_COLOR } from "../adapters/reactFlowAdapter";
+import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark, TriggerMark } from "./NodeMarks";
 
 function LegendRow({ mark, children }: { mark: ReactNode; children: ReactNode }) {
   return (
@@ -103,6 +104,21 @@ export default function CanvasLegend() {
 
           <LegendRow mark={<span style={{ fontSize: 10, color: "#666" }}>-opt</span>}>
             Under the node kind: configuration options, with no handle.
+          </LegendRow>
+
+          <LegendRow mark={<TriggerMark />}>
+            A trigger port of the Supervisor wiring.
+          </LegendRow>
+
+          <LegendRow
+            mark={
+              <svg width={24} height={8} viewBox="0 0 24 8">
+                <line x1={0} y1={4} x2={24} y2={4} stroke={WIRING_EDGE_COLOR} strokeWidth={1.5} strokeDasharray="2 4" />
+              </svg>
+            }
+          >
+            The Supervisor wiring, read only, shown from the menu of the
+            Supervisor.
           </LegendRow>
 
         </div>

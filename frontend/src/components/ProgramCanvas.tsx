@@ -37,6 +37,7 @@ import {
   isValidProgramConnection,
   computeFlippedOptionIds,
   canvasStructuralKey,
+  supervisorWiring,
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
@@ -179,15 +180,24 @@ export default function ProgramCanvas() {
     dismissProgramRun,
   } = useProgram();
 
+  // Whether the Supervisor wiring of a resident program is shown. It belongs
+  // to the tab, like the selection, and is not saved.
+  const [showWiring, setShowWiring] = useState(false);
+
   // "Business" nodes: recalculated whenever program changes.
   const nodes = useMemo(
-    () => programToReactFlowNodes(program),
-    [program]
+    () => programToReactFlowNodes(program, showWiring),
+    [program, showWiring]
   );
 
+  // The edges of the Supervisor wiring, read only, come after those of the
+  // program, derived from it as its handles are.
   const edges = useMemo(
-    () => programToReactFlowEdges(program),
-    [program]
+    () => [
+      ...programToReactFlowEdges(program),
+      ...(showWiring ? supervisorWiring(program).edges : []),
+    ],
+    [program, showWiring]
   );
 
   const nodeTypes = useMemo(
@@ -213,8 +223,8 @@ export default function ProgramCanvas() {
   // Everything but the positions that the canvas nodes draw from their
   // processes (see canvasStructuralKey).
   const structuralKey = useMemo(
-    () => canvasStructuralKey(program),
-    [program]
+    () => canvasStructuralKey(program, showWiring),
+    [program, showWiring]
   );
 
   // Fingerprint of which options are currently rendered with a flipped
@@ -749,6 +759,18 @@ export default function ProgramCanvas() {
           isPending={isProcessOutputPending}
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
+          canvasAction={
+            program.programType === "resident" &&
+            processContextMenu.process.nodeKind === "Supervisor"
+              ? {
+                  label: showWiring ? "Hide Supervisor wiring" : "Show Supervisor wiring",
+                  onSelect: () => {
+                    setShowWiring(shown => !shown);
+                    setProcessContextMenu(null);
+                  },
+                }
+              : undefined
+          }
         />
       )}
 

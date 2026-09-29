@@ -1995,8 +1995,7 @@ web UI; a single orderly stop for each output directory is left to the engine
 
 ## The canvas of a resident program
 
-*In progress: what a canvas node shows, its handles, the self-loop and the
-legend are built; the Supervisor wiring is not.*
+*Built.*
 
 The canvas of a resident program draws the same processes and connections as
 that of a general one (see "From the store to the canvas"), and shows besides
@@ -2079,13 +2078,15 @@ generation derives it: from whether the program has a `Supervisor`, from its
 nodes and from which of them are initiators (see "The program model of a
 resident program"). Drawing it needs that topology only, not the labels that
 script generation gives to its channels, which the frontend therefore does not
-repeat. The canvas draws:
+repeat: each handle of the wiring on the `Supervisor` is named after its node.
+The canvas draws:
 
 - a heartbeat channel from every node to the `Supervisor`, a single edge for an
   `array` or `generator` process, drawn as a fanout edge, since the
   `Supervisor` reads its heartbeat channels as a fanout family;
-- a trigger port from the `Supervisor` to every initiator, whose handle on the
-  initiator carries a mark of its own instead of the round handle;
+- a trigger port from the `Supervisor` to every initiator, a fanout edge too
+  for an initiator of that kind, whose handles, on the initiator and on the
+  `Supervisor`, carry a mark of their own instead of the round handle;
 - the manual trigger port of the `Supervisor`, as a handle marked as written
   from outside the program, like an external input.
 

@@ -23,17 +23,24 @@ import {
 export interface ProgramProcessData {
   process: ProgramProcess;
   flippedOptionIds: Set<string>;
+  // The handles of the Supervisor wiring on this canvas node, while the
+  // wiring is shown (see supervisorWiring).
+  wiringHandles: WiringHandle[];
   [key: string]: unknown;
 }
 
 /**
- * Converts the program processes into React Flow nodes.
+ * Converts the program processes into React Flow nodes, with the handles of
+ * the Supervisor wiring when `showWiring` is set.
  */
 export function programToReactFlowNodes(
-  program: Program
+  program: Program,
+  showWiring = false
 ): Node<ProgramProcessData>[] {
 
   const flippedOptionIds = computeFlippedOptionIds(program);
+
+  const wiringHandles = showWiring ? supervisorWiring(program).handles : {};
 
   return program.processes.map(process => ({
 
@@ -46,9 +53,117 @@ export function programToReactFlowNodes(
     data: {
       process,
       flippedOptionIds,
+      wiringHandles: wiringHandles[process.id] ?? [],
     },
 
   }));
+
+}
+
+// The color of the edges of the Supervisor wiring, which are drawn dotted,
+// apart from the business channels, dashed as every edge from a FIFO.
+export const WIRING_EDGE_COLOR = "#7f93b5";
+
+/**
+ * A handle of the Supervisor wiring: on a node, its heartbeat channel (an
+ * output) or, on an initiator, its trigger port (an input); on the
+ * Supervisor, the other end of each of them, named after its node, and its
+ * manual trigger port, written from outside the program. None of them is
+ * an option of the program model, and none accepts a connection.
+ */
+export interface WiringHandle {
+  id: string;
+  row: "top" | "bottom";
+  type: "source" | "target";
+  label: string;
+  kind: "heartbeat" | "trigger" | "manual";
+}
+
+/**
+ * The Supervisor wiring of a resident program, as the canvas draws it: the
+ * handles of each canvas node and the edges between them, read only. It is
+ * derived by the same rule with which script generation derives it (see
+ * api/resident_supervisor_wiring.py): from the Supervisor, the nodes and
+ * which of them are initiators, and from whether a node runs as several
+ * tasks, whose heartbeat channels or trigger ports the Supervisor reads or
+ * writes as a fanout family. A program without a Supervisor has none.
+ */
+export function supervisorWiring(
+  program: Program
+): { handles: Record<string, WiringHandle[]>; edges: Edge[] } {
+
+  const supervisor = program.processes.find(process => process.nodeKind === "Supervisor");
+
+  if (program.programType !== "resident" || !supervisor) {
+    return { handles: {}, edges: [] };
+  }
+
+  const nodes = program.processes.filter(process => process !== supervisor);
+
+  const supervisorInputs: WiringHandle[] = [];
+  const supervisorOutputs: WiringHandle[] = [];
+  const handles: Record<string, WiringHandle[]> = {};
+  const edges: Edge[] = [];
+
+  const maxProcessX = Math.max(...program.processes.map(process => process.position.x));
+
+  function wiringEdge(id: string, source: ProgramProcess, sourceHandle: string, target: ProgramProcess, targetHandle: string, familyEnd: "source" | "target"): Edge {
+    const isFanout = isFanoutPartnerMode(familyEnd === "source" ? target : source);
+    return {
+      id,
+      source: source.id,
+      sourceHandle,
+      target: target.id,
+      targetHandle,
+      selectable: false,
+      deletable: false,
+      focusable: false,
+      ...(isFanout
+        ? { type: "fanout", data: { narrowEnd: familyEnd, isFifo: true, wiring: true } }
+        : isBackEdge(source, target)
+        ? { type: "backedge", data: { detourX: maxProcessX + BACK_EDGE_MARGIN, sourceLeftRank: 0, targetLeftRank: 0 } }
+        : {}),
+      style: { stroke: WIRING_EDGE_COLOR, strokeDasharray: "2 4" },
+    };
+  }
+
+  for (const node of nodes) {
+
+    const nodeHandles: WiringHandle[] = [
+      { id: "wiring:hb", row: "bottom", type: "source", label: "heartbeat", kind: "heartbeat" },
+    ];
+
+    supervisorInputs.push(
+      { id: `wiring:hb:${node.id}`, row: "top", type: "target", label: node.name, kind: "heartbeat" }
+    );
+
+    edges.push(wiringEdge(`wiring:hb:${node.id}`, node, "wiring:hb", supervisor, `wiring:hb:${node.id}`, "target"));
+
+    if (node.initiator) {
+
+      nodeHandles.push(
+        { id: "wiring:trigger", row: "top", type: "target", label: "trigger", kind: "trigger" }
+      );
+
+      supervisorOutputs.push(
+        { id: `wiring:trigger:${node.id}`, row: "bottom", type: "source", label: node.name, kind: "trigger" }
+      );
+
+      edges.push(wiringEdge(`wiring:trigger:${node.id}`, supervisor, `wiring:trigger:${node.id}`, node, "wiring:trigger", "source"));
+
+    }
+
+    handles[node.id] = nodeHandles;
+
+  }
+
+  handles[supervisor.id] = [
+    ...supervisorInputs,
+    { id: "wiring:manual", row: "top", type: "target", label: "manual", kind: "manual" },
+    ...supervisorOutputs,
+  ];
+
+  return { handles, edges };
 
 }
 
@@ -63,11 +178,13 @@ export function programToReactFlowNodes(
  *
  * In a resident program it also holds, for each process, its node kind,
  * whether it is an initiator and whether it observes the outside world,
- * and for each option its sort (see nodeOptionRole), which decides
- * whether it has a handle and of what sort.
+ * for each option its sort (see nodeOptionRole), which decides whether it
+ * has a handle and of what sort, and whether the Supervisor wiring is
+ * shown, which adds and removes handles.
  */
-export function canvasStructuralKey(program: Program): string {
+export function canvasStructuralKey(program: Program, showWiring = false): string {
   const isResident = program.programType === "resident";
+  const wiring = isResident && showWiring ? "|wiring" : "";
   return program.processes
     .map(process => {
       const options = process.options
@@ -78,7 +195,7 @@ export function canvasStructuralKey(program: Program): string {
         ? `${key}:${process.nodeKind}:${!!process.initiator}:${observesOutside(process)}`
         : key;
     })
-    .join("|");
+    .join("|") + wiring;
 }
 
 /**

@@ -38,6 +38,10 @@ interface Props {
   isPending: boolean;
   onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
+  // An action of the canvas rather than of the execution of the process,
+  // listed after the others: on the Supervisor, showing or hiding the
+  // Supervisor wiring.
+  canvasAction?: { label: string; onSelect: () => void };
 }
 
 export default function ProcessContextMenu({
@@ -46,6 +50,7 @@ export default function ProcessContextMenu({
   isPending,
   onSelect,
   onClose,
+  canvasAction,
 }: Props) {
 
   const containerRef =
@@ -112,6 +117,27 @@ export default function ProcessContextMenu({
         </button>
 
       ))}
+
+      {canvasAction && (
+
+        <button
+
+          onClick={canvasAction.onSelect}
+
+          style={{
+            textAlign: "left",
+            padding: "8px 12px",
+            border: "none",
+            borderTop: "1px solid #eee",
+            background: "none",
+            cursor: "pointer",
+          }}
+
+        >
+          {canvasAction.label}
+        </button>
+
+      )}
 
     </div>
 

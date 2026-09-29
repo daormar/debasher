@@ -8,14 +8,14 @@ import type {
   Node,
 } from "@xyflow/react";
 
-import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
+import type { ProgramProcessData, WiringHandle } from "../adapters/reactFlowAdapter";
 import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
 import { NO_HOLD_FIFOS_LABEL, nodeOptionRole, observesOutside } from "../models/node";
-import { optionRow } from "../adapters/reactFlowAdapter";
+import { WIRING_EDGE_COLOR, optionRow } from "../adapters/reactFlowAdapter";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
-import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark } from "./NodeMarks";
+import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark, TriggerMark } from "./NodeMarks";
 import { useProgram } from "../store/ProgramContext";
 import { groupColor } from "../utils/groupColor";
 
@@ -103,6 +103,81 @@ function OptionHandle({
       </span>
 
       {row === "bottom" && handle}
+
+    </div>
+
+  );
+
+}
+
+/**
+ * A handle of the Supervisor wiring, read only: it accepts no connection,
+ * and its label is set apart from those of the options. A trigger port is a
+ * lightning bolt instead of the round handle, and the manual trigger port
+ * of the Supervisor carries the mark of what is written from outside the
+ * program, as an external input does.
+ */
+function WiringHandleView({ handle }: { handle: WiringHandle }) {
+
+  const isTrigger = handle.kind === "trigger";
+
+  const handleElement = (
+    <Handle
+      id={handle.id}
+      type={handle.type}
+      position={handle.row === "top" ? Position.Top : Position.Bottom}
+      isConnectable={false}
+      style={
+        isTrigger
+          ? { width: 12, height: 14, minWidth: 0, minHeight: 0, background: "none", border: "none", lineHeight: 0 }
+          : { background: WIRING_EDGE_COLOR, borderColor: WIRING_EDGE_COLOR }
+      }
+    >
+      {isTrigger && <TriggerMark />}
+    </Handle>
+  );
+
+  return (
+
+    <div
+      data-wiring-handle={handle.kind}
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        ...(handle.row === "top" ? { paddingTop: 10 } : { paddingBottom: 10 }),
+      }}
+    >
+
+      {handle.kind === "manual" && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            lineHeight: 0,
+            top: -18,
+          }}
+        >
+          <OutsideMark kind="externalInput" />
+        </div>
+      )}
+
+      {handle.row === "top" && handleElement}
+
+      <span
+        style={{
+          fontSize: 10,
+          fontStyle: "italic",
+          color: WIRING_EDGE_COLOR,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {handle.label}
+      </span>
+
+      {handle.row === "bottom" && handleElement}
 
     </div>
 
@@ -296,6 +371,10 @@ export default function ProcessNode({
 
         {topOptions.map(option => optionHandle(option, "top"))}
 
+        {data.wiringHandles
+          .filter(handle => handle.row === "top")
+          .map(handle => <WiringHandleView key={handle.id} handle={handle} />)}
+
       </div>
 
 
@@ -345,6 +424,10 @@ export default function ProcessNode({
       >
 
         {bottomOptions.map(option => optionHandle(option, "bottom"))}
+
+        {data.wiringHandles
+          .filter(handle => handle.row === "bottom")
+          .map(handle => <WiringHandleView key={handle.id} handle={handle} />)}
 
       </div>
 
