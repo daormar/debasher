@@ -786,7 +786,11 @@ the machine they were built on means nothing on another. An installed one is
 usually not writable, so the user saves it into a home directory of their
 own before changing it. `test/api/test_webui_programs.py` checks that each
 of them loads from where it is and that its generated script is the one that
-script generation writes from its metadata today.
+script generation writes from its metadata today, and `make installcheck` runs
+the generated script of each: a general program to its end, and a resident
+one, which does not end on its own, launched, fed through its external input
+until its output read outside the program carries the expected message, and
+stopped in an orderly way, after which every node has to be finished.
 
 ## Reserved names and user files
 
