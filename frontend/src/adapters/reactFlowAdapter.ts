@@ -48,6 +48,26 @@ export function programToReactFlowNodes(
 }
 
 /**
+ * The structural key of a program: for each process, its id, name and
+ * options handler mode, and the id, label and direction of each option.
+ * It changes whenever a process is added, removed or renamed, its options
+ * handler mode is switched, or an option is added, removed or edited, and
+ * never when a process is moved. The canvas refreshes its list of canvas
+ * nodes from the program only when it changes (see ProgramCanvas), so
+ * whatever a canvas node draws from its process has to be part of it.
+ */
+export function canvasStructuralKey(program: Program): string {
+  return program.processes
+    .map(
+      process =>
+        `${process.id}:${process.name}:${process.optionsHandler.mode}:${process.options
+          .map(o => `${o.id}:${o.label}:${o.direction}`)
+          .join(",")}`
+    )
+    .join("|");
+}
+
+/**
  * Whether `option` (declared on `process`) is a fanout family option —
  * see isFanoutOption. Only meaningful on a "standard"-mode process.
  */

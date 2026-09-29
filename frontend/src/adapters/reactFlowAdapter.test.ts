@@ -3,7 +3,7 @@ import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
 import type { Program } from "../models/program";
 import { createEmptyProgram } from "../storage/programStorage";
-import { computeFlippedOptionIds, isValidProgramConnection } from "./reactFlowAdapter";
+import { canvasStructuralKey, computeFlippedOptionIds, isValidProgramConnection } from "./reactFlowAdapter";
 
 function option(id: string, label: string, fields: Partial<ProgramOption> = {}): ProgramOption {
   return {
@@ -157,6 +157,33 @@ describe("isValidProgramConnection", () => {
 
   it("accepts a connection that closes a cycle through a fifo", () => {
     expect(cycle("fifo")).toBe(true);
+  });
+});
+
+describe("canvasStructuralKey", () => {
+  const key = canvasStructuralKey(program([counter, sink]));
+
+  it("stays the same when a process is moved", () => {
+    const moved = { ...sink, position: { x: 300, y: 400 } };
+    expect(canvasStructuralKey(program([counter, moved]))).toBe(key);
+  });
+
+  it("changes when a process is renamed or its options handler mode is switched", () => {
+    expect(canvasStructuralKey(program([counter, { ...sink, name: "drain" }]))).not.toBe(key);
+    const array = { ...sink, optionsHandler: { ...sink.optionsHandler, mode: "array" as const } };
+    expect(canvasStructuralKey(program([counter, array]))).not.toBe(key);
+  });
+
+  it("changes when an option is added, removed or relabeled", () => {
+    const added = { ...sink, options: [...sink.options, option("sink-n", "-n")] };
+    expect(canvasStructuralKey(program([counter, added]))).not.toBe(key);
+    expect(canvasStructuralKey(program([counter, { ...sink, options: [] }]))).not.toBe(key);
+    const relabeled = { ...sink, options: [option("sink-in", "-inf")] };
+    expect(canvasStructuralKey(program([counter, relabeled]))).not.toBe(key);
+  });
+
+  it("changes when a process is added or removed", () => {
+    expect(canvasStructuralKey(program([counter]))).not.toBe(key);
   });
 });
 

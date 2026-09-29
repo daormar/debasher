@@ -9,6 +9,7 @@ import type {
 } from "@xyflow/react";
 
 import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
+import type { ProgramOption } from "../models/option";
 import { optionRow } from "../adapters/reactFlowAdapter";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import { processNodeBackground } from "../models/processStatus";
@@ -26,6 +27,60 @@ function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) 
       {fanoutBaseLabel(label)}
       <span style={{ color: "#c0392b" }}>ith</span>
     </>
+  );
+
+}
+
+/**
+ * The handle of an option and its label, along the top or the bottom edge
+ * of a canvas node, with the handle on the outer side of the label.
+ */
+function OptionHandle({
+  option,
+  row,
+  isFanout,
+}: {
+  option: ProgramOption;
+  row: "top" | "bottom";
+  isFanout: boolean;
+}) {
+
+  const handle = (
+    <Handle
+      id={option.id}
+      type={option.direction === "input" ? "target" : "source"}
+      position={row === "top" ? Position.Top : Position.Bottom}
+    />
+  );
+
+  return (
+
+    <div
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        ...(row === "top" ? { paddingTop: 10 } : { paddingBottom: 10 }),
+      }}
+    >
+
+      {row === "top" && handle}
+
+      <span
+        title={isFanout ? "Fanout family option (dynamic count)" : undefined}
+        style={{
+          fontSize: 11,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <OptionLabel label={option.label} isFanout={isFanout} />
+      </span>
+
+      {row === "bottom" && handle}
+
+    </div>
+
   );
 
 }
@@ -98,40 +153,12 @@ export default function ProcessNode({
 
         {topOptions.map(
           option => (
-
-            <div
+            <OptionHandle
               key={option.id}
-              style={{
-                position: "relative",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                paddingTop: 10,
-              }}
-            >
-
-              <Handle
-
-                id={option.id}
-
-                type={option.direction === "input" ? "target" : "source"}
-
-                position={Position.Top}
-
-              />
-
-              <span
-                title={isStandard && isFanoutOption(option.label) ? "Fanout family option (dynamic count)" : undefined}
-                style={{
-                  fontSize: 11,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <OptionLabel label={option.label} isFanout={isStandard && isFanoutOption(option.label)} />
-              </span>
-
-            </div>
-
+              option={option}
+              row="top"
+              isFanout={isStandard && isFanoutOption(option.label)}
+            />
           )
         )}
 
@@ -177,40 +204,12 @@ export default function ProcessNode({
 
         {bottomOptions.map(
           option => (
-
-            <div
+            <OptionHandle
               key={option.id}
-              style={{
-                position: "relative",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                paddingBottom: 10,
-              }}
-            >
-
-              <span
-                title={isStandard && isFanoutOption(option.label) ? "Fanout family option (dynamic count)" : undefined}
-                style={{
-                  fontSize: 11,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <OptionLabel label={option.label} isFanout={isStandard && isFanoutOption(option.label)} />
-              </span>
-
-              <Handle
-
-                id={option.id}
-
-                type={option.direction === "input" ? "target" : "source"}
-
-                position={Position.Bottom}
-
-              />
-
-            </div>
-
+              option={option}
+              row="bottom"
+              isFanout={isStandard && isFanoutOption(option.label)}
+            />
           )
         )}
 

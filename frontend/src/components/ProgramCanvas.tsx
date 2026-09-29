@@ -36,6 +36,7 @@ import {
   connectionToProgramEdge,
   isValidProgramConnection,
   computeFlippedOptionIds,
+  canvasStructuralKey,
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
@@ -206,21 +207,11 @@ export default function ProgramCanvas() {
   // frame during dragging, via applyNodeChanges.
   const [localNodes, setLocalNodes] = useState(nodes);
 
-  // "Fingerprint" of everything except position: id, name, options
-  // handler mode, and options. Changes whenever a process is
-  // added/removed/renamed, its options handler mode is switched, or an
-  // option is added/removed/edited, never when a process is moved.
+  // Everything but the positions that the canvas nodes draw from their
+  // processes (see canvasStructuralKey).
   const structuralKey = useMemo(
-    () =>
-      program.processes
-        .map(
-          process =>
-            `${process.id}:${process.name}:${process.optionsHandler.mode}:${process.options
-              .map(o => `${o.id}:${o.label}:${o.direction}`)
-              .join(",")}`
-        )
-        .join("|"),
-    [program.processes]
+    () => canvasStructuralKey(program),
+    [program]
   );
 
   // Fingerprint of which options are currently rendered with a flipped
