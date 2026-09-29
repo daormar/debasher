@@ -101,6 +101,11 @@ refer to it.
   data type (`ProgramOption.channel`): `none` for a literal value or a
   connection, `value_desc` for a value descriptor the engine synthesizes, `fifo`
   for a named pipe, `shared_dir` for a shared directory.
+- **literal value**: the value of an option with option channel `none` that is
+  not connected, not a command line option and not taken from the process
+  specifications: the Bash word that the user writes in `ProgramOption.value`,
+  such as `10` or `${idx}`, and that script generation writes as it is (see
+  "Option definitions").
 - **shared directory**: as defined in the design of the engine.
 - **command line option**: as defined in the design of the engine, marked as one
   by `ProgramOption.commandLine`. It takes its value from the command line and
@@ -1214,8 +1219,9 @@ four sorts:
   so what starts the activity of a program always comes in through an
   external input;
 - a configuration option: an option with option channel `none` that no
-  connection feeds (a literal, a flag, a command line option or an attribute
-  of the process specifications), which the node reads from its options.
+  connection feeds (a literal value, a flag, a command line option or an
+  attribute of the process specifications), which the node reads from its
+  options.
 
 The fifo tag `control` is never set by the user: only the Supervisor wiring
 writes it. The option channels `value_desc` and `shared_dir` and the flag
@@ -1987,6 +1993,9 @@ web UI; a single orderly stop for each output directory is left to the engine
 
 ## The canvas of a resident program
 
+*In progress: what a canvas node shows, its handles and the legend are built;
+the self-loop and the Supervisor wiring are not.*
+
 The canvas of a resident program draws the same processes and connections as
 that of a general one (see "From the store to the canvas"), and shows besides
 what a resident program adds: the node kind and the role of each node, the
@@ -2032,14 +2041,21 @@ option is:
   it, or the outbound backlog of the node grows until the node fails, and it is
   where "Talk to FIFOs" reads.
 - A business input has a handle along the top, which accepts one connection,
-  from a business output.
+  from a business output. An input that a connection can reach has it before
+  it is connected too, even while it holds a literal value, such as the index
+  of a task (`-id ${idx}`): the canvas node draws it as any other input, and
+  the editor of the option shows its value.
 - An external input is drawn along the top with the other inputs, with a
   handle that accepts no connection and a mark that says that it is written
   from outside the program. It is where "Talk to FIFOs" writes, and where the
   activity of the program comes in, which the canvas thus shows.
-- A configuration option has no handle, since no connection feeds it. The
-  canvas node lists it apart from the inputs, so that it does not look like an
-  input left unconnected.
+- A configuration option that no connection can reach has no handle: a flag, a
+  command line option, an option taken from the process specifications, or an
+  output with option channel `none`. The canvas node lists it apart from the
+  inputs, so that it does not look like an input left unconnected. The
+  `Supervisor` lists among its own the flag `-no-hold-fifos`, which script
+  generation writes and each run sets, although the program model does not
+  hold it.
 - The options of the Supervisor wiring are not in the program model, and have
   no handle unless the wiring is shown.
 
@@ -2060,7 +2076,7 @@ The wiring shown is derived from the store, by the same rule with which script
 generation derives it: from whether the program has a `Supervisor`, from its
 nodes and from which of them are initiators (see "The program model of a
 resident program"). Drawing it needs that topology only, not the labels that
-script generation gives to its options, which the frontend therefore does not
+script generation gives to its channels, which the frontend therefore does not
 repeat. The canvas draws:
 
 - a heartbeat channel from every node to the `Supervisor`, a single edge for an
@@ -2097,8 +2113,10 @@ the process status. What a resident program adds follows it this way:
 - The structural key gains, for each process, its node kind, whether it is an
   initiator and whether it observes the outside world, which for an
   `FBPProcess` depends on whether its body of `observe` is empty; for each
-  option, its option channel and its fifo tag, which decide whether it has a
-  handle and of what sort; and whether the Supervisor wiring is shown. The last
+  option, which of the sorts of "The program model of a resident program" it
+  is (a business output, an input that a connection can reach, an external
+  input or a configuration option), which decides whether it has a handle and
+  of what sort; and whether the Supervisor wiring is shown. The last
   belongs to the tab, not to the program, but it adds and removes handles on
   the canvas nodes, which the canvas library takes only when the list of
   canvas nodes is refreshed.

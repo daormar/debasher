@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { ProgramOption } from "./option";
+import type { ProgramProcess } from "./process";
 import {
+  emptyNodeCode,
   isBusinessInputCandidate,
   isBusinessOutput,
   isRequiredHook,
   isReservedNodeOptionLabel,
   nodeClassName,
   nodeNameProblem,
+  nodeOptionRole,
+  observesOutside,
 } from "./node";
 
 function option(label: string, fields: Partial<ProgramOption> = {}): ProgramOption {
@@ -72,6 +76,53 @@ describe("the options of a node", () => {
     expect(isBusinessInputCandidate(option("-c", { fromProcessSpec: true, value: "cpus" }))).toBe(false);
     expect(isBusinessInputCandidate(option("-verbose", { dataType: "None" }))).toBe(false);
     expect(isBusinessInputCandidate(option("-outf", { channel: "fifo" }))).toBe(false);
+  });
+});
+
+describe("nodeOptionRole", () => {
+  it("tells the sort of each option of a node", () => {
+    expect(nodeOptionRole(option("-outf", { channel: "fifo" }))).toBe("businessOutput");
+    expect(nodeOptionRole(option("-inf"))).toBe("businessInput");
+    expect(nodeOptionRole(option("-id", { value: "${idx}" }))).toBe("businessInput");
+    expect(nodeOptionRole(option("-ext", { channel: "fifo", fifoTag: "external" }))).toBe("externalInput");
+  });
+
+  it("makes a configuration option of whatever no connection can feed", () => {
+    expect(nodeOptionRole(option("-n", { commandLine: true }))).toBe("configuration");
+    expect(nodeOptionRole(option("-c", { fromProcessSpec: true, value: "cpus" }))).toBe("configuration");
+    expect(nodeOptionRole(option("-verbose", { dataType: "None" }))).toBe("configuration");
+    expect(nodeOptionRole(option("-outv", { value: "/tmp/v" }))).toBe("configuration");
+  });
+});
+
+describe("observesOutside", () => {
+  function node(fields: Partial<ProgramProcess>): ProgramProcess {
+    return {
+      id: "n",
+      name: "n",
+      description: "",
+      position: { x: 0, y: 0 },
+      options: [],
+      optionsHandler: { mode: "standard" },
+      language: "python",
+      code: "",
+      computationalSpecs: {},
+      additionalSpecs: { force: false },
+      additionalMethods: {},
+      ...fields,
+    };
+  }
+
+  it("holds for an FBPProcess only with a body for observe", () => {
+    expect(observesOutside(node({ nodeKind: "FBPProcess", nodeCode: emptyNodeCode() }))).toBe(false);
+    expect(observesOutside(node({ nodeKind: "FBPProcess", nodeCode: { ...emptyNodeCode(), observe: "  \n" } }))).toBe(false);
+    expect(observesOutside(node({ nodeKind: "FBPProcess", nodeCode: { ...emptyNodeCode(), observe: "self.poll()" } }))).toBe(true);
+  });
+
+  it("holds for every ProgramLauncher and DirectoryWatcher, and never for the Supervisor", () => {
+    expect(observesOutside(node({ nodeKind: "ProgramLauncher", nodeCode: emptyNodeCode() }))).toBe(true);
+    expect(observesOutside(node({ nodeKind: "DirectoryWatcher", nodeCode: emptyNodeCode() }))).toBe(true);
+    expect(observesOutside(node({ nodeKind: "Supervisor" }))).toBe(false);
   });
 });
 

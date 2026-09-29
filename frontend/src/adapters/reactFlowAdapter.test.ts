@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
 import type { Program } from "../models/program";
+import type { ProgramEdge } from "../models/edge";
+import { emptyNodeCode } from "../models/node";
 import { createEmptyProgram } from "../storage/programStorage";
 import { canvasStructuralKey, computeFlippedOptionIds, isValidProgramConnection } from "./reactFlowAdapter";
 
@@ -184,6 +186,51 @@ describe("canvasStructuralKey", () => {
 
   it("changes when a process is added or removed", () => {
     expect(canvasStructuralKey(program([counter]))).not.toBe(key);
+  });
+});
+
+describe("canvasStructuralKey in a resident program", () => {
+  const relay: ProgramProcess = {
+    ...process("relay", [
+      option("relay-in", "-inf"),
+      option("relay-outf", "-outf", { channel: "fifo", value: "relay_out" }),
+    ]),
+    language: "python",
+    nodeKind: "FBPProcess",
+    nodeCode: emptyNodeCode(),
+  };
+
+  function resident(processes: ProgramProcess[], edges: ProgramEdge[] = []): Program {
+    return { ...program(processes), programType: "resident", edges };
+  }
+
+  const key = canvasStructuralKey(resident([relay]));
+
+  it("changes when a node becomes an initiator or starts to observe the outside world", () => {
+    expect(canvasStructuralKey(resident([{ ...relay, initiator: true }]))).not.toBe(key);
+    const observing = { ...relay, nodeCode: { ...emptyNodeCode(), observe: "self.poll()" } };
+    expect(canvasStructuralKey(resident([observing]))).not.toBe(key);
+  });
+
+  it("changes when an option changes its sort", () => {
+    const configured = { ...relay, options: [option("relay-in", "-inf", { commandLine: true }), relay.options[1]] };
+    expect(canvasStructuralKey(resident([configured]))).not.toBe(key);
+  });
+
+  it("stays the same when a connection is made", () => {
+    const loop: ProgramEdge = {
+      id: "loop",
+      sourceProcessId: "relay",
+      sourceOptionId: "relay-outf",
+      targetProcessId: "relay",
+      targetOptionId: "relay-in",
+    };
+    expect(canvasStructuralKey(resident([relay], [loop]))).toBe(key);
+  });
+
+  it("stays as in a general program when the program is general", () => {
+    expect(canvasStructuralKey(program([relay]))).not.toBe(key);
+    expect(canvasStructuralKey(program([{ ...relay, initiator: true }]))).toBe(canvasStructuralKey(program([relay])));
   });
 });
 

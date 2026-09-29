@@ -48,6 +48,7 @@ import CommandOutputModal from "./CommandOutputModal";
 import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
 import ProgramFilesPanel from "./ProgramFilesPanel";
+import CanvasLegend from "./CanvasLegend";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
   opts: "options",
@@ -721,6 +722,12 @@ export default function ProgramCanvas() {
         <Panel position="top-left">
           <ProgramFilesPanel />
         </Panel>
+
+        {program.programType === "resident" && (
+          <Panel position="top-right">
+            <CanvasLegend />
+          </Panel>
+        )}
 
         {runPhase !== "idle" && (
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>

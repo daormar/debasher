@@ -10,7 +10,12 @@ import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
 import { isFanoutOption } from "../models/option";
-import { isBusinessInputCandidate, isBusinessOutput } from "../models/node";
+import {
+  isBusinessInputCandidate,
+  isBusinessOutput,
+  nodeOptionRole,
+  observesOutside,
+} from "../models/node";
 
 /**
  * Data stored inside every React Flow node.
@@ -55,15 +60,24 @@ export function programToReactFlowNodes(
  * never when a process is moved. The canvas refreshes its list of canvas
  * nodes from the program only when it changes (see ProgramCanvas), so
  * whatever a canvas node draws from its process has to be part of it.
+ *
+ * In a resident program it also holds, for each process, its node kind,
+ * whether it is an initiator and whether it observes the outside world,
+ * and for each option its sort (see nodeOptionRole), which decides
+ * whether it has a handle and of what sort.
  */
 export function canvasStructuralKey(program: Program): string {
+  const isResident = program.programType === "resident";
   return program.processes
-    .map(
-      process =>
-        `${process.id}:${process.name}:${process.optionsHandler.mode}:${process.options
-          .map(o => `${o.id}:${o.label}:${o.direction}`)
-          .join(",")}`
-    )
+    .map(process => {
+      const options = process.options
+        .map(o => `${o.id}:${o.label}:${o.direction}${isResident ? `:${nodeOptionRole(o)}` : ""}`)
+        .join(",");
+      const key = `${process.id}:${process.name}:${process.optionsHandler.mode}:${options}`;
+      return isResident
+        ? `${key}:${process.nodeKind}:${!!process.initiator}:${observesOutside(process)}`
+        : key;
+    })
     .join("|");
 }
 

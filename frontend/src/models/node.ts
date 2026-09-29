@@ -192,6 +192,54 @@ export function isBusinessInputCandidate(option: ProgramOption): boolean {
   );
 }
 
+/**
+ * The sorts of the options of a node, as the canvas draws them: a business
+ * output, an input that a connection can reach (a business input once
+ * connected), an external input, or a configuration option, which no
+ * connection feeds.
+ */
+export type NodeOptionRole =
+  | "businessOutput"
+  | "businessInput"
+  | "externalInput"
+  | "configuration";
+
+export function nodeOptionRole(option: ProgramOption): NodeOptionRole {
+  if (isBusinessOutput(option)) {
+    return "businessOutput";
+  }
+  if (isBusinessInputCandidate(option)) {
+    return "businessInput";
+  }
+  if (option.direction === "input" && option.channel === "fifo" && option.fifoTag === "external") {
+    return "externalInput";
+  }
+  return "configuration";
+}
+
+/**
+ * Whether a node observes the world outside the program: an FBPProcess with
+ * a body for observe, and every ProgramLauncher and DirectoryWatcher, whose
+ * classes implement it.
+ */
+export function observesOutside(process: ProgramProcess): boolean {
+  switch (process.nodeKind) {
+    case "FBPProcess":
+      return (process.nodeCode?.observe.trim() ?? "") !== "";
+    case "ProgramLauncher":
+    case "DirectoryWatcher":
+      return true;
+    default:
+      return false;
+  }
+}
+
+// The flag of the Supervisor, a command line option, with which a run tells
+// it not to hold the business channels. Script generation writes it, and
+// the program model does not hold it, but the canvas lists it among the
+// configuration options of the Supervisor.
+export const NO_HOLD_FIFOS_LABEL = "-no-hold-fifos";
+
 // The computational specifications that each node kind reads, besides
 // cpus, mem and time.
 type ResidentSpecField = Exclude<keyof ComputationalSpecs, "cpus" | "mem" | "time">;
