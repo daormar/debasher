@@ -152,7 +152,10 @@ function ResidentLegend() {
 
       <Heading>Marks</Heading>
       <LegendRow mark={<NodeKindChip kind="FBPProcess" />}>
-        The node kind, in the blue gray of the wiring for the Supervisor.
+        The node kind, on a band with the name and the marks.
+      </LegendRow>
+      <LegendRow mark={<NodeKindChip kind="Supervisor" />}>
+        The Supervisor, on a band in the blue gray of its wiring.
       </LegendRow>
       <LegendRow mark={<InitiatorMark />}>
         An initiator: rounds start there.
