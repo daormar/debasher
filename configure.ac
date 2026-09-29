@@ -230,9 +230,39 @@ AS_IF([test "x$enable_frontend" != xno], [
     AS_IF([test -z "$NPM"], [
       AC_MSG_WARN([npm not found and no prebuilt frontend/dist/ present; skipping frontend])
       enable_frontend=no
+    ], [
+      dnl npm runs under whatever node comes first in the PATH when make
+      dnl runs (its "#!" line is "env node"), not the one it was installed
+      dnl with, as when nvm installs a Node.js that is not the default one
+      dnl of the shell. Find the node next to npm first, and have the
+      dnl frontend's Makefile put its directory first in the PATH of every
+      dnl npm command, so that the build does not depend on the PATH of the
+      dnl shell that runs make. A NODE given to configure is kept.
+      npm_bindir=`AS_DIRNAME(["$NPM"])`
+      AC_PATH_PROG([NODE], [node], [], [$npm_bindir$PATH_SEPARATOR$PATH])
+      AS_IF([test -z "$NODE"], [
+        AC_MSG_ERROR([npm was found, but no node; give NODE=/path/to/node, or --disable-frontend])
+      ])
+      dnl The oldest Node.js that the build and the tests of the frontend
+      dnl run on: vite asks for 20.19 or 22.12 and newer, and vitest, which
+      dnl make check runs, for 22.12 and newer.
+      node_min_version=22.12
+      AC_MSG_CHECKING([whether $NODE is Node.js $node_min_version or newer])
+      AS_IF(["$NODE" -e '
+          const [[major, minor]] = process.versions.node.split(".").map(Number);
+          const [[min_major, min_minor]] = process.argv[[1]].split(".").map(Number);
+          process.exit(major > min_major || (major === min_major && minor >= min_minor) ? 0 : 1);
+        ' "$node_min_version" >/dev/null 2>&1], [
+        AC_MSG_RESULT([yes])
+      ], [
+        AC_MSG_RESULT([no, `"$NODE" --version 2>/dev/null`])
+        AC_MSG_ERROR([the frontend needs Node.js $node_min_version or newer; put one first in the PATH, give NODE=/path/to/node, or --disable-frontend])
+      ])
+      NODE_BINDIR=`AS_DIRNAME(["$NODE"])`
     ])
   ])
 ])
+AC_SUBST([NODE_BINDIR])
 dnl INSTALL_FRONTEND: a web/ directory should end up installed, whether
 dnl built fresh (BUILD_FRONTEND, below) or copied from a prebuilt
 dnl frontend/dist/ already present in the source tree.
