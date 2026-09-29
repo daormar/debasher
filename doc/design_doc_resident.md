@@ -228,7 +228,7 @@ do the entries below that refer to it.
 - **held FIFO**: the FIFO of a business channel between two nodes, which the
   `Supervisor` holds open through a read end that it never reads, a third holder
   besides the two endpoints, so that what the FIFO holds outlives the crash of
-  both of them. The flag `-no_hold_fifos` turns it off (see "Holding the
+  both of them. The flag `-no-hold-fifos` turns it off (see "Holding the
   business channels").
 
 ## Rounds and checkpoints
@@ -650,7 +650,7 @@ guarantee in words and never cite these numbers, which may change.
   at some moment is what it held destroyed, at most what a pipe holds (64
   KiB): both endpoints down while the `Supervisor` is down too (it is not
   supervised, see the failure model), in a program without a `Supervisor`, or
-  in one whose `Supervisor` is given `-no_hold_fifos`. Whether the loss is
+  in one whose `Supervisor` is given `-no-hold-fifos`. Whether the loss is
   repaired then depends on where the destroyed messages came from. A relaunched
   writer restores its latest checkpoint and replays its input log after
   `capture_pos`, so it sends again, with the same sequence numbers, everything
@@ -756,7 +756,7 @@ out, even with no failure at all, is itself a race between independent writers
 that a single run does not pin down uniquely. The exception follows from two
 limits of the Contract, after which a message can be lost beyond repair: both
 endpoints of a channel crashed while no other process held the FIFO, which the
-chaos test reaches with `-no_hold_fifos` (see "Holding the business
+chaos test reaches with `-no-hold-fifos` (see "Holding the business
 channels"), and a node killed with a message that it has read from a FIFO but
 not yet written to its input log. A run that hits either passes if it ends
 with an error of G8 that names the channel and the numbers of the missing
@@ -1839,7 +1839,7 @@ as when the reader alone crashes.
   `Supervisor`, and during a graceful stop, since `debasher_stop_resident`
   stops the `Supervisor` first (a crash during a halt is already outside the
   guarantees, see "A crash while a round is open" in the Contract's limits).
-- **The switch.** Given the flag `-no_hold_fifos`, the `Supervisor` holds
+- **The switch.** Given the flag `-no-hold-fifos`, the `Supervisor` holds
   nothing and logs a warning that says what is at stake. Its module offers it
   as an option of the command line of the program, a flag like any other
   (`explain_flag`, `opt_is_non_mandatory_cmdline`,
@@ -3372,7 +3372,7 @@ Design ideas from Future work move here once they are actually built.
 - **A third holder of every business channel.** The `Supervisor` holds the
   FIFO of every business channel between two nodes through a read end that it
   never reads, so that what a FIFO holds outlives the crash of both of its
-  endpoints; the engine gives it the FIFOs, and the flag `-no_hold_fifos`,
+  endpoints; the engine gives it the FIFOs, and the flag `-no-hold-fifos`,
   which its module can offer on the command line of the program, turns it off
   (see "Holding the business channels"). The loss is then left to the
   `Supervisor` being down at the same time, which nothing watches (see
@@ -3381,7 +3381,7 @@ Design ideas from Future work move here once they are actually built.
   node"). `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO
   together at random moments, with and without the `Supervisor` holding it,
   and the chaos test runs the same case on a real run of both kinds, one of
-  them with `-no_hold_fifos`.
+  them with `-no-hold-fifos`.
 
 # Future work
 
@@ -3499,7 +3499,7 @@ Design ideas from Future work move here once they are actually built.
     FIFOs, which is what a rollback needs.
 - **Repairing messages destroyed with a FIFO.** When both endpoints of a channel
   crash while no other process holds the FIFO (the `Supervisor` down too, no
-  `Supervisor`, or `-no_hold_fifos`, see "Holding the business channels"), what
+  `Supervisor`, or `-no-hold-fifos`, see "Holding the business channels"), what
   the FIFO held is destroyed, and only what the writer produces again after its
   latest checkpoint comes back (see the Contract's limits). Ways to widen that,
   none designed or tried:

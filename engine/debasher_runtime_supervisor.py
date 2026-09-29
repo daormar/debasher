@@ -57,7 +57,7 @@ _FIFOS_DIRNAME = "__fifos__"
 
 # The flag that tells a Supervisor not to hold the fifos of the business
 # channels (see Supervisor._open_held_fifos).
-_NO_HOLD_FIFOS_FLAG = "no_hold_fifos"
+_NO_HOLD_FIFOS_FLAG = "no-hold-fifos"
 
 
 class Supervisor(_PortWorker):
@@ -78,7 +78,7 @@ class Supervisor(_PortWorker):
     It also holds open the fifo of every business channel of the program,
     HOLD_FIFOS, through a read end that it never reads (see
     _open_held_fifos), so that what a fifo holds outlives the crash of both
-    nodes of its channel, unless it is given the flag -no_hold_fifos, which
+    nodes of its channel, unless it is given the flag -no-hold-fifos, which
     its module may offer as an option of the command line of the program.
     """
 

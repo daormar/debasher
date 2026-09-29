@@ -23,7 +23,7 @@ RESERVED_NODE_LABELS = (HEARTBEAT_LABEL, TRIGGER_LABEL)
 # The labels of the Supervisor wiring on the Supervisor that do not depend
 # on a node.
 MANUAL_LABEL = "-manual"
-NO_HOLD_FIFOS_LABEL = "-no_hold_fifos"
+NO_HOLD_FIFOS_LABEL = "-no-hold-fifos"
 
 _TASK_INDEXED_MODES = {"array", "generator"}
 
@@ -129,7 +129,7 @@ class SupervisorWiring:
     The Supervisor wiring of a copy of a resident program, added to it as
     options and connections: to each node its heartbeat channel, to each
     initiator its control port, and to the Supervisor, if there is one, the
-    other ends of both, its manual trigger port, -no_hold_fifos and the
+    other ends of both, its manual trigger port, -no-hold-fifos and the
     command line options that count its fanout families.
     """
 
@@ -285,7 +285,7 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
       from outside the program, is its manual trigger port;
     - without a Supervisor, an input of a node tagged control and written
       from outside the program is the control port of an initiator;
-    - the flag -no_hold_fifos of the Supervisor, and the command line
+    - the flag -no-hold-fifos of the Supervisor, and the command line
       options that only count its fanout families, go too.
 
     `processes` are changed in place. Any other option of the Supervisor, and

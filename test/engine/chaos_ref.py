@@ -28,7 +28,7 @@ PFILE = Path(__file__).resolve().parent / "debasher_chaos_ref.sh"
 
 def launch_chaos(outdir, *program_opts):
     """Runs debasher_chaos_ref.sh into `outdir`, with the options of the
-    program `program_opts` (e.g. "-no_hold_fifos")."""
+    program `program_opts` (e.g. "-no-hold-fifos")."""
     launch(PFILE, outdir, *program_opts)
 
 

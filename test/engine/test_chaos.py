@@ -214,7 +214,7 @@ def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_
     only two pairs of killable nodes that can touch the Contract's "both
     endpoints of a channel crashed" limit (see "Limits and non-goals";
     the other is fanin+loop, not covered by this piece). The program is
-    run with -no_hold_fifos, so that the Supervisor does not hold that
+    run with -no-hold-fifos, so that the Supervisor does not hold that
     fifo and the limit is reached: with it held, the same construction
     loses nothing (see the next piece).
 
@@ -263,7 +263,7 @@ def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_
     k = 700
     interval = 0.02
     rng = random.Random(run_index)
-    launch_chaos(outdir, "-no_hold_fifos")
+    launch_chaos(outdir, "-no-hold-fifos")
 
     tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
     tailer.start()

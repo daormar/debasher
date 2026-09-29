@@ -262,8 +262,8 @@ def test_the_wiring_of_a_program_with_a_supervisor():
     assert 'debasher::define_opt_from_proc_out "-sink_hb" "sink" "-outhb" optlist || return 1' in sup
     assert 'debasher::define_fifo_opt "-outcounter_trig" "sup_counter_trig" optlist --control || return 1' in sup
     assert 'debasher::define_fifo_opt "-manual" "sup_manual" optlist --control || return 1' in sup
-    assert 'debasher::define_cmdline_flag_if_given "${cmdline}" "-no_hold_fifos" optlist || return 1' in sup
-    assert 'debasher::opt_is_non_mandatory_cmdline "-no_hold_fifos"' in _function(script, "sup_identify_cmdline_opts")
+    assert 'debasher::define_cmdline_flag_if_given "${cmdline}" "-no-hold-fifos" optlist || return 1' in sup
+    assert 'debasher::opt_is_non_mandatory_cmdline "-no-hold-fifos"' in _function(script, "sup_identify_cmdline_opts")
 
 
 def test_without_a_supervisor_an_initiator_has_a_control_port_written_from_outside():

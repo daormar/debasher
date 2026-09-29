@@ -1150,7 +1150,7 @@ when it loads the program.
 nothing of it but its name, its description and its computational
 specifications, `heartbeat_timeout_s` and `startup_timeout_s` among them:
 script generation writes its whole class and all its options. Among them is
-the flag `-no_hold_fifos`, a command line option, so that each run can choose
+the flag `-no-hold-fifos`, a command line option, so that each run can choose
 whether the `Supervisor` holds the business channels (see "Holding the
 business channels" in `doc/design_doc_resident.md`).
 
@@ -1345,7 +1345,7 @@ the Supervisor wiring with fixed labels, which no option of the user may take:
   the trigger port of the `Supervisor` or, without one, written from outside
   the program;
 - on the `Supervisor`, `-manual`, its manual trigger port, and the flag
-  `-no_hold_fifos`, together with the command line options that count its
+  `-no-hold-fifos`, together with the command line options that count its
   fanout families.
 
 The name of the process comes first in a label of the `Supervisor`, never
@@ -1369,12 +1369,12 @@ program model holds:
 - without a `Supervisor`, an input of a node tagged `--control` and written
   from outside the program is the control port of an initiator: it goes, and
   the node becomes an initiator;
-- the flag `-no_hold_fifos` of the `Supervisor`, and the command line options
+- the flag `-no-hold-fifos` of the `Supervisor`, and the command line options
   that only count its fanout families, go too.
 
 The labels and the fifo names of the wiring that script generation writes
 again may differ from those of the module, and a manual trigger port and
-`-no_hold_fifos` are added when the module had none. None of this changes what
+`-no-hold-fifos` are added when the module had none. None of this changes what
 the program does, since the runtime takes the ports of a process from the
 engine by their role, not by their label. The one exception is the code of a
 node that names an option of the wiring, such as `self.opts["outhb"]`: import
@@ -1622,7 +1622,7 @@ named for what it does, "Restart node", and is offered as follows:
   `doc/design_doc_resident.md`). Only a channel whose two ends are restarted
   together, a self-loop of the node or a channel between two tasks of the
   process, relies on the `Supervisor` to hold it, and may lose what it held
-  when the program was launched with `-no_hold_fifos`, which the warning then
+  when the program was launched with `-no-hold-fifos`, which the warning then
   says. It serves to free a node that is stuck, or to try the recovery of a
   program. A node restarted again and again before it sends a heartbeat
   counts for the `Supervisor` as a node that crashes after every relaunch, and
