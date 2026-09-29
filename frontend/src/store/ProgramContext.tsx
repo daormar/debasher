@@ -31,13 +31,11 @@ import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter
 import { saveProgram } from "../storage/programStorage";
 import type {
   ProcessStatusesResult,
-  ProgramStatusResult,
   ResetProgramStateResult,
   RunProgramResult,
   StopResult,
 } from "../api/executionApi";
 import {
-  fetchProgramStatus,
   getProcessStatuses,
   getProgramState,
   killProgram as requestKill,
@@ -45,25 +43,28 @@ import {
   resetProgramState as requestProgramStateReset,
   runProgram,
   stopProgram,
-  stopResidentProgram as requestResidentStop,
 } from "../api/executionApi";
+import type { GeneralRunPhase, GeneralRunTracking } from "../models/generalRun";
+import {
+  INITIAL_GENERAL_TRACKING,
+  LAUNCHED_GENERAL_TRACKING,
+  generalRunPhase,
+  nextGeneralTracking,
+  stoppedGeneralTracking,
+} from "../models/generalRun";
 import type { ResidentRequest, ResidentRunPhase } from "../models/residentRun";
 import { residentRunPhase } from "../models/residentRun";
-
-// How often to poll for a background run's completion, in milliseconds.
-const RUN_POLL_INTERVAL_MS = 5000;
 
 // Matches engine/debasher_lib.sh's DEBASHER_MOD_DIR_SEP.
 const MOD_DIR_SEP = ":";
 
-// How often to poll debasher_status for per-process node colors, in
+// How often to poll debasher_status for the process statuses, from which
+// the canvas colors the nodes and the run phase is derived, in
 // milliseconds. Runs continuously whenever an output directory is set,
-// independently of runPhase (which only tracks runs launched from this
-// UI), the output directory may hold a run that's already in
-// progress from outside it.
+// whoever launched the run in it.
 const PROCESS_STATUS_POLL_INTERVAL_MS = 5000;
 
-export type ProgramRunPhase = "idle" | "running" | "finished" | "unfinished";
+export type ProgramRunPhase = GeneralRunPhase;
 
 interface ProgramContextType {
   program: Program;
@@ -76,16 +77,23 @@ interface ProgramContextType {
 
   // True whenever processStatuses reports at least one process as
   // "IN-PROGRESS", i.e. a run is going for program.outputDir, whether
-  // launched from this tab or not (unlike runPhase, which only tracks
-  // a run this tab itself launched). Drives SaveDialog's proactive
+  // launched from this tab or not. Drives SaveDialog's proactive
   // disable, see save()'s own guard below for why saving mid-run is
   // unsafe.
   isRunInProgress: boolean;
 
+  // The run phase of a general program, derived from the process statuses,
+  // whoever launched the run, and from a request of this tab not answered
+  // yet (see models/generalRun.ts). Meaningless for a resident program,
+  // which has residentPhase.
   runPhase: ProgramRunPhase;
 
-  // debasher_status's output from the poll that settled runPhase into
-  // "unfinished" (see startRunPolling); null otherwise.
+  // Whether this tab saw the run end, going to "finished" or "unfinished"
+  // from "launching" or "running": only then is the end shown.
+  runEndSeen: boolean;
+
+  // debasher_status's output from the last reading, while runPhase is
+  // "unfinished"; null otherwise.
   runOutput: string | null;
 
   // Latest per-process statuses from debasher_status (see
@@ -109,20 +117,16 @@ interface ProgramContextType {
   // run phase goes to "new" at once. Throws while a run is in progress.
   resetProgramState: (deleteState: boolean) => Promise<ResetProgramStateResult>;
 
-  // Launches "Run program" in the background; throws (e.g. if a run
-  // is already in progress) rather than resolving with an error, so
-  // callers can show it inline. Resolves once the run has launched,
-  // not once it's finished; see runPhase for that. A resident program
-  // resolves with the exit code of its launch and what it printed, and
-  // its run is not followed by runPhase, nor stopped with the tab;
-  // `resumeChangedProgram` resumes its program state with a program that
-  // differs from the launch record (see runProgram).
+  // Launches "Run program"; throws (e.g. if a run is already in
+  // progress) rather than resolving with an error, so callers can show
+  // it inline. Resolves once the run has launched, not once it's
+  // finished; see runPhase and residentPhase for that. A launch that
+  // the backend waits for (a resident program, or Slurm) resolves with
+  // the exit code of debasher_exec and what it printed;
+  // `resumeChangedProgram` resumes the program state of a resident
+  // program with a program that differs from the launch record (see
+  // runProgram). Nothing that happens to the tab stops the run.
   startProgramRun: (resumeChangedProgram?: boolean) => Promise<RunProgramResult>;
-
-  // The running-progress indicator's Close button: stops the run if
-  // it's still going, otherwise just dismisses the finished/unfinished
-  // notice.
-  dismissProgramRun: () => void;
 
   // The run phase of a resident program, derived from processStatuses,
   // from whether the output directory holds program state, and from a
@@ -130,11 +134,12 @@ interface ProgramContextType {
   // Meaningless for a general program.
   residentPhase: ResidentRunPhase;
 
-  // "Stop program" on a resident program: the orderly stop, which resolves
-  // once the program has stopped, with the exit code of the tool. "Kill
-  // program": the hard kill. Both show the run phase "stopping" meanwhile,
-  // and throw on a failed request.
-  stopResidentProgram: () => Promise<StopResult>;
+  // "Stop program": debasher_stop on a general program, and the orderly stop
+  // on a resident one, which resolves once the program has stopped, with
+  // the exit code of the tool. "Kill program": the hard kill of a resident
+  // program. Both show the run phase "stopping" meanwhile, and throw on a
+  // failed request.
+  stopRun: () => Promise<StopResult>;
 
   killResidentProgram: () => Promise<StopResult>;
 
@@ -464,127 +469,6 @@ export function ProgramProvider({
     setProgram(() => updated);
   }
 
-  const [runPhase, setRunPhase] =
-    useState<ProgramRunPhase>("idle");
-
-  // debasher_status's output from the poll that settled runPhase into
-  // "unfinished", shown alongside the run-finished notice so a
-  // genuine failure can be diagnosed without a separate "Get program
-  // status" call. Not meaningful (and not shown) for any other phase.
-  const [runOutput, setRunOutput] =
-    useState<string | null>(null);
-
-  const pollTimerRef =
-    useRef<number | null>(null);
-
-  const beforeUnloadHandlerRef =
-    useRef<(() => void) | null>(null);
-
-  const runningProgramRef =
-    useRef<Program | null>(null);
-
-  // Mirrors runPhase for the unmount cleanup below, which, since its
-  // effect has an empty dependency array and only runs once, on
-  // unmount, would otherwise only ever see the phase from initial
-  // mount rather than the current one.
-  const runPhaseRef =
-    useRef<ProgramRunPhase>(runPhase);
-
-  useEffect(() => {
-    runPhaseRef.current = runPhase;
-  }, [runPhase]);
-
-  function stopRunPolling() {
-
-    if (pollTimerRef.current !== null) {
-      window.clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-
-    if (beforeUnloadHandlerRef.current !== null) {
-      window.removeEventListener("beforeunload", beforeUnloadHandlerRef.current);
-      beforeUnloadHandlerRef.current = null;
-    }
-
-  }
-
-  // Leaving the editor (the toolbar's "Close" button) unmounts this
-  // provider without ever unloading the page, so beforeunload above
-  // doesn't fire, stop a still-running program here too, or it's
-  // left running with nothing left to track or stop it.
-  useEffect(() => {
-    return () => {
-      stopRunPolling();
-      if (runPhaseRef.current === "running") {
-        const runningProgram = runningProgramRef.current ?? program;
-        stopProgram(runningProgram).catch(() => {
-          // Best-effort, the UI tracking this run is already gone.
-        });
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function startRunPolling(runningProgram: Program) {
-
-    runningProgramRef.current = runningProgram;
-    setRunPhase("running");
-    setRunOutput(null);
-
-    const beforeUnloadHandler = () => {
-      const blob = new Blob([JSON.stringify(runningProgram)], {
-        type: "application/json",
-      });
-      navigator.sendBeacon("/api/execution/stop", blob);
-    };
-
-    beforeUnloadHandlerRef.current = beforeUnloadHandler;
-    window.addEventListener("beforeunload", beforeUnloadHandler);
-
-    // "unfinished" (debasher_status's neither-finished-nor-in-progress
-    // exit code) is ambiguous: it also fires during an ordinary brief
-    // gap between processes, the previous one's job id is already
-    // gone but its completion marker, or the next one's job id, hasn't
-    // landed yet, which looks identical to a genuinely finished-with-
-    // failures run from a single reading. Requiring it twice in a row
-    // (one poll interval apart) filters that out: a run that's still
-    // actually going almost always shows "in-progress" again by the
-    // next tick, while a truly finished one keeps reading "unfinished".
-    let consecutiveUnfinished = 0;
-
-    pollTimerRef.current = window.setInterval(async () => {
-
-      let result: ProgramStatusResult;
-
-      try {
-        result = await fetchProgramStatus(runningProgram);
-      } catch {
-        return; // transient failure, try again next tick
-      }
-
-      if (result.state === "in-progress") {
-        consecutiveUnfinished = 0;
-        return;
-      }
-
-      if (result.state === "finished") {
-        stopRunPolling();
-        setRunPhase("finished");
-        return;
-      }
-
-      consecutiveUnfinished += 1;
-
-      if (consecutiveUnfinished >= 2) {
-        stopRunPolling();
-        setRunOutput(result.output);
-        setRunPhase("unfinished");
-      }
-
-    }, RUN_POLL_INTERVAL_MS);
-
-  }
-
   async function ensureNoRunInProgress() {
 
     const state = await getProgramState(program);
@@ -595,69 +479,83 @@ export function ProgramProvider({
 
   }
 
-  async function startProgramRun(resumeChangedProgram = false) {
-
-    if (program.programType === "resident") {
-      return withResidentRequest("launching", async () => {
-        await ensureNoRunInProgress();
-        return runProgram(program, resumeChangedProgram);
-      });
-    }
-
-    await ensureNoRunInProgress();
-    const result = await runProgram(program);
-    startRunPolling(program);
-    return result;
-
-  }
-
-  // The request of this tab to launch a resident program, or to stop or kill
-  // it, that has not been answered yet: the run phase shows it until the
-  // answer comes and the process statuses have been read again, so that the
-  // phase goes on to what the request left without waiting for the next
-  // poll.
-  const [residentRequest, setResidentRequest] =
+  // The request of this tab to launch the program, or to stop or kill it,
+  // that has not been answered yet: the run phase shows it until the answer
+  // comes. Nothing that happens to the tab stops a run: it lives in its
+  // output directory, whoever launched it (see "A run that outlives the tab"
+  // in doc/design_doc_webui.md).
+  const [runRequest, setRunRequest] =
     useState<ResidentRequest | null>(null);
 
-  async function withResidentRequest<T>(
+  // The phase of a run of a general program as the readings of the process
+  // statuses leave it (see models/generalRun.ts).
+  const [generalTracking, setGeneralTracking] =
+    useState<GeneralRunTracking>(INITIAL_GENERAL_TRACKING);
+
+  // What debasher_status printed at the last reading, shown when a run did
+  // not finish.
+  const [statusOutput, setStatusOutput] =
+    useState("");
+
+  // Runs `action` as a request of the tab, and reads the process statuses
+  // again once it is answered, so that the phase goes on to what the request
+  // left without waiting for the next poll.
+  async function withRunRequest<T>(
     request: ResidentRequest,
     action: () => Promise<T>
   ): Promise<T> {
 
-    setResidentRequest(request);
+    setRunRequest(request);
 
     try {
       const result = await action();
       await refreshProcessStatuses();
       return result;
     } finally {
-      setResidentRequest(null);
+      setRunRequest(null);
     }
 
   }
 
-  function stopResidentProgram() {
-    return withResidentRequest("stopping", () => requestResidentStop(program));
-  }
+  async function startProgramRun(resumeChangedProgram = false) {
 
-  function killResidentProgram() {
-    return withResidentRequest("stopping", () => requestKill(program));
-  }
-
-  function dismissProgramRun() {
-
-    if (runPhase === "running") {
-      stopRunPolling();
-      const runningProgram = runningProgramRef.current ?? program;
-      stopProgram(runningProgram).catch(() => {
-        // Best-effort, nothing meaningful left to show once the
-        // running indicator has already been dismissed.
+    if (program.programType === "resident") {
+      return withRunRequest("launching", async () => {
+        await ensureNoRunInProgress();
+        return runProgram(program, resumeChangedProgram);
       });
     }
 
-    setRunPhase("idle");
-    setRunOutput(null);
+    // A general run is followed from the next poll on, not at once: the
+    // first readings after a launch may still show the run before, and two
+    // of them with nothing in progress end the phase "launching".
+    setRunRequest("launching");
 
+    try {
+      await ensureNoRunInProgress();
+      const result = await runProgram(program);
+      if (result.started) {
+        setGeneralTracking(LAUNCHED_GENERAL_TRACKING);
+      }
+      return result;
+    } finally {
+      setRunRequest(null);
+    }
+
+  }
+
+  function stopRun() {
+    return withRunRequest("stopping", async () => {
+      const result = await stopProgram(program);
+      if (program.programType !== "resident") {
+        setGeneralTracking(stoppedGeneralTracking);
+      }
+      return result;
+    });
+  }
+
+  function killResidentProgram() {
+    return withRunRequest("stopping", () => requestKill(program));
   }
 
   const [processStatuses, setProcessStatuses] =
@@ -670,7 +568,13 @@ export function ProgramProvider({
     Object.values(processStatuses).includes("IN-PROGRESS");
 
   const residentPhase =
-    residentRunPhase(processStatuses, hasProgramState, residentRequest);
+    residentRunPhase(processStatuses, hasProgramState, runRequest);
+
+  const runPhase =
+    generalRunPhase(generalTracking, runRequest);
+
+  const runOutput =
+    runPhase === "unfinished" ? statusOutput : null;
 
   // Kept in sync on every render so the status-poll effect below (which
   // only restarts when outputDir/DEBASHER_MOD_DIR change, not on every
@@ -686,6 +590,8 @@ export function ProgramProvider({
   function applyProcessStatuses(result: ProcessStatusesResult) {
     setProcessStatuses(result.statuses);
     setHasProgramState(result.hasProgramState);
+    setStatusOutput(result.output);
+    setGeneralTracking(prev => nextGeneralTracking(prev, result.statuses));
   }
 
   async function readProcessStatuses(current: Program): Promise<ProcessStatusesResult> {
@@ -694,7 +600,7 @@ export function ProgramProvider({
     } catch {
       // Nothing to show while debasher_status can't be run (e.g. the
       // output directory hasn't been initialized by a run yet).
-      return { statuses: {}, hasProgramState: false };
+      return { statuses: {}, hasProgramState: false, output: "" };
     }
   }
 
@@ -714,8 +620,11 @@ export function ProgramProvider({
 
   useEffect(() => {
 
+    // Another output directory holds another run.
+    setGeneralTracking(INITIAL_GENERAL_TRACKING);
+
     if (!program.outputDir.trim()) {
-      applyProcessStatuses({ statuses: {}, hasProgramState: false });
+      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "" });
       return;
     }
 
@@ -775,7 +684,7 @@ export function ProgramProvider({
     if (cleared) {
       // Don't wait for the next poll tick, every node's background
       // should go back to white as soon as the reset is confirmed.
-      applyProcessStatuses({ statuses: {}, hasProgramState: false });
+      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "" });
     }
 
     return cleared;
@@ -1785,11 +1694,11 @@ export function ProgramProvider({
 
     startProgramRun,
 
-    dismissProgramRun,
+    runEndSeen: generalTracking.sawEnd,
 
     residentPhase,
 
-    stopResidentProgram,
+    stopRun,
 
     killResidentProgram,
 
@@ -1856,6 +1765,7 @@ export function ProgramProvider({
     selectedProcess,
     runPhase,
     runOutput,
+    generalTracking.sawEnd,
     processStatuses,
     residentPhase,
   ]);

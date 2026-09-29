@@ -5,7 +5,6 @@ import {
   checkProgramOptions,
   getProgramStatus,
   runProgramDebug,
-  stopProgram,
   takeSnapshot,
 } from "../api/executionApi";
 import type { RunProgramResult } from "../api/executionApi";
@@ -52,8 +51,8 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Reset program state",
 ]);
 
-// The actions on a resident program that the run menu does not offer while
-// a request of this tab to launch, stop or kill it has not been answered.
+// The actions on a program that the run menu does not offer while a request
+// of this tab to launch, stop or kill it has not been answered.
 const ACTS_ON_PROGRAM = new Set<MenuItem>([
   "Set output directory",
   "Check program options",
@@ -95,7 +94,7 @@ const REQUIRES_HOME_DIR = new Set<MenuItem>([
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
   "Check program options": "Checking...",
   "Run program (debug)": "Running...",
-  "Run program": "Running...",
+  "Run program": "Launching...",
   "Get program status": "Getting status...",
   "Stop program": "Stopping...",
   "Take snapshot": "Taking snapshot...",
@@ -116,13 +115,18 @@ export default function RunMenu() {
     startProgramRun,
     resetOutputDir,
     residentPhase,
-    stopResidentProgram,
+    stopRun,
     killResidentProgram,
     resetProgramState,
   } = useProgram();
 
   const isResident =
     program.programType === "resident";
+
+  // A request of this tab to launch, stop or kill the program has not been
+  // answered yet.
+  const phase = isResident ? residentPhase : runPhase;
+  const isRequestPending = phase === "launching" || phase === "stopping";
 
   const [isOpen, setOpen] =
     useState(false);
@@ -236,8 +240,9 @@ export default function RunMenu() {
     setPendingAction(null);
     setOpen(false);
 
-    // The launch of a resident program is waited for, so a program that the
-    // engine refuses is reported at once, with what debasher_exec printed.
+    // The launch of a resident program, or one with Slurm, is waited for, so
+    // a program that the engine refuses is reported at once, with what
+    // debasher_exec printed.
     if (result.exitCode !== null && result.exitCode !== 0) {
       setCommandOutput({
         title: "Run program: the launch failed",
@@ -271,18 +276,22 @@ export default function RunMenu() {
 
   }
 
-  // The orderly stop lasts until the program has stopped, up to about the
-  // timeout of the tool: the menu closes, the run phase shows the program as
-  // stopping, and the outcome comes in a modal.
-  async function handleStopResident() {
+  // The orderly stop of a resident program lasts until the program has
+  // stopped, up to about the timeout of the tool: the menu closes, the run
+  // phase shows the program as stopping, and the outcome comes in a modal.
+  async function handleStop() {
 
     setOpen(false);
 
     try {
-      const result = await stopResidentProgram();
+      const result = await stopRun();
       setCommandOutput({
         title: "Stop program",
-        message: orderlyStopOutcome(result.exitCode),
+        message: isResident
+          ? orderlyStopOutcome(result.exitCode)
+          : result.exitCode === 0
+          ? "The run was stopped."
+          : `debasher_stop ended with exit code ${result.exitCode}. What it printed:`,
         output: result.output,
       });
     } catch (err) {
@@ -445,10 +454,8 @@ export default function RunMenu() {
       handleRunProgram();
     } else if (item === "Get program status") {
       runOutputAction(item, "Program status", getProgramStatus);
-    } else if (item === "Stop program" && isResident) {
-      handleStopResident();
     } else if (item === "Stop program") {
-      runOutputAction(item, "Stop program", stopProgram);
+      handleStop();
     } else if (item === "Reset program state") {
       setOpen(false);
       setDeleteState(false);
@@ -540,15 +547,12 @@ export default function RunMenu() {
 
               disabled={
                 pendingAction !== null ||
-                (item === "Run program" && runPhase === "running") ||
-                // A resident program is not followed by runPhase: a run in
-                // progress is read from the process statuses, whoever
-                // launched it.
-                (item === "Run program" && isResident && isRunInProgress) ||
-                // Nothing else acts on a resident program while this tab
+                // A run in progress is read from the process statuses,
+                // whoever launched it.
+                (item === "Run program" && isRunInProgress) ||
+                // Nothing else acts on the program while this tab
                 // launches, stops or kills it.
-                (isResident && ACTS_ON_PROGRAM.has(item) &&
-                  (residentPhase === "launching" || residentPhase === "stopping")) ||
+                (ACTS_ON_PROGRAM.has(item) && isRequestPending) ||
                 // Stopping a resident program, or starting a round in it,
                 // with no node alive would find no reader for its triggers.
                 (LIVE_ONLY.has(item) && isResident && residentPhase !== "live") ||
@@ -564,7 +568,7 @@ export default function RunMenu() {
                 (item === "Reset output directory" && isRunInProgress) ||
                 // A fifo only exists on disk once its owning process
                 // has started.
-                (item === "Talk to FIFOs" && runPhase !== "running") ||
+                (item === "Talk to FIFOs" && !isRunInProgress) ||
                 // A line written raw into a port of a resident program
                 // would bring its node down: the nodes read envelopes.
                 (item === "Talk to FIFOs" && isResident)
@@ -579,11 +583,7 @@ export default function RunMenu() {
               }}
 
             >
-              {item === "Run program" && runPhase === "running"
-                ? "Running..."
-                : item === "Run program" && isResident && pendingAction === item
-                ? "Launching..."
-                : pendingAction === item
+              {pendingAction === item
                 ? PENDING_LABELS[item]
                 : item}
             </button>

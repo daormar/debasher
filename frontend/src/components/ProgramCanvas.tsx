@@ -19,6 +19,7 @@ import type { ProgramProcess } from "../models/process";
 import type { ProgramOption, FanoutFamily } from "../models/option";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
+import { showsGeneralIndicator } from "../models/generalRun";
 import { hasSupervisor } from "../models/node";
 import {
   offersRelaunchNode,
@@ -193,7 +194,7 @@ export default function ProgramCanvas() {
     disconnect,
     runPhase,
     runOutput,
-    dismissProgramRun,
+    runEndSeen,
     processStatuses,
     residentPhase,
   } = useProgram();
@@ -202,12 +203,13 @@ export default function ProgramCanvas() {
 
   const inOrder = stoppedInOrder(processStatuses);
 
-  // The indicator of a resident program, hidden by its Hide button until the
-  // run phase changes: what it shows is then new.
-  const residentIndicatorKey =
-    residentPhase === "stopped" ? `stopped:${inOrder}` : residentPhase;
+  // The indicator of the run, hidden by its Hide button until the run phase
+  // changes: what it shows is then new.
+  const indicatorKey = isResident
+    ? (residentPhase === "stopped" ? `stopped:${inOrder}` : residentPhase)
+    : runPhase;
 
-  const [hiddenResidentIndicator, setHiddenResidentIndicator] =
+  const [hiddenIndicator, setHiddenIndicator] =
     useState<string | null>(null);
 
   // Whether the Supervisor wiring of a resident program is shown. It belongs
@@ -862,23 +864,24 @@ export default function ProgramCanvas() {
           <CanvasLegend programType={program.programType} />
         </Panel>
 
-        {!isResident && runPhase !== "idle" && (
+        {!isResident && runPhase !== "idle" && showsGeneralIndicator(runPhase, runEndSeen) &&
+          hiddenIndicator !== indicatorKey && (
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
             <RunStatusIndicator
               phase={runPhase}
               output={runOutput}
-              onClose={dismissProgramRun}
+              onHide={() => setHiddenIndicator(indicatorKey)}
             />
           </Panel>
         )}
 
         {isResident && residentPhase !== "new" &&
-          hiddenResidentIndicator !== residentIndicatorKey && (
+          hiddenIndicator !== indicatorKey && (
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
             <ResidentRunIndicator
               phase={residentPhase}
               inOrder={inOrder}
-              onHide={() => setHiddenResidentIndicator(residentIndicatorKey)}
+              onHide={() => setHiddenIndicator(indicatorKey)}
             />
           </Panel>
         )}

@@ -11,10 +11,20 @@ type Screen =
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home" });
 
+  // Where a run left in progress goes on, said on the home screen after
+  // leaving the editor: nothing stops the run, and the web UI keeps no
+  // record of it.
+  const [notice, setNotice] = useState<string | null>(null);
+
   if (screen.name === "home") {
     return (
       <HomeScreen
-        onOpen={program => setScreen({ name: "editor", program })}
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
+        onOpen={program => {
+          setNotice(null);
+          setScreen({ name: "editor", program });
+        }}
       />
     );
   }
@@ -22,7 +32,10 @@ export default function App() {
   return (
     <ProgramProvider initialProgram={screen.program}>
       <ProgramEditor
-        onClose={() => setScreen({ name: "home" })}
+        onClose={runNotice => {
+          setNotice(runNotice);
+          setScreen({ name: "home" });
+        }}
       />
     </ProgramProvider>
   );

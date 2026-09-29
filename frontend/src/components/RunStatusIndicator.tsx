@@ -1,23 +1,30 @@
+import type { GeneralRunPhase } from "../models/generalRun";
+
 interface Props {
-  phase: "running" | "finished" | "unfinished";
-  // debasher_status's output from the poll that settled on
-  // "unfinished", shown below the message so the failure can be
+  phase: Exclude<GeneralRunPhase, "idle">;
+  // debasher_status's output from the last reading, shown below the
+  // message when the run did not finish, so the failure can be
   // diagnosed on the spot. Ignored for any other phase.
   output?: string | null;
-  onClose: () => void;
+  // Hides the indicator, and stops nothing: a run lives in its output
+  // directory, not in the tab.
+  onHide: () => void;
 }
 
 const MESSAGE: Record<Props["phase"], string> = {
+  launching: "Launching program…",
   running: "Running program…",
+  stopping: "Stopping program…",
   finished: "Program finished.",
   unfinished: "Program finished with errors.",
 };
 
-export default function RunStatusIndicator({ phase, output, onClose }: Props) {
+export default function RunStatusIndicator({ phase, output, onHide }: Props) {
 
   return (
 
     <div
+      data-general-phase={phase}
       style={{
         background: "#fff",
         border: "1px solid #ccc",
@@ -43,8 +50,8 @@ export default function RunStatusIndicator({ phase, output, onClose }: Props) {
           {MESSAGE[phase]}
         </span>
 
-        <button onClick={onClose}>
-          {phase === "running" ? "Stop" : "Close"}
+        <button onClick={onHide}>
+          Hide
         </button>
 
       </div>

@@ -10,6 +10,7 @@ import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
 import AddProgramDialog from "./AddProgramDialog";
 import RunMenu from "./RunMenu";
+import { runGoesOnNotice } from "../models/generalRun";
 import { hasSupervisor } from "../models/node";
 
 // Mirrors the shape of an identifier DeBasher can turn into function
@@ -19,7 +20,8 @@ import { hasSupervisor } from "../models/node";
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 interface Props {
-  onClose: () => void;
+  // Leaves the editor, with the notice to show when a run goes on.
+  onClose: (notice: string | null) => void;
 }
 
 export default function Toolbar({ onClose }: Props) {
@@ -29,6 +31,7 @@ export default function Toolbar({ onClose }: Props) {
     setName,
     addProcess,
     mergeProgram,
+    isRunInProgress,
   } = useProgram();
 
   const [isPreambleOpen, setPreambleOpen] =
@@ -236,7 +239,7 @@ export default function Toolbar({ onClose }: Props) {
       <RunMenu />
 
       <button
-        onClick={onClose}
+        onClick={() => onClose(runGoesOnNotice(program, isRunInProgress))}
         style={{ marginLeft: "auto" }}
       >
         Close

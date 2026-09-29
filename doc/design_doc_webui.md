@@ -23,30 +23,30 @@ directories, and how a program is run and observed. It does not describe the
 layout of each dialog or the look of the canvas.
 
 **Scope: general and resident programs.** The engine runs two types of program,
-general and resident (see the Glossary), and the web UI knows only the first
-one today. Every section before "Resident programs in the web UI" describes
+general and resident (see the Glossary), and the web UI knows both, resident
+programs only in part: a subsection of "Resident programs in the web UI" that is
+built says so. Every section before "Resident programs in the web UI" describes
 the design for general programs, and what it says holds for them. A resident
 program, whose design is in `doc/design_doc_resident.md`, follows rules of its
-own in several places: it is always run by the built-in scheduler, its
-processes are meant to outlive any browser tab, and it is stopped, snapshotted
-and reset with tools of its own. The section on resident programs says, for
-each part of the design described before it, whether it applies to resident
-programs unchanged, changes, or is replaced, and nothing in the earlier
-sections should be read as holding for resident programs unless that section
-says so.
+own in several places: it is always run by the built-in scheduler, its processes
+are meant to live until they are stopped, and it is stopped, snapshotted and
+reset with tools of its own. The section on resident programs says, for each
+part of the design described before it, whether it applies to resident programs
+unchanged, changes, or is replaced, and nothing in the earlier sections should
+be read as holding for resident programs unless that section says so.
 
 The document is organized as follows. The Glossary defines the terms it uses.
 "Architecture" presents the three layers of the web UI and where its state
 lives. "The program model" describes the data that the frontend edits and the
-backend receives. The two sections that follow describe the translation
-between the model and a module in each direction, and what survives a round
-trip. "Persistence and the program's directories" describes what the web UI
-keeps on disk, and "Execution and observation" how it runs a program and
-follows it. "Frontend state and the canvas" describes the frontend's own
-state, and "Guarantees and non-goals" gathers the guarantees stated along the
-way. "Resident programs in the web UI" designs the extension to resident
-programs before it is built, and "Future work" lists what is known to be
-missing.
+backend receives. The two sections that follow describe the translation between
+the model and a module in each direction, and what survives a round trip.
+"Persistence and the program's directories" describes what the web UI keeps on
+disk, and "Execution and observation" how it runs a program and follows it.
+"Frontend state and the canvas" describes the frontend's own state, and
+"Guarantees and non-goals" gathers the guarantees stated along the way.
+"Resident programs in the web UI" designs the extension to resident programs,
+and says which parts of it are built, and "Future work" lists what is known to
+be missing.
 
 # Glossary
 
@@ -196,11 +196,12 @@ refer to it.
 - **run**: as defined in the design of the engine.
 - **tab**: one browser tab with the web UI open, holding its own store.
 - **store**: the state of the frontend in a tab (`ProgramContext`): the program
-  being edited and what the tab knows about its runs.
-- **run phase**: the state of a run launched from this tab, as the tab follows
-  it (`ProgramRunPhase`). For a resident program, the state of the program
-  derived from the process statuses, whoever launched it (see "Running a
-  resident program").
+  being edited and what the tab last read of its run.
+- **run phase**: the state of the run of a program as the tab shows it
+  (`ProgramRunPhase`), derived from the process statuses, whoever launched the
+  run, and from the requests of the tab not answered yet (see "Following a
+  run"). A resident program has values of its own (see "Running a resident
+  program").
 - **process status**: as defined in the design of the engine, as
   `debasher_status` reports it for the output directory, whoever launched the
   run; it colors the canvas.
@@ -264,10 +265,10 @@ user. During development the Vite server serves the frontend and forwards
 The backend keeps nothing between two requests. Every request carries what it
 needs, in most cases the whole program model, and the backend acts on the disk
 and on the engine's tools and answers. `/run` is the clearest case: it saves
-the program, generates its script, starts `debasher_exec --wait` detached, with
-its output in `.debasher_webui_run.log` under the output directory, and answers
-at once, without keeping a handle on the process. What happened to the run is
-asked later of the engine itself, with `debasher_status` on the output
+the program, generates its script, starts `debasher_exec` in a session of its
+own, with its output in `.debasher_webui_run.log` under the output directory,
+and answers without keeping a handle on the process. What happened to the run
+is asked later of the engine itself, with `debasher_status` on the output
 directory.
 
 Two things follow. Restarting the backend loses nothing, since there is nothing
@@ -279,18 +280,16 @@ reports a run in progress on that output directory).
 ## Where the state lives
 
 The lasting state lives in two places only. The store of each tab holds the
-program being edited and what the tab knows about a run it launched. The disk
-holds the rest: the home directory keeps the program metadata, the generated
-script and the user files, and the output directory keeps what the engine writes
-during a run. The frontend uses no browser storage, so a program that has not
-been saved is lost when its tab is closed.
+program being edited and what the tab last read of its run. The disk holds the
+rest: the home directory keeps the program metadata, the generated script and
+the user files, and the output directory keeps what the engine writes during a
+run. The frontend uses no browser storage, so a program that has not been saved
+is lost when its tab is closed.
 
-A run launched from a tab lives as long as the tab follows it. Closing or
-reloading the tab stops it (the tab sends `/api/execution/stop` as it unloads),
-and so does leaving the editor for the home screen. A run that the tab did not
-launch is observed through the process statuses, but closing the tab never
-stops it. Resident programs replace this rule, since their processes are meant
-to outlive any tab (see "A program that outlives the tab").
+A run lives in its output directory, not in the tab that launched it. Nothing
+that happens to a tab stops it, and a tab follows any run of its output
+directory through the process statuses, whoever launched it (see "A run that
+outlives the tab").
 
 # The program model
 
@@ -862,13 +861,28 @@ command:
 - the flags of `executionOptions` that are set (`--builtinsched-cpus`,
   `--builtinsched-mem`, `--dflt-nodes`, `--dflt-throttle`,
   `--rerun-outdated-procs`, `--conda-support`, `--docker-support`);
-- `--wait`, so that `debasher_exec` lives as long as the run;
 - the program options, each label followed by its value, except a flag, which
   is given alone when its value is not empty and left out otherwise.
 
-The command runs with `DEBASHER_MOD_DIR` taken from the program's `envVars`,
-detached, with its output in the run log, and the backend answers at once.
-Nothing in the web UI shows the run log; it is there for diagnosis by hand.
+The command runs with `DEBASHER_MOD_DIR` taken from the program's `envVars`, in
+a session of its own, with its output in the run log (see "A run that outlives
+the tab"). What `/run` does next depends on the scheduler:
+
+- With the built-in scheduler, `debasher_exec` is the scheduler of the run: it
+  launches each process once those it depends on have finished, and lives as
+  long as the run. `/run` starts it detached and answers at once. A program that
+  the engine refuses when it loads it shows only in the run log: the run phase
+  leaves `launching` for what the output directory held before (see "Future
+  work").
+- With Slurm, `debasher_exec` ends once it has submitted a job for each process,
+  with its dependencies, and the run goes on in Slurm. `/run` waits for it and
+  answers with its exit code and what it printed, which the frontend shows when
+  the launch fails.
+
+`--wait` is never given: with the built-in scheduler it changes nothing, and
+with Slurm it would keep `debasher_exec` alive for the whole run, only to wait.
+Beyond a failed launch with Slurm, nothing in the web UI shows the run log; it
+is there for diagnosis by hand.
 
 "Run program (debug)" runs `debasher_exec --debug`, which does everything but
 launch the processes, and "Check program options" runs it with
@@ -877,30 +891,45 @@ shows what they print.
 
 ## Following a run
 
-The frontend follows a run with two polls, both built on `debasher_status` on
-the output directory and both every five seconds. Polling is deliberate: the
-backend has nothing that could push a change, and the engine records state in
-files.
+The frontend follows a run by reading `debasher_status` on the output directory
+every five seconds, whenever the program has an output directory, whoever
+launched the run. Polling is deliberate: the backend has nothing that could push
+a change, and the engine records state in files.
 
-**The run phase** follows only a run that this tab launched. It goes from
-`running` to `finished` when `debasher_status` reports every process finished,
-and to `unfinished` when it reports neither finished nor in progress twice in
-a row: a single reading of that kind also happens in the short gap between one
-process ending and the next starting. The output of `debasher_status` from the
-last reading is kept, to show why the run did not finish. The run phase
-belongs to the tab: closing or reloading the tab, leaving the editor, or
-dismissing the indicator of a running run stops it with `debasher_stop` (see
-"Where the state lives").
+**The process statuses** come from each reading. The backend parses the
+per-process lines of `debasher_status` (`PROCESS: <name> ; STATUS: <status>`)
+and the canvas colors each canvas node by its process's status: `FINISHED`,
+`IN-PROGRESS`, `UNFINISHED`, `UNFINISHED_BUT_RUNNABLE` or `TO-DO`, and no color
+when there is nothing to report. A run in progress is defined from these
+statuses, not from the run phase, so the guards that depend on it (saving,
+resetting and changing the output directory) also hold for a run launched from
+another tab or from the command line.
 
-**The process statuses** are read whenever the program has an output
-directory, whoever launched the run. The backend parses the per-process lines
-of `debasher_status` (`PROCESS: <name> ; STATUS: <status>`) and the canvas
-colors each canvas node by its process's status: `FINISHED`, `IN-PROGRESS`,
-`UNFINISHED`, `UNFINISHED_BUT_RUNNABLE` or `TO-DO`, and no color when there is
-nothing to report. A run in progress is defined from these statuses, not from
-the run phase, so the guards that depend on it (saving, resetting and changing
-the output directory) also hold for a run launched from another tab or from
-the command line.
+**The run phase** is derived from the same readings, and from the requests of
+the tab not answered yet:
+
+- `idle`: no process has a status to report, since the output directory holds no
+  run.
+- `running`: at least one process is in progress.
+- `finished`: every process has finished.
+- `unfinished`: no process is in progress and not every one has finished, in two
+  readings in a row: a single reading of that kind also happens in the short gap
+  between one process ending and the next starting. After a stop of the tab, one
+  reading is enough, since no next process is about to start.
+- `launching`: from a launch of the tab until the first reading that shows a
+  process in progress, or two readings with none, when the run ended or failed
+  at once.
+- `stopping`: while a request of the tab to stop the program has not been
+  answered.
+
+The tab shows the run phase in an indicator on the canvas, whose Hide button
+hides it until the run phase changes and stops nothing. It shows `launching`,
+`running` and `stopping`, and `finished` and `unfinished` only when the tab saw
+the run end, going there from `launching` or `running`: a program opened with
+the results of an old run shows no indicator. With `unfinished` it shows the
+output of `debasher_status` of the last reading, to show why the run did not
+finish. While a request of the tab to launch or stop the program has not been
+answered, the Run menu offers no other action on it.
 
 ## Inspecting a process
 
@@ -933,11 +962,11 @@ have to change with them.
 `--mirror`. It reads the mirror log with `debasher_get_fifo_mirror` every two
 seconds, and so never takes anything from the FIFO's real reader.
 
-**Talk to FIFOs** lets a person act as the other end of the unconnected FIFOs
-of a running program: write a line into an input, or read a line from an
-output. It is only offered while this tab's run is running, and only for
-unconnected FIFOs, since reading a FIFO that another process also reads would
-steal its data. The backend finds the FIFO by the engine's convention,
+**Talk to FIFOs** lets a person act as the other end of the unconnected FIFOs of
+a running program: write a line into an input, or read a line from an output. It
+is only offered while there is a run in progress, and only for unconnected
+FIFOs, since reading a FIFO that another process also reads would steal its
+data. The backend finds the FIFO by the engine's convention,
 `__fifos__/<process>/<fifo name>`, and bounds each attempt to eight seconds,
 because opening a FIFO blocks until the other end is open: a write that times
 out means that no process is reading; a read that times out only means that
@@ -945,21 +974,90 @@ nothing has been written yet, and the frontend tries again.
 
 ## Stopping
 
-"Stop program" runs `debasher_stop` on the output directory, and "Stop
-process", in the context menu of a canvas node, runs it for that one process.
+"Stop program" runs `debasher_stop` on the output directory, and "Stop process",
+in the context menu of a canvas node, runs it for that one process. Both run in
+a session of their own, with their output in a temporary file (see "A run that
+outlives the tab"), and the run phase is `stopping` until "Stop program" is
+answered.
+
+## A run that outlives the tab
+
+A run of a general program may last days, and a resident program is meant to
+live until it is stopped. A run therefore lives in its output directory, not in
+the tab that launched it, and once it is launched it depends on the backend for
+nothing. This subsection says what happens to a run when the tab or the backend
+goes away and comes back.
+
+**The tab.** Nothing that happens to a tab stops a run: closing or reloading it,
+leaving the editor, or hiding the indicator of the run. Only "Stop program"
+stops it, and "Stop process" one of its processes, besides the actions that stop
+a resident program (see "Running a resident program"). The tab asks nothing when
+it is closed: the browser shows only a generic warning, which could not say that
+the run goes on, and would show it every time.
+
+Leaving the editor while there is a run in progress shows a short notice, which
+blocks nothing: the run goes on in its output directory, and is followed or
+stopped by opening its program again. This is the only moment at which the web
+UI can say where the run lives. The backend keeps no record of it, and the home
+screen cannot list the runs in progress, since it does not know which output
+directories exist. A run is found again by loading its program from its home
+directory: its program metadata holds its output directory, and its run phase
+comes from the process statuses of that directory.
+
+A request of the tab that is still pending when the tab goes away, to launch or
+to stop a run, goes on in the backend to its end. The tab loses the answer, and
+whichever tab opens the program next sees the result in the process statuses.
+
+**The backend.** What the backend has to ensure is that nothing it starts dies
+with it, or in the middle of what it was doing. Two things could make it so.
+Without a session of its own, what the backend starts would belong to the
+session of the server, even if the built-in scheduler puts each process in a
+process group of its own, and a signal that stops the server, from its terminal
+for example, would reach it: a `debasher_exec` of the built-in scheduler killed
+that way would leave every process that it had not launched yet unlaunched, and
+the run cut in the middle. And a tool whose output goes into a pipe read by the
+backend dies of `SIGPIPE` at its next line once the backend is gone.
+
+So every tool that launches or stops a run runs in a session of its own and
+writes into a file, never into a pipe: `debasher_exec` into the run log, and
+`debasher_stop` into a temporary file of its own, which the backend reads when
+the tool ends and then deletes (two tabs may run it at the same time). With the
+built-in scheduler, whatever the run launches inherits the session of
+`debasher_exec`, away from the server; with Slurm, the jobs run in Slurm. The
+tools of a resident program follow the same rule (see "A program that outlives
+the tab").
+
+A request that the backend does not finish, because it went away in the middle,
+still reaches its end in the tool; only its answer is lost. A launch goes on, a
+stop ends with the run stopped, and a temporary file that the backend did not
+delete stays in the temporary directory of the system, with no other effect.
+When the backend comes back there is nothing to recover, since it keeps no
+state: the next reading of the process statuses shows the run as it is.
+
+**What is not guaranteed.**
+
+- **A restart of the machine.** Every process of a run of the built-in scheduler
+  dies with it, `debasher_exec` included, and nothing launches the run again
+  when the machine starts. A run in Slurm follows the rules of Slurm.
+- **Being told that a run ended.** A run that ends while no tab follows it is
+  reported to no one; the next tab that opens its program sees it in the process
+  statuses.
+- **A list of the runs in progress.** A run is found by loading its program from
+  its home directory; the web UI keeps no record of the runs it launched, since
+  the backend keeps no state.
 
 # Frontend state and the canvas
 
 ## Screens and the store
 
-The frontend has two screens: the home screen, which creates, loads or imports
-a program, and the editor. Opening a program in the editor creates a store
-with it (`ProgramProvider` in `store/ProgramContext.tsx`), and leaving the
-editor discards the store, stopping a run launched from it (see "Where the
-state lives"). The store holds the program, the selected process, the run
-phase with the last output of `debasher_status`, and the process statuses,
-from which it derives whether there is a run in progress. The dialogs edit a
-draft of their own and hand it to the store only when the user accepts it.
+The frontend has two screens: the home screen, which creates, loads or imports a
+program, and the editor. Opening a program in the editor creates a store with it
+(`ProgramProvider` in `store/ProgramContext.tsx`), and leaving the editor
+discards the store, which stops nothing (see "A run that outlives the tab"). The
+store holds the program, the selected process, the run phase with the last
+output of `debasher_status`, and the process statuses, from which it derives
+whether there is a run in progress. The dialogs edit a draft of their own and
+hand it to the store only when the user accepts it.
 
 Every change to the program goes through an operation of the store
 (`addProcess`, `connect`, `updateOption`, ...), and every operation passes its
@@ -1082,9 +1180,13 @@ non-goals of a resident program".
 
 - **One run per output directory.** A run is not launched on an output
   directory with a run in progress.
-- **A run launched from a tab does not outlive the tab.** Closing or reloading
-  the tab, leaving the editor, or dismissing the indicator of the run stops
-  it.
+- **Nothing that happens to a tab or to the backend stops a run, or cuts a tool
+  in the middle.** A run is stopped only with "Stop program" or "Stop process",
+  and every tool that launches or stops it runs in a session of its own and
+  writes into a file (see "A run that outlives the tab").
+- **A failed launch with Slurm is reported at once.** `/run` waits for
+  `debasher_exec`, which ends once the jobs are submitted, and shows what it
+  printed (see "Launching a run").
 - **Any run is observed.** The process statuses, and the guards that depend on
   them, cover a run launched from another tab or from the command line.
 - **Watching a FIFO takes nothing from it.** "Watch FIFO" reads the FIFO
@@ -1106,6 +1208,9 @@ non-goals of a resident program".
   before unsaved changes are lost.
 - **Live updates.** The web UI learns what happens in a run by polling, every
   few seconds, not by being told.
+- **Being told that a run ended, or a list of the runs in progress.** A run is
+  found, and its end seen, by opening its program (see "A run that outlives the
+  tab").
 - **Importing any module faithfully.** Import recognizes a closed grammar, and
   keeps the rest as it is rather than trying to understand it (see "What the
   round trip preserves").
@@ -1582,7 +1687,6 @@ waiting for any. The command changes accordingly:
 
 - `--sched BUILTIN` always, since the engine refuses any other scheduler, and
   the execution options offer no choice of scheduler;
-- no `--wait`, which does nothing with the built-in scheduler;
 - `--builtinsched-cpus` and `--builtinsched-mem` as for a general program: the
   engine refuses the launch, before starting any process, when the processes
   do not all fit in them at once;
@@ -1596,14 +1700,14 @@ waiting for any. The command changes accordingly:
   give them today (see "Future work" in `doc/design_doc_resident.md`).
 
 **The launch within the request.** Since `debasher_exec` ends as soon as every
-process is launched, `/run` waits for it, instead of starting it detached, and
-answers with its exit code and what it printed, which the frontend shows when
-the launch fails. A program that the engine refuses when it loads it, such as a
-node that no initiator reaches, is thus reported at once, as "Run program
-(debug)" reports it, and not only in the run log. The output of
-`debasher_exec` still goes to the run log, a file, and the backend reads it
-once `debasher_exec` ends: a pipe would be inherited by the processes it
-launches, and the request would wait for them.
+process is launched, `/run` waits for it, as for a general program with Slurm,
+and answers with its exit code and what it printed, which the frontend shows
+when the launch fails. A program that the engine refuses when it loads it, such
+as a node that no initiator reaches, is thus reported at once, as "Run program
+(debug)" reports it, and not only in the run log. The output of `debasher_exec`
+still goes to the run log, a file, and the backend reads it once `debasher_exec`
+ends: a pipe would be inherited by the processes it launches, and the request
+would wait for them.
 
 **The launch record at launch time.** `/run` goes through these steps:
 
@@ -1772,14 +1876,12 @@ that is resumed needs.
   round did not close.
 
 **The run phase of a resident program.** The run phase of a general program
-follows only a run launched from the tab, and becomes `finished` once every
-process has finished. Neither holds for a resident program. After an orderly
-stop every node has ended cleanly, and `debasher_status` reports every process
-finished, although the program has not finished but stopped, and resumes at
-the next launch. And a program that outlives the tab has to show as alive to
-any tab that opens it. The run phase of a resident program is therefore
-derived from the process statuses, which are read whoever launched the program
-(see "Following a run"), and takes these values:
+becomes `finished` once every process has finished (see "Following a run"). That
+does not fit a resident program: after an orderly stop every node has ended
+cleanly, and `debasher_status` reports every process finished, although the
+program has not finished but stopped, and resumes at the next launch. The run
+phase of a resident program is therefore derived from the same readings, whoever
+launched the program, with values of its own:
 
 - `new`: there is no program state in the output directory, and the next
   launch starts every node afresh.
@@ -1793,7 +1895,7 @@ derived from the process statuses, which are read whoever launched the program
   that failed in a program without a `Supervisor`. The user thus knows,
   before launching it again, whether the program may have lost something
   when it stopped.
-- `launching` and `stopping`: while a request of this tab to launch the
+- `launching` and `stopping`: while a request of the tab to launch the
   program, or to stop or kill it, has not been answered.
 
 A program may stop with no action of the web UI, when its `Supervisor` gives up
@@ -1810,7 +1912,8 @@ which actions are offered only while the program is `live`: "Stop program",
 "Kill program", "Restart node", "Relaunch node" and "Take snapshot", while
 "Reset program state" is offered only while it is `stopped`. What the tab does
 with a live program when it is closed, reloaded or leaves the editor is in "A
-program that outlives the tab".
+run that outlives the tab", and what a resident program adds to it in "A program
+that outlives the tab".
 
 ## Observing and talking to a live program
 
@@ -1958,74 +2061,39 @@ until the node fails; "Show node state" shows the backlog growing.
 
 ## A program that outlives the tab
 
+*Built.*
+
 A resident program is meant to live longer than any tab that follows it, and
-longer than the backend that launched it. The rule that a tab stops the run it
-launched (see "Where the state lives") holds for general programs only. This
-subsection says what replaces it, and what happens to a live program when the
-tab or the backend goes away and comes back.
+longer than the backend that launched it. The rules of "A run that outlives the
+tab" hold for it unchanged; this subsection says what a resident program adds to
+them.
 
-**The tab.** Nothing that happens to a tab stops a resident program: closing or
-reloading it, leaving the editor, or dismissing the indicator of the program.
-Only "Stop program", "Kill program" and the escalation of the `Supervisor` stop
-it (see "Running a resident program"). The tab asks nothing when it is closed:
-the browser shows only a generic warning, which could not say that the program
-goes on, and would show it every time, when going on is what a resident
-program is for.
-
-Leaving the editor while the program is `live` shows a short notice, which
-blocks nothing: the program goes on in its output directory, and is stopped by
-opening it again and using "Stop program". This is the only moment at which the
-web UI can say where the program lives. The backend keeps no record of it, and
-the home screen cannot list the live programs, since it does not know which
-output directories exist. A program is found again by loading it from its home
-directory: its program metadata holds its output directory, and its run phase
-comes from the process statuses of that directory.
-
-A request of the tab that is still pending when the tab goes away, to launch
-or to stop the program, goes on in the backend to its end. The tab loses the
-answer, and whichever tab opens the program next sees the result in the process
-statuses.
+**The tab.** Besides "Stop program", "Kill program" and the escalation of the
+`Supervisor` also stop the program (see "Running a resident program"). The
+notice shown when leaving the editor speaks of a program that is `live`.
 
 **The backend.** A live program depends on the backend for nothing: once
 `debasher_exec` has ended, its nodes, its `Supervisor` and the periodic
-`debasher_snapshot_resident` run on their own. What the backend has to ensure
-is that nothing it starts dies with it, or in the middle of what it was doing.
-Two things could make it so. What the backend starts belongs to the session of
-the server, even if the built-in scheduler puts each process in a process group
-of its own, and a signal that stops the server, from its terminal for example,
-could reach it. And a tool whose output goes into a pipe read by the backend
-dies of `SIGPIPE` at its next line once the backend is gone: an orderly stop cut
-that way could leave the `Supervisor` stopped and the nodes alive, with nobody
-to relaunch them.
+`debasher_snapshot_resident` run on their own. Every tool that acts on it
+(`debasher_exec`, `debasher_stop_resident`, `debasher_stop`,
+`debasher_launch_process` and `debasher_snapshot_resident`, once or with
+`--every`) runs in a session of its own, as the batch runs of a
+`ProgramLauncher` do, and writes into a file, never into a pipe: `debasher_exec`
+into the run log, the periodic snapshots into the snapshot log, and the stop,
+the hard kill, a relaunch and a single snapshot into a temporary file of their
+own. An orderly stop cut by the backend going away could otherwise leave the
+`Supervisor` stopped and the nodes alive, with nobody to relaunch them. Whatever
+the program launches later, the relaunches of the `Supervisor` included,
+inherits the session of `debasher_exec`, and a node that the web UI relaunches
+that of its `debasher_launch_process`, both away from the server.
 
-So every tool that acts on a live resident program (`debasher_exec`,
-`debasher_stop_resident`, `debasher_stop`, `debasher_launch_process` and
-`debasher_snapshot_resident`, once or with `--every`) runs in a session of its
-own, as the batch runs of a `ProgramLauncher` do, and writes into a file, never
-into a pipe: `debasher_exec` into the run log, the periodic snapshots into the
-snapshot log, and the stop, the hard kill, a relaunch and a single snapshot into
-a temporary file of their own, since two tabs may run them at the same time,
-which the backend reads when the tool ends and then deletes. Whatever the
-program launches later, the relaunches of the `Supervisor` included, inherits
-the session of `debasher_exec`, and a node that the web UI relaunches that of
-its `debasher_launch_process`, both away from the server.
-
-A request that the backend does not finish, because it went away in the
-middle, still reaches its end in the tool; only its answer is lost:
+A request that the backend does not finish still reaches its end in the tool, as
+for a general program, and two of them leave more than the answer behind:
 
 - a launch ends, but its launch record is not written, and the next launch
-  compares the program with the record left before it, which errs on the
-  side of asking (see "Running a resident program");
-- a stop ends with the program stopped, which the run phase shows once the
-  backend is back;
-- a round of "Take snapshot" closes or not, which "Show node state" shows;
-- a temporary file that the backend did not delete stays in the temporary
-  directory of the system, with no other effect.
-
-When the backend comes back there is nothing to recover, since it keeps no
-state: the next reading of the process statuses shows the program as it is.
-General programs keep their own rule: they are stopped with their tab, and
-nothing of this applies to them.
+  compares the program with the record left before it, which errs on the side of
+  asking (see "Running a resident program");
+- a round of "Take snapshot" closes or not, which "Show node state" shows.
 
 **Opening a live program again.** A tab opens a live program by loading it
 from its home directory, like any program: its program metadata gives the
@@ -2051,21 +2119,16 @@ at the same time, or an orderly stop and "Restart node", are not coordinated by
 the web UI; a single orderly stop for each output directory is left to the
 engine (see "Future work" in `doc/design_doc_resident.md`).
 
-**What is not guaranteed.**
+**What is not guaranteed**, besides what "A run that outlives the tab" says:
 
-- **A restart of the machine.** Every process of the program dies with it, and
-  nothing launches the program again when the machine starts. The program then
-  shows as stopped abruptly, since its processes did not end, and "Run program"
-  resumes it. As after a hard kill, what the pipes held is lost, which the nodes
-  that read them report as a gap in the sequence numbers. Starting resident
-  programs with the machine would need mechanisms of the operating system that
-  are not portable.
+- **A restart of the machine.** The program then shows as stopped abruptly,
+  since its processes did not end, and "Run program" resumes it. As after a
+  hard kill, what the pipes held is lost, which the nodes that read them report
+  as a gap in the sequence numbers. Starting resident programs with the machine
+  would need mechanisms of the operating system that are not portable.
 - **Being told that the program stopped.** A program that stops by itself, when
   its `Supervisor` gives up on a node, while no tab follows it, is not reported
   to anyone. The next tab that opens it sees it in its run phase.
-- **A list of the live programs.** A live program is found by loading it from
-  its home directory; the web UI keeps no record of the programs it launched,
-  since the backend keeps no state.
 - **A `Supervisor` that nothing supervises.** If the `Supervisor` dies, its
   canvas node shows `UNFINISHED`, and the web UI does not relaunch it: the
   program goes on without relaunches until its next stop, as the failure model
@@ -2356,6 +2419,12 @@ too.
   batch run on the canvas, colored by the statuses of its processes. The
   general program may not have been made with the web UI, and opening it must
   not write into its directory.
+- **A refused launch with the built-in scheduler.** Reporting at once a program
+  that the engine refuses when it loads it, when the built-in scheduler runs it.
+  `debasher_exec` is started detached there, since it lives as long as the run,
+  so the refusal shows only in the run log, and the run phase leaves `launching`
+  for what the output directory held before, which may be the end of an earlier
+  run.
 - **Restarting one task of a node.** "Restart node" on a single task of an
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.

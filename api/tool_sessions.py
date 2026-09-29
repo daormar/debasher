@@ -1,7 +1,8 @@
 """
-Running an engine tool that acts on a live resident program (see "A program
-that outlives the tab" in doc/design_doc_webui.md), so that nothing that
-happens to the backend stops the program or cuts the tool in the middle.
+Running an engine tool that launches or stops a run, or acts on a live
+resident program (see "A run that outlives the tab" in
+doc/design_doc_webui.md), so that nothing that happens to the backend stops
+the run or cuts the tool in the middle.
 
 The tool runs in a session of its own: a signal meant for the server, such
 as the interrupt of its terminal, reaches neither the tool nor what the tool

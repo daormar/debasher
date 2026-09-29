@@ -174,12 +174,12 @@ def _run_debasher_dir_tool_in_own_session(
     program: Program, tool_name: str, extra_args: list[str] | None = None
 ) -> tuple[str, int]:
     """
-    Run a DeBasher bin tool that takes "-d <outputDir>" and acts on a live
-    resident program (debasher_stop_resident, debasher_stop,
-    debasher_snapshot_resident), in a session
-    of its own and with its output in a temporary file, so that the backend
-    going away cannot cut it in the middle. `extra_args` follow "-d
-    <outputDir>". Returns (output, exit code).
+    Run a DeBasher bin tool that takes "-d <outputDir>" and acts on a run
+    (debasher_stop, debasher_stop_resident, debasher_snapshot_resident,
+    debasher_reset_resident), in a session of its own and with its output in
+    a temporary file, so that the backend going away cannot cut it in the
+    middle. `extra_args` follow "-d <outputDir>". Returns (output, exit
+    code).
     """
     tool = paths.find_bin_tool(tool_name)
     if tool is None:
@@ -301,9 +301,9 @@ def list_schedulers() -> ListSchedulersResponse:
 
 class RunProgramResponse(BaseModel):
     started: bool
-    # Only for a resident program, whose launch /run waits for: the exit
-    # code of debasher_exec and what it printed, capped at
-    # MAX_INSPECT_LINES lines.
+    # Only for a launch that /run waits for, that of a resident program or of
+    # a program run by Slurm: the exit code of debasher_exec and what it
+    # printed, capped at MAX_INSPECT_LINES lines.
     exitCode: int | None = None
     output: str | None = None
 
@@ -352,23 +352,32 @@ def _start_periodic_snapshots(program: Program, period: str) -> None:
     )
 
 
-def _launch_resident_program(command: list[str], program: Program) -> RunProgramResponse:
+def _launch_and_wait(command: list[str], program: Program) -> RunProgramResponse:
     """
-    Run debasher_exec on a resident program to its end, which comes as soon
-    as every process is launched, so that a launch that the engine refuses
-    is reported at once. It runs in a session of its own and writes into the
-    run log, which is read once it ends: a pipe would be inherited by the
-    processes it launches, and waiting for its end would mean waiting for
-    theirs. Once it has ended with 0, the periodic snapshots start, when the
-    program has a period for them.
+    Run debasher_exec to its end, which comes as soon as every process is
+    launched (a resident program) or submitted (Slurm), so that a launch that
+    the engine refuses is reported at once. It runs in a session of its own
+    and writes into the run log, which is read once it ends: a pipe would be
+    inherited by the processes it launches, and waiting for its end would
+    mean waiting for theirs.
     """
-    period = _snapshot_period(program)
-
     log_path = _run_log_path(program)
     exit_code = tool_sessions.run_in_own_session(command, _debasher_env(program), log_path)
     output = _cap_lines(log_path.read_text(errors="replace"))
+    return RunProgramResponse(started=exit_code == 0, exitCode=exit_code, output=output)
 
-    if exit_code == 0:
+
+def _launch_resident_program(command: list[str], program: Program) -> RunProgramResponse:
+    """
+    Launch a resident program, waiting for debasher_exec. Once it has ended
+    with 0, the launch record is written, and the periodic snapshots start,
+    when the program has a period for them.
+    """
+    period = _snapshot_period(program)
+
+    response = _launch_and_wait(command, program)
+
+    if response.exitCode == 0:
         # Only a launch that ended well leaves its record: after a failed
         # one, the program state may still be that of the previous record,
         # which has to stay so that the next launch asks again.
@@ -376,7 +385,7 @@ def _launch_resident_program(command: list[str], program: Program) -> RunProgram
         if period is not None:
             _start_periodic_snapshots(program, period)
 
-    return RunProgramResponse(started=exit_code == 0, exitCode=exit_code, output=output)
+    return response
 
 
 class LaunchCheckResponse(BaseModel):
@@ -419,11 +428,12 @@ LAUNCH_RECORD_CONFLICT = "launch-record"
 @router.post("/run", response_model=RunProgramResponse)
 def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProgramResponse:
     """
-    Launch a program run. A general program runs with debasher_exec
-    --wait in the background, and this returns immediately: poll /status
-    to find out when it's done. A resident program is launched with
-    debasher_exec in oneshot mode, and this returns once it has ended,
-    with its exit code and output.
+    Launch a program run, with debasher_exec in a session of its own. A
+    general program run by the built-in scheduler is started in the
+    background, and this returns immediately: the process statuses tell
+    when it's done. With Slurm, and for a resident program, launched with
+    debasher_exec in oneshot mode, this returns once debasher_exec has
+    ended, with its exit code and output.
 
     A resident program whose output directory holds program state, and that
     differs from the launch record or has none, is refused with a conflict
@@ -447,24 +457,22 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
                 detail={"code": LAUNCH_RECORD_CONFLICT, "hasLaunchRecord": check.hasLaunchRecord},
             )
 
-    command = _prepare_debasher_exec_command(
-        program, None if _is_resident(program) else "--wait"
-    )
+    # No --wait: with the built-in scheduler it changes nothing, and with
+    # Slurm it would keep debasher_exec alive for the whole run, only to wait.
+    command = _prepare_debasher_exec_command(program, None)
     if command is None:
         raise HTTPException(status_code=500, detail="debasher_exec tool not found.")
 
     if _is_resident(program):
         return _launch_resident_program(command, program)
 
-    log_path = _run_log_path(program)
+    if program.executionOptions.scheduler != "BUILTIN":
+        return _launch_and_wait(command, program)
 
-    with open(log_path, "w") as log_file:
-        subprocess.Popen(
-            command,
-            env=_debasher_env(program),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-        )
+    # With the built-in scheduler, debasher_exec is the scheduler of the run
+    # and lives as long as it: it is started detached, in a session of its
+    # own, so that a signal that stops the server does not cut the run.
+    tool_sessions.start_detached(command, _debasher_env(program), _run_log_path(program))
 
     return RunProgramResponse(started=True)
 
@@ -497,6 +505,8 @@ def get_program_status(program: Program) -> ProgramStatusResponse:
 
 class ProcessStatusesResponse(BaseModel):
     statuses: dict[str, str]
+    # What debasher_status printed, shown when a run did not finish.
+    output: str = ""
     # Only for a resident program: whether its output directory holds
     # program state, which the next launch resumes; false otherwise.
     hasProgramState: bool = False
@@ -516,6 +526,7 @@ def get_process_statuses(program: Program) -> ProcessStatusesResponse:
     output, _ = _run_debasher_dir_tool(program, "debasher_status")
     return ProcessStatusesResponse(
         statuses=_parse_process_statuses(output),
+        output=output,
         hasProgramState=_is_resident(program) and program_state.has_program_state(program.outputDir),
     )
 
@@ -857,7 +868,7 @@ def check_program_options(program: Program) -> CheckProgramOptionsResponse:
 
 class StopProgramResponse(BaseModel):
     output: str
-    # Only for a resident program: the exit code of the tool, which tells an
+    # The exit code of the tool, which for a resident program tells an
     # orderly stop from one that fell back to the hard kill.
     exitCode: int | None = None
 
@@ -872,12 +883,9 @@ def stop_program(program: Program) -> StopProgramResponse:
     falls back to the hard kill of debasher_stop when the round does not
     close in time (exit code 2).
     """
-    if _is_resident(program):
-        output, exit_code = _run_debasher_dir_tool_in_own_session(program, "debasher_stop_resident")
-        return StopProgramResponse(output=output, exitCode=exit_code)
-
-    output, _ = _run_debasher_dir_tool(program, "debasher_stop")
-    return StopProgramResponse(output=output)
+    tool = "debasher_stop_resident" if _is_resident(program) else "debasher_stop"
+    output, exit_code = _run_debasher_dir_tool_in_own_session(program, tool)
+    return StopProgramResponse(output=output, exitCode=exit_code)
 
 
 @router.post("/kill", response_model=StopProgramResponse)
@@ -900,10 +908,11 @@ class StopProcessRequest(BaseModel):
 def stop_process(request: StopProcessRequest) -> ProcessOutputResponse:
     """
     Stop a single process (debasher_stop -d <outputDir> -p <processName>),
-    for the canvas's right-click "Stop process" action.
+    for the canvas's right-click "Stop process" action, in a session of its
+    own.
     """
-    output = _run_debasher_process_tool(
-        request.program, "debasher_stop", request.processName
+    output, _ = _run_debasher_dir_tool_in_own_session(
+        request.program, "debasher_stop", ["-p", request.processName]
     )
     return ProcessOutputResponse(output=output)
 

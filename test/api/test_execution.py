@@ -181,10 +181,10 @@ def _flags(command):
 # --- the command --------------------------------------------------------------
 
 
-def test_a_general_program_is_given_every_execution_option_and_waited_for(tmp_path):
+def test_a_general_program_is_given_every_execution_option(tmp_path):
     program = _general(tmp_path, executionOptions=_ALL_EXECUTION_OPTIONS, programOptions={"-n": "3"})
 
-    command = execution._prepare_debasher_exec_command(program, "--wait")
+    command = execution._prepare_debasher_exec_command(program, None)
 
     assert _flags(command) == [
         "--sched", "SLURM",
@@ -195,7 +195,6 @@ def test_a_general_program_is_given_every_execution_option_and_waited_for(tmp_pa
         "--rerun-outdated-procs",
         "--conda-support",
         "--docker-support",
-        "--wait",
         "-n", "3",
     ]
 
@@ -867,3 +866,56 @@ def test_a_resumed_program_is_compared_with_its_launch_record(tmp_path):
         assert refused.value.status_code == 409
     finally:
         _hard_kill(program)
+
+
+# --- a general run that outlives the tab ------------------------------------------
+
+# A stand-in for debasher_exec that says in which session it runs and with
+# which arguments, and then lives a while, as the built-in scheduler does.
+_REPORT_AND_LIVE = (
+    'python3 -c "import os; print(os.getsid(0))" > "$(dirname "$0")/session"\n'
+    'echo "$*" > "$(dirname "$0")/args"\n'
+    "sleep 30\n"
+)
+
+
+def test_a_general_run_of_the_built_in_scheduler_is_started_detached_in_its_own_session(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, _REPORT_AND_LIVE)
+    program = _general(tmp_path)
+
+    started_at = time.monotonic()
+    response = execution.run_program(program)
+
+    try:
+        assert time.monotonic() - started_at < 10
+        assert response.started is True and response.exitCode is None
+        assert _wait_for_text(tmp_path / "args", "--sched BUILTIN")
+        assert "--wait" not in (tmp_path / "args").read_text()
+        assert _wait_for_text(tmp_path / "session", "")
+        assert int((tmp_path / "session").read_text()) != os.getsid(0)
+    finally:
+        subprocess.run(["pkill", "-f", str(tmp_path / "debasher_exec")])
+
+
+def test_a_general_run_by_slurm_is_waited_for_and_its_failure_reported(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, 'echo "sbatch refused: $*"\nexit 1')
+    program = _general(tmp_path, executionOptions=ExecutionOptions(scheduler="SLURM"))
+
+    response = execution.run_program(program)
+
+    assert response.started is False
+    assert response.exitCode == 1
+    assert response.output.startswith("sbatch refused: --pfile")
+    assert "--wait" not in response.output
+
+
+def test_stopping_a_general_run_reports_the_exit_code_of_the_tool(tmp_path, monkeypatch):
+    tool = tmp_path / "debasher_stop"
+    tool.write_text('#!/bin/sh\necho "stopped $*"\n')
+    tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setattr(paths, "find_bin_tool", lambda name: tool if name == "debasher_stop" else None)
+
+    response = execution.stop_program(_general(tmp_path))
+
+    assert response.exitCode == 0
+    assert response.output == f"stopped -d {tmp_path / 'out'}\n"

@@ -165,6 +165,8 @@ export interface ProcessStatusesResult {
   // Only for a resident program: whether its output directory holds
   // program state, which the next launch resumes. False otherwise.
   hasProgramState: boolean;
+  // What debasher_status printed, shown when a run did not finish.
+  output: string;
 }
 
 // Used to color nodes in the canvas, see ProgramContext's status polling
@@ -181,8 +183,8 @@ export async function getProcessStatuses(program: Program): Promise<ProcessStatu
     throw new Error(`Failed to get process statuses (${response.status})`);
   }
 
-  const { statuses, hasProgramState } = await response.json();
-  return { statuses, hasProgramState: hasProgramState ?? false };
+  const { statuses, hasProgramState, output } = await response.json();
+  return { statuses, hasProgramState: hasProgramState ?? false, output: output ?? "" };
 }
 
 async function fetchProcessOutput(
@@ -470,20 +472,6 @@ export async function resetProgramState(
   return response.json();
 }
 
-export async function stopProgram(program: Program): Promise<string> {
-  const response = await fetch("/api/execution/stop", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(program),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to stop program (${response.status})`);
-  }
-
-  const { output } = await response.json();
-  return output;
-}
 
 export interface StopResult {
   output: string;
@@ -505,11 +493,12 @@ async function postStop(endpoint: string, program: Program, fallback: string): P
   return { output, exitCode: exitCode ?? null };
 }
 
-// The orderly stop of a resident program (debasher_stop_resident), which
-// resolves once the program has stopped, up to about the timeout of the
-// tool: exit code 0 for an orderly stop, 2 for one that fell back to the
-// hard kill, 1 for an error of usage or setup.
-export async function stopResidentProgram(program: Program): Promise<StopResult> {
+// "Stop program": debasher_stop on a general program, and the orderly stop
+// of a resident program (debasher_stop_resident), which resolves once the
+// program has stopped, up to about the timeout of the tool: exit code 0 for
+// an orderly stop, 2 for one that fell back to the hard kill, 1 for an error
+// of usage or setup.
+export async function stopProgram(program: Program): Promise<StopResult> {
   return postStop("/api/execution/stop", program, "Failed to stop program");
 }
 
