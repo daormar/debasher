@@ -1,6 +1,7 @@
 import type { ComputationalSpecs, OptionsHandler, ProgramProcess } from "./process";
 import type { OptionValueSource, ProgramOption } from "./option";
-import { optionValueSource } from "./option";
+import { getCommandLineOptions, optionValueSource } from "./option";
+import type { Program } from "./program";
 
 // The node kinds of a resident program: the classes of the engine's runtime
 // library with the same names (see doc/design_doc_resident.md). A program
@@ -298,6 +299,24 @@ export const RESIDENT_SPEC_LABELS: Record<ResidentSpecField, string> = {
 
 export function hasSupervisor(processes: ProgramProcess[]): boolean {
   return processes.some(process => process.nodeKind === "Supervisor");
+}
+
+/**
+ * The command line options that "Set program options" offers: those of the
+ * processes and, in a resident program with a Supervisor, its flag
+ * -no-hold-fifos, which the program model does not hold, so that each run
+ * can choose whether the Supervisor holds the business channels.
+ */
+export function programCommandLineOptions(
+  program: Pick<Program, "programType" | "processes">
+): ProgramOption[] {
+
+  const options = getCommandLineOptions(program.processes);
+
+  return program.programType === "resident" && hasSupervisor(program.processes)
+    ? [...options, noHoldFifosOption()]
+    : options;
+
 }
 
 /**

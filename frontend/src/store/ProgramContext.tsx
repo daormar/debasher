@@ -29,7 +29,7 @@ import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
 import { emptyNodeCode, hasSupervisor } from "../models/node";
 import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 import { saveProgram } from "../storage/programStorage";
-import type { ProgramStatusResult } from "../api/executionApi";
+import type { ProgramStatusResult, RunProgramResult } from "../api/executionApi";
 import {
   fetchProgramStatus,
   getProcessStatuses,
@@ -95,8 +95,10 @@ interface ProgramContextType {
   // Launches "Run program" in the background; throws (e.g. if a run
   // is already in progress) rather than resolving with an error, so
   // callers can show it inline. Resolves once the run has launched,
-  // not once it's finished; see runPhase for that.
-  startProgramRun: () => Promise<void>;
+  // not once it's finished; see runPhase for that. A resident program
+  // resolves with the exit code of its launch and what it printed, and
+  // its run is not followed by runPhase, nor stopped with the tab.
+  startProgramRun: () => Promise<RunProgramResult>;
 
   // The running-progress indicator's Close button: stops the run if
   // it's still going, otherwise just dismisses the finished/unfinished
@@ -558,8 +560,13 @@ export function ProgramProvider({
       throw new Error("A run is already in progress for this output directory.");
     }
 
-    await runProgram(program);
-    startRunPolling(program);
+    const result = await runProgram(program);
+
+    if (program.programType !== "resident") {
+      startRunPolling(program);
+    }
+
+    return result;
 
   }
 

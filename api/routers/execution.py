@@ -9,8 +9,9 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import file_inspection, paths, persistence
+from .. import file_inspection, paths, persistence, tool_sessions
 from ..models import Program
+from ..resident_supervisor_wiring import NO_HOLD_FIFOS_LABEL
 
 router = APIRouter(prefix="/api/execution", tags=["execution"])
 
@@ -43,22 +44,68 @@ def _debasher_env(program: Program) -> dict[str, str]:
     return env
 
 
+def _is_resident(program: Program) -> bool:
+    return program.programType == "resident"
+
+
 def _command_line_option_types(program: Program) -> dict[str, str]:
     types: dict[str, str] = {}
     for process in program.processes:
         for option in process.options:
             if option.commandLine and option.label not in types:
                 types[option.label] = option.dataType
+    # The flag of the Supervisor is not in the program model: script
+    # generation writes it with the rest of the Supervisor.
+    if _is_resident(program) and any(p.nodeKind == "Supervisor" for p in program.processes):
+        types.setdefault(NO_HOLD_FIFOS_LABEL, "None")
     return types
 
 
-def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str] | None:
+def _execution_option_flags(program: Program) -> list[str]:
+    """
+    The debasher_exec flags of the execution options. The engine forces the
+    built-in scheduler in oneshot mode on a resident program, and refuses
+    any other scheduler, so a resident program is given only the limits of
+    the built-in scheduler: every other flag is either meant for the Slurm
+    scheduler or for general programs, or would keep some task of a node
+    from running at once.
+    """
+    exec_opts = program.executionOptions
+
+    if _is_resident(program):
+        flags = ["--sched", "BUILTIN"]
+    else:
+        flags = ["--sched", exec_opts.scheduler]
+
+    if exec_opts.builtinSchedCpus:
+        flags += ["--builtinsched-cpus", exec_opts.builtinSchedCpus]
+    if exec_opts.builtinSchedMem:
+        flags += ["--builtinsched-mem", exec_opts.builtinSchedMem]
+
+    if _is_resident(program):
+        return flags
+
+    if exec_opts.dfltNodes:
+        flags += ["--dflt-nodes", exec_opts.dfltNodes]
+    if exec_opts.dfltThrottle:
+        flags += ["--dflt-throttle", exec_opts.dfltThrottle]
+    if exec_opts.rerunOutdatedProcs:
+        flags.append("--rerun-outdated-procs")
+    if exec_opts.condaSupport:
+        flags.append("--conda-support")
+    if exec_opts.dockerSupport:
+        flags.append("--docker-support")
+
+    return flags
+
+
+def _prepare_debasher_exec_command(program: Program, mode_flag: str | None) -> list[str] | None:
     """
     Save `program` to its home directory (the same as pressing "Save"
     in the toolbar, generating its .sh file there) and build the
     debasher_exec command line for it, passing the scheduler, the run
-    output directory, and the command line options set via "Set
-    program options".
+    output directory, the other execution options, `mode_flag` when
+    given, and the command line options set via "Set program options".
 
     Returns None if debasher_exec isn't found.
     """
@@ -73,26 +120,11 @@ def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str
         str(tool),
         "--pfile", str(script_path),
         "--outdir", program.outputDir,
-        "--sched", program.executionOptions.scheduler,
+        *_execution_option_flags(program),
     ]
 
-    exec_opts = program.executionOptions
-    if exec_opts.builtinSchedCpus:
-        command += ["--builtinsched-cpus", exec_opts.builtinSchedCpus]
-    if exec_opts.builtinSchedMem:
-        command += ["--builtinsched-mem", exec_opts.builtinSchedMem]
-    if exec_opts.dfltNodes:
-        command += ["--dflt-nodes", exec_opts.dfltNodes]
-    if exec_opts.dfltThrottle:
-        command += ["--dflt-throttle", exec_opts.dfltThrottle]
-    if exec_opts.rerunOutdatedProcs:
-        command.append("--rerun-outdated-procs")
-    if exec_opts.condaSupport:
-        command.append("--conda-support")
-    if exec_opts.dockerSupport:
-        command.append("--docker-support")
-
-    command.append(mode_flag)
+    if mode_flag is not None:
+        command.append(mode_flag)
 
     option_types = _command_line_option_types(program)
     for label, value in program.programOptions.items():
@@ -241,13 +273,45 @@ def list_schedulers() -> ListSchedulersResponse:
 
 class RunProgramResponse(BaseModel):
     started: bool
+    # Only for a resident program, whose launch /run waits for: the exit
+    # code of debasher_exec and what it printed, capped at
+    # MAX_INSPECT_LINES lines.
+    exitCode: int | None = None
+    output: str | None = None
+
+
+_RUN_LOG_NAME = ".debasher_webui_run.log"
+
+
+def _run_log_path(program: Program) -> Path:
+    log_path = Path(program.outputDir).expanduser() / _RUN_LOG_NAME
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    return log_path
+
+
+def _launch_resident_program(command: list[str], program: Program) -> RunProgramResponse:
+    """
+    Run debasher_exec on a resident program to its end, which comes as soon
+    as every process is launched, so that a launch that the engine refuses
+    is reported at once. It runs in a session of its own and writes into the
+    run log, which is read once it ends: a pipe would be inherited by the
+    processes it launches, and waiting for its end would mean waiting for
+    theirs.
+    """
+    log_path = _run_log_path(program)
+    exit_code = tool_sessions.run_in_own_session(command, _debasher_env(program), log_path)
+    output = _cap_lines(log_path.read_text(errors="replace"))
+    return RunProgramResponse(started=exit_code == 0, exitCode=exit_code, output=output)
 
 
 @router.post("/run", response_model=RunProgramResponse)
 def run_program(program: Program) -> RunProgramResponse:
     """
-    Launch a program run (debasher_exec --wait) in the background and
-    return immediately. Poll /status to find out when it's done.
+    Launch a program run. A general program runs with debasher_exec
+    --wait in the background, and this returns immediately: poll /status
+    to find out when it's done. A resident program is launched with
+    debasher_exec in oneshot mode, and this returns once it has ended,
+    with its exit code and output.
     """
     state, _ = _get_program_state(program)
     if state == "in-progress":
@@ -256,12 +320,16 @@ def run_program(program: Program) -> RunProgramResponse:
             detail="A run is already in progress for this output directory.",
         )
 
-    command = _prepare_debasher_exec_command(program, "--wait")
+    command = _prepare_debasher_exec_command(
+        program, None if _is_resident(program) else "--wait"
+    )
     if command is None:
         raise HTTPException(status_code=500, detail="debasher_exec tool not found.")
 
-    log_path = Path(program.outputDir).expanduser() / ".debasher_webui_run.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if _is_resident(program):
+        return _launch_resident_program(command, program)
+
+    log_path = _run_log_path(program)
 
     with open(log_path, "w") as log_file:
         subprocess.Popen(

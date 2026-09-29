@@ -13,6 +13,7 @@ import {
   noHoldFifosOption,
   nodeOptionRole,
   observesOutside,
+  programCommandLineOptions,
 } from "./node";
 
 function option(label: string, fields: Partial<ProgramOption> = {}): ProgramOption {
@@ -152,5 +153,39 @@ describe("isRequiredHook", () => {
     expect(isRequiredHook("FBPProcess", "observe")).toBe(false);
     expect(isRequiredHook("ProgramLauncher", "processData")).toBe(false);
     expect(isRequiredHook("DirectoryWatcher", "captureNodeState")).toBe(false);
+  });
+});
+
+describe("programCommandLineOptions", () => {
+  function processWith(nodeKind: ProgramProcess["nodeKind"], options: ProgramOption[]): ProgramProcess {
+    return {
+      id: nodeKind ?? "p",
+      name: nodeKind ?? "p",
+      description: "",
+      position: { x: 0, y: 0 },
+      options,
+      optionsHandler: { mode: "standard" },
+      language: "python",
+      code: "",
+      computationalSpecs: {},
+      additionalSpecs: { force: false },
+      nodeKind,
+    } as ProgramProcess;
+  }
+
+  const count = option("-w", { commandLine: true, dataType: "int" });
+
+  it("adds the flag of the Supervisor in a resident program that has one", () => {
+    const processes = [processWith("FBPProcess", [count]), processWith("Supervisor", [])];
+    expect(programCommandLineOptions({ programType: "resident", processes }).map(o => o.label))
+      .toEqual(["-w", "-no-hold-fifos"]);
+  });
+
+  it("offers only the options of the processes without a Supervisor", () => {
+    const processes = [processWith("FBPProcess", [count])];
+    expect(programCommandLineOptions({ programType: "resident", processes }).map(o => o.label))
+      .toEqual(["-w"]);
+    expect(programCommandLineOptions({ programType: "general", processes: [processWith(undefined, [count])] })
+      .map(o => o.label)).toEqual(["-w"]);
   });
 });

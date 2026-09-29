@@ -6,6 +6,7 @@ import {
   runProgramDebug,
   stopProgram,
 } from "../api/executionApi";
+import type { RunProgramResult } from "../api/executionApi";
 import type { Program } from "../models/program";
 import { useProgram } from "../store/ProgramContext";
 import CommandOutputModal from "./CommandOutputModal";
@@ -63,6 +64,9 @@ export default function RunMenu() {
   const { program, runPhase, isRunInProgress, startProgramRun, resetOutputDir } =
     useProgram();
 
+  const isResident =
+    program.programType === "resident";
+
   const [isOpen, setOpen] =
     useState(false);
 
@@ -104,8 +108,10 @@ export default function RunMenu() {
     setActionError(null);
     setPendingAction("Run program");
 
+    let result: RunProgramResult;
+
     try {
-      await startProgramRun();
+      result = await startProgramRun();
     } catch (err) {
       setPendingAction(null);
       setActionError(err instanceof Error ? err.message : "Failed to run program.");
@@ -114,6 +120,18 @@ export default function RunMenu() {
 
     setPendingAction(null);
     setOpen(false);
+
+    // The launch of a resident program is waited for, so a program that the
+    // engine refuses is reported at once, with what debasher_exec printed.
+    if (result.exitCode !== null && result.exitCode !== 0) {
+      setCommandOutput({
+        title: "Run program: the launch failed",
+        output:
+          `debasher_exec ended with exit code ${result.exitCode}. ` +
+          `What it printed:\n\n` +
+          (result.output ?? ""),
+      });
+    }
 
   }
 
@@ -278,6 +296,10 @@ export default function RunMenu() {
               disabled={
                 pendingAction !== null ||
                 (item === "Run program" && runPhase === "running") ||
+                // A resident program is not followed by runPhase: a run in
+                // progress is read from the process statuses, whoever
+                // launched it.
+                (item === "Run program" && isResident && isRunInProgress) ||
                 // Wiping the output directory out from under a run
                 // (or repointing which directory this UI watches/
                 // controls) would delete files it's using or make it
@@ -288,7 +310,10 @@ export default function RunMenu() {
                 (item === "Reset output directory" && isRunInProgress) ||
                 // A fifo only exists on disk once its owning process
                 // has started.
-                (item === "Talk to FIFOs" && runPhase !== "running")
+                (item === "Talk to FIFOs" && runPhase !== "running") ||
+                // A line written raw into a port of a resident program
+                // would bring its node down: the nodes read envelopes.
+                (item === "Talk to FIFOs" && isResident)
               }
 
               style={{
@@ -302,6 +327,8 @@ export default function RunMenu() {
             >
               {item === "Run program" && runPhase === "running"
                 ? "Running..."
+                : item === "Run program" && isResident && pendingAction === item
+                ? "Launching..."
                 : pendingAction === item
                 ? PENDING_LABELS[item]
                 : item}

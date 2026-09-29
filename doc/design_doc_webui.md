@@ -1544,6 +1544,10 @@ unseen.
 
 ## Running a resident program
 
+*In progress: the launch is built, without the launch record; the orderly
+stop, "Kill program", "Restart node", "Take snapshot", the periodic snapshots
+and the run phase of a resident program are not.*
+
 A resident program is launched with `debasher_exec` and followed with
 `debasher_status`, as a general one, but a run of it never finishes on its own:
 its nodes run until they are stopped, and each launch on the same output

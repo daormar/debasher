@@ -26,10 +26,21 @@ export async function listSchedulers(): Promise<string[]> {
   return schedulers;
 }
 
-// Launches the run in the background and returns as soon as it's
-// started — it does not wait for the program to finish. Poll
-// getProgramState() to find out when it's done.
-export async function runProgram(program: Program): Promise<void> {
+export interface RunProgramResult {
+  started: boolean;
+  // Only for a resident program, whose launch the backend waits for: the
+  // exit code of debasher_exec and what it printed. Null for a general
+  // program.
+  exitCode: number | null;
+  output: string | null;
+}
+
+// Launches the run of a general program in the background and returns as
+// soon as it's started: it does not wait for the program to finish. Poll
+// getProgramState() to find out when it's done. The launch of a resident
+// program is waited for, and returns once debasher_exec has launched every
+// process, or failed to.
+export async function runProgram(program: Program): Promise<RunProgramResult> {
   const response = await fetch("/api/execution/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -41,6 +52,9 @@ export async function runProgram(program: Program): Promise<void> {
       await errorDetail(response, `Failed to run program (${response.status})`)
     );
   }
+
+  const { started, exitCode, output } = await response.json();
+  return { started, exitCode: exitCode ?? null, output: output ?? null };
 }
 
 export async function runProgramDebug(program: Program): Promise<string> {

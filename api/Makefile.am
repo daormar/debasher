@@ -4,7 +4,7 @@ debasher_constants.py doc_mod.py file_inspection.py main.py		\
 markdown_parsing.py models.py option_handler_import.py paths.py	\
 persistence.py program_import.py requirements.txt resident_generation.py	\
 resident_import.py resident_node_code.py resident_supervisor_wiring.py	\
-script_generation.py
+script_generation.py tool_sessions.py
 
 routersdir = $(apidir)/routers
 dist_routers_DATA = routers/__init__.py routers/execution.py		\
