@@ -39,7 +39,7 @@ from api.models import (
     ProgramOption,
     ProgramProcess,
 )
-from api.resident_generation import node_class_name, node_heredoc, normalized_part
+from api.resident_node_code import node_class_name, node_heredoc, normalized_part
 from api.script_generation import generate_script
 
 _ARRAY_CODE = (
