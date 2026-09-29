@@ -230,7 +230,6 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-ret=$?
 case $? in
     0)
         ((checks_passed++))
@@ -843,8 +842,9 @@ case $? in
         ;;
 esac
 
-# Check execution using SLURM if available
-if [ -n "SBATCH" ]; then
+# Check execution using SLURM if available: SBATCH is the name of the tool,
+# looked for in the PATH when the program runs, as the engine does
+if command -v "${SBATCH}" > /dev/null 2>&1; then
     echo "# Checks using SLURM Scheduler"
     echo ""
 
