@@ -14,7 +14,7 @@ bin_SCRIPTS = debasher_webui
 
 CLEANFILES = debasher_webui
 
-EXTRA_DIST = .gitignore README.md debasher_webui.sh
+EXTRA_DIST = .gitignore README.md debasher_webui.sh requirements-dev.txt
 
 debasher_webui: debasher_webui.sh
 	rm -f $@

@@ -38,11 +38,13 @@ command: there's no need to recreate it, only to re-run
 
 The tests of the API need these same dependencies (pydantic 2 among
 them), so `make check` has to run them with the pytest of this virtual
-environment rather than that of the system. Install pytest into it and
-tell `./configure` which one to use:
+environment rather than that of the system. Install the development
+dependencies into it (`api/requirements-dev.txt`: those of the server
+plus pytest, and coverage and radon for code analysis) and tell
+`./configure` which pytest to use:
 
 ```bash
-.venv/bin/pip install pytest
+.venv/bin/pip install -r api/requirements-dev.txt
 ./configure PYTEST="$PWD/.venv/bin/pytest"
 ```
 

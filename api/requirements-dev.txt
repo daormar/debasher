@@ -1,0 +1,11 @@
+-r requirements.txt
+colorama==0.4.6
+coverage==7.16.2
+iniconfig==2.3.0
+mando==0.7.1
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+pytest==9.1.1
+radon==6.0.1
+six==1.17.0
