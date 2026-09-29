@@ -17,7 +17,7 @@ import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
 import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark, TriggerMark } from "./NodeMarks";
 import { useProgram } from "../store/ProgramContext";
-import { groupColor } from "../utils/groupColor";
+import { SELECTED_NODE_COLOR, groupColor } from "../utils/groupColor";
 
 function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) {
 
@@ -337,7 +337,7 @@ export default function ProcessNode({
 
 
   const borderWidth = selected || groupBorderColor ? 2 : 1;
-  const borderColor = selected ? "#1a73e8" : groupBorderColor ?? "#999";
+  const borderColor = selected ? SELECTED_NODE_COLOR : groupBorderColor ?? "#999";
   const borderStyle = isManual ? "dashed" : "solid";
 
   return (
