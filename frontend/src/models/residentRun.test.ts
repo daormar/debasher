@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ProgramProcess } from "./process";
 import {
+  offersRelaunchNode,
   offersRestartNode,
   orderlyStopOutcome,
+  relaunchOutcome,
   residentRunPhase,
   restartNodeWarning,
   restartsWithBothEnds,
@@ -72,15 +74,16 @@ describe("Restart node", () => {
   const count = processOf("Count", "FBPProcess");
   const sup = processOf("Sup", "Supervisor");
 
-  it("is offered on every node of a program with a Supervisor but the Supervisor", () => {
-    const withSupervisor = { programType: "resident" as const, processes: [count, sup] };
-    expect(offersRestartNode(withSupervisor, count)).toBe(true);
-    expect(offersRestartNode(withSupervisor, sup)).toBe(false);
+  it("is offered on every node of a resident program but the Supervisor", () => {
+    expect(offersRestartNode({ programType: "resident" }, count)).toBe(true);
+    expect(offersRestartNode({ programType: "resident" }, sup)).toBe(false);
+    expect(offersRestartNode({ programType: "general" }, count)).toBe(false);
   });
 
-  it("is not offered where nothing would relaunch the node", () => {
-    expect(offersRestartNode({ programType: "resident", processes: [count] }, count)).toBe(false);
-    expect(offersRestartNode({ programType: "general", processes: [count, sup] }, count)).toBe(false);
+  it("offers Relaunch node only where no Supervisor relaunches the nodes", () => {
+    expect(offersRelaunchNode({ programType: "resident", processes: [count] })).toBe(true);
+    expect(offersRelaunchNode({ programType: "resident", processes: [count, sup] })).toBe(false);
+    expect(offersRelaunchNode({ programType: "general", processes: [count] })).toBe(false);
   });
 
   it("finds a channel whose two ends restart together", () => {
@@ -91,14 +94,30 @@ describe("Restart node", () => {
   });
 
   it("warns of every task of an array and of -no-hold-fifos only when they apply", () => {
-    const plain = restartNodeWarning(count, false).join(" ");
+    const plain = restartNodeWarning(count, true, false).join(" ");
+    expect(plain).toMatch(/the Supervisor relaunches it/);
     expect(plain).not.toMatch(/Every task/);
     expect(plain).not.toMatch(/-no-hold-fifos/);
     expect(plain).toMatch(/gives up on it/);
 
-    const array = restartNodeWarning(processOf("Work", "FBPProcess", "array"), true).join(" ");
+    const array = restartNodeWarning(processOf("Work", "FBPProcess", "array"), true, true).join(" ");
     expect(array).toMatch(/Every task of the node restarts/);
     expect(array).toMatch(/launched with -no-hold-fifos/);
+  });
+
+  it("says who relaunches the node, and what may be lost, without a Supervisor", () => {
+    const warning = restartNodeWarning(count, false, true).join(" ");
+    expect(warning).toMatch(/the web UI relaunches it/);
+    expect(warning).toMatch(/no Supervisor to hold it/);
+    expect(warning).not.toMatch(/-no-hold-fifos/);
+    expect(warning).not.toMatch(/heartbeat/);
+  });
+
+  it("says what was relaunched", () => {
+    expect(relaunchOutcome(["Work:0", "Work:3"], 0)).toMatch(/^Relaunched Work:0, Work:3/);
+    expect(relaunchOutcome([], 0)).toMatch(/No task of the node was down/);
+    expect(relaunchOutcome(["Work:0"], 1)).toMatch(/exit code 1, after relaunching Work:0/);
+    expect(relaunchOutcome([], 1)).toMatch(/exit code 1, and relaunched nothing/);
   });
 });
 

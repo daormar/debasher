@@ -19,8 +19,11 @@ import type { ProgramProcess } from "../models/process";
 import type { ProgramOption, FanoutFamily } from "../models/option";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
+import { hasSupervisor } from "../models/node";
 import {
+  offersRelaunchNode,
   offersRestartNode,
+  relaunchOutcome,
   restartNodeWarning,
   restartsWithBothEnds,
   stoppedInOrder,
@@ -33,6 +36,7 @@ import {
   getProcessTasks,
   inspectPath,
   launchedWithNoHoldFifos,
+  relaunchNode,
   restartNode,
   stopProcess,
 } from "../api/executionApi";
@@ -54,7 +58,7 @@ import SelfLoopEdge from "./SelfLoopEdge";
 import ConfirmDialog from "./ConfirmDialog";
 import ResidentRunIndicator from "./ResidentRunIndicator";
 import RunStatusIndicator from "./RunStatusIndicator";
-import ProcessContextMenu, { type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
+import ProcessContextMenu, { type NodeAction, type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
 import ProcessTaskPicker from "./ProcessTaskPicker";
 import CommandOutputModal from "./CommandOutputModal";
 import ProcessIOModal from "./ProcessIOModal";
@@ -77,6 +81,7 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   "watch-fifo": "mirrored fifo output",
   stop: "process stop",
   restart: "node restart",
+  relaunch: "node relaunch",
 };
 
 // Above this many indices, listing the family inline stops being
@@ -635,6 +640,17 @@ export default function ProgramCanvas() {
         return;
       }
 
+      if (action === "relaunch") {
+        const result = await relaunchNode(program, process.name);
+        setProcessCommandOutput({
+          title: `${process.name}: relaunch`,
+          message: relaunchOutcome(result.relaunched, result.exitCode),
+          output: result.output,
+        });
+        setProcessContextMenu(null);
+        return;
+      }
+
       // A "standard" process has no per-task files at all (empty list,
       // so taskIndices[0] is undefined, the plain no-task-index
       // request) and a process that only ever ran as one task doesn't
@@ -670,15 +686,21 @@ export default function ProgramCanvas() {
   }
 
   // "Restart node" asks first, with a warning that says what the restart
-  // does; it names -no-hold-fifos only when the node has a channel whose two
-  // ends restart together and the Supervisor was launched with the flag.
+  // does. When the node has a channel whose two ends restart together, the
+  // warning says that it may lose what it held: without a Supervisor always,
+  // with one only when it was launched with -no-hold-fifos.
   async function askRestartNode(process: ProgramProcess) {
+
+    const supervised = hasSupervisor(program.processes);
 
     const losesHeldChannel =
       restartsWithBothEnds(program.edges, process.id) &&
-      await launchedWithNoHoldFifos(program);
+      (!supervised || await launchedWithNoHoldFifos(program));
 
-    setRestartConfirm({ process, warning: restartNodeWarning(process, losesHeldChannel) });
+    setRestartConfirm({
+      process,
+      warning: restartNodeWarning(process, supervised, losesHeldChannel),
+    });
 
   }
 
@@ -695,7 +717,9 @@ export default function ProgramCanvas() {
       const result = await restartNode(program, process.name);
       setProcessCommandOutput({
         title: `${process.name}: restart`,
-        message: result.exitCode === 0
+        message: !hasSupervisor(program.processes)
+          ? relaunchOutcome(result.relaunched, result.exitCode)
+          : result.exitCode === 0
           ? "The node was stopped, and the Supervisor relaunches it from its last checkpoint and its input log."
           : `debasher_stop ended with exit code ${result.exitCode}. What it printed:`,
         output: result.output,
@@ -706,6 +730,29 @@ export default function ProgramCanvas() {
         output: err instanceof Error ? err.message : "Failed to restart the node.",
       });
     }
+
+  }
+
+  // The actions on the process itself in its context menu; those of a
+  // resident program act on a live program only.
+  function nodeActionsOf(process: ProgramProcess): NodeAction[] {
+
+    if (!isResident) {
+      return [{ label: "Stop process", action: "stop", disabled: false, destructive: true }];
+    }
+
+    const notLive = residentPhase !== "live";
+    const actions: NodeAction[] = [];
+
+    if (offersRelaunchNode(program)) {
+      actions.push({ label: "Relaunch node", action: "relaunch", disabled: notLive, destructive: false });
+    }
+
+    if (offersRestartNode(program, process)) {
+      actions.push({ label: "Restart node", action: "restart", disabled: notLive, destructive: true });
+    }
+
+    return actions;
 
   }
 
@@ -725,9 +772,9 @@ export default function ProgramCanvas() {
         setProcessIO(await fetchProcessIO(process, taskIndex));
       } else if (kind === "watch-fifo") {
         openFifoWatch(process, taskIndex);
-      } else if (kind === "stop" || kind === "restart") {
+      } else if (kind === "stop" || kind === "restart" || kind === "relaunch") {
         // Unreachable in practice, handleProcessMenuSelect handles
-        // "stop" and "restart" before ever reaching the task picker,
+        // these actions before ever reaching the task picker,
         // kept here only so this switch stays exhaustive over
         // ProcessMenuAction.
         setProcessCommandOutput({
@@ -844,13 +891,7 @@ export default function ProgramCanvas() {
           isPending={isProcessOutputPending}
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
-          stopAction={
-            !isResident
-              ? { label: "Stop process", action: "stop", disabled: false }
-              : offersRestartNode(program, processContextMenu.process)
-              ? { label: "Restart node", action: "restart", disabled: residentPhase !== "live" }
-              : null
-          }
+          nodeActions={nodeActionsOf(processContextMenu.process)}
           canvasAction={
             program.programType === "resident" &&
             processContextMenu.process.nodeKind === "Supervisor"

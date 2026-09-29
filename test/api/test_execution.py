@@ -6,8 +6,9 @@ program, which /run waits for, in a session of its own and with its output
 in the run log, and whose failure it reports at once; the program state
 that tells a program never launched from one stopped; the orderly stop and
 the hard kill of a resident program; "Restart node", a crash of the node
-that the Supervisor relaunches; and the snapshots, one round at a time or
-periodically from the launch.
+that the Supervisor relaunches, or the backend without a Supervisor, as
+"Relaunch node" does under the relaunch lock; and the snapshots, one round
+at a time or periodically from the launch.
 """
 
 import os
@@ -35,7 +36,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import paths, program_state, tool_sessions  # noqa: E402
+from api import node_relaunch, paths, program_state, tool_sessions  # noqa: E402
 from api.models import (  # noqa: E402
     AdditionalSpecs,
     ComputationalSpecs,
@@ -544,3 +545,124 @@ def test_a_round_that_did_not_close_names_its_nodes(tmp_path, monkeypatch):
     assert response.exitCode == 2
     assert response.epoch == 1759000000123
     assert response.pendingNodes == ["Sink", "Relay:1"]
+
+
+# --- relaunching a node without a Supervisor ---------------------------------------
+
+
+def _wait_for_new_pid(program, process, old_pid, timeout_secs=60):
+    deadline = time.monotonic() + timeout_secs
+    while _node_pid(program, process) in (old_pid, None) and time.monotonic() < deadline:
+        time.sleep(0.5)
+    return _node_pid(program, process)
+
+
+def _node_request(program, process):
+    return execution.StopProcessRequest(program=program, processName=process)
+
+
+@_needs_engine
+def test_relaunch_node_brings_a_downed_node_back(tmp_path):
+    program = _relay(tmp_path, with_supervisor=False)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        relay_pid = _node_pid(program, "Relay")
+        sink_pid = _node_pid(program, "Sink")
+
+        nothing_down = execution.relaunch_node(_node_request(program, "Sink"))
+        assert nothing_down.exitCode == 0
+        assert nothing_down.relaunched == []
+        assert _node_pid(program, "Sink") == sink_pid
+
+        subprocess.run(
+            [str(paths.find_bin_tool("debasher_stop")), "-d", program.outputDir, "-p", "Sink"],
+            capture_output=True,
+            timeout=60,
+        )
+        assert node_relaunch.wait_until_down(program.outputDir, "Sink")
+
+        response = execution.relaunch_node(_node_request(program, "Sink"))
+
+        assert response.exitCode == 0, response.output
+        assert response.relaunched == ["Sink"]
+        assert _wait_for_new_pid(program, "Sink", sink_pid) not in (sink_pid, None)
+        assert _node_pid(program, "Relay") == relay_pid
+        assert _wait_for_statuses(program, "IN-PROGRESS") == {"Relay": "IN-PROGRESS", "Sink": "IN-PROGRESS"}
+    finally:
+        _hard_kill(program)
+
+
+@_needs_engine
+def test_without_a_supervisor_a_restarted_node_is_relaunched_by_the_backend(tmp_path):
+    program = _relay(tmp_path, with_supervisor=False)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        sink_pid = _node_pid(program, "Sink")
+
+        response = execution.restart_node(_node_request(program, "Sink"))
+
+        assert response.exitCode == 0, response.output
+        assert response.relaunched == ["Sink"]
+        assert _wait_for_new_pid(program, "Sink", sink_pid) not in (sink_pid, None)
+        assert _wait_for_statuses(program, "IN-PROGRESS") == {"Relay": "IN-PROGRESS", "Sink": "IN-PROGRESS"}
+    finally:
+        _hard_kill(program)
+
+
+def test_a_node_is_not_relaunched_by_hand_where_a_supervisor_relaunches_it(tmp_path):
+    with pytest.raises(execution.HTTPException) as refused:
+        execution.relaunch_node(_node_request(_relay(tmp_path), "Sink"))
+
+    assert refused.value.status_code == 400
+
+
+def _dead_pid():
+    finished = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"], capture_output=True, text=True)
+    return finished.stdout.strip()
+
+
+def test_only_the_tasks_that_did_not_end_cleanly_and_whose_pid_is_gone_are_down(tmp_path):
+    exec_dir = tmp_path / "__exec__" / "Work"
+    exec_dir.mkdir(parents=True)
+    (exec_dir / "Work_0.id").write_text(f"{os.getpid()}\n")
+    (exec_dir / "Work_1.id").write_text(f"{_dead_pid()}\n")
+    (exec_dir / "Work_2.id").write_text("not a pid\n")
+    (exec_dir / "Work_3.id").write_text(f"{_dead_pid()}\n")
+    (exec_dir / "Work_3.finished").write_text("")
+    (exec_dir / "Work_10.opts").write_text("")
+
+    tasks = node_relaunch._tasks(str(tmp_path), "Work")
+
+    assert [(task.stem, task.index) for task in tasks] == [
+        ("Work_0", 0), ("Work_1", 1), ("Work_2", 2), ("Work_3", 3)
+    ]
+    # Work_3 ended cleanly, as a node does in an orderly stop.
+    assert [node_relaunch._is_down(task) for task in tasks] == [False, True, False, False]
+
+
+_TRY_LOCK = (
+    "import fcntl, sys\n"
+    "f = open(sys.argv[1], 'a')\n"
+    "try:\n"
+    "    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+    "    print('locked')\n"
+    "except BlockingIOError:\n"
+    "    print('busy')\n"
+)
+
+
+def test_the_relaunch_lock_keeps_out_a_second_relaunch(tmp_path):
+    lock_path = tmp_path / node_relaunch.RELAUNCH_LOCK_NAME
+
+    def try_lock():
+        return subprocess.run(
+            [sys.executable, "-c", _TRY_LOCK, str(lock_path)], capture_output=True, text=True
+        ).stdout.strip()
+
+    with node_relaunch.relaunch_lock(str(tmp_path)):
+        assert try_lock() == "busy"
+    assert try_lock() == "locked"

@@ -444,21 +444,44 @@ export async function killProgram(program: Program): Promise<StopResult> {
   return postStop("/api/execution/kill", program, "Failed to kill program");
 }
 
-// "Restart node" on a node of a resident program with a Supervisor
-// (debasher_stop -p): a crash of the node, which the Supervisor relaunches.
-export async function restartNode(program: Program, processName: string): Promise<StopResult> {
-  const response = await fetch("/api/execution/restart-node", {
+export interface RelaunchResult {
+  output: string;
+  exitCode: number;
+  // The tasks that the web UI relaunched, as <process> or <process>:<idx>.
+  relaunched: string[];
+}
+
+async function postNodeAction(
+  endpoint: string,
+  program: Program,
+  processName: string,
+  fallback: string
+): Promise<RelaunchResult> {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName }),
   });
 
   if (!response.ok) {
-    throw new Error(await errorDetail(response, `Failed to restart node (${response.status})`));
+    throw new Error(await errorDetail(response, `${fallback} (${response.status})`));
   }
 
-  const { output, exitCode } = await response.json();
-  return { output, exitCode: exitCode ?? null };
+  const { output, exitCode, relaunched } = await response.json();
+  return { output, exitCode, relaunched: relaunched ?? [] };
+}
+
+// "Restart node" on a node of a resident program (debasher_stop -p): a crash
+// of the node, which the Supervisor relaunches, or the backend in a program
+// without a Supervisor.
+export async function restartNode(program: Program, processName: string): Promise<RelaunchResult> {
+  return postNodeAction("/api/execution/restart-node", program, processName, "Failed to restart node");
+}
+
+// "Relaunch node" in a resident program without a Supervisor: relaunches the
+// tasks of the node that are down.
+export async function relaunchNode(program: Program, processName: string): Promise<RelaunchResult> {
+  return postNodeAction("/api/execution/relaunch-node", program, processName, "Failed to relaunch node");
 }
 
 export interface SnapshotResult {

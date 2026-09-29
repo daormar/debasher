@@ -17,16 +17,19 @@ export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 // "stop" calls stopProcess directly, skipping the task-index flow the
 // other actions go through, debasher_stop -p has no per-task variant.
 // "restart" is "Restart node" on a node of a resident program, which asks
-// for confirmation first.
-export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo" | "stop" | "restart";
+// for confirmation first; "relaunch" is "Relaunch node" in a resident
+// program without a Supervisor.
+export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo" | "stop" | "restart" | "relaunch";
 
-// The action that ends the process, listed last in a destructive color:
-// "Stop process" in a general program, "Restart node" on a node of a
-// resident program with a Supervisor (see offersRestartNode).
-export interface StopAction {
-  label: "Stop process" | "Restart node";
-  action: "stop" | "restart";
+// An action on the process itself, listed after the inspection actions:
+// "Relaunch node" (see offersRelaunchNode), and, in a destructive color,
+// "Stop process" in a general program or "Restart node" on a node of a
+// resident program (see offersRestartNode).
+export interface NodeAction {
+  label: "Stop process" | "Restart node" | "Relaunch node";
+  action: "stop" | "restart" | "relaunch";
   disabled: boolean;
+  destructive: boolean;
 }
 
 const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
@@ -43,7 +46,7 @@ interface Props {
   isPending: boolean;
   onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
-  stopAction: StopAction | null;
+  nodeActions: NodeAction[];
   // An action of the canvas rather than of the execution of the process,
   // listed after the others: on the Supervisor, showing or hiding the
   // Supervisor wiring.
@@ -56,7 +59,7 @@ export default function ProcessContextMenu({
   isPending,
   onSelect,
   onClose,
-  stopAction,
+  nodeActions,
   canvasAction,
 }: Props) {
 
@@ -124,13 +127,15 @@ export default function ProcessContextMenu({
 
       ))}
 
-      {stopAction && (
+      {nodeActions.map(nodeAction => (
 
         <button
 
-          onClick={() => onSelect(stopAction.action)}
+          key={nodeAction.label}
 
-          disabled={isPending || stopAction.disabled}
+          onClick={() => onSelect(nodeAction.action)}
+
+          disabled={isPending || nodeAction.disabled}
 
           style={{
             textAlign: "left",
@@ -138,14 +143,14 @@ export default function ProcessContextMenu({
             border: "none",
             background: "none",
             cursor: "pointer",
-            color: "#c0392b",
+            color: nodeAction.destructive ? "#c0392b" : undefined,
           }}
 
         >
-          {stopAction.label}
+          {nodeAction.label}
         </button>
 
-      )}
+      ))}
 
       {canvasAction && (
 

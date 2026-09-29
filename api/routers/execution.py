@@ -9,7 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import file_inspection, paths, persistence, program_state, tool_sessions
+from .. import file_inspection, node_relaunch, paths, persistence, program_state, tool_sessions
 from ..models import Program
 from ..resident_supervisor_wiring import NO_HOLD_FIFOS_LABEL
 
@@ -844,18 +844,86 @@ def stop_process(request: StopProcessRequest) -> ProcessOutputResponse:
     return ProcessOutputResponse(output=output)
 
 
-@router.post("/restart-node", response_model=StopProgramResponse)
-def restart_node(request: StopProcessRequest) -> StopProgramResponse:
+def _has_supervisor(program: Program) -> bool:
+    return any(p.nodeKind == "Supervisor" for p in program.processes)
+
+
+class RelaunchNodeResponse(BaseModel):
+    output: str
+    exitCode: int
+    # The tasks that the web UI relaunched, as <process> or <process>:<idx>;
+    # empty when none was down, and for a restart that the Supervisor
+    # relaunches.
+    relaunched: list[str] = []
+
+
+@router.post("/restart-node", response_model=RelaunchNodeResponse)
+def restart_node(request: StopProcessRequest) -> RelaunchNodeResponse:
     """
-    "Restart node" on a node of a resident program with a Supervisor:
-    debasher_stop -d <outputDir> -p <processName> kills every task of the
-    process at once, a crash of the node, which the Supervisor relaunches
-    from its last checkpoint and its input log.
+    "Restart node" on a node of a resident program: debasher_stop -d
+    <outputDir> -p <processName> kills every task of the process at once, a
+    crash of the node, which resumes from its last checkpoint and its input
+    log once it is launched again. With a Supervisor, the Supervisor
+    relaunches it. Without one, the backend does, once every task is down,
+    holding the relaunch lock from the stop to the relaunch.
     """
-    output, exit_code = _run_debasher_dir_tool_in_own_session(
-        request.program, "debasher_stop", ["-p", request.processName]
+    program = request.program
+
+    if _has_supervisor(program):
+        output, exit_code = _run_debasher_dir_tool_in_own_session(
+            program, "debasher_stop", ["-p", request.processName]
+        )
+        return RelaunchNodeResponse(output=output, exitCode=exit_code)
+
+    with node_relaunch.relaunch_lock(program.outputDir):
+        output, exit_code = _run_debasher_dir_tool_in_own_session(
+            program, "debasher_stop", ["-p", request.processName]
+        )
+        if exit_code != 0:
+            return RelaunchNodeResponse(output=output, exitCode=exit_code)
+
+        if not node_relaunch.wait_until_down(program.outputDir, request.processName):
+            return RelaunchNodeResponse(
+                output=output + f"Error: some task of {request.processName} still runs after the stop.\n",
+                exitCode=1,
+            )
+
+        result = node_relaunch.relaunch_down_tasks(
+            program.outputDir, request.processName, _debasher_env(program)
+        )
+
+    return RelaunchNodeResponse(
+        output=_cap_lines(output + result.output),
+        exitCode=result.exit_code,
+        relaunched=result.relaunched,
     )
-    return StopProgramResponse(output=output, exitCode=exit_code)
+
+
+@router.post("/relaunch-node", response_model=RelaunchNodeResponse)
+def relaunch_node(request: StopProcessRequest) -> RelaunchNodeResponse:
+    """
+    "Relaunch node" on a node of a resident program without a Supervisor:
+    relaunch each task of the process that is down, and only those, with
+    debasher_launch_process, under the relaunch lock.
+    """
+    program = request.program
+
+    if program.programType != "resident" or _has_supervisor(program):
+        raise HTTPException(
+            status_code=400,
+            detail="A node is relaunched by hand only in a resident program without a Supervisor.",
+        )
+
+    with node_relaunch.relaunch_lock(program.outputDir):
+        result = node_relaunch.relaunch_down_tasks(
+            program.outputDir, request.processName, _debasher_env(program)
+        )
+
+    return RelaunchNodeResponse(
+        output=_cap_lines(result.output),
+        exitCode=result.exit_code,
+        relaunched=result.relaunched,
+    )
 
 
 class SnapshotResponse(BaseModel):

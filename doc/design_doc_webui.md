@@ -210,6 +210,14 @@ refer to it.
 - **hard kill**: the stop of a program with `debasher_stop`, which stops the
   `debasher_exec` of the run if it still runs and then kills every process at
   once; for a resident program, what its FIFOs held may be lost.
+- **down**: of a task of a resident program, the state in which it has no
+  completion marker and the PID in its `.id` file, in the exec directory of
+  its process, no longer exists: the test with which the `Supervisor` decides
+  to relaunch a node, which the web UI applies too.
+- **relaunch lock**: `.debasher_webui_relaunch.lock` in the output directory of
+  a resident program, a file that the backend locks while it relaunches the
+  tasks of a node that are down (for "Restart node", from the stop on), so
+  that two tabs never relaunch the same task.
 - **mirror log**: as defined in the design of the engine: the log in which a
   mirror tap copies every line that a process writes into a FIFO defined with
   `--mirror`, which can be read without taking the data from the FIFO's reader.
@@ -1649,34 +1657,66 @@ and would end in a hard kill that kills nothing, reported as exit code 2.
 
 **Restarting a node.** "Stop process" runs `debasher_stop -p <process>`, which
 kills every task of the process at once. In a resident program that is a crash
-of the node, not a stop: the node leaves no mark of a clean end, and the
-`Supervisor` relaunches it, from its last checkpoint and its input log (see
-"Relaunching a downed node" in `doc/design_doc_resident.md`). The action is
-named for what it does, "Restart node", and is offered as follows:
+of the node, not a stop: the node leaves no mark of a clean end, and resumes
+from its last checkpoint and its input log once it is launched again. The
+action is named for what it does, "Restart node". It is offered on every node
+but the `Supervisor`, which nothing supervises: the nodes would go on without
+anyone to relaunch them or to hold their FIFOs, until the next stop. The user
+confirms it with a warning: the node restarts from its last checkpoint and
+replays its input log, and what its FIFOs hold is kept by the peers at their
+other ends (see "Ghost connections" in `doc/design_doc_resident.md`). Only a
+channel whose two ends are restarted together, a self-loop of the node or a
+channel between two tasks of the process, has no peer to hold it. The action
+serves to free a node that is stuck, or to try the recovery of a program. Who
+launches the node again depends on the program:
 
-- In a program with a `Supervisor`, on every node but the `Supervisor`, after
-  the user confirms it with a warning: the node restarts from its last
-  checkpoint and replays its input log, and what its FIFOs hold is kept by
-  the peers at their other ends (see "Ghost connections" in
-  `doc/design_doc_resident.md`). Only a channel whose two ends are restarted
-  together, a self-loop of the node or a channel between two tasks of the
-  process, relies on the `Supervisor` to hold it, and may lose what it held
-  when the program was launched with `-no-hold-fifos`, which the warning then
-  says. It serves to free a node that is stuck, or to try the recovery of a
-  program. A node restarted again and again before it sends a heartbeat
-  counts for the `Supervisor` as a node that crashes after every relaunch, and
-  after a few times the `Supervisor` gives up on it and stops the program (see
-  "Escalation on a permanent node failure" in `doc/design_doc_resident.md`).
-- Not on the `Supervisor`, which nothing supervises: the nodes would go on
-  without anyone to relaunch them or to hold their FIFOs, until the next stop.
-- Not in a program without a `Supervisor`, where nothing would relaunch the
-  node: it would stay down until the whole program is stopped and launched
-  again, since `debasher_exec` launches nothing while there is a run in
-  progress. Meanwhile each node that writes to it blocks once the pipe is
-  full, and its outbound backlog grows until the node fails.
+- In a program with a `Supervisor`, the `Supervisor` relaunches it (see
+  "Relaunching a downed node" in `doc/design_doc_resident.md`). The `Supervisor`
+  also holds a channel whose two ends are restarted together, unless the program
+  was launched with `-no-hold-fifos`: such a channel may then lose what it held,
+  which the warning says. A node restarted again and again before it sends a
+  heartbeat counts for the `Supervisor` as a node that crashes after every
+  relaunch, and after a few times the `Supervisor` gives up on it and stops the
+  program (see "Escalation on a permanent node failure" in
+  `doc/design_doc_resident.md`), which the warning says too.
+- In a program without a `Supervisor`, the backend relaunches it as "Relaunch
+  node" does (see below), once no task of the process runs, and holds the
+  relaunch lock from the stop to the relaunch. When some task still runs a
+  few seconds after the stop, it reports an error and relaunches nothing.
+  Nothing holds a channel whose two ends are restarted together, which may
+  lose what it held: the warning says so when the node has one.
 
 On an `array` or `generator` process the action restarts every task, since
 `debasher_stop` stops a process as a whole.
+
+**Relaunching a node.** In a program without a `Supervisor`, a node that goes
+down stays down: nothing relaunches it, and "Run program" launches nothing
+while there is a run in progress. Meanwhile each node that writes to it blocks
+once the pipe is full, and its outbound backlog grows until the node fails.
+"Relaunch node", in the context menu of a node of such a program, relaunches
+it as the `Supervisor` would:
+
+- The backend relaunches each task of the process that is down, and only
+  those, with `debasher_launch_process -d <output directory> -p <process>`,
+  and `-t <task index>` for a task of an `array` or `generator` process. A
+  task that ended cleanly, as a node does in an orderly stop, is not down,
+  and neither is a task with no `.id` file or whose PID exists: relaunching a
+  task that runs would give two incarnations of it reading the same FIFOs.
+  The backend looks for the tasks that are down and relaunches them under the
+  relaunch lock.
+- The relaunched node resumes from its last checkpoint and its input log. Its
+  peers held its FIFOs while it was down, so only a channel whose two ends
+  were down together may have lost what it held.
+- The frontend says which tasks were relaunched, or that none was down. The
+  action asks for no confirmation, since it acts only on what is down. It is
+  offered on every node while the program is `live`, whatever the color of
+  the node: the process status of an `array` or `generator` process shows it
+  in progress while any of its tasks runs, even with others down.
+
+It is not offered in a program with a `Supervisor`, whose own relaunches it
+would compete with. The backend reads the `.id` and `.finished` files by the
+names that the engine gives to them, as the `Supervisor` does, and would have
+to change with them.
 
 **Snapshots.** The nodes of a resident program write checkpoints and prune
 their input logs only when a round closes, and a round starts only when a
@@ -1757,9 +1797,9 @@ since they already read the process statuses and not the run phase: while the
 program is `live`, the frontend refuses to save, to reset the program state and
 to change the output directory, and `/run` refuses to launch. What changes is
 which actions are offered only while the program is `live`: "Stop program",
-"Kill program", "Restart node" and "Take snapshot". What the tab does with a
-live program when it is closed, reloaded or leaves the editor is in "A program
-that outlives the tab".
+"Kill program", "Restart node", "Relaunch node" and "Take snapshot". What the
+tab does with a live program when it is closed, reloaded or leaves the editor is
+in "A program that outlives the tab".
 
 ## Observing and talking to a live program
 
@@ -1778,8 +1818,9 @@ of their own in a resident program, which the legend of the canvas says:
   its stop signal.
 - `FINISHED`: the node ended cleanly, after an orderly stop.
 - `UNFINISHED`: the node is down. In a live program, the `Supervisor` is
-  relaunching it or has given up on it, or, without a `Supervisor`, nothing
-  will bring it back. In a program that is not live, it stopped abruptly.
+  relaunching it or has given up on it, or, without a `Supervisor`, it stays
+  down until "Relaunch node" relaunches it. In a program that is not live, it
+  stopped abruptly.
 - `UNFINISHED_BUT_RUNNABLE`: shown as `UNFINISHED`, since in a resident program
   no process waits to be run later.
 - `TO-DO`: the node has not been launched.
@@ -1947,15 +1988,16 @@ that way could leave the `Supervisor` stopped and the nodes alive, with nobody
 to relaunch them.
 
 So every tool that acts on a live resident program (`debasher_exec`,
-`debasher_stop_resident`, `debasher_stop` and `debasher_snapshot_resident`,
-once or with `--every`) runs in a session of its own, as the batch runs of a
-`ProgramLauncher` do, and writes into a file, never into a pipe:
-`debasher_exec` into the run log, the periodic snapshots into the snapshot log,
-and the stop, the hard kill and a single snapshot into a temporary file of
-their own, since two tabs may run them at the same time, which the backend
-reads when the tool ends and then deletes. Whatever the program launches later,
-the relaunches of the `Supervisor` included, inherits the session of
-`debasher_exec`, away from the server.
+`debasher_stop_resident`, `debasher_stop`, `debasher_launch_process` and
+`debasher_snapshot_resident`, once or with `--every`) runs in a session of its
+own, as the batch runs of a `ProgramLauncher` do, and writes into a file, never
+into a pipe: `debasher_exec` into the run log, the periodic snapshots into the
+snapshot log, and the stop, the hard kill, a relaunch and a single snapshot into
+a temporary file of their own, since two tabs may run them at the same time,
+which the backend reads when the tool ends and then deletes. Whatever the
+program launches later, the relaunches of the `Supervisor` included, inherits
+the session of `debasher_exec`, and a node that the web UI relaunches that of
+its `debasher_launch_process`, both away from the server.
 
 A request that the backend does not finish, because it went away in the
 middle, still reaches its end in the tool; only its answer is lost:
@@ -1990,12 +2032,13 @@ A live program can be edited in the tab, but not saved (see "Running a
 resident program"). Its changes are saved once it has stopped, and the next
 launch compares them with the launch record.
 
-Two tabs on the same live program are not coordinated, as for a general
-program (see "Non-goals"). What the engine's files guard still holds: a second
-launch is refused while there is a run in progress. Two orderly stops at the
-same time, or an orderly stop and "Restart node", are not coordinated by the
-web UI; a single orderly stop for each output directory is left to the engine
-(see "Future work" in `doc/design_doc_resident.md`).
+Two tabs on the same live program are not coordinated, as for a general program
+(see "Non-goals"). What the engine's files guard still holds: a second launch is
+refused while there is a run in progress. Relaunches are the exception: the
+relaunch lock keeps two tabs from relaunching the same task. Two orderly stops
+at the same time, or an orderly stop and "Restart node", are not coordinated by
+the web UI; a single orderly stop for each output directory is left to the
+engine (see "Future work" in `doc/design_doc_resident.md`).
 
 **What is not guaranteed.**
 
@@ -2212,6 +2255,9 @@ too.
 - **A hard kill is never taken for an orderly stop.** The exit code with which
   `debasher_stop_resident` reports that it fell back to `debasher_stop` is
   shown as such (see "Running a resident program").
+- **A relaunch never doubles a task.** "Relaunch node", and "Restart node" in a
+  program without a `Supervisor`, relaunch only a task whose PID no longer
+  exists, under the relaunch lock (see "Running a resident program").
 - **Nothing that the web UI writes can bring a node down.** "Talk to FIFOs"
   writes only `DATA` envelopes into external inputs, never a raw line, a
   `CLOSE` or a command into a control port (see "Observing and talking to a
@@ -2299,12 +2345,6 @@ too.
   batch run on the canvas, colored by the statuses of its processes. The
   general program may not have been made with the web UI, and opening it must
   not write into its directory.
-- **Relaunching a node by hand.** An action of the context menu of a node
-  of a resident program without a `Supervisor`, which relaunches a node that
-  is down with `debasher_launch_process`, as the `Supervisor` does. With it,
-  "Restart node" could also be offered in such a program. The peers of the
-  node hold its FIFOs while it is down, so only a channel whose two ends are
-  down together, such as a self-loop, may lose what it held.
 - **Restarting one task of a node.** "Restart node" on a single task of an
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.

@@ -1,6 +1,7 @@
 // Running a resident program (see "Running a resident program" in
 // doc/design_doc_webui.md): its run phase, what the exit codes of the tools
-// that stop it or take a snapshot of it mean, and "Restart node".
+// that stop it or take a snapshot of it mean, "Restart node" and "Relaunch
+// node".
 
 import type { ProgramEdge } from "./edge";
 import { hasSupervisor } from "./node";
@@ -73,17 +74,43 @@ export function orderlyStopOutcome(exitCode: number | null): string {
 
 }
 
-// "Restart node" kills the node, and the Supervisor relaunches it: it is
-// offered on every node of a program with a Supervisor but the Supervisor,
-// which nothing supervises. In a program without a Supervisor nothing would
-// relaunch the node.
+// "Restart node" kills the node, and the Supervisor relaunches it, or the
+// backend in a program without a Supervisor: it is offered on every node of a
+// resident program but the Supervisor, which nothing supervises.
 export function offersRestartNode(
-  program: Pick<Program, "programType" | "processes">,
+  program: Pick<Program, "programType">,
   process: ProgramProcess
 ): boolean {
-  return program.programType === "resident" &&
-    hasSupervisor(program.processes) &&
-    process.nodeKind !== "Supervisor";
+  return program.programType === "resident" && process.nodeKind !== "Supervisor";
+}
+
+// "Relaunch node" relaunches the tasks of a node that are down: it is offered
+// only in a resident program without a Supervisor, whose own relaunches it
+// would compete with.
+export function offersRelaunchNode(
+  program: Pick<Program, "programType" | "processes">
+): boolean {
+  return program.programType === "resident" && !hasSupervisor(program.processes);
+}
+
+// What the web UI relaunched, for "Relaunch node", and for "Restart node" in a
+// program without a Supervisor.
+export function relaunchOutcome(relaunched: string[], exitCode: number | null): string {
+
+  if (exitCode !== 0) {
+    const done = relaunched.length > 0
+      ? `after relaunching ${relaunched.join(", ")}`
+      : "and relaunched nothing";
+    return `It ended with exit code ${exitCode}, ${done}. What the tools printed:`;
+  }
+
+  if (relaunched.length === 0) {
+    return "No task of the node was down: nothing was relaunched.";
+  }
+
+  return `Relaunched ${relaunched.join(", ")}, from the last checkpoint and ` +
+    "the input log.";
+
 }
 
 // Whether the node has a channel whose two ends are restarted together: a
@@ -93,16 +120,25 @@ export function restartsWithBothEnds(edges: ProgramEdge[], processId: string): b
   return edges.some(edge => edge.sourceProcessId === processId && edge.targetProcessId === processId);
 }
 
-// The warning with which "Restart node" asks for confirmation.
+// The warning with which "Restart node" asks for confirmation. With a
+// Supervisor, `losesHeldChannel` means that the node has a channel whose two
+// ends restart together and that the program was launched with
+// -no-hold-fifos; without one, only the former, since nothing holds such a
+// channel.
 export function restartNodeWarning(
   process: ProgramProcess,
+  supervised: boolean,
   losesHeldChannel: boolean
 ): string[] {
 
+  const relauncher = supervised
+    ? "the Supervisor relaunches it"
+    : "the web UI relaunches it once every task of it is down";
+
   const warning = [
-    "The node is killed, as in a crash, and the Supervisor relaunches it: it " +
-    "restarts from its last checkpoint and replays its input log, and what " +
-    "its FIFOs hold is kept by the nodes at their other ends.",
+    `The node is killed, as in a crash, and ${relauncher}: it restarts from ` +
+    "its last checkpoint and replays its input log, and what its FIFOs hold " +
+    "is kept by the nodes at their other ends.",
   ];
 
   const mode = process.optionsHandler.mode;
@@ -111,18 +147,23 @@ export function restartNodeWarning(
   }
 
   if (losesHeldChannel) {
-    warning.push(
-      "The program was launched with -no-hold-fifos, and the node has a " +
-      "channel whose two ends restart together (a self-loop, or a channel " +
-      "between two of its tasks): what that channel holds may be lost."
+    warning.push(supervised
+      ? "The program was launched with -no-hold-fifos, and the node has a " +
+        "channel whose two ends restart together (a self-loop, or a channel " +
+        "between two of its tasks): what that channel holds may be lost."
+      : "The node has a channel whose two ends restart together (a " +
+        "self-loop, or a channel between two of its tasks), and there is no " +
+        "Supervisor to hold it: what that channel holds may be lost."
     );
   }
 
-  warning.push(
-    "A node restarted again and again before it sends a heartbeat counts for " +
-    "the Supervisor as a node that crashes after every relaunch: after a few " +
-    "times the Supervisor gives up on it and stops the program."
-  );
+  if (supervised) {
+    warning.push(
+      "A node restarted again and again before it sends a heartbeat counts for " +
+      "the Supervisor as a node that crashes after every relaunch: after a few " +
+      "times the Supervisor gives up on it and stops the program."
+    );
+  }
 
   return warning;
 
