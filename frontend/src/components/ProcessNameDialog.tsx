@@ -1,9 +1,15 @@
 import { useEffect, useId, useState } from "react";
 
-import { getProcessInfo, suggestProcessNames, validateProcessName } from "../api/processApi";
+import {
+  getNodeInfo,
+  getProcessInfo,
+  suggestNodes,
+  suggestProcessNames,
+  validateProcessName,
+} from "../api/processApi";
 import type { ProcessInfo } from "../models/process";
 import type { ProgramType } from "../models/program";
-import type { NodeKind } from "../models/node";
+import type { NodeInfo, NodeKind, SuggestedNode } from "../models/node";
 import { NODE_KINDS, nodeNameProblem } from "../models/node";
 
 interface Props {
@@ -13,17 +19,22 @@ interface Props {
   existingNames: string[];
   preamble: string;
   envVars: Record<string, string>;
-  // In a resident program the dialog suggests no process defined by the
-  // modules of the preamble (their code is not made of the parts of a
-  // node), and refuses a name whose class would hide a class of the
-  // runtime library or a Python builtin.
+  // In a resident program the dialog refuses a name whose class would hide
+  // a class of the runtime library or a Python builtin.
   programType?: ProgramType;
   // When adding a process to a resident program: the node kind is chosen
-  // here, once. `supervisorTaken` is whether the program already has its
-  // one Supervisor.
+  // here, once, and the dialog suggests the nodes that the modules of the
+  // preamble define, which bring their node kind, code and options with
+  // them (NodeInfo), read by the rules of import. `supervisorTaken` is
+  // whether the program already has its one Supervisor.
   chooseNodeKind?: boolean;
   supervisorTaken?: boolean;
-  onConfirm: (name: string, info: ProcessInfo | null, nodeKind?: NodeKind) => void;
+  onConfirm: (
+    name: string,
+    info: ProcessInfo | null,
+    nodeKind?: NodeKind,
+    nodeInfo?: NodeInfo
+  ) => void;
   onClose: () => void;
 }
 
@@ -54,6 +65,16 @@ export default function ProcessNameDialog({
   const [suggestions, setSuggestions] =
     useState<string[]>([]);
 
+  const [nodeSuggestions, setNodeSuggestions] =
+    useState<SuggestedNode[]>([]);
+
+  // The node kind of the suggested node that the name names, if any: it
+  // comes with the node, and cannot be chosen.
+  const suggestedKind =
+    nodeSuggestions.find(node => node.name === name.trim())?.nodeKind;
+
+  const effectiveKind = suggestedKind ?? nodeKind;
+
   const [isValidating, setValidating] =
     useState(false);
 
@@ -62,11 +83,28 @@ export default function ProcessNameDialog({
 
   useEffect(() => {
 
-    if (isResident) {
-      return;
-    }
-
     let cancelled = false;
+
+    if (isResident) {
+
+      if (chooseNodeKind) {
+        suggestNodes(preamble, envVars)
+          .then(nodes => {
+            if (!cancelled) {
+              setNodeSuggestions(nodes);
+              setSuggestions(nodes.map(node => node.name));
+            }
+          })
+          .catch(() => {
+            // Suggestions are a convenience: silently ignore failures.
+          });
+      }
+
+      return () => {
+        cancelled = true;
+      };
+
+    }
 
     suggestProcessNames(preamble, envVars)
       .then(names => {
@@ -82,7 +120,7 @@ export default function ProcessNameDialog({
       cancelled = true;
     };
 
-  }, [preamble, envVars, isResident]);
+  }, [preamble, envVars, isResident, chooseNodeKind]);
 
   async function handleConfirm() {
 
@@ -110,7 +148,7 @@ export default function ProcessNameDialog({
       }
     }
 
-    if (chooseNodeKind && nodeKind === "Supervisor" && supervisorTaken) {
+    if (chooseNodeKind && effectiveKind === "Supervisor" && supervisorTaken) {
       setError("This program already has a Supervisor: a program has at most one.");
       return;
     }
@@ -128,16 +166,23 @@ export default function ProcessNameDialog({
 
       let info: ProcessInfo | null = null;
 
-      if (suggestions.includes(trimmedName)) {
+      if (!isResident && suggestions.includes(trimmedName)) {
         try {
           info = await getProcessInfo(preamble, envVars, trimmedName);
         } catch {
-          // Injecting an existing process's info is a convenience —
+          // Injecting an existing process's info is a convenience:
           // proceed with a blank process rather than blocking on it.
         }
       }
 
-      onConfirm(trimmedName, info, chooseNodeKind ? nodeKind : undefined);
+      // A suggested node is read by the rules of import, and one that the
+      // web UI cannot hold is refused, with its reasons, which the dialog
+      // shows instead of adding the node.
+      const nodeInfo = suggestedKind
+        ? await getNodeInfo(preamble, envVars, trimmedName)
+        : undefined;
+
+      onConfirm(trimmedName, info, chooseNodeKind ? effectiveKind : undefined, nodeInfo);
       onClose();
     } catch (err) {
       setError(
@@ -219,7 +264,8 @@ export default function ProcessNameDialog({
             </label>
 
             <select
-              value={nodeKind}
+              value={effectiveKind}
+              disabled={Boolean(suggestedKind)}
               onChange={(event) => setNodeKind(event.target.value as NodeKind)}
               style={{ width: "100%" }}
             >
@@ -235,7 +281,10 @@ export default function ProcessNameDialog({
             </select>
 
             <div style={{ color: "#666", fontSize: 12 }}>
-              {NODE_KINDS.find(kind => kind.value === nodeKind)?.description}
+              {suggestedKind
+                ? "A node that a module of the preamble defines: its node kind, " +
+                  "code, options and description come with it."
+                : NODE_KINDS.find(kind => kind.value === nodeKind)?.description}
             </div>
 
           </>
@@ -249,7 +298,7 @@ export default function ProcessNameDialog({
         </datalist>
 
         {error && (
-          <div style={{ color: "#b00020", fontSize: 14 }}>
+          <div style={{ color: "#b00020", fontSize: 14, whiteSpace: "pre-wrap", maxHeight: 240, overflowY: "auto" }}>
             {error}
           </div>
         )}

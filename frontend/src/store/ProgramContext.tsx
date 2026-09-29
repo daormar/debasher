@@ -25,7 +25,7 @@ import { getOptionDirection } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
 import { buildConnectionSentinel } from "../models/edge";
 import type { Position } from "../models/position";
-import type { NodeCode, NodeKind } from "../models/node";
+import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
 import { emptyNodeCode, hasSupervisor } from "../models/node";
 import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 import { saveProgram } from "../storage/programStorage";
@@ -105,8 +105,10 @@ interface ProgramContextType {
 
   // In a resident program `nodeKind` is the node kind of the new process,
   // chosen when it is added: a node is written in Python, in the parts of
-  // NodeCode, and a Supervisor has no code of its own.
-  addProcess: (name: string, info: ProcessInfo | null, nodeKind?: NodeKind) => void;
+  // NodeCode, and a Supervisor has no code of its own. `nodeInfo`, for a
+  // node that a module of the preamble defines, brings its description,
+  // code, options and options handler.
+  addProcess: (name: string, info: ProcessInfo | null, nodeKind?: NodeKind, nodeInfo?: NodeInfo) => void;
 
   // Merges `loaded`'s processes/edges into the current program as a new
   // group (see "Add program"): every merged process is tagged with a
@@ -664,16 +666,26 @@ export function ProgramProvider({
     setSelectedProcessId(processId);
   }
 
-  function addProcess(name: string, info: ProcessInfo | null, nodeKind?: NodeKind) {
+  function addProcess(name: string, info: ProcessInfo | null, nodeKind?: NodeKind, nodeInfo?: NodeInfo) {
 
-    const nodeFields: Partial<ProgramProcess> = nodeKind
+    const nodeFields: Partial<ProgramProcess> = nodeInfo
       ? {
-          nodeKind,
+          nodeKind: nodeInfo.nodeKind,
           initiator: false,
-          nodeCode: nodeKind === "Supervisor" ? undefined : emptyNodeCode(),
+          nodeCode: nodeInfo.nodeCode,
           language: "python",
+          description: nodeInfo.description,
+          options: nodeInfo.options,
+          optionsHandler: nodeInfo.optionsHandler,
         }
-      : {};
+      : nodeKind
+        ? {
+            nodeKind,
+            initiator: false,
+            nodeCode: nodeKind === "Supervisor" ? undefined : emptyNodeCode(),
+            language: "python",
+          }
+        : {};
 
     const process: ProgramProcess = {
 

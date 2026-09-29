@@ -27,8 +27,8 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
 from api.doc_mod import parse_program_type
 from api.models import NodeCode
 from api.option_handler_import import scan_fifo_tags
-from api.program_import import import_program_from_script
-from api.resident_import import ResidentImportRefused
+from api.program_import import import_program_from_script, read_preamble_processes
+from api.resident_import import ResidentImportRefused, preamble_node_kinds, reuse_node
 from api.resident_node_code import decompose_heredoc
 from api.script_generation import generate_script
 
@@ -181,7 +181,7 @@ def test_option_definitions_outside_the_grammar_are_refused_rather_than_kept_man
 def test_a_control_port_written_from_outside_with_a_supervisor_is_refused():
     message = _refusal(_ENGINE_TEST_DIR / "debasher_startup_ref.sh", str(_ENGINE_TEST_DIR))
 
-    assert 'option "-trigger" of process "slow" is a control port written from outside the program' in message
+    assert '- slow: option "-trigger" is a control port written from outside the program' in message
 
 
 def test_code_that_names_a_port_of_the_wiring_is_refused():
@@ -194,3 +194,60 @@ def test_code_that_names_a_port_of_the_wiring_is_refused():
         message = _refusal(module)
 
     assert 'the code names "outhb", a port of the Supervisor wiring' in message
+
+
+# --- a node of a module, reused ------------------------------------------------
+
+_LAUNCHER_PREAMBLE = 'load_debasher_module "debasher_launcher_ref.sh"'
+_LAUNCHER_NAMES = ["launch", "sink", "sup"]
+
+
+def test_the_nodes_of_a_preamble_are_suggested_with_their_kinds_and_never_its_supervisor():
+    processes, edges = read_preamble_processes(_LAUNCHER_PREAMBLE, _LAUNCHER_NAMES, str(_ENGINE_TEST_DIR))
+
+    assert preamble_node_kinds(processes, edges) == {"launch": "ProgramLauncher", "sink": "FBPProcess"}
+
+
+def test_a_reused_node_brings_its_code_and_options_without_the_wiring_nor_its_connections():
+    processes, edges = read_preamble_processes(_LAUNCHER_PREAMBLE, _LAUNCHER_NAMES, str(_ENGINE_TEST_DIR))
+
+    launch = reuse_node(processes, edges, "launch")
+
+    assert launch.nodeKind == "ProgramLauncher"
+    assert launch.nodeCode.classBody.startswith('PFILE = "debasher_launcher_batch.sh"')
+    assert launch.initiator is False
+    assert [(o.label, o.channel, o.fifoTag, o.value) for o in launch.options] == [
+        ("-requests", "fifo", "external", "launch_requests"),
+        ("-outdone", "fifo", None, "launch_done"),
+    ]
+
+
+def test_a_reused_node_loses_the_connections_of_the_program_it_comes_from():
+    processes, edges = read_preamble_processes(_LAUNCHER_PREAMBLE, _LAUNCHER_NAMES, str(_ENGINE_TEST_DIR))
+
+    sink = reuse_node(processes, edges, "sink")
+
+    assert [(o.label, o.value) for o in sink.options] == [("-from_launch", "")]
+
+
+def test_a_node_that_does_not_fit_is_refused_alone_and_its_neighbors_are_still_reused(tmp_path):
+    # The Supervisor of the launcher module has code of its own, which import
+    # refuses, and a node of this module has a decorated class.
+    program = _relay()
+    module = generate_script(program).replace("class Sink(FBPProcess):", "@decorate\nclass Sink(FBPProcess):")
+    (tmp_path / "relay.sh").write_text(module)
+    preamble = 'load_debasher_module "relay.sh"'
+    processes, edges = read_preamble_processes(preamble, ["counter", "sink", "sup"], str(tmp_path))
+
+    with pytest.raises(ResidentImportRefused, match=r'(?s)the node "sink".*- sink, line 4: the class of the node has a decorator'):
+        reuse_node(processes, edges, "sink")
+
+    processes, edges = read_preamble_processes(preamble, ["counter", "sink", "sup"], str(tmp_path))
+    assert reuse_node(processes, edges, "counter").nodeKind == "FBPProcess"
+
+
+def test_a_supervisor_or_a_process_that_is_not_a_node_is_not_reused():
+    processes, edges = read_preamble_processes(_LAUNCHER_PREAMBLE, _LAUNCHER_NAMES, str(_ENGINE_TEST_DIR))
+
+    with pytest.raises(ResidentImportRefused, match="no node named"):
+        reuse_node(processes, edges, "sup")

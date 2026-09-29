@@ -1267,8 +1267,7 @@ options, the preamble of the program and its environment variables.
 
 ## Script generation and import of a resident program
 
-*In progress: script generation and import are built, the reuse of a node of
-a module is not.*
+*Built.*
 
 **The code of a node, generated.** Script generation writes the code of a node
 as the heredoc function of its process, `<process>_heredoc_py` (see "Layout of
@@ -1433,12 +1432,20 @@ and copies the description, the options and the code of the one chosen. In a
 resident program it suggests only the nodes among them: the processes whose
 Python heredoc declares a class that derives from a class of the runtime
 library, never a `Supervisor`, which the user does not edit and which a
-program has once. The node chosen is copied by the rules of import: its node
-kind comes from the base of its class, its code is decomposed into the parts
-of a node, a node that does not fit them is refused with the same
-explanation, and the options of the Supervisor wiring are removed, since
-script generation derives them again. Its name is kept, so its class keeps the
-name that the engine requires.
+program has once, each with its node kind, which the dialog then shows instead
+of offering a choice. A node is told from the processes around it, since its
+heartbeat channel is recognized by the `Supervisor` that reads it, so the
+processes that the preamble defines are read together, as a resident module
+made of the preamble and a program that adds all of them. The node chosen is
+copied by the rules of import: its node kind comes from the base of its class,
+its code is decomposed into the parts of a node, and its options lose the
+Supervisor wiring, which script generation derives again, and their
+connections, which belong to the program it came from; its description and
+the mode of its options handler come with it. A node that does not fit is
+refused with the same explanation as import gives, which the dialog shows;
+only its own problems count, whatever the other processes of the preamble
+hold. Its name is kept, so its class keeps the name that the engine
+requires.
 
 ## The directories of a resident program
 

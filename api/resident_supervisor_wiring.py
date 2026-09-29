@@ -262,12 +262,12 @@ class StrippedWiring:
     """What removing the Supervisor wiring leaves: the connections that are
     not part of it, the processes that are initiators, the labels of the
     options removed from each process, by process name, and what import
-    refuses because it is none of the wiring."""
+    refuses because it is none of the wiring, as (process name, reason)."""
 
     edges: list[ProgramEdge]
     initiators: set[str]
     removed_labels: dict[str, set[str]]
-    problems: list[str]
+    problems: list[tuple[str, str]]
 
 
 def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> StrippedWiring:
@@ -358,9 +358,12 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
                 remove(supervisor, option)
             else:
                 problems.append(
-                    f'the Supervisor "{supervisor.name}" has the option "{option.label}", which is '
-                    "none of the Supervisor wiring, and the web UI does not edit the options of the "
-                    "Supervisor: remove it"
+                    (
+                        supervisor.name,
+                        f'the Supervisor has the option "{option.label}", which is none of the '
+                        "Supervisor wiring, and the web UI does not edit the options of the "
+                        "Supervisor: remove it",
+                    )
                 )
 
     removed_labels = {}
@@ -373,15 +376,21 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
                 continue
             if supervisor is not None and option.direction == "input" and process is not supervisor:
                 problems.append(
-                    f'option "{option.label}" of process "{process.name}" is a control port '
-                    "written from outside the program, and in a program with a Supervisor the "
-                    "web UI gives every initiator a trigger port of the Supervisor instead: read "
-                    "the control port from a trigger port of the Supervisor"
+                    (
+                        process.name,
+                        f'option "{option.label}" is a control port written from outside the '
+                        "program, and in a program with a Supervisor the web UI gives every "
+                        "initiator a trigger port of the Supervisor instead: read the control "
+                        "port from a trigger port of the Supervisor",
+                    )
                 )
             else:
                 problems.append(
-                    f'option "{option.label}" of process "{process.name}" is a fifo tagged control '
-                    "that is none of the Supervisor wiring"
+                    (
+                        process.name,
+                        f'option "{option.label}" is a fifo tagged control that is none of the '
+                        "Supervisor wiring",
+                    )
                 )
 
     return StrippedWiring(remaining_edges, initiators, removed_labels, problems)

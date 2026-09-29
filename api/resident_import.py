@@ -91,13 +91,21 @@ def _check_process(process: ProgramProcess) -> list[_Problem]:
     return problems
 
 
-def import_resident_processes(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> list[ProgramEdge]:
-    """
-    Turns the processes of an imported resident program into nodes, in
-    place, and returns the connections that are not part of the Supervisor
-    wiring. Raises ResidentImportRefused, listing every node that does not
-    fit, when the web UI cannot hold the program.
-    """
+@dataclass
+class _Analysis:
+    """What import finds in the processes of a resident program: the
+    connections that are not part of the Supervisor wiring, the heredoc of
+    each process decomposed, the initiators, and every problem."""
+
+    edges: list[ProgramEdge]
+    decomposed: dict
+    initiators: set[str]
+    problems: list[_Problem]
+
+
+def _analyze(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> _Analysis:
+    """Gives every process its node kind and removes the Supervisor wiring,
+    in place, and finds what the web UI cannot hold, process by process."""
     problems: list[_Problem] = []
     decomposed = {}
 
@@ -118,7 +126,7 @@ def import_resident_processes(processes: list[ProgramProcess], edges: list[Progr
         problems.extend(_check_process(process))
 
     stripped = strip_wiring(processes, edges)
-    problems.extend(_Problem("the Supervisor wiring", None, problem) for problem in stripped.problems)
+    problems.extend(_Problem(process, None, problem) for process, problem in stripped.problems)
 
     # The code of a node that names a port of the wiring would stop working
     # once script generation writes the wiring again, under labels of its
@@ -138,17 +146,77 @@ def import_resident_processes(processes: list[ProgramProcess], edges: list[Progr
                 )
             )
 
-    if problems:
-        problems.sort(key=lambda problem: (problem.process, problem.line or 0))
+    problems.sort(key=lambda problem: (problem.process, problem.line or 0))
+    return _Analysis(stripped.edges, decomposed, stripped.initiators, problems)
+
+
+def _make_node(process: ProgramProcess, analysis: _Analysis) -> None:
+    """Gives a process that fits the parts of its node code, as the
+    program model holds it."""
+    process.nodeCode = analysis.decomposed[process.name].code
+    process.initiator = process.name in analysis.initiators
+    process.language = "python"
+    process.code = ""
+
+
+def import_resident_processes(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> list[ProgramEdge]:
+    """
+    Turns the processes of an imported resident program into nodes, in
+    place, and returns the connections that are not part of the Supervisor
+    wiring. Raises ResidentImportRefused, listing every node that does not
+    fit, when the web UI cannot hold the program.
+    """
+    analysis = _analyze(processes, edges)
+    if analysis.problems:
         raise ResidentImportRefused(
             "The web UI cannot hold this resident program, which the engine runs as it is. "
             "Change the code of these processes to fit the parts of a node, and import it again:\n"
-            + "\n".join(str(problem) for problem in problems)
+            + "\n".join(str(problem) for problem in analysis.problems)
         )
-
     for process in processes:
-        process.nodeCode = decomposed[process.name].code
-        process.initiator = process.name in stripped.initiators
-        process.language = "python"
-        process.code = ""
-    return stripped.edges
+        _make_node(process, analysis)
+    return analysis.edges
+
+
+def preamble_node_kinds(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> dict[str, str]:
+    """
+    The node kind of every node that the processes of a preamble hold (see
+    program_import.read_preamble_processes), by name: the nodes that the
+    dialog that names a new process of a resident program suggests. Never a
+    Supervisor, which the user does not edit and which a program has once,
+    nor a process that is not a node.
+    """
+    _analyze(processes, edges)
+    return {
+        process.name: process.nodeKind
+        for process in processes
+        if process.nodeKind is not None and process.nodeKind != "Supervisor"
+    }
+
+
+def reuse_node(processes: list[ProgramProcess], edges: list[ProgramEdge], name: str) -> ProgramProcess:
+    """
+    The node `name` of the processes of a preamble, by the rules of import,
+    to add it to a resident program: its node kind, the parts of its code
+    and its options without the Supervisor wiring, which script generation
+    derives again, nor its connections, which belong to the program it came
+    from. Raises ResidentImportRefused with the problems of that node alone
+    when the web UI cannot hold it; those of the other processes of the
+    preamble do not matter.
+    """
+    analysis = _analyze(processes, edges)
+    node = next((process for process in processes if process.name == name), None)
+    if node is None or node.nodeKind is None or node.nodeKind == "Supervisor":
+        raise ResidentImportRefused(f'The modules of the preamble define no node named "{name}".')
+    problems = [problem for problem in analysis.problems if problem.process == name]
+    if problems:
+        raise ResidentImportRefused(
+            f'The web UI cannot hold the node "{name}", which the engine runs as it is. Change its '
+            "code to fit the parts of a node:\n" + "\n".join(str(problem) for problem in problems)
+        )
+    _make_node(node, analysis)
+    node.initiator = False
+    for option in node.options:
+        if option.value.startswith("[") and option.value.endswith("]"):
+            option.value = ""
+    return node

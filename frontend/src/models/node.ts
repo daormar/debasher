@@ -1,4 +1,4 @@
-import type { ComputationalSpecs, ProgramProcess } from "./process";
+import type { ComputationalSpecs, OptionsHandler, ProgramProcess } from "./process";
 import type { ProgramOption } from "./option";
 
 // The node kinds of a resident program: the classes of the engine's runtime
@@ -223,4 +223,37 @@ export const RESIDENT_SPEC_LABELS: Record<ResidentSpecField, string> = {
 
 export function hasSupervisor(processes: ProgramProcess[]): boolean {
   return processes.some(process => process.nodeKind === "Supervisor");
+}
+
+/**
+ * A node that a module of the preamble defines, suggested by the dialog that
+ * names a new process of a resident program: its node kind, shown before it
+ * is chosen.
+ */
+export interface SuggestedNode {
+
+  name: string;
+
+  nodeKind: NodeKind;
+
+}
+
+/**
+ * What a node of a module brings to the resident program it is added to,
+ * read by the rules of import: its description, node kind, code and
+ * options, without the Supervisor wiring, which script generation derives
+ * again, nor its connections, which belong to the program it came from.
+ */
+export interface NodeInfo {
+
+  description: string;
+
+  nodeKind: NodeKind;
+
+  nodeCode: NodeCode;
+
+  options: ProgramOption[];
+
+  optionsHandler: OptionsHandler;
+
 }

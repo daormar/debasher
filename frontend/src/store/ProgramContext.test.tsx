@@ -55,6 +55,42 @@ describe("the processes of a resident program", () => {
     expect(sup.nodeCode).toBeUndefined();
   });
 
+  it("adds a node that a module of the preamble defines, with what it brings", () => {
+    const { result } = renderStore(createEmptyProgram("p", "resident"));
+    const nodeCode = { ...emptyNodeCode(), classBody: 'PFILE = "batch.sh"' };
+    const options = [{
+      id: "o1",
+      label: "-requests",
+      direction: "input" as const,
+      dataType: "string" as const,
+      channel: "fifo" as const,
+      fifoTag: "external" as const,
+      mirror: false,
+      description: "requests",
+      value: "launch_requests",
+      commandLine: false,
+      mandatory: false,
+      fromProcessSpec: false,
+    }];
+
+    act(() =>
+      result.current.addProcess("launch", null, "ProgramLauncher", {
+        description: "launches",
+        nodeKind: "ProgramLauncher",
+        nodeCode,
+        options,
+        optionsHandler: { mode: "standard" },
+      })
+    );
+
+    const [launch] = result.current.program.processes;
+    expect(launch.nodeKind).toBe("ProgramLauncher");
+    expect(launch.nodeCode).toEqual(nodeCode);
+    expect(launch.description).toBe("launches");
+    expect(launch.options).toEqual(options);
+    expect(launch.initiator).toBe(false);
+  });
+
   it("adds a process of a general program as before", () => {
     const { result } = renderStore(createEmptyProgram("p"));
 
