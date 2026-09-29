@@ -8,7 +8,8 @@ script_generation.py
 
 routersdir = $(apidir)/routers
 dist_routers_DATA = routers/__init__.py routers/execution.py		\
-routers/processes.py routers/program_files.py routers/programs.py
+routers/fs_browse.py routers/processes.py routers/program_files.py	\
+routers/programs.py
 
 bin_SCRIPTS = debasher_webui
 
