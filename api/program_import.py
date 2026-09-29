@@ -10,6 +10,7 @@ from .debasher_constants import (
 )
 from .doc_mod import (
     parse_module_markdown,
+    parse_program_type,
     run_doc_mod,
     run_doc_mod_all_shared_dirs,
     run_doc_mod_resolve_vars,
@@ -35,6 +36,7 @@ from .models import (
     ProgramProcess,
 )
 from .option_handler_import import ConnectionRef, SharedDirRef, resolve_options_handler
+from .resident_import import import_resident_processes
 from .script_generation import SCRIPT_HEADER
 
 # Default layout for imported processes: debasher_doc_mod's output
@@ -112,11 +114,29 @@ def _to_computational_specs(raw: dict[str, str]) -> ComputationalSpecs:
     """
     cpus = raw.get("cpus")
     mem = raw.get("mem")
+    # The specifications that the nodes of a resident program read, which
+    # debasher_doc_mod prints only when the process gives them.
+    resident = {name: _to_float(raw[name]) for name in _RESIDENT_NUMERIC_SPECS if name in raw}
+    if "max_concurrent_runs" in resident and resident["max_concurrent_runs"] is not None:
+        resident["max_concurrent_runs"] = int(resident["max_concurrent_runs"])
     return ComputationalSpecs(
         cpus=_to_float(cpus) if cpus is not None else None,
         mem=_to_float(mem) if mem is not None else None,
         time=raw.get("time"),
+        batch_sched=raw.get("batch_sched"),
+        **resident,
     )
+
+
+_RESIDENT_NUMERIC_SPECS = (
+    "input_log_max_mb",
+    "out_backlog_max_mb",
+    "out_backlog_fail_mb",
+    "gil_switch_interval_ms",
+    "startup_timeout_s",
+    "max_concurrent_runs",
+    "heartbeat_timeout_s",
+)
 
 
 def _to_alias_opt_map(raw_value: str | None) -> list[AliasOptMapping]:
@@ -547,6 +567,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
     """
     markdown = run_doc_mod(script_path, debasher_mod_dir)
     name, description, shared_dirs, process_chunks = parse_module_markdown(markdown)
+    program_type = parse_program_type(markdown)
 
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
@@ -578,6 +599,10 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
                 option.channel = "fifo"
             if option.label in result.mirrored_fifo_labels:
                 option.mirror = True
+            # The fifo tag of a resident program ("external" or "control"),
+            # written where a general program writes --mirror.
+            if option.channel == "fifo":
+                option.fifoTag = result.fifo_tags.get(option.label)
             # Not a channel (see ProgramOption.fromProcessSpec) — a
             # process-spec-sourced option is an ordinary literal once
             # resolved, this only flags where the value in `option.value`
@@ -625,11 +650,16 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
 
     edges = _build_edges(processes, pending_connections) + _build_shared_dir_edges(processes)
     _sync_connected_option_values(processes, edges)
+    if program_type == "resident":
+        # Turns the processes into nodes and removes the Supervisor wiring,
+        # or refuses the program (see resident_import.py).
+        edges = import_resident_processes(processes, edges)
     _layout_processes(processes, edges)
 
     return Program(
         id=str(uuid.uuid4()),
         name=name,
+        programType=program_type,
         description=description,
         preamble=_extract_preamble(script_path),
         envVars={"DEBASHER_MOD_DIR": debasher_mod_dir} if debasher_mod_dir else {},

@@ -1267,7 +1267,8 @@ options, the preamble of the program and its environment variables.
 
 ## Script generation and import of a resident program
 
-*In progress: script generation is built, import is not.*
+*In progress: script generation and import are built, the reuse of a node of
+a module is not.*
 
 **The code of a node, generated.** Script generation writes the code of a node
 as the heredoc function of its process, `<process>_heredoc_py` (see "Layout of
@@ -1298,7 +1299,8 @@ From it:
 - the node preamble is the text before the class, comments included, less the
   line `from debasher_runtime_lib import <kind>` when it has exactly that form;
 - a method of the class is a hook when it has the name of a hook, its fixed
-  signature and no decorator, and its body is kept, comments included;
+  signature with no annotation, no decorator and a body on lines of its own,
+  and its body is kept, comments included;
 - the class body is the rest of the class, in its order. A method with the name
   of a hook and another signature, such as `process_data(self, port, pkt)`,
   stays in it as an ordinary method, and works as it did;
@@ -1306,19 +1308,23 @@ From it:
   writes again. The same line under `if __name__ == "__main__":` is taken for
   it, since the engine runs the heredoc as the main module.
 
-**What import refuses.** A heredoc that script generation could not write
-again from these parts is refused: code after the class other than the line
-that runs it; a class with a decorator, more than one base or a keyword such as
-`metaclass=`; and a statement of the class body that uses a hook it follows,
-such as `handler = process_data`, which would come before the hook once
-script generation writes the hooks after the rest of the class body. Import
-then refuses the whole program and lists every node that does not fit, each
-with its line, the shape that the web UI expects and how to change the code to
-fit it. Such a module is a valid resident program, which the engine runs; only
-the web UI cannot hold it. This is where import departs from "What import does
-not understand, it keeps": the code of a node has no counterpart of the
-`manual` mode of the options handler, since the parts of a node already cover
-what a node can do, and a mode of its own would need an editor of its own.
+**What import refuses.** A heredoc that script generation could not write again
+from these parts is refused: code after the class other than the line that runs
+it; a class with a decorator, more than one base or a keyword such as
+`metaclass=`, or with its body on the line of its declaration; and a statement
+of the class body that uses a hook it follows, such as `handler = process_data`,
+which would come before the hook once script generation writes the hooks after
+the rest of the class body. A process with additional specifications or
+additional methods, which a resident program does not offer (see "The program
+model of a resident program"), is refused too, as is one whose code is not a
+Python heredoc. Import then refuses the whole program and lists every node that
+does not fit, each with its line, the shape that the web UI expects and how to
+change the code to fit it. Such a module is a valid resident program, which the
+engine runs; only the web UI cannot hold it. This is where import departs from
+"What import does not understand, it keeps": the code of a node has no
+counterpart of the `manual` mode of the options handler, since the parts of a
+node already cover what a node can do, and a mode of its own would need an
+editor of its own.
 
 **The round trip of the code of a node.** A node built with the web UI comes
 back from script generation and import with the same parts. A node written by
@@ -1329,7 +1335,8 @@ between the parts are those that script generation writes.
 **The Supervisor wiring, generated.** Script generation writes the options of
 the Supervisor wiring with fixed labels, which no option of the user may take:
 
-- on every node, `-outhb`, the output of its heartbeat channel;
+- on every node of a program with a `Supervisor`, `-outhb`, the output of its
+  heartbeat channel, which nothing would read in a program without one;
 - on the `Supervisor`, `-<process>_hb`, the input that reads the heartbeat
   channel of a node, or the fanout family `-<process>_hbith` for an `array` or
   `generator` process;
@@ -1380,11 +1387,14 @@ explanation as for the code of a node, import refuses a program whose
 `Supervisor` has code of its own (a method or an attribute in its class, such
 as its own `on_node_down`), since the web UI does not edit the `Supervisor`
 and has nowhere to keep it; a program whose `Supervisor` has an option that is
-none of the above; and a node whose option definition functions are outside
-the grammar of import, which in a general program would become `manual` mode,
-a mode that a resident program does not offer. A program whose wiring is
-incomplete, a node without a heartbeat channel for example, never reaches
-import: the engine refuses to load it.
+none of the above; in a program with a `Supervisor`, an input of a node tagged
+`--control` and written from outside the program, which the engine accepts but
+the program model cannot hold, since the web UI gives every initiator a
+trigger port of the `Supervisor`; and a node whose option definition functions
+are outside the grammar of import, which in a general program would become
+`manual` mode, a mode that a resident program does not offer. A program whose
+wiring is incomplete, a node without a heartbeat channel for example, never
+reaches import: the engine refuses to load it.
 
 **The fifo tags.** Script generation writes the fifo tag `--external` as the
 last argument of the `define_fifo_opt` of an external input, where it writes
@@ -2239,10 +2249,8 @@ too.
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.
 - **Building the web UI for resident programs.** Building what "Resident
-  programs in the web UI" designs, and extending `test/api/test_round_trip.py`
-  to resident programs: the resident reference modules of `test/engine/` that
-  the web UI can hold, as fixed points of import, and resident programs built
-  from the model.
+  programs in the web UI" designs, where a subsection does not say that it is
+  built.
 - **What the web UI waits for from the engine.** Several parts of the design
   of resident programs rely on engine work listed in the Future work of
   `doc/design_doc_resident.md`: what the `Supervisor` knows of each node,

@@ -132,6 +132,13 @@ class OptionHandlerResult:
     # `mirror` from this. Recovered the same way as fifo_labels itself
     # (best-effort in "manual" mode, exact otherwise).
     mirrored_fifo_labels: set[str] = field(default_factory=set)
+    # The fifo tag of each fifo whose define_fifo_opt[_generator] call
+    # carried one as its last token ("external" or "control", see
+    # script_generation.py's _fifo_tag_flag), by option label: that of a
+    # fanout family for a call in one of its blocks. Scanned from the source
+    # in every mode (see scan_fifo_tags), since a tag says nothing about the
+    # shape of the function.
+    fifo_tags: dict[str, str] = field(default_factory=dict)
     # Labels defined via define_procspec_opt — program_import.py sets
     # their option's fromProcessSpec (not channel — see
     # ProgramOption.fromProcessSpec's own docstring for why) from these.
@@ -309,6 +316,14 @@ _FIFO_SCAN_RE = re.compile(r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?
 _MIRRORED_FIFO_SCAN_RE = re.compile(
     r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"[^\n]*--mirror\b'
 )
+# The same call with a trailing fifo tag, which only a resident program
+# writes.
+_TAGGED_FIFO_SCAN_RE = re.compile(
+    r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"[^\n]*--(?P<tag>external|control)\b'
+)
+# The tokens that may end a define_fifo_opt[_generator] call after its
+# positional arguments: its mirror, or its fifo tag.
+_FIFO_TRAILING_FLAGS = (("--mirror", False), ("--external", False), ("--control", False))
 # The process_spec argument comes first (typically "${process_spec}", one
 # token with no internal space) — skipped the same way
 # _TASK_CONNECTION_SCAN_RE skips a task-index argument. Unlike
@@ -450,6 +465,10 @@ def _try_parse_fanout_block(
         return None
     func = call_match.group("func")
     tokens = _tokenize(call_match.group("args") or "")
+    # A fifo tag (see scan_fifo_tags) ends a define_fifo_opt of a family
+    # the same way as that of a single option.
+    if func == "define_fifo_opt" and tokens and tokens[-1] in _FIFO_TRAILING_FLAGS[1:]:
+        tokens = tokens[:-1]
     if len(tokens) != _CALL_TOKEN_COUNTS.get(func, -1):
         return None
 
@@ -597,6 +616,14 @@ def _parse_primitive_calls(
             and tokens[-1] == ("--mirror", False)
         )
         if is_mirrored_fifo_call:
+            tokens = tokens[:-1]
+        # A fifo tag takes the same place (see scan_fifo_tags, which
+        # recovers it).
+        if (
+            func in ("define_fifo_opt", "define_fifo_opt_generator")
+            and tokens
+            and tokens[-1] in _FIFO_TRAILING_FLAGS[1:]
+        ):
             tokens = tokens[:-1]
 
         if len(tokens) != _CALL_TOKEN_COUNTS[func]:
@@ -860,6 +887,20 @@ def scan_fifo_labels(source: str) -> set[str]:
     return {match.group("label") for match in _FIFO_SCAN_RE.finditer(source)}
 
 
+def scan_fifo_tags(source: str) -> dict[str, str]:
+    """
+    The fifo tag of every define_fifo_opt[_generator] call of `source` that
+    carries one, by option label. A call in a fanout-family block, whose
+    label is "<base>${i}", gives the tag to the family, "<base>ith".
+    """
+    tags = {}
+    for match in _TAGGED_FIFO_SCAN_RE.finditer(source):
+        label = match.group("label")
+        family = _FANOUT_BLOCK_LABEL_RE.match(label)
+        tags[f"{family.group('base')}ith" if family else label] = match.group("tag")
+    return tags
+
+
 def scan_mirrored_fifo_labels(source: str) -> set[str]:
     """Best-effort companion to scan_fifo_labels, same reasoning."""
     return {match.group("label") for match in _MIRRORED_FIFO_SCAN_RE.finditer(source)}
@@ -1042,6 +1083,14 @@ def _verbatim_array_code(script_path: Path, code: str, debasher_mod_dir: str) ->
 
 
 def resolve_options_handler(
+    option_handler_code: dict[str, str], script_path: Path, debasher_mod_dir: str = ""
+) -> OptionHandlerResult:
+    result = _resolve_options_handler_mode(option_handler_code, script_path, debasher_mod_dir)
+    result.fifo_tags = scan_fifo_tags("\n".join(option_handler_code.values()))
+    return result
+
+
+def _resolve_options_handler_mode(
     option_handler_code: dict[str, str], script_path: Path, debasher_mod_dir: str = ""
 ) -> OptionHandlerResult:
     generate_opts = option_handler_code.get(PROCESS_METHOD_GENERATE_OPTS_SUFFIX)

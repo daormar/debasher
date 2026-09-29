@@ -194,6 +194,14 @@ debasher::_show_proc_specs()
     [ "${partition}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`partition\`: ${partition}"
     local throttle=$(debasher::_extract_throttle_from_process_spec "${process_spec}")
     [ "${throttle}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`throttle\`: ${throttle}"
+    # Those that the nodes of a resident program read, when the process gives
+    # them
+    local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
+    local specname value
+    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES} ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}; do
+        value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
+        [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`${specname}\`: ${value}"
+    done
     echo ""
 
     echo "### Additional Specifications"

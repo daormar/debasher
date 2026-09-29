@@ -69,7 +69,9 @@ def _process(name, kind, options=(), mode="standard", **fields):
         "computationalSpecs": ComputationalSpecs(cpus=1, mem=32, time="00:10:00"),
         "additionalSpecs": AdditionalSpecs(force=False),
         "nodeKind": kind,
-        "nodeCode": None if kind == "Supervisor" else _SINK_CODE,
+        # A copy for every node, so that a test that changes the code of one
+        # changes nothing else.
+        "nodeCode": None if kind == "Supervisor" else _SINK_CODE.model_copy(),
     }
     return ProgramProcess(**{**defaults, **fields})
 
@@ -269,7 +271,7 @@ def test_without_a_supervisor_an_initiator_has_a_control_port_written_from_outsi
 
     counter = _function(script, "counter_define_opts")
     assert 'debasher::define_fifo_opt "-trigger" "counter_trigger" optlist --control || return 1' in counter
-    assert 'debasher::define_fifo_opt "-outhb" "counter_hb" optlist || return 1' in counter
+    assert "-outhb" not in script
     assert "sup_" not in script
 
 

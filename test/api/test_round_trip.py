@@ -44,6 +44,7 @@ from api.models import (
     AdditionalSpecs,
     ComputationalSpecs,
     ExecutionOptions,
+    NodeCode,
     OptionsHandler,
     Position,
     Program,
@@ -374,3 +375,127 @@ def test_code_methods_specs_and_texts_survive_the_round_trip(tmp_path):
     )
 
     _assert_model_round_trip(program, tmp_path)
+
+
+# --- Resident programs -----------------------------------------------------
+
+_ENGINE_TEST_DIR = _REPO_ROOT / "test" / "engine"
+
+# The resident reference modules of test/engine that the web UI can hold:
+# the others give their Supervisor code of its own, or write their option
+# definitions outside the grammar of import, and import refuses them (see
+# test_resident_import.py).
+_RESIDENT_MODULES = [_ENGINE_TEST_DIR / "debasher_halt_ref.sh"]
+
+
+@pytest.mark.parametrize("module", _RESIDENT_MODULES, ids=lambda module: module.name)
+def test_a_resident_module_that_the_web_ui_can_hold_is_a_fixed_point_of_the_round_trip(module):
+    debasher_mod_dir = str(_ENGINE_TEST_DIR)
+
+    imported = import_program_from_script(module, debasher_mod_dir)
+    reimported = _generate_and_import(imported, debasher_mod_dir)
+
+    assert imported.programType == "resident"
+    assert _canonical_program(reimported) == _canonical_program(imported)
+
+
+def _node(name: str, kind: str, options: list[ProgramOption], **fields) -> ProgramProcess:
+    defaults = dict(
+        language="python",
+        code="",
+        nodeKind=kind,
+        nodeCode=None if kind == "Supervisor" else NodeCode(),
+    )
+    return _process(name, options, **(defaults | fields))
+
+
+def test_a_resident_program_survives_the_round_trip(tmp_path):
+    counter = _node(
+        "counter",
+        "FBPProcess",
+        [
+            _option("-ext", channel="fifo", fifoTag="external", value="counter_ext"),
+            _option("-loop", value="[counter;-outloop]"),
+            _option("-limit", value="10"),
+            _option("-n", dataType="int", commandLine=True, mandatory=True),
+            _option("-outloop", channel="fifo", value="counter_loop"),
+            _option("-outf", channel="fifo", value="counter_out"),
+        ],
+        initiator=True,
+        nodeCode=NodeCode(
+            preamble="import json\n\n# The step of the count\nSTEP = 1",
+            classBody=(
+                "HEARTBEAT_INTERVAL_SECONDS = 1\n\ndef __init__(self):\n    super().__init__()\n"
+                "    self.count = 0\n\ndef _limit(self):\n    return int(self.opts[\"limit\"])"
+            ),
+            processData=(
+                "# Every packet counts\nself.count += STEP\nif self.count < self._limit():\n"
+                '    self.send_data("outloop", self.count)\nself.send_data("outf", json.dumps(packet))'
+            ),
+            captureNodeState='return {"count": self.count}',
+            restoreNodeState='self.count = node_state["count"]',
+            initializeRuntime="pass",
+        ),
+        computationalSpecs=ComputationalSpecs(
+            cpus=1,
+            mem=64,
+            time="00:05:00",
+            input_log_max_mb=50,
+            out_backlog_max_mb=4,
+            out_backlog_fail_mb=32,
+            gil_switch_interval_ms=1,
+            startup_timeout_s=30,
+        ),
+    )
+    launch = _node(
+        "launch",
+        "ProgramLauncher",
+        [_option("-requests", value="[counter;-outf]"), _option("-outdone", channel="fifo", value="launch_done")],
+        nodeCode=NodeCode(classBody='PFILE = "batch.sh"'),
+        computationalSpecs=ComputationalSpecs(
+            cpus=1, mem=64, time="00:05:00", max_concurrent_runs=2, batch_sched="SLURM"
+        ),
+    )
+    watch = _node(
+        "watch",
+        "DirectoryWatcher",
+        [_option("-watchdir", value="/data/incoming"), _option("-outrequests", channel="fifo", value="watch_req")],
+        initiator=True,
+        nodeCode=NodeCode(classBody='PATTERN = "*.bam"'),
+    )
+    sink = _node(
+        "sink",
+        "FBPProcess",
+        [_option("-done", value="[launch;-outdone]"), _option("-req", value="[watch;-outrequests]")],
+        nodeCode=NodeCode(processData="pass", captureNodeState="return {}", restoreNodeState="pass", initializeRuntime="pass"),
+    )
+    sup = _node(
+        "sup",
+        "Supervisor",
+        [],
+        computationalSpecs=ComputationalSpecs(cpus=1, mem=64, time="00:05:00", heartbeat_timeout_s=20, startup_timeout_s=60),
+    )
+    program = _program(
+        "rt_resident",
+        [counter, launch, watch, sink, sup],
+        [
+            _edge("counter", "-outloop", "counter", "-loop"),
+            _edge("counter", "-outf", "launch", "-requests"),
+            _edge("launch", "-outdone", "sink", "-done"),
+            _edge("watch", "-outrequests", "sink", "-req"),
+        ],
+        programType="resident",
+    )
+
+    _assert_model_round_trip(program, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "with_supervisor, array_initiator",
+    [(True, False), (True, True), (False, False), (False, True)],
+    ids=["supervisor", "supervisor-array-initiator", "no-supervisor", "no-supervisor-array-initiator"],
+)
+def test_the_wiring_of_an_array_survives_the_round_trip(tmp_path, with_supervisor, array_initiator):
+    from test_resident_generation import _fanout
+
+    _assert_model_round_trip(_fanout(with_supervisor, array_initiator), tmp_path)
