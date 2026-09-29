@@ -559,7 +559,8 @@ other than `none` or `fifo`, or whose input is not connected to a process in
 `array` or `generator` mode; and a connection to a fanout family from a
 process in another mode. The save writes the program metadata before it
 generates the script, so a program that script generation refuses is still
-saved, and the home directory keeps the script of the previous save.
+saved, and the home directory keeps the script of the previous save. The save
+answers with the reason of the refusal, which the frontend shows.
 
 ## Environment variables of a program
 
@@ -1266,6 +1267,8 @@ options, the preamble of the program and its environment variables.
 
 ## Script generation and import of a resident program
 
+*In progress: script generation is built, import is not.*
+
 **The code of a node, generated.** Script generation writes the code of a node
 as the heredoc function of its process, `<process>_heredoc_py` (see "Layout of
 the generated module"), which holds, in this order:
@@ -1401,6 +1404,18 @@ the section "Program Type" of the module documentation, where
 `debasher_doc_mod` prints the type that the engine resolved, so a module that
 declares `program_type "general"` comes back as a general program without the
 function, which behaves the same.
+
+**What script generation refuses of a resident program.** Besides what it
+refuses in a general program, with the same answer (see "What script
+generation refuses"), script generation refuses a resident program with more
+than one `Supervisor`; a process with no node kind; a node in `manual` mode;
+an option of the user that takes a label of the Supervisor wiring, uses the
+option channel `value_desc` or `shared_dir`, is mirrored or has the fifo tag
+`control`; a `Supervisor` with options of its own, or in `array` or
+`generator` mode; and, in a program with a `Supervisor`, an `array` or
+`generator` node that reaches no fanout family counted by a command line
+option. The editor offers none of them, and script generation refuses them in
+program metadata written by hand or by another tool.
 
 **A node of a module, reused.** In a general program the dialog that names a
 new process suggests the processes that the modules of the preamble define,

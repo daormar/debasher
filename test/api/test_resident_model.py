@@ -139,6 +139,5 @@ def test_a_resident_program_keeps_what_it_adds_in_its_metadata(tmp_path):
     assert sup.computationalSpecs.heartbeat_timeout_s == 20
 
 
-def test_the_script_of_a_resident_program_is_not_generated_yet():
-    with pytest.raises(NotImplementedError, match="resident program"):
-        generate_script(_resident_program())
+def test_the_script_of_a_resident_program_declares_its_type():
+    assert 'debasher::program_type "resident"' in generate_script(_resident_program())

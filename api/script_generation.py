@@ -5,6 +5,7 @@ from pathlib import Path
 from .debasher_constants import (
     MODULE_DOCUMENT_SUFFIX,
     MODULE_PROGRAM_SUFFIX,
+    MODULE_PROGRAM_TYPE_SUFFIX,
     MODULE_SHARED_DIRS_SUFFIX,
     PROCESS_METHOD_DOCUMENT_SUFFIX,
     PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX,
@@ -23,6 +24,7 @@ from .debasher_constants import (
 from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
 from .models import ComputationalSpecs, AdditionalSpecs, Program
+from .resident_generation import resident_program_for_generation
 
 INDENT_WIDTH = 4
 INDENT = " " * INDENT_WIDTH
@@ -41,7 +43,27 @@ def _computational_specs_str(specs: ComputationalSpecs) -> str:
         parts.append(f"mem={specs.mem:g}")
     if specs.time is not None:
         parts.append(f"time={specs.time}")
+    # The specifications that the nodes of a resident program read, under
+    # the names of the engine (see "Limits of a node" in
+    # doc/design_doc_resident.md), none of them set for a general program.
+    for name in _RESIDENT_COMP_SPEC_NAMES:
+        value = getattr(specs, name)
+        if value is None:
+            continue
+        parts.append(f"{name}={value:g}" if isinstance(value, (int, float)) else f"{name}={value}")
     return " ".join(parts)
+
+
+_RESIDENT_COMP_SPEC_NAMES = (
+    "input_log_max_mb",
+    "out_backlog_max_mb",
+    "out_backlog_fail_mb",
+    "gil_switch_interval_ms",
+    "startup_timeout_s",
+    "max_concurrent_runs",
+    "batch_sched",
+    "heartbeat_timeout_s",
+)
 
 
 def _alias_opt_map_str(specs: AdditionalSpecs) -> str | None:
@@ -126,6 +148,18 @@ def _add_document_module_func(name, description):
         lines.append(INDENT + ":")
     lines.append("}")
     return lines
+
+
+def _add_program_type_func(name):
+    """The module-level function that makes a module a resident program; a
+    general program writes none, since a module without one is general."""
+    return [f"{name}{MODULE_PROGRAM_TYPE_SUFFIX}()", "{", f'{INDENT}debasher::program_type "resident"', "}"]
+
+
+def _fifo_tag_flag(option) -> str:
+    """The fifo tag of a resident program, written as the last argument of
+    define_fifo_opt, where a general program writes --mirror."""
+    return f" --{option.fifoTag}" if option.fifoTag else ""
 
 
 def _add_shared_dirs_func(name, shared_dirs):
@@ -395,8 +429,9 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
 
     if option.direction == "output":
         func = "define_fifo_opt" if option.channel == "fifo" else "define_opt"
+        tag_flag = _fifo_tag_flag(option) if option.channel == "fifo" else ""
         lines.append(
-            f'{indent}{INDENT}debasher::{func} "{base_label}${{i}}" "{option.value}" optlist || return 1'
+            f'{indent}{INDENT}debasher::{func} "{base_label}${{i}}" "{option.value}" optlist{tag_flag} || return 1'
         )
     else:
         conn_proc, conn_opt = _get_process_plus_opt(option)
@@ -440,7 +475,10 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         # frontend's OptionEditor already only ever offers the checkbox
         # for direction == "output".
         mirror_flag = " --mirror" if option.mirror and option.direction == "output" else ""
-        return [f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist{mirror_flag} || return 1']
+        return [
+            f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist'
+            f"{mirror_flag}{_fifo_tag_flag(option)} || return 1"
+        ]
     if option.channel == "shared_dir":
         # Always define_opt_from_shared_dir, regardless of any edges
         # into/out of this option, those exist purely to document the
@@ -783,6 +821,11 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
     lines.extend(_add_shared_dirs_func(program.name, program.sharedDirs))
     lines.extend(["", ""])
 
+    # Add the program type of a resident program
+    if program.programType == "resident":
+        lines.extend(_add_program_type_func(program.name))
+        lines.extend(["", ""])
+
     # Add process functions
     for process in program.processes:
         lines.extend(_add_document_proc_func(process))
@@ -1003,9 +1046,9 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
     concern _find_redundant_exec_funcs exists for doesn't apply.
     """
     if program.programType == "resident":
-        raise NotImplementedError(
-            f'Program "{program.name}" is a resident program, whose script generation '
-            "is not built yet: its program metadata is saved, but not its script."
-        )
+        # The code of every node is assembled from its parts, never taken
+        # from a module that the preamble loads, so there is nothing
+        # redundant to leave out.
+        return _build_script(resident_program_for_generation(program))
     skip_exec_for = frozenset() if skip_redundant_check else _find_redundant_exec_funcs(program)
     return _build_script(program, skip_exec_for=skip_exec_for)

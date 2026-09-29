@@ -42,9 +42,10 @@ class ProgramOption(BaseModel):
     # tag "external" marks an external input, written by a source outside
     # the program, which takes no connection (the engine's define_fifo_opt
     # --external). The other fifo tag, "control", belongs only to the
-    # Supervisor wiring, which script generation derives and the model
-    # never holds.
-    fifoTag: Optional[Literal["external"]] = None
+    # Supervisor wiring, which script generation derives (see
+    # resident_generation.py) on a copy of the program: the program model
+    # of the user never holds it.
+    fifoTag: Optional[Literal["external", "control"]] = None
     description: str
     value: str
     commandLine: bool

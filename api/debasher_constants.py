@@ -52,6 +52,7 @@ RESERVED_HEREDOC_SUFFIXES = ["py", "r", "perl", "groovy"]
 MODULE_DOCUMENT_SUFFIX = "_document"
 MODULE_SHARED_DIRS_SUFFIX = "_shared_dirs"
 MODULE_PROGRAM_SUFFIX = "_program"
+MODULE_PROGRAM_TYPE_SUFFIX = "_program_type"
 
 # Mirrors DEBASHER_MODULE_METHODS: suffixes DeBasher appends to a
 # module (program) name to build its module-level function names.
@@ -59,4 +60,5 @@ RESERVED_MODULE_METHOD_SUFFIXES = [
     MODULE_DOCUMENT_SUFFIX,
     MODULE_SHARED_DIRS_SUFFIX,
     MODULE_PROGRAM_SUFFIX,
+    MODULE_PROGRAM_TYPE_SUFFIX,
 ]

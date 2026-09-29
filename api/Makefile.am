@@ -2,7 +2,8 @@ apidir = $(pkgdatadir)/api
 dist_api_DATA = __init__.py additional_methods_import.py			\
 debasher_constants.py doc_mod.py file_inspection.py main.py		\
 markdown_parsing.py models.py option_handler_import.py paths.py	\
-persistence.py program_import.py requirements.txt script_generation.py
+persistence.py program_import.py requirements.txt resident_generation.py	\
+script_generation.py
 
 routersdir = $(apidir)/routers
 dist_routers_DATA = routers/__init__.py routers/execution.py		\
