@@ -52,6 +52,11 @@ Running `./configure` with the virtual environment activated finds the
 same pytest first on `PATH`. A pytest whose Python has an older pydantic
 skips the test modules that need pydantic 2, and says why.
 
+`make crap` runs the Python suites of the API and of the engine again
+under coverage and lists the functions whose CRAP score (cyclomatic
+complexity weighed against test coverage) is above 30. It is not part of
+`make check`; see `test/utils/crap_report.py` for the details.
+
 ## Production
 
 `make install` installs this server and the built frontend as plain

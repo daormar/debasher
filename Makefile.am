@@ -7,6 +7,11 @@ SUBDIRS = m4 engine api frontend doc data test
 # npm check), so the result can be configured/installed without npm on
 # the machine that consumes it, e.g. a bioconda build with no network
 # access. Requires npm on the machine running this target.
+# CRAP report of the Python code, see test/Makefile.am.
+.PHONY: crap
+crap:
+	$(MAKE) -C test crap
+
 .PHONY: dist-vendored
 dist-vendored:
 	$(MAKE) -C frontend all
