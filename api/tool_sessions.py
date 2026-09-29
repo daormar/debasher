@@ -12,7 +12,9 @@ inherited by the processes that the tool launches, so that waiting for its
 end would mean waiting for theirs.
 """
 
+import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -34,3 +36,23 @@ def run_in_own_session(command: list[str], env: dict[str, str], output_path: Pat
         )
 
     return result.returncode
+
+
+def run_with_temp_output(command: list[str], env: dict[str, str]) -> tuple[str, int]:
+    """
+    Run `command` as run_in_own_session does, with its output in a
+    temporary file of its own, since two tabs may run the same tool at the
+    same time. Returns what it printed and its exit code, and deletes the
+    file. A file that is not deleted, because the backend went away before
+    the tool ended, stays in the temporary directory of the system, with no
+    other effect.
+    """
+    fd, name = tempfile.mkstemp(prefix="debasher_webui_", suffix=".log")
+    os.close(fd)
+    output_path = Path(name)
+
+    try:
+        exit_code = run_in_own_session(command, env, output_path)
+        return output_path.read_text(errors="replace"), exit_code
+    finally:
+        output_path.unlink(missing_ok=True)

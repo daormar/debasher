@@ -9,7 +9,9 @@ import {
 import type { RunProgramResult } from "../api/executionApi";
 import type { Program } from "../models/program";
 import { useProgram } from "../store/ProgramContext";
+import { HARD_KILL_CONSEQUENCES, orderlyStopOutcome } from "../models/residentRun";
 import CommandOutputModal from "./CommandOutputModal";
+import ConfirmDialog from "./ConfirmDialog";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
 import OutputDirEditor from "./OutputDirEditor";
 import ProgramOptionsEditor from "./ProgramOptionsEditor";
@@ -25,6 +27,7 @@ const MENU_ITEMS = [
   "Run program",
   "Get program status",
   "Stop program",
+  "Kill program",
   "Reset output directory",
   "Talk to FIFOs",
 ] as const;
@@ -37,7 +40,25 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Run program",
   "Get program status",
   "Stop program",
+  "Kill program",
   "Reset output directory",
+]);
+
+// The actions on a resident program that the run menu does not offer while
+// a request of this tab to launch, stop or kill it has not been answered.
+const ACTS_ON_PROGRAM = new Set<MenuItem>([
+  "Set output directory",
+  "Check program options",
+  "Run program (debug)",
+  "Run program",
+  "Stop program",
+  "Kill program",
+  "Reset output directory",
+]);
+
+// Offered on a resident program only.
+const RESIDENT_ONLY = new Set<MenuItem>([
+  "Kill program",
 ]);
 
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
@@ -56,13 +77,22 @@ const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
 
 interface CommandOutput {
   title: string;
+  message?: string;
   output: string;
 }
 
 export default function RunMenu() {
 
-  const { program, runPhase, isRunInProgress, startProgramRun, resetOutputDir } =
-    useProgram();
+  const {
+    program,
+    runPhase,
+    isRunInProgress,
+    startProgramRun,
+    resetOutputDir,
+    residentPhase,
+    stopResidentProgram,
+    killResidentProgram,
+  } = useProgram();
 
   const isResident =
     program.programType === "resident";
@@ -80,6 +110,9 @@ export default function RunMenu() {
     useState(false);
 
   const [isResetConfirmOpen, setResetConfirmOpen] =
+    useState(false);
+
+  const [isKillConfirmOpen, setKillConfirmOpen] =
     useState(false);
 
   const [isTalkToFifosOpen, setTalkToFifosOpen] =
@@ -126,10 +159,8 @@ export default function RunMenu() {
     if (result.exitCode !== null && result.exitCode !== 0) {
       setCommandOutput({
         title: "Run program: the launch failed",
-        output:
-          `debasher_exec ended with exit code ${result.exitCode}. ` +
-          `What it printed:\n\n` +
-          (result.output ?? ""),
+        message: `debasher_exec ended with exit code ${result.exitCode}. What it printed:`,
+        output: result.output ?? "",
       });
     }
 
@@ -154,6 +185,51 @@ export default function RunMenu() {
       );
     } finally {
       setPendingAction(null);
+    }
+
+  }
+
+  // The orderly stop lasts until the program has stopped, up to about the
+  // timeout of the tool: the menu closes, the run phase shows the program as
+  // stopping, and the outcome comes in a modal.
+  async function handleStopResident() {
+
+    setOpen(false);
+
+    try {
+      const result = await stopResidentProgram();
+      setCommandOutput({
+        title: "Stop program",
+        message: orderlyStopOutcome(result.exitCode),
+        output: result.output,
+      });
+    } catch (err) {
+      setCommandOutput({
+        title: "Stop program",
+        output: err instanceof Error ? err.message : "Failed to stop program.",
+      });
+    }
+
+  }
+
+  async function handleConfirmKill() {
+
+    setKillConfirmOpen(false);
+
+    try {
+      const result = await killResidentProgram();
+      setCommandOutput({
+        title: "Kill program",
+        message: result.exitCode === 0
+          ? `The program was killed. ${HARD_KILL_CONSEQUENCES}`
+          : `debasher_stop ended with exit code ${result.exitCode}. What it printed:`,
+        output: result.output,
+      });
+    } catch (err) {
+      setCommandOutput({
+        title: "Kill program",
+        output: err instanceof Error ? err.message : "Failed to kill program.",
+      });
     }
 
   }
@@ -211,8 +287,13 @@ export default function RunMenu() {
       handleRunProgram();
     } else if (item === "Get program status") {
       runOutputAction(item, "Program status", getProgramStatus);
+    } else if (item === "Stop program" && isResident) {
+      handleStopResident();
     } else if (item === "Stop program") {
       runOutputAction(item, "Stop program", stopProgram);
+    } else if (item === "Kill program") {
+      setOpen(false);
+      setKillConfirmOpen(true);
     } else if (item === "Reset output directory") {
       setOpen(false);
       setResetError(null);
@@ -285,7 +366,7 @@ export default function RunMenu() {
           }}
         >
 
-          {MENU_ITEMS.map(item => (
+          {MENU_ITEMS.filter(item => isResident || !RESIDENT_ONLY.has(item)).map(item => (
 
             <button
 
@@ -300,6 +381,14 @@ export default function RunMenu() {
                 // progress is read from the process statuses, whoever
                 // launched it.
                 (item === "Run program" && isResident && isRunInProgress) ||
+                // Nothing else acts on a resident program while this tab
+                // launches, stops or kills it.
+                (isResident && ACTS_ON_PROGRAM.has(item) &&
+                  (residentPhase === "launching" || residentPhase === "stopping")) ||
+                // Stopping a resident program with no node alive would
+                // find no reader for its triggers.
+                ((item === "Stop program" || item === "Kill program") && isResident &&
+                  residentPhase !== "live") ||
                 // Wiping the output directory out from under a run
                 // (or repointing which directory this UI watches/
                 // controls) would delete files it's using or make it
@@ -380,9 +469,28 @@ export default function RunMenu() {
         />
       )}
 
+      {isKillConfirmOpen && (
+        <ConfirmDialog
+          title="Kill program?"
+          confirmLabel="Kill"
+          onConfirm={handleConfirmKill}
+          onCancel={() => setKillConfirmOpen(false)}
+        >
+          <p style={{ margin: 0 }}>
+            debasher_stop kills every process of the program at once, with
+            no orderly stop: use it for a program known to be stuck, whose
+            orderly stop would only reach the hard kill after its timeout.
+          </p>
+          <p style={{ margin: 0 }}>
+            {HARD_KILL_CONSEQUENCES}
+          </p>
+        </ConfirmDialog>
+      )}
+
       {commandOutput !== null && (
         <CommandOutputModal
           title={commandOutput.title}
+          message={commandOutput.message}
           output={commandOutput.output}
           onClose={() => setCommandOutput(null)}
         />

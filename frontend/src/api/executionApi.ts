@@ -110,11 +110,20 @@ export async function getProgramState(program: Program): Promise<ProgramState> {
   return state;
 }
 
-// Per-process statuses as reported by debasher_status (e.g. "FINISHED",
-// "IN-PROGRESS", "UNFINISHED", "UNFINISHED_BUT_RUNNABLE", "TO-DO"),
-// keyed by process name. Used to color nodes in the canvas — see
-// ProgramContext's status polling and ProcessNode's use of it.
-export async function getProcessStatuses(program: Program): Promise<Record<string, string>> {
+export interface ProcessStatusesResult {
+  // Per-process statuses as reported by debasher_status (e.g. "FINISHED",
+  // "IN-PROGRESS", "UNFINISHED", "UNFINISHED_BUT_RUNNABLE", "TO-DO"),
+  // keyed by process name.
+  statuses: Record<string, string>;
+  // Only for a resident program: whether its output directory holds
+  // program state, which the next launch resumes. False otherwise.
+  hasProgramState: boolean;
+}
+
+// Used to color nodes in the canvas, see ProgramContext's status polling
+// and ProcessNode's use of it, and to derive the run phase of a resident
+// program.
+export async function getProcessStatuses(program: Program): Promise<ProcessStatusesResult> {
   const response = await fetch("/api/execution/process-statuses", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -125,8 +134,8 @@ export async function getProcessStatuses(program: Program): Promise<Record<strin
     throw new Error(`Failed to get process statuses (${response.status})`);
   }
 
-  const { statuses } = await response.json();
-  return statuses;
+  const { statuses, hasProgramState } = await response.json();
+  return { statuses, hasProgramState: hasProgramState ?? false };
 }
 
 async function fetchProcessOutput(
@@ -400,6 +409,39 @@ export async function stopProgram(program: Program): Promise<string> {
 
   const { output } = await response.json();
   return output;
+}
+
+export interface StopResult {
+  output: string;
+  exitCode: number | null;
+}
+
+async function postStop(endpoint: string, program: Program, fallback: string): Promise<StopResult> {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `${fallback} (${response.status})`));
+  }
+
+  const { output, exitCode } = await response.json();
+  return { output, exitCode: exitCode ?? null };
+}
+
+// The orderly stop of a resident program (debasher_stop_resident), which
+// resolves once the program has stopped, up to about the timeout of the
+// tool: exit code 0 for an orderly stop, 2 for one that fell back to the
+// hard kill, 1 for an error of usage or setup.
+export async function stopResidentProgram(program: Program): Promise<StopResult> {
+  return postStop("/api/execution/stop", program, "Failed to stop program");
+}
+
+// The hard kill of a resident program (debasher_stop).
+export async function killProgram(program: Program): Promise<StopResult> {
+  return postStop("/api/execution/kill", program, "Failed to kill program");
 }
 
 // Stop a single process (the canvas's right-click "Stop process"

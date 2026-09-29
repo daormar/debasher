@@ -1,9 +1,11 @@
 """
-Launching a program from the web UI (see "Launching a run" and "Running a
-resident program" in doc/design_doc_webui.md): the debasher_exec command of
-a general and of a resident program, and the launch of a resident program,
-which /run waits for, in a session of its own and with its output in the run
-log, and whose failure it reports at once.
+Launching and stopping a program from the web UI (see "Launching a run" and
+"Running a resident program" in doc/design_doc_webui.md): the debasher_exec
+command of a general and of a resident program; the launch of a resident
+program, which /run waits for, in a session of its own and with its output
+in the run log, and whose failure it reports at once; the program state
+that tells a program never launched from one stopped; and the orderly stop
+and the hard kill of a resident program.
 """
 
 import os
@@ -30,7 +32,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import paths, tool_sessions  # noqa: E402
+from api import paths, program_state, tool_sessions  # noqa: E402
 from api.models import (  # noqa: E402
     AdditionalSpecs,
     ComputationalSpecs,
@@ -245,6 +247,53 @@ def test_a_tool_runs_in_a_session_of_its_own_and_writes_into_a_file(tmp_path):
     assert stderr_line == "to stderr"
 
 
+def test_a_tool_with_a_temporary_output_file_leaves_no_file_behind(tmp_path, monkeypatch):
+    monkeypatch.setattr(tool_sessions.tempfile, "tempdir", str(tmp_path))
+
+    output, exit_code = tool_sessions.run_with_temp_output(
+        [sys.executable, "-u", "-c", _REPORT_SESSION_AND_OUTPUT], dict(os.environ)
+    )
+
+    assert exit_code == 3
+    assert output.splitlines()[2] == "to stderr"
+    assert list(tmp_path.iterdir()) == []
+
+
+# --- program state --------------------------------------------------------------
+
+
+def _exec_dir(outdir, process, *entries):
+    exec_dir = outdir / "__exec__" / process
+    exec_dir.mkdir(parents=True)
+    for entry in entries:
+        (exec_dir / entry).write_text("")
+
+
+def test_an_output_directory_never_launched_has_no_program_state(tmp_path):
+    assert not program_state.has_program_state(str(tmp_path / "missing"))
+    assert not program_state.has_program_state(str(tmp_path))
+
+
+def test_the_files_of_the_engine_alone_are_no_program_state(tmp_path):
+    _exec_dir(tmp_path, "Relay", "Relay.opts", "Relay.stdout", "Relay.finished", "node_info")
+
+    assert not program_state.has_program_state(str(tmp_path))
+
+
+@pytest.mark.parametrize("entry", ["checkpoints", "log", "halted", "checkpoints_3", "log_0"])
+def test_what_a_node_keeps_in_its_exec_directory_is_program_state(tmp_path, entry):
+    _exec_dir(tmp_path, "Relay", "Relay.opts", entry)
+
+    assert program_state.has_program_state(str(tmp_path))
+
+
+def test_the_output_directory_of_a_process_is_program_state(tmp_path):
+    _exec_dir(tmp_path, "Relay", "Relay.opts")
+    (tmp_path / "Relay").mkdir()
+
+    assert program_state.has_program_state(str(tmp_path))
+
+
 # --- /run of a resident program -------------------------------------------------
 
 
@@ -307,6 +356,14 @@ def _wait_for_statuses(program, expected, timeout_secs=30):
         time.sleep(0.5)
 
 
+def _hard_kill(program):
+    subprocess.run(
+        [str(paths.find_bin_tool("debasher_stop")), "-d", program.outputDir],
+        capture_output=True,
+        timeout=60,
+    )
+
+
 @_needs_engine
 def test_a_resident_program_is_launched_and_the_launch_ends(tmp_path):
     program = _relay(tmp_path)
@@ -318,8 +375,43 @@ def test_a_resident_program_is_launched_and_the_launch_ends(tmp_path):
         statuses = _wait_for_statuses(program, "IN-PROGRESS")
         assert statuses == {"Relay": "IN-PROGRESS", "Sink": "IN-PROGRESS", "Sup": "IN-PROGRESS"}
     finally:
-        subprocess.run(
-            [str(paths.find_bin_tool("debasher_stop")), "-d", program.outputDir],
-            capture_output=True,
-            timeout=60,
-        )
+        _hard_kill(program)
+
+
+@_needs_engine
+def test_a_resident_program_is_stopped_in_order_and_keeps_its_state(tmp_path):
+    program = _relay(tmp_path)
+    assert not execution.get_process_statuses(program).hasProgramState
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        response = execution.stop_program(program)
+
+        assert response.exitCode == 0, response.output
+        assert "stopped cleanly" in response.output
+        statuses = execution.get_process_statuses(program)
+        assert set(statuses.statuses.values()) == {"FINISHED"}
+        assert statuses.hasProgramState
+    finally:
+        _hard_kill(program)
+
+
+@_needs_engine
+def test_a_resident_program_is_killed_at_once(tmp_path):
+    program = _relay(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        response = execution.kill_program(program)
+
+        assert response.exitCode == 0, response.output
+        statuses = execution.get_process_statuses(program)
+        assert "IN-PROGRESS" not in statuses.statuses.values()
+        assert set(statuses.statuses.values()) != {"FINISHED"}
+        assert statuses.hasProgramState
+    finally:
+        _hard_kill(program)

@@ -1,10 +1,12 @@
 interface Props {
   title: string;
+  // What the outcome means, shown as text above what the tool printed.
+  message?: string;
   output: string;
   onClose: () => void;
 }
 
-export default function CommandOutputModal({ title, output, onClose }: Props) {
+export default function CommandOutputModal({ title, message, output, onClose }: Props) {
 
   return (
 
@@ -37,6 +39,12 @@ export default function CommandOutputModal({ title, output, onClose }: Props) {
         <h3 style={{ margin: 0 }}>
           {title}
         </h3>
+
+        {message && (
+          <p style={{ margin: 0, fontSize: 14 }}>
+            {message}
+          </p>
+        )}
 
         <pre
           style={{

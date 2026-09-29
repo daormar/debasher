@@ -9,7 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import file_inspection, paths, persistence, tool_sessions
+from .. import file_inspection, paths, persistence, program_state, tool_sessions
 from ..models import Program
 from ..resident_supervisor_wiring import NO_HOLD_FIFOS_LABEL
 
@@ -161,6 +161,23 @@ def _run_debasher_dir_tool(program: Program, tool_name: str) -> tuple[str, int]:
     result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
     return result.stdout + result.stderr, result.returncode
+
+
+def _run_debasher_dir_tool_in_own_session(program: Program, tool_name: str) -> tuple[str, int]:
+    """
+    Run a DeBasher bin tool that takes "-d <outputDir>" and acts on a live
+    resident program (debasher_stop_resident, debasher_stop), in a session
+    of its own and with its output in a temporary file, so that the backend
+    going away cannot cut it in the middle. Returns (output, exit code).
+    """
+    tool = paths.find_bin_tool(tool_name)
+    if tool is None:
+        return f"Error: {tool_name} tool not found.", 1
+
+    output, exit_code = tool_sessions.run_with_temp_output(
+        [str(tool), "-d", program.outputDir], _debasher_env(program)
+    )
+    return _cap_lines(output), exit_code
 
 
 def _get_program_state(program: Program) -> tuple[ProgramState, str]:
@@ -370,6 +387,9 @@ def get_program_status(program: Program) -> ProgramStatusResponse:
 
 class ProcessStatusesResponse(BaseModel):
     statuses: dict[str, str]
+    # Only for a resident program: whether its output directory holds
+    # program state, which the next launch resumes; false otherwise.
+    hasProgramState: bool = False
 
 
 @router.post("/process-statuses", response_model=ProcessStatusesResponse)
@@ -384,7 +404,10 @@ def get_process_statuses(program: Program) -> ProcessStatusesResponse:
     this unconditionally and simply show no color in that case.
     """
     output, _ = _run_debasher_dir_tool(program, "debasher_status")
-    return ProcessStatusesResponse(statuses=_parse_process_statuses(output))
+    return ProcessStatusesResponse(
+        statuses=_parse_process_statuses(output),
+        hasProgramState=_is_resident(program) and program_state.has_program_state(program.outputDir),
+    )
 
 
 class ProcessTasksRequest(BaseModel):
@@ -724,15 +747,38 @@ def check_program_options(program: Program) -> CheckProgramOptionsResponse:
 
 class StopProgramResponse(BaseModel):
     output: str
+    # Only for a resident program: the exit code of the tool, which tells an
+    # orderly stop from one that fell back to the hard kill.
+    exitCode: int | None = None
 
 
 @router.post("/stop", response_model=StopProgramResponse)
 def stop_program(program: Program) -> StopProgramResponse:
     """
-    Stop a running program (debasher_stop -d <outputDir>).
+    Stop a running program. A general program is stopped with debasher_stop
+    -d <outputDir>, and a resident one in order, with debasher_stop_resident
+    -d <outputDir> and its default timeout, which this waits for: it halts
+    every node in one round and then stops them, the Supervisor first, and
+    falls back to the hard kill of debasher_stop when the round does not
+    close in time (exit code 2).
     """
+    if _is_resident(program):
+        output, exit_code = _run_debasher_dir_tool_in_own_session(program, "debasher_stop_resident")
+        return StopProgramResponse(output=output, exitCode=exit_code)
+
     output, _ = _run_debasher_dir_tool(program, "debasher_stop")
     return StopProgramResponse(output=output)
+
+
+@router.post("/kill", response_model=StopProgramResponse)
+def kill_program(program: Program) -> StopProgramResponse:
+    """
+    Kill a resident program at once with debasher_stop -d <outputDir>, the
+    hard kill, for a program known to be stuck, whose orderly stop would
+    only reach the hard kill after its timeout.
+    """
+    output, exit_code = _run_debasher_dir_tool_in_own_session(program, "debasher_stop")
+    return StopProgramResponse(output=output, exitCode=exit_code)
 
 
 class StopProcessRequest(BaseModel):

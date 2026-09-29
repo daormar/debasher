@@ -19,6 +19,7 @@ import type { ProgramProcess } from "../models/process";
 import type { ProgramOption, FanoutFamily } from "../models/option";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
+import { stoppedInOrder } from "../models/residentRun";
 import {
   getProcessOpts,
   getProcessResolvedOptions,
@@ -43,6 +44,7 @@ import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
 import BackEdge from "./BackEdge";
 import SelfLoopEdge from "./SelfLoopEdge";
+import ResidentRunIndicator from "./ResidentRunIndicator";
 import RunStatusIndicator from "./RunStatusIndicator";
 import ProcessContextMenu, { type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
 import ProcessTaskPicker from "./ProcessTaskPicker";
@@ -178,7 +180,21 @@ export default function ProgramCanvas() {
     runPhase,
     runOutput,
     dismissProgramRun,
+    processStatuses,
+    residentPhase,
   } = useProgram();
+
+  const isResident = program.programType === "resident";
+
+  const inOrder = stoppedInOrder(processStatuses);
+
+  // The indicator of a resident program, hidden by its Hide button until the
+  // run phase changes: what it shows is then new.
+  const residentIndicatorKey =
+    residentPhase === "stopped" ? `stopped:${inOrder}` : residentPhase;
+
+  const [hiddenResidentIndicator, setHiddenResidentIndicator] =
+    useState<string | null>(null);
 
   // Whether the Supervisor wiring of a resident program is shown. It belongs
   // to the tab, like the selection, and is not saved.
@@ -739,12 +755,23 @@ export default function ProgramCanvas() {
           <CanvasLegend programType={program.programType} />
         </Panel>
 
-        {runPhase !== "idle" && (
+        {!isResident && runPhase !== "idle" && (
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
             <RunStatusIndicator
               phase={runPhase}
               output={runOutput}
               onClose={dismissProgramRun}
+            />
+          </Panel>
+        )}
+
+        {isResident && residentPhase !== "new" &&
+          hiddenResidentIndicator !== residentIndicatorKey && (
+          <Panel position="bottom-right" style={{ marginBottom: 170 }}>
+            <ResidentRunIndicator
+              phase={residentPhase}
+              inOrder={inOrder}
+              onHide={() => setHiddenResidentIndicator(residentIndicatorKey)}
             />
           </Panel>
         )}

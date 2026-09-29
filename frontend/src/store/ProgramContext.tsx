@@ -29,15 +29,24 @@ import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
 import { emptyNodeCode, hasSupervisor } from "../models/node";
 import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 import { saveProgram } from "../storage/programStorage";
-import type { ProgramStatusResult, RunProgramResult } from "../api/executionApi";
+import type {
+  ProcessStatusesResult,
+  ProgramStatusResult,
+  RunProgramResult,
+  StopResult,
+} from "../api/executionApi";
 import {
   fetchProgramStatus,
   getProcessStatuses,
   getProgramState,
+  killProgram as requestKill,
   resetOutputDir as requestOutputDirReset,
   runProgram,
   stopProgram,
+  stopResidentProgram as requestResidentStop,
 } from "../api/executionApi";
+import type { ResidentRequest, ResidentRunPhase } from "../models/residentRun";
+import { residentRunPhase } from "../models/residentRun";
 
 // How often to poll for a background run's completion, in milliseconds.
 const RUN_POLL_INTERVAL_MS = 5000;
@@ -104,6 +113,20 @@ interface ProgramContextType {
   // it's still going, otherwise just dismisses the finished/unfinished
   // notice.
   dismissProgramRun: () => void;
+
+  // The run phase of a resident program, derived from processStatuses,
+  // from whether the output directory holds program state, and from a
+  // request of this tab not answered yet (see models/residentRun.ts).
+  // Meaningless for a general program.
+  residentPhase: ResidentRunPhase;
+
+  // "Stop program" on a resident program: the orderly stop, which resolves
+  // once the program has stopped, with the exit code of the tool. "Kill
+  // program": the hard kill. Both show the run phase "stopping" meanwhile,
+  // and throw on a failed request.
+  stopResidentProgram: () => Promise<StopResult>;
+
+  killResidentProgram: () => Promise<StopResult>;
 
   // In a resident program `nodeKind` is the node kind of the new process,
   // chosen when it is added: a node is written in Python, in the parts of
@@ -552,7 +575,7 @@ export function ProgramProvider({
 
   }
 
-  async function startProgramRun() {
+  async function ensureNoRunInProgress() {
 
     const state = await getProgramState(program);
 
@@ -560,14 +583,55 @@ export function ProgramProvider({
       throw new Error("A run is already in progress for this output directory.");
     }
 
-    const result = await runProgram(program);
+  }
 
-    if (program.programType !== "resident") {
-      startRunPolling(program);
+  async function startProgramRun() {
+
+    if (program.programType === "resident") {
+      return withResidentRequest("launching", async () => {
+        await ensureNoRunInProgress();
+        return runProgram(program);
+      });
     }
 
+    await ensureNoRunInProgress();
+    const result = await runProgram(program);
+    startRunPolling(program);
     return result;
 
+  }
+
+  // The request of this tab to launch a resident program, or to stop or kill
+  // it, that has not been answered yet: the run phase shows it until the
+  // answer comes and the process statuses have been read again, so that the
+  // phase goes on to what the request left without waiting for the next
+  // poll.
+  const [residentRequest, setResidentRequest] =
+    useState<ResidentRequest | null>(null);
+
+  async function withResidentRequest<T>(
+    request: ResidentRequest,
+    action: () => Promise<T>
+  ): Promise<T> {
+
+    setResidentRequest(request);
+
+    try {
+      const result = await action();
+      await refreshProcessStatuses();
+      return result;
+    } finally {
+      setResidentRequest(null);
+    }
+
+  }
+
+  function stopResidentProgram() {
+    return withResidentRequest("stopping", () => requestResidentStop(program));
+  }
+
+  function killResidentProgram() {
+    return withResidentRequest("stopping", () => requestKill(program));
   }
 
   function dismissProgramRun() {
@@ -589,8 +653,14 @@ export function ProgramProvider({
   const [processStatuses, setProcessStatuses] =
     useState<Record<string, string>>({});
 
+  const [hasProgramState, setHasProgramState] =
+    useState(false);
+
   const isRunInProgress =
     Object.values(processStatuses).includes("IN-PROGRESS");
+
+  const residentPhase =
+    residentRunPhase(processStatuses, hasProgramState, residentRequest);
 
   // Kept in sync on every render so the status-poll effect below (which
   // only restarts when outputDir/DEBASHER_MOD_DIR change, not on every
@@ -603,27 +673,48 @@ export function ProgramProvider({
     programRef.current = program;
   }, [program]);
 
+  function applyProcessStatuses(result: ProcessStatusesResult) {
+    setProcessStatuses(result.statuses);
+    setHasProgramState(result.hasProgramState);
+  }
+
+  async function readProcessStatuses(current: Program): Promise<ProcessStatusesResult> {
+    try {
+      return await getProcessStatuses(current);
+    } catch {
+      // Nothing to show while debasher_status can't be run (e.g. the
+      // output directory hasn't been initialized by a run yet).
+      return { statuses: {}, hasProgramState: false };
+    }
+  }
+
+  // Reads the process statuses at once, besides the poll below, after a
+  // request that changes them. A reading for an output directory that has
+  // changed meanwhile is dropped.
+  async function refreshProcessStatuses() {
+    const current = programRef.current;
+    if (!current.outputDir.trim()) {
+      return;
+    }
+    const result = await readProcessStatuses(current);
+    if (programRef.current.outputDir === current.outputDir) {
+      applyProcessStatuses(result);
+    }
+  }
+
   useEffect(() => {
 
     if (!program.outputDir.trim()) {
-      setProcessStatuses({});
+      applyProcessStatuses({ statuses: {}, hasProgramState: false });
       return;
     }
 
     let cancelled = false;
 
     async function poll() {
-      try {
-        const statuses = await getProcessStatuses(programRef.current);
-        if (!cancelled) {
-          setProcessStatuses(statuses);
-        }
-      } catch {
-        // Nothing to show while debasher_status can't be run (e.g. the
-        // output directory hasn't been initialized by a run yet).
-        if (!cancelled) {
-          setProcessStatuses({});
-        }
+      const result = await readProcessStatuses(programRef.current);
+      if (!cancelled) {
+        applyProcessStatuses(result);
       }
     }
 
@@ -657,7 +748,7 @@ export function ProgramProvider({
     if (cleared) {
       // Don't wait for the next poll tick, every node's background
       // should go back to white as soon as the reset is confirmed.
-      setProcessStatuses({});
+      applyProcessStatuses({ statuses: {}, hasProgramState: false });
     }
 
     return cleared;
@@ -1667,6 +1758,12 @@ export function ProgramProvider({
 
     dismissProgramRun,
 
+    residentPhase,
+
+    stopResidentProgram,
+
+    killResidentProgram,
+
     addProcess,
 
     mergeProgram,
@@ -1731,6 +1828,7 @@ export function ProgramProvider({
     runPhase,
     runOutput,
     processStatuses,
+    residentPhase,
   ]);
 
   return (
