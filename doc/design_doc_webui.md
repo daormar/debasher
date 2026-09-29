@@ -1209,8 +1209,8 @@ four sorts:
   so what starts the activity of a program always comes in through an
   external input;
 - a configuration option: an option with option channel `none` that no
-  connection feeds (a literal, a command line option or an attribute of the
-  process specifications), which the node reads from its options.
+  connection feeds (a literal, a flag, a command line option or an attribute
+  of the process specifications), which the node reads from its options.
 
 The fifo tag `control` is never set by the user: only the Supervisor wiring
 writes it. The option channels `value_desc` and `shared_dir` and the flag
@@ -1221,8 +1221,8 @@ processes it launches all at once.
 
 **Connections.** The canvas accepts a connection in a resident program only
 from a business output to a business input, of another node or of the same
-node. An external input takes none, and the Supervisor wiring is never drawn
-by hand.
+node. An external input takes none, nor does a flag, which takes no value,
+and the Supervisor wiring is never drawn by hand.
 
 **Options handler modes.** `standard`, `array` and `generator` apply as in a
 general program, and each task of an `array` or `generator` process is a node

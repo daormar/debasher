@@ -159,6 +159,7 @@ describe("isValidProgramConnection in a resident program", () => {
     option("relay-in", "-inf"),
     option("relay-ext", "-ext", { channel: "fifo", fifoTag: "external", value: "relay_ext" }),
     option("relay-n", "-n", { commandLine: true }),
+    option("relay-v", "-v", { dataType: "None" }),
     option("relay-outf", "-outf", { channel: "fifo", value: "relay_out" }),
     option("relay-outv", "-outv", { value: "/tmp/v" }),
   ]);
@@ -190,6 +191,7 @@ describe("isValidProgramConnection in a resident program", () => {
   it("joins nothing into an external input or a configuration option", () => {
     expect(connects("relay-outf", "relay", "relay-ext")).toBe(false);
     expect(connects("relay-outf", "relay", "relay-n")).toBe(false);
+    expect(connects("relay-outf", "relay", "relay-v")).toBe(false);
   });
 
   it("keeps a single connection into each business input", () => {

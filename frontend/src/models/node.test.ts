@@ -70,6 +70,7 @@ describe("the options of a node", () => {
     expect(isBusinessInputCandidate(option("-inf", { channel: "fifo", fifoTag: "external" }))).toBe(false);
     expect(isBusinessInputCandidate(option("-n", { commandLine: true }))).toBe(false);
     expect(isBusinessInputCandidate(option("-c", { fromProcessSpec: true, value: "cpus" }))).toBe(false);
+    expect(isBusinessInputCandidate(option("-verbose", { dataType: "None" }))).toBe(false);
     expect(isBusinessInputCandidate(option("-outf", { channel: "fifo" }))).toBe(false);
   });
 });

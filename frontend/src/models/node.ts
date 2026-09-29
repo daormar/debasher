@@ -180,12 +180,13 @@ export function isBusinessOutput(option: ProgramOption): boolean {
  * An input that a connection can reach in a resident program, to become a
  * business input: one with option channel "none" whose value comes from no
  * command line option and no process specification. An external input
- * takes no connection.
+ * takes no connection, and neither does a flag, which takes no value.
  */
 export function isBusinessInputCandidate(option: ProgramOption): boolean {
   return (
     option.direction === "input" &&
     option.channel === "none" &&
+    option.dataType !== "None" &&
     !option.commandLine &&
     !option.fromProcessSpec
   );
