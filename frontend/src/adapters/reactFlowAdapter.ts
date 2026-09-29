@@ -9,7 +9,7 @@ import type { ProgramProcess } from "../models/process";
 import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
-import { isFanoutOption } from "../models/option";
+import { isFanoutOption, optionValueSource } from "../models/option";
 import {
   configurationSource,
   isBusinessInputCandidate,
@@ -177,7 +177,9 @@ export function supervisorWiring(
 
 /**
  * The structural key of a program: for each process, its id, name and
- * options handler mode, and the id, label and direction of each option.
+ * options handler mode, and the id, label and direction of each option and,
+ * for an input, where its value comes from when no connection can give it
+ * (see optionValueSource), which its hollow handle and tag show.
  * It changes whenever a process is added, removed or renamed, its options
  * handler mode is switched, or an option is added, removed or edited, and
  * never when a process is moved. The canvas refreshes its list of canvas
@@ -190,6 +192,12 @@ export function supervisorWiring(
  * option, where its value comes from, which decide how its handle is drawn,
  * and whether the Supervisor wiring is shown, which adds and removes handles.
  */
+// Where the value of an input of a general program comes from when no
+// connection can give it: what its hollow handle and its tag show.
+function generalOptionKey(option: ProgramOption): string {
+  return option.direction === "input" ? optionValueSource(option) ?? "" : "";
+}
+
 // The sort of an option of a node and, for a configuration option, where its
 // value comes from: what its handle and its tag show.
 function residentOptionKey(option: ProgramOption): string {
@@ -203,7 +211,7 @@ export function canvasStructuralKey(program: Program, showWiring = false): strin
   return program.processes
     .map(process => {
       const options = process.options
-        .map(o => `${o.id}:${o.label}:${o.direction}${isResident ? `:${residentOptionKey(o)}` : ""}`)
+        .map(o => `${o.id}:${o.label}:${o.direction}:${isResident ? residentOptionKey(o) : generalOptionKey(o)}`)
         .join(",");
       const key = `${process.id}:${process.name}:${process.optionsHandler.mode}:${options}`;
       return isResident

@@ -191,6 +191,11 @@ describe("canvasStructuralKey", () => {
     expect(canvasStructuralKey(program([counter, relabeled]))).not.toBe(key);
   });
 
+  it("changes when an input comes to take its value from the command line", () => {
+    const fromCommandLine = { ...sink, options: [option("sink-in", "-in", { commandLine: true })] };
+    expect(canvasStructuralKey(program([counter, fromCommandLine]))).not.toBe(key);
+  });
+
   it("changes when a process is added or removed", () => {
     expect(canvasStructuralKey(program([counter]))).not.toBe(key);
   });

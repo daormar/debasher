@@ -13,7 +13,7 @@ import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
 import { configurationSource, noHoldFifosOption, nodeOptionRole, observesOutside } from "../models/node";
 import { WIRING_EDGE_COLOR, optionRow } from "../adapters/reactFlowAdapter";
-import { fanoutBaseLabel, isFanoutOption } from "../models/option";
+import { fanoutBaseLabel, isFanoutOption, optionValueSource } from "../models/option";
 import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
 import {
   HEAD_BAND_COLOR,
@@ -323,20 +323,33 @@ export default function ProcessNode({
     return undefined;
   }
 
+  // Where the value of an option comes from when no connection can give it,
+  // which its hollow handle is tagged with: in a resident program, for every
+  // configuration option; in a general one, for an input of the command line,
+  // of the process specifications or a flag, which script generation writes
+  // before it looks at any connection.
+  function valueSource(option: ProgramOption): string | undefined {
+    if (isResident) {
+      return nodeOptionRole(option) === "configuration" ? configurationSource(option) : undefined;
+    }
+    return option.direction === "input" ? optionValueSource(option) ?? undefined : undefined;
+  }
+
   // In a resident program only a business output and an input that a
-  // connection can reach take a connection; a configuration option has a
-  // hollow handle, tagged with where its value comes from.
+  // connection can reach take a connection; an option with a hollow handle
+  // takes none in either type of program.
   function optionHandle(option: ProgramOption, row: "top" | "bottom") {
     const role = isResident ? nodeOptionRole(option) : null;
+    const source = valueSource(option);
     return (
       <OptionHandle
         key={option.id}
         option={option}
         row={row}
         isFanout={isStandard && isFanoutOption(option.label)}
-        connectable={!role || role === "businessOutput" || role === "businessInput"}
+        connectable={!source && (!role || role === "businessOutput" || role === "businessInput")}
         outsideMark={outsideMark(option)}
-        valueSource={role === "configuration" ? configurationSource(option) : undefined}
+        valueSource={source}
       />
     );
   }

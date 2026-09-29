@@ -981,14 +981,20 @@ source. An edge from a FIFO is dashed.
 A canvas node shows the process's name and options, its options handler mode
 (a double border for `array` and `generator`, a dashed one for `manual`), its
 group (a border color derived from the `groupId`, and a badge with the
-module's name), and, as its background, the process status.
+module's name), and, as its background, the process status. An input whose
+value no connection can give, since script generation writes it before it
+looks at any connection (see "Connections"), has a hollow handle, which takes
+no connection, and a tag after its label that says where its value comes
+from: `cmdline` for a command line option, a flag included, `spec` for an
+option taken from the process specifications, and `flag` for a flag that the
+module always gives.
 
 The canvas has a legend, which the user can fold. It says what each process
 status means (see "Process status" in `doc/design_doc_engine.md`), and what the
 canvas draws to tell processes and edges apart: the borders of a canvas node,
-an edge from a file or a value and one from a FIFO, a fanout edge, the route
-of an edge that goes back up and of a self-loop, and the label of a fanout
-family.
+a hollow handle and its tag, an edge from a file or a value and one from a
+FIFO, a fanout edge, the route of an edge that goes back up and of a
+self-loop, and the label of a fanout family.
 
 Of what the canvas shows, only the positions belong to the program model and
 are saved. The selection, the part of the canvas in view (fitted to the
@@ -1001,7 +1007,8 @@ The canvas library draws from its own list of canvas nodes, which it updates
 on every frame of a drag. The canvas keeps that list, writes each new position
 into the store as the drag goes, and refreshes the list from the store only
 when the program's structural key changes (for each process: its id, name and
-mode, and the id, label and direction of each option) or when the set of moved
+mode, and the id, label and direction of each option, and for an input, where
+its value comes from when no connection can give it) or when the set of moved
 handles changes, keeping the positions that the list already has. Refreshing
 it on every change of the store would fight with the drag.
 

@@ -114,6 +114,12 @@ function GeneralLegend() {
         Colored, with a badge: a group brought in by "Add program".
       </LegendRow>
 
+      <Heading>Handles</Heading>
+      <LegendRow mark={<HollowHandleSample />}>
+        A hollow handle takes no connection: its tag says where the value
+        comes from (cmdline, spec or flag).
+      </LegendRow>
+
       <Heading>Edges</Heading>
       <LegendRow mark={<EdgeSample points="0,6 24,6" />}>
         From a file or a value.
