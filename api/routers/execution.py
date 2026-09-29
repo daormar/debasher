@@ -429,7 +429,8 @@ LAUNCH_RECORD_CONFLICT = "launch-record"
 def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProgramResponse:
     """
     Launch a program run, with debasher_exec in a session of its own. A
-    general program run by the built-in scheduler is started in the
+    general program run by the built-in scheduler is validated with
+    debasher_exec --validate, which this waits for, and then started in the
     background, and this returns immediately: the process statuses tell
     when it's done. With Slurm, and for a resident program, launched with
     debasher_exec in oneshot mode, this returns once debasher_exec has
@@ -470,23 +471,34 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
         return _launch_and_wait(command, program)
 
     # With the built-in scheduler, debasher_exec is the scheduler of the run
-    # and lives as long as it: it is started detached, in a session of its
-    # own, so that a signal that stops the server does not cut the run.
+    # and lives as long as it, so it cannot be waited for. The program is
+    # validated first, within the request, so that a program that the engine
+    # refuses is reported at once rather than leaving the output directory as
+    # it was, which the run phase would take for the end of a run.
+    validation = _prepare_debasher_exec_command(program, "--validate")
+    response = _launch_and_wait(validation, program)
+    if response.exitCode != 0:
+        return response
+
+    # Then it is started detached, in a session of its own, so that a signal
+    # that stops the server does not cut the run.
     tool_sessions.start_detached(command, _debasher_env(program), _run_log_path(program))
 
     return RunProgramResponse(started=True)
 
 
-class RunProgramDebugResponse(BaseModel):
+class ValidateProgramResponse(BaseModel):
     output: str
 
 
-@router.post("/run-debug", response_model=RunProgramDebugResponse)
-def run_program_debug(program: Program) -> RunProgramDebugResponse:
+@router.post("/validate", response_model=ValidateProgramResponse)
+def validate_program(program: Program) -> ValidateProgramResponse:
     """
-    Run a program in debug mode (debasher_exec --debug).
+    Validate a program (debasher_exec --validate): everything but launching
+    its processes, and, with the built-in scheduler, the resources of each
+    process against its limits.
     """
-    return RunProgramDebugResponse(output=_run_debasher_exec(program, "--debug"))
+    return ValidateProgramResponse(output=_run_debasher_exec(program, "--validate"))
 
 
 class ProgramStatusResponse(BaseModel):

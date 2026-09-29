@@ -4,8 +4,8 @@ import {
   checkLaunch,
   checkProgramOptions,
   getProgramStatus,
-  runProgramDebug,
   takeSnapshot,
+  validateProgram,
 } from "../api/executionApi";
 import type { RunProgramResult } from "../api/executionApi";
 import { LaunchRecordConflict } from "../api/executionApi";
@@ -26,7 +26,7 @@ const MENU_ITEMS = [
   "Set execution options",
   "Set program options",
   "Check program options",
-  "Run program (debug)",
+  "Validate program",
   "Run program",
   "Get program status",
   "Stop program",
@@ -41,7 +41,7 @@ type MenuItem = (typeof MENU_ITEMS)[number];
 
 const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Check program options",
-  "Run program (debug)",
+  "Validate program",
   "Run program",
   "Get program status",
   "Stop program",
@@ -56,7 +56,7 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
 const ACTS_ON_PROGRAM = new Set<MenuItem>([
   "Set output directory",
   "Check program options",
-  "Run program (debug)",
+  "Validate program",
   "Run program",
   "Stop program",
   "Kill program",
@@ -87,13 +87,13 @@ const GENERAL_ONLY = new Set<MenuItem>([
 
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
   "Check program options",
-  "Run program (debug)",
+  "Validate program",
   "Run program",
 ]);
 
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
   "Check program options": "Checking...",
-  "Run program (debug)": "Running...",
+  "Validate program": "Validating...",
   "Run program": "Launching...",
   "Get program status": "Getting status...",
   "Stop program": "Stopping...",
@@ -448,8 +448,8 @@ export default function RunMenu() {
       setProgramOptionsOpen(true);
     } else if (item === "Check program options") {
       runOutputAction(item, "Check program options", checkProgramOptions);
-    } else if (item === "Run program (debug)") {
-      runOutputAction(item, "Run program (debug)", runProgramDebug);
+    } else if (item === "Validate program") {
+      runOutputAction(item, "Validate program", validateProgram);
     } else if (item === "Run program") {
       handleRunProgram();
     } else if (item === "Get program status") {

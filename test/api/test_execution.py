@@ -870,9 +870,11 @@ def test_a_resumed_program_is_compared_with_its_launch_record(tmp_path):
 
 # --- a general run that outlives the tab ------------------------------------------
 
-# A stand-in for debasher_exec that says in which session it runs and with
-# which arguments, and then lives a while, as the built-in scheduler does.
+# A stand-in for debasher_exec that validates at once, and otherwise says in
+# which session it runs and with which arguments, and then lives a while, as
+# the built-in scheduler does.
 _REPORT_AND_LIVE = (
+    'case "$*" in *--validate*) echo "$*" > "$(dirname "$0")/validated"; exit 0;; esac\n'
     'python3 -c "import os; print(os.getsid(0))" > "$(dirname "$0")/session"\n'
     'echo "$*" > "$(dirname "$0")/args"\n'
     "sleep 30\n"
@@ -889,8 +891,10 @@ def test_a_general_run_of_the_built_in_scheduler_is_started_detached_in_its_own_
     try:
         assert time.monotonic() - started_at < 10
         assert response.started is True and response.exitCode is None
+        assert "--validate" in (tmp_path / "validated").read_text()
         assert _wait_for_text(tmp_path / "args", "--sched BUILTIN")
         assert "--wait" not in (tmp_path / "args").read_text()
+        assert "--validate" not in (tmp_path / "args").read_text()
         assert _wait_for_text(tmp_path / "session", "")
         assert int((tmp_path / "session").read_text()) != os.getsid(0)
     finally:
@@ -919,3 +923,20 @@ def test_stopping_a_general_run_reports_the_exit_code_of_the_tool(tmp_path, monk
 
     assert response.exitCode == 0
     assert response.output == f"stopped -d {tmp_path / 'out'}\n"
+
+
+def test_a_general_program_that_the_engine_refuses_is_reported_before_anything_is_launched(tmp_path, monkeypatch):
+    _fake_debasher_exec(
+        tmp_path,
+        monkeypatch,
+        'case "$*" in *--validate*) echo "Error: option not found for process Step"; exit 1;; esac\n'
+        f"touch {tmp_path / 'launched'}",
+    )
+    program = _general(tmp_path)
+
+    response = execution.run_program(program)
+
+    assert response.started is False
+    assert response.exitCode == 1
+    assert "option not found for process Step" in response.output
+    assert not (tmp_path / "launched").exists()

@@ -104,15 +104,18 @@ export async function checkLaunch(program: Program): Promise<LaunchCheckResult> 
   return response.json();
 }
 
-export async function runProgramDebug(program: Program): Promise<string> {
-  const response = await fetch("/api/execution/run-debug", {
+// "Validate program" (debasher_exec --validate): everything but launching
+// the processes, and, with the built-in scheduler, the resources of each
+// process against its limits.
+export async function validateProgram(program: Program): Promise<string> {
+  const response = await fetch("/api/execution/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to run program (debug) (${response.status})`);
+    throw new Error(`Failed to validate the program (${response.status})`);
   }
 
   const { output } = await response.json();

@@ -772,12 +772,12 @@ overwriting it during a run would leave the processes already started on one
 version and the rest on another, with nothing to show it. The frontend checks
 this before sending the save; the backend does not.
 
-Running also saves. "Run program", "Run program (debug)" and "Check program
+Running also saves. "Run program", "Validate program" and "Check program
 options" all save the program metadata and the generated script into the home
 directory before calling `debasher_exec` (see "Launching a run"), so that the
-engine always runs the program as it is in the editor. Only "Run program"
-first checks that there is no run in progress; the other two are not blocked
-during a run, and so bypass the guard of the save.
+engine always runs the program as it is in the editor. Only "Run program" first
+checks that there is no run in progress; the other two are not blocked during a
+run, and so bypass the guard of the save.
 
 **Loading.** Loading reads the program metadata of a directory and opens the
 program as it was saved, except for `homeDir`, which becomes the absolute path
@@ -870,10 +870,16 @@ the tab"). What `/run` does next depends on the scheduler:
 
 - With the built-in scheduler, `debasher_exec` is the scheduler of the run: it
   launches each process once those it depends on have finished, and lives as
-  long as the run. `/run` starts it detached and answers at once. A program that
-  the engine refuses when it loads it shows only in the run log: the run phase
-  leaves `launching` for what the output directory held before (see "Future
-  work").
+  long as the run, so it cannot be waited for. `/run` first validates the
+  program with `debasher_exec --validate` within the request, and answers with
+  its exit code and what it printed when the validation fails; otherwise it
+  starts the run detached and answers at once. A program that the engine refuses
+  is therefore reported by `/run` itself and never reaches the run phase, which
+  would take the output directory, left as it was, for the end of a run. What
+  the validation cannot see, a first round of the scheduler that can choose no
+  task, comes after the scheduler has reset the completion markers of the
+  processes it runs again, and so shows in the run phase as `unfinished`, and in
+  the run log.
 - With Slurm, `debasher_exec` ends once it has submitted a job for each process,
   with its dependencies, and the run goes on in Slurm. `/run` waits for it and
   answers with its exit code and what it printed, which the frontend shows when
@@ -881,13 +887,14 @@ the tab"). What `/run` does next depends on the scheduler:
 
 `--wait` is never given: with the built-in scheduler it changes nothing, and
 with Slurm it would keep `debasher_exec` alive for the whole run, only to wait.
-Beyond a failed launch with Slurm, nothing in the web UI shows the run log; it
-is there for diagnosis by hand.
+Beyond a failed launch, nothing in the web UI shows the run log; it is there
+for diagnosis by hand.
 
-"Run program (debug)" runs `debasher_exec --debug`, which does everything but
-launch the processes, and "Check program options" runs it with
-`--check-proc-opts`. Both run to the end within the request, and the frontend
-shows what they print.
+"Validate program" runs `debasher_exec --validate`, which does everything but
+launch the processes, and, with the built-in scheduler, checks the CPUs and
+memory of each process against the budget of the scheduler; "Check program
+options" runs `debasher_exec --check-proc-opts`. Both run to the end within the
+request, and the frontend shows what they print.
 
 ## Following a run
 
@@ -1184,9 +1191,12 @@ non-goals of a resident program".
   in the middle.** A run is stopped only with "Stop program" or "Stop process",
   and every tool that launches or stops it runs in a session of its own and
   writes into a file (see "A run that outlives the tab").
-- **A failed launch with Slurm is reported at once.** `/run` waits for
-  `debasher_exec`, which ends once the jobs are submitted, and shows what it
-  printed (see "Launching a run").
+- **A program that the engine refuses is reported at once.** With Slurm, `/run`
+  waits for `debasher_exec`, which ends once the jobs are submitted, and with
+  the built-in scheduler it validates the program first; either way it shows
+  what the engine printed. The one exception is a first round of the built-in
+  scheduler that can choose no task, which shows as `unfinished` (see "Launching
+  a run").
 - **Any run is observed.** The process statuses, and the guards that depend on
   them, cover a run launched from another tab or from the command line.
 - **Watching a FIFO takes nothing from it.** "Watch FIFO" reads the FIFO
@@ -1703,8 +1713,8 @@ waiting for any. The command changes accordingly:
 process is launched, `/run` waits for it, as for a general program with Slurm,
 and answers with its exit code and what it printed, which the frontend shows
 when the launch fails. A program that the engine refuses when it loads it, such
-as a node that no initiator reaches, is thus reported at once, as "Run program
-(debug)" reports it, and not only in the run log. The output of `debasher_exec`
+as a node that no initiator reaches, is thus reported at once, as "Validate
+program" reports it, and not only in the run log. The output of `debasher_exec`
 still goes to the run log, a file, and the backend reads it once `debasher_exec`
 ends: a pipe would be inherited by the processes it launches, and the request
 would wait for them.
@@ -1735,7 +1745,7 @@ launch ask when it need not. A record written before the launch, or after any
 launch, would do the reverse: miss a question when the state comes from
 another program.
 
-"Run program (debug)" and "Check program options" apply unchanged.
+"Validate program" and "Check program options" apply unchanged.
 
 **Stopping in order.** "Stop program" is replaced by the orderly stop, which
 runs `debasher_stop_resident -d <output directory>` with its default timeout:
@@ -2381,7 +2391,7 @@ too.
   refuses leaves the home directory as it was.
 - **Guards in the backend.** Refusing in the backend, and not only in the
   frontend, a save, a reset of the output directory or a change of it while
-  there is a run in progress, and blocking "Run program (debug)" and "Check
+  there is a run in progress, and blocking "Validate program" and "Check
   program options" during a run, which today save the generated script
   without that check.
 - **The group on the canvas.** Adding the group to the structural key of the
@@ -2419,12 +2429,6 @@ too.
   batch run on the canvas, colored by the statuses of its processes. The
   general program may not have been made with the web UI, and opening it must
   not write into its directory.
-- **A refused launch with the built-in scheduler.** Reporting at once a program
-  that the engine refuses when it loads it, when the built-in scheduler runs it.
-  `debasher_exec` is started detached there, since it lives as long as the run,
-  so the refusal shows only in the run log, and the run phase leaves `launching`
-  for what the output directory held before, which may be the end of an earlier
-  run.
 - **Restarting one task of a node.** "Restart node" on a single task of an
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.

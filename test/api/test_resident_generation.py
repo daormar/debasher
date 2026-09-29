@@ -5,7 +5,7 @@ assembled from its parts, the fixed class of the Supervisor, the Supervisor
 wiring derived from the nodes and the initiators, the fifo tags, the
 program type and the specifications of a node, and what script generation
 refuses. The modules generated here are also checked by the engine itself,
-with debasher_exec --debug, which loads a resident program and validates it
+with debasher_exec --validate, which loads a resident program and validates it
 without launching anything.
 """
 
@@ -398,7 +398,7 @@ def test_the_engine_accepts_the_generated_module(tmp_path, program, program_opts
             str(tmp_path / "out"),
             "--sched",
             "BUILTIN",
-            "--debug",
+            "--validate",
             *program_opts,
         ],
         capture_output=True,

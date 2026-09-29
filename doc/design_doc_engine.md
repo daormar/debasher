@@ -241,6 +241,16 @@ relative to the output directory of the run.
 - **final process specification**: `program.procspec`, the process
   specifications with their dependencies filled in. The tools take the set of
   processes of a run from it.
+- **validation**: `debasher_exec --validate`, which does everything that a run
+  does before it launches anything, and launches nothing: it loads the program,
+  builds and checks the options of every process, orders the processes and
+  writes the final process specification, and, with the built-in scheduler,
+  checks the CPUs and memory of every process against the budget of the
+  scheduler. A program that passes it is not refused for its options or for what
+  a single process asks for; a first round of the built-in scheduler that can
+  choose no task, or, with `--builtinsched-oneshot`, that cannot launch every
+  process at once, is still refused when the run starts. The validation leaves
+  the process options of the output directory as they were.
 - **scheduler**: what launches the tasks of a process once its dependencies
   hold: the built-in scheduler or the Slurm scheduler.
 - **built-in scheduler**: the scheduler that runs tasks on the local machine
@@ -1248,7 +1258,9 @@ The budget is given with `--builtinsched-cpus` and `--builtinsched-mem`, and is
 unlimited by default. Every task of a process asks for the `cpus` and `mem` of
 its process specification, and the built-in scheduler takes the first value of
 each when they are lists. `time`, `nodes`, `account` and `partition` are not
-used.
+used. Before its first round the scheduler refuses the run when a process asks
+for more CPUs or memory than the budget, which the validation checks too, in
+the same way.
 
 A task is launched as a background process of its own process group, whose
 process id goes to the `.id` file of the task, so that stopping it reaches

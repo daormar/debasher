@@ -428,3 +428,37 @@ EOF
     [[ "${output}" == *"E> Error: something failed"* ]]
     [[ "${output}" == *"W> Warning: something odd"* ]]
 }
+
+# debasher_builtin_sched::check_program_comp_res checks, as debasher_exec
+# --validate does, what the scheduler checks before it launches anything:
+# the resources of each process against its limits.
+write_procspec() {
+    PROCSPEC="${BATS_TEST_TMPDIR}/program.procspec"
+    printf '%s\n' \
+        "small cpus=1 mem=32 time=00:01:00 |||  ; processdeps=none" \
+        "big cpus=4 mem=64 time=00:01:00 |||  ; processdeps=afterok:small" > "${PROCSPEC}"
+    DEBASHER_PROCESS_OPT_LIST_LEN[small]=1
+    DEBASHER_PROCESS_OPT_LIST_LEN[big]=1
+}
+
+@test "check_program_comp_res accepts processes within the limits of the scheduler" {
+    write_procspec
+    run debasher_builtin_sched::check_program_comp_res "${PROCSPEC}" 4 64
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+
+    run debasher_builtin_sched::check_program_comp_res "${PROCSPEC}" \
+        "${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}" "${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}"
+    [ "$status" -eq 0 ]
+}
+
+@test "check_program_comp_res refuses a process above the limits, naming it" {
+    write_procspec
+    run debasher_builtin_sched::check_program_comp_res "${PROCSPEC}" 2 64
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"number of cpus for process big exceeds limit (cpus: 4"* ]]
+
+    run debasher_builtin_sched::check_program_comp_res "${PROCSPEC}" 4 32
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"amount of memory for process big exceeds limit (mem: 64"* ]]
+}

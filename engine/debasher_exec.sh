@@ -55,7 +55,7 @@ usage()
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--rerun-outdated-procs] [--conda-support]"
     echo "                          [--docker-support] [--gen-proc-graph]"
-    echo "                          [--show-cmdline-opts|--check-proc-opts|--debug]"
+    echo "                          [--show-cmdline-opts|--check-proc-opts|--validate]"
     echo "                          [--wait] [--builtinsched-debug] [--version] [--help]"
     echo ""
     echo "--pfile <string>          File with program processes to be executed (see"
@@ -84,7 +84,9 @@ usage()
     echo "--gen-proc-graph          Generate process graph"
     echo "--show-cmdline-opts       Show command line options for the program"
     echo "--check-proc-opts         Check process options"
-    echo "--debug                   Do everything except launching program processes"
+    echo "--validate                Do everything except launching program processes,"
+    echo "                          and check that the resources of each process fit"
+    echo "                          the limits of the built-in scheduler"
     echo "--wait                    Wait until all processes finish. This option has"
     echo "                          no effect when using the BUILTIN scheduler since it"
     echo "                          waits by its own design"
@@ -112,7 +114,7 @@ read_pars()
     gen_proc_graph_given=0
     show_cmdline_opts_given=0
     check_proc_opts_given=0
-    debug=0
+    validate=0
     wait=0
     builtin_sched_debug=0
     while [ $# -ne 0 ]; do
@@ -205,7 +207,13 @@ read_pars()
                           ;;
             "--check-proc-opts") check_proc_opts_given=1
                            ;;
-            "--debug") debug=1
+            "--validate") validate=1
+                          ;;
+            # An unknown option would be taken for an option of the program,
+            # and a script that still asks for the dry run of --debug would
+            # launch the program instead
+            "--debug") echo "Error! --debug was renamed --validate" >&2
+                       exit 1
                        ;;
             "--wait") wait=1
                        ;;
@@ -242,13 +250,13 @@ check_pars()
         exit 1
     fi
 
-    if [ ${show_cmdline_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
-        echo "Error! --show-cmdline-opts and --debug options cannot be given simultaneously"
+    if [ ${show_cmdline_opts_given} -eq 1 -a ${validate} -eq 1 ]; then
+        echo "Error! --show-cmdline-opts and --validate options cannot be given simultaneously"
         exit 1
     fi
 
-    if [ ${check_proc_opts_given} -eq 1 -a ${debug} -eq 1 ]; then
-        echo "Error! --check-proc-opts and --debug options cannot be given simultaneously"
+    if [ ${check_proc_opts_given} -eq 1 -a ${validate} -eq 1 ]; then
+        echo "Error! --check-proc-opts and --validate options cannot be given simultaneously"
         exit 1
     fi
 }
@@ -1227,7 +1235,7 @@ wait_for_program_processes()
 }
 
 ########
-launch_process_debug()
+show_process_to_launch()
 {
     # Initialize variables
     local cmdline=$1
@@ -1235,7 +1243,8 @@ launch_process_debug()
     local processname=$3
     local process_spec=$4
 
-    # Launch process (it only shows its status and specification)
+    # Show the status and the specification of the process, launching
+    # nothing
 
     # Obtain process status
     local status=$(debasher::_get_process_status "${dirname}" "${processname}")
@@ -1243,9 +1252,9 @@ launch_process_debug()
 }
 
 ########
-launch_program_processes_debug()
+show_program_processes_to_launch()
 {
-    echo "# Launching program processes... (debug mode)" >&2
+    echo "# Program processes that a launch would start... (validation)" >&2
 
     # Read input parameters
     local cmdline=$1
@@ -1256,7 +1265,7 @@ launch_program_processes_debug()
     # processes are explored in topological order
     local processname
     for processname in "${DEBASHER_PROGRAM_PROCESSES_TOPO_SORT[@]}"; do
-        launch_process_debug "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
+        show_process_to_launch "${cmdline}" "${dirname}" "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[$processname]}" || return 1
     done
 
     echo "" >&2
@@ -1430,11 +1439,22 @@ print_command_line "${outd}" "${command_line}" || exit 1
 write_exec_context "${outd}" || exit 1
 
 # Launch processes
-if [ ${debug} -eq 1 ]; then
-    launch_program_processes_debug "${command_line}" "${outd}" || exit 1
+if [ ${validate} -eq 1 ]; then
+    show_program_processes_to_launch "${command_line}" "${outd}" || exit 1
+
+    # What the built-in scheduler checks before its first round, the
+    # resources of each process against its budget, is checked too, so that
+    # a program that passes the validation is not refused for what a single
+    # process asks for
+    comp_res_ok=1
+    if [ "$(debasher::_get_scheduler)" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+        debasher_builtin_sched::check_program_comp_res "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || comp_res_ok=0
+    fi
 
     # Restore old process options (if they exist)
     restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
+
+    [ ${comp_res_ok} -eq 1 ] || exit 1
 else
     sched=$(debasher::_get_scheduler)
     if [ ${builtin_sched_oneshot_given} -eq 1 ] && [ "${sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ]; then

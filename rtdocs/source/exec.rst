@@ -78,11 +78,15 @@ are useful for that purpose:
   error message is shown. Otherwise, the options are shown and the tool
   finishes its execution.
 
-* ``--debug``: this option carries out all the necessary steps to
+* ``--validate``: this option carries out all the necessary steps to
   execute a DeBasher program, with the exception of the execution
-  itself. This includes the option checking process that can be done
-  using the ``--check-proc-opts`` option, but also the current status of
-  the different processes involved in the program.
+  itself, and shows the current status of the different processes
+  involved in the program. This includes the option checking process
+  that can be done using the ``--check-proc-opts`` option. With the
+  built-in scheduler, it also checks that the computational resources of
+  each process fit the limits given with ``--builtinsched-cpus`` and
+  ``--builtinsched-mem``. A program that passes the validation is not
+  refused for its options or for the resources of a single process.
 
 Executing Programs Using the Built-In Scheduler
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
