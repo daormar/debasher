@@ -92,7 +92,9 @@ function GeneralLegend() {
       <LegendRow mark={<BorderSample border="1px dashed #999" />}>
         Dashed: manual mode.
       </LegendRow>
-      <LegendRow mark={<BorderSample border="2px solid #2e86de" />}>
+      {/* Red, with the saturation and lightness of every group color (see
+          groupColor), and far from the blue of a selected canvas node. */}
+      <LegendRow mark={<BorderSample border="2px solid hsl(0, 65%, 45%)" />}>
         Colored, with a badge: a group brought in by "Add program".
       </LegendRow>
 
