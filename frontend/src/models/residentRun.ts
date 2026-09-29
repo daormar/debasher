@@ -1,6 +1,11 @@
 // Running a resident program (see "Running a resident program" in
-// doc/design_doc_webui.md): its run phase and what the exit codes of the
-// tools that stop it mean.
+// doc/design_doc_webui.md): its run phase, what the exit codes of the tools
+// that stop it mean, and "Restart node".
+
+import type { ProgramEdge } from "./edge";
+import { hasSupervisor } from "./node";
+import type { ProgramProcess } from "./process";
+import type { Program } from "./program";
 
 // The run phase of a resident program. Unlike the run phase of a general
 // program, it does not follow a run of this tab: it is derived from the
@@ -65,5 +70,60 @@ export function orderlyStopOutcome(exitCode: number | null): string {
   }
 
   return `debasher_stop_resident ended with exit code ${exitCode}.`;
+
+}
+
+// "Restart node" kills the node, and the Supervisor relaunches it: it is
+// offered on every node of a program with a Supervisor but the Supervisor,
+// which nothing supervises. In a program without a Supervisor nothing would
+// relaunch the node.
+export function offersRestartNode(
+  program: Pick<Program, "programType" | "processes">,
+  process: ProgramProcess
+): boolean {
+  return program.programType === "resident" &&
+    hasSupervisor(program.processes) &&
+    process.nodeKind !== "Supervisor";
+}
+
+// Whether the node has a channel whose two ends are restarted together: a
+// self-loop, or a channel between two tasks of the process. Only such a
+// channel relies on the Supervisor to hold it while the node is down.
+export function restartsWithBothEnds(edges: ProgramEdge[], processId: string): boolean {
+  return edges.some(edge => edge.sourceProcessId === processId && edge.targetProcessId === processId);
+}
+
+// The warning with which "Restart node" asks for confirmation.
+export function restartNodeWarning(
+  process: ProgramProcess,
+  losesHeldChannel: boolean
+): string[] {
+
+  const warning = [
+    "The node is killed, as in a crash, and the Supervisor relaunches it: it " +
+    "restarts from its last checkpoint and replays its input log, and what " +
+    "its FIFOs hold is kept by the nodes at their other ends.",
+  ];
+
+  const mode = process.optionsHandler.mode;
+  if (mode === "array" || mode === "generator") {
+    warning.push("Every task of the node restarts, since debasher_stop stops a process as a whole.");
+  }
+
+  if (losesHeldChannel) {
+    warning.push(
+      "The program was launched with -no-hold-fifos, and the node has a " +
+      "channel whose two ends restart together (a self-loop, or a channel " +
+      "between two of its tasks): what that channel holds may be lost."
+    );
+  }
+
+  warning.push(
+    "A node restarted again and again before it sends a heartbeat counts for " +
+    "the Supervisor as a node that crashes after every relaunch: after a few " +
+    "times the Supervisor gives up on it and stops the program."
+  );
+
+  return warning;
 
 }

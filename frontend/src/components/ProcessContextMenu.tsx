@@ -6,7 +6,6 @@ const MENU_ITEMS = [
   "Show scheduler output",
   "Show inputs and outputs",
   "Watch FIFO",
-  "Stop process",
 ] as const;
 
 export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
@@ -17,7 +16,18 @@ export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 // output fifo options (see ProgramCanvas's handleProcessMenuSelect).
 // "stop" calls stopProcess directly, skipping the task-index flow the
 // other actions go through, debasher_stop -p has no per-task variant.
-export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo" | "stop";
+// "restart" is "Restart node" on a node of a resident program, which asks
+// for confirmation first.
+export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo" | "stop" | "restart";
+
+// The action that ends the process, listed last in a destructive color:
+// "Stop process" in a general program, "Restart node" on a node of a
+// resident program with a Supervisor (see offersRestartNode).
+export interface StopAction {
+  label: "Stop process" | "Restart node";
+  action: "stop" | "restart";
+  disabled: boolean;
+}
 
 const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show options": "opts",
@@ -25,12 +35,7 @@ const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show scheduler output": "sched-out",
   "Show inputs and outputs": "io",
   "Watch FIFO": "watch-fifo",
-  "Stop process": "stop",
 };
-
-// Items rendered in a "destructive action" color (currently just
-// "Stop process"), rather than adding a whole variant prop per item.
-const DESTRUCTIVE_ITEMS = new Set<(typeof MENU_ITEMS)[number]>(["Stop process"]);
 
 interface Props {
   x: number;
@@ -38,6 +43,7 @@ interface Props {
   isPending: boolean;
   onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
+  stopAction: StopAction | null;
   // An action of the canvas rather than of the execution of the process,
   // listed after the others: on the Supervisor, showing or hiding the
   // Supervisor wiring.
@@ -50,6 +56,7 @@ export default function ProcessContextMenu({
   isPending,
   onSelect,
   onClose,
+  stopAction,
   canvasAction,
 }: Props) {
 
@@ -109,7 +116,6 @@ export default function ProcessContextMenu({
             border: "none",
             background: "none",
             cursor: "pointer",
-            color: DESTRUCTIVE_ITEMS.has(item) ? "#c0392b" : undefined,
           }}
 
         >
@@ -117,6 +123,29 @@ export default function ProcessContextMenu({
         </button>
 
       ))}
+
+      {stopAction && (
+
+        <button
+
+          onClick={() => onSelect(stopAction.action)}
+
+          disabled={isPending || stopAction.disabled}
+
+          style={{
+            textAlign: "left",
+            padding: "8px 12px",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            color: "#c0392b",
+          }}
+
+        >
+          {stopAction.label}
+        </button>
+
+      )}
 
       {canvasAction && (
 

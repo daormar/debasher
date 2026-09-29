@@ -4,8 +4,9 @@ Launching and stopping a program from the web UI (see "Launching a run" and
 command of a general and of a resident program; the launch of a resident
 program, which /run waits for, in a session of its own and with its output
 in the run log, and whose failure it reports at once; the program state
-that tells a program never launched from one stopped; and the orderly stop
-and the hard kill of a resident program.
+that tells a program never launched from one stopped; the orderly stop and
+the hard kill of a resident program; and "Restart node", a crash of the
+node that the Supervisor relaunches.
 """
 
 import os
@@ -13,6 +14,7 @@ import stat
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -415,3 +417,58 @@ def test_a_resident_program_is_killed_at_once(tmp_path):
         assert statuses.hasProgramState
     finally:
         _hard_kill(program)
+
+
+def _node_pid(program, process):
+    pid_file = Path(program.outputDir) / "__exec__" / process / f"{process}.id"
+    try:
+        return pid_file.read_text().strip()
+    except FileNotFoundError:
+        return None
+
+
+@_needs_engine
+def test_a_restarted_node_is_relaunched_by_the_supervisor(tmp_path):
+    program = _relay(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        first_pid = _node_pid(program, "Sink")
+
+        response = execution.restart_node(execution.StopProcessRequest(program=program, processName="Sink"))
+
+        assert response.exitCode == 0, response.output
+        deadline = time.monotonic() + 60
+        while _node_pid(program, "Sink") in (first_pid, None) and time.monotonic() < deadline:
+            time.sleep(0.5)
+        assert _node_pid(program, "Sink") not in (first_pid, None)
+        statuses = _wait_for_statuses(program, "IN-PROGRESS")
+        assert statuses == {"Relay": "IN-PROGRESS", "Sink": "IN-PROGRESS", "Sup": "IN-PROGRESS"}
+    finally:
+        _hard_kill(program)
+
+
+@_needs_engine
+@pytest.mark.parametrize("flag_value, expected", [("true", True), ("", False)])
+def test_the_launch_says_whether_the_supervisor_holds_the_fifos(tmp_path, flag_value, expected):
+    program = _relay(tmp_path, programOptions={"-no-hold-fifos": flag_value})
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        # The tab may hold other program options than those of the launch.
+        edited = program.model_copy(update={"programOptions": {}})
+        response = execution.launched_with_no_hold_fifos(edited)
+
+        assert response.launchedWithNoHoldFifos is expected
+    finally:
+        _hard_kill(program)
+
+
+def test_a_program_never_launched_or_without_a_supervisor_holds_its_fifos(tmp_path):
+    assert not execution.launched_with_no_hold_fifos(_relay(tmp_path)).launchedWithNoHoldFifos
+    assert not execution.launched_with_no_hold_fifos(
+        _relay(tmp_path, with_supervisor=False)
+    ).launchedWithNoHoldFifos

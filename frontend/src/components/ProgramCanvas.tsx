@@ -19,7 +19,12 @@ import type { ProgramProcess } from "../models/process";
 import type { ProgramOption, FanoutFamily } from "../models/option";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
-import { stoppedInOrder } from "../models/residentRun";
+import {
+  offersRestartNode,
+  restartNodeWarning,
+  restartsWithBothEnds,
+  stoppedInOrder,
+} from "../models/residentRun";
 import {
   getProcessOpts,
   getProcessResolvedOptions,
@@ -27,6 +32,8 @@ import {
   getProcessStdout,
   getProcessTasks,
   inspectPath,
+  launchedWithNoHoldFifos,
+  restartNode,
   stopProcess,
 } from "../api/executionApi";
 
@@ -44,6 +51,7 @@ import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
 import BackEdge from "./BackEdge";
 import SelfLoopEdge from "./SelfLoopEdge";
+import ConfirmDialog from "./ConfirmDialog";
 import ResidentRunIndicator from "./ResidentRunIndicator";
 import RunStatusIndicator from "./RunStatusIndicator";
 import ProcessContextMenu, { type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
@@ -68,6 +76,7 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   io: "inputs and outputs",
   "watch-fifo": "mirrored fifo output",
   stop: "process stop",
+  restart: "node restart",
 };
 
 // Above this many indices, listing the family inline stops being
@@ -368,7 +377,11 @@ export default function ProgramCanvas() {
     useState(false);
 
   const [processCommandOutput, setProcessCommandOutput] =
-    useState<{ title: string; output: string } | null>(null);
+    useState<{ title: string; message?: string; output: string } | null>(null);
+
+  // "Restart node" waiting for the user's confirmation, with its warning.
+  const [restartConfirm, setRestartConfirm] =
+    useState<{ process: ProgramProcess; warning: string[] } | null>(null);
 
   // Set instead of fetching straight away whenever the process ran as
   // more than one task (see ProcessTaskPicker), populated only after
@@ -616,6 +629,12 @@ export default function ProgramCanvas() {
         return;
       }
 
+      if (action === "restart") {
+        await askRestartNode(process);
+        setProcessContextMenu(null);
+        return;
+      }
+
       // A "standard" process has no per-task files at all (empty list,
       // so taskIndices[0] is undefined, the plain no-task-index
       // request) and a process that only ever ran as one task doesn't
@@ -650,6 +669,46 @@ export default function ProgramCanvas() {
 
   }
 
+  // "Restart node" asks first, with a warning that says what the restart
+  // does; it names -no-hold-fifos only when the node has a channel whose two
+  // ends restart together and the Supervisor was launched with the flag.
+  async function askRestartNode(process: ProgramProcess) {
+
+    const losesHeldChannel =
+      restartsWithBothEnds(program.edges, process.id) &&
+      await launchedWithNoHoldFifos(program);
+
+    setRestartConfirm({ process, warning: restartNodeWarning(process, losesHeldChannel) });
+
+  }
+
+  async function handleConfirmRestart() {
+
+    if (!restartConfirm) {
+      return;
+    }
+
+    const { process } = restartConfirm;
+    setRestartConfirm(null);
+
+    try {
+      const result = await restartNode(program, process.name);
+      setProcessCommandOutput({
+        title: `${process.name}: restart`,
+        message: result.exitCode === 0
+          ? "The node was stopped, and the Supervisor relaunches it from its last checkpoint and its input log."
+          : `debasher_stop ended with exit code ${result.exitCode}. What it printed:`,
+        output: result.output,
+      });
+    } catch (err) {
+      setProcessCommandOutput({
+        title: `${process.name}: restart`,
+        output: err instanceof Error ? err.message : "Failed to restart the node.",
+      });
+    }
+
+  }
+
   async function handleTaskPickerConfirm(taskIndex: number) {
 
     if (!processTaskPicker) {
@@ -666,10 +725,11 @@ export default function ProgramCanvas() {
         setProcessIO(await fetchProcessIO(process, taskIndex));
       } else if (kind === "watch-fifo") {
         openFifoWatch(process, taskIndex);
-      } else if (kind === "stop") {
+      } else if (kind === "stop" || kind === "restart") {
         // Unreachable in practice, handleProcessMenuSelect handles
-        // "stop" before ever reaching the task picker, kept here only
-        // so this switch stays exhaustive over ProcessMenuAction.
+        // "stop" and "restart" before ever reaching the task picker,
+        // kept here only so this switch stays exhaustive over
+        // ProcessMenuAction.
         setProcessCommandOutput({
           title: `${process.name}: stop`,
           output: await stopProcess(program, process.name),
@@ -784,6 +844,13 @@ export default function ProgramCanvas() {
           isPending={isProcessOutputPending}
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
+          stopAction={
+            !isResident
+              ? { label: "Stop process", action: "stop", disabled: false }
+              : offersRestartNode(program, processContextMenu.process)
+              ? { label: "Restart node", action: "restart", disabled: residentPhase !== "live" }
+              : null
+          }
           canvasAction={
             program.programType === "resident" &&
             processContextMenu.process.nodeKind === "Supervisor"
@@ -811,9 +878,25 @@ export default function ProgramCanvas() {
         />
       )}
 
+      {restartConfirm && (
+        <ConfirmDialog
+          title={`Restart node ${restartConfirm.process.name}?`}
+          confirmLabel="Restart"
+          onConfirm={handleConfirmRestart}
+          onCancel={() => setRestartConfirm(null)}
+        >
+          {restartConfirm.warning.map(paragraph => (
+            <p key={paragraph} style={{ margin: 0 }}>
+              {paragraph}
+            </p>
+          ))}
+        </ConfirmDialog>
+      )}
+
       {processCommandOutput && (
         <CommandOutputModal
           title={processCommandOutput.title}
+          message={processCommandOutput.message}
           output={processCommandOutput.output}
           onClose={() => setProcessCommandOutput(null)}
         />

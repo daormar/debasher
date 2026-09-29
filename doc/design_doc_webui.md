@@ -1025,7 +1025,7 @@ again from the store on every change.
 This section gathers the guarantees that the web UI gives today for general
 programs, stated in the sections above, and what it deliberately does not
 try to do. Where a guarantee has a known gap, "Future work" lists it. Those of
-resident programs, designed and not built, are gathered in "Guarantees and
+resident programs, designed and being built, are gathered in "Guarantees and
 non-goals of a resident program".
 
 ## Guarantees
@@ -1545,7 +1545,7 @@ unseen.
 ## Running a resident program
 
 *In progress: the launch (without the launch record), the orderly stop, "Kill
-program" and the run phase of a resident program are built; "Restart node",
+program", "Restart node" and the run phase of a resident program are built;
 "Take snapshot" and the periodic snapshots are not.*
 
 A resident program is launched with `debasher_exec` and followed with

@@ -163,19 +163,22 @@ def _run_debasher_dir_tool(program: Program, tool_name: str) -> tuple[str, int]:
     return result.stdout + result.stderr, result.returncode
 
 
-def _run_debasher_dir_tool_in_own_session(program: Program, tool_name: str) -> tuple[str, int]:
+def _run_debasher_dir_tool_in_own_session(
+    program: Program, tool_name: str, extra_args: list[str] | None = None
+) -> tuple[str, int]:
     """
     Run a DeBasher bin tool that takes "-d <outputDir>" and acts on a live
     resident program (debasher_stop_resident, debasher_stop), in a session
     of its own and with its output in a temporary file, so that the backend
-    going away cannot cut it in the middle. Returns (output, exit code).
+    going away cannot cut it in the middle. `extra_args` follow "-d
+    <outputDir>". Returns (output, exit code).
     """
     tool = paths.find_bin_tool(tool_name)
     if tool is None:
         return f"Error: {tool_name} tool not found.", 1
 
     output, exit_code = tool_sessions.run_with_temp_output(
-        [str(tool), "-d", program.outputDir], _debasher_env(program)
+        [str(tool), "-d", program.outputDir, *(extra_args or [])], _debasher_env(program)
     )
     return _cap_lines(output), exit_code
 
@@ -796,6 +799,43 @@ def stop_process(request: StopProcessRequest) -> ProcessOutputResponse:
         request.program, "debasher_stop", request.processName
     )
     return ProcessOutputResponse(output=output)
+
+
+@router.post("/restart-node", response_model=StopProgramResponse)
+def restart_node(request: StopProcessRequest) -> StopProgramResponse:
+    """
+    "Restart node" on a node of a resident program with a Supervisor:
+    debasher_stop -d <outputDir> -p <processName> kills every task of the
+    process at once, a crash of the node, which the Supervisor relaunches
+    from its last checkpoint and its input log.
+    """
+    output, exit_code = _run_debasher_dir_tool_in_own_session(
+        request.program, "debasher_stop", ["-p", request.processName]
+    )
+    return StopProgramResponse(output=output, exitCode=exit_code)
+
+
+class NoHoldFifosResponse(BaseModel):
+    # Whether the Supervisor of the live program was launched with
+    # -no-hold-fifos, as its own ".opts" file says; false when it has none.
+    launchedWithNoHoldFifos: bool
+
+
+@router.post("/launched-with-no-hold-fifos", response_model=NoHoldFifosResponse)
+def launched_with_no_hold_fifos(program: Program) -> NoHoldFifosResponse:
+    """
+    Whether the Supervisor of a resident program was launched with
+    -no-hold-fifos, read from the options it was given, so that it is the
+    launch that counts, whoever made it, and not the program options as the
+    tab holds them now. "Restart node" warns with it that a channel whose
+    two ends are restarted together may lose what it held.
+    """
+    supervisor = next((p for p in program.processes if p.nodeKind == "Supervisor"), None)
+    if supervisor is None:
+        return NoHoldFifosResponse(launchedWithNoHoldFifos=False)
+
+    opts = _parse_opts_file(_get_process_opts_path(program.outputDir, supervisor.name, None))
+    return NoHoldFifosResponse(launchedWithNoHoldFifos=NO_HOLD_FIFOS_LABEL in opts)
 
 
 class ResetOutputDirResponse(BaseModel):

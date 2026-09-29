@@ -444,6 +444,40 @@ export async function killProgram(program: Program): Promise<StopResult> {
   return postStop("/api/execution/kill", program, "Failed to kill program");
 }
 
+// "Restart node" on a node of a resident program with a Supervisor
+// (debasher_stop -p): a crash of the node, which the Supervisor relaunches.
+export async function restartNode(program: Program, processName: string): Promise<StopResult> {
+  const response = await fetch("/api/execution/restart-node", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to restart node (${response.status})`));
+  }
+
+  const { output, exitCode } = await response.json();
+  return { output, exitCode: exitCode ?? null };
+}
+
+// Whether the Supervisor of the live program was launched with
+// -no-hold-fifos, as the options it was given say.
+export async function launchedWithNoHoldFifos(program: Program): Promise<boolean> {
+  const response = await fetch("/api/execution/launched-with-no-hold-fifos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to read the launch options (${response.status})`);
+  }
+
+  const { launchedWithNoHoldFifos } = await response.json();
+  return launchedWithNoHoldFifos;
+}
+
 // Stop a single process (the canvas's right-click "Stop process"
 // action), see api/routers/execution.py's /stop-process.
 export async function stopProcess(program: Program, processName: string): Promise<string> {

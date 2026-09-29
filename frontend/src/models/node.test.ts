@@ -169,6 +169,7 @@ describe("programCommandLineOptions", () => {
       code: "",
       computationalSpecs: {},
       additionalSpecs: { force: false },
+      additionalMethods: {},
       nodeKind,
     } as ProgramProcess;
   }
