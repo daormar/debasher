@@ -1,8 +1,14 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import { RESIDENT_STATUS_MEANINGS, processNodeBackground } from "../models/processStatus";
 import { WIRING_EDGE_COLOR } from "../adapters/reactFlowAdapter";
+import type { ProgramType } from "../models/program";
+import {
+  GENERAL_STATUS_MEANINGS,
+  RESIDENT_STATUS_MEANINGS,
+  processNodeBackground,
+} from "../models/processStatus";
+import type { ProcessRunStatus } from "../models/processStatus";
 import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark, TriggerMark } from "./NodeMarks";
 
 function LegendRow({ mark, children }: { mark: ReactNode; children: ReactNode }) {
@@ -16,12 +22,152 @@ function LegendRow({ mark, children }: { mark: ReactNode; children: ReactNode })
   );
 }
 
+function Heading({ children }: { children: ReactNode }) {
+  return <div style={{ fontWeight: "bold", marginTop: 4 }}>{children}</div>;
+}
+
+function StatusRows({ meanings }: { meanings: { status: ProcessRunStatus; meaning: string }[] }) {
+  return (
+    <>
+      {meanings.map(({ status, meaning }) => (
+        <LegendRow
+          key={status}
+          mark={
+            <span
+              style={{
+                display: "inline-block",
+                width: 18,
+                height: 12,
+                border: "1px solid #999",
+                borderRadius: 3,
+                background: processNodeBackground(status),
+              }}
+            />
+          }
+        >
+          <b>{status}</b>: {meaning}
+        </LegendRow>
+      ))}
+    </>
+  );
+}
+
+// A small box drawn with the border of a canvas node.
+function BorderSample({ border, double }: { border: string; double?: boolean }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: 16,
+        height: 10,
+        border,
+        borderRadius: 2,
+        outline: double ? border : undefined,
+        outlineOffset: double ? 2 : undefined,
+      }}
+    />
+  );
+}
+
+// A short edge, as a polyline in a 24 by 12 box.
+function EdgeSample({ points, dash, color = "#999" }: { points: string; dash?: string; color?: string }) {
+  return (
+    <svg width={24} height={12} viewBox="0 0 24 12">
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeDasharray={dash} />
+    </svg>
+  );
+}
+
+/** What the canvas of a general program draws. */
+function GeneralLegend() {
+  return (
+    <>
+      <Heading>Process status</Heading>
+      <StatusRows meanings={GENERAL_STATUS_MEANINGS} />
+
+      <Heading>Borders</Heading>
+      <LegendRow mark={<BorderSample border="1px solid #999" double />}>
+        Double: array or generator mode, a task for each element or index.
+      </LegendRow>
+      <LegendRow mark={<BorderSample border="1px dashed #999" />}>
+        Dashed: manual mode.
+      </LegendRow>
+      <LegendRow mark={<BorderSample border="2px solid #2e86de" />}>
+        Colored, with a badge: a group brought in by "Add program".
+      </LegendRow>
+
+      <Heading>Edges</Heading>
+      <LegendRow mark={<EdgeSample points="0,6 24,6" />}>
+        From a file or a value.
+      </LegendRow>
+      <LegendRow mark={<EdgeSample points="0,6 24,6" dash="6 4" />}>
+        From a FIFO.
+      </LegendRow>
+      <LegendRow
+        mark={
+          <svg width={24} height={12} viewBox="0 0 24 12">
+            <polygon points="0,5 24,1 24,11 0,7" fill="#999" />
+          </svg>
+        }
+      >
+        A fanout: one becomes many, narrow at the fanout family.
+      </LegendRow>
+      <LegendRow mark={<EdgeSample points="4,11 4,9 22,9 22,1 10,1 10,3" />}>
+        Around the processes, on the right: an edge that goes back up, or a
+        self-loop around its own process.
+      </LegendRow>
+      <LegendRow
+        mark={<span style={{ fontSize: 10 }}>-out<span style={{ color: "#c0392b" }}>ith</span></span>}
+      >
+        A fanout family: as many options as another option says.
+      </LegendRow>
+    </>
+  );
+}
+
+/** What the canvas of a resident program draws. */
+function ResidentLegend() {
+  return (
+    <>
+      <Heading>Process status</Heading>
+      <StatusRows meanings={RESIDENT_STATUS_MEANINGS} />
+
+      <Heading>Marks</Heading>
+      <LegendRow mark={<NodeKindChip kind="FBPProcess" />}>
+        The node kind, dark for the Supervisor.
+      </LegendRow>
+      <LegendRow mark={<InitiatorMark />}>
+        An initiator: rounds start there.
+      </LegendRow>
+      <LegendRow mark={<ObserveMark />}>
+        Observes the world outside the program.
+      </LegendRow>
+      <LegendRow mark={<OutsideMark kind="externalInput" />}>
+        Above an input: written from outside the program.
+      </LegendRow>
+      <LegendRow mark={<OutsideMark kind="readOutside" />}>
+        Below an output: read outside the program.
+      </LegendRow>
+      <LegendRow mark={<span style={{ fontSize: 10, color: "#666" }}>-opt</span>}>
+        Under the node kind: configuration options, with no handle.
+      </LegendRow>
+      <LegendRow mark={<TriggerMark />}>
+        A trigger port of the Supervisor wiring.
+      </LegendRow>
+      <LegendRow mark={<EdgeSample points="0,6 24,6" dash="2 4" color={WIRING_EDGE_COLOR} />}>
+        The Supervisor wiring, read only, shown from the menu of the
+        Supervisor.
+      </LegendRow>
+    </>
+  );
+}
+
 /**
- * The legend of the canvas of a resident program, which the user can fold:
- * what each process status means in a resident program, and what each mark
- * of a canvas node means.
+ * The legend of the canvas, which the user can fold: what each process
+ * status means in a program of this type, and what the canvas draws to tell
+ * its processes and edges apart. Whether it is folded belongs to the tab.
  */
-export default function CanvasLegend() {
+export default function CanvasLegend({ programType }: { programType: ProgramType }) {
 
   const [isOpen, setOpen] = useState(true);
 
@@ -29,6 +175,7 @@ export default function CanvasLegend() {
 
     <div
       data-legend={isOpen ? "open" : "folded"}
+      data-legend-type={programType}
       style={{
         width: isOpen ? 250 : undefined,
         background: "#fff",
@@ -57,70 +204,7 @@ export default function CanvasLegend() {
       {isOpen && (
 
         <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
-
-          <div style={{ fontWeight: "bold" }}>Process status</div>
-
-          {RESIDENT_STATUS_MEANINGS.map(({ status, meaning }) => (
-            <LegendRow
-              key={status}
-              mark={
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: 18,
-                    height: 12,
-                    border: "1px solid #999",
-                    borderRadius: 3,
-                    background: processNodeBackground(status),
-                  }}
-                />
-              }
-            >
-              <b>{status}</b>: {meaning}
-            </LegendRow>
-          ))}
-
-          <div style={{ fontWeight: "bold", marginTop: 4 }}>Marks</div>
-
-          <LegendRow mark={<NodeKindChip kind="FBPProcess" />}>
-            The node kind, dark for the Supervisor.
-          </LegendRow>
-
-          <LegendRow mark={<InitiatorMark />}>
-            An initiator: rounds start there.
-          </LegendRow>
-
-          <LegendRow mark={<ObserveMark />}>
-            Observes the world outside the program.
-          </LegendRow>
-
-          <LegendRow mark={<OutsideMark kind="externalInput" />}>
-            Above an input: written from outside the program.
-          </LegendRow>
-
-          <LegendRow mark={<OutsideMark kind="readOutside" />}>
-            Below an output: read outside the program.
-          </LegendRow>
-
-          <LegendRow mark={<span style={{ fontSize: 10, color: "#666" }}>-opt</span>}>
-            Under the node kind: configuration options, with no handle.
-          </LegendRow>
-
-          <LegendRow mark={<TriggerMark />}>
-            A trigger port of the Supervisor wiring.
-          </LegendRow>
-
-          <LegendRow
-            mark={
-              <svg width={24} height={8} viewBox="0 0 24 8">
-                <line x1={0} y1={4} x2={24} y2={4} stroke={WIRING_EDGE_COLOR} strokeWidth={1.5} strokeDasharray="2 4" />
-              </svg>
-            }
-          >
-            The Supervisor wiring, read only, shown from the menu of the
-            Supervisor.
-          </LegendRow>
-
+          {programType === "resident" ? <ResidentLegend /> : <GeneralLegend />}
         </div>
 
       )}

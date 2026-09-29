@@ -979,9 +979,17 @@ A canvas node shows the process's name and options, its options handler mode
 group (a border color derived from the `groupId`, and a badge with the
 module's name), and, as its background, the process status.
 
+The canvas has a legend, which the user can fold. It says what each process
+status means (see "Process status" in `doc/design_doc_engine.md`), and what the
+canvas draws to tell processes and edges apart: the borders of a canvas node,
+an edge from a file or a value and one from a FIFO, a fanout edge, the route
+of an edge that goes back up and of a self-loop, and the label of a fanout
+family.
+
 Of what the canvas shows, only the positions belong to the program model and
 are saved. The selection, the part of the canvas in view (fitted to the
-program when the editor opens) and the colors are not.
+program when the editor opens), whether the legend is folded and the colors
+are not.
 
 ## Keeping the canvas in step with the store
 
@@ -2129,11 +2137,13 @@ the process status. What a resident program adds follows it this way:
   structural key. A canvas node reads it from the store, so that a connection
   does not refresh the list of canvas nodes.
 
-The canvas of a resident program has a legend, which the user can fold. It says
+The canvas of a resident program has a legend of its own, which the user folds
+as that of a general program (see "From the store to the canvas"). It says
 what each process status means in a resident program (see "Observing and
 talking to a live program"), and what each mark means: the node kind, an
 initiator, a node that observes the outside world, an external input, a
-business output read outside the program, and a trigger port.
+business output read outside the program, a trigger port, and the edges of the
+Supervisor wiring.
 
 ## Guarantees and non-goals of a resident program
 
@@ -2260,10 +2270,6 @@ too.
   the documentation, and maybe the program, to a service outside the machine,
   which the user has to know; and its answers are only as good as a
   documentation kept in step with the code.
-- **A legend for a general program.** A legend of the canvas like that of a
-  resident program (see "The canvas of a resident program"), which says what
-  the colors of the process statuses and the styles of the borders and edges
-  mean.
 - **Closing an external input.** An action of "Talk to FIFOs" that writes a
   `CLOSE` into an external input, to tell a node that its source has
   finished, once the engine has a hook that lets the code of a node learn that

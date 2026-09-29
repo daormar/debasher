@@ -735,11 +735,9 @@ export default function ProgramCanvas() {
           <ProgramFilesPanel />
         </Panel>
 
-        {program.programType === "resident" && (
-          <Panel position="top-right">
-            <CanvasLegend />
-          </Panel>
-        )}
+        <Panel position="top-right">
+          <CanvasLegend programType={program.programType} />
+        </Panel>
 
         {runPhase !== "idle" && (
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
