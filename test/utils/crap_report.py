@@ -17,7 +17,10 @@ Usage: crap_report.py [--top N] [--threshold T] SOURCE_DIR TEST_DIR
 
 It needs pytest, coverage and radon (api/requirements-dev.txt), so it is run
 with the Python of the virtual environment of the API. The report goes to
-standard output and the output of pytest to standard error.
+standard output, with the summary line of pytest. The whole output of pytest
+goes to standard error only when the suite fails, so that the tracebacks some
+tests print on purpose (a thread dying on bad input, reported by pytest as a
+warning) do not bury the report.
 """
 
 import argparse
@@ -43,9 +46,9 @@ def crap_score(complexity, coverage_fraction):
 
 def run_coverage(source_dir, test_dir, work_dir):
     """Run the pytest suite of test_dir under coverage, measuring the code
-    of source_dir, and return pytest's exit status and the coverage data as
-    a dict from absolute file path to its "files" entry of the JSON report
-    of coverage.
+    of source_dir, and return pytest's exit status, its summary line and
+    the coverage data as a dict from absolute file path to its "files" entry
+    of the JSON report of coverage.
 
     The Python processes that the tests start are measured too: part of the
     code of the engine only runs in them.
@@ -60,9 +63,15 @@ def run_coverage(source_dir, test_dir, work_dir):
                 "patch = subprocess\n"
                 "parallel = true\n")
     cov = [sys.executable, "-m", "coverage"]
-    status = subprocess.call(
+    pytest = subprocess.run(
         cov + ["run", f"--rcfile={rcfile}", "-m", "pytest", "-q", test_dir],
-        cwd=root, stdout=sys.stderr)
+        cwd=root, capture_output=True, text=True)
+    if pytest.returncode != 0:
+        sys.stderr.write(pytest.stdout + pytest.stderr)
+    # The summary is the last line pytest writes to standard output (coverage
+    # writes its own warnings to standard error)
+    lines = pytest.stdout.strip().splitlines()
+    summary = lines[-1].strip("= ") if lines else ""
     json_path = os.path.join(work_dir, "coverage.json")
     subprocess.check_call(cov + ["combine", f"--rcfile={rcfile}", "-q"],
                           cwd=root, stdout=sys.stderr)
@@ -71,8 +80,9 @@ def run_coverage(source_dir, test_dir, work_dir):
         cwd=root, stdout=sys.stderr)
     with open(json_path) as f:
         files = json.load(f)["files"]
-    return status, {os.path.abspath(os.path.join(root, path)): data
-                    for path, data in files.items()}
+    return (pytest.returncode, summary,
+            {os.path.abspath(os.path.join(root, path)): data
+             for path, data in files.items()})
 
 
 def python_files(source_dir):
@@ -153,13 +163,17 @@ def main():
     root = os.path.dirname(source_dir)
 
     with tempfile.TemporaryDirectory(prefix="crap_report.") as work_dir:
-        status, coverage_files = run_coverage(source_dir, test_dir, work_dir)
+        status, summary, coverage_files = run_coverage(source_dir, test_dir,
+                                                       work_dir)
     rows = crap_rows(source_dir, coverage_files)
     flagged = [r for r in rows if r[0] > args.threshold]
     listed = rows[:args.top] if args.top is not None else flagged
 
+    if os.path.commonpath([test_dir, root]) == root:
+        test_dir = os.path.relpath(test_dir, root)
     print(f"CRAP report of {os.path.relpath(source_dir, root)} "
-          f"(tests: {os.path.relpath(test_dir, root)})")
+          f"(tests: {test_dir})")
+    print(f"pytest: {summary}")
     if status != 0:
         print(f"WARNING: pytest exited with status {status}, so the coverage "
               "below may be lower than the real one")
