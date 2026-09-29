@@ -350,8 +350,10 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
 
 /**
  * Whether a connection is allowed: it must go from an output option to
- * an input option. Both may belong to the same process: a self-loop,
- * which lets a process feed itself. Every cycle, a self-loop included,
+ * an input option that is not a flag, which takes no value, and which
+ * script generation writes before it looks at any connection. Both may
+ * belong to the same process: a self-loop, which lets a process feed
+ * itself. Every cycle, a self-loop included,
  * needs at least one edge from a fifo: a connection that is not from a
  * fifo is refused when it would close a cycle of connections that are
  * not from a fifo either, since the engine refuses such a cycle (see
@@ -396,6 +398,10 @@ export function isValidProgramConnection(
   const targetOptionDef = targetProcess?.options.find(
     option => option.id === targetHandle
   );
+
+  if (targetOptionDef?.dataType === "None") {
+    return false;
+  }
 
   // A resident program accepts a connection only from a business output to
   // an input that it makes a business input, of another node or of the

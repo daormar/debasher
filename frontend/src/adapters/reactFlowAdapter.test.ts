@@ -84,6 +84,18 @@ describe("isValidProgramConnection", () => {
     ).toBe(true);
   });
 
+  it("refuses a connection into a flag", () => {
+    const flagged = process("flagged", [option("flagged-v", "-v", { dataType: "None" })], 200);
+    expect(
+      isValidProgramConnection(program([counter, flagged]), {
+        source: "counter",
+        sourceHandle: "counter-outsink",
+        target: "flagged",
+        targetHandle: "flagged-v",
+      })
+    ).toBe(false);
+  });
+
   it("refuses a self-loop from an output that is not a fifo", () => {
     const writer = process("writer", [
       option("writer-in", "-in"),

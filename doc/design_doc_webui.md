@@ -371,6 +371,9 @@ the engine:
 
 - It goes from an output to an input. Both may belong to the same process,
   a self-loop, so that a process can feed itself.
+- The input is not a flag, which takes no value, and which script generation
+  writes before it looks at any connection. The editor of an option does not
+  offer the data type `None` to a connected input either.
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same

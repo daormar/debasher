@@ -414,7 +414,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             file
           </option>
 
-          {direction === "input" && (
+          {/* A flag takes no connection (see isValidProgramConnection). */}
+          {direction === "input" && !connectedSourceLabel && (
             <option value="None">
               None (flag)
             </option>
