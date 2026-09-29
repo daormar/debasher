@@ -6,6 +6,7 @@ import {
   residentRunPhase,
   restartNodeWarning,
   restartsWithBothEnds,
+  snapshotOutcome,
   stoppedInOrder,
 } from "./residentRun";
 
@@ -98,5 +99,14 @@ describe("Restart node", () => {
     const array = restartNodeWarning(processOf("Work", "FBPProcess", "array"), true).join(" ");
     expect(array).toMatch(/Every task of the node restarts/);
     expect(array).toMatch(/launched with -no-hold-fifos/);
+  });
+});
+
+describe("snapshotOutcome", () => {
+  it("shows the epoch of a round that closed, and names the nodes of one that did not", () => {
+    expect(snapshotOutcome(0, 1759000000123, [])).toMatch(/^Round 1759000000123 closed at every node/);
+    expect(snapshotOutcome(2, 1759000000123, ["Sink", "Relay:1"])).toMatch(/did not close at Sink, Relay:1,/);
+    expect(snapshotOutcome(2, null, [])).toMatch(/^The round did not close at some node/);
+    expect(snapshotOutcome(1, null, [])).toMatch(/error of usage or setup/);
   });
 });

@@ -1544,9 +1544,8 @@ unseen.
 
 ## Running a resident program
 
-*In progress: the launch (without the launch record), the orderly stop, "Kill
-program", "Restart node" and the run phase of a resident program are built;
-"Take snapshot" and the periodic snapshots are not.*
+*In progress: everything is built but what comes from "The directories of a
+resident program": the launch record and "Reset program state".*
 
 A resident program is launched with `debasher_exec` and followed with
 `debasher_status`, as a general one, but a run of it never finishes on its own:
@@ -1692,9 +1691,8 @@ the default timeout of the tool, and shows what its exit code means. With 0,
 the round closed at every node, and the frontend shows its epoch. With 2, the
 round did not close at some node, because the node is down, has halted or has
 a halt open, and the frontend names the nodes. With 1, an error of usage or
-setup. The action is offered only while
-there is a run in progress, and works as well on a program launched from the
-command line.
+setup. The action is offered only while there is a run in progress, and works
+as well on a program launched from the command line.
 
 Periodic snapshots are off by default, and the user turns them on with
 `executionOptions.snapshotEverySecs`, a field of the execution options of a

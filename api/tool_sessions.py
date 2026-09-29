@@ -38,6 +38,23 @@ def run_in_own_session(command: list[str], env: dict[str, str], output_path: Pat
     return result.returncode
 
 
+def start_detached(command: list[str], env: dict[str, str], output_path: Path) -> None:
+    """
+    Start `command` in a session of its own, with its standard output and
+    error written into `output_path`, and return without waiting for it:
+    the backend keeps nothing of it.
+    """
+    with open(output_path, "w") as output:
+        subprocess.Popen(
+            command,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+
+
 def run_with_temp_output(command: list[str], env: dict[str, str]) -> tuple[str, int]:
     """
     Run `command` as run_in_own_session does, with its output in a

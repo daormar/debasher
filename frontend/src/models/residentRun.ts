@@ -1,6 +1,6 @@
 // Running a resident program (see "Running a resident program" in
 // doc/design_doc_webui.md): its run phase, what the exit codes of the tools
-// that stop it mean, and "Restart node".
+// that stop it or take a snapshot of it mean, and "Restart node".
 
 import type { ProgramEdge } from "./edge";
 import { hasSupervisor } from "./node";
@@ -125,5 +125,33 @@ export function restartNodeWarning(
   );
 
   return warning;
+
+}
+
+// What the outcome of "Take snapshot" (debasher_snapshot_resident) means.
+export function snapshotOutcome(
+  exitCode: number,
+  epoch: number | null,
+  pendingNodes: string[]
+): string {
+
+  const round = epoch === null ? "The round" : `Round ${epoch}`;
+
+  if (exitCode === 0) {
+    return `${round} closed at every node: each one wrote a checkpoint of it ` +
+      "and pruned its input log.";
+  }
+
+  if (exitCode === 2) {
+    const where = pendingNodes.length > 0 ? ` at ${pendingNodes.join(", ")}` : " at some node";
+    return `${round} did not close${where}, since the node is down, has ` +
+      "halted or has a halt open.";
+  }
+
+  if (exitCode === 1) {
+    return "No round was started: an error of usage or setup.";
+  }
+
+  return `debasher_snapshot_resident ended with exit code ${exitCode}.`;
 
 }

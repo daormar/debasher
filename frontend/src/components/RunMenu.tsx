@@ -5,11 +5,12 @@ import {
   getProgramStatus,
   runProgramDebug,
   stopProgram,
+  takeSnapshot,
 } from "../api/executionApi";
 import type { RunProgramResult } from "../api/executionApi";
 import type { Program } from "../models/program";
 import { useProgram } from "../store/ProgramContext";
-import { HARD_KILL_CONSEQUENCES, orderlyStopOutcome } from "../models/residentRun";
+import { HARD_KILL_CONSEQUENCES, orderlyStopOutcome, snapshotOutcome } from "../models/residentRun";
 import CommandOutputModal from "./CommandOutputModal";
 import ConfirmDialog from "./ConfirmDialog";
 import ExecutionOptionsEditor from "./ExecutionOptionsEditor";
@@ -28,6 +29,7 @@ const MENU_ITEMS = [
   "Get program status",
   "Stop program",
   "Kill program",
+  "Take snapshot",
   "Reset output directory",
   "Talk to FIFOs",
 ] as const;
@@ -41,6 +43,7 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Get program status",
   "Stop program",
   "Kill program",
+  "Take snapshot",
   "Reset output directory",
 ]);
 
@@ -53,12 +56,21 @@ const ACTS_ON_PROGRAM = new Set<MenuItem>([
   "Run program",
   "Stop program",
   "Kill program",
+  "Take snapshot",
   "Reset output directory",
+]);
+
+// Offered on a resident program only while it is live.
+const LIVE_ONLY = new Set<MenuItem>([
+  "Stop program",
+  "Kill program",
+  "Take snapshot",
 ]);
 
 // Offered on a resident program only.
 const RESIDENT_ONLY = new Set<MenuItem>([
   "Kill program",
+  "Take snapshot",
 ]);
 
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
@@ -73,6 +85,7 @@ const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
   "Run program": "Running...",
   "Get program status": "Getting status...",
   "Stop program": "Stopping...",
+  "Take snapshot": "Taking snapshot...",
 };
 
 interface CommandOutput {
@@ -212,6 +225,27 @@ export default function RunMenu() {
 
   }
 
+  async function handleTakeSnapshot() {
+
+    setPendingAction("Take snapshot");
+    setActionError(null);
+
+    try {
+      const result = await takeSnapshot(program);
+      setCommandOutput({
+        title: "Take snapshot",
+        message: snapshotOutcome(result.exitCode, result.epoch, result.pendingNodes),
+        output: result.output,
+      });
+      setOpen(false);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to take a snapshot.");
+    } finally {
+      setPendingAction(null);
+    }
+
+  }
+
   async function handleConfirmKill() {
 
     setKillConfirmOpen(false);
@@ -291,6 +325,8 @@ export default function RunMenu() {
       handleStopResident();
     } else if (item === "Stop program") {
       runOutputAction(item, "Stop program", stopProgram);
+    } else if (item === "Take snapshot") {
+      handleTakeSnapshot();
     } else if (item === "Kill program") {
       setOpen(false);
       setKillConfirmOpen(true);
@@ -385,10 +421,9 @@ export default function RunMenu() {
                 // launches, stops or kills it.
                 (isResident && ACTS_ON_PROGRAM.has(item) &&
                   (residentPhase === "launching" || residentPhase === "stopping")) ||
-                // Stopping a resident program with no node alive would
-                // find no reader for its triggers.
-                ((item === "Stop program" || item === "Kill program") && isResident &&
-                  residentPhase !== "live") ||
+                // Stopping a resident program, or starting a round in it,
+                // with no node alive would find no reader for its triggers.
+                (LIVE_ONLY.has(item) && isResident && residentPhase !== "live") ||
                 // Wiping the output directory out from under a run
                 // (or repointing which directory this UI watches/
                 // controls) would delete files it's using or make it

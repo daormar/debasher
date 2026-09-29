@@ -215,6 +215,10 @@ class ExecutionOptions(BaseModel):
     rerunOutdatedProcs: bool = False
     condaSupport: bool = False
     dockerSupport: bool = False
+    # Only for a resident program: the period, in seconds, of the snapshots
+    # that /run starts once the program is launched (debasher_snapshot_resident
+    # --every); empty for no periodic snapshots.
+    snapshotEverySecs: str = ""
 
 
 class Program(BaseModel):

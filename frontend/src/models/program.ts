@@ -40,6 +40,11 @@ export interface ExecutionOptions {
   // --docker-support
   dockerSupport?: boolean;
 
+  // Only for a resident program: the period, in seconds, of the snapshots
+  // that "Run program" starts once the program is launched
+  // (debasher_snapshot_resident --every). Empty for no periodic snapshots.
+  snapshotEverySecs?: string;
+
 }
 
 // Chosen when the program is created, and never changed afterwards: the

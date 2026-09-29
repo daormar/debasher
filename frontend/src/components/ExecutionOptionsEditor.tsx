@@ -48,6 +48,14 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   const [dockerSupport, setDockerSupport] =
     useState(program.executionOptions.dockerSupport ?? false);
 
+  const [snapshotEverySecs, setSnapshotEverySecs] =
+    useState(program.executionOptions.snapshotEverySecs ?? "");
+
+  // Empty, or a positive number of seconds, as debasher_snapshot_resident
+  // --every takes it.
+  const isSnapshotPeriodValid =
+    /^\s*(\d*[1-9]\d*)?\s*$/.test(snapshotEverySecs);
+
   const [schedulers, setSchedulers] =
     useState<string[]>([]);
 
@@ -100,6 +108,7 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
       rerunOutdatedProcs,
       condaSupport,
       dockerSupport,
+      snapshotEverySecs: snapshotEverySecs.trim(),
     });
     onClose();
   }
@@ -222,6 +231,39 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
           </>
         )}
 
+        {isResident && (
+          <>
+
+            <label style={{ fontSize: 14 }}>
+              Snapshot period in seconds (blank = no periodic snapshots)
+            </label>
+
+            <input
+              type="text"
+              value={snapshotEverySecs}
+              placeholder="e.g. 300"
+              onChange={(event) => setSnapshotEverySecs(event.target.value)}
+              style={{ width: "100%" }}
+            />
+
+            {!isSnapshotPeriodValid && (
+              <div style={{ color: "#b00020", fontSize: 13 }}>
+                The period must be a positive number of seconds.
+              </div>
+            )}
+
+            <p style={{ margin: 0, fontSize: 13, color: "#555" }}>
+              The nodes write checkpoints and prune their input logs only when
+              a round closes. With no period, the only rounds are those of
+              "Take snapshot", and the input logs grow until their size cap
+              stops the nodes. A period has to be longer than a round takes,
+              or each round replaces the one before it and none closes. It
+              applies from the next launch from the web UI.
+            </p>
+
+          </>
+        )}
+
         {!isResident && scheduler === "SLURM" && (
           <>
 
@@ -297,7 +339,7 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleSave}>
+          <button onClick={handleSave} disabled={!isSnapshotPeriodValid}>
             Save
           </button>
 

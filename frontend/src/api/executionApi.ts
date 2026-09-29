@@ -461,6 +461,33 @@ export async function restartNode(program: Program, processName: string): Promis
   return { output, exitCode: exitCode ?? null };
 }
 
+export interface SnapshotResult {
+  output: string;
+  // 0 a round that closed at every node, 2 one that did not close at some
+  // node, 1 an error of usage or setup.
+  exitCode: number;
+  epoch: number | null;
+  // With exit code 2, the nodes at which the round did not close.
+  pendingNodes: string[];
+}
+
+// "Take snapshot" (debasher_snapshot_resident): starts one round and
+// resolves once it has closed at every node, or its timeout has passed.
+export async function takeSnapshot(program: Program): Promise<SnapshotResult> {
+  const response = await fetch("/api/execution/snapshot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to take a snapshot (${response.status})`));
+  }
+
+  const { output, exitCode, epoch, pendingNodes } = await response.json();
+  return { output, exitCode, epoch: epoch ?? null, pendingNodes: pendingNodes ?? [] };
+}
+
 // Whether the Supervisor of the live program was launched with
 // -no-hold-fifos, as the options it was given say.
 export async function launchedWithNoHoldFifos(program: Program): Promise<boolean> {

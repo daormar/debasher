@@ -168,7 +168,8 @@ def _run_debasher_dir_tool_in_own_session(
 ) -> tuple[str, int]:
     """
     Run a DeBasher bin tool that takes "-d <outputDir>" and acts on a live
-    resident program (debasher_stop_resident, debasher_stop), in a session
+    resident program (debasher_stop_resident, debasher_stop,
+    debasher_snapshot_resident), in a session
     of its own and with its output in a temporary file, so that the backend
     going away cannot cut it in the middle. `extra_args` follow "-d
     <outputDir>". Returns (output, exit code).
@@ -302,11 +303,46 @@ class RunProgramResponse(BaseModel):
 
 _RUN_LOG_NAME = ".debasher_webui_run.log"
 
+_SNAPSHOT_LOG_NAME = ".debasher_webui_snapshots.log"
+
 
 def _run_log_path(program: Program) -> Path:
     log_path = Path(program.outputDir).expanduser() / _RUN_LOG_NAME
     log_path.parent.mkdir(parents=True, exist_ok=True)
     return log_path
+
+
+def _snapshot_period(program: Program) -> str | None:
+    """The period of the periodic snapshots of a resident program, or None
+    for none; a period that is not a positive number of seconds is refused
+    before anything is launched."""
+    period = program.executionOptions.snapshotEverySecs.strip()
+    if not period:
+        return None
+    if not period.isdigit() or int(period) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The snapshot period must be a positive number of seconds, not '{period}'.",
+        )
+    return period
+
+
+def _start_periodic_snapshots(program: Program, period: str) -> None:
+    """
+    Start debasher_snapshot_resident --every <period> on the output
+    directory, detached, in a session of its own and with its output in the
+    snapshot log. The tool ends by itself once no node of the program runs,
+    whatever stopped the program, so nothing has to stop it.
+    """
+    tool = paths.find_bin_tool("debasher_snapshot_resident")
+    if tool is None:
+        raise HTTPException(status_code=500, detail="debasher_snapshot_resident tool not found.")
+
+    tool_sessions.start_detached(
+        [str(tool), "-d", program.outputDir, "--every", period],
+        _debasher_env(program),
+        Path(program.outputDir).expanduser() / _SNAPSHOT_LOG_NAME,
+    )
 
 
 def _launch_resident_program(command: list[str], program: Program) -> RunProgramResponse:
@@ -316,11 +352,18 @@ def _launch_resident_program(command: list[str], program: Program) -> RunProgram
     is reported at once. It runs in a session of its own and writes into the
     run log, which is read once it ends: a pipe would be inherited by the
     processes it launches, and waiting for its end would mean waiting for
-    theirs.
+    theirs. Once it has ended with 0, the periodic snapshots start, when the
+    program has a period for them.
     """
+    period = _snapshot_period(program)
+
     log_path = _run_log_path(program)
     exit_code = tool_sessions.run_in_own_session(command, _debasher_env(program), log_path)
     output = _cap_lines(log_path.read_text(errors="replace"))
+
+    if exit_code == 0 and period is not None:
+        _start_periodic_snapshots(program, period)
+
     return RunProgramResponse(started=exit_code == 0, exitCode=exit_code, output=output)
 
 
@@ -813,6 +856,46 @@ def restart_node(request: StopProcessRequest) -> StopProgramResponse:
         request.program, "debasher_stop", ["-p", request.processName]
     )
     return StopProgramResponse(output=output, exitCode=exit_code)
+
+
+class SnapshotResponse(BaseModel):
+    output: str
+    # 0 for a round that closed at every node, 2 for one that did not close
+    # at some node, 1 for an error of usage or setup.
+    exitCode: int
+    # The epoch of the round, when the tool started one.
+    epoch: int | None = None
+    # With exit code 2, the nodes at which the round did not close, when the
+    # tool names them.
+    pendingNodes: list[str] = []
+
+
+# What debasher_snapshot_resident prints of a round: "Round <epoch> closed
+# at every node ...", or "Warning: round <epoch> did not close ...", and,
+# before the latter, "Error: no checkpoint of round <epoch> or of a newer
+# one at <node> <node> ...".
+_ROUND_EPOCH_RE = re.compile(r"\b[Rr]ound (\d+)\b")
+_PENDING_NODES_RE = re.compile(r"^Error: no checkpoint of round \d+ or of a newer one at (.+)$", re.MULTILINE)
+
+
+@router.post("/snapshot", response_model=SnapshotResponse)
+def take_snapshot(program: Program) -> SnapshotResponse:
+    """
+    "Take snapshot" on a live resident program: debasher_snapshot_resident
+    -d <outputDir> with its default timeout, which starts one round and
+    waits until it closes at every node or the timeout passes.
+    """
+    output, exit_code = _run_debasher_dir_tool_in_own_session(program, "debasher_snapshot_resident")
+
+    epoch_match = _ROUND_EPOCH_RE.search(output)
+    pending_match = _PENDING_NODES_RE.search(output)
+
+    return SnapshotResponse(
+        output=output,
+        exitCode=exit_code,
+        epoch=int(epoch_match.group(1)) if epoch_match else None,
+        pendingNodes=pending_match.group(1).split() if pending_match else [],
+    )
 
 
 class NoHoldFifosResponse(BaseModel):

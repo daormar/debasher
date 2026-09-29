@@ -5,8 +5,9 @@ command of a general and of a resident program; the launch of a resident
 program, which /run waits for, in a session of its own and with its output
 in the run log, and whose failure it reports at once; the program state
 that tells a program never launched from one stopped; the orderly stop and
-the hard kill of a resident program; and "Restart node", a crash of the
-node that the Supervisor relaunches.
+the hard kill of a resident program; "Restart node", a crash of the node
+that the Supervisor relaunches; and the snapshots, one round at a time or
+periodically from the launch.
 """
 
 import os
@@ -472,3 +473,74 @@ def test_a_program_never_launched_or_without_a_supervisor_holds_its_fifos(tmp_pa
     assert not execution.launched_with_no_hold_fifos(
         _relay(tmp_path, with_supervisor=False)
     ).launchedWithNoHoldFifos
+
+
+# --- snapshots ------------------------------------------------------------------
+
+
+def _wait_for_text(path, text, timeout_secs=60):
+    deadline = time.monotonic() + timeout_secs
+    while time.monotonic() < deadline:
+        if path.exists() and text in path.read_text():
+            return True
+        time.sleep(0.5)
+    return False
+
+
+@_needs_engine
+def test_a_snapshot_closes_a_round_at_every_node(tmp_path):
+    program = _relay(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        response = execution.take_snapshot(program)
+
+        assert response.exitCode == 0, response.output
+        assert response.epoch is not None
+        assert f"Round {response.epoch} closed at every node" in response.output
+        assert response.pendingNodes == []
+    finally:
+        _hard_kill(program)
+
+
+@_needs_engine
+def test_the_launch_starts_periodic_snapshots_that_end_with_the_program(tmp_path):
+    program = _relay(tmp_path, executionOptions=ExecutionOptions(scheduler="BUILTIN", snapshotEverySecs="2"))
+    snapshot_log = tmp_path / "out" / ".debasher_webui_snapshots.log"
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+
+        assert _wait_for_text(snapshot_log, "closed at every node"), snapshot_log.read_text()
+
+        assert execution.stop_program(program).exitCode == 0
+        assert _wait_for_text(snapshot_log, "is running any more, no more rounds"), snapshot_log.read_text()
+    finally:
+        _hard_kill(program)
+
+
+def test_a_snapshot_period_that_is_not_a_positive_number_launches_nothing(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, f"touch {tmp_path / 'launched'}")
+    program = _relay(tmp_path, executionOptions=ExecutionOptions(scheduler="BUILTIN", snapshotEverySecs="0"))
+
+    with pytest.raises(execution.HTTPException) as refused:
+        execution.run_program(program)
+
+    assert refused.value.status_code == 400
+    assert not (tmp_path / "launched").exists()
+
+
+def test_a_round_that_did_not_close_names_its_nodes(tmp_path, monkeypatch):
+    output = (
+        "Error: no checkpoint of round 1759000000123 or of a newer one at Sink Relay:1\n"
+        "Warning: round 1759000000123 did not close at every node of out within 60s\n"
+    )
+    monkeypatch.setattr(execution, "_run_debasher_dir_tool_in_own_session", lambda program, tool: (output, 2))
+
+    response = execution.take_snapshot(_relay(tmp_path))
+
+    assert response.exitCode == 2
+    assert response.epoch == 1759000000123
+    assert response.pendingNodes == ["Sink", "Relay:1"]
