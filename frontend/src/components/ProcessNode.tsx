@@ -11,7 +11,7 @@ import type {
 import type { ProgramProcessData, WiringHandle } from "../adapters/reactFlowAdapter";
 import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
-import { NO_HOLD_FIFOS_LABEL, nodeOptionRole, observesOutside } from "../models/node";
+import { configurationSource, noHoldFifosOption, nodeOptionRole, observesOutside } from "../models/node";
 import { WIRING_EDGE_COLOR, optionRow } from "../adapters/reactFlowAdapter";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
@@ -26,6 +26,14 @@ import {
 } from "./NodeMarks";
 import { useProgram } from "../store/ProgramContext";
 import { SELECTED_NODE_COLOR, groupColor } from "../utils/groupColor";
+
+// What the tag of a hollow handle says, in full.
+const VALUE_SOURCE_TITLE: Record<string, string> = {
+  cmdline: "Given on the command line of the program",
+  spec: "Taken from the process specifications",
+  flag: "A flag that the module always gives",
+  fixed: "A value that the module gives",
+};
 
 function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) {
 
@@ -47,7 +55,9 @@ function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) 
  * of a canvas node, with the handle on the outer side of the label. In a
  * resident program an option whose data cross the border of the program
  * carries a mark outside its handle, and an external input's handle takes
- * no connection.
+ * no connection. An option whose value comes from elsewhere than a
+ * connection has a hollow handle, which takes none either, and a tag after
+ * its label that says where its value comes from.
  */
 function OptionHandle({
   option,
@@ -55,12 +65,14 @@ function OptionHandle({
   isFanout,
   connectable = true,
   outsideMark,
+  valueSource,
 }: {
   option: ProgramOption;
   row: "top" | "bottom";
   isFanout: boolean;
   connectable?: boolean;
   outsideMark?: "externalInput" | "readOutside";
+  valueSource?: string;
 }) {
 
   const handle = (
@@ -69,6 +81,7 @@ function OptionHandle({
       type={option.direction === "input" ? "target" : "source"}
       position={row === "top" ? Position.Top : Position.Bottom}
       isConnectable={connectable}
+      {...(valueSource ? { style: { background: "#fff", border: "1px solid #555" } } : {})}
     />
   );
 
@@ -108,6 +121,15 @@ function OptionHandle({
         }}
       >
         <OptionLabel label={option.label} isFanout={isFanout} />
+        {valueSource && (
+          <span
+            data-value-source={valueSource}
+            title={VALUE_SOURCE_TITLE[valueSource]}
+            style={{ marginLeft: 4, fontSize: 9, color: "#888" }}
+          >
+            {valueSource}
+          </span>
+        )}
       </span>
 
       {row === "bottom" && handle}
@@ -196,16 +218,9 @@ function WiringHandleView({ handle }: { handle: WiringHandle }) {
 /**
  * The head of a canvas node of a resident program: its name, its node kind
  * and the marks of an initiator and of a node that observes the outside
- * world, on a band that groups them (see HEAD_BAND_COLOR), and below them its
- * configuration options, which have no handle.
+ * world, on a band that groups them (see HEAD_BAND_COLOR).
  */
-function ResidentHead({
-  process,
-  configurationLabels,
-}: {
-  process: ProgramProcess;
-  configurationLabels: string[];
-}) {
+function ResidentHead({ process }: { process: ProgramProcess }) {
 
   const isSupervisor = process.nodeKind === "Supervisor";
 
@@ -238,20 +253,6 @@ function ResidentHead({
 
       </div>
 
-      {configurationLabels.length > 0 && (
-        <div
-          data-configuration-options={configurationLabels.join(" ")}
-          title="Configuration options: no connection feeds them"
-          style={{
-            marginTop: 6,
-            fontSize: 10,
-            color: "#666",
-          }}
-        >
-          {configurationLabels.join("  ")}
-        </div>
-      )}
-
     </div>
 
   );
@@ -282,11 +283,11 @@ export default function ProcessNode({
   const isManual = optionsHandlerMode === "manual";
 
 
-  // In a resident program an option has a handle only when a connection can
-  // reach it, or when it is an external input; a configuration option is
-  // listed apart instead.
-  const handleOptions = isResident
-    ? process.options.filter(option => nodeOptionRole(option) !== "configuration")
+  // Every option has a handle. The Supervisor also has its flag
+  // -no-hold-fifos, which script generation writes although the program
+  // model does not hold it.
+  const handleOptions = isResident && process.nodeKind === "Supervisor"
+    ? [...process.options, noHoldFifosOption()]
     : process.options;
 
   const topOptions =
@@ -299,17 +300,6 @@ export default function ProcessNode({
     handleOptions.filter(
       option => optionRow(option, flippedOptionIds) === "bottom"
     );
-
-  // The Supervisor also lists its flag -no-hold-fifos, which script
-  // generation writes although the program model does not hold it.
-  const configurationLabels = isResident
-    ? [
-        ...process.options
-          .filter(option => nodeOptionRole(option) === "configuration")
-          .map(option => option.label),
-        ...(process.nodeKind === "Supervisor" ? [NO_HOLD_FIFOS_LABEL] : []),
-      ]
-    : [];
 
   // A business output with no connection is read outside the program. It
   // depends on the edges, which are not part of the structural key, so it
@@ -328,15 +318,20 @@ export default function ProcessNode({
     return undefined;
   }
 
+  // In a resident program only a business output and an input that a
+  // connection can reach take a connection; a configuration option has a
+  // hollow handle, tagged with where its value comes from.
   function optionHandle(option: ProgramOption, row: "top" | "bottom") {
+    const role = isResident ? nodeOptionRole(option) : null;
     return (
       <OptionHandle
         key={option.id}
         option={option}
         row={row}
         isFanout={isStandard && isFanoutOption(option.label)}
-        connectable={!isResident || nodeOptionRole(option) !== "externalInput"}
+        connectable={!role || role === "businessOutput" || role === "businessInput"}
         outsideMark={outsideMark(option)}
+        valueSource={role === "configuration" ? configurationSource(option) : undefined}
       />
     );
   }
@@ -390,7 +385,7 @@ export default function ProcessNode({
 
       {isResident ? (
 
-        <ResidentHead process={process} configurationLabels={configurationLabels} />
+        <ResidentHead process={process} />
 
       ) : (
 

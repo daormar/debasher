@@ -2046,12 +2046,11 @@ The color of the border and the badge of a group stay unused in a resident
 program, rather than taken for the node kind, so that the same mark never
 means two things depending on the type of the program.
 
-**The handles of a node.** In a general program every option has a handle,
-the inputs along the top and the outputs along the bottom. In a resident
-program an option has a handle only when a connection can reach it, since the
-canvas accepts only a connection from a business output to a business input
-(see "The program model of a resident program"), and a handle shows what the
-option is:
+**The handles of a node.** Every option has a handle, the inputs along the top
+and the outputs along the bottom, as in a general program. A connection can
+reach fewer of them in a resident program, only a business output and a
+business input (see "The program model of a resident program"), and a handle
+shows what the option is:
 
 - A business output has a handle along the bottom. With no connection it is
   read outside the program, and a mark says so: something outside has to read
@@ -2066,13 +2065,15 @@ option is:
   handle that accepts no connection and a mark that says that it is written
   from outside the program. It is where "Talk to FIFOs" writes, and where the
   activity of the program comes in, which the canvas thus shows.
-- A configuration option that no connection can reach has no handle: a flag, a
-  command line option, an option taken from the process specifications, or an
-  output with option channel `none`. The canvas node lists it apart from the
-  inputs, so that it does not look like an input left unconnected. The
-  `Supervisor` lists among its own the flag `-no-hold-fifos`, which script
-  generation writes and each run sets, although the program model does not
-  hold it.
+- A configuration option that no connection can reach has a hollow handle,
+  which accepts no connection, so that it does not look like an input left
+  unconnected, and a tag after its label that says where its value comes
+  from: `cmdline` for a command line option, a flag included, `spec` for an
+  option taken from the process specifications, `flag` for a flag that the
+  module always gives, and `fixed` for an output with option channel `none`.
+  The `Supervisor` has among its options the flag `-no-hold-fifos`, a command
+  line option that script generation writes and each run sets, although the
+  program model does not hold it.
 - The options of the Supervisor wiring are not in the program model, and have
   no handle unless the wiring is shown.
 
@@ -2134,8 +2135,9 @@ the process status. What a resident program adds follows it this way:
   `FBPProcess` depends on whether its body of `observe` is empty; for each
   option, which of the sorts of "The program model of a resident program" it
   is (a business output, an input that a connection can reach, an external
-  input or a configuration option), which decides whether it has a handle and
-  of what sort; and whether the Supervisor wiring is shown. The last
+  input or a configuration option) and, for a configuration option, where its
+  value comes from, which decide how its handle is drawn; and whether the
+  Supervisor wiring is shown. The last
   belongs to the tab, not to the program, but it adds and removes handles on
   the canvas nodes, which the canvas library takes only when the list of
   canvas nodes is refreshed.
@@ -2149,8 +2151,8 @@ as that of a general program (see "From the store to the canvas"). It says
 what each process status means in a resident program (see "Observing and
 talking to a live program"), and what each mark means: the node kind, an
 initiator, a node that observes the outside world, an external input, a
-business output read outside the program, a trigger port, and the edges of the
-Supervisor wiring.
+business output read outside the program, a hollow handle and its tag, a
+trigger port, and the edges of the Supervisor wiring.
 
 ## Guarantees and non-goals of a resident program
 

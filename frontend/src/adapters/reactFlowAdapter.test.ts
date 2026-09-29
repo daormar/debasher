@@ -219,6 +219,12 @@ describe("canvasStructuralKey in a resident program", () => {
     expect(canvasStructuralKey(resident([observing]))).not.toBe(key);
   });
 
+  it("changes when the value of a configuration option comes from elsewhere", () => {
+    const fromCommandLine = { ...relay, options: [option("relay-n", "-n", { commandLine: true }), relay.options[1]] };
+    const fromSpec = { ...relay, options: [option("relay-n", "-n", { fromProcessSpec: true, value: "cpus" }), relay.options[1]] };
+    expect(canvasStructuralKey(resident([fromCommandLine]))).not.toBe(canvasStructuralKey(resident([fromSpec])));
+  });
+
   it("changes when an option changes its sort", () => {
     const configured = { ...relay, options: [option("relay-in", "-inf", { commandLine: true }), relay.options[1]] };
     expect(canvasStructuralKey(resident([configured]))).not.toBe(key);

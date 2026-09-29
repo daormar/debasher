@@ -11,6 +11,7 @@ import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
 import { isFanoutOption } from "../models/option";
 import {
+  configurationSource,
   isBusinessInputCandidate,
   isBusinessOutput,
   nodeOptionRole,
@@ -181,17 +182,24 @@ export function supervisorWiring(
  *
  * In a resident program it also holds, for each process, its node kind,
  * whether it is an initiator and whether it observes the outside world,
- * for each option its sort (see nodeOptionRole), which decides whether it
- * has a handle and of what sort, and whether the Supervisor wiring is
- * shown, which adds and removes handles.
+ * for each option its sort (see nodeOptionRole) and, for a configuration
+ * option, where its value comes from, which decide how its handle is drawn,
+ * and whether the Supervisor wiring is shown, which adds and removes handles.
  */
+// The sort of an option of a node and, for a configuration option, where its
+// value comes from: what its handle and its tag show.
+function residentOptionKey(option: ProgramOption): string {
+  const role = nodeOptionRole(option);
+  return role === "configuration" ? `${role}:${configurationSource(option)}` : role;
+}
+
 export function canvasStructuralKey(program: Program, showWiring = false): string {
   const isResident = program.programType === "resident";
   const wiring = isResident && showWiring ? "|wiring" : "";
   return program.processes
     .map(process => {
       const options = process.options
-        .map(o => `${o.id}:${o.label}:${o.direction}${isResident ? `:${nodeOptionRole(o)}` : ""}`)
+        .map(o => `${o.id}:${o.label}:${o.direction}${isResident ? `:${residentOptionKey(o)}` : ""}`)
         .join(",");
       const key = `${process.id}:${process.name}:${process.optionsHandler.mode}:${options}`;
       return isResident
@@ -403,18 +411,13 @@ export function programToReactFlowEdges(
 
     const backEdge = !isFanoutEdge && goesBack;
 
-    // The options drawn with a handle: in a resident program a
-    // configuration option has none (see nodeOptionRole).
-    const hasHandle = (option: ProgramOption) =>
-      program.programType !== "resident" || nodeOptionRole(option) !== "configuration";
-
     // How many output ports sit to the right of the source port on its
     // node (0 for the rightmost). BackEdge and SelfLoopEdge use this to
     // lift an edge's near-node detour higher the further left its source
     // port sits, so edges from different output ports on the same node
     // fan out at different heights instead of overlapping.
     const sourceOutputOptions = sourceProcess?.options.filter(
-      option => option.direction === "output" && hasHandle(option)
+      option => option.direction === "output"
     ) ?? [];
 
     const sourceOptionIndex = sourceOutputOptions.findIndex(
@@ -429,7 +432,7 @@ export function programToReactFlowEdges(
     // right of the target port on its node. BackEdge uses this to raise
     // the target-side rise the further left the target port sits.
     const targetInputOptions = targetProcess?.options.filter(
-      option => option.direction === "input" && hasHandle(option)
+      option => option.direction === "input"
     ) ?? [];
 
     const targetOptionIndex = targetInputOptions.findIndex(

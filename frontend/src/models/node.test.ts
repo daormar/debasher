@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import {
+  configurationSource,
   emptyNodeCode,
   isBusinessInputCandidate,
   isBusinessOutput,
@@ -9,6 +10,7 @@ import {
   isReservedNodeOptionLabel,
   nodeClassName,
   nodeNameProblem,
+  noHoldFifosOption,
   nodeOptionRole,
   observesOutside,
 } from "./node";
@@ -92,6 +94,23 @@ describe("nodeOptionRole", () => {
     expect(nodeOptionRole(option("-c", { fromProcessSpec: true, value: "cpus" }))).toBe("configuration");
     expect(nodeOptionRole(option("-verbose", { dataType: "None" }))).toBe("configuration");
     expect(nodeOptionRole(option("-outv", { value: "/tmp/v" }))).toBe("configuration");
+  });
+});
+
+describe("configurationSource", () => {
+  it("says where the value of an option that takes no connection comes from", () => {
+    expect(configurationSource(option("-n", { commandLine: true }))).toBe("cmdline");
+    expect(configurationSource(option("-v", { commandLine: true, dataType: "None" }))).toBe("cmdline");
+    expect(configurationSource(option("-c", { fromProcessSpec: true, value: "cpus" }))).toBe("spec");
+    expect(configurationSource(option("-verbose", { dataType: "None" }))).toBe("flag");
+    expect(configurationSource(option("-outv", { value: "/tmp/v" }))).toBe("fixed");
+  });
+
+  it("gives the flag of the Supervisor a place of its own among its options", () => {
+    const flag = noHoldFifosOption();
+    expect(flag.label).toBe("-no-hold-fifos");
+    expect(nodeOptionRole(flag)).toBe("configuration");
+    expect(configurationSource(flag)).toBe("cmdline");
   });
 });
 

@@ -129,3 +129,23 @@ export function getCommandLineOptions(
   return [...byLabel.values()];
 
 }
+
+// Where the value of an option comes from when no connection can give it:
+// the command line (a flag of the command line included), an attribute of
+// the process specifications, or the module itself for a flag that is not
+// of the command line, which is always given. The canvas tags the hollow
+// handle of such an option with it.
+export type OptionValueSource = "cmdline" | "spec" | "flag";
+
+export function optionValueSource(option: ProgramOption): OptionValueSource | null {
+  if (option.commandLine) {
+    return "cmdline";
+  }
+  if (option.fromProcessSpec) {
+    return "spec";
+  }
+  if (option.dataType === "None") {
+    return "flag";
+  }
+  return null;
+}

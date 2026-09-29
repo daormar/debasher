@@ -69,6 +69,22 @@ function BorderSample({ border, double }: { border: string; double?: boolean }) 
   );
 }
 
+// The hollow handle of an option that takes no connection.
+function HollowHandleSample() {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        border: "1px solid #555",
+        background: "#fff",
+      }}
+    />
+  );
+}
+
 // A short edge, as a polyline in a 24 by 12 box.
 function EdgeSample({ points, dash, color = "#999" }: { points: string; dash?: string; color?: string }) {
   return (
@@ -150,8 +166,9 @@ function ResidentLegend() {
       <LegendRow mark={<OutsideMark kind="readOutside" />}>
         Below an output: read outside the program.
       </LegendRow>
-      <LegendRow mark={<span style={{ fontSize: 10, color: "#666" }}>-opt</span>}>
-        Under the node kind: configuration options, with no handle.
+      <LegendRow mark={<HollowHandleSample />}>
+        A hollow handle takes no connection: its tag says where the value
+        comes from (cmdline, spec, flag or fixed).
       </LegendRow>
       <LegendRow mark={<TriggerMark />}>
         A trigger port of the Supervisor wiring.

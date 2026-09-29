@@ -1,5 +1,6 @@
 import type { ComputationalSpecs, OptionsHandler, ProgramProcess } from "./process";
-import type { ProgramOption } from "./option";
+import type { OptionValueSource, ProgramOption } from "./option";
+import { optionValueSource } from "./option";
 
 // The node kinds of a resident program: the classes of the engine's runtime
 // library with the same names (see doc/design_doc_resident.md). A program
@@ -234,11 +235,36 @@ export function observesOutside(process: ProgramProcess): boolean {
   }
 }
 
+/**
+ * Where the value of a configuration option of a node comes from, as the
+ * canvas tags its hollow handle: see optionValueSource, and "fixed" for an
+ * output with option channel "none", whose value the module gives.
+ */
+export function configurationSource(option: ProgramOption): OptionValueSource | "fixed" {
+  return optionValueSource(option) ?? "fixed";
+}
+
 // The flag of the Supervisor, a command line option, with which a run tells
 // it not to hold the business channels. Script generation writes it, and
-// the program model does not hold it, but the canvas lists it among the
-// configuration options of the Supervisor.
+// the program model does not hold it, but the canvas draws it as an option
+// of the Supervisor, as it draws the others.
 export const NO_HOLD_FIFOS_LABEL = "-no-hold-fifos";
+
+export function noHoldFifosOption(): ProgramOption {
+  return {
+    id: "supervisor:no-hold-fifos",
+    label: NO_HOLD_FIFOS_LABEL,
+    direction: "input",
+    dataType: "None",
+    channel: "none",
+    mirror: false,
+    description: "do not hold the FIFOs of the business channels",
+    value: "",
+    commandLine: true,
+    mandatory: false,
+    fromProcessSpec: false,
+  };
+}
 
 // The computational specifications that each node kind reads, besides
 // cpus, mem and time.
