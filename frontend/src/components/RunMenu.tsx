@@ -31,6 +31,7 @@ const MENU_ITEMS = [
   "Kill program",
   "Take snapshot",
   "Reset output directory",
+  "Reset program state",
   "Talk to FIFOs",
 ] as const;
 
@@ -45,6 +46,7 @@ const REQUIRES_OUTPUT_DIR = new Set<MenuItem>([
   "Kill program",
   "Take snapshot",
   "Reset output directory",
+  "Reset program state",
 ]);
 
 // The actions on a resident program that the run menu does not offer while
@@ -58,6 +60,7 @@ const ACTS_ON_PROGRAM = new Set<MenuItem>([
   "Kill program",
   "Take snapshot",
   "Reset output directory",
+  "Reset program state",
 ]);
 
 // Offered on a resident program only while it is live.
@@ -71,6 +74,13 @@ const LIVE_ONLY = new Set<MenuItem>([
 const RESIDENT_ONLY = new Set<MenuItem>([
   "Kill program",
   "Take snapshot",
+  "Reset program state",
+]);
+
+// Offered on a general program only: a resident program resets its program
+// state instead, since its output directory is part of the program.
+const GENERAL_ONLY = new Set<MenuItem>([
+  "Reset output directory",
 ]);
 
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
@@ -105,6 +115,7 @@ export default function RunMenu() {
     residentPhase,
     stopResidentProgram,
     killResidentProgram,
+    resetProgramState,
   } = useProgram();
 
   const isResident =
@@ -126,6 +137,14 @@ export default function RunMenu() {
     useState(false);
 
   const [isKillConfirmOpen, setKillConfirmOpen] =
+    useState(false);
+
+  const [isResetStateConfirmOpen, setResetStateConfirmOpen] =
+    useState(false);
+
+  // "Reset program state": delete the program state instead of setting it
+  // aside.
+  const [deleteState, setDeleteState] =
     useState(false);
 
   const [isTalkToFifosOpen, setTalkToFifosOpen] =
@@ -246,6 +265,28 @@ export default function RunMenu() {
 
   }
 
+  async function handleConfirmResetState() {
+
+    setResetStateConfirmOpen(false);
+
+    try {
+      const result = await resetProgramState(deleteState);
+      setCommandOutput({
+        title: "Reset program state",
+        message: result.exitCode === 0
+          ? "The next launch starts every node afresh."
+          : `debasher_reset_resident ended with exit code ${result.exitCode}. What it printed:`,
+        output: result.output,
+      });
+    } catch (err) {
+      setCommandOutput({
+        title: "Reset program state",
+        output: err instanceof Error ? err.message : "Failed to reset the program state.",
+      });
+    }
+
+  }
+
   async function handleConfirmKill() {
 
     setKillConfirmOpen(false);
@@ -325,6 +366,10 @@ export default function RunMenu() {
       handleStopResident();
     } else if (item === "Stop program") {
       runOutputAction(item, "Stop program", stopProgram);
+    } else if (item === "Reset program state") {
+      setOpen(false);
+      setDeleteState(false);
+      setResetStateConfirmOpen(true);
     } else if (item === "Take snapshot") {
       handleTakeSnapshot();
     } else if (item === "Kill program") {
@@ -402,7 +447,7 @@ export default function RunMenu() {
           }}
         >
 
-          {MENU_ITEMS.filter(item => isResident || !RESIDENT_ONLY.has(item)).map(item => (
+          {MENU_ITEMS.filter(item => isResident ? !GENERAL_ONLY.has(item) : !RESIDENT_ONLY.has(item)).map(item => (
 
             <button
 
@@ -424,6 +469,8 @@ export default function RunMenu() {
                 // Stopping a resident program, or starting a round in it,
                 // with no node alive would find no reader for its triggers.
                 (LIVE_ONLY.has(item) && isResident && residentPhase !== "live") ||
+                // A program that is new has nothing to reset.
+                (item === "Reset program state" && residentPhase !== "stopped") ||
                 // Wiping the output directory out from under a run
                 // (or repointing which directory this UI watches/
                 // controls) would delete files it's using or make it
@@ -519,6 +566,33 @@ export default function RunMenu() {
           <p style={{ margin: 0 }}>
             {HARD_KILL_CONSEQUENCES}
           </p>
+        </ConfirmDialog>
+      )}
+
+      {isResetStateConfirmOpen && (
+        <ConfirmDialog
+          title="Reset program state?"
+          confirmLabel="Reset"
+          onConfirm={handleConfirmResetState}
+          onCancel={() => setResetStateConfirmOpen(false)}
+        >
+          <p style={{ margin: 0 }}>
+            The state of every node is taken away: its checkpoints, its input
+            log, its halted marker and what its process left in its output
+            directory. The next launch starts every node afresh.
+          </p>
+          <p style={{ margin: 0 }}>
+            It is set aside under __reset__/&lt;timestamp&gt;/ in the output
+            directory, since a checkpoint that is lost cannot be made again.
+          </p>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={deleteState}
+              onChange={(event) => setDeleteState(event.target.checked)}
+            />
+            Delete it instead of setting it aside
+          </label>
         </ConfirmDialog>
       )}
 

@@ -162,9 +162,11 @@ refer to it.
   resident program, where the web UI sends everything that the
   `debasher_snapshot_resident --every` it starts prints.
 - **program state**: what the nodes of a resident program keep across runs in
-  its output directory, their checkpoints, input logs and halted markers and the
-  output directories of their processes: what `debasher_reset_resident` takes
-  away (see "The directories of a resident program").
+  its output directory, their checkpoints, input logs and halted markers, and
+  what their processes left in their own output directories: what
+  `debasher_reset_resident` takes away (see "The directories of a resident
+  program"). An empty output directory of a process is no program state: the
+  engine creates it empty before a first run, and a reset leaves it so.
 - **launch record**: the copy of the generated script and of the program options
   that every launch of a resident program leaves in its output directory,
   against which the next launch compares the program.
@@ -1493,31 +1495,35 @@ requires.
 
 ## The directories of a resident program
 
+*In progress: "Reset program state" is built; the launch record is not.*
+
 **The home directory** is the same as for a general program (see "The home
 directory"): the program metadata, the generated script and the user files,
 with the same guarantees.
 
 **The output directory** holds, besides what a general run leaves there, the
-program state: what each node keeps across runs, its checkpoints, its input
-log and its halted marker, in its execdir, and the output directory of its
-process, which the engine does not empty when it launches a node again (see
-"Ordered shutdown" in `doc/design_doc_resident.md`). A resident program is
-resumed from that state every time it is launched on the same output
-directory, so the output directory of a resident program is part of the
-program in a way that the output directory of a general program is not. The
-rules that keep the two directories apart apply unchanged. Besides the run
-log, the web UI adds to it the launch record (see below) and the snapshot log
-(see "Running a resident program").
+program state: what each node keeps across runs, its checkpoints, its input log
+and its halted marker, in its execdir, and what its process left in its own
+output directory, which the engine does not empty when it launches a node again
+(see "Ordered shutdown" in `doc/design_doc_resident.md`). A resident program is
+resumed from that state every time it is launched on the same output directory,
+so the output directory of a resident program is part of the program in a way
+that the output directory of a general program is not. The rules that keep the
+two directories apart apply unchanged. Besides the run log, the web UI adds to
+it the launch record (see below) and the snapshot log (see "Running a resident
+program").
 
 **Resetting.** "Reset output directory" gives way to "Reset program state",
 which runs `debasher_reset_resident` on the output directory: it takes the
-program state away, for every task of every process, and the next launch
-starts every node afresh. By default the tool sets the state aside under
+program state away, for every task of every process, and the next launch starts
+every node afresh. By default the tool sets the state aside under
 `__reset__/<timestamp>/` in the output directory, since a checkpoint that is
 lost cannot be made again, and the dialog offers to delete it instead
 (`--delete`). As for a general program, the frontend refuses to reset while
-there is a run in progress, and the tool refuses it too. What is set aside
-stays in the output directory until the user deletes it.
+there is a run in progress, and the backend and the tool refuse it too; the
+action is offered while the program is `stopped`, since a program that is `new`
+has nothing to reset. What is set aside stays in the output directory until the
+user deletes it.
 
 **Launching a program with state.** A node resumes from its checkpoint and
 replays its input log with the code that the program has when it is launched,
@@ -1553,7 +1559,7 @@ unseen.
 ## Running a resident program
 
 *In progress: everything is built but what comes from "The directories of a
-resident program": the launch record and "Reset program state".*
+resident program": the launch record.*
 
 A resident program is launched with `debasher_exec` and followed with
 `debasher_status`, as a general one, but a run of it never finishes on its own:
@@ -1797,9 +1803,10 @@ since they already read the process statuses and not the run phase: while the
 program is `live`, the frontend refuses to save, to reset the program state and
 to change the output directory, and `/run` refuses to launch. What changes is
 which actions are offered only while the program is `live`: "Stop program",
-"Kill program", "Restart node", "Relaunch node" and "Take snapshot". What the
-tab does with a live program when it is closed, reloaded or leaves the editor is
-in "A program that outlives the tab".
+"Kill program", "Restart node", "Relaunch node" and "Take snapshot", while
+"Reset program state" is offered only while it is `stopped`. What the tab does
+with a live program when it is closed, reloaded or leaves the editor is in "A
+program that outlives the tab".
 
 ## Observing and talking to a live program
 

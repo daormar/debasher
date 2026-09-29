@@ -396,6 +396,33 @@ export async function resetOutputDir(program: Program): Promise<boolean> {
   return cleared;
 }
 
+export interface ResetProgramStateResult {
+  output: string;
+  exitCode: number;
+}
+
+// "Reset program state" on a resident program (debasher_reset_resident):
+// sets the program state aside under __reset__/<timestamp>/ in the output
+// directory, or deletes it with `deleteState`.
+export async function resetProgramState(
+  program: Program,
+  deleteState: boolean
+): Promise<ResetProgramStateResult> {
+  const response = await fetch("/api/execution/reset-program-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, delete: deleteState }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await errorDetail(response, `Failed to reset the program state (${response.status})`)
+    );
+  }
+
+  return response.json();
+}
+
 export async function stopProgram(program: Program): Promise<string> {
   const response = await fetch("/api/execution/stop", {
     method: "POST",

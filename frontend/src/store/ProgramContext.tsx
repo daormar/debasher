@@ -32,6 +32,7 @@ import { saveProgram } from "../storage/programStorage";
 import type {
   ProcessStatusesResult,
   ProgramStatusResult,
+  ResetProgramStateResult,
   RunProgramResult,
   StopResult,
 } from "../api/executionApi";
@@ -41,6 +42,7 @@ import {
   getProgramState,
   killProgram as requestKill,
   resetOutputDir as requestOutputDirReset,
+  resetProgramState as requestProgramStateReset,
   runProgram,
   stopProgram,
   stopResidentProgram as requestResidentStop,
@@ -100,6 +102,12 @@ interface ProgramContextType {
   // every node's background goes back to white right away, rather
   // than waiting for the next status poll tick.
   resetOutputDir: () => Promise<boolean>;
+
+  // "Reset program state" on a resident program (the run menu's, in place
+  // of "Reset output directory"): sets the program state aside, or deletes
+  // it with `deleteState`, and reads the process statuses again, so that the
+  // run phase goes to "new" at once. Throws while a run is in progress.
+  resetProgramState: (deleteState: boolean) => Promise<ResetProgramStateResult>;
 
   // Launches "Run program" in the background; throws (e.g. if a run
   // is already in progress) rather than resolving with an error, so
@@ -728,6 +736,23 @@ export function ProgramProvider({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program.outputDir, program.envVars.DEBASHER_MOD_DIR]);
+
+  async function resetProgramState(deleteState: boolean) {
+
+    // As resetOutputDir's guard below: the state of a node that runs is
+    // not to be taken from under it. The tool refuses it too.
+    if (isRunInProgress) {
+      throw new Error(
+        "Cannot reset the program state while a run is in progress. Stop the " +
+        "program first."
+      );
+    }
+
+    const result = await requestProgramStateReset(program, deleteState);
+    await refreshProcessStatuses();
+    return result;
+
+  }
 
   async function resetOutputDir() {
 
@@ -1753,6 +1778,8 @@ export function ProgramProvider({
     processStatuses,
 
     resetOutputDir,
+
+    resetProgramState,
 
     startProgramRun,
 

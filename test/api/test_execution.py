@@ -4,7 +4,8 @@ Launching and stopping a program from the web UI (see "Launching a run" and
 command of a general and of a resident program; the launch of a resident
 program, which /run waits for, in a session of its own and with its output
 in the run log, and whose failure it reports at once; the program state
-that tells a program never launched from one stopped; the orderly stop and
+that tells a program never launched from one stopped, and "Reset program
+state", which takes it away; the orderly stop and
 the hard kill of a resident program; "Restart node", a crash of the node
 that the Supervisor relaunches, or the backend without a Supervisor, as
 "Relaunch node" does under the relaunch lock; and the snapshots, one round
@@ -291,11 +292,19 @@ def test_what_a_node_keeps_in_its_exec_directory_is_program_state(tmp_path, entr
     assert program_state.has_program_state(str(tmp_path))
 
 
-def test_the_output_directory_of_a_process_is_program_state(tmp_path):
+def test_what_a_process_left_in_its_output_directory_is_program_state(tmp_path):
+    _exec_dir(tmp_path, "Relay", "Relay.opts")
+    (tmp_path / "Relay").mkdir()
+    (tmp_path / "Relay" / "result").write_text("")
+
+    assert program_state.has_program_state(str(tmp_path))
+
+
+def test_an_empty_output_directory_of_a_process_is_no_program_state(tmp_path):
     _exec_dir(tmp_path, "Relay", "Relay.opts")
     (tmp_path / "Relay").mkdir()
 
-    assert program_state.has_program_state(str(tmp_path))
+    assert not program_state.has_program_state(str(tmp_path))
 
 
 # --- /run of a resident program -------------------------------------------------
@@ -409,6 +418,9 @@ def test_a_resident_program_is_killed_at_once(tmp_path):
     try:
         assert execution.run_program(program).exitCode == 0
         _wait_for_statuses(program, "IN-PROGRESS")
+        # A round leaves checkpoints: program state, which the next launch
+        # resumes.
+        assert execution.take_snapshot(program).exitCode == 0
 
         response = execution.kill_program(program)
 
@@ -666,3 +678,58 @@ def test_the_relaunch_lock_keeps_out_a_second_relaunch(tmp_path):
     with node_relaunch.relaunch_lock(str(tmp_path)):
         assert try_lock() == "busy"
     assert try_lock() == "locked"
+
+
+# --- resetting the program state ------------------------------------------------
+
+
+@_needs_engine
+@pytest.mark.parametrize("delete", [False, True])
+def test_a_reset_takes_the_program_state_away(tmp_path, delete):
+    program = _relay(tmp_path)
+    out = tmp_path / "out"
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        assert execution.take_snapshot(program).exitCode == 0
+
+        with pytest.raises(execution.HTTPException) as refused:
+            execution.reset_program_state(execution.ResetProgramStateRequest(program=program))
+        assert refused.value.status_code == 409
+
+        assert execution.stop_program(program).exitCode == 0
+        assert execution.get_process_statuses(program).hasProgramState
+
+        response = execution.reset_program_state(
+            execution.ResetProgramStateRequest(program=program, delete=delete)
+        )
+
+        assert response.exitCode == 0, response.output
+        assert not execution.get_process_statuses(program).hasProgramState
+        set_aside = list((out / "__reset__").glob("*/__exec__/*/checkpoints")) if (out / "__reset__").exists() else []
+        assert bool(set_aside) is not delete
+    finally:
+        _hard_kill(program)
+
+
+def test_a_general_program_has_no_program_state_to_reset(tmp_path):
+    with pytest.raises(execution.HTTPException) as refused:
+        execution.reset_program_state(execution.ResetProgramStateRequest(program=_general(tmp_path)))
+
+    assert refused.value.status_code == 400
+
+
+@_needs_engine
+def test_a_program_killed_before_it_kept_anything_starts_afresh(tmp_path):
+    program = _relay(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        assert execution.kill_program(program).exitCode == 0
+
+        assert not execution.get_process_statuses(program).hasProgramState
+    finally:
+        _hard_kill(program)

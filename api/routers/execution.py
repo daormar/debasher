@@ -989,6 +989,45 @@ def launched_with_no_hold_fifos(program: Program) -> NoHoldFifosResponse:
     return NoHoldFifosResponse(launchedWithNoHoldFifos=NO_HOLD_FIFOS_LABEL in opts)
 
 
+class ResetProgramStateRequest(BaseModel):
+    program: Program
+    # Delete the program state instead of setting it aside.
+    delete: bool = False
+
+
+class ResetProgramStateResponse(BaseModel):
+    output: str
+    exitCode: int
+
+
+@router.post("/reset-program-state", response_model=ResetProgramStateResponse)
+def reset_program_state(request: ResetProgramStateRequest) -> ResetProgramStateResponse:
+    """
+    "Reset program state" on a resident program: debasher_reset_resident -d
+    <outputDir>, which takes the program state away, for every task of every
+    process, so that the next launch starts every node afresh. It sets the
+    state aside under __reset__/<timestamp>/ in the output directory, or
+    deletes it with `delete` (--delete). Refused while there is a run in
+    progress, which the tool refuses too.
+    """
+    program = request.program
+
+    if not _is_resident(program):
+        raise HTTPException(status_code=400, detail="Only a resident program has program state.")
+
+    state, _ = _get_program_state(program)
+    if state == "in-progress":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot reset the program state while a run is in progress.",
+        )
+
+    output, exit_code = _run_debasher_dir_tool_in_own_session(
+        program, "debasher_reset_resident", ["--delete"] if request.delete else []
+    )
+    return ResetProgramStateResponse(output=output, exitCode=exit_code)
+
+
 class ResetOutputDirResponse(BaseModel):
     # False whenever a guard below made this a no-op, the caller can
     # tell the user there was nothing to reset.
