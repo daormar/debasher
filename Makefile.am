@@ -19,3 +19,9 @@ crap:
 	$(MAKE) -C test crap
 	@echo
 	$(MAKE) -C frontend crap
+
+# Complexity of the Bash functions of the engine and hotspots of the code,
+# see test/Makefile.am.
+.PHONY: bash-complexity hotspots
+bash-complexity hotspots:
+	$(MAKE) -C test $@
