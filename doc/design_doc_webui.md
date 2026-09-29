@@ -970,8 +970,9 @@ each other (see "Connections"). Each edge becomes a canvas edge between two
 handles, drawn in one of four ways: a plain edge; a back edge, routed along a
 lane to the right of every process; a self-loop, routed around the right side
 of its own process, clear of its box, as "The canvas of a resident program"
-describes; or a fanout edge, narrow at the end of the fanout family. An edge
-from a FIFO is dashed.
+describes; or a fanout edge, a wedge narrow at the end of the fanout family,
+which follows the route of a back edge when its target sits at or above its
+source. An edge from a FIFO is dashed.
 
 A canvas node shows the process's name and options, its options handler mode
 (a double border for `array` and `generator`, a dashed one for `manual`), its

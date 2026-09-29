@@ -264,6 +264,21 @@ describe("programToReactFlowEdges", () => {
     expect(back.type).toBe("backedge");
   });
 
+  it("gives a fanout edge that goes back up the detour of a back edge", () => {
+    const scatter = process("scatter", [
+      option("scatter-w", "-w", { commandLine: true }),
+      option("scatter-out", "-outfith", { countSourceOptionId: "scatter-w" }),
+    ], 400);
+    const worker = { ...process("worker", [option("worker-in", "-inf")]), optionsHandler: { mode: "array" as const } };
+    const edges = [edge("fan", "scatter", "scatter-out", "worker", "worker-in")];
+    const [up] = programToReactFlowEdges({ ...program([scatter, worker]), edges });
+    expect(up.type).toBe("fanout");
+    expect(up.data).toMatchObject({ narrowEnd: "source", detourX: 260 });
+    const [down] = programToReactFlowEdges({ ...program([{ ...scatter, position: { x: 0, y: 0 } }, { ...worker, position: { x: 0, y: 400 } }]), edges });
+    expect(down.type).toBe("fanout");
+    expect(down.data).not.toHaveProperty("detourX");
+  });
+
   it("sets apart the self-loops of a node by the place of their handles", () => {
     const twice = process("twice", [
       option("twice-a", "-a"),

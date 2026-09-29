@@ -109,6 +109,9 @@ export function supervisorWiring(
 
   function wiringEdge(id: string, source: ProgramProcess, sourceHandle: string, target: ProgramProcess, targetHandle: string, familyEnd: "source" | "target"): Edge {
     const isFanout = isFanoutPartnerMode(familyEnd === "source" ? target : source);
+    const detour = isBackEdge(source, target)
+      ? { detourX: maxProcessX + BACK_EDGE_MARGIN, sourceLeftRank: 0, targetLeftRank: 0 }
+      : undefined;
     return {
       id,
       source: source.id,
@@ -119,9 +122,9 @@ export function supervisorWiring(
       deletable: false,
       focusable: false,
       ...(isFanout
-        ? { type: "fanout", data: { narrowEnd: familyEnd, isFifo: true, wiring: true } }
-        : isBackEdge(source, target)
-        ? { type: "backedge", data: { detourX: maxProcessX + BACK_EDGE_MARGIN, sourceLeftRank: 0, targetLeftRank: 0 } }
+        ? { type: "fanout", data: { narrowEnd: familyEnd, isFifo: true, wiring: true, ...detour } }
+        : detour
+        ? { type: "backedge", data: detour }
         : {}),
       style: { stroke: WIRING_EDGE_COLOR, strokeDasharray: "2 4" },
     };
@@ -392,8 +395,13 @@ export function programToReactFlowEdges(
     // along the lane of the back edges, which joins processes far apart.
     const selfLoop = !isFanoutEdge && edge.sourceProcessId === edge.targetProcessId;
 
-    const backEdge =
-      !isFanoutEdge && !selfLoop && !isFlippedReturnEdge && isBackEdge(sourceProcess, targetProcess);
+    // Whether the edge goes back up and takes the detour lane, whatever it
+    // looks like: a fanout edge that goes back up draws its wedge along
+    // the detour too (see FanoutEdge).
+    const goesBack =
+      !selfLoop && !isFlippedReturnEdge && isBackEdge(sourceProcess, targetProcess);
+
+    const backEdge = !isFanoutEdge && goesBack;
 
     // The options drawn with a handle: in a resident program a
     // configuration option has none (see nodeOptionRole).
@@ -457,7 +465,11 @@ export function programToReactFlowEdges(
         : {}),
 
       data: isFanoutEdge
-        ? { narrowEnd: sourceIsFanout ? "source" : "target", isFifo: sourceOption?.channel === "fifo" }
+        ? {
+            narrowEnd: sourceIsFanout ? "source" : "target",
+            isFifo: sourceOption?.channel === "fifo",
+            ...(goesBack ? { detourX: maxProcessX + BACK_EDGE_MARGIN, sourceLeftRank, targetLeftRank } : {}),
+          }
         : selfLoop
         ? { sourceLeftRank, targetLeftRank }
         : backEdge
