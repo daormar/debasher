@@ -4,6 +4,8 @@
 # load an installed program from its own directory.
 webuiprgdir = $(datadir)/$(PACKAGE)/webui_programs
 nobase_webuiprg_DATA = webui_fifo_sum/webui_fifo_sum.sh	\
-webui_fifo_sum/.debasher/program.json
+webui_fifo_sum/.debasher/program.json				\
+webui_running_sum/webui_running_sum.sh				\
+webui_running_sum/.debasher/program.json
 
 EXTRA_DIST = $(nobase_webuiprg_DATA)

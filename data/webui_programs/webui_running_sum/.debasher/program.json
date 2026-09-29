@@ -1,0 +1,166 @@
+{
+  "id": "193bb155-fb66-46a3-b909-721fae5e5ce2",
+  "name": "webui_running_sum",
+  "programType": "resident",
+  "description": "Example built with the web UI: a resident program whose node keeps the running sum of the numbers written into its external input, and writes each new sum out.",
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": false,
+    "dockerSupport": false
+  },
+  "programOptions": {},
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "866488ec-2406-40fb-b43e-d61f3f85ba41",
+      "name": "accumulate",
+      "description": "Keeps the running sum of the numbers it receives, and sends each new sum out.",
+      "position": {
+        "x": 120.0,
+        "y": 260.0
+      },
+      "options": [
+        {
+          "id": "c0faa502-51b4-417a-b079-e9bdb46ef7f2",
+          "label": "-numbers",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "fifoTag": "external",
+          "description": "numbers written from outside the program, one per message",
+          "value": "accumulate_numbers",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "a33d5dbd-e4ee-41b7-b557-99f63e4fd73e",
+          "label": "-outsum",
+          "direction": "output",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "the running sum after each number, read outside the program",
+          "value": "accumulate_sum",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "FBPProcess",
+      "initiator": true,
+      "nodeCode": {
+        "preamble": "",
+        "classBody": "def __init__(self):\n    super().__init__()\n    # The node state: the sum of every number received so far.\n    self.total = 0",
+        "processData": "self.total += packet\nself.send_data(\"outsum\", self.total)",
+        "captureNodeState": "return {\"total\": self.total}",
+        "restoreNodeState": "self.total = node_state[\"total\"]",
+        "initializeRuntime": "pass",
+        "observe": ""
+      }
+    },
+    {
+      "id": "d8a77576-b184-4523-a153-f17f3f0b6a73",
+      "name": "sup",
+      "description": "Watches accumulate and relaunches it if it goes down.",
+      "position": {
+        "x": 120.0,
+        "y": 60.0
+      },
+      "options": [],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "Supervisor",
+      "initiator": false,
+      "nodeCode": null
+    }
+  ],
+  "edges": []
+}
