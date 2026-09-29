@@ -350,8 +350,10 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
 
 /**
  * Whether a connection is allowed: it must go from an output option to
- * an input option that is not a flag, which takes no value, and which
- * script generation writes before it looks at any connection. Both may
+ * an input option whose value does not come from elsewhere: not a flag,
+ * which takes no value, nor a command line option, nor one taken from the
+ * process specifications, all of which script generation writes before it
+ * looks at any connection. Both may
  * belong to the same process: a self-loop, which lets a process feed
  * itself. Every cycle, a self-loop included,
  * needs at least one edge from a fifo: a connection that is not from a
@@ -399,7 +401,11 @@ export function isValidProgramConnection(
     option => option.id === targetHandle
   );
 
-  if (targetOptionDef?.dataType === "None") {
+  if (
+    targetOptionDef?.dataType === "None" ||
+    targetOptionDef?.commandLine ||
+    targetOptionDef?.fromProcessSpec
+  ) {
     return false;
   }
 

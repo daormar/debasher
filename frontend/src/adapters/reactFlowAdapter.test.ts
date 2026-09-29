@@ -96,6 +96,23 @@ describe("isValidProgramConnection", () => {
     ).toBe(false);
   });
 
+  it("refuses a connection into an option whose value comes from elsewhere", () => {
+    const configured = process("configured", [
+      option("configured-n", "-n", { commandLine: true }),
+      option("configured-c", "-c", { fromProcessSpec: true, value: "cpus" }),
+    ], 200);
+    for (const targetHandle of ["configured-n", "configured-c"]) {
+      expect(
+        isValidProgramConnection(program([counter, configured]), {
+          source: "counter",
+          sourceHandle: "counter-outsink",
+          target: "configured",
+          targetHandle,
+        })
+      ).toBe(false);
+    }
+  });
+
   it("refuses a self-loop from an output that is not a fifo", () => {
     const writer = process("writer", [
       option("writer-in", "-in"),

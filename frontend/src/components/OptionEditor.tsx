@@ -51,6 +51,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
       edge.targetOptionId === option.id
   );
 
+  const isConnected = connectingEdges.length > 0;
+
   const connectedSourceOptions = connectingEdges
     .map(edge => {
 
@@ -414,8 +416,9 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             file
           </option>
 
-          {/* A flag takes no connection (see isValidProgramConnection). */}
-          {direction === "input" && !connectedSourceLabel && (
+          {/* A flag takes no connection (see isValidProgramConnection), nor
+              does a command line option or one from the process spec. */}
+          {direction === "input" && !isConnected && (
             <option value="None">
               None (flag)
             </option>
@@ -466,6 +469,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
                 type="checkbox"
 
                 checked={commandLine}
+
+                disabled={isConnected && !commandLine}
 
                 onChange={(event) => {
                   const checked = event.target.checked;
@@ -521,6 +526,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
                   type="checkbox"
 
                   checked={fromProcessSpec}
+
+                  disabled={isConnected && !fromProcessSpec}
 
                   onChange={(event) => {
                     const checked = event.target.checked;
