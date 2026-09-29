@@ -402,10 +402,10 @@ process on itself, but such a process would only read the file it writes, and
 the canvas refuses it with the rest.
 
 Every cycle has at least one edge whose target sits at or above its source on
-the canvas, a self-loop included, and the canvas routes such an edge around
-the processes instead of through them. For two processes that answer each
-other through FIFOs, it instead moves the handles of the answering pair to the
-other side, so that the edge stays short.
+the canvas, a self-loop included. The canvas routes such an edge around the
+processes instead of through them, and a self-loop around its own process. For
+two processes that answer each other through FIFOs, it instead moves the
+handles of the answering pair to the other side, so that the edge stays short.
 
 ## Options handler modes
 
@@ -967,9 +967,11 @@ and position, and a handle for each option, with the option's id: the inputs
 along the top and the outputs along the bottom, except the pair of handles
 that the canvas moves to keep a short edge between two processes that answer
 each other (see "Connections"). Each edge becomes a canvas edge between two
-handles, drawn in one of three ways: a plain edge; a back edge, routed along a
-lane to the right of every process; or a fanout edge, narrow at the end of the
-fanout family. An edge from a FIFO is dashed.
+handles, drawn in one of four ways: a plain edge; a back edge, routed along a
+lane to the right of every process; a self-loop, routed around the right side
+of its own process, clear of its box, as "The canvas of a resident program"
+describes; or a fanout edge, narrow at the end of the fanout family. An edge
+from a FIFO is dashed.
 
 A canvas node shows the process's name and options, its options handler mode
 (a double border for `array` and `generator`, a dashed one for `manual`), its
@@ -1993,8 +1995,8 @@ web UI; a single orderly stop for each output directory is left to the engine
 
 ## The canvas of a resident program
 
-*In progress: what a canvas node shows, its handles and the legend are built;
-the self-loop and the Supervisor wiring are not.*
+*In progress: what a canvas node shows, its handles, the self-loop and the
+legend are built; the Supervisor wiring is not.*
 
 The canvas of a resident program draws the same processes and connections as
 that of a general one (see "From the store to the canvas"), and shows besides
@@ -2102,8 +2104,8 @@ joins processes far apart, and along which a node that feeds itself would be
 hard to tell in a wide program. Several self-loops of the same node are drawn
 apart from each other, each at a height and a distance that follow the place
 of its handles, as the back edges that leave the same node are. The same
-drawing applies to a self-loop of a general program, which "From the store to
-the canvas" routes along the lane of the back edges.
+drawing applies to a self-loop of a general program (see "From the store to
+the canvas").
 
 **The structural key and the legend.** The rule of "Keeping the canvas in step
 with the store" holds: whatever a canvas node draws from its process is part

@@ -271,16 +271,25 @@ export function programToReactFlowEdges(
       flippedOptionIds.has(edge.sourceOptionId) &&
       flippedOptionIds.has(edge.targetOptionId);
 
+    // A self-loop is drawn next to its own node (see SelfLoopEdge), not
+    // along the lane of the back edges, which joins processes far apart.
+    const selfLoop = !isFanoutEdge && edge.sourceProcessId === edge.targetProcessId;
+
     const backEdge =
-      !isFanoutEdge && !isFlippedReturnEdge && isBackEdge(sourceProcess, targetProcess);
+      !isFanoutEdge && !selfLoop && !isFlippedReturnEdge && isBackEdge(sourceProcess, targetProcess);
+
+    // The options drawn with a handle: in a resident program a
+    // configuration option has none (see nodeOptionRole).
+    const hasHandle = (option: ProgramOption) =>
+      program.programType !== "resident" || nodeOptionRole(option) !== "configuration";
 
     // How many output ports sit to the right of the source port on its
-    // node (0 for the rightmost). BackEdge uses this to lift a back
-    // edge's near-node detour higher the further left its source port
-    // sits, so back edges from different output ports on the same node
+    // node (0 for the rightmost). BackEdge and SelfLoopEdge use this to
+    // lift an edge's near-node detour higher the further left its source
+    // port sits, so edges from different output ports on the same node
     // fan out at different heights instead of overlapping.
     const sourceOutputOptions = sourceProcess?.options.filter(
-      option => option.direction === "output"
+      option => option.direction === "output" && hasHandle(option)
     ) ?? [];
 
     const sourceOptionIndex = sourceOutputOptions.findIndex(
@@ -295,7 +304,7 @@ export function programToReactFlowEdges(
     // right of the target port on its node. BackEdge uses this to raise
     // the target-side rise the further left the target port sits.
     const targetInputOptions = targetProcess?.options.filter(
-      option => option.direction === "input"
+      option => option.direction === "input" && hasHandle(option)
     ) ?? [];
 
     const targetOptionIndex = targetInputOptions.findIndex(
@@ -322,10 +331,18 @@ export function programToReactFlowEdges(
       // ReactFlow's `{...defaultEdgeOptions, ...edge}` merge doesn't have
       // an explicit `type: undefined` here clobbering the default type
       // ProgramCanvas configures (see its defaultEdgeOptions).
-      ...(isFanoutEdge ? { type: "fanout" } : backEdge ? { type: "backedge" } : {}),
+      ...(isFanoutEdge
+        ? { type: "fanout" }
+        : selfLoop
+        ? { type: "selfloop" }
+        : backEdge
+        ? { type: "backedge" }
+        : {}),
 
       data: isFanoutEdge
         ? { narrowEnd: sourceIsFanout ? "source" : "target", isFifo: sourceOption?.channel === "fifo" }
+        : selfLoop
+        ? { sourceLeftRank, targetLeftRank }
         : backEdge
         ? { detourX: maxProcessX + BACK_EDGE_MARGIN, sourceLeftRank, targetLeftRank }
         : undefined,

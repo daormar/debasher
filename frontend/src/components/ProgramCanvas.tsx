@@ -41,6 +41,7 @@ import {
 import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
 import BackEdge from "./BackEdge";
+import SelfLoopEdge from "./SelfLoopEdge";
 import RunStatusIndicator from "./RunStatusIndicator";
 import ProcessContextMenu, { type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
 import ProcessTaskPicker from "./ProcessTaskPicker";
@@ -200,6 +201,7 @@ export default function ProgramCanvas() {
     () => ({
       fanout: FanoutEdge,
       backedge: BackEdge,
+      selfloop: SelfLoopEdge,
     }),
     []
   );

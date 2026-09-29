@@ -5,7 +5,12 @@ import type { Program } from "../models/program";
 import type { ProgramEdge } from "../models/edge";
 import { emptyNodeCode } from "../models/node";
 import { createEmptyProgram } from "../storage/programStorage";
-import { canvasStructuralKey, computeFlippedOptionIds, isValidProgramConnection } from "./reactFlowAdapter";
+import {
+  canvasStructuralKey,
+  computeFlippedOptionIds,
+  isValidProgramConnection,
+  programToReactFlowEdges,
+} from "./reactFlowAdapter";
 
 function option(id: string, label: string, fields: Partial<ProgramOption> = {}): ProgramOption {
   return {
@@ -231,6 +236,48 @@ describe("canvasStructuralKey in a resident program", () => {
   it("stays as in a general program when the program is general", () => {
     expect(canvasStructuralKey(program([relay]))).not.toBe(key);
     expect(canvasStructuralKey(program([{ ...relay, initiator: true }]))).toBe(canvasStructuralKey(program([relay])));
+  });
+});
+
+describe("programToReactFlowEdges", () => {
+  function edge(id: string, source: string, sourceOption: string, target: string, targetOption: string): ProgramEdge {
+    return { id, sourceProcessId: source, sourceOptionId: sourceOption, targetProcessId: target, targetOptionId: targetOption };
+  }
+
+  it("draws a self-loop next to its node, not along the lane of the back edges", () => {
+    const [loop] = programToReactFlowEdges({
+      ...program([counter, sink]),
+      edges: [edge("loop", "counter", "counter-outself", "counter", "counter-self")],
+    });
+    expect(loop.type).toBe("selfloop");
+    expect(loop.data).toEqual({ sourceLeftRank: 1, targetLeftRank: 0 });
+  });
+
+  it("still draws an edge back up to another process along the lane", () => {
+    const up = process("up", [option("up-in", "-in"), option("up-outf", "-outf", { channel: "fifo", value: "up_out" })], 400);
+    const [back] = programToReactFlowEdges({
+      ...program([counter, up]),
+      edges: [edge("back", "up", "up-outf", "counter", "counter-self")],
+    });
+    expect(back.type).toBe("backedge");
+  });
+
+  it("sets apart the self-loops of a node by the place of their handles", () => {
+    const twice = process("twice", [
+      option("twice-a", "-a"),
+      option("twice-b", "-b"),
+      option("twice-outa", "-outa", { channel: "fifo", value: "twice_a" }),
+      option("twice-outb", "-outb", { channel: "fifo", value: "twice_b" }),
+    ]);
+    const [outer, inner] = programToReactFlowEdges({
+      ...program([twice]),
+      edges: [
+        edge("outer", "twice", "twice-outa", "twice", "twice-a"),
+        edge("inner", "twice", "twice-outb", "twice", "twice-b"),
+      ],
+    });
+    expect(outer.data).toEqual({ sourceLeftRank: 1, targetLeftRank: 1 });
+    expect(inner.data).toEqual({ sourceLeftRank: 0, targetLeftRank: 0 });
   });
 });
 
