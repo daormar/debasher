@@ -6,7 +6,7 @@ import tempfile
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import paths
+from .. import inherited_hooks, paths
 from ..debasher_constants import (
     RESERVED_HEREDOC_SUFFIXES,
     RESERVED_PROCESS_METHOD_SUFFIXES,
@@ -352,3 +352,27 @@ def get_node_info(request: GetNodeInfoRequest) -> GetNodeInfoResponse:
             optionsHandler=node.optionsHandler,
         )
     )
+
+
+class InheritedHooksRequest(BaseModel):
+    kind: str
+
+
+class InheritedHooksResponse(BaseModel):
+    # {field of NodeCode: source of the method} for each hook that the class
+    # of the node kind implements; empty for an FBPProcess.
+    hooks: dict[str, str] = {}
+    error: str | None = None
+
+
+@router.post("/inherited-hooks", response_model=InheritedHooksResponse)
+def get_inherited_hooks(request: InheritedHooksRequest) -> InheritedHooksResponse:
+    """
+    The code of the hooks that a node of `kind` inherits from its class of
+    the runtime library, for the node code editor, which shows it read only
+    next to each hook: a body given for the hook replaces it.
+    """
+    try:
+        return InheritedHooksResponse(hooks=inherited_hooks.inherited_hooks(request.kind))
+    except inherited_hooks.InheritedHooksError as exc:
+        return InheritedHooksResponse(error=str(exc))

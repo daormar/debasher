@@ -1,11 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
 import { languageExtension } from "./codeLanguages";
 import type { ProgramProcess } from "../models/process";
-import type { NodeCode, NodeKind } from "../models/node";
-import { NODE_HOOKS, emptyNodeCode, isRequiredHook, nodeClassName } from "../models/node";
+import type { NodeCode, NodeHookPart, NodeKind } from "../models/node";
+import {
+  NODE_HOOKS,
+  emptyNodeCode,
+  inheritedHookNote,
+  inheritsHooks,
+  isRequiredHook,
+  nodeClassName,
+} from "../models/node";
+import { getInheritedHooks } from "../api/processApi";
 
 interface Props {
   process: ProgramProcess;
@@ -21,7 +29,10 @@ type Part = keyof NodeCode;
  * class declaration, the signature of each hook) are shown read only: the
  * class is named after the process and derives from the node kind, so the
  * user never writes it. Every part is edited without the indentation that
- * script generation adds.
+ * script generation adds. A node whose class implements every hook (a
+ * ProgramLauncher, a DirectoryWatcher) inherits them: next to each hook the
+ * editor says so, and shows, read only, the code that it inherits, read from
+ * the runtime library, which a body replaces.
  */
 export default function NodeCodeEditor({ process, onClose }: Props) {
 
@@ -36,6 +47,24 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
 
   const [part, setPart] =
     useState<Part>("classBody");
+
+  // The code of the hooks that the node inherits from its class, and why it
+  // could not be read, if it could not.
+  const [inherited, setInherited] =
+    useState<{ hooks: Partial<Record<NodeHookPart, string>>; error: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!inheritsHooks(kind)) {
+      return;
+    }
+    let current = true;
+    getInheritedHooks(kind)
+      .then(result => { if (current) setInherited(result); })
+      .catch(err => {
+        if (current) setInherited({ hooks: {}, error: err instanceof Error ? err.message : String(err) });
+      });
+    return () => { current = false; };
+  }, [kind]);
 
   const parts: { part: Part; label: string; note?: string }[] = [
     { part: "preamble", label: "Node preamble" },
@@ -52,6 +81,10 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
   ];
 
   const hook = NODE_HOOKS.find(h => h.part === part);
+
+  const showsInherited = hook !== undefined && inheritsHooks(kind);
+
+  const inheritedCode = hook ? inherited?.hooks[hook.part] : undefined;
 
   // What script generation writes before the part being edited, shown
   // above the editor so that the part reads in its place.
@@ -146,6 +179,12 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
               {context}
             </pre>
 
+            {showsInherited && (
+              <div data-testid="inherited-note" style={{ color: "#555", fontSize: 12 }}>
+                {inheritedHookNote(kind, hook.name, hook.signature, draft[part].trim() !== "")}
+              </div>
+            )}
+
             <div style={{ border: "1px solid #ccc" }}>
 
               <CodeMirror
@@ -154,7 +193,7 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
 
                 value={draft[part]}
 
-                height="360px"
+                height={showsInherited ? "220px" : "360px"}
 
                 extensions={[
                   languageExtension("python"),
@@ -176,6 +215,33 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
                   : "The body of the hook, without its signature. An empty body " +
                     "leaves the hook out."}
             </div>
+
+            {showsInherited && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ color: "#666", fontSize: 12 }}>
+                  Inherited from {kind}, read only:
+                </div>
+                <pre
+                  data-testid="inherited-code"
+                  style={{
+                    margin: 0,
+                    padding: "6px 8px",
+                    maxHeight: 160,
+                    overflow: "auto",
+                    background: "#f7f7f7",
+                    color: "#888",
+                    border: "1px dashed #ccc",
+                    fontSize: 12,
+                  }}
+                >
+                  {inherited === null
+                    ? "Reading..."
+                    : inherited.error
+                      ? `The inherited code could not be read: ${inherited.error}`
+                      : inheritedCode ?? `${kind} does not define ${hook.name}.`}
+                </pre>
+              </div>
+            )}
 
           </div>
 

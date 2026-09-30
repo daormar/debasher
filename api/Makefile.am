@@ -1,6 +1,6 @@
 apidir = $(pkgdatadir)/api
 dist_api_DATA = __init__.py additional_methods_import.py			\
-debasher_constants.py doc_mod.py file_inspection.py main.py		\
+debasher_constants.py doc_mod.py file_inspection.py inherited_hooks.py main.py	\
 markdown_parsing.py models.py node_relaunch.py option_handler_import.py paths.py	\
 persistence.py program_import.py requirements.txt resident_generation.py	\
 resident_fifos.py resident_import.py resident_node_code.py resident_supervisor_wiring.py	\
@@ -23,6 +23,7 @@ debasher_webui: debasher_webui.sh
 	echo "debasher_pkgdatadir=\"$(pkgdatadir)\"" >> $@
 	echo "debasher_bindir=\"$(bindir)\"" >> $@
 	echo "debasher_libexecdir=\"$(libexecdir)\"" >> $@
+	echo "debasher_pythondir=\"$(pythondir)\"" >> $@
 	echo "debasher_default_python=\"$(PYTHON)\"" >> $@
 	cat $< >> $@
 	chmod ugo+x $@

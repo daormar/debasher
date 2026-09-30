@@ -58,3 +58,29 @@ def find_bin_tool(name: str) -> Path | None:
 def find_libexec_tool(name: str) -> Path | None:
     """Locate a DeBasher tool installed under libexec/ (e.g. debasher_list_proc_names)."""
     return find_tool(name, "libexec", "DEBASHER_WEBUI_LIBEXEC_DIR")
+
+
+def find_runtime_module(name: str) -> Path | None:
+    """
+    Locate a module of the runtime library of resident programs (e.g.
+    debasher_runtime_launcher.py). A node always imports the installed
+    library, $(pythondir), never the sources in engine/, so the installed
+    copy comes first: where the installed debasher_webui launcher says
+    (DEBASHER_WEBUI_PYTHON_DIR), else a local --prefix=<repo root> install,
+    and the sources in engine/ only when nothing is installed.
+    """
+    candidate_dirs = []
+
+    override = os.environ.get("DEBASHER_WEBUI_PYTHON_DIR")
+    if override:
+        candidate_dirs.append(Path(override))
+
+    candidate_dirs.extend(sorted((_REPO_ROOT / "lib").glob("python*/site-packages")))
+    candidate_dirs.append(_REPO_ROOT / "engine")
+
+    for candidate_dir in candidate_dirs:
+        candidate = candidate_dir / name
+        if candidate.is_file():
+            return candidate
+
+    return None

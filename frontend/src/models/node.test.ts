@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import {
+  NODE_HOOKS,
   configurationSource,
+  inheritedHookNote,
+  inheritsHooks,
+  superCall,
   emptyNodeCode,
   isBusinessInputCandidate,
   isBusinessOutput,
@@ -188,5 +192,33 @@ describe("programCommandLineOptions", () => {
       .toEqual(["-w"]);
     expect(programCommandLineOptions({ programType: "general", processes: [processWith(undefined, [count])] })
       .map(o => o.label)).toEqual(["-w"]);
+  });
+});
+
+describe("inherited hooks", () => {
+  it("are those of a ProgramLauncher and a DirectoryWatcher, whose classes implement every hook", () => {
+    expect(inheritsHooks("ProgramLauncher")).toBe(true);
+    expect(inheritsHooks("DirectoryWatcher")).toBe(true);
+    expect(inheritsHooks("FBPProcess")).toBe(false);
+    expect(inheritsHooks("Supervisor")).toBe(false);
+  });
+
+  it("are run from a body that replaces them with the parameters of their signature", () => {
+    expect(NODE_HOOKS.map(h => superCall(h.signature))).toEqual([
+      "super().process_data(port_name, packet)",
+      "super().capture_node_state()",
+      "super().restore_node_state(node_state)",
+      "super().initialize_runtime()",
+      "super().observe()",
+    ]);
+  });
+
+  it("say what an empty body and a body mean", () => {
+    const signature = "def process_data(self, port_name, packet):";
+    expect(inheritedHookNote("ProgramLauncher", "process_data", signature, false))
+      .toMatch(/^Empty: the node runs process_data of ProgramLauncher, shown below/);
+    expect(inheritedHookNote("ProgramLauncher", "process_data", signature, true))
+      .toBe("This body replaces process_data of ProgramLauncher, shown below: call " +
+        "super().process_data(port_name, packet) in it to keep what that one does.");
   });
 });

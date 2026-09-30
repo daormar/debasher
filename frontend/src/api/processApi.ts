@@ -1,5 +1,5 @@
 import type { ProcessInfo } from "../models/process";
-import type { NodeInfo, SuggestedNode } from "../models/node";
+import type { NodeHookPart, NodeInfo, SuggestedNode } from "../models/node";
 
 export async function validateProcessName(name: string): Promise<boolean> {
   const response = await fetch("/api/processes/validate-name", {
@@ -105,4 +105,24 @@ export async function getNodeInfo(
 
   const { info } = await response.json();
   return info;
+}
+
+// The code of the hooks that a node of `kind` inherits from its class of the
+// runtime library (a ProgramLauncher or a DirectoryWatcher implements every
+// hook), read from the library itself, by field of NodeCode: the node code
+// editor shows it read only next to each hook. Empty for an FBPProcess.
+export async function getInheritedHooks(
+  kind: string
+): Promise<{ hooks: Partial<Record<NodeHookPart, string>>; error: string | null }> {
+  const response = await fetch("/api/processes/inherited-hooks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response));
+  }
+
+  return response.json();
 }

@@ -1301,6 +1301,18 @@ what they mostly need are class attributes. The class body never declares the
 ports of the node: the engine gives each node its ports from the options of the
 module, and stops a node whose class declares them.
 
+The editor of the code of a node makes the inheritance visible. Next to each
+hook of a `ProgramLauncher` or a `DirectoryWatcher` it says whether the node
+runs the hook of its class (when the body is empty) or replaces it (when the
+body has code), and names the call that keeps what the class does, such as
+`super().process_data(port_name, packet)`. Below the body it shows, read only
+and in gray, the code that the node inherits, which is what a body would
+replace. That code is read from the runtime library itself, never from a copy
+kept apart from it: the installed library first, since that is the one a node
+imports, and the sources in `engine/` only in a build that has not been
+installed. The module is parsed, never imported. When the library cannot be
+read, the editor says so, and the hooks are edited as usual.
+
 The class is named after the process, in CamelCase (`counter` gives `Counter`,
 `org.ns.count_words` gives `OrgNsCountWords`), as the engine requires (see
 "Defining a node" in `doc/design_doc_resident.md`), and the editor shows its

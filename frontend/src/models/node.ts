@@ -94,6 +94,34 @@ export function isRequiredHook(kind: NodeKind, part: NodeHookPart): boolean {
   return kind === "FBPProcess" && part !== "observe";
 }
 
+/**
+ * Whether the class of a node kind implements every hook, so that a node
+ * inherits them, and a body given for one replaces that of the class.
+ */
+export function inheritsHooks(kind: NodeKind): boolean {
+  return kind === "ProgramLauncher" || kind === "DirectoryWatcher";
+}
+
+/**
+ * The call that runs the inherited hook from a body that replaces it, with
+ * the parameters of its signature: super().process_data(port_name, packet).
+ */
+export function superCall(signature: string): string {
+  const match = /^def (\w+)\(self(?:, )?([^)]*)\):$/.exec(signature);
+  return match ? `super().${match[1]}(${match[2]})` : "";
+}
+
+/**
+ * What the node code editor says of a hook that a node inherits: empty, the
+ * node runs the one of its class; with a body, the body replaces it.
+ */
+export function inheritedHookNote(kind: NodeKind, name: string, signature: string, hasBody: boolean): string {
+  const call = superCall(signature);
+  return hasBody
+    ? `This body replaces ${name} of ${kind}, shown below: call ${call} in it to keep what that one does.`
+    : `Empty: the node runs ${name} of ${kind}, shown below. A body here replaces it: call ${call} in it to keep what that one does.`;
+}
+
 // The classes of the runtime library, which the class of a node may not
 // hide, and the Python builtins whose names a class named in CamelCase can
 // take (those that start with a capital letter): the engine refuses a node

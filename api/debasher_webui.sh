@@ -119,6 +119,10 @@ export DEBASHER_WEBUI_STATIC_DIR="${debasher_pkgdatadir}/web"
 export DEBASHER_WEBUI_BIN_DIR="${debasher_bindir}"
 export DEBASHER_WEBUI_LIBEXEC_DIR="${debasher_libexecdir}"
 
+# DEBASHER_WEBUI_PYTHON_DIR tells api/paths.py where the runtime library of
+# resident programs was installed, whose code the node code editor shows.
+export DEBASHER_WEBUI_PYTHON_DIR="${debasher_pythondir}"
+
 echo "Once started, open http://${host}:${port}/ in your browser to use the web interface." >&2
 
 exec "${PYTHON}" -m uvicorn api.main:app \
