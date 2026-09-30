@@ -37,8 +37,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf autoconf-archive automake graphviz \
-            python3 python3-venv bats
+          sudo apt-get install -y autoconf automake graphviz python3 \
+            python3-venv bats
 
       # The Node.js of Ubuntu is older than the 22.12 that the frontend needs
       - name: Install Node.js (Linux)
@@ -51,7 +51,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install bash coreutils findutils gnu-sed grep gawk flock \
-            autoconf autoconf-archive automake graphviz python node bats-core
+            autoconf automake graphviz python node bats-core
           BREW="$(brew --prefix)"
           {
             echo "$BREW/bin"
@@ -81,11 +81,13 @@ jobs:
       - name: Build
         run: make
 
-      - name: Run the tests
-        run: make check
-
+      # Before the tests: the built tools that some of them run load the
+      # library of the engine from the prefix
       - name: Install
         run: make install
+
+      - name: Run the tests
+        run: make check
 
       - name: Check the installation
         run: make installcheck
