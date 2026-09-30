@@ -277,15 +277,18 @@ debasher::program_type()
 }
 
 ########
-# Public: Sets the type of the program being defined.
+# Public: Sets the type of the program being defined, from the
+# `program_type` method of its module.
 #
-# $1 - Program type.
+# $1 - Program type: "general" (the default, when the module defines no
+#      `program_type` method) or "resident".
 #
 # Examples
 #
 #    program_type "resident"
 #
-# The function does not return any value
+# The function does not return any value. It aborts the execution when
+# given any other type.
 program_type() { debasher::program_type "$@"; }
 
 ########
