@@ -1,5 +1,5 @@
 ACLOCAL_AMFLAGS = -I m4
-EXTRA_DIST = m4 reconf configure COPYING.LESSER README.md
+EXTRA_DIST = m4 reconf configure COPYING.LESSER README.md NEWS.md
 SUBDIRS = m4 engine api frontend doc data test
 
 # Like "make dist", but also vendors a freshly-built frontend/dist/ into
