@@ -125,12 +125,12 @@ See the :doc:`namespace_example` example for a module that reimplements
 One exception: a process implemented in another language (Python, R,
 Perl or Groovy) provides its code through a suffixed variable (legacy,
 e.g. ``hello_world_py``) or function (preferred, e.g.
-``hello_world_heredoc_py`` — a longer, more specific suffix than the
+``hello_world_heredoc_py``, a longer, more specific suffix than the
 legacy variable's, since it is reserved as a process method name).
 Only the function form can be named after a namespaced process, since
-a Bash variable name cannot contain a ``.`` — see :doc:`hello_world_py`
+a Bash variable name cannot contain a ``.`` (see :doc:`hello_world_py`
 versus its legacy, variable-based counterpart
-:doc:`hello_world_py_legacy`.
+:doc:`hello_world_py_legacy`).
 
 A DeBasher process can have input and output options, that are provided
 to the process as if it was a standard UNIX command.
@@ -930,7 +930,7 @@ pairs, second argument):
   and wall-clock time budget assigned to the process.
 * ``nodes``, ``account``, ``partition``: SLURM-specific scheduling
   attributes (number of nodes, billing account, and partition/queue to
-  submit to) — only meaningful when running under the SLURM scheduler.
+  submit to), only meaningful when running under the SLURM scheduler.
 * ``throttle``: caps how many tasks of an array/generator process are
   scheduled at the same time.
 
