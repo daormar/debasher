@@ -31,19 +31,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install the requirements (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf autoconf-archive automake libtool \
-            graphviz python3 python3-venv bats
+          sudo apt-get install -y autoconf autoconf-archive automake graphviz \
+            python3 python3-venv bats
 
       # The Node.js of Ubuntu is older than the 22.12 that the frontend needs
       - name: Install Node.js (Linux)
         if: runner.os == 'Linux'
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -51,8 +51,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install bash coreutils findutils gnu-sed grep gawk flock \
-            autoconf autoconf-archive automake libtool graphviz python node \
-            bats-core
+            autoconf autoconf-archive automake graphviz python node bats-core
           BREW="$(brew --prefix)"
           {
             echo "$BREW/bin"
@@ -103,7 +102,7 @@ jobs:
 
       - name: Upload the logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-${{ matrix.os }}
           path: ${{ runner.temp }}/logs.tar.gz
