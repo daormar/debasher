@@ -21,7 +21,7 @@
 ########
 debasher::debasher_version()
 {
-    echo "${debasher_pkgname} version: ${debasher::debasher_version}" >&2
+    echo "${debasher_pkgname} version: ${debasher_version}" >&2
 }
 
 ########

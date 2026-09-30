@@ -12,6 +12,16 @@ setup() {
     source "${ENGINE_BUILDDIR}/debasher_lib_utils"
 }
 
+@test "debasher::debasher_version prints the version of the package" {
+    # Normally supplied by the preamble of the script that sources the
+    # library
+    debasher_pkgname="debasher"
+    debasher_version="9.8.7"
+    run debasher::debasher_version
+    [ "$status" -eq 0 ]
+    [ "$output" = "debasher version: 9.8.7" ]
+}
+
 @test "debasher::_str_is_natural_number accepts a natural number" {
     run debasher::_str_is_natural_number "42"
     [ "$status" -eq 0 ]
