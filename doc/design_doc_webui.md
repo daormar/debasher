@@ -975,10 +975,11 @@ have to change with them.
 seconds, and so never takes anything from the FIFO's real reader.
 
 **Talk to FIFOs** lets a person act as the other end of the unconnected FIFOs of
-a running program: write a line into an input, or read a line from an output. It
-is only offered while there is a run in progress, and only for unconnected
-FIFOs, since reading a FIFO that another process also reads would steal its
-data. The backend finds the FIFO by the engine's convention,
+a running program: write a line into an input, and read from an output the line
+that answers it, the two paired, one line read for each line written. It is
+only offered while there is a run in progress, and only for unconnected FIFOs,
+since reading a FIFO that another process also reads would steal its data.
+The backend finds the FIFO by the engine's convention,
 `__fifos__/<process>/<fifo name>`, and bounds each attempt to eight seconds,
 because opening a FIFO blocks until the other end is open: a write that times
 out means that no process is reading; a read that times out only means that
@@ -1932,8 +1933,7 @@ that outlives the tab".
 
 ## Observing and talking to a live program
 
-*In progress: "Show node state" and "Show batch runs" are built; "Talk to
-FIFOs" is not.*
+*Built.*
 
 A resident program is observed through the same process statuses as a general
 one, and through what each node keeps in its execdir: its checkpoints, its
@@ -2071,6 +2071,23 @@ own, "Take snapshot" and "Stop program", which number a trigger and send it to
 every initiator at once, where a command written by hand into one port would
 open a round that never closes.
 
+The two halves of the dialog are independent, and both optional. In a general
+program a line written into an input usually brings one line back from an
+output, and the dialog pairs them: it writes, and waits for the answer (see
+"FIFOs"). A node of a resident
+program owes no such answer. It may send nothing for a message, or several
+messages, or send on its own, from `observe`, and its business output also
+carries the `BARRIER` of every round, which answers nothing the user wrote. A
+dialog that waited for an answer to each write would block on a node that
+sends every third message, and would take a `BARRIER`, or the answer to an
+earlier write, for the answer to the last one. And a program may have only one
+half: a node fed from outside that writes only files, or a node that sends on
+its own and takes nothing in. So the user picks an external input to write
+into, a business output to read from, or both; writing never waits for a
+read, a loop reads the output for as long as the dialog is open, and what is
+written and what is read go into one transcript, in the order in which they
+happened.
+
 **Writing.** The user gives the payload, and the backend wraps it in a `DATA`
 envelope with no sequence number, since what comes from outside the program is
 not numbered, and writes it as one line: `{"type": "DATA", "payload": ...}`.
@@ -2081,9 +2098,19 @@ list, a number. Text that does not parse is refused, and nothing is written. In
 text mode what the user writes is sent as a JSON string. A raw line is never
 written: a reader takes a line that is not JSON for the fragment of a writer
 that died in the middle of a message, and a second one in a row kills its
-thread, and with it the node. A write ends once the line is in the pipe, not
-once the node has logged it, which its input log shows afterwards, and it is
-bounded as for a general program.
+thread, and with it the node.
+
+For the same reason a line is never written in part. The backend writes it
+with a single `write()` on a FIFO opened without blocking, which POSIX makes
+atomic up to `PIPE_BUF` bytes (at least 512, 4096 on Linux): the whole line
+goes into the pipe or nothing does, even when the attempt is given up, and it
+never interleaves with a line of another writer of the same input. A message
+whose line is longer than that is refused. The open and the write are tried
+again for eight seconds, and what makes them fail says what is wrong: nothing
+holds the read end of the FIFO (its node is down, and no `Supervisor` holds
+it), or the pipe is full (its node is not reading it). A write ends once the
+line is in the pipe, not once the node has logged it, which its input log
+shows afterwards.
 
 The web UI never writes a `CLOSE` into an external input. A `CLOSE` closes the
 port for good, across every resume until the program state is reset, and the
@@ -2091,16 +2118,29 @@ code of the node never learns of it, since no hook reports it (see "Future
 work" in `doc/design_doc_resident.md`). A source that wants to tell a node that
 it has finished sends a `DATA` with a payload that the node understands.
 
-**Reading.** The backend reads the FIFO one line at a time, as for a general
-program, and decodes each envelope. Within the same bound it skips the blank
-lines and the `HELLO` with which every incarnation of a writer starts, and
-answers with the type and the payload of the first other envelope. The
-frontend shows the payload of a `DATA`, with its sequence number, marks a
-`BARRIER` as the marker of a round and a `CLOSE` as the end of the writer.
+**Reading.** The backend reads the FIFO one byte at a time, so that it never
+takes anything past the line it reads, and decodes each line as an envelope.
+It skips the blank lines and the `HELLO` with which every incarnation of a
+writer starts, and answers with the type, the sequence number and the payload
+of the first other envelope, or with a line that is not one, as it was read.
+The frontend shows the payload of a `DATA`, with its sequence number, marks a
+`BARRIER` as the marker of a round and a `CLOSE` as the end of the writer. The
+backend opens the FIFO without blocking, so opening it never waits, and a read
+sees no end of file while the node or the `Supervisor` holds the FIFO (see
+"Ghost connections" in `doc/design_doc_resident.md`); with neither, a read
+finds nothing, as when nothing has been written. A read waits two seconds for
+the first byte of a line, and the frontend reads again at once. A line started
+is read to its end, within thirty seconds: its writer writes it whole, and
+only a writer that died in the middle of it leaves it cut, which the dialog
+reports, pausing the reading.
+
 Reading takes the message from the channel, as it does for a general program,
-and so competes with any other reader outside the program. A business output
-that nobody reads fills its pipe, and then the outbound backlog of its node,
-until the node fails; "Show node state" shows the backlog growing.
+and so competes with any other reader outside the program. The user can pause
+the loop, and nothing is then taken; the read in flight still ends, and what
+it took is shown. The short bound keeps small what a read in flight when the
+dialog closes can take and show to nobody: at most one message. A business
+output that nobody reads fills its pipe, and then the outbound backlog of its
+node, until the node fails; "Show node state" shows the backlog growing.
 
 ## A program that outlives the tab
 

@@ -687,6 +687,79 @@ def test_the_batch_runs_of_a_launcher_node_and_the_status_of_one(tmp_path):
         _hard_kill(program)
 
 
+# --- talking to the FIFOs of a resident program ---------------------------------------
+
+
+def _running_sum(tmp_path):
+    shutil.copytree(_WEBUI_PROGRAMS_DIR / "webui_running_sum", tmp_path / "webui_running_sum")
+    program = persistence.load_program(str(tmp_path / "webui_running_sum"))
+    program.outputDir = str(tmp_path / "out")
+    return program
+
+
+def _read_next(program):
+    """The next envelope of the output read outside the program, reading
+    again while nothing arrives, as the frontend does."""
+    request = execution.FifoIORequest(program=program, processName="Accumulate", fifoName="sum")
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        response = execution.read_resident_fifo(request)
+        if not response.timedOut:
+            return response
+    raise AssertionError("nothing arrived on the output")
+
+
+@_needs_engine
+def test_messages_are_written_into_an_external_input_and_read_from_an_output(tmp_path):
+    program = _running_sum(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        written = [
+            execution.write_resident_fifo(
+                execution.ResidentFifoWriteRequest(
+                    program=program, processName="Accumulate", fifoName="numbers", text=text
+                )
+            )
+            for text in ("1", "2", "3")
+        ]
+        sums = [_read_next(program).envelope for _ in range(3)]
+        epoch = execution.take_snapshot(program).epoch
+        barrier = _read_next(program).envelope
+
+        assert all(w.ok for w in written), written
+        assert [(e.type, e.seq, e.payload) for e in sums] == [("DATA", 1, 1), ("DATA", 2, 3), ("DATA", 3, 6)]
+        assert (barrier.type, barrier.payload["epoch"]) == ("BARRIER", epoch)
+        # Opening and closing the output to read it never brings the node down.
+        assert set(_wait_for_statuses(program, "IN-PROGRESS").values()) == {"IN-PROGRESS"}
+    finally:
+        _hard_kill(program)
+
+
+@_needs_engine
+def test_text_that_is_not_json_is_never_written(tmp_path):
+    program = _running_sum(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        response = execution.write_resident_fifo(
+            execution.ResidentFifoWriteRequest(
+                program=program, processName="Accumulate", fifoName="numbers", text="one"
+            )
+        )
+        log = _inspect(program, "Accumulate", "log").result
+
+        assert not response.ok
+        assert "Not JSON" in response.error
+        assert log["records"] == []
+    finally:
+        _hard_kill(program)
+
+
 # --- relaunching a node without a Supervisor ---------------------------------------
 
 

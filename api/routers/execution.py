@@ -10,7 +10,16 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import file_inspection, launch_record, node_relaunch, paths, persistence, program_state, tool_sessions
+from .. import (
+    file_inspection,
+    launch_record,
+    node_relaunch,
+    paths,
+    persistence,
+    program_state,
+    resident_fifos,
+    tool_sessions,
+)
 from ..models import Program
 from ..resident_supervisor_wiring import NO_HOLD_FIFOS_LABEL
 
@@ -740,6 +749,63 @@ def read_fifo(request: FifoIORequest) -> FifoReadResponse:
         return FifoReadResponse(error=result.stderr.strip() or "Read failed.")
 
     return FifoReadResponse(line=result.stdout)
+
+
+class ResidentFifoWriteRequest(FifoIORequest):
+    text: str
+    # "json": `text` is any JSON value, the payload; "text": `text` is sent
+    # as a JSON string.
+    mode: Literal["json", "text"] = "json"
+
+
+class ResidentEnvelope(BaseModel):
+    type: str
+    seq: int | None = None
+    payload: Any = None
+
+
+class ResidentFifoReadResponse(BaseModel):
+    envelope: ResidentEnvelope | None = None
+    # A line that does not parse as an envelope, as it was read.
+    unparsable: str | None = None
+    # Nothing arrived within the bound: the frontend reads again.
+    timedOut: bool = False
+    error: str | None = None
+
+
+@router.post("/resident-fifo-write", response_model=FifoWriteResponse)
+def write_resident_fifo(request: ResidentFifoWriteRequest) -> FifoWriteResponse:
+    """
+    Write one message into an external input of a resident program, for
+    "Talk to FIFOs": the payload the user gave, wrapped in a DATA envelope
+    and written as one line, whole or not at all. The write ends once the
+    line is in the pipe, not once the node has logged it.
+    """
+    path = _resolve_fifo_path(request.program, request.processName, request.fifoName)
+    try:
+        resident_fifos.write_line(path, resident_fifos.data_line(resident_fifos.payload_of(request.text, request.mode)))
+    except resident_fifos.FifoError as exc:
+        return FifoWriteResponse(ok=False, error=str(exc))
+    return FifoWriteResponse(ok=True)
+
+
+@router.post("/resident-fifo-read", response_model=ResidentFifoReadResponse)
+def read_resident_fifo(request: FifoIORequest) -> ResidentFifoReadResponse:
+    """
+    Read the next envelope from a business output with no reader of a
+    resident program, for "Talk to FIFOs", skipping blank lines and HELLO.
+    It takes the message from the channel.
+    """
+    path = _resolve_fifo_path(request.program, request.processName, request.fifoName)
+    try:
+        found = resident_fifos.read_envelope(path)
+    except resident_fifos.FifoError as exc:
+        return ResidentFifoReadResponse(error=str(exc))
+    if found is None:
+        return ResidentFifoReadResponse(timedOut=True)
+    if found.unparsable is not None:
+        return ResidentFifoReadResponse(unparsable=found.unparsable)
+    return ResidentFifoReadResponse(envelope=ResidentEnvelope(type=found.type, seq=found.seq, payload=found.payload))
 
 
 # There's no "debasher_get_opts" bin tool (unlike stdout/sched-out), the

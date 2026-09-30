@@ -1,5 +1,6 @@
 import type { InspectNodeCommand } from "../models/nodeState";
 import type { Program } from "../models/program";
+import type { ResidentFifoRead, TalkMode } from "../models/residentTalk";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
@@ -329,6 +330,52 @@ export async function readFifo(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, fifoName }),
     signal,
+  });
+
+  if (!response.ok) {
+    return { error: await errorDetail(response, `Failed to read from ${fifoName}.`) };
+  }
+
+  return response.json();
+}
+
+// Writes one message into an external input of a resident program ("Talk
+// to FIFOs"): the backend wraps the payload in a DATA envelope and writes it
+// as one line, whole or not at all. In JSON mode `text` is any JSON value; in
+// text mode it is sent as a string.
+export async function writeResidentFifo(
+  program: Program,
+  processName: string,
+  fifoName: string,
+  text: string,
+  mode: TalkMode
+): Promise<{ ok: boolean; error?: string }> {
+  const response = await fetch("/api/execution/resident-fifo-write", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, fifoName, text, mode }),
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: await errorDetail(response, `Failed to write to ${fifoName}.`) };
+  }
+
+  return response.json();
+}
+
+// Reads the next envelope from a business output with no reader of a
+// resident program ("Talk to FIFOs"), skipping blank lines and HELLO. It
+// takes the message from the channel. `timedOut: true` means nothing arrived
+// within the backend's short bound: the caller reads again.
+export async function readResidentFifo(
+  program: Program,
+  processName: string,
+  fifoName: string
+): Promise<ResidentFifoRead> {
+  const response = await fetch("/api/execution/resident-fifo-read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, fifoName }),
   });
 
   if (!response.ok) {

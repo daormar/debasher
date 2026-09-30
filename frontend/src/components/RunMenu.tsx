@@ -20,6 +20,7 @@ import OutputDirEditor from "./OutputDirEditor";
 import ProgramOptionsEditor from "./ProgramOptionsEditor";
 import ResetOutputDirConfirm from "./ResetOutputDirConfirm";
 import TalkToFifosDialog from "./TalkToFifosDialog";
+import ResidentTalkDialog from "./ResidentTalkDialog";
 
 const MENU_ITEMS = [
   "Set output directory",
@@ -567,11 +568,9 @@ export default function RunMenu() {
                 (item === "Set output directory" && isRunInProgress) ||
                 (item === "Reset output directory" && isRunInProgress) ||
                 // A fifo only exists on disk once its owning process
-                // has started.
-                (item === "Talk to FIFOs" && !isRunInProgress) ||
-                // A line written raw into a port of a resident program
-                // would bring its node down: the nodes read envelopes.
-                (item === "Talk to FIFOs" && isResident)
+                // has started; a resident program is talked to while it
+                // is live, whoever launched it.
+                (item === "Talk to FIFOs" && (isResident ? residentPhase !== "live" : !isRunInProgress))
               }
 
               style={{
@@ -697,11 +696,15 @@ export default function RunMenu() {
         />
       )}
 
-      {isTalkToFifosOpen && (
+      {isTalkToFifosOpen && (isResident ? (
+        <ResidentTalkDialog
+          onClose={() => setTalkToFifosOpen(false)}
+        />
+      ) : (
         <TalkToFifosDialog
           onClose={() => setTalkToFifosOpen(false)}
         />
-      )}
+      ))}
 
     </div>
 
