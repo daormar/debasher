@@ -103,11 +103,11 @@ export function showsGeneralIndicator(phase: GeneralRunPhase, sawEnd: boolean): 
   return (phase === "finished" || phase === "unfinished") && sawEnd;
 }
 
-// The notice shown when leaving the editor while there is a run in progress,
+// The message shown when leaving the editor while there is a run in progress,
 // which blocks nothing: the run goes on in its output directory, and this is
 // the only moment at which the web UI can say where it lives. Null when there
 // is no run in progress.
-export function runGoesOnNotice(
+export function runGoesOnMessage(
   program: { name: string; outputDir: string; programType: "general" | "resident" },
   isRunInProgress: boolean
 ): string | null {

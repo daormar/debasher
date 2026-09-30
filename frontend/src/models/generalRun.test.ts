@@ -5,7 +5,7 @@ import {
   LAUNCHED_GENERAL_TRACKING,
   generalRunPhase,
   nextGeneralTracking,
-  runGoesOnNotice,
+  runGoesOnMessage,
   stoppedGeneralTracking,
   showsGeneralIndicator,
 } from "./generalRun";
@@ -80,17 +80,17 @@ describe("generalRunPhase and showsGeneralIndicator", () => {
   });
 });
 
-describe("runGoesOnNotice", () => {
+describe("runGoesOnMessage", () => {
   const program = { name: "sum", outputDir: "/tmp/out", programType: "general" as const };
 
   it("says where a run in progress goes on, for each type of program", () => {
-    expect(runGoesOnNotice(program, true)).toBe(
+    expect(runGoesOnMessage(program, true)).toBe(
       "The run of sum goes on in /tmp/out. Load the program again to follow it or stop it."
     );
-    expect(runGoesOnNotice({ ...program, programType: "resident" }, true)).toMatch(/^sum is live in \/tmp\/out/);
+    expect(runGoesOnMessage({ ...program, programType: "resident" }, true)).toMatch(/^sum is live in \/tmp\/out/);
   });
 
   it("says nothing with no run in progress", () => {
-    expect(runGoesOnNotice(program, false)).toBeNull();
+    expect(runGoesOnMessage(program, false)).toBeNull();
   });
 });

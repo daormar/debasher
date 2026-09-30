@@ -14,15 +14,15 @@ export default function App() {
   // Where a run left in progress goes on, said on the home screen after
   // leaving the editor: nothing stops the run, and the web UI keeps no
   // record of it.
-  const [notice, setNotice] = useState<string | null>(null);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
 
   if (screen.name === "home") {
     return (
       <HomeScreen
-        notice={notice}
-        onDismissNotice={() => setNotice(null)}
+        runMessage={runMessage}
+        onDismissRunMessage={() => setRunMessage(null)}
         onOpen={program => {
-          setNotice(null);
+          setRunMessage(null);
           setScreen({ name: "editor", program });
         }}
       />
@@ -32,8 +32,8 @@ export default function App() {
   return (
     <ProgramProvider initialProgram={screen.program}>
       <ProgramEditor
-        onClose={runNotice => {
-          setNotice(runNotice);
+        onClose={message => {
+          setRunMessage(message);
           setScreen({ name: "home" });
         }}
       />

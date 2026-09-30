@@ -9,11 +9,11 @@ interface Props {
   // Called with the program that should be opened in the editor.
   onOpen: (program: Program) => void;
   // Where a run left in progress goes on, after leaving the editor.
-  notice: string | null;
-  onDismissNotice: () => void;
+  runMessage: string | null;
+  onDismissRunMessage: () => void;
 }
 
-export default function HomeScreen({ onOpen, notice, onDismissNotice }: Props) {
+export default function HomeScreen({ onOpen, runMessage, onDismissRunMessage }: Props) {
   const [isNewProgramOpen, setNewProgramOpen] = useState(false);
   const [isLoadProgramOpen, setLoadProgramOpen] = useState(false);
   const [isImportProgramOpen, setImportProgramOpen] = useState(false);
@@ -26,9 +26,9 @@ export default function HomeScreen({ onOpen, notice, onDismissNotice }: Props) {
     <div style={{ padding: 32, maxWidth: 480, margin: "0 auto" }}>
       <h1>DeBasher</h1>
 
-      {notice && (
+      {runMessage && (
         <div
-          data-run-notice
+          data-run-message
           style={{
             display: "flex",
             alignItems: "flex-start",
@@ -41,8 +41,8 @@ export default function HomeScreen({ onOpen, notice, onDismissNotice }: Props) {
             fontSize: 14,
           }}
         >
-          <span style={{ flex: 1 }}>{notice}</span>
-          <button onClick={onDismissNotice}>Dismiss</button>
+          <span style={{ flex: 1 }}>{runMessage}</span>
+          <button onClick={onDismissRunMessage}>Dismiss</button>
         </div>
       )}
 

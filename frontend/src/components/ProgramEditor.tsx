@@ -3,7 +3,7 @@ import ProgramCanvas from "./ProgramCanvas";
 import Inspector from "./Inspector";
 
 interface Props {
-  onClose: (notice: string | null) => void;
+  onClose: (runMessage: string | null) => void;
 }
 
 export default function ProgramEditor({ onClose }: Props) {
