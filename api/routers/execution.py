@@ -155,16 +155,18 @@ def _run_debasher_exec(program: Program, mode_flag: str) -> str:
     return result.stdout + result.stderr
 
 
-def _run_debasher_dir_tool(program: Program, tool_name: str) -> tuple[str, int]:
+def _run_debasher_dir_tool(program: Program, tool_name: str, outdir: str | None = None) -> tuple[str, int]:
     """
     Run a DeBasher bin tool that just takes "-d <outputDir>" (e.g.
-    debasher_status, debasher_stop). Returns (combined output, exit code).
+    debasher_status, debasher_stop), on the output directory of the program
+    or on `outdir`, the run directory of a batch run of a launcher node.
+    Returns (combined output, exit code).
     """
     tool = paths.find_bin_tool(tool_name)
     if tool is None:
         return f"Error: {tool_name} tool not found.", 1
 
-    command = [str(tool), "-d", program.outputDir]
+    command = [str(tool), "-d", outdir if outdir is not None else program.outputDir]
 
     result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
@@ -820,7 +822,7 @@ class InspectNodeRequest(BaseModel):
     # One task of an array or generator process (see /process-tasks); omit
     # for a process that runs as one node.
     taskIndex: int | None = None
-    command: Literal["summary", "checkpoint", "log"]
+    command: Literal["summary", "checkpoint", "log", "runs"]
     # The epoch of the checkpoint, for "checkpoint".
     epoch: int | None = None
     # The input port whose records "log" keeps; omit for every port.
@@ -845,15 +847,16 @@ def _inspect_node_command_args(request: InspectNodeRequest) -> list[str]:
         if request.port is not None:
             args += ["--port", request.port]
         return args
-    return ["summary"]
+    return [request.command]
 
 
 @router.post("/inspect-node", response_model=InspectNodeResponse)
 def inspect_node(request: InspectNodeRequest) -> InspectNodeResponse:
     """
     What a node of a resident program keeps in its execdir, for "Show node
-    state": debasher_inspect_resident reads it and prints it as JSON, and
-    the backend reads none of those files itself. An error of the tool (a
+    state", and the batch runs of a launcher node, for "Show batch runs":
+    debasher_inspect_resident reads them and prints them as JSON, and the
+    backend reads none of those files itself. An error of the tool (a
     node that keeps no node state, a checkpoint that the node no longer
     retains) comes back as `error`, without the lines with which the engine
     reports loading the module.
@@ -878,6 +881,24 @@ def inspect_node(request: InspectNodeRequest) -> InspectNodeResponse:
         return InspectNodeResponse(result=json.loads(result.stdout))
     except json.JSONDecodeError:
         return InspectNodeResponse(error=_cap_lines(f"debasher_inspect_resident printed no JSON:\n{result.stdout}"))
+
+
+class BatchRunStatusRequest(BaseModel):
+    program: Program
+    # The run directory of a batch run, as the "runs" command of
+    # /inspect-node gives it.
+    runDir: str
+
+
+@router.post("/batch-run-status", response_model=ProcessOutputResponse)
+def get_batch_run_status(request: BatchRunStatusRequest) -> ProcessOutputResponse:
+    """
+    What debasher_status says of the run directory of a batch run that is a
+    whole general program, for a row of "Show batch runs". It only reads, as
+    /inspect-path does, anywhere the server's user can read.
+    """
+    output, _ = _run_debasher_dir_tool(request.program, "debasher_status", outdir=request.runDir)
+    return ProcessOutputResponse(output=_cap_lines(output))
 
 
 class InspectPathRequest(BaseModel):

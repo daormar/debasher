@@ -13,7 +13,9 @@ that the Supervisor relaunches, or the backend without a Supervisor, as
 at a time or periodically from the launch.
 """
 
+import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -38,7 +40,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import launch_record, node_relaunch, paths, program_state, tool_sessions  # noqa: E402
+from api import launch_record, node_relaunch, paths, persistence, program_state, tool_sessions  # noqa: E402
 from api.models import (  # noqa: E402
     AdditionalSpecs,
     ComputationalSpecs,
@@ -631,6 +633,58 @@ def test_a_checkpoint_is_asked_for_by_its_epoch(tmp_path):
         _inspect(_relay(tmp_path), "Relay", "checkpoint")
 
     assert raised.value.status_code == 422
+
+
+_WEBUI_PROGRAMS_DIR = Path(__file__).resolve().parents[2] / "data" / "webui_programs"
+
+
+def _batch_launcher(tmp_path):
+    """webui_batch_launcher, with webui_batch_greet, the general program that
+    its launcher node runs, saved side by side, as it names it."""
+    for name in ("webui_batch_launcher", "webui_batch_greet"):
+        shutil.copytree(_WEBUI_PROGRAMS_DIR / name, tmp_path / name)
+    program = persistence.load_program(str(tmp_path / "webui_batch_launcher"))
+    program.outputDir = str(tmp_path / "out")
+    return program
+
+
+def _request(program, text, run):
+    path = Path(program.outputDir) / "__fifos__" / "Launch" / "requests"
+    line = json.dumps({"type": "DATA", "payload": {"opts": {"-text": text, "-secs": "0"}, "run": run}})
+    subprocess.run(["bash", "-c", 'printf "%s\n" "$1" > "$2"', "_", line, str(path)], check=True, timeout=30)
+
+
+@_needs_engine
+def test_the_batch_runs_of_a_launcher_node_and_the_status_of_one(tmp_path):
+    program = _batch_launcher(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        _request(program, "world", "r1")
+        _request(program, "fail", "r2")
+
+        def ended():
+            runs = _inspect(program, "Launch", "runs").result["runs"]
+            return [r["state"] for r in runs] == ["finished", "failed"]
+
+        deadline = time.monotonic() + 60
+        while not ended() and time.monotonic() < deadline:
+            time.sleep(0.5)
+
+        runs = _inspect(program, "Launch", "runs").result
+        finished, failed = runs["runs"]
+        status = execution.get_batch_run_status(
+            execution.BatchRunStatusRequest(program=program, runDir=finished["run_dir"])
+        )
+        not_a_launcher = _inspect(program, "Report", "runs")
+
+        assert [(r["run"], r["state"]) for r in runs["runs"]] == [("r1", "finished"), ("r2", "failed")]
+        assert failed["exit_code"] != 0
+        assert "PROCESS: greet ; STATUS: FINISHED" in status.output
+        assert "not a launcher node" in not_a_launcher.error
+    finally:
+        _hard_kill(program)
 
 
 # --- relaunching a node without a Supervisor ---------------------------------------

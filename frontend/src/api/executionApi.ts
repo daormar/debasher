@@ -363,10 +363,11 @@ export async function getProcessResolvedOptions(
   return values;
 }
 
-// What a node of a resident program keeps in its execdir, read by
-// debasher_inspect_resident for "Show node state": what the tool printed,
-// parsed, or the error it reported (a node that keeps no node state, a
-// checkpoint that the node no longer retains).
+// What a node of a resident program keeps in its execdir, or the batch runs
+// of a launcher node, read by debasher_inspect_resident for "Show node
+// state" and "Show batch runs": what the tool printed, parsed, or the error
+// it reported (a node that keeps no node state, a checkpoint that the node
+// no longer retains).
 export async function inspectNode<T>(
   program: Program,
   processName: string,
@@ -386,6 +387,23 @@ export async function inspectNode<T>(
   }
 
   return response.json();
+}
+
+// What debasher_status says of the run directory of a batch run of a
+// launcher node that is a whole general program, for "Show batch runs".
+export async function getBatchRunStatus(program: Program, runDir: string): Promise<string> {
+  const response = await fetch("/api/execution/batch-run-status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, runDir }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to get the status of ${runDir}.`));
+  }
+
+  const { output } = await response.json();
+  return output;
 }
 
 export type PathInspection =

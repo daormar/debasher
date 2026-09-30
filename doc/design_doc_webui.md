@@ -1932,8 +1932,8 @@ that outlives the tab".
 
 ## Observing and talking to a live program
 
-*In progress: "Show node state" is built; "Show batch runs" and "Talk to FIFOs"
-are not.*
+*In progress: "Show node state" and "Show batch runs" are built; "Talk to
+FIFOs" is not.*
 
 A resident program is observed through the same process statuses as a general
 one, and through what each node keeps in its execdir: its checkpoints, its
@@ -2034,8 +2034,13 @@ general program, and open the run directory as any other path (see
 itself deduces from the run directory (see "Launching from the queue on disk"
 in `doc/design_doc_resident.md`), and the same engine tool computes it, with a
 command of its own, `runs`, from the code of the launcher node, so that the
-rule is written once. Launching again a batch run that failed is not offered
-until the engine has a command for it (see "Future work" in
+rule is written once. Whether a batch run is a whole general program, or the
+single process that the class attribute `PROCESS` of the launcher node names
+(see "A single process" in `doc/design_doc_resident.md`), comes from the node
+info file of the launcher node, as `summary` gives it. The action is enabled
+when "Show node state" is, and its list is read as every view here is, never
+polled. Launching again a batch run that failed is not offered until the
+engine has a command for it (see "Future work" in
 `doc/design_doc_resident.md`).
 
 **A `DirectoryWatcher`** has no view of its own. The files that it has asked

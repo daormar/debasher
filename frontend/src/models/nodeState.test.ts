@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import {
+  batchRunStateText,
   formatBytes,
   inputPortsOf,
+  offersShowBatchRuns,
   offersShowNodeState,
   summaryRows,
   wasLaunched,
+  type BatchRun,
   type NodeInfo,
   type NodeSummary,
 } from "./nodeState";
@@ -136,5 +139,21 @@ describe("formatBytes", () => {
   it("keeps bytes whole and gives larger sizes one decimal", () => {
     expect(formatBytes(342)).toBe("342 B");
     expect(formatBytes(8 * MiB)).toBe("8.0 MiB");
+  });
+});
+
+describe("Show batch runs", () => {
+  it("is offered on a launcher node only", () => {
+    expect(offersShowBatchRuns(process([], { nodeKind: "ProgramLauncher" }))).toBe(true);
+    expect(offersShowBatchRuns(process([]))).toBe(false);
+    expect(offersShowBatchRuns(process([], { nodeKind: "Supervisor" }))).toBe(false);
+  });
+
+  it("gives the exit code of a batch run that failed", () => {
+    const run = (state: BatchRun["state"], exit_code: number | null): BatchRun =>
+      ({ pos: 1, run: "r1", run_dir: "/runs/r1", state, exit_code });
+    expect(batchRunStateText(run("failed", 3))).toBe("failed with exit code 3");
+    expect(batchRunStateText(run("finished", 0))).toBe("finished");
+    expect(batchRunStateText(run("stopped", null))).toBe("stopped before it ended");
   });
 });

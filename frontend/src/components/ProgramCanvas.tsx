@@ -21,7 +21,7 @@ import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
 import { showsGeneralIndicator } from "../models/generalRun";
 import { hasSupervisor } from "../models/node";
-import { offersShowNodeState, wasLaunched } from "../models/nodeState";
+import { offersShowBatchRuns, offersShowNodeState, wasLaunched } from "../models/nodeState";
 import {
   offersRelaunchNode,
   offersRestartNode,
@@ -61,10 +61,16 @@ import SelfLoopEdge from "./SelfLoopEdge";
 import ConfirmDialog from "./ConfirmDialog";
 import ResidentRunIndicator from "./ResidentRunIndicator";
 import RunStatusIndicator from "./RunStatusIndicator";
-import ProcessContextMenu, { type NodeAction, type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
+import ProcessContextMenu, {
+  type NodeAction,
+  type ProcessMenuAction,
+  type ProcessOutputKind,
+  type ResidentInspection,
+} from "./ProcessContextMenu";
 import ProcessTaskPicker from "./ProcessTaskPicker";
 import CommandOutputModal from "./CommandOutputModal";
 import NodeStateModal from "./NodeStateModal";
+import BatchRunsModal from "./BatchRunsModal";
 import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
 import ProgramFilesPanel from "./ProgramFilesPanel";
@@ -84,6 +90,7 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   io: "inputs and outputs",
   "watch-fifo": "mirrored fifo output",
   "node-state": "node state",
+  "batch-runs": "batch runs",
   stop: "process stop",
   restart: "node restart",
   relaunch: "node relaunch",
@@ -449,6 +456,10 @@ export default function ProgramCanvas() {
   const [nodeState, setNodeState] =
     useState<{ process: ProgramProcess; taskIndex?: number } | null>(null);
 
+  // "Show batch runs" on a launcher node, which is never a task of an array.
+  const [batchRunsOf, setBatchRunsOf] =
+    useState<ProgramProcess | null>(null);
+
   // Set instead of opening fifoWatch directly whenever a process has
   // more than one mirrored output fifo option, mirrors
   // processTaskPicker's own "pick first" pattern.
@@ -650,6 +661,12 @@ export default function ProgramCanvas() {
         return;
       }
 
+      if (action === "batch-runs") {
+        setBatchRunsOf(process);
+        setProcessContextMenu(null);
+        return;
+      }
+
       if (action === "relaunch") {
         const result = await relaunchNode(program, process.name);
         setProcessCommandOutput({
@@ -768,6 +785,29 @@ export default function ProgramCanvas() {
 
   }
 
+  // The inspection actions of a node of a resident program, enabled once the
+  // node has been launched, whatever the run phase.
+  function residentInspectionsOf(process: ProgramProcess): ResidentInspection[] {
+
+    if (!isResident) {
+      return [];
+    }
+
+    const disabled = !wasLaunched(processStatuses[process.name]);
+    const inspections: ResidentInspection[] = [];
+
+    if (offersShowNodeState(process)) {
+      inspections.push({ label: "Show node state", action: "node-state", disabled });
+    }
+
+    if (offersShowBatchRuns(process)) {
+      inspections.push({ label: "Show batch runs", action: "batch-runs", disabled });
+    }
+
+    return inspections;
+
+  }
+
   async function handleTaskPickerConfirm(taskIndex: number) {
 
     if (!processTaskPicker) {
@@ -786,6 +826,8 @@ export default function ProgramCanvas() {
         setNodeState({ process, taskIndex });
       } else if (kind === "watch-fifo") {
         openFifoWatch(process, taskIndex);
+      } else if (kind === "batch-runs") {
+        setBatchRunsOf(process);
       } else if (kind === "stop" || kind === "restart" || kind === "relaunch") {
         // Unreachable in practice, handleProcessMenuSelect handles
         // these actions before ever reaching the task picker,
@@ -897,11 +939,7 @@ export default function ProgramCanvas() {
           y={processContextMenu.y}
           isPending={isProcessOutputPending}
           isResident={isResident}
-          nodeState={
-            isResident && offersShowNodeState(processContextMenu.process)
-              ? { disabled: !wasLaunched(processStatuses[processContextMenu.process.name]) }
-              : undefined
-          }
+          residentInspections={residentInspectionsOf(processContextMenu.process)}
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
           nodeActions={nodeActionsOf(processContextMenu.process)}
@@ -1036,6 +1074,13 @@ export default function ProgramCanvas() {
           process={nodeState.process}
           taskIndex={nodeState.taskIndex}
           onClose={() => setNodeState(null)}
+        />
+      )}
+
+      {batchRunsOf && (
+        <BatchRunsModal
+          process={batchRunsOf}
+          onClose={() => setBatchRunsOf(null)}
         />
       )}
 

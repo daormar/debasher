@@ -14,6 +14,9 @@ export interface NodeInfo {
     out_backlog_max_bytes: number;
     out_backlog_fail_bytes: number;
   };
+  // Only for a launcher node: its runs root, and PROCESS, the process that
+  // it runs alone, or null when it runs the whole general program.
+  launcher?: { runs_root: string; process: string | null };
   updated_at: number;
   healthy: boolean;
   out_backlog_bytes: Record<string, number>;
@@ -70,10 +73,24 @@ export interface InputLogView {
   records: InputLogRecord[];
 }
 
+export interface BatchRun {
+  pos: number;
+  run: string;
+  run_dir: string;
+  state: "registered" | "running" | "finished" | "failed" | "stopped";
+  exit_code: number | null;
+}
+
+export interface BatchRuns {
+  runs_root: string;
+  runs: BatchRun[];
+}
+
 export type InspectNodeCommand =
   | { command: "summary" }
   | { command: "checkpoint"; epoch: number }
-  | { command: "log"; port?: string };
+  | { command: "log"; port?: string }
+  | { command: "runs" };
 
 // One line of the summary: `warning` marks what crosses a limit of the
 // engine itself, never a threshold of the web UI.
@@ -221,4 +238,24 @@ export function offersShowNodeState(process: ProgramProcess): boolean {
 
 export function wasLaunched(status: string | undefined): boolean {
   return status !== undefined && status !== "TO-DO";
+}
+
+// "Show batch runs" is offered on a launcher node, and enabled, as "Show
+// node state", once the node has been launched.
+export function offersShowBatchRuns(process: ProgramProcess): boolean {
+  return process.nodeKind === "ProgramLauncher";
+}
+
+const BATCH_RUN_STATE_TEXT: Record<BatchRun["state"], string> = {
+  registered: "registered",
+  running: "running",
+  finished: "finished",
+  failed: "failed",
+  stopped: "stopped before it ended",
+};
+
+export function batchRunStateText(run: BatchRun): string {
+  return run.state === "failed" && run.exit_code !== null
+    ? `failed with exit code ${run.exit_code}`
+    : BATCH_RUN_STATE_TEXT[run.state];
 }

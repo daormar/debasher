@@ -19,9 +19,18 @@ export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 // "restart" is "Restart node" on a node of a resident program, which asks
 // for confirmation first; "relaunch" is "Relaunch node" in a resident
 // program without a Supervisor.
-// "node-state" opens NodeStateModal, on a node of a resident program.
+// "node-state" opens NodeStateModal and "batch-runs" BatchRunsModal, on a
+// node of a resident program.
 export type ProcessMenuAction =
-  ProcessOutputKind | "io" | "watch-fifo" | "node-state" | "stop" | "restart" | "relaunch";
+  ProcessOutputKind | "io" | "watch-fifo" | "node-state" | "batch-runs" | "stop" | "restart" | "relaunch";
+
+// An inspection action of a node of a resident program, listed after the
+// others: "Show node state" and, on a launcher node, "Show batch runs".
+export interface ResidentInspection {
+  label: "Show node state" | "Show batch runs";
+  action: "node-state" | "batch-runs";
+  disabled: boolean;
+}
 
 // An action on the process itself, listed after the inspection actions:
 // "Relaunch node" (see offersRelaunchNode), and, in a destructive color,
@@ -47,10 +56,9 @@ interface Props {
   y: number;
   isPending: boolean;
   // In a resident program "Watch FIFO" is not offered, since the engine
-  // refuses --mirror there, and "Show node state" is, when `nodeState` is
-  // given (not on the Supervisor).
+  // refuses --mirror there, and `residentInspections` are.
   isResident: boolean;
-  nodeState?: { disabled: boolean };
+  residentInspections: ResidentInspection[];
   onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
   nodeActions: NodeAction[];
@@ -65,7 +73,7 @@ export default function ProcessContextMenu({
   y,
   isPending,
   isResident,
-  nodeState,
+  residentInspections,
   onSelect,
   onClose,
   nodeActions,
@@ -136,13 +144,15 @@ export default function ProcessContextMenu({
 
       ))}
 
-      {nodeState && (
+      {residentInspections.map(inspection => (
 
         <button
 
-          onClick={() => onSelect("node-state")}
+          key={inspection.label}
 
-          disabled={isPending || nodeState.disabled}
+          onClick={() => onSelect(inspection.action)}
+
+          disabled={isPending || inspection.disabled}
 
           style={{
             textAlign: "left",
@@ -153,10 +163,10 @@ export default function ProcessContextMenu({
           }}
 
         >
-          Show node state
+          {inspection.label}
         </button>
 
-      )}
+      ))}
 
       {nodeActions.map(nodeAction => (
 
