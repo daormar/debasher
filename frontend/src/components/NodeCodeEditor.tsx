@@ -15,6 +15,11 @@ import {
 } from "../models/node";
 import { getInheritedHooks } from "../api/processApi";
 
+// The height of the parts and the editor, the same for every part, and that
+// of the inherited code of a hook, which scrolls within it.
+const EDITOR_AREA_HEIGHT = "min(560px, 65vh)";
+const INHERITED_CODE_HEIGHT = 150;
+
 interface Props {
   process: ProgramProcess;
   onClose: () => void;
@@ -131,7 +136,10 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
           Node code: {process.name} ({kind})
         </h3>
 
-        <div style={{ display: "flex", gap: 12 }}>
+        {/* One height for every part, so that switching parts never resizes
+            the window: the editor takes what the other blocks leave, and
+            each block scrolls within it. */}
+        <div style={{ display: "flex", gap: 12, height: EDITOR_AREA_HEIGHT }}>
 
           <nav
             style={{
@@ -139,6 +147,7 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
               display: "flex",
               flexDirection: "column",
               gap: 4,
+              overflowY: "auto",
             }}
           >
 
@@ -164,7 +173,14 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
 
           </nav>
 
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+
+            {/* Above the declaration, which reads on with the body below it. */}
+            {showsInherited && (
+              <div data-testid="inherited-note" style={{ color: "#555", fontSize: 12 }}>
+                {inheritedHookNote(kind, hook.name, hook.signature, draft[part].trim() !== "")}
+              </div>
+            )}
 
             <pre
               style={{
@@ -179,13 +195,7 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
               {context}
             </pre>
 
-            {showsInherited && (
-              <div data-testid="inherited-note" style={{ color: "#555", fontSize: 12 }}>
-                {inheritedHookNote(kind, hook.name, hook.signature, draft[part].trim() !== "")}
-              </div>
-            )}
-
-            <div style={{ border: "1px solid #ccc" }}>
+            <div style={{ flex: 1, minHeight: 0, border: "1px solid #ccc" }}>
 
               <CodeMirror
 
@@ -193,7 +203,9 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
 
                 value={draft[part]}
 
-                height={showsInherited ? "220px" : "360px"}
+                height="100%"
+
+                style={{ height: "100%" }}
 
                 extensions={[
                   languageExtension("python"),
@@ -226,7 +238,8 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
                   style={{
                     margin: 0,
                     padding: "6px 8px",
-                    maxHeight: 160,
+                    height: INHERITED_CODE_HEIGHT,
+                    boxSizing: "border-box",
                     overflow: "auto",
                     background: "#f7f7f7",
                     color: "#888",
