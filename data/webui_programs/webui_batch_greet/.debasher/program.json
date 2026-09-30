@@ -1,0 +1,124 @@
+{
+  "id": "bb3aac12-c369-4fc4-af56-7ecdf7e260e4",
+  "name": "webui_batch_greet",
+  "programType": "general",
+  "description": "Example built with the web UI: a general program that waits for some seconds and writes a greeting; webui_batch_launcher runs it once for each request.",
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": false,
+    "dockerSupport": false,
+    "snapshotEverySecs": ""
+  },
+  "programOptions": {},
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "687eba91-1ef5-4c46-aa8d-9e27679a60d7",
+      "name": "greet",
+      "description": "Waits for some seconds and writes a greeting into a file.",
+      "position": {
+        "x": 120.0,
+        "y": 160.0
+      },
+      "options": [
+        {
+          "id": "9ecbbc0d-0b29-41d5-876b-b201e003c3eb",
+          "label": "-text",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "none",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "whom to greet; the text fail makes the program fail",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "4dea4c5c-c614-4934-9248-f310b9bdb5c9",
+          "label": "-secs",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "how many seconds to wait before greeting",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "3854cd7a-0b26-42ee-ae2d-98de7d73669d",
+          "label": "-outf",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "none",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "file with the greeting",
+          "value": "${process_outdir}/greeting.txt",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "greet()\n{\n    local text=$(read_opt_value_from_func_args \"-text\" \"$@\")\n    local secs=$(read_opt_value_from_func_args \"-secs\" \"$@\")\n    local outf=$(read_opt_value_from_func_args \"-outf\" \"$@\")\n\n    # The text \"fail\" makes the program fail, to show a batch run that\n    # failed.\n    if [ \"${text}\" = \"fail\" ]; then\n        echo \"Error: asked to fail\" >&2\n        return 1\n    fi\n\n    sleep \"${secs}\"\n    echo \"Hello, ${text}!\" > \"${outf}\"\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    }
+  ],
+  "edges": []
+}

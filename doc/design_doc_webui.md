@@ -794,13 +794,18 @@ loaded, never imported, and so keep everything the program model holds. None
 of them records an output directory or a source directory, since a path of
 the machine they were built on means nothing on another. An installed one is
 usually not writable, so the user saves it into a home directory of their
-own before changing it. `test/api/test_webui_programs.py` checks that each
-of them loads from where it is and that its generated script is the one that
-script generation writes from its metadata today, and `make installcheck` runs
-the generated script of each: a general program to its end, and a resident
-one, which does not end on its own, launched, fed through its external input
-until its output read outside the program carries the expected message, and
-stopped in an orderly way, after which every node has to be finished.
+own before changing it. A shipped program may run another one: the launcher node
+of `webui_batch_launcher` names `webui_batch_greet` by a path relative to its
+own home directory, `../webui_batch_greet/webui_batch_greet.sh`, a path that
+resolves both where the two are installed, side by side, and for a user who
+saves them side by side too; a user who saves them apart edits that path.
+`test/api/test_webui_programs.py` checks that each of them loads from where it
+is and that its generated script is the one that script generation writes from
+its metadata today, and `make installcheck` runs the generated script of each: a
+general program to its end, and a resident one, which does not end on its own,
+launched, fed through its external input until its output read outside the
+program carries the expected message, and stopped in an orderly way, after which
+every node has to be finished.
 
 ## Reserved names and user files
 

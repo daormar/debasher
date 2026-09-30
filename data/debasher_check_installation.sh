@@ -842,6 +842,44 @@ case $? in
         ;;
 esac
 
+# Check webui_batch_greet, the general program that webui_batch_launcher runs
+progname="webui_batch_greet"
+sched="BUILTIN"
+bs_cpus=1
+bs_mem=256
+check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                   "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-text world -secs 0"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check webui_batch_launcher, a resident program with a launcher node: one
+# request runs webui_batch_greet, installed next to it, and Report reports
+# the batch run that finished
+progname="webui_batch_launcher"
+check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                       "${progname}" "requests" '{"opts":{"-text":"world","-secs":"0"},"run":"r1"}' \
+                       "report" '{"run": "r1", "status": "finished", "finished": 1, "failed": 0}'
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check execution using SLURM if available: SBATCH is the name of the tool,
 # looked for in the PATH when the program runs, as the engine does
 if command -v "${SBATCH}" > /dev/null 2>&1; then

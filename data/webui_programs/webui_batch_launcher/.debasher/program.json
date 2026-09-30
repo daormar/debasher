@@ -1,0 +1,264 @@
+{
+  "id": "da3b13e9-a483-42b8-b665-15338a57f67d",
+  "name": "webui_batch_launcher",
+  "programType": "resident",
+  "description": "Example built with the web UI: a resident program whose launcher node runs the general program webui_batch_greet once for each request written into its external input, and whose other node reports on each batch run that ends.",
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": false,
+    "dockerSupport": false,
+    "snapshotEverySecs": ""
+  },
+  "programOptions": {},
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "e6126aff-7160-412f-ad6a-dc2685b467a6",
+      "name": "Sup",
+      "description": "Watches Launch and Report and relaunches them if they go down.",
+      "position": {
+        "x": 120.0,
+        "y": 60.0
+      },
+      "options": [],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "Supervisor",
+      "initiator": false,
+      "nodeCode": null
+    },
+    {
+      "id": "10c4599c-d7f3-477d-ac71-31b0808cc3fe",
+      "name": "Launch",
+      "description": "Runs webui_batch_greet once for each request, and sends a notice when each batch run ends.",
+      "position": {
+        "x": 120.0,
+        "y": 260.0
+      },
+      "options": [
+        {
+          "id": "80e8e1e4-f22a-4103-9bad-709e9b19edc9",
+          "label": "-requests",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "fifoTag": "external",
+          "description": "requests written from outside the program, one batch run each: {\"opts\": {\"-text\": ..., \"-secs\": ...}, \"run\": ...}",
+          "value": "requests",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "0f569927-a4fd-4453-80ad-69b509270559",
+          "label": "-outdone",
+          "direction": "output",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "a notice for each batch run that ends",
+          "value": "done",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "ProgramLauncher",
+      "initiator": true,
+      "nodeCode": {
+        "preamble": "",
+        "classBody": "# The general program to run, next to this program's home directory.\nPFILE = \"../webui_batch_greet/webui_batch_greet.sh\"",
+        "processData": "",
+        "captureNodeState": "",
+        "restoreNodeState": "",
+        "initializeRuntime": "",
+        "observe": ""
+      }
+    },
+    {
+      "id": "ab1d4193-0a2f-4913-8336-53eceab0209b",
+      "name": "Report",
+      "description": "Counts the batch runs that finish and those that fail, and reports each end.",
+      "position": {
+        "x": 120.0,
+        "y": 520.0
+      },
+      "options": [
+        {
+          "id": "e9aa3733-d6b5-4aa0-92cc-831f67dd6682",
+          "label": "-done",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "none",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "the notices of the batch runs that end",
+          "value": "[Launch;-outdone]",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "128b8297-b98d-4030-8997-832d148c66ed",
+          "label": "-outreport",
+          "direction": "output",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "one line for each batch run that ends, with how many finished and failed so far, read outside the program",
+          "value": "report",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "FBPProcess",
+      "initiator": false,
+      "nodeCode": {
+        "preamble": "",
+        "classBody": "def __init__(self):\n    super().__init__()\n    # The node state: how many batch runs finished and failed.\n    self.counts = {\"finished\": 0, \"failed\": 0}",
+        "processData": "status = packet[\"status\"]\nself.counts[status] = self.counts.get(status, 0) + 1\nself.send_data(\"outreport\", {\"run\": packet[\"run\"], \"status\": status, **self.counts})",
+        "captureNodeState": "return dict(self.counts)",
+        "restoreNodeState": "self.counts = dict(node_state)",
+        "initializeRuntime": "pass",
+        "observe": ""
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "76c1105b-fc2c-48cc-b785-4cd7e3bf1424",
+      "sourceProcessId": "10c4599c-d7f3-477d-ac71-31b0808cc3fe",
+      "sourceOptionId": "0f569927-a4fd-4453-80ad-69b509270559",
+      "targetProcessId": "ab1d4193-0a2f-4913-8336-53eceab0209b",
+      "targetOptionId": "e9aa3733-d6b5-4aa0-92cc-831f67dd6682"
+    }
+  ]
+}

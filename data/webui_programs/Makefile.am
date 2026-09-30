@@ -3,7 +3,11 @@
 # nobase_ keeps that layout under webuiprgdir, so that the web UI can
 # load an installed program from its own directory.
 webuiprgdir = $(datadir)/$(PACKAGE)/webui_programs
-nobase_webuiprg_DATA = webui_fifo_sum/webui_fifo_sum.sh	\
+nobase_webuiprg_DATA = webui_batch_greet/webui_batch_greet.sh	\
+webui_batch_greet/.debasher/program.json			\
+webui_batch_launcher/webui_batch_launcher.sh			\
+webui_batch_launcher/.debasher/program.json			\
+webui_fifo_sum/webui_fifo_sum.sh				\
 webui_fifo_sum/.debasher/program.json				\
 webui_running_sum/webui_running_sum.sh				\
 webui_running_sum/.debasher/program.json
