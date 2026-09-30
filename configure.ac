@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.71])
-AC_INIT([debasher],[1.0],[daniel.ortiz@ub.edu])
+AC_INIT([debasher],[2.0.dev0],[daniel.ortiz@ub.edu])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 AM_PATH_PYTHON([3])

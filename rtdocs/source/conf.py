@@ -14,8 +14,8 @@ project = 'DeBasher'
 copyright = '2024, Daniel Ortiz-Martínez'
 author = 'Daniel Ortiz-Martínez'
 
-release = '0.1'
-version = '0.1.0'
+release = '2.0.dev0'
+version = '2.0'
 
 # -- General configuration
 
