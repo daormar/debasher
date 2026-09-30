@@ -282,3 +282,21 @@ The output returned by the command is:
     * Resetting output directory for process...
     Function hello_world successfully executed
     Process finished at 07/30/24 18:17:06
+
+Using the Web Interface
+-----------------------
+
+The same kind of program can also be built without writing its module
+by hand, with the DeBasher web interface. Once its Python dependencies
+are installed (see the :ref:`webui` Section), it is started with:
+
+::
+
+    $ debasher_webui
+
+and opened in a browser at ``http://127.0.0.1:8000/``. There, "Create
+new program" starts an empty program, where processes are added and
+their options connected on a canvas; "Save" writes the program and its
+generated module into a directory, and the "Run" menu runs it with
+``debasher_exec``, coloring each process by its status as the run goes
+on.

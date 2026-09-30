@@ -30,7 +30,8 @@ a resident program gets the following from DeBasher:
 This section explains what a resident program is made of, how to write
 one, and how to run, stop, resume and inspect it. The Python classes
 that a resident program is built from are documented in the
-:ref:`resident-nodes-api` Section.
+:ref:`resident-nodes-api` Section. A resident program can also be
+built and run from the web interface (see the :ref:`webui` Section).
 
 Concepts
 --------

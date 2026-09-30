@@ -48,3 +48,7 @@ which exchange messages through FIFOs, possibly in cycles, react to
 what is written into the program from outside, and survive the crash
 of any of them, returning to the state they had (see the
 :ref:`resident` Section).
+
+Programs of both types can be written by hand, as Bash modules, or
+built, run and observed from a browser with the DeBasher web interface
+(see the :ref:`webui` Section).

@@ -338,10 +338,11 @@ Web Interface
 debasher_webui
 ^^^^^^^^^^^^^^^
 
-``debasher_webui`` launches the DeBasher web interface: a server that
-exposes the workflow API and, once the frontend has been built and
-installed, also serves it, so that both are available from a single
-process at ``http://<host>:<port>/``.
+``debasher_webui`` launches the DeBasher web interface (see the
+:ref:`webui` Section): a server that exposes the workflow API and,
+once the frontend has been built and installed, also serves it, so
+that both are available from a single process at
+``http://<host>:<port>/``.
 
 ::
 
