@@ -1,0 +1,10 @@
+# conda-build pins a run requirement that is also a host one to the
+# version of the build (pin_run_as_build), which for python is its minor
+# version: the package would install only with the Python 3.X it was
+# built with. python is a host requirement only so that configure finds
+# it under $PREFIX, and the engine's Python modules are installed outside
+# site-packages (see build.sh), so the package runs with any Python 3.
+pin_run_as_build:
+  python:
+    min_pin: x
+    max_pin: x

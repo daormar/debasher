@@ -23,9 +23,39 @@ make -j"${CPU_COUNT}"
 make install
 ```
 
-No autoconf/automake/libtool either: the dist tarball already ships the
-generated `configure` script and `Makefile.in` files (`EXTRA_DIST` in the
-root `Makefile.am`), so plain `make` is enough.
+No autoconf/automake either: the dist tarball already ships the generated
+`configure` script and `Makefile.in` files (`EXTRA_DIST` in the root
+`Makefile.am`), so plain `make` is enough.
+
+## Tool paths and the noarch package
+
+`configure` writes the absolute path of each tool it finds (`bash` in the
+shebang, `sed`, `flock`, `dot`, ...) into the scripts it builds. For a
+single `noarch: generic` package that runs on Linux and on macOS, each of
+those paths has to point inside the environment where the package is
+installed:
+
+- The tools the engine needs (Bash 4.3 or newer, the GNU coreutils,
+  findutils, sed, grep and gawk, diffutils, gzip, `flock` from util-linux,
+  Graphviz) are `host` requirements, not only `run` ones, so `configure`
+  finds them under `$PREFIX`, which conda rewrites on install. Otherwise it
+  would take the build machine's own, which on macOS would be Bash 3.2 and
+  BSD tools, or a path that does not exist at all.
+- The optional tools (`Rscript`, `perl`, `groovy`, `java`, `docker`, `ssh`,
+  `wget`, `pandoc`) are not requirements of the package. `build.sh`
+  presets their autoconf cache variables to bare names, so they are looked
+  up in the `PATH` at run time, as the Slurm commands are.
+
+Python is a host requirement for the same reason, and the engine's Python
+modules go to `lib/debasher/python/`, a directory that does not depend on
+the version of Python. `conda_build_config.yaml` relaxes conda-build's
+`pin_run_as_build` for Python, which would otherwise tie the package to
+the minor version of Python it was built with (`util-linux` is built per
+Python version, so Python is always in the host environment anyway).
+
+`run_test.sh` checks that no installed script holds a path outside the
+environment, runs a few example programs to their end, and starts the web
+UI's server and loads a program through its API.
 
 ## Cutting a release for this recipe
 
@@ -33,6 +63,8 @@ root `Makefile.am`), so plain `make` is enough.
    ```bash
    ./reconf && ./configure && make dist-vendored
    ```
+   This needs npm (Node.js 22.12 or newer) in the `PATH`, to build the
+   frontend that the tarball carries.
 2. Upload the resulting `debasher-<version>.tar.gz` as a GitHub release
    asset at `https://github.com/daormar/debasher/releases/tag/v<version>`
    (the URL `meta.yaml` expects).
@@ -62,6 +94,22 @@ conda activate bioconda-test
 # swap source: url: for a local "url: file:///path/to/debasher-<version>.tar.gz"
 # with a matching sha256 first, since the real release asset won't exist yet
 conda-build conda/ --croot /tmp/cbuild -c conda-forge --override-channels
+```
+
+Every requirement comes from conda-forge, so the bioconda channel is not
+needed here, and leaving it out keeps the solver's memory use down
+(conda-build with both channels can need more than 4 GB). If the test
+phase still runs out of memory, build with `--no-test` and test as below.
+
+The package is noarch, so the one bioconda builds on Linux is the one
+that macOS users install. To check it on a Mac, or with a Python other
+than the build's, install it into a new environment and run
+`run_test.sh` there, with `PREFIX` set to the environment:
+
+```bash
+conda create -n debasher-test -c /tmp/cbuild -c conda-forge debasher curl python=3.11
+conda activate debasher-test
+PREFIX="$CONDA_PREFIX" bash conda/run_test.sh
 ```
 
 Watch out for stray `npm` on your `PATH` (nvm, an apt-installed Node,
