@@ -475,9 +475,9 @@ class ProgramLauncher(FBPProcess):
     # -- the observation of the batch runs --
 
     def _observe_port(self):
-        """RUNS_DONE_PORT if the node has DONE_PORT to send notices on, so
-        that observe() brings in the end of each batch run; None otherwise,
-        and observe() only launches."""
+        """RUNS_DONE_PORT if the node has DONE_PORT to send done messages
+        on, so that observe() brings in the end of each batch run; None
+        otherwise, and observe() only launches."""
         return self.RUNS_DONE_PORT if self.DONE_PORT in self.OUTPUT_PORTS else None
 
     def observe(self):

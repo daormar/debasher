@@ -3081,11 +3081,11 @@ rounds.
   directory writes it again when it comes back. `process_data` drops the
   second one, since the batch run is already in its announced set, and a
   replay, which finds both in the log in the same order, drops it too: the
-  event may arrive more than once, the notice goes out once.
+  event may arrive more than once, the message on `outdone` goes out once.
 - A batch run that ends while the node is down leaves no exit code, since no
   launcher node was waiting for it. When the node comes back, `observe()` asks
-  `debasher_status`, which says that every process finished, and
-  the notice goes out.
+  `debasher_status`, which says that every process finished, and the message on
+  `outdone` goes out.
 - A launcher node without `outdone` brings in no event.
 
 ## A single process
@@ -3409,14 +3409,14 @@ Design ideas from Future work move here once they are actually built.
 - **Batch runs from a node.** A launcher node, of class `ProgramLauncher`,
   launches a general program, or a single process of a module, once for each
   request it receives, in a run directory of its own, with a queue on disk, a
-  limit of batch runs at a time and a notice downstream when each one ends
+  limit of batch runs at a time and a message downstream when each one ends
   (see "`ProgramLauncher`: batch runs from a node").
   `test/engine/debasher_launcher_ref.sh` is the reference, with
   `test/engine/debasher_launcher_batch.sh` as the general program: its
   real-run tests, with the built-in scheduler and with SLURM where the machine
-  has a controller up, check the results and the notices of two requests,
-  and that a batch run outlives a crash of its launcher node and is announced
-  once.
+  has a controller up, check the results and the messages on `outdone` of two
+  requests, and that a batch run outlives a crash of its launcher node and is
+  announced once.
 - **Observing the outside world.** A node can watch something outside the
   program, and bring what it sees in as an input, with `observe()` and
   `inject()` (see "Observing the outside world"); `DirectoryWatcher` watches a

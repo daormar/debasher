@@ -1011,7 +1011,7 @@ a resident program (see "Running a resident program"). The tab asks nothing when
 it is closed: the browser shows only a generic warning, which could not say that
 the run goes on, and would show it every time.
 
-Leaving the editor while there is a run in progress shows a short notice, which
+Leaving the editor while there is a run in progress shows a short message, which
 blocks nothing: the run goes on in its output directory, and is followed or
 stopped by opening its program again. This is the only moment at which the web
 UI can say where the run lives. The backend keeps no record of it, and the home
@@ -2186,7 +2186,7 @@ them.
 
 **The tab.** Besides "Stop program", "Kill program" and the escalation of the
 `Supervisor` also stop the program (see "Running a resident program"). The
-notice shown when leaving the editor speaks of a program that is `live`.
+message shown when leaving the editor speaks of a program that is `live`.
 
 **The backend.** A live program depends on the backend for nothing: once
 `debasher_exec` has ended, its nodes, its `Supervisor` and the periodic
