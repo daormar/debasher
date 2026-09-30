@@ -48,17 +48,20 @@ is particularly appropriate for the execution of pipelines, also called
 workflows. Workflow execution is important in different fields. One
 particular example would be the field of Bioinformatics.</p>
 
+<p>DeBasher runs two types of programs. A <em>general program</em>
+processes a batch of inputs: each of its processes runs once, as soon
+as its inputs are ready, and ends. A <em>resident program</em>
+processes a stream: its processes are long-lived Python classes with a
+state of their own, which exchange messages through FIFOs, react to
+what is written into the program from outside, and survive the crash
+of any of them. Programs of both types can be written by hand, as Bash
+modules, or built, run and observed from a browser with the DeBasher
+web interface.</p>
+
 <p>The DeBasher software package was created and is currently maintained
-by <a href="http://daormar.github.io/">Daniel Ortiz-Martínez</a>.
+by <a href="https://daormar.github.io/">Daniel Ortiz-Martínez</a>.
 Daniel is an experienced machine learning researcher and also holds
 an MSc degree in Bioinformatics.</p>
-
-<!-- <h2> -->
-<!-- <a id="news" class="anchor" href="#news" aria-hidden="true"><span class="octicon octicon-link"></span></a>News</h2> -->
-<!-- <p>A new version of the toolkit has been released with several improvements and new features: -->
-<!-- <ul> -->
-<!-- <li>TBD</li> -->
-<!-- </ul> -->
 
 <h2>
 <a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>General Features</h2>
@@ -67,17 +70,18 @@ an MSc degree in Bioinformatics.</p>
 
 <ul>
 <li>Definition of complex programs composed of several processes.</li>
-<li>Framework to define programs and processes using Bash shell scripting or other programming languages.</li>
+<li>Framework to define programs and processes using Bash shell scripting or other programming languages (Python, R, Perl and Groovy).</li>
 <li>Concurrent execution of processes depending on detailed process dependencies.</li>
 <li>Reexecution of only those processes that are pending or whose execution failed.</li>
-<li>Integration with workload schedulers such as Slurm.</li>
-<li>Support for Conda environments.</li>
+<li>A built-in scheduler for a single machine, and integration with workload schedulers such as Slurm.</li>
+<li>Support for Conda environments and Docker containers.</li>
 <li>Reproducible workflows.</li>
-<li>Generation of graphical representations of programs as directed acyclic graphs.</li>
+<li>Generation of graphical representations of programs.</li>
+<li>A web interface to build, run and observe programs from a browser.</li>
 </ul>
 
 <h2>
-<a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Advanced Features</h2>
+<a id="advanced-features" class="anchor" href="#advanced-features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Advanced Features</h2>
 
 <p>DeBasher also incorporates features that are not usual in other similar tools:</p>
 
@@ -87,44 +91,163 @@ an MSc degree in Bioinformatics.</p>
 <li>Ability to implement stateful processes.</li>
 <li>Possibility to combine workflows at runtime.</li>
 <li>Efficient execution of workflows composed of thousands of processes by resorting to static scheduling.</li>
+<li>Resident programs, whose processes keep their state and are fault tolerant:
+<ul>
+<li>a process that crashes is relaunched and returns to the state it would have had without the crash, while the others keep running;</li>
+<li>consistent snapshots of the state of every process, taken at any moment;</li>
+<li>orderly stop of a whole program, and resumption later from where it stopped;</li>
+<li>failures detected and reported, never silent;</li>
+<li>processes that observe the outside world, such as a directory where files arrive, and processes that launch a general program for each request they receive.</li>
 </ul>
+</li>
+</ul>
+
+<h2>
+<a id="web-interface" class="anchor" href="#web-interface" aria-hidden="true"><span class="octicon octicon-link"></span></a>Web Interface</h2>
+
+<p>The DeBasher web interface lets you build a program without writing
+its module by hand: each process is a box on a canvas and each
+connection an edge between two of them. The web interface translates
+the drawing into a DeBasher module, runs it with the tools of
+DeBasher, colors each process by its status as the run goes on, and
+lets you inspect what each process left and talk to the FIFOs of a
+running program. It supports both general and resident programs, and
+it can also import a module written by hand.</p>
 
 <h2>
 <a id="distribution-details" class="anchor" href="#distribution-details" aria-hidden="true"><span class="octicon octicon-link"></span></a>Distribution Details</h2>
 
-<p>DeBasher has been coded using Bash shell-scripting and
-Python. DeBasher is known to compile on Unix-like systems. See the
-"Documentation and Support" section of these instructions if you
-experience problems during compilation.</p>
+<p>DeBasher has been coded using Bash shell-scripting and Python; its
+web interface is written in TypeScript, with React, and served by a
+Python server built on FastAPI. DeBasher is developed and tested on
+Linux, and also runs on Windows through WSL2. It should run on macOS,
+where it has not been tested yet. See the "Documentation and Support"
+section of these instructions if you experience problems during
+compilation.</p>
 
-<p>It is released under the <a href="http://www.gnu.org/copyleft/lgpl.html">GNU Lesser General Public License (LGPL)</a>.</p>
+<p>It is released under the <a href="https://www.gnu.org/licenses/lgpl-3.0.html">GNU Lesser General Public License (LGPL), version 3</a>.</p>
 
 <h2>
 <a id="installation" class="anchor" href="#installation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installation</h2>
-
 <h4>
-<a id="basic-installation-procedure" class="anchor" href="#basic-installation-procedure" aria-hidden="true"><span class="octicon octicon-link"></span></a>Basic Installation Procedure</h4>
+<a id="requirements" class="anchor" href="#requirements" aria-hidden="true"><span class="octicon octicon-link"></span></a>Requirements</h4>
 
-<p>To install DeBasher, first you need to install the autotools
-(autoconf, autoconf-archive, automake and libtool packages in
-Ubuntu). DeBasher requires Bash 4.0 or above as well as Python 3.x to
-work. Finally, the Graphviz package is also required so as to generate
-graphic information about programs.
-</p>
+<ul>
+<li>Bash 4.3 or newer, which runs every script of DeBasher.</li>
+<li>Python 3.</li>
+<li>The usual command line tools of a Linux system: those of GNU
+coreutils (<code>realpath</code> and <code>timeout</code> among them),
+<code>grep</code>, <code>sed</code>, <code>awk</code>
+and <code>find</code>, and <code>flock</code>, from util-linux.</li>
+<li>Graphviz, whose <code>dot</code> command draws the graphs of programs.</li>
+<li>The autotools, to configure the package: autoconf 2.71 or newer,
+automake, libtool and autoconf-archive.</li>
+<li>For the web interface, which is optional: Node.js 22.12 or newer,
+with npm, to build it, and a Python virtual environment for its server
+(see <a href="#web-interface-setup">below</a>). Without
+npm, <code>configure</code> leaves the web interface out, as it does
+when given <code>--disable-frontend</code>.</li>
+</ul>
 
-<p> Assuming Ubuntu is being used, the required packages can be
-installed as follows:</p>
-
-<pre><code> $ sudo apt install autoconf autoconf-archive automake libtool graphviz
-</code></pre>
-
-<p>On the other hand, some of the functionality incorporated by DeBasher
-requires the previous installation of third-party software
+<p>Some features need further software
 (<a href="#third-party-software">see below</a>).</p>
 
-<p>Once the autotools are available (as well as other required
-software), you can proceed with the installation of the tool by
-following the next sequence of steps:</p>
+<h4>
+<a id="linux" class="anchor" href="#linux" aria-hidden="true"><span class="octicon octicon-link"></span></a>Linux</h4>
+
+<p>On Ubuntu (or Debian), the required packages are installed with:</p>
+
+<pre><code> $ sudo apt install autoconf autoconf-archive automake libtool graphviz python3 python3-venv
+</code></pre>
+
+<p>Bash, coreutils and util-linux are part of every installation. The
+Node.js package of the distribution is usually older than 22.12; a
+newer one is installed from <a href="https://nodejs.org/">nodejs.org</a>
+or with <a href="https://github.com/nvm-sh/nvm">nvm</a>. Other
+distributions have packages of the same names, or close to them.</p>
+
+<h4>
+<a id="windows" class="anchor" href="#windows" aria-hidden="true"><span class="octicon octicon-link"></span></a>Windows</h4>
+
+<p>DeBasher runs inside WSL2, the Linux system of Windows. WSL2 is
+installed, with an Ubuntu distribution, from a PowerShell opened as
+administrator:</p>
+
+<pre><code> &gt; wsl --install
+</code></pre>
+
+<p>Then, in a terminal of that Ubuntu, follow the instructions for
+Linux above. Keep the sources of DeBasher, your programs and their
+output directories in the file system of Linux (under your home
+directory there), not in the drives of Windows that WSL2 mounts
+under <code>/mnt/c</code>: DeBasher creates FIFOs and locks files, which
+those drives may not support, and reaching them from Linux is much
+slower. The web interface, started inside WSL2, is reached from a
+browser of Windows at <code>http://localhost:8000/</code>, since WSL2
+forwards the ports of <code>localhost</code> to Windows.</p>
+
+<h4>
+<a id="macos" class="anchor" href="#macos" aria-hidden="true"><span class="octicon octicon-link"></span></a>macOS</h4>
+
+<p><strong>DeBasher has not been tested on macOS yet.</strong> The steps
+below install everything that it needs, and make the command line tools
+that it finds behave as those of Linux do, which is the setting in which
+it is tested. If something still fails, please report it on
+the <a href="https://github.com/daormar/debasher/issues">issue
+tracker</a>.</p>
+
+<ol>
+<li>
+<p>Install the command line tools of Xcode, which provide <code>git</code> and <code>make</code>:</p>
+
+<pre><code> $ xcode-select --install
+</code></pre>
+</li>
+<li>
+<p>Install <a href="https://brew.sh/">Homebrew</a>, and with it the rest of the requirements:</p>
+
+<pre><code> $ brew install bash coreutils findutils gnu-sed grep gawk flock \
+     autoconf autoconf-archive automake libtool graphviz python node
+</code></pre>
+
+<p>macOS ships Bash 3.2 and has no <code>flock</code>, and
+its <code>sed</code>, <code>grep</code>, <code>find</code> and the tools
+of coreutils are those of BSD, which differ in details from the GNU
+ones that DeBasher is tested with.</p>
+</li>
+<li>
+<p>Put the Bash of Homebrew and the GNU tools first in
+the <code>PATH</code>, under their usual names (Homebrew installs the
+GNU tools with a <code>g</code> prefix, <code>gsed</code>
+or <code>gtimeout</code>, and keeps the usual names
+in <code>gnubin</code> directories), for example
+in <code>~/.zprofile</code>:</p>
+
+<pre><code>BREW="$(brew --prefix)"
+export PATH="$BREW/opt/coreutils/libexec/gnubin:$BREW/opt/findutils/libexec/gnubin:$BREW/opt/gnu-sed/libexec/gnubin:$BREW/opt/grep/libexec/gnubin:$BREW/bin:$PATH"
+</code></pre>
+
+<p><code>configure</code> takes the first <code>bash</code> of
+the <code>PATH</code>, which every script of DeBasher then runs with,
+and refuses one older than 4.3; <code>bash --version</code> shows which
+one comes first.</p>
+</li>
+<li>
+<p>Build and install the package as described below, and
+run <code>make installcheck</code>, which runs the examples of DeBasher
+and says whether they work.</p>
+</li>
+</ol>
+
+<p>Mirror taps (the <code>--mirror</code> option
+of <code>define_fifo_opt</code>) rely on how Linux treats a FIFO opened
+for both reading and writing, and may not work on macOS.</p>
+
+<h4>
+<a id="building-and-installing" class="anchor" href="#building-and-installing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Building and Installing</h4>
+
+<p>Once the requirements are available, the package is built and
+installed with the following steps:</p>
 
 <ol>
 <li>
@@ -141,6 +264,9 @@ following the next sequence of steps:</p>
 <li><p>Type <code>make</code> to compile the package.</p></li>
 <li><p>Type <code>make install</code> to install the programs and any data files and
 documentation.</p></li>
+<li><p>Optionally, type <code>make installcheck</code> to check the
+installation: it runs the example programs with the installed
+tools.</p></li>
 <li><p>You can remove the program binaries and object files from the source
 code directory by typing <code>make clean</code>.</p></li>
 </ol>
@@ -150,7 +276,7 @@ directory (or similar, depending on the OS you use); however, since Step
 5 requires root privileges, another directory can be specified during
 Step 3 by typing:</p>
 
-<pre><code> $ configure --prefix=&lt;absolute-installation-path&gt;
+<pre><code> $ ./configure --prefix=&lt;absolute-installation-path&gt;
 </code></pre>
 
 <p>For example, if <code>user1</code> wants to install the DeBasher
@@ -158,7 +284,7 @@ package in the directory <code>/home/user1/debasher</code>, the sequence
 of commands to execute should be the following:</p>
 
 <pre><code> $ ./reconf
- $ configure --prefix=/home/user1/debasher
+ $ ./configure --prefix=/home/user1/debasher
  $ make
  $ make install
 </code></pre>
@@ -166,15 +292,29 @@ of commands to execute should be the following:</p>
 <p>The installation directory can be the same directory where the
 DeBasher package was decompressed.</p>
 
-<!-- <h4 id="checking-package-installation">Checking Package Installation</h4> -->
+<h4>
+<a id="web-interface-setup" class="anchor" href="#web-interface-setup" aria-hidden="true"><span class="octicon octicon-link"></span></a>Starting the Web Interface</h4>
 
-<!-- <p>Once the package has been installed, it is possible to perform basic -->
-<!-- checkings in an automatic manner so as to detect portability errors. For -->
-<!-- this purpose, the following command can be used:</p> -->
+<p>The server of the web interface needs the Python packages listed
+in <code>share/debasher/api/requirements.txt</code>, under the
+installation directory, which <code>make install</code> does not
+install. They are installed once, in a virtual environment:</p>
 
-<!-- <pre><code> $ make installcheck</code></pre> -->
+<pre><code> $ python3 -m venv ~/debasher-venv
+ $ ~/debasher-venv/bin/pip install -r &lt;installation-path&gt;/share/debasher/api/requirements.txt
+</code></pre>
 
-<!-- <p>TBD</p> -->
+<p>Then, with that environment activated, <code>debasher_webui</code>
+starts the server, and the web interface is
+at <code>http://127.0.0.1:8000/</code>:</p>
+
+<pre><code> $ source ~/debasher-venv/bin/activate
+ $ debasher_webui
+</code></pre>
+
+<p>The server has no authentication and runs every program as the user
+who started it, so by default it listens only on the local machine; to
+reach it from another machine, forward its port over SSH.</p>
 
 <h4>
 <a id="third-party-software" class="anchor" href="#third-party-software"
@@ -198,7 +338,7 @@ modules.</p>
 <h5>Docker</h5>
 
 <p>DeBasher also provides support for <a href="https://www.docker.com/">Docker</a>
-containers.</p>
+containers, favoring reproducibility of results.</p>
 
 <h2>
 <a id="current-status" class="anchor" href="#current-status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Current Status</h2>
@@ -207,13 +347,13 @@ containers.</p>
   features that will be incorporated in a near future:</p>
 
 <ul>
-<li>Graphic tool to build programs.</li>
+<li>Support for macOS, checked by running the tests of the package there.</li>
 <li>Support for additional workload schedulers.</li>
 </ul>
 
 <h2>
-<a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sample Projects Using DeBasher</h2>
-<p></p>
+<a id="sample-projects" class="anchor" href="#sample-projects" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sample Projects Using DeBasher</h2>
+
 <ul>
 <li><p><a href="https://daormar.github.io/geno-debasher/">Geno-DeBasher</a>:
 Geno-DeBasher is a bioinformatics software project implementing DeBasher
@@ -223,14 +363,17 @@ modules related to genome variant calling.</p></li>
 <h2>
 <a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Documentation and Support</h2>
 
-<p>Project documentation is being developed. Such documentation includes:</p>
+<p>Project documentation includes:</p>
 
 <ul>
 <li>These instructions.</li>
+<li><a href="https://debasher.readthedocs.io/en/latest/">Technical
+documentation</a>: how to execute and implement programs, resident
+programs, the web interface, the tools of DeBasher and its API, with
+examples.</li>
 <li>A set
-of <a href="http://daormar.github.io/debasher/docsupport/slides.pdf">slides</a>
+of <a href="https://daormar.github.io/debasher/docsupport/slides.pdf">slides</a>
 ("slides.pdf" under the "doc" directory).</li>
-<li><a href="https://debasher.readthedocs.io/en/latest/">Technical documentation</a>.</li>
 <li>A <a href="https://link.springer.com/article/10.1186/s12859-025-06108-1">journal paper</a>.</li>
 </ul>
 
@@ -243,14 +386,12 @@ file</a> with multiple DeBasher code examples.</p>
 <p>If you need additional help, you can:</p>
 
 <ul>
-<li>use the <a href="https://github.com/daormar/debasher/issues">github issue tracker</a>.
-</li>
+<li>use the <a href="https://github.com/daormar/debasher/issues">github issue tracker</a>.</li>
 <li><a href="mailto:daniel.ortiz.phd@gmail.com">send an e-mail to the author</a>.</li>
-</li>
 </ul>
 
 <h2>
-<a id="docsupport" class="anchor" href="#docsupport" aria-hidden="true"><span class="octicon octicon-link"></span></a>Citation</h2>
+<a id="citation" class="anchor" href="#citation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Citation</h2>
 
  <p>
     If you use DeBasher in your research, please cite the following publication:
@@ -263,5 +404,7 @@ processes. BMC Bioinformatics 26, 106
 (2025). <a href="https://doi.org/10.1186/s12859-025-06108-1">https://doi.org/10.1186/s12859-025-06108-1</a>
  </p>
 
+      </section>
+    </div>
   </body>
 </html>
