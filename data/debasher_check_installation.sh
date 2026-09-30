@@ -911,9 +911,12 @@ echo ""
 echo "Total Checks: $((checks_passed + checks_timedout + checks_failed)) ; Passed: ${checks_passed} ; Timed Out: ${checks_timedout} ; Failed: ${checks_failed}"
 echo ""
 
-if test $checks_failed -gt 0 ; then
+# A check that failed or timed out fails the script, and so make
+# installcheck
+if test $checks_failed -gt 0 || test $checks_timedout -gt 0 ; then
     print_checks_failed_message "${tmpdir}"
     echo ""
+    exit 1
 else
     # Remove directory for temporaries
     echo "# Remove directory used to store temporary files..."
