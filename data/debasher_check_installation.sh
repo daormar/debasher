@@ -13,6 +13,27 @@ print_checks_failed_message()
 }
 
 ########
+# Reports that the check of the program of the module `progname` is
+# skipped, and why: something it needs is not available here.
+print_skipped_check()
+{
+    local progname=$1
+    local reason=$2
+
+    echo "## Checking ${progname}.sh ... Skipped (${reason})"
+    echo ""
+}
+
+########
+# Whether conda can activate an environment here, as the conda example
+# does: a conda command is not enough, conda has to be set up in the shell
+# (conda init). Tried in a subshell, which leaves this one as it was.
+conda_is_usable()
+{
+    ( conda activate base && conda deactivate ) > /dev/null 2>&1
+}
+
+########
 check_program()
 {
     local tmpdir=$1
@@ -57,6 +78,13 @@ check_program_file()
         local debasher_status_out="${tmpdir}/${outdirname}_status.out"
         "${TIMEOUT}" -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
         ret=$?
+        # A program that debasher_status finds still in progress (2) or
+        # unfinished (3), a process of it having failed, fails the check
+        case $ret in
+            2|3)
+                ret=1
+                ;;
+        esac
     fi
 
     case $ret in
@@ -223,6 +251,7 @@ echo ""
 checks_passed=0
 checks_timedout=0
 checks_failed=0
+checks_skipped=0
 
 # Check debasher_hello_world program
 progname="debasher_hello_world"
@@ -711,41 +740,52 @@ case $? in
         ;;
 esac
 
-# Check debasher_conda_example
+# Check debasher_conda_example if conda is available
 progname="debasher_conda_example"
-sched="BUILTIN"
-bs_cpus=4
-bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+if conda_is_usable; then
+    sched="BUILTIN"
+    bs_cpus=4
+    bs_mem=1024
+    check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+else
+    print_skipped_check "${progname}" "conda not found or not set up in the shell"
+    ((checks_skipped++))
+fi
 
-# Check debasher_docker_example
+# Check debasher_docker_example if docker is available and its daemon
+# answers
 progname="debasher_docker_example"
-sched="BUILTIN"
-bs_cpus=4
-bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+if command -v "${DOCKER}" > /dev/null 2>&1 && "${DOCKER}" info > /dev/null 2>&1; then
+    sched="BUILTIN"
+    bs_cpus=4
+    bs_mem=1024
+    check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+else
+    print_skipped_check "${progname}" "docker not found or its daemon not running"
+    ((checks_skipped++))
+fi
 
 # Check debasher_dynamic_fanout
 progname="debasher_dynamic_fanout"
@@ -908,12 +948,15 @@ fi
 # Summary
 echo "# Summary"
 echo ""
-echo "Total Checks: $((checks_passed + checks_timedout + checks_failed)) ; Passed: ${checks_passed} ; Timed Out: ${checks_timedout} ; Failed: ${checks_failed}"
+echo "Total Checks: $((checks_passed + checks_timedout + checks_failed)) ; Passed: ${checks_passed} ; Timed Out: ${checks_timedout} ; Failed: ${checks_failed} ; Skipped: ${checks_skipped}"
 echo ""
 
-if test $checks_failed -gt 0 ; then
+# A check that failed or timed out fails the script, and so make
+# installcheck
+if test $checks_failed -gt 0 || test $checks_timedout -gt 0 ; then
     print_checks_failed_message "${tmpdir}"
     echo ""
+    exit 1
 else
     # Remove directory for temporaries
     echo "# Remove directory used to store temporary files..."

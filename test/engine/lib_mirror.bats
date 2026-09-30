@@ -51,6 +51,20 @@ teardown() {
     fi
 }
 
+# The time in which debasher::_stop_fifo_mirror_taps ends a stuck tap,
+# with a grace period of 1s. On Linux, SIGTERM interrupts the tap blocked
+# opening or writing its real fifo, and ends it within a second grace
+# period; on macOS it does not, and the tap then ends with the SIGKILL
+# that follows that second period, which bounds it too: two grace periods,
+# and a margin for the polling of the wait and a loaded machine.
+stuck_tap_stop_bound_ms() {
+    if [ "$(uname -s)" = "Linux" ]; then
+        echo 2000
+    else
+        echo 5000
+    fi
+}
+
 # Sends one line into the shim fifo from its own background job, a
 # fresh open/write/close (see file header for why this matters).
 write_to_shim() {
@@ -296,8 +310,7 @@ now_ms() {
     local start=$(now_ms)
     debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
     [ "$?" -eq 0 ]
-    # SIGTERM ends it: the SIGKILL fallback would take a second grace period.
-    [ $(( $(now_ms) - start )) -lt 2000 ]
+    [ $(( $(now_ms) - start )) -lt $(stuck_tap_stop_bound_ms) ]
 
     ! kill -0 "${tap_pid}" 2>/dev/null
     grep -q "Warning: fifo mirror tap for ${shimfifo} did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"
@@ -314,7 +327,7 @@ now_ms() {
     local start=$(now_ms)
     debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
     [ "$?" -eq 0 ]
-    [ $(( $(now_ms) - start )) -lt 2000 ]
+    [ $(( $(now_ms) - start )) -lt $(stuck_tap_stop_bound_ms) ]
 
     ! kill -0 "${tap_pid}" 2>/dev/null
     grep -q "did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"

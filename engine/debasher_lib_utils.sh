@@ -214,13 +214,15 @@ debasher::_serialize_string_array()
 }
 
 ########
+# Whether a shell function named $1 is defined. Only functions count: a
+# command of the same name in the PATH does not, and the PATH is never
+# searched, which is slow where it holds slow directories (those of
+# Windows, under WSL2).
 debasher::_func_exists()
 {
     local funcname=$1
 
-    type ${funcname} >/dev/null 2>&1 || return 1
-
-    return 0
+    declare -F "${funcname}" > /dev/null
 }
 
 ########

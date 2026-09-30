@@ -191,9 +191,12 @@ debasher::_search_mod_in_dirs()
     done
 
     if [ -n "${fullmodname}" ]; then
-        if ! debasher::_is_absolute_path "${fullmodname}"; then
-            fullmodname=$(debasher::_get_absolute_path "${fullmodname}")
-        fi
+        # Its canonical path, with no symbolic link, so that a module has
+        # a single name however it is reached (through the current
+        # directory or through a directory of DEBASHER_MOD_DIR that is or
+        # goes through a link), which the checks of a module already
+        # loaded or still being loaded compare
+        fullmodname=$(debasher::_get_absolute_path "${fullmodname}")
     else
         # Fallback to package bindir
         fullmodname="${debasher_bindir}/${module}"
@@ -215,7 +218,12 @@ debasher::_determine_full_module_name()
         # candidates rejected by an earlier, unrelated search must not
         # be reported alongside this module
         DEBASHER_REJECTED_MOD_CANDIDATES=()
-        DEBASHER_RESOLVED_MODNAME="${module}"
+        # Canonical, as a module found by a search is
+        if [ -f "${module}" ]; then
+            DEBASHER_RESOLVED_MODNAME=$(debasher::_get_absolute_path "${module}")
+        else
+            DEBASHER_RESOLVED_MODNAME="${module}"
+        fi
     else
         debasher::_search_mod_in_dirs "${module}"
     fi

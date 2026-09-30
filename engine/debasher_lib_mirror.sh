@@ -127,7 +127,7 @@ debasher::_check_fifo_mirror_allowed()
 # last descriptor is closed. Holding a write end of its own also keeps
 # the tap's reads from ever seeing EOF between writers, and a writer's
 # open from blocking. Opening a fifo for reading and writing does not
-# block on Linux (POSIX leaves it undefined).
+# block on Linux or on macOS (POSIX leaves it undefined).
 debasher::_run_fifo_mirror_tap()
 {
     local shimfifo=$1

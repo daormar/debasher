@@ -9,11 +9,12 @@ easy as it is shown below.
 Installation
 ------------
 
-DeBasher is developed and tested on Linux. It also runs on Windows
-through WSL2, which runs a Linux system inside Windows, and it should
-run on macOS, where it has not been tested yet. The requirements are
-listed first, then how to meet them on each system, and then how to
-build and install the package, which is the same everywhere.
+DeBasher is developed on Linux, and tested on Linux, on macOS and on
+Windows through WSL2, which runs a Linux system inside Windows: on
+each of them every change is built and its tests run. The
+requirements are listed first, then how to meet them on each system,
+and then how to build and install the package, which is the same
+everywhere.
 
 Requirements
 ^^^^^^^^^^^^
@@ -24,8 +25,8 @@ Requirements
   coreutils (``realpath`` and ``timeout`` among them), ``grep``,
   ``sed``, ``awk`` and ``find``, and ``flock``, from util-linux.
 * Graphviz, whose ``dot`` command draws the graphs of programs.
-* The autotools, to configure the package: autoconf 2.71 or newer,
-  automake, libtool and autoconf-archive.
+* The autotools, to configure the package: autoconf 2.71 or newer and
+  automake; and ``make``, to build it.
 * For the web interface, which is optional (see the :ref:`webui`
   Section): Node.js 22.12 or newer, with npm, to build it, and a
   Python virtual environment for its server. Without npm,
@@ -42,7 +43,7 @@ On Ubuntu (or Debian), the required packages are installed with:
 
 ::
 
-    $ sudo apt install autoconf autoconf-archive automake libtool graphviz python3 python3-venv
+    $ sudo apt install autoconf automake make git graphviz python3 python3-venv
 
 Bash, coreutils and util-linux are part of every installation. The
 Node.js package of the distribution is usually older than 22.12; a
@@ -53,9 +54,9 @@ packages of the same names, or close to them.
 Windows
 ^^^^^^^
 
-DeBasher runs inside WSL2, the Linux system of Windows. WSL2 is
-installed, with an Ubuntu distribution, from a PowerShell opened as
-administrator:
+DeBasher runs inside WSL2, the Linux system of Windows, and is tested
+there with Ubuntu 24.04. WSL2 is installed, with an Ubuntu
+distribution, from a PowerShell opened as administrator:
 
 ::
 
@@ -74,11 +75,11 @@ at ``http://localhost:8000/``, since WSL2 forwards the ports of
 macOS
 ^^^^^
 
-**DeBasher has not been tested on macOS yet.** The steps below install
-everything that it needs, and make the command line tools that it
-finds behave as those of Linux do, which is the setting in which it
-is tested. If something still fails, please report it on the `issues
-page <https://github.com/daormar/debasher/issues>`__ of the project.
+The steps below install everything that DeBasher needs, and make the
+command line tools that it finds behave as those of Linux do. They are
+the steps with which DeBasher is tested on macOS 15, on Apple silicon.
+If something fails, please report it on the `issues page
+<https://github.com/daormar/debasher/issues>`__ of the project.
 
 #. Install the command line tools of Xcode, which provide ``git`` and
    ``make``:
@@ -93,7 +94,7 @@ page <https://github.com/daormar/debasher/issues>`__ of the project.
    ::
 
        $ brew install bash coreutils findutils gnu-sed grep gawk flock \
-           autoconf autoconf-archive automake libtool graphviz python node
+           autoconf automake graphviz python node
 
    macOS ships Bash 3.2 and has no ``flock``, and its ``sed``, ``grep``,
    ``find`` and the tools of coreutils are those of BSD, which differ
@@ -118,8 +119,9 @@ page <https://github.com/daormar/debasher/issues>`__ of the project.
    whether they work.
 
 Mirror taps (the ``--mirror`` option of ``define_fifo_opt``) rely on
-how Linux treats a FIFO opened for both reading and writing, and may
-not work on macOS.
+how Linux and macOS treat a FIFO opened for both reading and writing.
+On macOS, a mirror tap whose reader is gone takes a second longer to
+stop.
 
 Building and Installing
 ^^^^^^^^^^^^^^^^^^^^^^^

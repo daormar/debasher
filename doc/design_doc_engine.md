@@ -85,6 +85,8 @@ relative to the output directory of the run.
 - **module search path**: where a module given by a relative name is looked for:
   the current directory, then each directory of `DEBASHER_MOD_DIR`, then the
   directory where DeBasher is installed.
+- **canonical path**: the absolute path of a file with every symbolic link on
+  it resolved, the one name that the file has however it is reached.
 - **module method**: a function `<module>_<suffix>` that the engine calls on a
   module: `_document`, `_shared_dirs`, `_program` and `_program_type`.
 - **program file**: the module given to `debasher_exec` with `--pfile`, whose
@@ -426,32 +428,34 @@ module `mymod.sh` has its program in `mymod_program`, its shared directories in
 which a module calls at its top level to load the modules it builds on, and
 which `debasher_exec` calls on the program file.
 
-**Finding a module.** An absolute path is taken as it is. A relative name is
-looked for in the directories of the module search path in order, the current
-directory first and then each directory of `DEBASHER_MOD_DIR` (a list
-separated by colons), and the first file found wins, so that a module in the
-current directory is never shadowed by one of the same name elsewhere. In each
-directory the engine tries the name as given and the name with `.sh`. It then
-looks one level below the directory for a program saved by the web UI, which
-it accepts only when the directory of the file holds a
+**Finding a module.** An absolute path is not looked for in any directory. A
+relative name is looked for in the directories of the module search path in
+order, the current directory first and then each directory of `DEBASHER_MOD_DIR`
+(a list separated by colons), and the first file found wins, so that a module in
+the current directory is never shadowed by one of the same name elsewhere. In
+each directory the engine tries the name as given and the name with `.sh`. It
+then looks one level below the directory for a program saved by the web UI,
+which it accepts only when the directory of the file holds a
 `.debasher/program.json` whose program has the same name, so that an unrelated
 file with the same name in some subdirectory is never taken for the module. A
 name found nowhere is looked for, last, in the directory where DeBasher is
 installed. The program file given to `debasher_exec` with `--pfile` is resolved
-in the same way, and the command line file records the absolute path it
+in the same way, and the command line file records the canonical path it
 resolved to, so that the tools that later read the run do not depend on the
 module search path of whoever runs them.
 
 **Loading a module.** A module is sourced into the shell of the tool that loads
 it, with the directory of the module as the current directory while it loads.
-The modules it loads in turn are therefore looked for first next to it, and
-not in the directory from which `debasher_exec` was run. A module is identified
-by the absolute path of its file and is loaded only once: loading it again, as
-two modules that build on a third one do, has no effect. A module that is asked
-for while it is still loading, because modules load each other in a cycle, is
-refused, and the error names the whole cycle. The engine keeps the loaded
-modules in the order in which they finish loading, so that every module comes
-after the modules it loads.
+The modules it loads in turn are therefore looked for first next to it, and not
+in the directory from which `debasher_exec` was run. A module is identified by
+the canonical path of its file, so that a module reached through a symbolic link
+(to the file or to a directory on its path) and through its real path is the
+same module, and it is loaded only once: loading it again, as two modules that
+build on a third one do, has no effect. A module that is asked for while it is
+still loading, because modules load each other in a cycle, is refused, and the
+error names the whole cycle. The engine keeps the loaded modules in the order in
+which they finish loading, so that every module comes after the modules it
+loads.
 
 **What loading means for a run.** Everything that a module does at its top
 level, defining functions and variables and loading other modules, happens in
@@ -1147,18 +1151,19 @@ on every run of the owner.
 
 The tap keeps its three files open for its whole life. It opens the shim for
 reading and writing, so that the opens of the owner never block and lines
-written through several opens are not lost between them; POSIX leaves opening
-a FIFO for reading and writing undefined, and the engine relies on what Linux
-does, which is not to block. It opens the real FIFO once, so that its reader
-sees the end of the data only when the tap exits, and it ignores `SIGPIPE`
-and retries a write that fails, so that a reader that opens the FIFO anew for
-each line, and is briefly gone between two of them, gets every line.
+written through several opens are not lost between them; POSIX leaves opening a
+FIFO for reading and writing undefined, and the engine relies on what Linux and
+macOS do, which is not to block. It opens the real FIFO once, so that its reader
+sees the end of the data only when the tap exits, and it ignores `SIGPIPE` and
+retries a write that fails, so that a reader that opens the FIFO anew for each
+line, and is briefly gone between two of them, gets every line.
 
 When the process function returns, the engine writes a stop token into the shim.
 The tap forwards everything before it, including a last line without a newline,
 which it forwards as it was written, and exits. A tap that has not stopped
 within two seconds, because it is stuck retrying a line that no reader will
-take, is ended with `SIGTERM`, and `SIGKILL` if needed, with a warning and
+take, is ended with `SIGTERM`, and `SIGKILL` if needed (on macOS, where
+`SIGTERM` does not interrupt a tap blocked on the real FIFO), with a warning and
 without failing the task: the lines it could not forward are in the mirror log.
 A tap that stops on its token but exits with an error fails the task.
 
@@ -1714,18 +1719,11 @@ What is known to be missing from the design, or left open by it:
 - **`aftercorr` task by task.** The built-in scheduler could launch each task
   of an array as soon as its counterpart has succeeded, as Slurm does.
 - **Portable mirror taps.** A mirror tap that does not rely on opening a FIFO
-  for reading and writing.
+  for reading and writing, which POSIX leaves undefined, so that mirror taps
+  work on other systems than those on which the engine is checked (Linux,
+  macOS, and Windows under WSL2, which is a Linux system).
 - **Finer change detection.** Comparing the contents of input files, all the
   tasks of an array, and, for outdated code, only the module that defines each
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
-- **Systems other than Linux.** The engine is built and tested on Linux. It
-  should run on Windows under WSL2, which is a Linux system, although nothing
-  checks it there. Nothing checks it on macOS either, where it needs tools that
-  the system lacks or ships in another version: a Bash of version 4.3 or newer
-  (macOS ships 3.2), `flock`, `realpath` before macOS 13, and, for the tools of
-  resident programs, `timeout` (which GNU coreutils installs there as
-  `gtimeout`); and mirror taps would need to be portable ("Portable mirror
-  taps" above). Supporting macOS means running `make check` and
-  `make installcheck` there, and fixing what they find.

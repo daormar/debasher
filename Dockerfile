@@ -29,20 +29,16 @@ RUN npm run build
 FROM debian:bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        autoconf automake libtool libltdl-dev build-essential \
+        autoconf automake build-essential \
         bash python3 gawk graphviz ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 COPY . .
 
-# Not using ./reconf: its preflight check looks for a "libtool" binary,
-# which Debian's libtool package doesn't ship (only libtoolize, which is
-# what autoreconf actually needs and uses under the hood).
-#
 # --disable-frontend: this stage has no npm, and the built frontend is
 # copied in separately from the frontend-builder stage below.
-RUN autoreconf -i -I m4 --force \
+RUN ./reconf \
     && ./configure --disable-frontend --prefix=/usr/local \
     && make \
     && make install DESTDIR=/out
