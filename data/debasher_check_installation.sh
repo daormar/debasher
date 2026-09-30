@@ -55,7 +55,7 @@ check_program_file()
     local ret=$?
     if test $ret -eq 0 ; then
         local debasher_status_out="${tmpdir}/${outdirname}_status.out"
-        timeout -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
+        "${TIMEOUT}" -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
         ret=$?
     fi
 
@@ -156,7 +156,7 @@ check_resident_program()
         # write is bounded in time.
         local payload
         for payload in ${input_payloads}; do
-            timeout ${timeout_secs}s "${BASH}" -c 'printf "{\"type\": \"DATA\", \"payload\": %s}\n" "$1" > "$2"' \
+            "${TIMEOUT}" ${timeout_secs}s "${BASH}" -c 'printf "{\"type\": \"DATA\", \"payload\": %s}\n" "$1" > "$2"' \
                     _ "${payload}" "${input_path}" || { ret=124; break; }
         done
 

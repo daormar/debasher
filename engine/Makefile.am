@@ -100,6 +100,7 @@ SUFFIXES= .sh .py .r .R
 	echo "TEE=\"$(TEE)\"" >> $@
 	echo "GZIP=\"$(GZIP)\"" >> $@
 	echo "SLEEP=\"$(SLEEP)\"" >> $@
+	echo "TIMEOUT=\"$(TIMEOUT)\"" >> $@
 	echo "SEQ=\"$(SEQ)\"" >> $@
 	echo "DOCKER=\"$(DOCKER)\"" >> $@
 	echo "SRUN=\"$(SRUN)\"" >> $@

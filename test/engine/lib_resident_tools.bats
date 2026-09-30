@@ -20,6 +20,7 @@ setup() {
     # directly (see lib_programs.bats for why).
     SLEEP="$(command -v sleep)"
     CAT="$(command -v cat)"
+    TIMEOUT="$(command -v timeout)"
 
     source "${ENGINE_BUILDDIR}/debasher_lib.sh"
     source "${ENGINE_BUILDDIR}/debasher_lib_resident_tools.sh"
