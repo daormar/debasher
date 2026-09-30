@@ -13,6 +13,18 @@ print_checks_failed_message()
 }
 
 ########
+# Reports that the check of the program of the module `progname` is
+# skipped, and why: something it needs is not available here.
+print_skipped_check()
+{
+    local progname=$1
+    local reason=$2
+
+    echo "## Checking ${progname}.sh ... Skipped (${reason})"
+    echo ""
+}
+
+########
 check_program()
 {
     local tmpdir=$1
@@ -223,6 +235,7 @@ echo ""
 checks_passed=0
 checks_timedout=0
 checks_failed=0
+checks_skipped=0
 
 # Check debasher_hello_world program
 progname="debasher_hello_world"
@@ -711,41 +724,52 @@ case $? in
         ;;
 esac
 
-# Check debasher_conda_example
+# Check debasher_conda_example if conda is available
 progname="debasher_conda_example"
-sched="BUILTIN"
-bs_cpus=4
-bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+if command -v conda > /dev/null 2>&1; then
+    sched="BUILTIN"
+    bs_cpus=4
+    bs_mem=1024
+    check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+else
+    print_skipped_check "${progname}" "conda not found"
+    ((checks_skipped++))
+fi
 
-# Check debasher_docker_example
+# Check debasher_docker_example if docker is available and its daemon
+# answers
 progname="debasher_docker_example"
-sched="BUILTIN"
-bs_cpus=4
-bs_mem=1024
-check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+if command -v "${DOCKER}" > /dev/null 2>&1 && "${DOCKER}" info > /dev/null 2>&1; then
+    sched="BUILTIN"
+    bs_cpus=4
+    bs_mem=1024
+    check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+else
+    print_skipped_check "${progname}" "docker not found or its daemon not running"
+    ((checks_skipped++))
+fi
 
 # Check debasher_dynamic_fanout
 progname="debasher_dynamic_fanout"
@@ -908,7 +932,7 @@ fi
 # Summary
 echo "# Summary"
 echo ""
-echo "Total Checks: $((checks_passed + checks_timedout + checks_failed)) ; Passed: ${checks_passed} ; Timed Out: ${checks_timedout} ; Failed: ${checks_failed}"
+echo "Total Checks: $((checks_passed + checks_timedout + checks_failed)) ; Passed: ${checks_passed} ; Timed Out: ${checks_timedout} ; Failed: ${checks_failed} ; Skipped: ${checks_skipped}"
 echo ""
 
 # A check that failed or timed out fails the script, and so make
