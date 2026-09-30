@@ -97,3 +97,23 @@ setup() {
         [ "$status" -ne 0 ] || { echo "accepted ${value}"; return 1; }
     done
 }
+
+@test "debasher::_func_exists finds a defined function" {
+    some_method() { :; }
+    run debasher::_func_exists some_method
+    [ "$status" -eq 0 ]
+}
+
+@test "debasher::_func_exists does not take a command of the PATH or a builtin for a function" {
+    mkdir -p "${BATS_TEST_TMPDIR}/bin"
+    printf '#!/bin/sh\n' > "${BATS_TEST_TMPDIR}/bin/some_method"
+    chmod +x "${BATS_TEST_TMPDIR}/bin/some_method"
+    PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
+
+    run debasher::_func_exists some_method
+    [ "$status" -eq 1 ]
+    run debasher::_func_exists echo
+    [ "$status" -eq 1 ]
+    run debasher::_func_exists no_such_method
+    [ "$status" -eq 1 ]
+}
