@@ -708,9 +708,26 @@ DeBasher module can define its own methods, similarly to a process (see
   A shared directory declared this way is created once, before any
   process in the program executes, and its absolute path can then be
   retrieved from any process's own methods by means of
-  ``get_absolute_shdirname`` (e.g. ``get_absolute_shdirname "data"``) —
-  letting two processes agree on a common directory without one having
-  to pass it to the other as a regular connected option.
+  ``get_absolute_shdirname`` (e.g. ``get_absolute_shdirname "data"``).
+  This lets two processes agree on a common directory without one
+  having to pass it to the other as a regular connected option.
+* ``program_type``: declares the type of the program, using
+  ``program_type``, either ``general`` (the default, when the module
+  defines no such method) or ``resident``:
+
+  .. code-block:: bash
+
+      webui_running_sum_program_type()
+      {
+          program_type "resident"
+      }
+
+  A general program is the kind described in this section, whose
+  processes run once and end. A resident program is made of long-lived,
+  stateful Python processes (see the :ref:`resident` Section). Only the
+  type declared by the module given to ``debasher_exec`` counts: a
+  module loaded by it to reuse its processes or its program has its own
+  ``program_type`` method ignored.
 
 Once a module (and/or its processes) defines any of these methods, the
 ``debasher_doc_mod`` tool can be used to generate Markdown

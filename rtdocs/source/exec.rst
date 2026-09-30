@@ -112,6 +112,13 @@ following two options can be used:
   can be used by the built-in scheduler. A value of -1 (the default)
   means unlimited memory.
 
+A resident program (see the :ref:`resident` Section) always runs with
+the built-in scheduler, which ``debasher_exec`` selects on its own for
+it, refusing any other. Its processes are meant to run until they are
+stopped, so ``debasher_exec`` launches all of them at once and returns
+without waiting for them; the resources given with the two options
+above must be enough for every process of the program together.
+
 Executing Programs Using External Schedulers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

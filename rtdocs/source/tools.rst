@@ -146,6 +146,90 @@ Its options are:
 * ``-e <string>``: comma-separated list of process names to exclude
   from the output.
 
+Resident Program Control
+------------------------
+
+The tools below act on a resident program, running or stopped, given
+its output directory with ``-d <string>``. The :ref:`resident` Section
+explains what they are for; ``debasher_status`` also works on a
+resident program.
+
+debasher_stop_resident
+^^^^^^^^^^^^^^^^^^^^^^
+
+``debasher_stop_resident`` stops a running resident program in order:
+every node saves its state in one last snapshot and then stops, so
+that the next ``debasher_exec`` on the same output directory resumes
+it. ``debasher_stop`` would kill every process at once instead.
+
+::
+
+    $ debasher_stop_resident -d <string> [-x <string>] [--timeout <int>]
+
+* ``-x <string>``: comma-separated nodes to leave running: a process
+  name (every task, if it is an array) or ``<process>:<idx>`` (one
+  task of an array).
+* ``--timeout <int>``: seconds to wait for the stop to complete (60 by
+  default), after which the tool falls back to ``debasher_stop`` and
+  fails.
+
+debasher_snapshot_resident
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``debasher_snapshot_resident`` takes a snapshot of a running resident
+program: every node saves a checkpoint and prunes its input log.
+
+::
+
+    $ debasher_snapshot_resident -d <string> [--timeout <int> | --every <int>]
+
+* ``--timeout <int>``: seconds to wait for the snapshot to complete at
+  every node (60 by default).
+* ``--every <int>``: take a snapshot every ``<int>`` seconds, until no
+  node of the program is running.
+
+debasher_reset_resident
+^^^^^^^^^^^^^^^^^^^^^^^
+
+``debasher_reset_resident`` takes a stopped resident program back to
+its first run: it moves the checkpoints, input logs, notices and
+process outputs of every node under ``__reset__/<timestamp>/`` in the
+output directory, so that the next ``debasher_exec`` starts every node
+afresh. It refuses while any process of the program is running.
+
+::
+
+    $ debasher_reset_resident -d <string> [--delete]
+
+* ``--delete``: delete the state of the nodes instead of setting it
+  aside.
+
+debasher_inspect_resident
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``debasher_inspect_resident`` shows, in JSON, what a node of a resident
+program keeps, and changes nothing. It works on a running program as
+well as on a stopped one.
+
+::
+
+    $ debasher_inspect_resident -d <string> -p <string> [-t <int>] <command>
+    $ debasher_inspect_resident -d <string> notices
+
+``-p <string>`` gives the process and ``-t <int>`` the index of the
+task, for an array process. The commands are:
+
+* ``summary``: the state of the node (alive, down, finished or not
+  launched), its checkpoints, the size of its input log against its
+  limit, its health and its notice.
+* ``checkpoint <int>``: a checkpoint that the node keeps, given by its
+  epoch, as ``summary`` lists them.
+* ``log [--port <string>] [--last <int>]``: the latest records of the
+  input log (100 by default), or those of one port.
+* ``runs``: the batch runs of a launcher node, with their states.
+* ``notices``: the notices of every node of the program (with ``-d``
+  alone).
+
 Retrieving Process Output
 ---------------------------
 

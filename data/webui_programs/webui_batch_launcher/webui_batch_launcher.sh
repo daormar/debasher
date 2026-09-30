@@ -77,14 +77,14 @@ EOF
 
 Launch_document()
 {
-    debasher::document_process "Runs webui_batch_greet once for each request, and sends a notice when each batch run ends."
+    debasher::document_process "Runs webui_batch_greet once for each request, and sends a message when each batch run ends."
 }
 
 
 Launch_explain_opts()
 {
     debasher::explain_opt "-requests" "<string>" "requests written from outside the program, one batch run each: {\"opts\": {\"-text\": ..., \"-secs\": ...}, \"run\": ...}"
-    debasher::explain_opt "-outdone" "<string>" "a notice for each batch run that ends"
+    debasher::explain_opt "-outdone" "<string>" "a message for each batch run that ends"
     debasher::explain_opt "-outhb" "<string>" "heartbeat channel to the Supervisor"
     debasher::explain_opt "-trigger" "<string>" "control port of this initiator"
 }
@@ -138,7 +138,7 @@ Report_document()
 
 Report_explain_opts()
 {
-    debasher::explain_opt "-done" "<string>" "the notices of the batch runs that end"
+    debasher::explain_opt "-done" "<string>" "the messages of the batch runs that end"
     debasher::explain_opt "-outreport" "<string>" "one line for each batch run that ends, with how many finished and failed so far, read outside the program"
     debasher::explain_opt "-outhb" "<string>" "heartbeat channel to the Supervisor"
 }

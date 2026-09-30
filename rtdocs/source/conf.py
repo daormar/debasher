@@ -1,5 +1,13 @@
 # Configuration file for the Sphinx documentation builder.
 
+import os
+import sys
+
+# The Python runtime of resident programs, whose docstrings the API
+# reference of its classes is built from (sphinx.ext.autodoc). Its
+# modules import only the standard library.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'engine')))
+
 # -- Project information
 
 project = 'DeBasher'

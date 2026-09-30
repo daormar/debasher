@@ -36,6 +36,8 @@ Contents
 
    implem
 
+   resident
+
    tools
 
    api
