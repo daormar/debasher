@@ -183,14 +183,48 @@ def test_the_supervisor_keeps_what_a_fifo_holds_when_both_of_its_nodes_die(tmp_p
     assert left == "".join(_line(seq, 100) for seq in range(11, 31)).encode()
 
 
-def _race_writer(path):
+_RACE_LINE_SIZES = [50, 500, 3000, 6000, 12000]
+
+
+def _fifo_capacity(tmp_path, chunk):
+    """
+    How many bytes a fifo holds that nobody reads, written in pieces of
+    `chunk` bytes: 64 KiB on Linux, less on other systems (macOS).
+    """
+    path = str(tmp_path / "capacity")
+    os.mkfifo(path)
+    rfd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    wfd = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+    size = 0
+    try:
+        while True:
+            size += os.write(wfd, b"x" * chunk)
+    except BlockingIOError:
+        pass
+    finally:
+        os.close(wfd)
+        os.close(rfd)
+    return size
+
+
+def _race_line_sizes(tmp_path):
+    """
+    The sizes of the lines of _race_writer: those that a fifo holds at
+    least four of, so that what is left after a kill holds a complete line
+    whatever the capacity of a fifo on this system.
+    """
+    capacity = _fifo_capacity(tmp_path, max(_RACE_LINE_SIZES))
+    return capacity, [size for size in _RACE_LINE_SIZES if size <= capacity // 4]
+
+
+def _race_writer(path, sizes):
     wfd, _ = _open_fifo_writer(path)
     _write_all(wfd, '\n{"type": "HELLO"}\n')
     seq = 0
     while True:
         seq += 1
         # Some lines above PIPE_BUF, which a kill can cut in two.
-        _write_all(wfd, _line(seq, random.choice([50, 500, 3000, 6000, 12000])))
+        _write_all(wfd, _line(seq, random.choice(sizes)))
 
 
 def _race_reader(path):
@@ -211,13 +245,14 @@ def test_what_the_supervisor_holds_survives_both_nodes_killed_at_any_instant(tmp
     (what the dead writer was writing).
     """
     random.seed(seed)
+    capacity, sizes = _race_line_sizes(tmp_path)
     path = str(tmp_path / "f")
     os.mkfifo(path)
     proc = _holder([path])
     proc._open_fifos()
     try:
         r = _spawn(lambda: _race_reader(path))
-        w = _spawn(lambda: _race_writer(path), pgid=r)
+        w = _spawn(lambda: _race_writer(path, sizes), pgid=r)
         time.sleep(random.uniform(0.02, 0.2))
         _kill_group(r, r, w)
         left = _drain(path)
@@ -237,7 +272,7 @@ def test_what_the_supervisor_holds_survives_both_nodes_killed_at_any_instant(tmp
             continue
         if envelope["type"] == "DATA":
             seqs.append(envelope["seq"])
-    assert seqs, left[:200]
+    assert seqs, (capacity, len(left), left[:200])
     assert seqs == list(range(seqs[0], seqs[0] + len(seqs)))
 
 
