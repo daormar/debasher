@@ -1720,3 +1720,12 @@ What is known to be missing from the design, or left open by it:
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
+- **Systems other than Linux.** The engine is built and tested on Linux. It
+  should run on Windows under WSL2, which is a Linux system, although nothing
+  checks it there. Nothing checks it on macOS either, where it needs tools that
+  the system lacks or ships in another version: a Bash of version 4.3 or newer
+  (macOS ships 3.2), `flock`, `realpath` before macOS 13, and, for the tools of
+  resident programs, `timeout` (which GNU coreutils installs there as
+  `gtimeout`); and mirror taps would need to be portable ("Portable mirror
+  taps" above). Supporting macOS means running `make check` and
+  `make installcheck` there, and fixing what they find.
