@@ -9,9 +9,9 @@ easy as it is shown below.
 Installation
 ------------
 
-DeBasher is developed on Linux, and tested on Linux and on macOS,
-where every change is built and its tests run. It also runs on
-Windows through WSL2, which runs a Linux system inside Windows. The
+DeBasher is developed on Linux, and tested on Linux, on macOS and on
+Windows through WSL2, which runs a Linux system inside Windows: on
+each of them every change is built and its tests run. The
 requirements are listed first, then how to meet them on each system,
 and then how to build and install the package, which is the same
 everywhere.
@@ -54,9 +54,9 @@ packages of the same names, or close to them.
 Windows
 ^^^^^^^
 
-DeBasher runs inside WSL2, the Linux system of Windows. WSL2 is
-installed, with an Ubuntu distribution, from a PowerShell opened as
-administrator:
+DeBasher runs inside WSL2, the Linux system of Windows, and is tested
+there with Ubuntu 24.04. WSL2 is installed, with an Ubuntu
+distribution, from a PowerShell opened as administrator:
 
 ::
 

@@ -2,8 +2,7 @@
 # the installation (make installcheck), on Linux, on macOS and on Windows
 # under WSL2. Each job installs the requirements as
 # rtdocs/source/getstart.rst says for its system, so the jobs of macOS and
-# WSL2 also check those instructions. The job of WSL2 is experimental: it
-# does not fail the workflow.
+# WSL2 also check those instructions.
 #
 # Tests that a runner cannot run skip themselves: those that need Slurm
 # (no sbatch here), the real runs of resident programs (only with
@@ -120,7 +119,6 @@ jobs:
   # system are those of Windows.
   wsl2:
     runs-on: windows-2025
-    continue-on-error: true
     timeout-minutes: 90
     defaults:
       run:

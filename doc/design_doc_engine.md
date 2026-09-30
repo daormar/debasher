@@ -1719,13 +1719,11 @@ What is known to be missing from the design, or left open by it:
 - **`aftercorr` task by task.** The built-in scheduler could launch each task
   of an array as soon as its counterpart has succeeded, as Slurm does.
 - **Portable mirror taps.** A mirror tap that does not rely on opening a FIFO
-  for reading and writing.
+  for reading and writing, which POSIX leaves undefined, so that mirror taps
+  work on other systems than those on which the engine is checked (Linux,
+  macOS, and Windows under WSL2, which is a Linux system).
 - **Finer change detection.** Comparing the contents of input files, all the
   tasks of an array, and, for outdated code, only the module that defines each
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
-- **Systems other than Linux and macOS.** The engine is checked on Linux and on
-  macOS only. It should run on Windows under WSL2, which is a Linux system,
-  although nothing checks it there, and other systems would need portable
-  mirror taps ("Portable mirror taps" above).
