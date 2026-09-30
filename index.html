@@ -141,7 +141,7 @@ coreutils (<code>realpath</code> and <code>timeout</code> among them),
 and <code>find</code>, and <code>flock</code>, from util-linux.</li>
 <li>Graphviz, whose <code>dot</code> command draws the graphs of programs.</li>
 <li>The autotools, to configure the package: autoconf 2.71 or newer and
-automake.</li>
+automake; and <code>make</code>, to build it.</li>
 <li>For the web interface, which is optional: Node.js 22.12 or newer,
 with npm, to build it, and a Python virtual environment for its server
 (see <a href="#web-interface-setup">below</a>). Without
@@ -157,7 +157,7 @@ when given <code>--disable-frontend</code>.</li>
 
 <p>On Ubuntu (or Debian), the required packages are installed with:</p>
 
-<pre><code> $ sudo apt install autoconf automake graphviz python3 python3-venv
+<pre><code> $ sudo apt install autoconf automake make git graphviz python3 python3-venv
 </code></pre>
 
 <p>Bash, coreutils and util-linux are part of every installation. The
