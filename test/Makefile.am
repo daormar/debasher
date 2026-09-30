@@ -1,7 +1,7 @@
 SUBDIRS = engine api
 
 EXTRA_DIST = utils/README.md utils/crap_report.py utils/bash_complexity.py \
-utils/hotspots.py
+utils/hotspots.py utils/coupling.py
 
 # CRAP report (utils/crap_report.py) of the Python code of the API and of
 # the engine. It is not part of `make check`: it is a report rather than a
@@ -21,12 +21,16 @@ crap:
 	@echo "pytest not found: skipping the CRAP report"
 endif
 
-# Complexity of the Bash functions of the engine (utils/bash_complexity.py)
-# and hotspots of the code (utils/hotspots.py): reports too, and static ones,
-# so they need neither the tests nor the virtual environment of the API.
-.PHONY: bash-complexity hotspots
+# Complexity of the Bash functions of the engine (utils/bash_complexity.py),
+# hotspots of the code (utils/hotspots.py) and its change coupling
+# (utils/coupling.py): reports too, and static ones, so they need neither
+# the tests nor the virtual environment of the API.
+.PHONY: bash-complexity hotspots coupling
 bash-complexity:
 	cd $(top_srcdir) && $(PYTHON) test/utils/bash_complexity.py
 
 hotspots:
 	cd $(top_srcdir) && $(PYTHON) test/utils/hotspots.py
+
+coupling:
+	cd $(top_srcdir) && $(PYTHON) test/utils/coupling.py
