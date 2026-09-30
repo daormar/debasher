@@ -36,6 +36,10 @@ intersphinx_disabled_domains = ['std']
 
 templates_path = ['_templates']
 
+# The *_doc.md files that generate_api_files.sh writes are only included
+# into the pages of the API, never built as pages of their own.
+exclude_patterns = ['*_doc.md']
+
 html_static_path = ['_static']
 
 # -- Options for HTML output
