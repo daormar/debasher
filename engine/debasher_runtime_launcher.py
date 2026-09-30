@@ -199,6 +199,10 @@ def program_status(debasher_status, run_dir):
 
 class ProgramLauncher(FBPProcess):
     """
+    A node that launches a general program once for each request that it
+    receives, each in a run directory of its own, and can tell a node
+    downstream when each of those batch runs ends.
+
     A subclass names the general program to launch, PFILE, as a module that
     declares the node would load it: a relative path is looked for in the
     directory of that module, where a program keeps its files, and then in
@@ -209,30 +213,49 @@ class ProgramLauncher(FBPProcess):
     RUNS_ROOT, an absolute path under which the run directories go; by
     default they go in the output directory of the process.
 
-    Every input port is a port of requests. If the node has an output port
-    DONE_PORT, observe() brings in the end of every batch run under the name
-    RUNS_DONE_PORT (its observe port, which is not a fifo), and the node
-    sends a notice on DONE_PORT for each.
+    Every input port is a port of requests. A request is a JSON object
+    with `opts`, the options of the general program (names with their
+    leading dash, values as strings), and optionally `run`, the name of its
+    run directory, a relative path none of whose parts starts with a dot:
+    `{"opts": {"-bam": "/data/s17.bam"}, "run": "s17"}`. Without `run`, the
+    run directory is named after the position of the request. A request
+    that does not follow this, or whose run directory belongs to another
+    request, is logged as an error and dropped.
+
+    If the node has an output port DONE_PORT, observe() brings in the end
+    of every batch run under the name RUNS_DONE_PORT (its observe port,
+    which is not a fifo), and the node sends on DONE_PORT a message for
+    each, `{"run": ..., "status": ..., "exit_code": ...}`, with `status`
+    "finished" for an exit code of 0 and "failed" for any other.
+
+    A launcher node cannot be a task of an array process.
     """
 
+    #: The module of the general program to launch (required).
     PFILE = None
+    #: The name of a process of PFILE to launch alone, instead of the whole
+    #: program, or None.
     PROCESS = None
+    #: The absolute path under which the run directories go, or None for the
+    #: output directory of the process.
     RUNS_ROOT = None
     RUNS_DONE_PORT = "runs_done"
+    #: The output port on which the end of each batch run is sent, if the
+    #: node has it.
     DONE_PORT = "outdone"
     _RUNTIME_CLASS = "ProgramLauncher"
-    # How many batch runs run at a time. A program sets it for a process in
-    # its computational specifications, max_concurrent_runs.
+    #: How many batch runs run at a time. A program sets it for a process in
+    #: its computational specifications, `max_concurrent_runs`.
     MAX_CONCURRENT_RUNS = 1
-    # The scheduler the batch runs use, given to debasher_exec as --sched:
-    # the built-in one by default, as for the resident program itself, so
-    # that the batch runs do not depend on the scheduler a machine would
-    # pick on its own. A program sets it for a process in its computational
-    # specifications, batch_sched (BUILTIN or SLURM).
+    #: The scheduler the batch runs use, given to debasher_exec as `--sched`:
+    #: the built-in one by default, as for the resident program itself, so
+    #: that the batch runs do not depend on the scheduler a machine would
+    #: pick on its own. A program sets it for a process in its computational
+    #: specifications, `batch_sched` (BUILTIN or SLURM).
     BATCH_SCHED = "BUILTIN"
-    # How often, at most, observe() asks debasher_status how a batch run is
-    # going (OBSERVE_INTERVAL_SECS is how often it looks at the run
-    # directories).
+    #: How often, at most, in seconds, observe() asks debasher_status how a
+    #: batch run is going (OBSERVE_INTERVAL_SECS is how often it looks at the
+    #: run directories).
     STATUS_CHECK_INTERVAL_SECS = 5.0
 
     _COMP_SPEC_ATTRS = {

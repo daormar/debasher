@@ -39,6 +39,11 @@ from debasher_runtime_fbp import FBPProcess
 
 class DirectoryWatcher(FBPProcess):
     """
+    A node that watches a directory and sends a request for each file that
+    arrives there, typically to a launcher node (see ProgramLauncher). A
+    module declares it with a subclass that sets WATCH_DIR (or gives the
+    process the option `-watchdir`) and, if needed, PATTERN.
+
     WATCH_DIR is the directory to watch: an absolute path, or one relative to
     the directory of the module that declares the node; an option of the
     node named WATCH_DIR_OPTION (-watchdir), if it has one, gives it instead,
@@ -57,12 +62,23 @@ class DirectoryWatcher(FBPProcess):
     name of the file without its extension as the name of the run.
     """
 
+    #: The directory to watch, an absolute path or one relative to the
+    #: directory of the module.
     WATCH_DIR = None
+    #: The option of the process, without its dash, that gives the directory
+    #: to watch instead of WATCH_DIR, when the process has it.
     WATCH_DIR_OPTION = "watchdir"
+    #: The pattern, in the syntax of the shell, that the name of a file has to
+    #: match.
     PATTERN = "*"
+    #: How many observations in a row the size and modification time of a
+    #: file have to stay the same for the file to be complete.
     STABLE_OBSERVATIONS = 2
     OBSERVE_PORT = "arrivals"
+    #: The output port on which the requests are sent.
     REQUESTS_PORT = "outrequests"
+    #: The option of the general program to launch that receives the path of
+    #: the file, in the default request.
     FILE_OPTION = "-infile"
     _RUNTIME_CLASS = "DirectoryWatcher"
 
@@ -126,7 +142,9 @@ class DirectoryWatcher(FBPProcess):
     # -- what a module may redefine --
 
     def request_for(self, path):
-        """The request sent for the complete file at `path`."""
+        """The request sent for the complete file at `path`: by default
+        `{"opts": {FILE_OPTION: path}, "run": <name of the file without its
+        extension>}`. A module redefines it to send something else."""
         name = os.path.splitext(os.path.basename(path))[0]
         return {"opts": {self.FILE_OPTION: path}, "run": name}
 
