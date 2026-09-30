@@ -19,7 +19,9 @@ export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 // "restart" is "Restart node" on a node of a resident program, which asks
 // for confirmation first; "relaunch" is "Relaunch node" in a resident
 // program without a Supervisor.
-export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo" | "stop" | "restart" | "relaunch";
+// "node-state" opens NodeStateModal, on a node of a resident program.
+export type ProcessMenuAction =
+  ProcessOutputKind | "io" | "watch-fifo" | "node-state" | "stop" | "restart" | "relaunch";
 
 // An action on the process itself, listed after the inspection actions:
 // "Relaunch node" (see offersRelaunchNode), and, in a destructive color,
@@ -44,6 +46,11 @@ interface Props {
   x: number;
   y: number;
   isPending: boolean;
+  // In a resident program "Watch FIFO" is not offered, since the engine
+  // refuses --mirror there, and "Show node state" is, when `nodeState` is
+  // given (not on the Supervisor).
+  isResident: boolean;
+  nodeState?: { disabled: boolean };
   onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
   nodeActions: NodeAction[];
@@ -57,6 +64,8 @@ export default function ProcessContextMenu({
   x,
   y,
   isPending,
+  isResident,
+  nodeState,
   onSelect,
   onClose,
   nodeActions,
@@ -103,7 +112,7 @@ export default function ProcessContextMenu({
       }}
     >
 
-      {MENU_ITEMS.map(item => (
+      {MENU_ITEMS.filter(item => !(isResident && item === "Watch FIFO")).map(item => (
 
         <button
 
@@ -126,6 +135,28 @@ export default function ProcessContextMenu({
         </button>
 
       ))}
+
+      {nodeState && (
+
+        <button
+
+          onClick={() => onSelect("node-state")}
+
+          disabled={isPending || nodeState.disabled}
+
+          style={{
+            textAlign: "left",
+            padding: "8px 12px",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+          }}
+
+        >
+          Show node state
+        </button>
+
+      )}
 
       {nodeActions.map(nodeAction => (
 

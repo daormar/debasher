@@ -559,6 +559,80 @@ def test_a_round_that_did_not_close_names_its_nodes(tmp_path, monkeypatch):
     assert response.pendingNodes == ["Sink", "Relay:1"]
 
 
+# --- inspecting a node ----------------------------------------------------------------
+
+
+def _inspect(program, process, command, **fields):
+    return execution.inspect_node(
+        execution.InspectNodeRequest(program=program, processName=process, command=command, **fields)
+    )
+
+
+def _write_external(program, fifo, payload):
+    path = Path(program.outputDir) / "__fifos__" / "Relay" / fifo
+    subprocess.run(
+        ["bash", "-c", 'printf "%s\n" "$1" > "$2"', "_", f'{{"type": "DATA", "payload": {payload}}}', str(path)],
+        check=True,
+        timeout=30,
+    )
+
+
+@_needs_engine
+def test_the_state_of_a_node_is_read_by_the_engine_tool(tmp_path):
+    program = _relay(tmp_path)
+    relay, sink = program.processes[:2]
+    relay.nodeCode.processData = 'self.send_data("outf", packet)'
+    sink.nodeCode.processData = "pass"
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        _write_external(program, "relay_ext", '"a1"')
+        epoch = execution.take_snapshot(program).epoch
+        assert epoch is not None
+
+        summary = _inspect(program, "Relay", "summary")
+        checkpoint = _inspect(program, "Relay", "checkpoint", epoch=epoch)
+        every_port = _inspect(program, "Relay", "log")
+        one_port = _inspect(program, "Relay", "log", port="ext")
+
+        assert summary.error is None
+        assert summary.result["task_state"] == "alive"
+        assert [c["epoch"] for c in summary.result["checkpoints"]] == [epoch]
+        assert checkpoint.result["readable"]
+        assert checkpoint.result["epoch"] == epoch
+        assert {r["port"] for r in every_port.result["records"]} == {"ext", "trigger"}
+        assert [(r["port"], r["payload"]) for r in one_port.result["records"]] == [("ext", "a1")]
+    finally:
+        _hard_kill(program)
+
+
+@_needs_engine
+def test_an_error_of_the_engine_tool_comes_back_without_the_loading_lines(tmp_path):
+    program = _relay(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+
+        supervisor = _inspect(program, "Sup", "summary")
+        no_checkpoint = _inspect(program, "Relay", "checkpoint", epoch=1)
+
+        assert supervisor.result is None
+        assert supervisor.error.startswith("Error: Sup is the Supervisor, which keeps no node state")
+        assert "Loading module" not in supervisor.error
+        assert "retains no checkpoint of epoch 1" in no_checkpoint.error
+    finally:
+        _hard_kill(program)
+
+
+def test_a_checkpoint_is_asked_for_by_its_epoch(tmp_path):
+    with pytest.raises(execution.HTTPException) as raised:
+        _inspect(_relay(tmp_path), "Relay", "checkpoint")
+
+    assert raised.value.status_code == 422
+
+
 # --- relaunching a node without a Supervisor ---------------------------------------
 
 

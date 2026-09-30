@@ -21,6 +21,7 @@ import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
 import { showsGeneralIndicator } from "../models/generalRun";
 import { hasSupervisor } from "../models/node";
+import { offersShowNodeState, wasLaunched } from "../models/nodeState";
 import {
   offersRelaunchNode,
   offersRestartNode,
@@ -62,6 +63,7 @@ import RunStatusIndicator from "./RunStatusIndicator";
 import ProcessContextMenu, { type NodeAction, type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
 import ProcessTaskPicker from "./ProcessTaskPicker";
 import CommandOutputModal from "./CommandOutputModal";
+import NodeStateModal from "./NodeStateModal";
 import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
 import ProgramFilesPanel from "./ProgramFilesPanel";
@@ -80,6 +82,7 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   ...OUTPUT_KIND_LABEL,
   io: "inputs and outputs",
   "watch-fifo": "mirrored fifo output",
+  "node-state": "node state",
   stop: "process stop",
   restart: "node restart",
   relaunch: "node relaunch",
@@ -441,6 +444,10 @@ export default function ProgramCanvas() {
     taskIndex?: number;
   } | null>(null);
 
+  // "Show node state" on a node of a resident program.
+  const [nodeState, setNodeState] =
+    useState<{ process: ProgramProcess; taskIndex?: number } | null>(null);
+
   // Set instead of opening fifoWatch directly whenever a process has
   // more than one mirrored output fifo option, mirrors
   // processTaskPicker's own "pick first" pattern.
@@ -668,6 +675,8 @@ export default function ProgramCanvas() {
 
       if (action === "io") {
         setProcessIO(await fetchProcessIO(process, taskIndices[0]));
+      } else if (action === "node-state") {
+        setNodeState({ process, taskIndex: taskIndices[0] });
       } else if (action === "watch-fifo") {
         openFifoWatch(process, taskIndices[0]);
       } else {
@@ -772,6 +781,8 @@ export default function ProgramCanvas() {
     try {
       if (kind === "io") {
         setProcessIO(await fetchProcessIO(process, taskIndex));
+      } else if (kind === "node-state") {
+        setNodeState({ process, taskIndex });
       } else if (kind === "watch-fifo") {
         openFifoWatch(process, taskIndex);
       } else if (kind === "stop" || kind === "restart" || kind === "relaunch") {
@@ -892,6 +903,12 @@ export default function ProgramCanvas() {
           x={processContextMenu.x}
           y={processContextMenu.y}
           isPending={isProcessOutputPending}
+          isResident={isResident}
+          nodeState={
+            isResident && offersShowNodeState(processContextMenu.process)
+              ? { disabled: !wasLaunched(processStatuses[processContextMenu.process.name]) }
+              : undefined
+          }
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
           nodeActions={nodeActionsOf(processContextMenu.process)}
@@ -1019,6 +1036,14 @@ export default function ProgramCanvas() {
             </div>
           </div>
         </div>
+      )}
+
+      {nodeState && (
+        <NodeStateModal
+          process={nodeState.process}
+          taskIndex={nodeState.taskIndex}
+          onClose={() => setNodeState(null)}
+        />
       )}
 
       {fifoWatch && (

@@ -1927,6 +1927,9 @@ that outlives the tab".
 
 ## Observing and talking to a live program
 
+*In progress: "Show node state" is built; "Show batch runs" and "Talk to FIFOs"
+are not.*
+
 A resident program is observed through the same process statuses as a general
 one, and through what each node keeps in its execdir: its checkpoints, its
 input log and its halted marker. This subsection says which actions of
@@ -1977,12 +1980,32 @@ a node, shows what the node keeps in its execdir, read only, in three views:
   the figures that warn of a coming failure: with no rounds, the input log
   grows until its cap stops the node, with a reader that does not read, the
   outbound backlog grows until it does, and a node with a dead thread shows as
-  `IN-PROGRESS` while it does nothing.
+  `IN-PROGRESS` while it does nothing. A node info file older than two
+  heartbeat intervals has stopped being written: in a node that is alive,
+  this means that it is still replaying its input log or that its heartbeat
+  thread has died, and the summary marks it; in a node that is not alive, it
+  is simply the file of its latest incarnation, shown unmarked.
 - The checkpoints: the list of those that the node retains and, for the one
   chosen, its `node_state`, formatted, together with the messages in transit
   that it holds, `channel_state` and `out_backlog`, counted by port.
 - The input log: its latest records, which the user can filter by port, cut
-  at the same number of lines as the other outputs.
+  at the same number of lines as the other outputs. The records above the
+  `capture_pos` of the latest checkpoint are marked. The ports to filter by
+  are the input ports that the program model knows (its external inputs and
+  its connected inputs, named as the input log records them: the option name
+  without its leading dash), together with the ports of the records read,
+  which add the control port of an initiator, not in the model.
+
+The action is offered on every node but the `Supervisor`, which keeps no node
+state, and enabled once the node has been launched, whatever the run phase: a
+stopped node keeps what it held, which is when it is most worth reading. The
+summary marks a figure only when it crosses a limit that the engine sets (a
+node that is down, a dead thread, a live node whose node info file is older
+than two heartbeat intervals, an outbound backlog over the size above which
+checkpoints are skipped, skipped checkpoints, an input log at its cap or that
+cannot be read), never a threshold that the web UI sets. Each view is read
+when it is shown and again when the user asks, never polled, so that a view
+left open does not start the engine tool every few seconds.
 
 The backend reads none of these files itself. An engine tool,
 `debasher_inspect_resident -d <output directory> -p <process> [-t <index>]`,

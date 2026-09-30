@@ -1,3 +1,4 @@
+import type { InspectNodeCommand } from "../models/nodeState";
 import type { Program } from "../models/program";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
@@ -360,6 +361,31 @@ export async function getProcessResolvedOptions(
 
   const { values } = await response.json();
   return values;
+}
+
+// What a node of a resident program keeps in its execdir, read by
+// debasher_inspect_resident for "Show node state": what the tool printed,
+// parsed, or the error it reported (a node that keeps no node state, a
+// checkpoint that the node no longer retains).
+export async function inspectNode<T>(
+  program: Program,
+  processName: string,
+  taskIndex: number | undefined,
+  command: InspectNodeCommand
+): Promise<{ result: T | null; error: string | null }> {
+  const response = await fetch("/api/execution/inspect-node", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, taskIndex, ...command }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await errorDetail(response, `Failed to inspect node ${processName}.`)
+    );
+  }
+
+  return response.json();
 }
 
 export type PathInspection =

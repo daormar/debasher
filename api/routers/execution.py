@@ -1,10 +1,11 @@
+import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -811,6 +812,72 @@ def get_process_resolved_options(request: ProcessOutputRequest) -> ProcessResolv
         request.program.outputDir, request.processName, request.taskIndex
     )
     return ProcessResolvedOptionsResponse(values=_parse_opts_file(opts_path))
+
+
+class InspectNodeRequest(BaseModel):
+    program: Program
+    processName: str
+    # One task of an array or generator process (see /process-tasks); omit
+    # for a process that runs as one node.
+    taskIndex: int | None = None
+    command: Literal["summary", "checkpoint", "log"]
+    # The epoch of the checkpoint, for "checkpoint".
+    epoch: int | None = None
+    # The input port whose records "log" keeps; omit for every port.
+    port: str | None = None
+
+
+class InspectNodeResponse(BaseModel):
+    # What debasher_inspect_resident printed, parsed; None on an error.
+    result: Any = None
+    error: str | None = None
+
+
+def _inspect_node_command_args(request: InspectNodeRequest) -> list[str]:
+    if request.command == "checkpoint":
+        if request.epoch is None:
+            raise HTTPException(status_code=422, detail="The checkpoint command needs an epoch.")
+        return ["checkpoint", str(request.epoch)]
+    if request.command == "log":
+        # The latest records, cut at the same number of lines as the other
+        # outputs.
+        args = ["log", "--last", str(file_inspection.MAX_INSPECT_LINES)]
+        if request.port is not None:
+            args += ["--port", request.port]
+        return args
+    return ["summary"]
+
+
+@router.post("/inspect-node", response_model=InspectNodeResponse)
+def inspect_node(request: InspectNodeRequest) -> InspectNodeResponse:
+    """
+    What a node of a resident program keeps in its execdir, for "Show node
+    state": debasher_inspect_resident reads it and prints it as JSON, and
+    the backend reads none of those files itself. An error of the tool (a
+    node that keeps no node state, a checkpoint that the node no longer
+    retains) comes back as `error`, without the lines with which the engine
+    reports loading the module.
+    """
+    tool = paths.find_bin_tool("debasher_inspect_resident")
+    if tool is None:
+        return InspectNodeResponse(error="Error: debasher_inspect_resident tool not found.")
+
+    command = [str(tool), "-d", request.program.outputDir, "-p", request.processName]
+    if request.taskIndex is not None:
+        command += ["-t", str(request.taskIndex)]
+    command += _inspect_node_command_args(request)
+
+    result = subprocess.run(command, env=_debasher_env(request.program), capture_output=True, text=True)
+
+    if result.returncode != 0:
+        messages = [line for line in result.stderr.splitlines() if not line.startswith("Loading module ")]
+        error = "\n".join(messages).strip() or f"debasher_inspect_resident ended with exit code {result.returncode}."
+        return InspectNodeResponse(error=_cap_lines(error))
+
+    try:
+        return InspectNodeResponse(result=json.loads(result.stdout))
+    except json.JSONDecodeError:
+        return InspectNodeResponse(error=_cap_lines(f"debasher_inspect_resident printed no JSON:\n{result.stdout}"))
 
 
 class InspectPathRequest(BaseModel):
