@@ -177,8 +177,8 @@ do the entries below that refer to it.
   (`<process_name>_<idx>.id`, `.sched_out`, ...). A task gets its index too,
   exported as `DEBASHER_PROCESS_TASK_IDX` (empty for a process that is not an
   array), and adds `_<idx>` to the name of everything it keeps there:
-  `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>`, `control_ports_<idx>` and
-  `node_info_<idx>` (`_execdir_entry`).
+  `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>`, `control_ports_<idx>`,
+  `node_info_<idx>` and `notice_<idx>` (`_execdir_entry`).
 - **limits of a node**: `INPUT_LOG_MAX_BYTES`, `OUT_BACKLOG_MAX_BYTES`,
   `OUT_BACKLOG_FAIL_BYTES` and `GIL_SWITCH_INTERVAL_SECS`, class attributes of
   `FBPProcess` that a module can redefine and that the computational
@@ -398,6 +398,15 @@ do the entries below that refer to it.
   anywhere else, such as its limits in force and the size of its outbound
   backlog. It is not part of the state of the node (see
   "`debasher_inspect_resident`: what a node keeps").
+- **notice**: one message, with a level (`info` or `warning`), that the code of
+  a node leaves for whoever watches the program with `set_notice()` and takes
+  away with `clear_notice()`, saying how the node is now, such as that its
+  configuration file is missing. A node has at most one, which the next
+  replaces; it is not a log, not part of the state of the node, and not sent on
+  any channel (see "Notices").
+- **notice file**: the file `notice` (`notice_<idx>` for a task of an array, see
+  execdir), a JSON object in which a node keeps its notice, written atomically
+  in its own `execdir`, and removed when the node has none.
 
 ## Failure and recovery
 
@@ -1204,6 +1213,56 @@ module whose files are complete in another way (a companion file, a rename at
 the end of a copy) redefines `is_complete()`; `request_for()` makes the
 request from the path.
 
+## Notices
+
+A node sometimes has something to tell the person who watches the program that
+is neither a message on a channel, which goes to another node, nor a line of
+its log, which nobody reads until something has gone wrong: that its
+configuration file is missing and it does nothing until it appears, or that the
+service it forwards to does not answer. The code of the node, which the module
+writes, leaves such a message with `set_notice(text, level="info")`, and takes
+it away with `clear_notice()`.
+
+- **One notice, not a log.** A node has at most one notice, kept in its notice
+  file (see the Glossary), and a new one replaces the previous one, so that the
+  notice says how the node is now and never grows. `level` is `info` or
+  `warning`, anything else being an error. The text is cut at `NOTICE_MAX_CHARS`
+  characters, 1000, with a warning in the log, since a notice that is too long
+  is a fault of the code of the node, not a reason to stop it. The file holds
+  `{"level": ..., "text": ..., "set_at": ...}`, `set_at` being the time at which
+  the notice was set.
+- **From any hook and any thread.** Any hook may set or clear it, `observe()`
+  included. The node keeps a copy of its notice in memory and writes the file
+  into a temporary file renamed into place, the comparison, the write and the
+  rename under one lock: a reader finds the previous notice or the new one,
+  never a part of either, the file always holds the notice that was set last,
+  and setting the notice that the node already has writes nothing.
+- **Not state.** The notice is in no checkpoint, rounds ignore it, it travels on
+  no channel, and nothing in the node reads it back: it only reports.
+  `debasher_reset_resident` takes it away with the rest, since it speaks of a
+  node whose state is gone (see "`debasher_reset_resident`: a clean start").
+- **Each incarnation starts with none.** `run()` removes the notice file before
+  `restore_node_state()`, so that a notice of an earlier incarnation, about a
+  fault fixed since or a file that has appeared since, never outlives it. What
+  the code of the node sets during the startup, in `restore_node_state()`,
+  `initialize_runtime()` or the replay of its input log, is set again. A notice
+  that follows from the node state and that `process_data` set before the latest
+  checkpoint is not, since the replay starts after that checkpoint: the node
+  sets it again in `restore_node_state()`, from the state it restores. A notice
+  set in `restore_node_state()` or `initialize_runtime()` is written at once;
+  during the replay that follows, the runtime keeps only the last `set_notice()`
+  or `clear_notice()` asked for, and applies it once the replay ends, so that a
+  long replay costs one write.
+
+The notice is read from outside: `debasher_inspect_resident` gives it in the
+summary of a node and, for every node of a program at once, with its command
+`notices` (see "`debasher_inspect_resident`: what a node keeps"), and the web UI
+marks the canvas node that has one (see "Observing and talking to a live
+program" in `doc/design_doc_webui.md`). The `Supervisor` has no notice, and the
+classes of the runtime library set none of their own: a `DirectoryWatcher` that
+waits for files says nothing, and a module that wants it to derives from it and
+sets one.
+
 ## State capture and checkpoint schema
 
 - `capture_node_state()`: only serializable logical state, never runtime
@@ -1244,16 +1303,16 @@ none, it starts with default values. The distinction between "first time" and
 not by a decision the process itself makes.
 
 Single sequence, implemented exactly this way in `run()`: open every FIFO by
-known name -> look for the most recent checkpoint -> (if found)
-`restore_node_state()`, otherwise default values -> `initialize_runtime()`
-(always invoked, same code whether or not state was restored) -> open the
-input log and replay it after the checkpoint's `capture_pos`, all of it if
-there was no checkpoint (see "Input log") -> `start_threads()` (starts every
-worker thread) -> wait until told to stop -> stop every thread. The FIFOs
-come first because a node holds a FIFO only from the moment it opens it,
-and restoring and replaying can take a while: if a neighbor that was the
-only holder of a FIFO crashed during that time, what it had sent would be
-destroyed with it.
+known name -> remove the notice of the previous incarnation (see "Notices") ->
+look for the most recent checkpoint -> (if found) `restore_node_state()`,
+otherwise default values -> `initialize_runtime()` (always invoked, same code
+whether or not state was restored) -> open the input log and replay it after the
+checkpoint's `capture_pos`, all of it if there was no checkpoint (see "Input
+log") -> `start_threads()` (starts every worker thread) -> wait until told to
+stop -> stop every thread. The FIFOs come first because a node holds a FIFO only
+from the moment it opens it, and restoring and replaying can take a while: if a
+neighbor that was the only holder of a FIFO crashed during that time, what it
+had sent would be destroyed with it.
 
 **Important consequence**: launching a process for the first time and
 relaunching it after a failure are the same operation, with no distinction. The
@@ -2295,13 +2354,14 @@ closes no epoch, prunes nothing and ends at the size cap of its input logs
 
 `debasher_reset_resident -d <outdir> [--delete]`
 (`engine/debasher_reset_resident.sh`, installed in `bin`) resets a stopped
-resident program, so that the next `debasher_exec` on the same output
-directory starts every node as on its first run. A node keeps its state across
-runs in files that the engine does not reset (see "Ordered shutdown"): its
-checkpoints, its input log and its halted marker, in its execdir (Glossary),
-and the output directory of its process. The tool takes all of them away, for
-every task of every process, the `Supervisor` included, and leaves the output
-directory of each process empty, as the engine leaves it before a first run.
+resident program, so that the next `debasher_exec` on the same output directory
+starts every node as on its first run. A node keeps its state across runs in
+files that the engine does not reset (see "Ordered shutdown"): its checkpoints,
+its input log and its halted marker, in its execdir (Glossary), and the output
+directory of its process. The tool takes all of them away, and the notice of the
+node with them (see "Notices"), for every task of every process, the
+`Supervisor` included, and leaves the output directory of each process empty, as
+the engine leaves it before a first run.
 
 - **The whole program, never one node.** A node that starts afresh numbers
   its channels from the start again (G5), and a reader that kept its own
@@ -2320,13 +2380,19 @@ directory of each process empty, as the engine leaves it before a first run.
 
 ## `debasher_inspect_resident`: what a node keeps
 
-`debasher_inspect_resident -d <outdir> -p <process> [-t <idx>] <command>`
-(`engine/debasher_inspect_resident.sh`, installed in `bin`) prints, as one
-JSON object on its standard output, what one node of a resident program keeps
-in its execdir: its checkpoints, its input log, its halted marker and its node
-info file, and, for a launcher node, the state of its batch runs. It serves a
-person at the command line as well as the web UI, which shows what it prints
-(see "Observing and talking to a live program" in `doc/design_doc_webui.md`).
+```
+debasher_inspect_resident -d <outdir> -p <process> [-t <idx>] <command>
+debasher_inspect_resident -d <outdir> notices
+```
+
+The tool (`engine/debasher_inspect_resident.sh`, installed in `bin`) prints, as
+one JSON object on its standard output, what one node of a resident program
+keeps in its execdir: its checkpoints, its input log, its halted marker, its
+node info file and its notice, and, for a launcher node, the state of its batch
+runs. The second form prints the notices of every node of the program at once.
+It serves a person at the command line as well as the web UI, which shows what
+it prints (see "Observing and talking to a live program" in
+`doc/design_doc_webui.md`).
 
 - **One node.** `-d`, `-p` and `-t` are those of `debasher_get_stdout`. The
   tool loads the program from its output directory, as the other tools do,
@@ -2351,12 +2417,12 @@ person at the command line as well as the web UI, which shows what it prints
   - a checkpoint of another schema version is reported as such, with its
     version, and nothing else of it is read.
 - **Each file whole, not a cut.** A node writes its checkpoints, its halted
-  marker and its node info file into a temporary file renamed into place, and
-  appends whole lines to its input log, so the tool reads each file as the
-  node left it at some moment. It does not read them all at the same moment,
-  though: in a live node a round may close, or a segment be pruned, between
-  two of them. What it prints is the state of each file, not a consistent
-  state of the node.
+  marker, its node info file and its notice file into a temporary file renamed
+  into place, and appends whole lines to its input log, so the tool reads each
+  file as the node left it at some moment. It does not read them all at the same
+  moment, though: in a live node a round may close, or a segment be pruned,
+  between two of them. What it prints is the state of each file, not a
+  consistent state of the node.
 - **The node info file.** Part of what the tool shows lives only in the memory
   of the node: the limits in force, which the class of the node and the
   computational specifications of its process decide (see "Limits of a
@@ -2422,6 +2488,8 @@ The commands:
     seconds, or `null` if the node has never written one. `stale` is true when
     the file is older than two heartbeat intervals, as it is in a node that is
     down, still replaying, or whose heartbeat thread has died.
+  - `notice`: the notice of the node (see "Notices"), its level, its text and
+    when it was set, or `null` without one.
 - **`checkpoint <epoch>`**: one checkpoint that the node retains: its path, the
   time at which it was written, its schema version and `readable`, whether
   that is the version of the runtime library. A readable one also gives
@@ -2453,12 +2521,18 @@ The commands:
   has written its exit code. The rule asks `debasher_status` about some run
   directories, which the tool does once for each, where the node spaces its
   questions out, so `runs` takes longer with many batch runs in progress.
+- **`notices`**: with `-d` alone, since it covers the whole program, the notice
+  of every node that has one, sorted by the name of its process and by its task
+  index: its process, its task index (`null` except for a task of an array) and
+  its notice. The `Supervisor` is skipped, and so is a node without a notice or
+  not launched yet. It loads the program once and reads one small file for each
+  node, so the web UI can run it every time it reads the process statuses.
 
 The tool ends with 0 once it has printed, and with 1, and a message, on an
 error of usage or setup: a program that is not a resident one, a process or an
-index that it refuses (see above), an epoch that the node does not retain, or
+index that it refuses (see above), an epoch that the node does not retain,
 `runs` on a node that is not a launcher node or has never written its node
-info file.
+info file, `notices` with `-p` or `-t`, or another command without `-p`.
 
 # Channel kinds declared with the fifo
 

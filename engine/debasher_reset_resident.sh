@@ -23,7 +23,7 @@
 # keeps its state across runs in its checkpoints, its input log and its
 # halted marker, in the process's own __exec__ directory, and in the output
 # directory of the process, none of which the engine resets. This tool sets
-# all of them aside, under __reset__/<timestamp>/ in the output directory of
+# all of them aside, and the notice of the node with them, under __reset__/<timestamp>/ in the output directory of
 # the program, or deletes them with --delete. It resets the whole program,
 # never one node: a node that starts afresh numbers the messages of its
 # channels from the start again, and a reader that kept its own state would
@@ -135,10 +135,10 @@ num_tasks_of_process()
 
 ########
 # Prints, one per line, the paths that hold the state of the nodes of process
-# $2: in the process's __exec__ directory, the checkpoints, the input log and
-# the halted marker of each task, named as the node's runtime names them (see
-# _execdir_entry in engine/debasher_runtime_transport.py), and the output
-# directory of the process. Only the paths that exist.
+# $2: in the process's __exec__ directory, the checkpoints, the input log, the
+# halted marker and the notice of each task, named as the node's runtime names
+# them (see _execdir_entry in engine/debasher_runtime_transport.py), and the
+# output directory of the process. Only the paths that exist.
 state_paths_of_process()
 {
     local absdirname=$1
@@ -154,7 +154,7 @@ state_paths_of_process()
             if [ "${num_tasks}" -gt 1 ]; then
                 suffix="_${idx}"
             fi
-            for name in checkpoints log halted; do
+            for name in checkpoints log halted notice; do
                 if [ -e "${execdir}/${name}${suffix}" ]; then
                     echo "${execdir}/${name}${suffix}"
                 fi

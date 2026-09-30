@@ -123,6 +123,35 @@ def test_the_tasks_of_an_array_process(outdir):
     assert "not an array process" in not_an_array.stderr
 
 
+def _put_notice(outdir, process, name, text):
+    """A notice file as a node leaves it (see set_notice): what `notices`
+    reads is the file, whichever code wrote it."""
+    path = os.path.join(outdir, "__exec__", process, name)
+    with open(path, "w") as f:
+        json.dump({"level": "warning", "text": text, "set_at": 1.0}, f)
+
+
+def test_the_notices_of_every_node_in_order_of_process_and_task(outdir):
+    launch(ENGINE_TEST_DIR / "debasher_array_ref.sh", outdir)
+    assert wait_until(
+        lambda: os.path.exists(os.path.join(outdir, "__exec__", "worker", "node_info_2"))
+    )
+    _put_notice(outdir, "worker", "notice_2", "task two")
+    _put_notice(outdir, "worker", "notice_0", "task zero")
+    _put_notice(outdir, "collect", "notice", "collecting")
+
+    result = inspected(outdir, "notices")
+
+    assert [(n["process"], n["task"], n["text"]) for n in result["notices"]] == [
+        ("collect", None, "collecting"),
+        ("worker", 0, "task zero"),
+        ("worker", 2, "task two"),
+    ]
+    with_process = inspect(outdir, "-p", "worker", "notices")
+    assert with_process.returncode == 1
+    assert "-p and -t do not apply" in with_process.stderr
+
+
 def test_the_batch_runs_of_a_launcher_node_and_what_the_tool_refuses(outdir):
     launch(ENGINE_TEST_DIR / "debasher_launcher_ref.sh", outdir)
     assert _started(outdir, "launch")
@@ -153,3 +182,8 @@ def test_the_batch_runs_of_a_launcher_node_and_what_the_tool_refuses(outdir):
     assert no_epoch.returncode == 1
     no_command = inspect(outdir, "-p", "sink")
     assert no_command.returncode == 1
+
+    # The Supervisor has no notice, whatever its execdir holds.
+    _put_notice(outdir, "sup", "notice", "not a node")
+    _put_notice(outdir, "sink", "notice", "a node")
+    assert [n["process"] for n in inspected(outdir, "notices")["notices"]] == ["sink"]

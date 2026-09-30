@@ -38,6 +38,11 @@ from debasher_runtime_envelope import (
 from debasher_runtime_transport import _PortWorker, _STOP
 from debasher_runtime_inputlog import LogCapReached, _InputLog
 
+# What a replay has asked of the notice so far when it has asked nothing
+# (see FBPProcess._replayed_notice), which None, a request to clear it,
+# cannot stand for.
+_NO_NOTICE_REQUEST = object()
+
 
 #####################
 # FBPProcess        #
@@ -136,6 +141,10 @@ class FBPProcess(_PortWorker):
     # machine.
     OUT_BACKLOG_MAX_BYTES = 8 * 1024 * 1024
     OUT_BACKLOG_FAIL_BYTES = 64 * 1024 * 1024
+    # The notice of a node (see set_notice): its levels, and the length at
+    # which its text is cut.
+    NOTICE_LEVELS = ("info", "warning")
+    NOTICE_MAX_CHARS = 1000
 
     # The class of the runtime library that a node derives from, which its
     # node info file names (see _write_node_info): a subclass in the runtime
@@ -302,8 +311,17 @@ class FBPProcess(_PortWorker):
         # Whether the node is replaying its input log (see
         # _replay_input_log). Internal: a module never sees it, so that
         # neither its node state nor what it sends can depend on it; sleep()
-        # is what uses it.
+        # and set_notice() are what use it.
         self._replaying = False
+        # The notice of the node as its notice file holds it, {"level",
+        # "text"}, or None without one, and what a replay asked for last,
+        # applied once it ends (_NO_NOTICE_REQUEST while it asked nothing).
+        # The comparison with it, the write of the file and its rename go
+        # under _notice_lock, so that the file always holds the notice that
+        # was set last, whatever thread set it.
+        self._notice = None
+        self._replayed_notice = _NO_NOTICE_REQUEST
+        self._notice_lock = threading.Lock()
 
     def _port_field_value(self, attribute, items):
         """
@@ -371,6 +389,10 @@ class FBPProcess(_PortWorker):
         # process holds it open, which during that time may be the neighbor
         # alone: if it crashed too, everything it had sent would be destroyed.
         self._open_fifos()
+
+        # Each incarnation starts with no notice: one of an earlier
+        # incarnation may speak of a fault fixed since.
+        self._remove_notice_file()
 
         checkpoint = self._load_latest_checkpoint()
         capture_pos = 0
@@ -812,6 +834,88 @@ class FBPProcess(_PortWorker):
         if self._replaying:
             return
         self._stop_requested.wait(seconds)
+
+    # -- the notice --
+
+    def set_notice(self, text, level="info"):
+        """
+        Leaves a notice for whoever watches the program, such as that the
+        configuration file of the node is missing: one message, which
+        replaces the one the node had, in its notice file (see "Notices" in
+        the design doc). `level` is "info" or "warning"; a text longer than
+        NOTICE_MAX_CHARS is cut, with a warning in the log. Allowed from any
+        hook and any thread. It is not part of the node state, and each
+        incarnation starts without one, so a notice that follows from the
+        node state is set again in restore_node_state(). While the node
+        replays its input log only the last request counts, applied once
+        the replay ends.
+        """
+        if level not in self.NOTICE_LEVELS:
+            raise ValueError(
+                f"{type(self).__name__}: the level of a notice is one of {list(self.NOTICE_LEVELS)}, "
+                f"not {level!r}"
+            )
+        text = str(text)
+        if len(text) > self.NOTICE_MAX_CHARS:
+            self.log.warning(
+                "the text of a notice has %d characters, cut at NOTICE_MAX_CHARS (%d)",
+                len(text),
+                self.NOTICE_MAX_CHARS,
+            )
+            text = text[: self.NOTICE_MAX_CHARS]
+        self._request_notice({"level": level, "text": text})
+
+    def clear_notice(self):
+        """Takes away the notice of the node, if it has one (see set_notice)."""
+        self._request_notice(None)
+
+    def _request_notice(self, notice):
+        with self._notice_lock:
+            if self._replaying:
+                self._replayed_notice = notice
+                return
+            self._write_notice(notice)
+
+    def _apply_replayed_notice(self):
+        """Applies what the replay that just ended asked for last, if
+        anything: a long replay costs one write."""
+        with self._notice_lock:
+            notice, self._replayed_notice = self._replayed_notice, _NO_NOTICE_REQUEST
+            if notice is not _NO_NOTICE_REQUEST:
+                self._write_notice(notice)
+
+    def _notice_path(self):
+        return self._execdir_entry("notice")
+
+    def _write_notice(self, notice):
+        """
+        Makes the notice file hold `notice`, or removes it for None, unless
+        it already does. Atomic (temp file + rename), like the node info
+        file. Called with _notice_lock held.
+        """
+        if notice == self._notice:
+            return
+        path = self._notice_path()
+        if notice is None:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        else:
+            os.makedirs(self._execdir(), exist_ok=True)
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w") as f:
+                json.dump({**notice, "set_at": time.time()}, f)
+            os.replace(tmp_path, path)
+        self._notice = notice
+
+    def _remove_notice_file(self):
+        with self._notice_lock:
+            try:
+                os.remove(self._notice_path())
+            except FileNotFoundError:
+                pass
+            self._notice = None
 
     def send_data(self, tag, payload):
         """
@@ -1380,6 +1484,7 @@ class FBPProcess(_PortWorker):
                 replayed += 1
         finally:
             self._replaying = False
+        self._apply_replayed_notice()
         if replayed:
             self.log.info(
                 "replayed %d records of the input log after position %s", replayed, capture_pos

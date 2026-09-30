@@ -130,6 +130,14 @@ def test_the_summary_of_a_node(execdir):
     assert info["out_backlog_bytes"] == {"outf": 12}
     assert info["age_secs"] < 5
     assert info["stale"] is False
+    assert result["notice"] is None
+
+
+def test_the_summary_gives_the_notice_of_the_node(execdir):
+    notice = {"level": "warning", "text": "the configuration file is missing", "set_at": 1790000000.5}
+    (execdir / "notice").write_text(json.dumps(notice))
+
+    assert _run(execdir, "summary")["notice"] == notice
 
 
 def test_a_node_info_file_older_than_two_heartbeats_is_stale(execdir):
@@ -342,6 +350,43 @@ def test_runs_on_a_node_that_is_not_a_launcher_is_an_error(execdir):
 def test_runs_on_a_node_that_never_started_is_an_error(tmp_path):
     with pytest.raises(inspect.InspectError, match="never written its node info file"):
         _run(tmp_path, "runs")
+
+
+# --- notices -------------------------------------------------------------------
+
+
+def test_the_notices_of_every_node_that_has_one_in_their_order(tmp_path):
+    relay, fanout = tmp_path / "relay", tmp_path / "fanout"
+    relay.mkdir()
+    fanout.mkdir()
+    (relay / "notice").write_text(json.dumps({"level": "info", "text": "waiting", "set_at": 1.0}))
+    (fanout / "notice_2").write_text(json.dumps({"level": "warning", "text": "task two", "set_at": 2.0}))
+
+    result = inspect.run_command(
+        [
+            "notices",
+            "--node", "fanout", "0", str(fanout),
+            "--node", "fanout", "2", str(fanout),
+            "--node", "relay", "-", str(relay),
+            "--node", "sink", "-", str(tmp_path / "sink"),
+        ]
+    )
+
+    assert result == {
+        "notices": [
+            {"process": "fanout", "task": 2, "level": "warning", "text": "task two", "set_at": 2.0},
+            {"process": "relay", "task": None, "level": "info", "text": "waiting", "set_at": 1.0},
+        ]
+    }
+
+
+def test_notices_of_no_node_is_an_empty_list():
+    assert inspect.run_command(["notices"]) == {"notices": []}
+
+
+def test_a_command_of_one_node_needs_the_node(execdir):
+    with pytest.raises(inspect.InspectError, match="--process"):
+        inspect.run_command(["--execdir", str(execdir), "summary"])
 
 
 # --- the command line ----------------------------------------------------------

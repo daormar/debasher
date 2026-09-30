@@ -17,9 +17,10 @@
 # *- bash -*
 #
 # Prints, as one JSON object, what one node of a resident program keeps in
-# its execdir: its checkpoints, its input log, its halted marker and its
-# node info file, and, for a launcher node, the state of its batch runs. It
-# only reads: it writes nothing, takes no lock and sends nothing to the
+# its execdir: its checkpoints, its input log, its halted marker, its node
+# info file and its notice, and, for a launcher node, the state of its batch
+# runs; or, with the command notices, the notices of every node of the
+# program. It only reads: it writes nothing, takes no lock and sends nothing to the
 # node, so it works the same on a live program as on a stopped one.
 #
 # This script finds the node in its program, and the state of its task;
@@ -45,6 +46,7 @@ print_desc()
 usage()
 {
     echo "debasher_inspect_resident -d <string> -p <string> [-t <int>] <command>"
+    echo "debasher_inspect_resident -d <string> notices"
     echo "                          [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
@@ -60,6 +62,8 @@ usage()
     echo "                          The latest records of the input log (100 by"
     echo "                          default), or of one port"
     echo "runs                      The batch runs of a launcher node"
+    echo "notices                   The notices of every node of the program (with"
+    echo "                          -d alone)"
 }
 
 ########
@@ -120,6 +124,14 @@ check_pars()
         fi
     fi
 
+    if [ ${#command_args[@]} -gt 0 ] && [ "${command_args[0]}" = "notices" ]; then
+        if [ ${p_given} -eq 1 ] || [ ${t_given} -eq 1 ]; then
+            echo "Error! notices covers the whole program: -p and -t do not apply" >&2
+            exit 1
+        fi
+        return 0
+    fi
+
     if [ ${p_given} -eq 0 ]; then
         echo "Error! -p parameter not given!" >&2
         exit 1
@@ -131,7 +143,7 @@ check_pars()
     fi
 
     if [ ${#command_args[@]} -eq 0 ]; then
-        echo "Error! no command given (summary, checkpoint, log or runs)" >&2
+        echo "Error! no command given (summary, checkpoint, log, runs or notices)" >&2
         exit 1
     fi
 }
@@ -246,6 +258,43 @@ inspect_resident_node()
 }
 
 ########
+# Prints the notices of every node of the program in $1: each task of each
+# process but the Supervisor, sorted by process name and task index, read by
+# debasher_inspect_node in one call. A process never launched has no node
+# yet, and so no notice.
+inspect_resident_notices()
+{
+    local dirname=$1
+    local absdirname=$(debasher::_get_absolute_path "${dirname}")
+
+    debasher::_resident_tool_load_program "${absdirname}" debasher_inspect_resident || return 1
+
+    local -a node_args=()
+    local processname role script_file num_tasks execdir idx
+    while IFS= read -r processname; do
+        role=$(debasher::_classify_resident_process_role "${processname}") || return 1
+        if [ "${role}" = "supervisor" ]; then
+            continue
+        fi
+        script_file=$(debasher::_get_script_filename "${absdirname}" "${processname}")
+        if [ ! -f "${script_file}" ]; then
+            continue
+        fi
+        num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_now_secs)") || return 1
+        execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
+        if [ "${num_tasks}" -eq 1 ]; then
+            node_args+=(--node "${processname}" "-" "${execdir}")
+        else
+            for (( idx = 0; idx < num_tasks; idx++ )); do
+                node_args+=(--node "${processname}" "${idx}" "${execdir}")
+            done
+        fi
+    done < <(printf '%s\n' "${!DEBASHER_PROGRAM_PROCESSES[@]}" | "${SORT}")
+
+    "${debasher_libexecdir}"/debasher_inspect_node notices "${node_args[@]}"
+}
+
+########
 
 if [ $# -eq 0 ]; then
     print_desc
@@ -256,6 +305,10 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-inspect_resident_node "${pdir}"
+if [ "${command_args[0]}" = "notices" ]; then
+    inspect_resident_notices "${pdir}"
+else
+    inspect_resident_node "${pdir}"
+fi
 
 exit $?

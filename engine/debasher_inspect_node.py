@@ -19,8 +19,9 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 # *- python -*
 
 # Prints, as one JSON object, what one node of a resident program keeps in its
-# execdir: the files half of debasher_inspect_resident, which finds the node
-# in its program, tells the state of its task and passes both on. It only
+# execdir, or the notices of every node of a program: the files half of
+# debasher_inspect_resident, which finds the nodes in their program, tells the
+# state of a task and passes both on. It only
 # reads, and reads each file by the rules with which the node reads it when
 # it recovers, with the code of the runtime library rather than a copy of
 # those rules.
@@ -133,6 +134,11 @@ class Node:
     def input_log(self):
         return _InputLogReader(self.entry("log"))
 
+    def notice(self):
+        """The notice of the node, as its notice file holds it, or None
+        without one."""
+        return _read_json(self.entry("notice"))
+
 
 # --- the commands -------------------------------------------------------------
 
@@ -170,6 +176,7 @@ def summary(node, process, task_state):
         "halted_epoch": node.halted_epoch(),
         "input_log": input_log,
         "node_info": info,
+        "notice": node.notice(),
     }
 
 
@@ -259,6 +266,22 @@ def runs(node, process_outdir, debasher_status):
 # --- the command line ---------------------------------------------------------
 
 
+def notices(nodes):
+    """The notice of every node of `nodes`, [(process, task index or None,
+    execdir)], in their order, skipping a node without one."""
+    result = []
+    for process, task_idx, execdir in nodes:
+        notice = Node(execdir, task_idx).notice()
+        if notice is not None:
+            result.append({"process": process, "task": task_idx, **notice})
+    return {"notices": result}
+
+
+def _node_arg(values):
+    process, task_idx, execdir = values
+    return process, None if task_idx == "-" else _non_negative_int(task_idx), execdir
+
+
 def _non_negative_int(text):
     value = int(text)
     if value < 0:
@@ -280,12 +303,13 @@ class _Parser(argparse.ArgumentParser):
 
 def build_arg_parser():
     parser = _Parser(prog="debasher_inspect_node", add_help=False)
-    parser.add_argument("--process", required=True)
+    # Required by every command but notices, which is given its nodes.
+    parser.add_argument("--process")
     parser.add_argument("--task-idx", type=_non_negative_int)
-    parser.add_argument("--task-state", required=True)
-    parser.add_argument("--execdir", required=True)
-    parser.add_argument("--process-outdir", required=True)
-    parser.add_argument("--debasher-status", required=True)
+    parser.add_argument("--task-state")
+    parser.add_argument("--execdir")
+    parser.add_argument("--process-outdir")
+    parser.add_argument("--debasher-status")
     commands = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
     commands.add_parser("summary", add_help=False)
     checkpoint_parser = commands.add_parser("checkpoint", add_help=False)
@@ -294,6 +318,12 @@ def build_arg_parser():
     log_parser.add_argument("--port")
     log_parser.add_argument("--last", type=_positive_int, default=100)
     commands.add_parser("runs", add_help=False)
+    notices_parser = commands.add_parser("notices", add_help=False)
+    # One node each: its process, its task index ("-" but in an array) and
+    # the execdir of its process.
+    notices_parser.add_argument(
+        "--node", nargs=3, action="append", default=[], metavar=("PROCESS", "TASK_IDX", "EXECDIR")
+    )
     return parser
 
 
@@ -301,6 +331,15 @@ def run_command(argv):
     """The JSON value that the command in `argv` prints. Raises InspectError
     on an error of usage or setup."""
     args = build_arg_parser().parse_args(argv)
+    if args.command == "notices":
+        return notices([_node_arg(values) for values in args.node])
+    missing = [
+        f"--{name.replace('_', '-')}"
+        for name in ("process", "task_state", "execdir", "process_outdir", "debasher_status")
+        if getattr(args, name) is None
+    ]
+    if missing:
+        raise InspectError(f"{args.command} needs {', '.join(missing)}")
     node = Node(args.execdir, args.task_idx)
     if args.command == "summary":
         return summary(node, args.process, args.task_state)
