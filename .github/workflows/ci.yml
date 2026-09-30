@@ -1,0 +1,110 @@
+# Builds DeBasher, runs its tests (make check) and installs it to check
+# the installation (make installcheck), on Linux and on macOS. Each job
+# installs the requirements as rtdocs/source/getstart.rst says for its
+# system, so the macOS job also checks those instructions.
+#
+# Tests that a runner cannot run skip themselves: those that need Slurm
+# (no sbatch here), the real runs of resident programs (only with
+# DEBASHER_RUN_CHAOS_TEST set), and, in make installcheck, the examples of
+# conda and Docker when these are not available.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the requirements (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf autoconf-archive automake libtool \
+            graphviz python3 python3-venv bats
+
+      # The Node.js of Ubuntu is older than the 22.12 that the frontend needs
+      - name: Install Node.js (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install the requirements (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install bash coreutils findutils gnu-sed grep gawk flock \
+            autoconf autoconf-archive automake libtool graphviz python node \
+            bats-core
+          BREW="$(brew --prefix)"
+          {
+            echo "$BREW/bin"
+            echo "$BREW/opt/coreutils/libexec/gnubin"
+            echo "$BREW/opt/findutils/libexec/gnubin"
+            echo "$BREW/opt/gnu-sed/libexec/gnubin"
+            echo "$BREW/opt/grep/libexec/gnubin"
+          } >> "$GITHUB_PATH"
+
+      - name: Show the tools found first in the PATH
+        run: |
+          bash --version | head -1
+          for tool in sed grep find timeout realpath flock awk python3 node; do
+            echo "$tool: $(command -v $tool)"
+          done
+
+      - name: Create the virtual environment of the API
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r api/requirements-dev.txt
+
+      - name: Configure
+        run: |
+          ./reconf
+          ./configure --prefix="$RUNNER_TEMP/debasher" PYTEST="$PWD/.venv/bin/pytest"
+
+      - name: Build
+        run: make
+
+      - name: Run the tests
+        run: make check
+
+      - name: Install
+        run: make install
+
+      - name: Check the installation
+        run: make installcheck
+
+      # The regular files only: the output directories of make installcheck
+      # hold FIFOs, which an upload would block on
+      - name: Collect the logs
+        if: failure()
+        run: |
+          find . "$HOME"/debasher_installcheck_* -type f \
+            \( -name config.log -o -path '*debasher_installcheck_*' \) \
+            -print0 2>/dev/null |
+            tar --null -czf "$RUNNER_TEMP/logs.tar.gz" -T - || true
+
+      - name: Upload the logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.os }}
+          path: ${{ runner.temp }}/logs.tar.gz
+          if-no-files-found: ignore
