@@ -119,9 +119,9 @@ it can also import a module written by hand.</p>
 
 <p>DeBasher has been coded using Bash shell-scripting and Python; its
 web interface is written in TypeScript, with React, and served by a
-Python server built on FastAPI. DeBasher is developed and tested on
-Linux, and also runs on Windows through WSL2. It should run on macOS,
-where it has not been tested yet. See the "Documentation and Support"
+Python server built on FastAPI. DeBasher is developed on Linux, is
+tested on Linux and on macOS, and also runs on Windows through WSL2.
+See the "Documentation and Support"
 section of these instructions if you experience problems during
 compilation.</p>
 
@@ -140,8 +140,8 @@ coreutils (<code>realpath</code> and <code>timeout</code> among them),
 <code>grep</code>, <code>sed</code>, <code>awk</code>
 and <code>find</code>, and <code>flock</code>, from util-linux.</li>
 <li>Graphviz, whose <code>dot</code> command draws the graphs of programs.</li>
-<li>The autotools, to configure the package: autoconf 2.71 or newer,
-automake, libtool and autoconf-archive.</li>
+<li>The autotools, to configure the package: autoconf 2.71 or newer and
+automake.</li>
 <li>For the web interface, which is optional: Node.js 22.12 or newer,
 with npm, to build it, and a Python virtual environment for its server
 (see <a href="#web-interface-setup">below</a>). Without
@@ -157,7 +157,7 @@ when given <code>--disable-frontend</code>.</li>
 
 <p>On Ubuntu (or Debian), the required packages are installed with:</p>
 
-<pre><code> $ sudo apt install autoconf autoconf-archive automake libtool graphviz python3 python3-venv
+<pre><code> $ sudo apt install autoconf automake graphviz python3 python3-venv
 </code></pre>
 
 <p>Bash, coreutils and util-linux are part of every installation. The
@@ -189,10 +189,10 @@ forwards the ports of <code>localhost</code> to Windows.</p>
 <h4>
 <a id="macos" class="anchor" href="#macos" aria-hidden="true"><span class="octicon octicon-link"></span></a>macOS</h4>
 
-<p><strong>DeBasher has not been tested on macOS yet.</strong> The steps
-below install everything that it needs, and make the command line tools
-that it finds behave as those of Linux do, which is the setting in which
-it is tested. If something still fails, please report it on
+<p>The steps below install everything that DeBasher needs, and make the
+command line tools that it finds behave as those of Linux do. They are
+the steps with which DeBasher is tested on macOS 15, on Apple silicon.
+If something fails, please report it on
 the <a href="https://github.com/daormar/debasher/issues">issue
 tracker</a>.</p>
 
@@ -207,7 +207,7 @@ tracker</a>.</p>
 <p>Install <a href="https://brew.sh/">Homebrew</a>, and with it the rest of the requirements:</p>
 
 <pre><code> $ brew install bash coreutils findutils gnu-sed grep gawk flock \
-     autoconf autoconf-archive automake libtool graphviz python node
+     autoconf automake graphviz python node
 </code></pre>
 
 <p>macOS ships Bash 3.2 and has no <code>flock</code>, and
@@ -240,8 +240,9 @@ and says whether they work.</p>
 </ol>
 
 <p>Mirror taps (the <code>--mirror</code> option
-of <code>define_fifo_opt</code>) rely on how Linux treats a FIFO opened
-for both reading and writing, and may not work on macOS.</p>
+of <code>define_fifo_opt</code>) rely on how Linux and macOS treat a
+FIFO opened for both reading and writing. On macOS, a mirror tap whose
+reader is gone takes a second longer to stop.</p>
 
 <h4>
 <a id="building-and-installing" class="anchor" href="#building-and-installing" aria-hidden="true"><span class="octicon octicon-link"></span></a>Building and Installing</h4>
@@ -347,7 +348,6 @@ containers, favoring reproducibility of results.</p>
   features that will be incorporated in a near future:</p>
 
 <ul>
-<li>Support for macOS, checked by running the tests of the package there.</li>
 <li>Support for additional workload schedulers.</li>
 </ul>
 
