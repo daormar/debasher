@@ -26,7 +26,7 @@ Requirements
   ``sed``, ``awk`` and ``find``, and ``flock``, from util-linux.
 * Graphviz, whose ``dot`` command draws the graphs of programs.
 * The autotools, to configure the package: autoconf 2.71 or newer and
-  automake.
+  automake; and ``make``, to build it.
 * For the web interface, which is optional (see the :ref:`webui`
   Section): Node.js 22.12 or newer, with npm, to build it, and a
   Python virtual environment for its server. Without npm,
@@ -43,7 +43,7 @@ On Ubuntu (or Debian), the required packages are installed with:
 
 ::
 
-    $ sudo apt install autoconf automake graphviz python3 python3-venv
+    $ sudo apt install autoconf automake make git graphviz python3 python3-venv
 
 Bash, coreutils and util-linux are part of every installation. The
 Node.js package of the distribution is usually older than 22.12; a

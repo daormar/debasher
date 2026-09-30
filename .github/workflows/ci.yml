@@ -1,7 +1,9 @@
 # Builds DeBasher, runs its tests (make check) and installs it to check
-# the installation (make installcheck), on Linux and on macOS. Each job
-# installs the requirements as rtdocs/source/getstart.rst says for its
-# system, so the macOS job also checks those instructions.
+# the installation (make installcheck), on Linux, on macOS and on Windows
+# under WSL2. Each job installs the requirements as
+# rtdocs/source/getstart.rst says for its system, so the jobs of macOS and
+# WSL2 also check those instructions. The job of WSL2 is experimental: it
+# does not fail the workflow.
 #
 # Tests that a runner cannot run skip themselves: those that need Slurm
 # (no sbatch here), the real runs of resident programs (only with
@@ -37,8 +39,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf automake graphviz python3 \
-            python3-venv bats
+          sudo apt-get install -y autoconf automake make git graphviz \
+            python3 python3-venv bats
 
       # The Node.js of Ubuntu is older than the 22.12 that the frontend needs
       - name: Install Node.js (Linux)
@@ -107,5 +109,110 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: logs-${{ matrix.os }}
+          path: ${{ runner.temp }}/logs.tar.gz
+          if-no-files-found: ignore
+
+  # Windows runs DeBasher inside WSL2, in an Ubuntu of its own, so every
+  # step but the first two runs there (the "wsl-bash" shell of
+  # setup-wsl), as an ordinary user, not root. The sources are cloned
+  # into the file system of Linux, as getstart.rst asks, and not taken
+  # from a checkout of Windows under /mnt, whose line endings and file
+  # system are those of Windows.
+  wsl2:
+    runs-on: windows-2025
+    continue-on-error: true
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: wsl-bash -u ci {0}
+    steps:
+      - name: Install Ubuntu in WSL2, with the requirements
+        uses: Vampire/setup-wsl@v7
+        with:
+          distribution: Ubuntu-24.04
+          wsl-version: 2
+          additional-packages: >-
+            autoconf automake make git graphviz python3 python3-venv
+            curl xz-utils bats
+
+      - name: Create an ordinary user
+        shell: wsl-bash -u root {0}
+        run: useradd --create-home --shell /bin/bash ci
+
+      # From nodejs.org, as getstart.rst says: the Node.js of Ubuntu is
+      # older than the 22.12 that the frontend needs
+      - name: Install Node.js
+        run: |
+          base=https://nodejs.org/dist/latest-v22.x
+          tarball=$(curl -fsSL "$base/SHASUMS256.txt" | grep -o 'node-v[0-9.]*-linux-x64\.tar\.xz' | head -1)
+          mkdir -p ~/node
+          curl -fsSL "$base/$tarball" | tar -xJ -C ~/node --strip-components=1
+
+      - name: Get the sources
+        run: |
+          git init -q ~/debasher
+          cd ~/debasher
+          git fetch -q --depth 1 "${{ github.server_url }}/${{ github.repository }}" "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+
+      - name: Show the system and the tools found first in the PATH
+        run: |
+          export PATH="$HOME/node/bin:$PATH"
+          uname -a
+          bash --version | head -1
+          for tool in sed grep find timeout realpath flock awk python3 node; do
+            echo "$tool: $(command -v $tool)"
+          done
+
+      - name: Create the virtual environment of the API
+        run: |
+          cd ~/debasher
+          python3 -m venv .venv
+          .venv/bin/pip install -r api/requirements-dev.txt
+
+      - name: Configure
+        run: |
+          export PATH="$HOME/node/bin:$PATH"
+          cd ~/debasher
+          ./reconf
+          ./configure --prefix="$HOME/prefix" PYTEST="$PWD/.venv/bin/pytest"
+
+      - name: Build
+        run: |
+          export PATH="$HOME/node/bin:$PATH"
+          cd ~/debasher && make
+
+      - name: Install
+        run: |
+          export PATH="$HOME/node/bin:$PATH"
+          cd ~/debasher && make install
+
+      - name: Run the tests
+        run: |
+          export PATH="$HOME/node/bin:$PATH"
+          cd ~/debasher && make check
+
+      - name: Check the installation
+        run: |
+          export PATH="$HOME/node/bin:$PATH"
+          cd ~/debasher && make installcheck
+
+      # Collected inside WSL2 and copied where the runner of Windows can
+      # upload them
+      - name: Collect the logs
+        if: failure()
+        run: |
+          cd ~/debasher
+          find . "$HOME"/debasher_installcheck_* -type f \
+            \( -name config.log -o -path '*debasher_installcheck_*' \) \
+            -print0 2>/dev/null |
+            tar --null -czf /tmp/logs.tar.gz -T - || true
+          cp /tmp/logs.tar.gz "$(wslpath -u '${{ runner.temp }}')/logs.tar.gz"
+
+      - name: Upload the logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-wsl2
           path: ${{ runner.temp }}/logs.tar.gz
           if-no-files-found: ignore
