@@ -88,12 +88,15 @@ falls back to the builtin scheduler, exactly as a from-source build would.
 
 ## Testing locally
 
+The release asset that `meta.yaml` names does not exist before the
+release, so `make_local_recipe.sh` writes a copy of the recipe whose source
+is a local tarball, with its sha256:
+
 ```bash
 mamba create -n bioconda-test -c conda-forge -c bioconda conda-build bioconda-utils -y
 conda activate bioconda-test
-# swap source: url: for a local "url: file:///path/to/debasher-<version>.tar.gz"
-# with a matching sha256 first, since the real release asset won't exist yet
-conda-build conda/ --croot /tmp/cbuild -c conda-forge --override-channels
+conda/make_local_recipe.sh debasher-<version>.tar.gz /tmp/recipe
+conda-build /tmp/recipe --croot /tmp/cbuild -c conda-forge --override-channels
 ```
 
 Every requirement comes from conda-forge, so the bioconda channel is not
@@ -111,6 +114,12 @@ conda create -n debasher-test -c /tmp/cbuild -c conda-forge debasher curl python
 conda activate debasher-test
 PREFIX="$CONDA_PREFIX" bash conda/run_test.sh
 ```
+
+The workflow `.github/workflows/conda.yml` does all of this on every push:
+it builds the tarball and the package on Linux, running the recipe's test,
+and then installs the package on macOS, on Apple silicon and on Intel,
+with Python 3.11, and runs `run_test.sh` there, without Homebrew's GNU
+tools in the `PATH`, so that the package has to bring its own.
 
 Watch out for stray `npm` on your `PATH` (nvm, an apt-installed Node,
 etc.): if the source tarball wasn't built with `make dist-vendored` (no

@@ -1,0 +1,118 @@
+# Builds the conda package of the bioconda recipe (conda/) on Linux, as
+# bioconda does, and checks it where it has to work too: the package is
+# noarch, so the one built on Linux is the one that macOS installs.
+#
+# The build job builds the release tarball with "make dist-vendored",
+# builds the recipe from it with conda-build, which also runs the
+# recipe's test, and passes the package on as a local channel. The
+# macOS jobs install it from that channel, with a Python other than the
+# one of the build, and run the recipe's test there.
+
+name: Conda package
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      # What "make dist-vendored" needs: configure, and npm to build the
+      # frontend that the tarball carries
+      - name: Install the requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake make graphviz python3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Build the release tarball
+        run: |
+          ./reconf
+          ./configure
+          make dist-vendored
+
+      - name: Install Miniforge, with conda-build
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/miniforge.sh" \
+            "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+          bash "$RUNNER_TEMP/miniforge.sh" -b -p "$RUNNER_TEMP/miniforge"
+          "$RUNNER_TEMP/miniforge/bin/conda" install -y -n base conda-build conda-index
+
+      - name: Build and test the package
+        run: |
+          conda/make_local_recipe.sh debasher-*.tar.gz "$RUNNER_TEMP/recipe"
+          "$RUNNER_TEMP/miniforge/bin/conda-build" "$RUNNER_TEMP/recipe" \
+            --croot "$RUNNER_TEMP/cbuild" --output-folder "$RUNNER_TEMP/channel" \
+            -c conda-forge --override-channels
+
+      # A channel has an index for each platform that installs from it,
+      # even an empty one: the package itself is under noarch
+      - name: Index the channel
+        run: |
+          mkdir -p "$RUNNER_TEMP"/channel/{osx-arm64,osx-64,linux-64}
+          "$RUNNER_TEMP/miniforge/bin/python" -m conda_index "$RUNNER_TEMP/channel"
+          ls -l "$RUNNER_TEMP"/channel/noarch
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: conda-channel
+          path: ${{ runner.temp }}/channel
+          if-no-files-found: error
+
+  macos:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        # Apple silicon (osx-arm64) and Intel (osx-64)
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      # For conda/run_test.sh
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: conda-channel
+          path: ${{ runner.temp }}/channel
+
+      - name: Install Miniforge
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/miniforge.sh" \
+            "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+          bash "$RUNNER_TEMP/miniforge.sh" -b -p "$RUNNER_TEMP/miniforge"
+
+      # Nothing of Homebrew's GNU tools is put first in the PATH, unlike
+      # in the CI workflow: the package has to bring its own
+      - name: Install the package
+        run: |
+          "$RUNNER_TEMP/miniforge/bin/conda" create -y -p "$RUNNER_TEMP/env" \
+            -c "file://$RUNNER_TEMP/channel" -c conda-forge --override-channels \
+            debasher curl python=3.11
+
+      - name: Run the recipe's test
+        run: |
+          source "$RUNNER_TEMP/miniforge/bin/activate" "$RUNNER_TEMP/env"
+          uname -m
+          bash --version | head -1
+          for tool in bash sed grep find timeout realpath flock awk dot python; do
+            echo "$tool: $(command -v $tool)"
+          done
+          PREFIX="$CONDA_PREFIX" bash conda/run_test.sh
