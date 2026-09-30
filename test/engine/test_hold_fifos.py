@@ -184,6 +184,7 @@ def test_the_supervisor_keeps_what_a_fifo_holds_when_both_of_its_nodes_die(tmp_p
 
 
 _RACE_LINE_SIZES = [50, 500, 3000, 6000, 12000]
+_RACE_READ_SIZES = [1000, 4096, 20000]
 
 
 def _fifo_capacity(tmp_path, chunk):
@@ -207,14 +208,18 @@ def _fifo_capacity(tmp_path, chunk):
     return size
 
 
-def _race_line_sizes(tmp_path):
+def _race_sizes(tmp_path):
     """
-    The sizes of the lines of _race_writer: those that a fifo holds at
-    least four of, so that what is left after a kill holds a complete line
-    whatever the capacity of a fifo on this system.
+    The capacity of a fifo on this system, and the sizes of the lines of
+    _race_writer and of the reads of _race_reader that fit it: a fifo
+    holds at least four lines, and a read takes at most a third of it. A
+    read then never empties a full fifo, and the two thirds left hold a
+    complete line, whatever the capacity of a fifo here.
     """
     capacity = _fifo_capacity(tmp_path, max(_RACE_LINE_SIZES))
-    return capacity, [size for size in _RACE_LINE_SIZES if size <= capacity // 4]
+    lines = [size for size in _RACE_LINE_SIZES if size <= capacity // 4]
+    reads = [size for size in _RACE_READ_SIZES if size <= capacity // 3]
+    return capacity, lines, reads
 
 
 def _race_writer(path, sizes):
@@ -227,10 +232,10 @@ def _race_writer(path, sizes):
         _write_all(wfd, _line(seq, random.choice(sizes)))
 
 
-def _race_reader(path):
+def _race_reader(path, sizes):
     rfd, _ = _open_fifo_reader(path)
     while True:
-        os.read(rfd, random.choice([1000, 4096, 20000]))
+        os.read(rfd, random.choice(sizes))
         time.sleep(random.uniform(0, 0.003))
 
 
@@ -245,21 +250,21 @@ def test_what_the_supervisor_holds_survives_both_nodes_killed_at_any_instant(tmp
     (what the dead writer was writing).
     """
     random.seed(seed)
-    capacity, sizes = _race_line_sizes(tmp_path)
+    capacity, line_sizes, read_sizes = _race_sizes(tmp_path)
     path = str(tmp_path / "f")
     os.mkfifo(path)
     proc = _holder([path])
     proc._open_fifos()
     try:
-        r = _spawn(lambda: _race_reader(path))
-        w = _spawn(lambda: _race_writer(path, sizes), pgid=r)
+        r = _spawn(lambda: _race_reader(path, read_sizes))
+        w = _spawn(lambda: _race_writer(path, line_sizes), pgid=r)
         time.sleep(random.uniform(0.02, 0.2))
         _kill_group(r, r, w)
         left = _drain(path)
     finally:
         proc._close_held_fifos()
 
-    assert left
+    assert left, (capacity, line_sizes, read_sizes)
     pieces = left.split(b"\n")
     seqs = []
     for i, piece in enumerate(pieces):
@@ -272,7 +277,7 @@ def test_what_the_supervisor_holds_survives_both_nodes_killed_at_any_instant(tmp
             continue
         if envelope["type"] == "DATA":
             seqs.append(envelope["seq"])
-    assert seqs, (capacity, len(left), left[:200])
+    assert seqs, (capacity, line_sizes, read_sizes, len(left), left[:200])
     assert seqs == list(range(seqs[0], seqs[0] + len(seqs)))
 
 
