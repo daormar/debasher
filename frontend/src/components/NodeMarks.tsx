@@ -37,6 +37,52 @@ export function ObserveMark() {
   );
 }
 
+const NOTICE_COLORS = {
+  info: { fill: "#1f6fb2", stroke: "#15507f" },
+  warning: { fill: "#f0a500", stroke: "#8a5f00" },
+};
+
+/**
+ * The notice of a node, by its level: an "i" in a blue circle for info, an
+ * "!" in an amber triangle for a warning. Its title, the tooltip, gives the
+ * text. Dimmed while the node does not run, when the notice is that of its
+ * latest incarnation.
+ */
+export function NoticeMark({ level, title, dimmed = false }: {
+  level: "info" | "warning";
+  title: string;
+  dimmed?: boolean;
+}) {
+  const { fill, stroke } = NOTICE_COLORS[level];
+  return (
+    <svg
+      data-mark="notice"
+      data-level={level}
+      data-dimmed={dimmed ? "true" : undefined}
+      width={14}
+      height={14}
+      viewBox="0 0 14 14"
+      aria-label={level === "warning" ? "Warning notice" : "Notice"}
+      style={{ opacity: dimmed ? 0.4 : 1 }}
+    >
+      <title>{title}</title>
+      {level === "warning" ? (
+        <>
+          <path d="M 7 1 L 13.2 12.6 L 0.8 12.6 Z" fill={fill} stroke={stroke} strokeWidth={0.8} strokeLinejoin="round" />
+          <path d="M 7 4.8 L 7 8.8" stroke="#fff" strokeWidth={1.6} strokeLinecap="round" />
+          <circle cx={7} cy={10.7} r={0.9} fill="#fff" />
+        </>
+      ) : (
+        <>
+          <circle cx={7} cy={7} r={6.2} fill={fill} stroke={stroke} strokeWidth={0.8} />
+          <circle cx={7} cy={4.2} r={0.95} fill="#fff" />
+          <path d="M 7 6.4 L 7 10.4" stroke="#fff" strokeWidth={1.6} strokeLinecap="round" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 /**
  * Data that cross the border of the program: an arrow that points the way
  * the data go, down into an external input above its handle, and down out of

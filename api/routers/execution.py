@@ -527,6 +527,18 @@ def get_program_status(program: Program) -> ProgramStatusResponse:
     return ProgramStatusResponse(output=output, state=state)
 
 
+class NodeNotice(BaseModel):
+    """The notice that a node of a resident program leaves for whoever
+    watches the program."""
+
+    process: str
+    # The task of an array process, None for a process of one node.
+    task: int | None = None
+    level: str
+    text: str
+    set_at: float | None = None
+
+
 class ProcessStatusesResponse(BaseModel):
     statuses: dict[str, str]
     # What debasher_status printed, shown when a run did not finish.
@@ -534,6 +546,32 @@ class ProcessStatusesResponse(BaseModel):
     # Only for a resident program: whether its output directory holds
     # program state, which the next launch resumes; false otherwise.
     hasProgramState: bool = False
+    # Only for a resident program: the notices of its nodes.
+    notices: list[NodeNotice] = []
+
+
+def _node_notices(program: Program) -> list[NodeNotice]:
+    """
+    The notices of every node of a resident program, from
+    debasher_inspect_resident -d <outputDir> notices, one call for the whole
+    program. A failure of the tool leaves the canvas without notices, and the
+    statuses as they are, so it gives none.
+    """
+    tool = paths.find_bin_tool("debasher_inspect_resident")
+    if tool is None:
+        return []
+    result = subprocess.run(
+        [str(tool), "-d", program.outputDir, "notices"],
+        env=_debasher_env(program),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    try:
+        return [NodeNotice(**notice) for notice in json.loads(result.stdout)["notices"]]
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return []
 
 
 @router.post("/process-statuses", response_model=ProcessStatusesResponse)
@@ -548,10 +586,14 @@ def get_process_statuses(program: Program) -> ProcessStatusesResponse:
     this unconditionally and simply show no color in that case.
     """
     output, _ = _run_debasher_dir_tool(program, "debasher_status")
+    statuses = _parse_process_statuses(output)
+    resident = _is_resident(program)
     return ProcessStatusesResponse(
-        statuses=_parse_process_statuses(output),
+        statuses=statuses,
         output=output,
-        hasProgramState=_is_resident(program) and program_state.has_program_state(program.outputDir),
+        hasProgramState=resident and program_state.has_program_state(program.outputDir),
+        # A program never launched has no node, and so no notice.
+        notices=_node_notices(program) if resident and statuses else [],
     )
 
 

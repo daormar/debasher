@@ -2,14 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import {
+  NOTICES_IN_TOOLTIP,
   batchRunStateText,
   formatBytes,
   inputPortsOf,
+  noticeMarkLevel,
+  noticesOfProcess,
+  noticeTooltip,
   offersShowBatchRuns,
   offersShowNodeState,
   summaryRows,
   wasLaunched,
   type BatchRun,
+  type NodeNotice,
   type NodeInfo,
   type NodeSummary,
 } from "./nodeState";
@@ -155,5 +160,35 @@ describe("Show batch runs", () => {
     expect(batchRunStateText(run("failed", 3))).toBe("failed with exit code 3");
     expect(batchRunStateText(run("finished", 0))).toBe("finished");
     expect(batchRunStateText(run("stopped", null))).toBe("stopped before it ended");
+  });
+});
+
+describe("the notices of the nodes", () => {
+  const notice = (process: string, task: number | null, level: "info" | "warning", text: string): NodeNotice =>
+    ({ process, task, level, text, set_at: 1 });
+
+  it("gives the mark the highest level among the tasks of a process", () => {
+    expect(noticeMarkLevel([])).toBeNull();
+    expect(noticeMarkLevel([notice("w", 0, "info", "a")])).toBe("info");
+    expect(noticeMarkLevel([notice("w", 0, "info", "a"), notice("w", 1, "warning", "b")])).toBe("warning");
+  });
+
+  it("keeps the notices of one process", () => {
+    const all = [notice("Report", null, "info", "a"), notice("Launch", null, "warning", "b")];
+    expect(noticesOfProcess(all, "Launch").map(n => n.text)).toEqual(["b"]);
+  });
+
+  it("lists the notices of the tasks, each with its index, up to a limit", () => {
+    expect(noticeTooltip([notice("Report", null, "warning", "1 batch run(s) failed")]))
+      .toBe("1 batch run(s) failed");
+    expect(noticeTooltip([notice("w", 0, "info", "a"), notice("w", 3, "info", "b")])).toBe("task 0: a\ntask 3: b");
+    const many = Array.from({ length: NOTICES_IN_TOOLTIP + 2 }, (_, i) => notice("w", i, "info", "x"));
+    expect(noticeTooltip(many).split("\n").at(-1)).toBe("and 2 more");
+  });
+
+  it("shows the notice in the summary of a node", () => {
+    const rows = summaryRows(summary({ notice: { level: "warning", text: "missing", set_at: null } }));
+    expect(rows.find(row => row.label === "Notice")?.value).toBe("warning: missing (set unknown)");
+    expect(summaryRows(summary()).find(row => row.label === "Notice")?.value).toBe("none");
   });
 });

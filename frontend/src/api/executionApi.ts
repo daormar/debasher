@@ -1,4 +1,4 @@
-import type { InspectNodeCommand } from "../models/nodeState";
+import type { InspectNodeCommand, NodeNotice } from "../models/nodeState";
 import type { Program } from "../models/program";
 import type { ResidentFifoRead, TalkMode } from "../models/residentTalk";
 
@@ -172,6 +172,8 @@ export interface ProcessStatusesResult {
   hasProgramState: boolean;
   // What debasher_status printed, shown when a run did not finish.
   output: string;
+  // Only for a resident program: the notices of its nodes.
+  notices: NodeNotice[];
 }
 
 // Used to color nodes in the canvas, see ProgramContext's status polling
@@ -188,8 +190,8 @@ export async function getProcessStatuses(program: Program): Promise<ProcessStatu
     throw new Error(`Failed to get process statuses (${response.status})`);
   }
 
-  const { statuses, hasProgramState, output } = await response.json();
-  return { statuses, hasProgramState: hasProgramState ?? false, output: output ?? "" };
+  const { statuses, hasProgramState, output, notices } = await response.json();
+  return { statuses, hasProgramState: hasProgramState ?? false, output: output ?? "", notices: notices ?? [] };
 }
 
 async function fetchProcessOutput(

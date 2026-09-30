@@ -687,6 +687,72 @@ def test_the_batch_runs_of_a_launcher_node_and_the_status_of_one(tmp_path):
         _hard_kill(program)
 
 
+# --- the notices of the nodes ------------------------------------------------------
+
+
+def _wait_for_notices(program, expected, timeout_secs=60):
+    deadline = time.monotonic() + timeout_secs
+    while True:
+        notices = [(n.process, n.level, n.text) for n in execution.get_process_statuses(program).notices]
+        if notices == expected or time.monotonic() > deadline:
+            return notices
+        time.sleep(0.5)
+
+
+@_needs_engine
+def test_the_notices_of_the_nodes_come_with_the_process_statuses(tmp_path):
+    program = _batch_launcher(tmp_path)
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        assert execution.get_process_statuses(program).notices == []
+
+        _request(program, "fail", "r1")
+
+        assert _wait_for_notices(program, [("Report", "warning", "1 batch run(s) failed")]) == [
+            ("Report", "warning", "1 batch run(s) failed")
+        ]
+    finally:
+        _hard_kill(program)
+
+
+@_needs_engine
+def test_a_relaunched_node_sets_again_the_notice_that_follows_from_its_state(tmp_path):
+    program = _batch_launcher(tmp_path)
+    expected = [("Report", "warning", "1 batch run(s) failed")]
+
+    try:
+        assert execution.run_program(program).exitCode == 0
+        _wait_for_statuses(program, "IN-PROGRESS")
+        _request(program, "fail", "r1")
+        assert _wait_for_notices(program, expected) == expected
+        # The failure is then below the checkpoint, and the relaunched node
+        # does not replay it: restore_node_state() sets the notice again.
+        assert execution.take_snapshot(program).exitCode == 0
+        first_pid = _node_pid(program, "Report")
+
+        assert execution.restart_node(execution.StopProcessRequest(program=program, processName="Report")).exitCode == 0
+        deadline = time.monotonic() + 60
+        while _node_pid(program, "Report") in (first_pid, None) and time.monotonic() < deadline:
+            time.sleep(0.5)
+
+        assert _node_pid(program, "Report") not in (first_pid, None)
+        _wait_for_statuses(program, "IN-PROGRESS")
+        assert _wait_for_notices(program, expected) == expected
+    finally:
+        _hard_kill(program)
+
+
+def test_a_failure_of_the_tool_gives_no_notices(tmp_path, monkeypatch):
+    tool = tmp_path / "debasher_inspect_resident"
+    tool.write_text("#!/bin/sh\necho 'not json'\n")
+    tool.chmod(0o755)
+    monkeypatch.setattr(paths, "find_bin_tool", lambda name: tool if name == "debasher_inspect_resident" else None)
+
+    assert execution._node_notices(_relay(tmp_path)) == []
+
+
 # --- talking to the FIFOs of a resident program ---------------------------------------
 
 

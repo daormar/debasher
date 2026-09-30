@@ -165,7 +165,7 @@
     {
       "id": "ab1d4193-0a2f-4913-8336-53eceab0209b",
       "name": "Report",
-      "description": "Counts the batch runs that finish and those that fail, and reports each end.",
+      "description": "Counts the batch runs that finish and those that fail, reports each end, and leaves a warning notice while some batch run has failed.",
       "position": {
         "x": 120.0,
         "y": 520.0
@@ -243,10 +243,10 @@
       "initiator": false,
       "nodeCode": {
         "preamble": "",
-        "classBody": "def __init__(self):\n    super().__init__()\n    # The node state: how many batch runs finished and failed.\n    self.counts = {\"finished\": 0, \"failed\": 0}",
-        "processData": "status = packet[\"status\"]\nself.counts[status] = self.counts.get(status, 0) + 1\nself.send_data(\"outreport\", {\"run\": packet[\"run\"], \"status\": status, **self.counts})",
+        "classBody": "def __init__(self):\n    super().__init__()\n    # The node state: how many batch runs finished and failed.\n    self.counts = {\"finished\": 0, \"failed\": 0}\n\ndef report_failures(self):\n    # A notice for whoever watches the program while some batch run has failed.\n    if self.counts.get(\"failed\"):\n        self.set_notice(f\"{self.counts['failed']} batch run(s) failed\", level=\"warning\")",
+        "processData": "status = packet[\"status\"]\nself.counts[status] = self.counts.get(status, 0) + 1\nself.send_data(\"outreport\", {\"run\": packet[\"run\"], \"status\": status, **self.counts})\nself.report_failures()",
         "captureNodeState": "return dict(self.counts)",
-        "restoreNodeState": "self.counts = dict(node_state)",
+        "restoreNodeState": "self.counts = dict(node_state)\n# The notice is not part of the node state: it is set again from it.\nself.report_failures()",
         "initializeRuntime": "pass",
         "observe": ""
       }

@@ -225,6 +225,9 @@ refer to it.
 - **mirror log**: as defined in the design of the engine: the log in which a
   mirror tap copies every line that a process writes into a FIFO defined with
   `--mirror`, which can be read without taking the data from the FIFO's reader.
+- **notice**: as defined in the design of resident programs: the one message,
+  `info` or `warning`, that the code of a node leaves for whoever watches the
+  program, and which the canvas node shows with a mark.
 - **unconnected FIFO**: a FIFO option with no edge and whose label does not name
   a fanout family, whose other end is an external end in the sense of the
   engine, left to someone outside the program, such as a person using "Talk to
@@ -1936,8 +1939,8 @@ that outlives the tab".
 *Built.*
 
 A resident program is observed through the same process statuses as a general
-one, and through what each node keeps in its execdir: its checkpoints, its
-input log and its halted marker. This subsection says which actions of
+one, and through what each node keeps in its execdir: its checkpoints, its input
+log, its halted marker and its notice. This subsection says which actions of
 "Execution and observation" apply to a live program, which change, and what the
 web UI reads of the state of a node.
 
@@ -1979,17 +1982,18 @@ a node, shows what the node keeps in its execdir, read only, in three views:
   checkpoint and when it was written, the halted marker, the size of the input
   log against its cap, how many records lie above the `capture_pos` of the
   latest checkpoint (what the node would replay if it crashed now), the size of
-  the outbound backlog against its limits, the cap and the limits being those
-  in force for the node, which it writes into its node info file, and whether
-  every thread of the node was alive at its latest heartbeat tick. These are
-  the figures that warn of a coming failure: with no rounds, the input log
-  grows until its cap stops the node, with a reader that does not read, the
-  outbound backlog grows until it does, and a node with a dead thread shows as
-  `IN-PROGRESS` while it does nothing. A node info file older than two
-  heartbeat intervals has stopped being written: in a node that is alive,
-  this means that it is still replaying its input log or that its heartbeat
-  thread has died, and the summary marks it; in a node that is not alive, it
-  is simply the file of its latest incarnation, shown unmarked.
+  the outbound backlog against its limits, the cap and the limits being those in
+  force for the node, which it writes into its node info file, and whether every
+  thread of the node was alive at its latest heartbeat tick. These are the
+  figures that warn of a coming failure: with no rounds, the input log grows
+  until its cap stops the node, with a reader that does not read, the outbound
+  backlog grows until it does, and a node with a dead thread shows as
+  `IN-PROGRESS` while it does nothing. The summary also shows the notice of the
+  node, if it has one (see the notices of the nodes, below). A node info file
+  older than two heartbeat intervals has stopped being written: in a node that
+  is alive, this means that it is still replaying its input log or that its
+  heartbeat thread has died, and the summary marks it; in a node that is not
+  alive, it is simply the file of its latest incarnation, shown unmarked.
 - The checkpoints: the list of those that the node retains and, for the one
   chosen, its `node_state`, formatted, together with the messages in transit
   that it holds, `channel_state` and `out_backlog`, counted by port.
@@ -2047,6 +2051,23 @@ engine has a command for it (see "Future work" in
 to launch are in its node state, which "Show node state" shows, and the
 directory it watches is the value of its option `-watchdir`, which "Show inputs
 and outputs" opens.
+
+**The notices of the nodes.** A node may leave one notice for whoever watches
+the program, `info` or `warning`, which says how it is now, such as that its
+configuration file is missing (see "Notices" in `doc/design_doc_resident.md`).
+The web UI reads the notices with the process statuses: for a resident program,
+the backend runs `debasher_inspect_resident -d <output directory> notices`
+together with `debasher_status`, one call for the whole program, and answers
+with both. A canvas node with a notice shows a mark of its level, whose tooltip
+gives the text, and the summary of "Show node state" shows it, with when it was
+set. An `array` or `generator` process has one canvas node for all its tasks: it
+shows the mark of the highest level among the notices of its tasks, and the
+tooltip lists them, each with its task index, as many as the tooltip can hold.
+The mark is dimmed while the process of the canvas node is not `IN-PROGRESS`:
+its notice is then that of the latest incarnation of a node that no longer runs,
+still worth reading after a failure (a configuration file that is missing, for
+example), until a relaunch of the node removes it. A failure of the tool leaves
+the canvas without notices, and the statuses are shown as usual.
 
 **Watching a FIFO.** "Watch FIFO" is not offered, since the engine refuses
 `--mirror` in a resident program, and there is no mirror log to read. The
@@ -2250,6 +2271,9 @@ with marks of its own, which take none of those:
   `doc/design_doc_resident.md`).
 - **An `array` or `generator` process**, with the double border, as in a
   general program, since each of its tasks is a node of its own.
+- **A notice**, with a mark of its level, `info` or `warning`, in the head of
+  the canvas node, dimmed while its process is not `IN-PROGRESS` (see
+  "Observing and talking to a live program").
 
 The color of the border and the badge of a group stay unused in a resident
 program, rather than taken for the node kind, so that the same mark never
@@ -2361,9 +2385,9 @@ The canvas of a resident program has a legend of its own, which the user folds
 as that of a general program (see "From the store to the canvas"). It says
 what each process status means in a resident program (see "Observing and
 talking to a live program"), and what each mark means: the node kind, an
-initiator, a node that observes the outside world, an external input, a
-business output read outside the program, a hollow handle and its tag, a
-trigger port, and the edges of the Supervisor wiring.
+initiator, a node that observes the outside world, a notice and its level, an
+external input, a business output read outside the program, a hollow handle and
+its tag, a trigger port, and the edges of the Supervisor wiring.
 
 ## Guarantees and non-goals of a resident program
 

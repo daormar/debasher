@@ -19,12 +19,14 @@ import {
   HEAD_BAND_COLOR,
   InitiatorMark,
   NodeKindChip,
+  NoticeMark,
   ObserveMark,
   OutsideMark,
   SUPERVISOR_HEAD_BAND_COLOR,
   TriggerMark,
 } from "./NodeMarks";
 import { useProgram } from "../store/ProgramContext";
+import { noticeMarkLevel, noticesOfProcess, noticeTooltip, type NodeNotice } from "../models/nodeState";
 import { SELECTED_NODE_COLOR, groupColor } from "../utils/groupColor";
 
 // What the tag of a hollow handle says, in full.
@@ -222,10 +224,19 @@ function WiringHandleView({ handle }: { handle: WiringHandle }) {
 
 /**
  * The head of a canvas node of a resident program: its name, its node kind
- * and the marks of an initiator and of a node that observes the outside
- * world, on a band that groups them (see HEAD_BAND_COLOR).
+ * and the marks of an initiator, of a node that observes the outside world
+ * and of the notice of its node (of its tasks, for an array), on a band that
+ * groups them (see HEAD_BAND_COLOR). The notice mark is dimmed while the
+ * process is not IN-PROGRESS: the notice is then that of the latest
+ * incarnation of a node that no longer runs.
  */
-function ResidentHead({ process }: { process: ProgramProcess }) {
+function ResidentHead({ process, notices, status }: {
+  process: ProgramProcess;
+  notices: NodeNotice[];
+  status: string | undefined;
+}) {
+
+  const noticeLevel = noticeMarkLevel(notices);
 
   const isSupervisor = process.nodeKind === "Supervisor";
 
@@ -254,6 +265,9 @@ function ResidentHead({ process }: { process: ProgramProcess }) {
           {process.nodeKind && <NodeKindChip kind={process.nodeKind} />}
           {process.initiator && <InitiatorMark />}
           {observesOutside(process) && <ObserveMark />}
+          {noticeLevel && (
+            <NoticeMark level={noticeLevel} title={noticeTooltip(notices)} dimmed={status !== "IN-PROGRESS"} />
+          )}
         </div>
 
       </div>
@@ -272,7 +286,7 @@ export default function ProcessNode({
   const process = data.process;
   const flippedOptionIds = data.flippedOptionIds;
 
-  const { program, processStatuses } = useProgram();
+  const { program, processStatuses, nodeNotices } = useProgram();
 
   const isResident = program.programType === "resident";
 
@@ -403,7 +417,11 @@ export default function ProcessNode({
 
       {isResident ? (
 
-        <ResidentHead process={process} />
+        <ResidentHead
+          process={process}
+          notices={noticesOfProcess(nodeNotices, process.name)}
+          status={status}
+        />
 
       ) : (
 

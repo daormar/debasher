@@ -25,6 +25,21 @@ export interface NodeInfo {
   stale: boolean;
 }
 
+// The notice that a node leaves for whoever watches the program (see
+// "Notices" in doc/design_doc_resident.md), as its notice file holds it.
+export interface Notice {
+  level: "info" | "warning";
+  text: string;
+  set_at: number | null;
+}
+
+// A notice with the node that left it, as the process statuses bring it:
+// `task` is null but for a task of an array.
+export interface NodeNotice extends Notice {
+  process: string;
+  task: number | null;
+}
+
 export interface NodeSummary {
   task_state: "alive" | "finished" | "down" | "not_launched";
   checkpoints: { epoch: number; written_at: number | null }[];
@@ -40,6 +55,7 @@ export interface NodeSummary {
     error?: string;
   };
   node_info: NodeInfo | null;
+  notice?: Notice | null;
 }
 
 export interface PortCount {
@@ -208,6 +224,12 @@ export function summaryRows(summary: NodeSummary): SummaryRow[] {
     },
     inputLogRow(summary),
     {
+      label: "Notice",
+      value: summary.notice
+        ? `${summary.notice.level}: ${summary.notice.text} (set ${formatTime(summary.notice.set_at)})`
+        : "none",
+    },
+    {
       label: "To replay",
       value: `${summary.input_log.to_replay} record${summary.input_log.to_replay === 1 ? "" : "s"} ` +
         "above the latest checkpoint, which a relaunch now would replay",
@@ -258,4 +280,32 @@ export function batchRunStateText(run: BatchRun): string {
   return run.state === "failed" && run.exit_code !== null
     ? `failed with exit code ${run.exit_code}`
     : BATCH_RUN_STATE_TEXT[run.state];
+}
+
+// How many notices of the tasks of one process the tooltip of its mark lists.
+export const NOTICES_IN_TOOLTIP = 10;
+
+export function noticesOfProcess(notices: NodeNotice[], processName: string): NodeNotice[] {
+  return notices.filter(notice => notice.process === processName);
+}
+
+// The level of the mark of a canvas node: the highest among the notices of
+// its tasks, or null without any.
+export function noticeMarkLevel(notices: NodeNotice[]): Notice["level"] | null {
+  if (notices.length === 0) {
+    return null;
+  }
+  return notices.some(notice => notice.level === "warning") ? "warning" : "info";
+}
+
+// The tooltip of the mark: the text of the notice, or, for the tasks of an
+// array, each with its task index, as many as NOTICES_IN_TOOLTIP.
+export function noticeTooltip(notices: NodeNotice[]): string {
+  const lines = notices
+    .slice(0, NOTICES_IN_TOOLTIP)
+    .map(notice => (notice.task === null ? notice.text : `task ${notice.task}: ${notice.text}`));
+  if (notices.length > NOTICES_IN_TOOLTIP) {
+    lines.push(`and ${notices.length - NOTICES_IN_TOOLTIP} more`);
+  }
+  return lines.join("\n");
 }

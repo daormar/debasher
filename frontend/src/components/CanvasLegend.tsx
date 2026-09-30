@@ -9,7 +9,7 @@ import {
   processNodeBackground,
 } from "../models/processStatus";
 import type { ProcessRunStatus } from "../models/processStatus";
-import { InitiatorMark, NodeKindChip, ObserveMark, OutsideMark, TriggerMark } from "./NodeMarks";
+import { InitiatorMark, NodeKindChip, NoticeMark, ObserveMark, OutsideMark, TriggerMark } from "./NodeMarks";
 
 function LegendRow({ mark, children }: { mark: ReactNode; children: ReactNode }) {
   return (
@@ -168,6 +168,13 @@ function ResidentLegend() {
       </LegendRow>
       <LegendRow mark={<ObserveMark />}>
         Observes the world outside the program.
+      </LegendRow>
+      <LegendRow mark={<NoticeMark level="info" title="A notice" />}>
+        A notice of the node, which its tooltip gives; dimmed while the node
+        does not run.
+      </LegendRow>
+      <LegendRow mark={<NoticeMark level="warning" title="A warning notice" />}>
+        A notice of level warning.
       </LegendRow>
       <LegendRow mark={<OutsideMark kind="externalInput" />}>
         Above an input: written from outside the program.

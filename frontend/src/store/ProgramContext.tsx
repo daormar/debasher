@@ -54,6 +54,7 @@ import {
 } from "../models/generalRun";
 import type { ResidentRequest, ResidentRunPhase } from "../models/residentRun";
 import { residentRunPhase } from "../models/residentRun";
+import type { NodeNotice } from "../models/nodeState";
 
 // Matches engine/debasher_lib.sh's DEBASHER_MOD_DIR_SEP.
 const MOD_DIR_SEP = ":";
@@ -101,6 +102,10 @@ interface ProgramContextType {
   // output directory is set or the last poll failed/had nothing to
   // report.
   processStatuses: Record<string, string>;
+
+  // The notices of the nodes of a resident program, read with the process
+  // statuses; empty otherwise.
+  nodeNotices: NodeNotice[];
 
   // Deletes everything inside the output directory (Run menu's "Reset
   // output directory", after its confirmation modal). Resolves to
@@ -564,6 +569,9 @@ export function ProgramProvider({
   const [hasProgramState, setHasProgramState] =
     useState(false);
 
+  const [nodeNotices, setNodeNotices] =
+    useState<NodeNotice[]>([]);
+
   const isRunInProgress =
     Object.values(processStatuses).includes("IN-PROGRESS");
 
@@ -590,6 +598,7 @@ export function ProgramProvider({
   function applyProcessStatuses(result: ProcessStatusesResult) {
     setProcessStatuses(result.statuses);
     setHasProgramState(result.hasProgramState);
+    setNodeNotices(result.notices);
     setStatusOutput(result.output);
     setGeneralTracking(prev => nextGeneralTracking(prev, result.statuses));
   }
@@ -600,7 +609,7 @@ export function ProgramProvider({
     } catch {
       // Nothing to show while debasher_status can't be run (e.g. the
       // output directory hasn't been initialized by a run yet).
-      return { statuses: {}, hasProgramState: false, output: "" };
+      return { statuses: {}, hasProgramState: false, output: "", notices: [] };
     }
   }
 
@@ -624,7 +633,7 @@ export function ProgramProvider({
     setGeneralTracking(INITIAL_GENERAL_TRACKING);
 
     if (!program.outputDir.trim()) {
-      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "" });
+      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "", notices: [] });
       return;
     }
 
@@ -684,7 +693,7 @@ export function ProgramProvider({
     if (cleared) {
       // Don't wait for the next poll tick, every node's background
       // should go back to white as soon as the reset is confirmed.
-      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "" });
+      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "", notices: [] });
     }
 
     return cleared;
@@ -1688,6 +1697,8 @@ export function ProgramProvider({
 
     processStatuses,
 
+    nodeNotices,
+
     resetOutputDir,
 
     resetProgramState,
@@ -1767,6 +1778,7 @@ export function ProgramProvider({
     runOutput,
     generalTracking.sawEnd,
     processStatuses,
+    nodeNotices,
     residentPhase,
   ]);
 
