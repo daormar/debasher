@@ -8,7 +8,11 @@ setup() {
 }
 
 # Writes the context from a bash that has loaded the engine and a small
-# module, with an environment of its own, into ${BATS_TEST_TMPDIR}/ctx.sh
+# module, with an environment of its own, into ${BATS_TEST_TMPDIR}/ctx.sh.
+# Every bash here is the one that runs the tests, ${BASH}, not the first
+# one of a bare PATH, which may be older than the engine needs (that of
+# macOS is); in it, BASH names that bash, as the preamble of a built
+# script names the one that configure found
 write_context() {
     local module="${BATS_TEST_TMPDIR}/mod.sh"
     cat > "${module}" <<'EOM'
@@ -20,9 +24,8 @@ module_func() { echo "module function"; }
 EOM
     env -i PATH="/usr/bin:/bin" HOME=/tmp FOREIGN_VAR=foreign DEBASHER_EXPORTED=kept \
         ENGINE_BUILDDIR="${ENGINE_BUILDDIR}" MODULE="${module}" CTX="${BATS_TEST_TMPDIR}/ctx.sh" \
-        bash -c '
+        "${BASH}" -c '
             debasher_pkglibdir="${ENGINE_BUILDDIR}"
-            BASH="$(command -v bash)"
             CAT="$(command -v cat)"
             source "${ENGINE_BUILDDIR}/debasher_lib.sh"
             source "${MODULE}"
@@ -59,7 +62,7 @@ EOM
 @test "_write_exec_context writes a context that a clean bash loads without errors" {
     write_context
 
-    run env -i bash -c "source '${BATS_TEST_TMPDIR}/ctx.sh' && echo \"\${MODULE_MAP[a key]}\" && module_func"
+    run env -i "${BASH}" -c "source '${BATS_TEST_TMPDIR}/ctx.sh' && echo \"\${MODULE_MAP[a key]}\" && module_func"
     [ "${status}" -eq 0 ]
     [ "${output}" = "$(printf 'a value\nmodule function')" ]
 }
@@ -71,7 +74,7 @@ EOM
     grep -q '^declare -- MODULE_EMPTY_SCALAR$' "${BATS_TEST_TMPDIR}/ctx.sh"
     # A key with a dot, as the name of a namespaced process has, reads as
     # an associative key, not as arithmetic
-    run env -i bash -c "source '${BATS_TEST_TMPDIR}/ctx.sh' && echo \"[\${MODULE_EMPTY_MAP[ns.proc]:-}]\""
+    run env -i "${BASH}" -c "source '${BATS_TEST_TMPDIR}/ctx.sh' && echo \"[\${MODULE_EMPTY_MAP[ns.proc]:-}]\""
     [ "${status}" -eq 0 ]
     [ "${output}" = "[]" ]
 }
