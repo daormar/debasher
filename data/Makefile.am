@@ -8,6 +8,9 @@ installcheck-local: debasher_check_installation
 # Build using suffix rules (portable)
 SUFFIXES= .sh
 
+# Built again after a new configure, whose values it carries
+debasher_check_installation: Makefile
+
 .sh :
 	rm -f $@
 	echo "#! " $(BASH) > $@

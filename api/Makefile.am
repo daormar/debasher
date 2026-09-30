@@ -17,7 +17,8 @@ CLEANFILES = debasher_webui
 
 EXTRA_DIST = .gitignore README.md debasher_webui.sh requirements-dev.txt
 
-debasher_webui: debasher_webui.sh
+# Makefile: built again after a new configure, whose values it carries
+debasher_webui: debasher_webui.sh Makefile
 	rm -f $@
 	echo "#! " $(BASH) > $@
 	echo "debasher_pkgdatadir=\"$(pkgdatadir)\"" >> $@

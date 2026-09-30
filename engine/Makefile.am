@@ -57,6 +57,11 @@ debasher_gen_telegram_data.py
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
 
+# The built scripts carry what configure found (the version, the
+# installation directories, the paths of the tools): a new configure
+# writes a new Makefile, which has them built again.
+$(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA): Makefile
+
 .sh :
 	rm -f $@
 	echo "#! " $(BASH) > $@
