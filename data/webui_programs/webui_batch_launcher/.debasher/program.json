@@ -76,7 +76,7 @@
     {
       "id": "10c4599c-d7f3-477d-ac71-31b0808cc3fe",
       "name": "Launch",
-      "description": "Runs webui_batch_greet once for each request, and sends a notice when each batch run ends.",
+      "description": "Runs webui_batch_greet once for each request, and sends a message when each batch run ends.",
       "position": {
         "x": 120.0,
         "y": 260.0
@@ -105,7 +105,7 @@
           "channel": "fifo",
           "mirror": false,
           "fifoTag": null,
-          "description": "a notice for each batch run that ends",
+          "description": "a message for each batch run that ends",
           "value": "done",
           "commandLine": false,
           "mandatory": false,
@@ -179,7 +179,7 @@
           "channel": "none",
           "mirror": false,
           "fifoTag": null,
-          "description": "the notices of the batch runs that end",
+          "description": "the messages of the batch runs that end",
           "value": "[Launch;-outdone]",
           "commandLine": false,
           "mandatory": false,
