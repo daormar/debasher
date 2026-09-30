@@ -54,8 +54,8 @@ teardown() {
 # The time in which debasher::_stop_fifo_mirror_taps ends a stuck tap,
 # with a grace period of 1s. On Linux, SIGTERM interrupts the tap blocked
 # opening or writing its real fifo, and ends it within a second grace
-# period; elsewhere (macOS) it may not, and the tap then ends with the
-# SIGKILL that follows that second period, which bounds it too.
+# period; on macOS it does not, and the tap then ends with the SIGKILL
+# that follows that second period, which bounds it too.
 stuck_tap_stop_bound_ms() {
     if [ "$(uname -s)" = "Linux" ]; then
         echo 2000

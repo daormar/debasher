@@ -9,11 +9,12 @@ easy as it is shown below.
 Installation
 ------------
 
-DeBasher is developed and tested on Linux. It also runs on Windows
-through WSL2, which runs a Linux system inside Windows, and it should
-run on macOS, where it has not been tested yet. The requirements are
-listed first, then how to meet them on each system, and then how to
-build and install the package, which is the same everywhere.
+DeBasher is developed on Linux, and tested on Linux and on macOS,
+where every change is built and its tests run. It also runs on
+Windows through WSL2, which runs a Linux system inside Windows. The
+requirements are listed first, then how to meet them on each system,
+and then how to build and install the package, which is the same
+everywhere.
 
 Requirements
 ^^^^^^^^^^^^
@@ -74,11 +75,11 @@ at ``http://localhost:8000/``, since WSL2 forwards the ports of
 macOS
 ^^^^^
 
-**DeBasher has not been tested on macOS yet.** The steps below install
-everything that it needs, and make the command line tools that it
-finds behave as those of Linux do, which is the setting in which it
-is tested. If something still fails, please report it on the `issues
-page <https://github.com/daormar/debasher/issues>`__ of the project.
+The steps below install everything that DeBasher needs, and make the
+command line tools that it finds behave as those of Linux do. They are
+the steps with which DeBasher is tested on macOS 15, on Apple silicon.
+If something fails, please report it on the `issues page
+<https://github.com/daormar/debasher/issues>`__ of the project.
 
 #. Install the command line tools of Xcode, which provide ``git`` and
    ``make``:
@@ -118,8 +119,9 @@ page <https://github.com/daormar/debasher/issues>`__ of the project.
    whether they work.
 
 Mirror taps (the ``--mirror`` option of ``define_fifo_opt``) rely on
-how Linux treats a FIFO opened for both reading and writing, and may
-not work on macOS.
+how Linux and macOS treat a FIFO opened for both reading and writing.
+On macOS, a mirror tap whose reader is gone takes a second longer to
+stop.
 
 Building and Installing
 ^^^^^^^^^^^^^^^^^^^^^^^

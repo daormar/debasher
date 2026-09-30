@@ -1151,18 +1151,19 @@ on every run of the owner.
 
 The tap keeps its three files open for its whole life. It opens the shim for
 reading and writing, so that the opens of the owner never block and lines
-written through several opens are not lost between them; POSIX leaves opening
-a FIFO for reading and writing undefined, and the engine relies on what Linux
-does, which is not to block. It opens the real FIFO once, so that its reader
-sees the end of the data only when the tap exits, and it ignores `SIGPIPE`
-and retries a write that fails, so that a reader that opens the FIFO anew for
-each line, and is briefly gone between two of them, gets every line.
+written through several opens are not lost between them; POSIX leaves opening a
+FIFO for reading and writing undefined, and the engine relies on what Linux and
+macOS do, which is not to block. It opens the real FIFO once, so that its reader
+sees the end of the data only when the tap exits, and it ignores `SIGPIPE` and
+retries a write that fails, so that a reader that opens the FIFO anew for each
+line, and is briefly gone between two of them, gets every line.
 
 When the process function returns, the engine writes a stop token into the shim.
 The tap forwards everything before it, including a last line without a newline,
 which it forwards as it was written, and exits. A tap that has not stopped
 within two seconds, because it is stuck retrying a line that no reader will
-take, is ended with `SIGTERM`, and `SIGKILL` if needed, with a warning and
+take, is ended with `SIGTERM`, and `SIGKILL` if needed (on macOS, where
+`SIGTERM` does not interrupt a tap blocked on the real FIFO), with a warning and
 without failing the task: the lines it could not forward are in the mirror log.
 A tap that stops on its token but exits with an error fails the task.
 
@@ -1724,12 +1725,7 @@ What is known to be missing from the design, or left open by it:
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
-- **Systems other than Linux.** The engine is built and tested on Linux. It
-  should run on Windows under WSL2, which is a Linux system, although nothing
-  checks it there. Nothing checks it on macOS either, where it needs tools that
-  the system lacks or ships in another version: a Bash of version 4.3 or newer
-  (macOS ships 3.2), `flock`, `realpath` before macOS 13, and, for the tools of
-  resident programs, `timeout` (which GNU coreutils installs there as
-  `gtimeout`); and mirror taps would need to be portable ("Portable mirror
-  taps" above). Supporting macOS means running `make check` and
-  `make installcheck` there, and fixing what they find.
+- **Systems other than Linux and macOS.** The engine is checked on Linux and on
+  macOS only. It should run on Windows under WSL2, which is a Linux system,
+  although nothing checks it there, and other systems would need portable
+  mirror taps ("Portable mirror taps" above).
