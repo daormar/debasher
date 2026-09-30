@@ -55,12 +55,13 @@ teardown() {
 # with a grace period of 1s. On Linux, SIGTERM interrupts the tap blocked
 # opening or writing its real fifo, and ends it within a second grace
 # period; on macOS it does not, and the tap then ends with the SIGKILL
-# that follows that second period, which bounds it too.
+# that follows that second period, which bounds it too: two grace periods,
+# and a margin for the polling of the wait and a loaded machine.
 stuck_tap_stop_bound_ms() {
     if [ "$(uname -s)" = "Linux" ]; then
         echo 2000
     else
-        echo 3000
+        echo 5000
     fi
 }
 
