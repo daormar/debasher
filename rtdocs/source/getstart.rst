@@ -25,7 +25,7 @@ Requirements
   ``sed``, ``awk`` and ``find``, and ``flock``, from util-linux.
 * Graphviz, whose ``dot`` command draws the graphs of programs.
 * The autotools, to configure the package: autoconf 2.71 or newer,
-  automake, libtool and autoconf-archive.
+  automake and autoconf-archive.
 * For the web interface, which is optional (see the :ref:`webui`
   Section): Node.js 22.12 or newer, with npm, to build it, and a
   Python virtual environment for its server. Without npm,
@@ -42,7 +42,7 @@ On Ubuntu (or Debian), the required packages are installed with:
 
 ::
 
-    $ sudo apt install autoconf autoconf-archive automake libtool graphviz python3 python3-venv
+    $ sudo apt install autoconf autoconf-archive automake graphviz python3 python3-venv
 
 Bash, coreutils and util-linux are part of every installation. The
 Node.js package of the distribution is usually older than 22.12; a
@@ -93,7 +93,7 @@ page <https://github.com/daormar/debasher/issues>`__ of the project.
    ::
 
        $ brew install bash coreutils findutils gnu-sed grep gawk flock \
-           autoconf autoconf-archive automake libtool graphviz python node
+           autoconf autoconf-archive automake graphviz python node
 
    macOS ships Bash 3.2 and has no ``flock``, and its ``sed``, ``grep``,
    ``find`` and the tools of coreutils are those of BSD, which differ

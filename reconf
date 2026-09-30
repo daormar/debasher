@@ -5,7 +5,6 @@ echo -n "- Checking that autotools are present..."
 err=0
 which autoconf >/dev/null 2>&1 || err=1
 which automake >/dev/null 2>&1 || err=1
-which libtool >/dev/null 2>&1 || err=1
 
 if [ $err -eq 1 ]; then
    echo ""
@@ -24,9 +23,6 @@ autoreconf -i -I m4 --force || err=1
 if [ $err -eq 1 ]; then
    echo ""
    echo "**Error**: reconf script has failed."
-   echo ""
-   echo "NOTE: Make sure libtool-ltdl-devel (rpm) / libltdl-dev (deb)"
-   echo "or an appropriate package for your distribution is installed."
    echo ""
    exit 1
 fi
