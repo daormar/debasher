@@ -3,7 +3,7 @@ dist_api_DATA = __init__.py additional_methods_import.py			\
 debasher_constants.py doc_mod.py file_inspection.py main.py		\
 markdown_parsing.py models.py node_relaunch.py option_handler_import.py paths.py	\
 persistence.py program_import.py requirements.txt resident_generation.py	\
-resident_import.py resident_node_code.py resident_supervisor_wiring.py	\
+resident_fifos.py resident_import.py resident_node_code.py resident_supervisor_wiring.py	\
 launch_record.py program_state.py script_generation.py tool_sessions.py
 
 routersdir = $(apidir)/routers
