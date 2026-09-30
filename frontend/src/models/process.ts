@@ -1,5 +1,6 @@
 import type { Position } from "./position";
 import type { OptionDataType, ProgramOption } from "./option";
+import type { NodeCode, NodeKind } from "./node";
 
 export type ProcessLanguage =
   | "bash"
@@ -16,9 +17,30 @@ export interface ComputationalSpecs {
 
   time?: string;
 
+  // Only for the node kinds of a resident program that read them (see
+  // RESIDENT_SPEC_FIELDS in models/node.ts), each named as the engine's
+  // computational specification it becomes; unset leaves the default of
+  // the class.
+
+  input_log_max_mb?: number;
+
+  out_backlog_max_mb?: number;
+
+  out_backlog_fail_mb?: number;
+
+  gil_switch_interval_ms?: number;
+
+  startup_timeout_s?: number;
+
+  max_concurrent_runs?: number;
+
+  batch_sched?: string;
+
+  heartbeat_timeout_s?: number;
+
 }
 
-export const DEFAULT_COMPUTATIONAL_SPECS: Required<ComputationalSpecs> = {
+export const DEFAULT_COMPUTATIONAL_SPECS: Required<Pick<ComputationalSpecs, "cpus" | "mem" | "time">> = {
   cpus: 1,
   mem: 256,
   time: "01:00:00",
@@ -144,6 +166,16 @@ export interface ProgramProcess {
   additionalMethods: AdditionalMethods;
 
   groupSource?: GroupSource;
+
+  // Only in a resident program: the node kind of the process, chosen when
+  // it is added; whether it is an initiator, where a round starts; and the
+  // parts of its code, which a Supervisor does not have (script generation
+  // writes its whole class). See models/node.ts.
+  nodeKind?: NodeKind;
+
+  initiator?: boolean;
+
+  nodeCode?: NodeCode;
 
 }
 

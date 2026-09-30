@@ -2,7 +2,7 @@
 Real debasher_exec runs of debasher_launcher_ref.sh, a resident program with
 a launcher node: every request that arrives at launch starts a batch run of
 debasher_launcher_batch.sh, which launch finds next to its own module, in a
-run directory of its own, and sink gets a notice when each one ends.
+run directory of its own, and sink gets a message when each one ends.
 Checks that the batch runs leave their results in their run directories,
 and that a launch killed while a batch run is going on is relaunched,
 leaves the batch run to end, and still tells sink, once. Every test runs
@@ -68,7 +68,7 @@ def _run_dir(outdir, run):
     return Path(outdir, "launch", run)
 
 
-def _notices(tailer):
+def _done_messages(tailer):
     return [env["payload"] for env in list(tailer.records) if env.get("type") == "DATA"]
 
 
@@ -92,12 +92,12 @@ def test_every_request_runs_the_batch_program_in_its_own_run_directory(outdir):
     try:
         _request(outdir, "r1", "one", 0)
         _request(outdir, "s/r2", "two", 0)
-        assert wait_until(lambda: len(_notices(tailer)) == 2, timeout=60.0)
+        assert wait_until(lambda: len(_done_messages(tailer)) == 2, timeout=60.0)
     finally:
         tailer.stop_and_join()
 
-    assert sorted(n["run"] for n in _notices(tailer)) == ["r1", "s/r2"]
-    assert all(n["exit_code"] == 0 for n in _notices(tailer))
+    assert sorted(n["run"] for n in _done_messages(tailer)) == ["r1", "s/r2"]
+    assert all(n["exit_code"] == 0 for n in _done_messages(tailer))
     for run, text in (("r1", "one"), ("s/r2", "two")):
         run_dir = _run_dir(outdir, run)
         assert (run_dir / "step" / "result.txt").read_text() == f"{text}\n"
@@ -119,11 +119,11 @@ def test_a_batch_run_outlives_a_crash_of_its_launcher_and_is_announced_once(outd
         assert not result.exists()
         assert wait_until(lambda: read_pid(id_path) not in (None, old_pid), timeout=15.0)
 
-        assert wait_until(lambda: len(_notices(tailer)) >= 1, timeout=60.0)
-        # Time for a second notice to show up, if one were sent.
-        assert not wait_until(lambda: len(_notices(tailer)) > 1, timeout=3.0)
+        assert wait_until(lambda: len(_done_messages(tailer)) >= 1, timeout=60.0)
+        # Time for a second message to show up, if one were sent.
+        assert not wait_until(lambda: len(_done_messages(tailer)) > 1, timeout=3.0)
     finally:
         tailer.stop_and_join()
 
-    assert _notices(tailer) == [{"run": "slow", "status": "finished", "exit_code": 0}]
+    assert _done_messages(tailer) == [{"run": "slow", "status": "finished", "exit_code": 0}]
     assert (run_dir / "step" / "result.txt").read_text() == "late\n"

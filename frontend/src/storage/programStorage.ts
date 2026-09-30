@@ -1,4 +1,4 @@
-import type { Program } from "../models/program";
+import type { Program, ProgramType } from "../models/program";
 
 // ---------------------------------------------------------------
 // FAKE IMPLEMENTATION — replace the body of each function below
@@ -92,10 +92,11 @@ export async function getAllEnvVars(
  * Not persisted yet — just builds a blank program in memory.
  * It only gets stored once the user actually saves it.
  */
-export function createEmptyProgram(name: string): Program {
+export function createEmptyProgram(name: string, programType: ProgramType = "general"): Program {
   return {
     id: crypto.randomUUID(),
     name,
+    programType,
     description: "",
     preamble: "",
     envVars: {},

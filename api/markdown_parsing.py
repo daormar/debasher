@@ -1,4 +1,5 @@
 import re
+import textwrap
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -283,6 +284,13 @@ def join_verbatim_body_lines(lines: list[str]) -> str:
     `declare -f` equivalent, "\\n".join(body).strip(), is safe there only
     because function_body_lines already stripped every line
     individually — a verbatim body must not be).
+
+    The indentation every line shares (the body's own indentation inside
+    its function) is removed, keeping only the relative indentation
+    within the body: script_generation.py indents a stored body again
+    when it wraps it back into a function (see _indent_block), so a body
+    stored with its original indentation would gain one more level on
+    every import and generation.
     """
     start = 0
     end = len(lines)
@@ -290,7 +298,7 @@ def join_verbatim_body_lines(lines: list[str]) -> str:
         start += 1
     while end > start and not lines[end - 1].strip():
         end -= 1
-    return "\n".join(lines[start:end])
+    return textwrap.dedent("\n".join(lines[start:end]))
 
 
 def verbatim_function_body_lines(source: str) -> list[str] | None:

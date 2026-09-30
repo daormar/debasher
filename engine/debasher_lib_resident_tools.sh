@@ -317,7 +317,7 @@ debasher::_resident_tool_trigger_every_node()
         fi
         while IFS= read -r fifo; do
             [ -n "${fifo}" ] || continue
-            if ! timeout 5 "${BASH}" -c 'echo "$1" > "$2"' _ "${trigger_json}" "${fifo}"; then
+            if ! "${TIMEOUT}" 5 "${BASH}" -c 'echo "$1" > "$2"' _ "${trigger_json}" "${fifo}"; then
                 echo "Error: could not write the ${command} trigger to ${fifo}" >&2
                 return 1
             fi

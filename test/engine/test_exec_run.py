@@ -576,3 +576,44 @@ def test_a_program_with_namespaced_processes_runs(tmp_path, example):
 
     status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
     assert status.returncode == 0, status.stdout + status.stderr
+
+
+# A process that asks for two cpus, for a scheduler limited to one
+TWO_CPUS_MODULE = CD_POST_MODULE.replace("cdpost", "twocpus").replace("cpus=1", "cpus=2")
+
+
+def test_validate_launches_nothing_and_leaves_a_finished_run_as_it_was(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "first")
+    assert result.returncode == 0, result.stderr
+    execdir = outdir / "__exec__" / "hello_world"
+    before = (execdir / "hello_world.finished").stat().st_mtime_ns
+
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "second", "--validate")
+
+    assert result.returncode == 0, result.stderr
+    assert "PROCESS: hello_world ; STATUS: FINISHED" in result.stderr
+    assert (execdir / "hello_world.finished").stat().st_mtime_ns == before
+    assert (execdir / "hello_world.stdout").read_text() == "first\n"
+
+
+def test_validate_refuses_a_process_above_the_limits_of_the_scheduler(tmp_path):
+    pfile = tmp_path / "debasher_twocpus.sh"
+    pfile.write_text(TWO_CPUS_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--builtinsched-cpus", "1", "--validate")
+
+    assert result.returncode != 0
+    assert "number of cpus for process twocpus exceeds limit" in result.stderr
+    assert not list(outdir.glob("__exec__/*/*.id"))
+
+
+def test_debug_is_refused_and_launches_nothing(tmp_path):
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "x", "--debug")
+
+    assert result.returncode != 0
+    assert "--debug was renamed --validate" in result.stderr
+    assert not (outdir / "__exec__").exists()

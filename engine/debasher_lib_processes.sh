@@ -194,6 +194,14 @@ debasher::_show_proc_specs()
     [ "${partition}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`partition\`: ${partition}"
     local throttle=$(debasher::_extract_throttle_from_process_spec "${process_spec}")
     [ "${throttle}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`throttle\`: ${throttle}"
+    # Those that the nodes of a resident program read, when the process gives
+    # them
+    local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
+    local specname value
+    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES} ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}; do
+        value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
+        [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`${specname}\`: ${value}"
+    done
     echo ""
 
     echo "### Additional Specifications"
@@ -381,22 +389,29 @@ debasher::_show_proc_implem_delegate()
 }
 
 ########
-# debasher::_show_proc_implem helper: prints processname's heredoc
-# variable ("<processname>_<py|r|perl|groovy>") as a fenced code block
-# tagged with its language. Returns 1 if no such variable exists.
+# debasher::_show_proc_implem helper: prints the source of processname's
+# heredoc as a fenced code block tagged with its language, whichever form
+# provides it: the function "<processname>_heredoc_<py|r|perl|groovy>",
+# which prints it, or the legacy variable "<processname>_<py|r|perl|groovy>",
+# which holds it (see debasher::_search_heredoc_provider, which prefers
+# the function, as the engine does when it runs the process). Returns 1
+# if the process has neither.
 debasher::_show_proc_implem_heredoc()
 {
     local processname=$1
 
-    local i
+    local i provider_info provider kind
     for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
-        local proc_varname=$(debasher::_search_process_var "${processname}" "${DEBASHER_PROCESS_VARNAMES[$i]}")
-        if [ "${proc_varname}" != "${DEBASHER_VAR_NOT_FOUND}" ]; then
-            echo '```'${DEBASHER_HEREDOC_LANGUAGES[$i]}
-            echo "${!proc_varname}"
-            echo '```'
-            return 0
+        provider_info=$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_FUNCNAMES[$i]}" "${DEBASHER_PROCESS_VARNAMES[$i]}") || continue
+        read -r provider kind <<< "${provider_info}"
+        echo '```'${DEBASHER_HEREDOC_LANGUAGES[$i]}
+        if [ "${kind}" = "func" ]; then
+            "${provider}"
+        else
+            echo "${!provider}"
         fi
+        echo '```'
+        return 0
     done
 
     return 1
@@ -1023,9 +1038,9 @@ debasher::_get_explained_opt_names()
 }
 
 ########
-# Populates the given associative array (passed by name) with the set
-# of option names actually produced for a process's first task
-# (task_idx 0).
+# Populates the given associative array (passed by name) with the
+# options actually produced for a process's first task (task_idx 0),
+# each name mapped to its value (empty for a flag).
 #
 # For a process without an option generator, this reads the
 # DEBASHER_OPT_LIST_<proc>_0 array that debasher::_define_opts_for_process
@@ -1041,14 +1056,16 @@ debasher::_get_explained_opt_names()
 # walked the same way debasher::_generate_opt_list does (odd tokens
 # are option names, the following token is their value unless it is
 # itself an option, in which case the first is treated as a flag) to
-# recover the option names. This extra call is made inside a subshell
-# so it is side-effect free (no stray FIFO registration, etc.) on the
-# program's real scheduling state -- only the resulting option names
-# are read back.
+# recover the options. This extra call is made inside a subshell so it
+# is side-effect free (no stray FIFO registration, etc.) on the
+# program's real scheduling state -- only the resulting options are
+# read back, as NUL-separated name/value pairs, so that a value may
+# hold any character.
 #
 # $1 - Command line.
 # $2 - Process name.
-# $3 - Name of an existing associative array to populate (opt name -> 1).
+# $3 - Name of an existing associative array to populate (opt name ->
+#      value).
 debasher::_get_actual_opt_names_for_first_task()
 {
     local cmdline=$1
@@ -1060,8 +1077,12 @@ debasher::_get_actual_opt_names_for_first_task()
         local process_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}
         local process_outdir=$(debasher::_get_process_outdir "${processname}")
 
-        local names
-        names=$(
+        # The subshell ends with an end marker only when generate_opts
+        # succeeded, so a failure is told apart from a task with no
+        # options (a process substitution's own exit status is lost)
+        local end_marker="__DEBASHER_END_OF_OPTS__"
+        local -a fields=()
+        mapfile -d '' -t fields < <(
             ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" 0 >/dev/null || exit 1
             set -- "${DEBASHER_DESERIALIZED_ARGS[@]}"
             while [ $# -gt 0 ]; do
@@ -1070,28 +1091,32 @@ debasher::_get_actual_opt_names_for_first_task()
                     shift
                     continue
                 fi
-                # printf, not echo: echo would take an option named
-                # "-n", "-e" or "-E" as one of its own flags and print
-                # nothing
-                printf '%s\n' "${token}"
                 shift
-                [ $# -eq 0 ] && continue
-                debasher::_str_is_option "$1" && continue
-                shift
+                local value=""
+                if [ $# -gt 0 ] && ! debasher::_str_is_option "$1"; then
+                    value="$1"
+                    shift
+                fi
+                printf '%s\0%s\0' "${token}" "${value}"
             done
-        ) || return 1
+            printf '%s\0' "${end_marker}"
+        )
+        if [ "${#fields[@]}" -eq 0 ] || [ "${fields[-1]}" != "${end_marker}" ]; then
+            return 1
+        fi
+        unset 'fields[-1]'
 
-        local n
-        while IFS= read -r n; do
-            [ -n "${n}" ] && actual_opt_names_ref["${n}"]=1
-        done <<< "${names}"
+        local i
+        for ((i = 0; i + 1 < ${#fields[@]}; i += 2)); do
+            actual_opt_names_ref["${fields[i]}"]="${fields[i + 1]}"
+        done
     else
         local opt_list_name=$(debasher::_get_opt_list_name "${processname}" 0)
         if declare -p "${opt_list_name}" >/dev/null 2>&1; then
             declare -n first_task_opt_list_ref="${opt_list_name}"
             local o
             for o in "${!first_task_opt_list_ref[@]}"; do
-                actual_opt_names_ref["${o}"]=1
+                actual_opt_names_ref["${o}"]="${first_task_opt_list_ref[${o}]}"
             done
         fi
     fi
@@ -1110,6 +1135,16 @@ debasher::_get_actual_opt_names_for_first_task()
 # they are only present when given on the command line), so their
 # absence from a single sampled task is not necessarily an error.
 #
+# A command-line option (one its identify_cmdline_opts marks with
+# opt_is_cmdline or opt_is_non_mandatory_cmdline) takes its value from
+# the command line and nowhere else: a process that defines it with a
+# value of its own (define_opt, define_fifo_opt, ...) is an error (see
+# debasher::_cmdline_opt_value_is_from_cmdline). Its absence from the
+# first task, on the other hand, is never warned about: a command-line
+# option may only shape the process's tasks (e.g. a task count its
+# define_opts or generate_opts_size reads with get_cmdline_opt)
+# without being given to them, or be defined only if given.
+#
 # One more legitimate mismatch, handled separately by
 # debasher::_actual_opt_is_ith_instance below: a process whose number
 # of "-foo0", "-foo1", ... "-foo<N-1>" options depends on a run-time
@@ -1120,7 +1155,8 @@ debasher::_get_actual_opt_names_for_first_task()
 #
 # $1 - Command line.
 #
-# Returns 1 if some process defines an undeclared option.
+# Returns 1 if some process defines an undeclared option, or a
+# command-line option with a value of its own.
 debasher::_check_opt_names_vs_explain()
 {
     local cmdline=$1
@@ -1130,6 +1166,7 @@ debasher::_check_opt_names_vs_explain()
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         local -A explained_opt_names=()
         debasher::_get_explained_opt_names "${processname}" explained_opt_names || continue
+        debasher::_mark_identified_cmdline_opts "${processname}" || return 1
 
         local -A actual_opt_names=()
         debasher::_get_actual_opt_names_for_first_task "${cmdline}" "${processname}" actual_opt_names || return 1
@@ -1140,18 +1177,88 @@ debasher::_check_opt_names_vs_explain()
                 debasher::_actual_opt_is_ith_instance "${opt}" explained_opt_names && continue
                 echo "Error: process ${processname} defines option ${opt}, which is not declared in its explain_opts" >&2
                 had_undeclared_opt=1
+                continue
+            fi
+            if debasher::_opt_is_cmdline_for_process "${processname}" "${opt}" \
+                    && ! debasher::_cmdline_opt_value_is_from_cmdline "${cmdline}" "${opt}" "${actual_opt_names[${opt}]}"; then
+                echo "Error: process ${processname} defines command-line option ${opt} with a value that does not come from the command line; a command-line option can only be defined from it (define_cmdline_opt and similar)" >&2
+                had_undeclared_opt=1
             fi
         done
 
         for opt in "${!explained_opt_names[@]}"; do
             if [ -z "${actual_opt_names[${opt}]+x}" ]; then
                 debasher::_ith_family_has_instance "${opt}" actual_opt_names && continue
+                debasher::_opt_is_cmdline_for_process "${processname}" "${opt}" && continue
                 echo "Warning: process ${processname} declares option ${opt} in explain_opts, but it was not found among the options generated for its first task" >&2
             fi
         done
     done
 
     [ "${had_undeclared_opt}" -eq 0 ]
+}
+
+########
+# Runs the process's identify_cmdline_opts method, if it has one, so
+# that the options it marks as command-line options are known
+# (DEBASHER_PROGRAM_OPT_IS_CMDLINE): an ordinary run never calls that
+# method otherwise.
+#
+# $1 - Process name.
+debasher::_mark_identified_cmdline_opts()
+{
+    local processname=$1
+
+    local funcname=$(debasher::_get_identify_cmdline_opts_funcname "${processname}")
+    if [ "${funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        return 0
+    fi
+    ${funcname}
+}
+
+########
+# True if the process marks the option as a command-line option in its
+# identify_cmdline_opts.
+#
+# $1 - Process name.
+# $2 - Option name.
+debasher::_opt_is_cmdline_for_process()
+{
+    local processname=$1
+    local opt=$2
+
+    local proc_opt=${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${proc_opt}]}" = 1 ]
+}
+
+########
+# True if a command-line option defined for a task holds the value that
+# the define_cmdline_* functions give it: the value given on the command
+# line, or its absolute path (define_cmdline_infile_opt[_if_given]), or
+# no value at all for a flag given on the command line. False when the
+# option was not given on the command line (so its value must have
+# come from somewhere else) or holds a different value.
+#
+# $1 - Command line.
+# $2 - Option name.
+# $3 - Value the option holds in the task (empty for a flag).
+debasher::_cmdline_opt_value_is_from_cmdline()
+{
+    local cmdline=$1
+    local opt=$2
+    local actual_value=$3
+
+    debasher::_check_opt_given_memoiz "${cmdline}" "${opt}" || return 1
+
+    # Given with no value: a flag
+    if ! debasher::_read_opt_value_from_line_memoiz "${cmdline}" "${opt}"; then
+        [ -z "${actual_value}" ] || [ "${actual_value}" = "${DEBASHER_VOID_VALUE}" ]
+        return
+    fi
+    local given_value="${_OPT_VALUE_}"
+
+    [ "${actual_value}" = "${given_value}" ] && return 0
+    [ "${actual_value}" = "$(debasher::_get_absolute_path "${given_value}")" ]
 }
 
 ########

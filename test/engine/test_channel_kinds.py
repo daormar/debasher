@@ -19,7 +19,7 @@ _NODE_PY = '''
 from debasher_runtime_lib import FBPProcess
 
 
-class Node(FBPProcess):
+class {cls}(FBPProcess):
     INPUT_PORTS = {inputs}
     OUTPUT_PORTS = {outputs}
     CONTROL_PORTS = {control}
@@ -38,13 +38,19 @@ class Node(FBPProcess):
         pass
 
 
-Node().run()
+{cls}().run()
 '''
 
 
 def _resident_process(name, explain, define, inputs, outputs, control=(), external=()):
+    # The class of a node is named after its process, in CamelCase, which
+    # for these one-word names is the name capitalized.
     source = _NODE_PY.format(
-        inputs=list(inputs), outputs=list(outputs), control=list(control), external=list(external)
+        cls=name.capitalize(),
+        inputs=list(inputs),
+        outputs=list(outputs),
+        control=list(control),
+        external=list(external),
     )
     return f"""
 {name}_document()

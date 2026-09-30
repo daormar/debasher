@@ -22,10 +22,26 @@ check_program()
     local bs_cpus=$5
     local bs_mem=$6
     local additional_opts=$7
-    local pfile="${debasher_datadir}/programs/${progname}.sh"
+
+    check_program_file "${tmpdir}" "${debasher_datadir}/programs/${progname}.sh" "${outdirname}" \
+                       "${sched}" "${bs_cpus}" "${bs_mem}" "${additional_opts}"
+}
+
+########
+# Runs the general program of the module `pfile` to its end, and checks that
+# every process finished.
+check_program_file()
+{
+    local tmpdir=$1
+    local pfile=$2
+    local outdirname=$3
+    local sched=$4
+    local bs_cpus=$5
+    local bs_mem=$6
+    local additional_opts=$7
     local outdir="${tmpdir}/${outdirname}"
 
-    echo -n "## Checking ${progname}.sh ... "
+    echo -n "## Checking $("${BASENAME}" "${pfile}") ... "
 
     local debasher_exec_out="${tmpdir}/${outdirname}_exec.out"
     "${debasher_bindir}/debasher_exec" --pfile "${pfile}" \
@@ -39,7 +55,7 @@ check_program()
     local ret=$?
     if test $ret -eq 0 ; then
         local debasher_status_out="${tmpdir}/${outdirname}_status.out"
-        timeout -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
+        "${TIMEOUT}" -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
         ret=$?
     fi
 
@@ -67,6 +83,130 @@ check_program()
 }
 
 ########
+# Waits up to `seconds` for debasher_status to report every process of the
+# run in `outdir` with the status counted by `field` in its summary
+# ("inprogress" or "finished"), keeping its last output in `status_out`.
+wait_for_every_process()
+{
+    local outdir=$1
+    local field=$2
+    local seconds=$3
+    local status_out=$4
+    local i summary total count
+
+    for ((i = 0; i < seconds; i++)); do
+        "${debasher_bindir}/debasher_status" -d "${outdir}" > "${status_out}" 2>&1
+        summary=$("${GREP}" "SUMMARY" "${status_out}")
+        total=$("${ECHO}" "${summary}" | "${SED}" 's/.*num_processes= \([0-9]*\).*/\1/')
+        count=$("${ECHO}" "${summary}" | "${SED}" "s/.* ${field}= \([0-9]*\).*/\1/")
+        if [ -n "${total}" ] && [ "${total}" -gt 0 ] && [ "${count}" = "${total}" ]; then
+            return 0
+        fi
+        "${SLEEP}" 1
+    done
+    return 1
+}
+
+########
+# Checks the resident program of the module `pfile`, which does not end on
+# its own: launches it, waits until every node is alive, and stops it in an
+# orderly way, after which every node has to be finished. Given an external
+# input `input_fifo`, it also writes each of `input_payloads` into it as a
+# DATA message, and waits until the output read outside the program
+# `output_fifo` carries a DATA message whose payload is `expected_payload`.
+check_resident_program()
+{
+    local tmpdir=$1
+    local pfile=$2
+    local outdirname=$3
+    local input_fifo=$4
+    local input_payloads=$5
+    local output_fifo=$6
+    local expected_payload=$7
+    local outdir="${tmpdir}/${outdirname}"
+    local status_out="${tmpdir}/${outdirname}_status.out"
+    local timeout_secs=30
+    local ret=0
+
+    echo -n "## Checking $("${BASENAME}" "${pfile}") (resident) ... "
+
+    # debasher_exec returns once the nodes are launched, which go on
+    # running.
+    "${debasher_bindir}/debasher_exec" --pfile "${pfile}" \
+                                       --outdir "${outdir}" \
+                                       > "${tmpdir}/${outdirname}_exec.out" 2>&1 || ret=1
+
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "inprogress" ${timeout_secs} "${status_out}" || ret=124
+    fi
+
+    local reader_pid=""
+    if test $ret -eq 0 && test -n "${input_fifo}" ; then
+        local fifos_dir="${outdir}/__fifos__"
+        local input_path=$("${FIND}" "${fifos_dir}" -name "${input_fifo}")
+        local output_path=$("${FIND}" "${fifos_dir}" -name "${output_fifo}")
+        local output_file="${tmpdir}/${outdirname}_output.out"
+
+        # Something outside has to read an output read outside the program,
+        # or its node's outbound backlog grows.
+        "${CAT}" "${output_path}" > "${output_file}" &
+        reader_pid=$!
+
+        # Opening the fifo waits for its node to open its end, so each
+        # write is bounded in time.
+        local payload
+        for payload in ${input_payloads}; do
+            "${TIMEOUT}" ${timeout_secs}s "${BASH}" -c 'printf "{\"type\": \"DATA\", \"payload\": %s}\n" "$1" > "$2"' \
+                    _ "${payload}" "${input_path}" || { ret=124; break; }
+        done
+
+        if test $ret -eq 0 ; then
+            ret=124
+            local i
+            for ((i = 0; i < timeout_secs; i++)); do
+                if "${GREP}" -q -F "\"payload\": ${expected_payload}}" "${output_file}" 2>/dev/null; then
+                    ret=0
+                    break
+                fi
+                "${SLEEP}" 1
+            done
+        fi
+    fi
+
+    # Stopped in any case, so that nothing is left running: after --timeout,
+    # debasher_stop_resident falls back to a hard kill, and fails.
+    "${debasher_bindir}/debasher_stop_resident" -d "${outdir}" --timeout ${timeout_secs} \
+                                                > "${tmpdir}/${outdirname}_stop.out" 2>&1
+    if test $? -ne 0 && test $ret -eq 0 ; then
+        ret=1
+    fi
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "finished" ${timeout_secs} "${status_out}" || ret=1
+    fi
+
+    # The node closes its end when it stops, which ends the reader; one
+    # left waiting is not.
+    if test -n "${reader_pid}" ; then
+        kill "${reader_pid}" 2>/dev/null
+        wait "${reader_pid}" 2>/dev/null
+    fi
+
+    case $ret in
+        0)
+            echo "OK"
+            ;;
+        124)
+            echo "Timed Out"
+            ;;
+        *)
+            echo "Failed"
+            ;;
+    esac
+    echo ""
+    return $ret
+}
+
+########
 # Check the DeBasher package
 
 # Create directory for temporary files
@@ -90,7 +230,6 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-ret=$?
 case $? in
     0)
         ((checks_passed++))
@@ -662,8 +801,88 @@ case $? in
         ;;
 esac
 
-# Check execution using SLURM if available
-if [ -n "SBATCH" ]; then
+# Checks of the programs built with the web UI
+echo "# Checks of the programs built with the web UI"
+echo ""
+
+# Check webui_fifo_sum, a general program; the web UI gives each process
+# 256 MB by default
+progname="webui_fifo_sum"
+sched="BUILTIN"
+bs_cpus=2
+bs_mem=512
+check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                   "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check webui_running_sum, a resident program: the running sum of 1, 2 and 3
+# is 6
+progname="webui_running_sum"
+check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                       "${progname}" "numbers" "1 2 3" "sum" "6"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check webui_batch_greet, the general program that webui_batch_launcher runs
+progname="webui_batch_greet"
+sched="BUILTIN"
+bs_cpus=1
+bs_mem=256
+check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                   "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-text world -secs 0"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check webui_batch_launcher, a resident program with a launcher node: one
+# request runs webui_batch_greet, installed next to it, and Report reports
+# the batch run that finished
+progname="webui_batch_launcher"
+check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                       "${progname}" "requests" '{"opts":{"-text":"world","-secs":"0"},"run":"r1"}' \
+                       "report" '{"run": "r1", "status": "finished", "finished": 1, "failed": 0}'
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check execution using SLURM if available: SBATCH is the name of the tool,
+# looked for in the PATH when the program runs, as the engine does
+if command -v "${SBATCH}" > /dev/null 2>&1; then
     echo "# Checks using SLURM Scheduler"
     echo ""
 

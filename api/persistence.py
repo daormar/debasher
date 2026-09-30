@@ -168,9 +168,16 @@ def load_program(input_dir: str) -> Program:
     """
     Read and deserialize <input_dir>/.debasher/program.json.
 
+    The program's home directory is the directory it is loaded from, as
+    an absolute path, whatever the metadata recorded when it was saved:
+    a home directory that was copied or moved, or one shipped with
+    DeBasher (data/webui_programs), goes on being saved and run where it
+    now is.
+
     Raises FileNotFoundError if that file doesn't exist.
     """
-    program_path = Path(input_dir).expanduser() / METADATA_DIRNAME / PROGRAM_FILENAME
+    home_dir = Path(input_dir).expanduser().resolve()
+    program_path = home_dir / METADATA_DIRNAME / PROGRAM_FILENAME
 
     if not program_path.is_file():
         raise FileNotFoundError(
@@ -178,7 +185,9 @@ def load_program(input_dir: str) -> Program:
             f"(expected a {METADATA_DIRNAME}/{PROGRAM_FILENAME} file in the given directory)"
         )
 
-    return Program.model_validate_json(program_path.read_text())
+    program = Program.model_validate_json(program_path.read_text())
+    program.homeDir = str(home_dir)
+    return program
 
 
 def resolve_script_path(script_path: str) -> Path:

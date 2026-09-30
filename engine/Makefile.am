@@ -2,14 +2,15 @@ bin_SCRIPTS= debasher_exec debasher_exec_batch debasher_get_stdout	\
 debasher_get_sched_out debasher_get_fifo_mirror debasher_stop		\
 debasher_status debasher_stats debasher_exec_process debasher_doc_mod	\
 debasher_proc_dataset debasher_reformat_status				\
-debasher_stop_resident debasher_reset_resident debasher_snapshot_resident
+debasher_stop_resident debasher_reset_resident debasher_snapshot_resident	\
+debasher_inspect_resident
 
 libexec_SCRIPTS= debasher_check_prg_files			\
 debasher_compare_opts debasher_solve_knapsack_greedy		\
 debasher_gen_knapsack_problem debasher_gen_telegram_data	\
 debasher_list_deblib_pub_funcs debasher_list_proc_names		\
 debasher_get_proc_info debasher_get_verbatim_func_source		\
-debasher_launch_process debasher_resolve_pfile
+debasher_launch_process debasher_resolve_pfile debasher_inspect_node
 
 python_PYTHON= debasher_runtime_lib.py debasher_runtime_envelope.py	\
 debasher_runtime_transport.py debasher_runtime_inputlog.py		\
@@ -41,6 +42,7 @@ debasher_get_stdout.sh debasher_get_sched_out.sh			\
 debasher_get_fifo_mirror.sh						\
 debasher_check_prg_files.py debasher_stop.sh debasher_stop_resident.sh	\
 debasher_reset_resident.sh debasher_snapshot_resident.sh		\
+debasher_inspect_resident.sh debasher_inspect_node.py			\
 debasher_status.sh						\
 debasher_stats.sh debasher_exec_process.sh debasher_doc_mod.sh		\
 debasher_proc_dataset.sh						\
@@ -98,6 +100,7 @@ SUFFIXES= .sh .py .r .R
 	echo "TEE=\"$(TEE)\"" >> $@
 	echo "GZIP=\"$(GZIP)\"" >> $@
 	echo "SLEEP=\"$(SLEEP)\"" >> $@
+	echo "TIMEOUT=\"$(TIMEOUT)\"" >> $@
 	echo "SEQ=\"$(SEQ)\"" >> $@
 	echo "DOCKER=\"$(DOCKER)\"" >> $@
 	echo "SRUN=\"$(SRUN)\"" >> $@

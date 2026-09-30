@@ -57,30 +57,45 @@ _FIFOS_DIRNAME = "__fifos__"
 
 # The flag that tells a Supervisor not to hold the fifos of the business
 # channels (see Supervisor._open_held_fifos).
-_NO_HOLD_FIFOS_FLAG = "no_hold_fifos"
+_NO_HOLD_FIFOS_FLAG = "no-hold-fifos"
 
 
 class Supervisor(_PortWorker):
     """
-    Its ports are NODE_PORTS = {node: option_name} (one entry per
-    supervised node's heartbeat channel), where node is either a string
-    (the name of a non-array process) or a (process_name, task_idx)
-    tuple (one task of an array process), TRIGGER_PORT (a list of output
-    option names, one per initiator to send start_snapshot/shutdown to)
-    and MANUAL_TRIGGER_PORT (a single input option name for an external
-    manual trigger, relayed to every TRIGGER_PORT entry with an epoch
-    added to it, see _stamp_epoch). A Supervisor run by the engine takes
-    them from the options of its module (see
-    _PortWorker._take_ports_from_engine); one built without the engine,
-    as the unit tests build them, declares them in the class attributes
-    below.
+    The optional process of a resident program, at most one, that watches
+    its nodes. Every node sends it heartbeats; when they stop, or the
+    process of a node is gone, the Supervisor relaunches the node, and it
+    gives up on a node that keeps failing, stopping the rest of the program
+    in order. It relays to the initiators the triggers that start a
+    snapshot or a shutdown, written into its manual trigger port from
+    outside the program. It also holds open the FIFO of every channel
+    between two nodes, so that what a FIFO holds outlives the crash of both
+    of them, unless the process is given the flag `-no-hold-fifos`.
 
-    It also holds open the fifo of every business channel of the program,
-    HOLD_FIFOS, through a read end that it never reads (see
-    _open_held_fifos), so that what a fifo holds outlives the crash of both
-    nodes of its channel, unless it is given the flag -no_hold_fifos, which
-    its module may offer as an option of the command line of the program.
+    A module declares it with an empty subclass,
+    `class Sup(Supervisor): pass`, whose ports the engine gives, like
+    those of a node. It keeps no state: a Supervisor relaunched by hand
+    starts afresh.
     """
+
+    # Its ports are NODE_PORTS = {node: option_name} (one entry per
+    # supervised node's heartbeat channel), where node is either a string
+    # (the name of a non-array process) or a (process_name, task_idx)
+    # tuple (one task of an array process), TRIGGER_PORT (a list of output
+    # option names, one per initiator to send start_snapshot/shutdown to)
+    # and MANUAL_TRIGGER_PORT (a single input option name for an external
+    # manual trigger, relayed to every TRIGGER_PORT entry with an epoch
+    # added to it, see _stamp_epoch). A Supervisor run by the engine takes
+    # them from the options of its module (see
+    # _PortWorker._take_ports_from_engine); one built without the engine,
+    # as the unit tests build them, declares them in the class attributes
+    # below.
+    #
+    # It also holds open the fifo of every business channel of the program,
+    # HOLD_FIFOS, through a read end that it never reads (see
+    # _open_held_fifos), so that what a fifo holds outlives the crash of both
+    # nodes of its channel, unless it is given the flag -no-hold-fifos, which
+    # its module may offer as an option of the command line of the program.
 
     NODE_PORTS = {}
     TRIGGER_PORT = []
@@ -91,7 +106,11 @@ class Supervisor(_PortWorker):
     # engine lists absolute paths.
     HOLD_FIFOS = []
 
+    #: How long, in seconds, a node may go without sending a heartbeat
+    #: before it is declared down. A program sets it with the computational
+    #: specification `heartbeat_timeout_s` of the Supervisor.
     HEARTBEAT_TIMEOUT_SECS = 30
+    #: How often, in seconds, the Supervisor checks the heartbeats.
     HEARTBEAT_CHECK_INTERVAL_SECS = 5
     # The startup deadline: how long a node has, from each launch, to send
     # its first heartbeat, which comes only after it has restored its
@@ -99,6 +118,11 @@ class Supervisor(_PortWorker):
     # NODE_STARTUP_TIMEOUT_SECS = {node: seconds} gives it for a node, and
     # STARTUP_TIMEOUT_SECS for the others; never shorter than
     # HEARTBEAT_TIMEOUT_SECS, which is also what it is when neither says.
+    #: How long, in seconds, a node has, from each launch, to send its first
+    #: heartbeat, which comes once it has restored its checkpoint and replayed
+    #: its input log; never shorter than HEARTBEAT_TIMEOUT_SECS. A program
+    #: sets it with the computational specification `startup_timeout_s`, of
+    #: the Supervisor for every node, or of a node for that node.
     STARTUP_TIMEOUT_SECS = None
     NODE_STARTUP_TIMEOUT_SECS = {}
     # The computational specifications that set HEARTBEAT_TIMEOUT_SECS and
@@ -110,7 +134,11 @@ class Supervisor(_PortWorker):
         "heartbeat_timeout_s": ("HEARTBEAT_TIMEOUT_SECS", 1),
         "startup_timeout_s": ("STARTUP_TIMEOUT_SECS", 1),
     }
+    #: How many times in a row a node is relaunched without sending a
+    #: heartbeat before the Supervisor gives up on it.
     MAX_RELAUNCH_ATTEMPTS = 3
+    #: How long, in seconds, the orderly stop that follows giving up on a
+    #: node may take before the program is killed.
     FORCE_STOP_TIMEOUT_SECS = 60
 
     # The field of DEBASHER_PROCESS_PORTS that gives each of the class
@@ -674,18 +702,21 @@ class Supervisor(_PortWorker):
 
     def on_node_down(self, node_name):
         """
-        Default: relaunch the node through debasher_launch_process, an
-        installed engine tool that calls the built-in scheduler's own
-        launch function (debasher_builtin_sched::_launch), so a relaunch
-        is identical to the original launch: it sets the per-launch
-        variables (which .id file to write, which task index) for the
-        process being launched and puts it in its own process group.
-        Merely re-executing the generated script instead would inherit
-        this Supervisor's own values of those variables, so the
-        relaunched node would write its PID into the Supervisor's .id
-        file, never its own. Overridable for a node that needs something
-        non-standard.
+        Called when the node `node_name` is declared down. By default it
+        relaunches the node exactly as the program first launched it. A
+        subclass may redefine it for a node that needs something else.
         """
+        # Default: relaunch the node through debasher_launch_process, an
+        # installed engine tool that calls the built-in scheduler's own
+        # launch function (debasher_builtin_sched::_launch), so a relaunch
+        # is identical to the original launch: it sets the per-launch
+        # variables (which .id file to write, which task index) for the
+        # process being launched and puts it in its own process group.
+        # Merely re-executing the generated script instead would inherit
+        # this Supervisor's own values of those variables, so the
+        # relaunched node would write its PID into the Supervisor's .id
+        # file, never its own. Overridable for a node that needs something
+        # non-standard.
         command = self._launch_process_command(node_name)
         # Non-blocking, so the checker thread keeps watching the other
         # nodes; a short-lived thread waits for the launcher itself (it
@@ -729,23 +760,27 @@ class Supervisor(_PortWorker):
 
     def on_node_permanently_failed(self, node_name):
         """
-        Default: escalate in a background thread (so the checker thread
-        that triggered this keeps running and noticing other nodes
-        reaching "done" meanwhile), by calling `debasher_stop_resident`
-        (`-x node_name`, `--keep-supervisor`) as a subprocess: it gracefully
-        stops whatever part of the graph remains reachable (an ordinary
-        halt, then a real stop signal, per node), excluding node_name
-        itself, and falls back to `debasher_stop` on its own if that does
-        not finish within FORCE_STOP_TIMEOUT_SECS (the signature of a graph
-        left disconnected by this node's death). `--keep-supervisor` is not
-        optional here: this call runs on a thread of this same Supervisor
-        process, so the tool must not try to stop it too (see
-        `debasher_stop_resident`'s own `stop_supervisor_if_any` for why
-        that would deadlock into always forcing debasher_stop). Left alone,
-        this Supervisor resolves on its own, the same way it always does,
-        once every node it watches is done or given up on (see
-        "Clean-completion detection").
+        Called when the Supervisor gives up on the node `node_name`, after
+        MAX_RELAUNCH_ATTEMPTS relaunches. By default it stops the rest of
+        the program in order with debasher_stop_resident, and kills it if
+        that takes longer than FORCE_STOP_TIMEOUT_SECS.
         """
+        # Default: escalate in a background thread (so the checker thread
+        # that triggered this keeps running and noticing other nodes
+        # reaching "done" meanwhile), by calling `debasher_stop_resident`
+        # (`-x node_name`, `--keep-supervisor`) as a subprocess: it gracefully
+        # stops whatever part of the graph remains reachable (an ordinary
+        # halt, then a real stop signal, per node), excluding node_name
+        # itself, and falls back to `debasher_stop` on its own if that does
+        # not finish within FORCE_STOP_TIMEOUT_SECS (the signature of a graph
+        # left disconnected by this node's death). `--keep-supervisor` is not
+        # optional here: this call runs on a thread of this same Supervisor
+        # process, so the tool must not try to stop it too (see
+        # `debasher_stop_resident`'s own `stop_supervisor_if_any` for why
+        # that would deadlock into always forcing debasher_stop). Left alone,
+        # this Supervisor resolves on its own, the same way it always does,
+        # once every node it watches is done or given up on (see
+        # "Clean-completion detection").
         with self._lock:
             self._active_escalations += 1
         thread = threading.Thread(

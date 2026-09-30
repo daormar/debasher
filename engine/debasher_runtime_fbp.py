@@ -25,6 +25,7 @@ import json
 import signal
 import sys
 import threading
+import time
 
 from debasher_runtime_envelope import (
     TYPE_BARRIER,
@@ -36,6 +37,11 @@ from debasher_runtime_envelope import (
 )
 from debasher_runtime_transport import _PortWorker, _STOP
 from debasher_runtime_inputlog import LogCapReached, _InputLog
+
+# What a replay has asked of the notice so far when it has asked nothing
+# (see FBPProcess._replayed_notice), which None, a request to clear it,
+# cannot stand for.
+_NO_NOTICE_REQUEST = object()
 
 
 #####################
@@ -51,14 +57,35 @@ from debasher_runtime_inputlog import LogCapReached, _InputLog
 
 class FBPProcess(_PortWorker):
     """
-    Base class for resident processes. A subclass overrides
-    process_data/capture_node_state/restore_node_state/initialize_runtime.
-    Its ports are option names, without their leading dash(es) (e.g.
-    "inf" for -inf). A node run by the engine takes them from the options
-    of its module (see _take_ports_from_engine); a node built without the
-    engine, as the unit tests build them, declares them in the class
-    attributes below.
+    The base class of every node of a resident program. A module defines a
+    node with a subclass, named after its process in CamelCase, that
+    redefines the four hooks process_data(), capture_node_state(),
+    restore_node_state() and initialize_runtime(), and whose Python code
+    creates it and calls run(): `Counter().run()`.
+
+    The ports of the node are the options of its process connected to a
+    FIFO, named without their leading dash (`inf` for `-inf`). The engine
+    gives them to the node from the options of its module, so the class
+    declares none. Every option of the process is in `self.opts`, a dict
+    from the name of the option, without its dash, to its value, a
+    string; a flag, an option given with no value, is True when it is
+    given, and its name has to be listed in the class attribute `FLAGS`
+    (for example `FLAGS = ("verbose",)`). `self.log` is a logger from the
+    standard `logging` module, which writes to the standard error of the
+    process.
+
+    A node acts only in reaction to what it receives: the framework calls
+    process_data() once for each message, and a node sends only from
+    there. After a crash, the node is restored from its latest checkpoint
+    and process_data() is called again for every message received since,
+    in the same order, so that the node returns to the state it had.
     """
+
+    # Its ports are option names, without their leading dash(es) (e.g.
+    # "inf" for -inf). A node run by the engine takes them from the options
+    # of its module (see _take_ports_from_engine); a node built without the
+    # engine, as the unit tests build them, declares them in the class
+    # attributes below.
 
     INPUT_PORTS = []
     OUTPUT_PORTS = []
@@ -88,13 +115,20 @@ class FBPProcess(_PortWorker):
     # checkpoints are still written, just never announced anywhere.
     SUPERVISOR_PORT = None
 
+    #: How often, in seconds, the node tells the Supervisor of the program
+    #: that it is alive.
     HEARTBEAT_INTERVAL_SECONDS = 5
 
     # The observation of the outside world (see observe()): the name of the
     # port under which what the node observes reaches process_data, which is
     # not a fifo and so not one of its input ports, or None for a node that
     # observes only to act; and how often observe() runs.
+    #: The name under which what observe() brings in with inject() reaches
+    #: process_data(), as its `port_name`. It is not a FIFO and not one of the
+    #: ports of the node. None, the default, for a node that observes only to
+    #: act, which cannot call inject().
     OBSERVE_PORT = None
+    #: How often, in seconds, observe() runs.
     OBSERVE_INTERVAL_SECS = 1.0
 
     # The GIL switch interval of the node's process (sys.setswitchinterval),
@@ -105,6 +139,9 @@ class FBPProcess(_PortWorker):
     # loses it (see the Contract's limits). A short interval keeps that wait
     # short, at no cost that a measurement tells apart from noise. It applies
     # to the whole process, which the node has to itself.
+    #: The GIL switch interval of the process of the node, in seconds (0.5 ms
+    #: by default). A program sets it for one of its processes with the
+    #: computational specification `gil_switch_interval_ms`.
     GIL_SWITCH_INTERVAL_SECS = 0.0005
     CHECKPOINT_SCHEMA_VERSION = 2
     CHECKPOINT_RETENTION = 3
@@ -117,6 +154,12 @@ class FBPProcess(_PortWorker):
     # surface as an error, not something to paper over by discarding history
     # that a recovery may need. A segment is closed, and a new one started,
     # when it reaches the second size.
+    #: The size, in bytes, that the input log of the node may reach (100 MiB
+    #: by default). The log holds what the node received since its latest
+    #: checkpoint, so it only reaches this size when no snapshot has been
+    #: taken for a long time; the node then stops with an error. A program
+    #: sets it for one of its processes with the computational specification
+    #: `input_log_max_mb`.
     INPUT_LOG_MAX_BYTES = 100 * 1024 * 1024
     INPUT_LOG_SEGMENT_BYTES = 4 * 1024 * 1024
 
@@ -133,8 +176,28 @@ class FBPProcess(_PortWorker):
     # stopped, is down or stuck, or is slower than this node for good), and
     # a loud failure is better than a node that eats the memory of the
     # machine.
+    #: The size, in bytes, of what send_data() has taken and the node has not
+    #: yet written into its FIFOs, since their readers are slow, over which
+    #: the node skips a checkpoint and waits for the next round (8 MiB by
+    #: default). A program sets it for one of its processes with the
+    #: computational specification `out_backlog_max_mb`.
     OUT_BACKLOG_MAX_BYTES = 8 * 1024 * 1024
+    #: The size, in bytes, of what send_data() has taken and the node has not
+    #: yet written into its FIFOs, over which send_data() raises, since a
+    #: reader of the node is not reading (64 MiB by default). A program sets
+    #: it for one of its processes with the computational specification
+    #: `out_backlog_fail_mb`.
     OUT_BACKLOG_FAIL_BYTES = 64 * 1024 * 1024
+    # The notice of a node (see set_notice): its levels, and the length at
+    # which its text is cut.
+    NOTICE_LEVELS = ("info", "warning")
+    #: The length at which set_notice() cuts the text of a notice.
+    NOTICE_MAX_CHARS = 1000
+
+    # The class of the runtime library that a node derives from, which its
+    # node info file names (see _write_node_info): a subclass in the runtime
+    # library that a module derives from in turn sets its own.
+    _RUNTIME_CLASS = "FBPProcess"
 
     # The computational specifications of a process that set the limits
     # above for that process of a program (see _PortWorker._apply_comp_specs).
@@ -161,6 +224,8 @@ class FBPProcess(_PortWorker):
 
         self._heartbeat_thread = None
         self._heartbeat_stop = threading.Event()
+        # When this incarnation started its threads (see start_threads).
+        self._started_at = None
 
         # The observation thread, started only for a class that defines
         # observe(), and what wakes it before its interval (observe_now).
@@ -252,6 +317,9 @@ class FBPProcess(_PortWorker):
         # with it (under the same lock) so that send_data checks
         # OUT_BACKLOG_FAIL_BYTES at no cost.
         self._unwritten_bytes = 0
+        # The same, for each output port, which the node info file reports
+        # (see _write_node_info) with no need to go through the backlog.
+        self._unwritten_port_bytes = {}
         self._out_backlog_lock = threading.Lock()
         # The epoch of the first round whose checkpoint was skipped because
         # of the size of the outbound backlog, since the last one written;
@@ -291,8 +359,17 @@ class FBPProcess(_PortWorker):
         # Whether the node is replaying its input log (see
         # _replay_input_log). Internal: a module never sees it, so that
         # neither its node state nor what it sends can depend on it; sleep()
-        # is what uses it.
+        # and set_notice() are what use it.
         self._replaying = False
+        # The notice of the node as its notice file holds it, {"level",
+        # "text"}, or None without one, and what a replay asked for last,
+        # applied once it ends (_NO_NOTICE_REQUEST while it asked nothing).
+        # The comparison with it, the write of the file and its rename go
+        # under _notice_lock, so that the file always holds the notice that
+        # was set last, whatever thread set it.
+        self._notice = None
+        self._replayed_notice = _NO_NOTICE_REQUEST
+        self._notice_lock = threading.Lock()
 
     def _port_field_value(self, attribute, items):
         """
@@ -328,21 +405,27 @@ class FBPProcess(_PortWorker):
 
     def run(self):
         """
-        Full startup sequence: install the SIGTERM handler -> open every
-        FIFO -> find the most recent checkpoint if any ->
-        restore_node_state()/defaults, and the sender counters with it (see
-        _out_seq) -> initialize_runtime() -> open the input log and replay
-        what it holds after the checkpoint (all of it if there is no
-        checkpoint, since the node state is then the default one) ->
-        start_threads() (starts every worker thread) -> wait until told to
-        stop (SIGTERM, from outside this process; see _on_stop_signal and
-        _stop_requested) -> stop every thread, from this (the calling)
-        thread rather than the one that actually delivered the signal. A
-        halt closing its epoch is not part of this wait any more (see
-        _on_epoch_closed): it behaves like an ordinary snapshot, and this
-        node keeps running until told to stop by signal, whether or not it
-        ever halted.
+        Runs the node until it is told to stop. The Python code of the
+        process calls it once, after creating the node. It restores the
+        node from its latest checkpoint with restore_node_state(), calls
+        initialize_runtime(), calls process_data() again for every message
+        received since that checkpoint, and then processes what arrives.
         """
+        # Full startup sequence: install the SIGTERM handler -> open every
+        # FIFO -> find the most recent checkpoint if any ->
+        # restore_node_state()/defaults, and the sender counters with it (see
+        # _out_seq) -> initialize_runtime() -> open the input log and replay
+        # what it holds after the checkpoint (all of it if there is no
+        # checkpoint, since the node state is then the default one) ->
+        # start_threads() (starts every worker thread) -> wait until told to
+        # stop (SIGTERM, from outside this process; see _on_stop_signal and
+        # _stop_requested) -> stop every thread, from this (the calling)
+        # thread rather than the one that actually delivered the signal. A
+        # halt closing its epoch is not part of this wait any more (see
+        # _on_epoch_closed): it behaves like an ordinary snapshot, and this
+        # node keeps running until told to stop by signal, whether or not it
+        # ever halted.
+        #
         # A signal handler can only be installed from the main thread; a
         # node driven by run() on a background thread (every test that does
         # this) has no real SIGTERM to catch anyway, and simulates the stop
@@ -360,6 +443,10 @@ class FBPProcess(_PortWorker):
         # process holds it open, which during that time may be the neighbor
         # alone: if it crashed too, everything it had sent would be destroyed.
         self._open_fifos()
+
+        # Each incarnation starts with no notice: one of an earlier
+        # incarnation may speak of a fault fixed since.
+        self._remove_notice_file()
 
         checkpoint = self._load_latest_checkpoint()
         capture_pos = 0
@@ -470,13 +557,17 @@ class FBPProcess(_PortWorker):
         that is driven without run() gets it opened here, empty of any
         checkpoint. Also writes this incarnation's control ports file (see
         _write_control_ports_file), since self.opts is enough for that on
-        its own, with no need to wait for any of the above.
+        its own, with no need to wait for any of the above, and its first
+        node info file (see _write_node_info), before the heartbeat thread
+        that writes it again is started.
         """
         self._write_control_ports_file()
         if self._input_log is None:
             self._open_input_log(0)
         self._closed_at_start_ports = frozenset(self._closed_ports)
         super().start_threads()
+        self._started_at = time.time()
+        self._write_node_info(self._all_threads_alive())
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
         if self._observes():
@@ -504,6 +595,51 @@ class FBPProcess(_PortWorker):
         with open(tmp_path, "w") as f:
             for port in self.CONTROL_PORTS:
                 f.write(self.opts[port] + "\n")
+        os.replace(tmp_path, path)
+
+    def _node_info_path(self):
+        return self._execdir_entry("node_info")
+
+    def _node_info_extra(self):
+        """What a subclass of the runtime library adds to the node info file,
+        under names of its own: nothing here."""
+        return {}
+
+    def _write_node_info(self, healthy):
+        """
+        Writes the node info file: what a tool outside the node (see
+        debasher_inspect_resident) needs to know of it and cannot read
+        anywhere else. The limits in force, which the class and the
+        computational specifications of the process decide, and the size of
+        the outbound backlog, which lives only in memory, and whose copy in a
+        checkpoint is missing precisely when it grows too large. Written when
+        the threads start and again at every tick of the heartbeat thread,
+        with `healthy` as that tick found it. Atomic (temp file + rename),
+        like a checkpoint. Nothing in the node reads it back: it is not part
+        of the state of the node.
+        """
+        with self._out_backlog_lock:
+            out_backlog_bytes = dict(self._unwritten_port_bytes)
+        info = {
+            "runtime_class": self._RUNTIME_CLASS,
+            "started_at": self._started_at,
+            "heartbeat_interval_secs": self.HEARTBEAT_INTERVAL_SECONDS,
+            "limits": {
+                "input_log_max_bytes": self.INPUT_LOG_MAX_BYTES,
+                "out_backlog_max_bytes": self.OUT_BACKLOG_MAX_BYTES,
+                "out_backlog_fail_bytes": self.OUT_BACKLOG_FAIL_BYTES,
+                "gil_switch_interval_secs": self.GIL_SWITCH_INTERVAL_SECS,
+            },
+            **self._node_info_extra(),
+            "updated_at": time.time(),
+            "healthy": healthy,
+            "out_backlog_bytes": out_backlog_bytes,
+            "checkpoints_skipped_since": self._checkpoints_skipped_since,
+        }
+        path = self._node_info_path()
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(info, f)
         os.replace(tmp_path, path)
 
     def stop_threads(self, timeout=None, close=True):
@@ -548,23 +684,26 @@ class FBPProcess(_PortWorker):
         self.log.debug("observation thread stopped")
 
     def observe_now(self):
-        """Wakes the observation thread, so that observe() runs now and not
-        at the end of its interval."""
+        """Makes observe() run now, and not at the end of its interval."""
         self._observe_wake.set()
 
     def inject(self, payload):
         """
-        Brings `payload`, something that observe() saw, into the node, as a
-        DATA of OBSERVE_PORT: writes it to the input log and queues it for the
-        brain thread, as a reader thread does with what it reads from a fifo,
-        in the same order across every port (see _on_arrivals). It reaches
-        process_data like any input, and a replay reproduces it without
-        looking at the world again. Returns once it is logged, so that
-        whatever observe() records afterwards (that it reported something,
-        for example) never gets ahead of what the node has logged. Never from
-        process_data: an input that processing made would be made again by
-        every replay.
+        Brings `payload`, something that observe() saw, into the node as a
+        message: process_data() receives it with OBSERVE_PORT as its
+        `port_name`. The message is recorded like any other, so that a
+        replay after a crash receives it again without looking at the
+        world again. It returns once the message is recorded. It raises
+        when called from process_data(), since an input made by processing
+        would be made again by every replay, or when the class has no
+        OBSERVE_PORT.
         """
+        # Writes it to the input log and queues it for the brain thread, as
+        # a reader thread does with what it reads from a fifo, in the same
+        # order across every port (see _on_arrivals). Returning once it is
+        # logged means that whatever observe() records afterwards (that it
+        # reported something, for example) never gets ahead of what the
+        # node has logged.
         if self._handler_thread == threading.get_ident():
             raise RuntimeError(
                 f"{type(self).__name__}: inject() brings in what observe() sees; "
@@ -741,33 +880,119 @@ class FBPProcess(_PortWorker):
 
     def sleep(self, seconds):
         """
-        Waits `seconds`, from process_data, to set the pace of a node that
-        emits on its own through a self-loop (see "A node that emits on its
-        own" in the design doc's Extensions). It does not wait while the node
-        replays its input log, where the pace of the first execution has no
-        use and would only delay the recovery, and it returns early once the
-        node is told to stop, so that a stop is not delayed either. Only when
-        the next step comes changes, never the node state or what is sent.
+        Waits `seconds`, from process_data(), to set the pace of a node that
+        emits on its own through a self-loop. It does not wait while the
+        node replays its input log after a crash, where the pace would only
+        delay the recovery, and it returns early once the node is told to
+        stop. Use it instead of time.sleep(): it changes only when the next
+        step comes, never the node state or what is sent.
         """
         if self._replaying:
             return
         self._stop_requested.wait(seconds)
 
+    # -- the notice --
+
+    def set_notice(self, text, level="info"):
+        """
+        Leaves a notice for whoever watches the program, such as that the
+        configuration file of the node is missing. A node has at most one
+        notice, and a new one replaces the one it had. `level` is "info" or
+        "warning"; a text longer than NOTICE_MAX_CHARS is cut, with a
+        warning in the log. It may be called from any hook and any thread.
+        The notice is not part of the node state, and each incarnation of
+        the node starts without one, so a notice that follows from the node
+        state is set again in restore_node_state().
+        debasher_inspect_resident shows it, and the web interface marks the
+        node that has one.
+        """
+        # It goes to the notice file of the node. While the node replays its
+        # input log only the last request counts, applied once the replay
+        # ends.
+        if level not in self.NOTICE_LEVELS:
+            raise ValueError(
+                f"{type(self).__name__}: the level of a notice is one of {list(self.NOTICE_LEVELS)}, "
+                f"not {level!r}"
+            )
+        text = str(text)
+        if len(text) > self.NOTICE_MAX_CHARS:
+            self.log.warning(
+                "the text of a notice has %d characters, cut at NOTICE_MAX_CHARS (%d)",
+                len(text),
+                self.NOTICE_MAX_CHARS,
+            )
+            text = text[: self.NOTICE_MAX_CHARS]
+        self._request_notice({"level": level, "text": text})
+
+    def clear_notice(self):
+        """Takes away the notice of the node, if it has one (see set_notice)."""
+        self._request_notice(None)
+
+    def _request_notice(self, notice):
+        with self._notice_lock:
+            if self._replaying:
+                self._replayed_notice = notice
+                return
+            self._write_notice(notice)
+
+    def _apply_replayed_notice(self):
+        """Applies what the replay that just ended asked for last, if
+        anything: a long replay costs one write."""
+        with self._notice_lock:
+            notice, self._replayed_notice = self._replayed_notice, _NO_NOTICE_REQUEST
+            if notice is not _NO_NOTICE_REQUEST:
+                self._write_notice(notice)
+
+    def _notice_path(self):
+        return self._execdir_entry("notice")
+
+    def _write_notice(self, notice):
+        """
+        Makes the notice file hold `notice`, or removes it for None, unless
+        it already does. Atomic (temp file + rename), like the node info
+        file. Called with _notice_lock held.
+        """
+        if notice == self._notice:
+            return
+        path = self._notice_path()
+        if notice is None:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        else:
+            os.makedirs(self._execdir(), exist_ok=True)
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w") as f:
+                json.dump({**notice, "set_at": time.time()}, f)
+            os.replace(tmp_path, path)
+        self._notice = notice
+
+    def _remove_notice_file(self):
+        with self._notice_lock:
+            try:
+                os.remove(self._notice_path())
+            except FileNotFoundError:
+                pass
+            self._notice = None
+
     def send_data(self, tag, payload):
         """
-        Sends a DATA message on the output port `tag`, numbered with this
-        channel's next sequence number (see _out_seq and G5 in the
-        Contract). A node acts only in reaction to what it receives, so
-        this is allowed only inside process_data(), on the thread that is
-        running it: the brain thread, or the thread that called run() while
-        it replays the input log. From anywhere else it raises, and nothing
-        is sent or numbered. That keeps the messages a node sends, and the
-        state it captures, in the order in which it processed what it
-        received, which is what a replay reproduces: restored from the same
-        checkpoint, it renumbers what it sends again exactly the same way.
-        It also raises, again with nothing sent or numbered, if the message
-        would take the outbound backlog over OUT_BACKLOG_FAIL_BYTES.
+        Sends `payload`, any value that JSON can serialize, on the output
+        port `tag`. A node acts only in reaction to what it receives, so it
+        may be called only from process_data(), and raises anywhere else.
+        It also raises when what the node has not yet written into its
+        FIFOs would go over OUT_BACKLOG_FAIL_BYTES. When it raises, nothing
+        is sent.
         """
+        # The message is numbered with this channel's next sequence number
+        # (see _out_seq and G5 in the Contract). "Only from process_data()"
+        # means on the thread that is running it: the brain thread, or the
+        # thread that called run() while it replays the input log. That
+        # keeps the messages a node sends, and the state it captures, in the
+        # order in which it processed what it received, which is what a
+        # replay reproduces: restored from the same checkpoint, it renumbers
+        # what it sends again exactly the same way.
         if self._handler_thread != threading.get_ident():
             raise RuntimeError(
                 f"{type(self).__name__}: send_data() called outside process_data(), "
@@ -778,7 +1003,7 @@ class FBPProcess(_PortWorker):
         line = encode_data(payload, seq=seq)
         with self._out_backlog_lock:
             if self._unwritten_bytes + len(line) > self.OUT_BACKLOG_FAIL_BYTES:
-                port_bytes = sum(len(entry) for _, entry in self._unwritten.get(tag, []))
+                port_bytes = self._unwritten_port_bytes.get(tag, 0)
                 raise RuntimeError(
                     f"{type(self).__name__}: the outbound backlog would go over "
                     f"OUT_BACKLOG_FAIL_BYTES ({self.OUT_BACKLOG_FAIL_BYTES} bytes) with this "
@@ -786,8 +1011,7 @@ class FBPProcess(_PortWorker):
                     "a reader of this node is not reading (it was stopped, is down or "
                     "stuck, or is slower than this node)"
                 )
-            self._unwritten.setdefault(tag, []).append((seq, line))
-            self._unwritten_bytes += len(line)
+            self._add_to_out_backlog(tag, seq, line)
         self._out_seq[tag] = seq
         self._outbound_queues[tag].put(line)
 
@@ -806,6 +1030,14 @@ class FBPProcess(_PortWorker):
             if backlog and backlog[0][1] == item:
                 backlog.pop(0)
                 self._unwritten_bytes -= len(item)
+                self._unwritten_port_bytes[tag] -= len(item)
+
+    def _add_to_out_backlog(self, tag, seq, line):
+        """Appends a numbered DATA line to the outbound backlog of `tag`,
+        keeping its sizes up to date. The caller holds _out_backlog_lock."""
+        self._unwritten.setdefault(tag, []).append((seq, line))
+        self._unwritten_bytes += len(line)
+        self._unwritten_port_bytes[tag] = self._unwritten_port_bytes.get(tag, 0) + len(line)
 
     def _close_payload(self, tag):
         """
@@ -832,8 +1064,7 @@ class FBPProcess(_PortWorker):
                 seq = entry["seq"]
                 line = encode_data(entry["payload"], seq=seq)
                 with self._out_backlog_lock:
-                    self._unwritten.setdefault(tag, []).append((seq, line))
-                    self._unwritten_bytes += len(line)
+                    self._add_to_out_backlog(tag, seq, line)
                 self._outbound_queues[tag].put(line)
 
     def _snapshot_out_backlog(self):
@@ -868,6 +1099,12 @@ class FBPProcess(_PortWorker):
             # actively announcing its own bad health.
             if healthy and self.SUPERVISOR_PORT is not None:
                 self._send_interact(self.SUPERVISOR_PORT, "heartbeat")
+            # A node info file that cannot be written is not a reason to stop
+            # the heartbeats: the node goes on, only its file goes stale.
+            try:
+                self._write_node_info(healthy)
+            except OSError as exc:
+                self.log.warning("cannot write the node info file: %r", exc)
         self.log.debug("heartbeat thread stopped")
 
     def _on_barrier(self, port_name, payload):
@@ -1308,6 +1545,7 @@ class FBPProcess(_PortWorker):
                 replayed += 1
         finally:
             self._replaying = False
+        self._apply_replayed_notice()
         if replayed:
             self.log.info(
                 "replayed %d records of the input log after position %s", replayed, capture_pos
@@ -1341,25 +1579,60 @@ class FBPProcess(_PortWorker):
     # -- subclass extension points --
 
     def process_data(self, port_name, packet):
+        """
+        Processes one message, `packet`, received on the input port
+        `port_name` (or under OBSERVE_PORT, from observe()). `packet` is
+        the value that the sender gave to send_data(), already decoded from
+        JSON. It is the only place from which the node sends, with
+        send_data(). It must be deterministic: given the same node state
+        and the same messages, it makes the same new state and sends the
+        same messages, since a replay after a crash calls it again for
+        every message received since the latest checkpoint. It must not
+        depend on the time, on randomness or on reads from outside the
+        program, and whatever it does outside its FIFOs (writing a file,
+        calling a service) may be done more than once.
+        """
         raise NotImplementedError
 
     def capture_node_state(self):
+        """
+        Returns the node state: everything that process_data() keeps from
+        one message to the next, as a value that JSON can serialize. It is
+        called when a snapshot is taken, and what it returns is saved in a
+        checkpoint of the node.
+        """
         raise NotImplementedError
 
     def restore_node_state(self, node_state):
+        """
+        Sets the node state from `node_state`, what capture_node_state()
+        returned, when the node starts from a checkpoint. It must rebuild
+        the state exactly. It is not called when the node starts with no
+        checkpoint, so the constructor sets the initial state. It cannot
+        send.
+        """
         raise NotImplementedError
 
     def initialize_runtime(self):
+        """
+        Opens what the node uses and is not part of its state, such as a
+        connection or an open file, before it processes any message. It is
+        called at every start of the node, after restore_node_state(). It
+        cannot send.
+        """
         raise NotImplementedError
 
     def observe(self):
         """
         Optional. Looks at the outside world (a directory, a queue, the
         batch runs of a launcher node) and brings what it sees into the node
-        with inject(). Runs on a thread of its own, the observation thread,
-        every OBSERVE_INTERVAL_SECS or when observe_now() wakes it, only
-        while the node is live, never in a replay. What it sees is different
-        every time, so it cannot happen in process_data: it enters as an
-        input, which the input log records. A class that does not define it
-        has no observation thread.
+        with inject(). It runs on a thread of its own, every
+        OBSERVE_INTERVAL_SECS or when observe_now() is called, only while
+        the node is running, never while it replays its input log. What it
+        sees is different every time, so it cannot happen in
+        process_data(): it enters as an input, which a replay receives
+        again. After a crash, observe() may bring in again what it had
+        already brought in, so process_data() keeps in the node state what
+        it has acted on, and drops a repetition. If observe() raises, the
+        node stops sending heartbeats, as a node that crashed does.
         """

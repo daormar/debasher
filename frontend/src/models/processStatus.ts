@@ -36,3 +36,33 @@ export function processNodeBackground(
   }
   return DEFAULT_BACKGROUND;
 }
+
+/**
+ * The status of a process of a resident program as the canvas shows it:
+ * UNFINISHED_BUT_RUNNABLE is shown as UNFINISHED, since in a resident program
+ * no process waits to be run later.
+ */
+export function residentProcessStatus(
+  status: string | undefined
+): string | undefined {
+  return status === "UNFINISHED_BUT_RUNNABLE" ? "UNFINISHED" : status;
+}
+
+// What each process status means in a general program, as the legend of the
+// canvas says it (see "Process status" in doc/design_doc_engine.md).
+export const GENERAL_STATUS_MEANINGS: { status: ProcessRunStatus; meaning: string }[] = [
+  { status: "IN-PROGRESS", meaning: "some task still runs" },
+  { status: "FINISHED", meaning: "every task ended well or was skipped" },
+  { status: "UNFINISHED", meaning: "launched, nothing runs, and some task did not end well" },
+  { status: "UNFINISHED_BUT_RUNNABLE", meaning: "an array stopped partway; the next run launches the tasks left" },
+  { status: "TO-DO", meaning: "never launched" },
+];
+
+// What each process status means in a resident program, as the legend of the
+// canvas says it.
+export const RESIDENT_STATUS_MEANINGS: { status: ProcessRunStatus; meaning: string }[] = [
+  { status: "IN-PROGRESS", meaning: "alive, also after a halt, until stopped" },
+  { status: "FINISHED", meaning: "ended cleanly, by an orderly stop" },
+  { status: "UNFINISHED", meaning: "down; if the program is not live, stopped abruptly" },
+  { status: "TO-DO", meaning: "not launched" },
+];

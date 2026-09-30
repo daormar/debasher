@@ -149,8 +149,15 @@ generate_markdown() {
                     # Paragraph text (does not start with a space)
                     case "$last" in
                         "")
-                            # Start a new paragraph
-                            /usr/bin/env echo -n "$line"
+                            # Start a new paragraph; the examples that
+                            # follow a heading "Examples" are code, so
+                            # it introduces a literal block (the output
+                            # is included into reStructuredText)
+                            if [ "$line" = "Examples" ]; then
+                                /usr/bin/env echo -n "Examples::"
+                            else
+                                /usr/bin/env echo -n "$line"
+                            fi
                             ;;
 
                         *)

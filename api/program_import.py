@@ -1,5 +1,7 @@
 import re
+import tempfile
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -10,6 +12,7 @@ from .debasher_constants import (
 )
 from .doc_mod import (
     parse_module_markdown,
+    parse_program_type,
     run_doc_mod,
     run_doc_mod_all_shared_dirs,
     run_doc_mod_resolve_vars,
@@ -35,6 +38,8 @@ from .models import (
     ProgramProcess,
 )
 from .option_handler_import import ConnectionRef, SharedDirRef, resolve_options_handler
+from .resident_import import import_resident_processes
+from .script_generation import SCRIPT_HEADER
 
 # Default layout for imported processes: debasher_doc_mod's output
 # carries no position information, so processes are laid out in layers
@@ -111,11 +116,29 @@ def _to_computational_specs(raw: dict[str, str]) -> ComputationalSpecs:
     """
     cpus = raw.get("cpus")
     mem = raw.get("mem")
+    # The specifications that the nodes of a resident program read, which
+    # debasher_doc_mod prints only when the process gives them.
+    resident = {name: _to_float(raw[name]) for name in _RESIDENT_NUMERIC_SPECS if name in raw}
+    if "max_concurrent_runs" in resident and resident["max_concurrent_runs"] is not None:
+        resident["max_concurrent_runs"] = int(resident["max_concurrent_runs"])
     return ComputationalSpecs(
         cpus=_to_float(cpus) if cpus is not None else None,
         mem=_to_float(mem) if mem is not None else None,
         time=raw.get("time"),
+        batch_sched=raw.get("batch_sched"),
+        **resident,
     )
+
+
+_RESIDENT_NUMERIC_SPECS = (
+    "input_log_max_mb",
+    "out_backlog_max_mb",
+    "out_backlog_fail_mb",
+    "gil_switch_interval_ms",
+    "startup_timeout_s",
+    "max_concurrent_runs",
+    "heartbeat_timeout_s",
+)
 
 
 def _to_alias_opt_map(raw_value: str | None) -> list[AliasOptMapping]:
@@ -193,11 +216,22 @@ def _extract_preamble(script_path: Path) -> str:
     function definition" (see script_generation.py's _add_preamble),
     everything in the script itself up to (not including) its first
     top-level function definition is that same thing, read back out.
+
+    A script that script_generation.py wrote starts with its
+    SCRIPT_HEADER line, which is not part of the preamble: it is left
+    out, with the blank lines after it, so that importing a generated
+    script and generating it again does not add one more header to the
+    preamble every time.
     """
     try:
         lines = script_path.read_text().splitlines()
     except OSError:
         return ""
+
+    if lines and lines[0] == SCRIPT_HEADER:
+        lines = lines[1:]
+        while lines and not lines[0].strip():
+            lines = lines[1:]
 
     for index, line in enumerate(lines):
         if _FUNCTION_DEF_RE.match(line):
@@ -467,6 +501,10 @@ def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge])
     with a bounded (not necessarily "correct", since no single layering
     is correct for a cycle) result rather than hanging.
 
+    A self-loop (a process connected to itself) says nothing about the
+    order of two processes, and relaxing it would only push its process
+    one layer down on every pass, so it is left out.
+
     Processes sharing a layer are placed side by side, left to right in
     their original script order, for a deterministic layout.
     """
@@ -476,6 +514,8 @@ def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge])
         changed = False
         for edge in edges:
             if edge.sourceProcessId not in layer or edge.targetProcessId not in layer:
+                continue
+            if edge.sourceProcessId == edge.targetProcessId:
                 continue
             candidate = layer[edge.sourceProcessId] + 1
             if candidate > layer[edge.targetProcessId]:
@@ -492,43 +532,27 @@ def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge])
         next_x_by_layer[process_layer] = x + _PROCESS_X_SPACING
 
 
-def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") -> Program:
-    """
-    Import a Program from an existing DeBasher script by running
-    debasher_doc_mod over it and parsing the Markdown it generates.
+@dataclass
+class _ReadModule:
+    """What import reads of a module before it lays out its processes: its
+    header, its processes and their connections, as for a general program."""
 
-    Beyond the program's name/description/shared directories (see
-    parse_module_markdown, which requires debasher_doc_mod's
-    --show-shdirs output — one of run_doc_mod's DEFAULT_FLAGS) and each
-    process's name, description, options, and implementation code, each
-    process's
-    options-handler mode, per-option values, and any process-to-process
-    connections it implies are recovered on a best-effort basis by
-    statically parsing its _define_opts/_generate_opts_size/
-    _generate_opts source (see option_handler_import.py for the
-    recovery rules and their limits — a loop-shaped _define_opts
-    round-trips into "array" mode only when it matches
-    script_generation.py's exact fixed shape; anything else with a loop,
-    other control flow, or a real per-task generator that doesn't verify
-    (see _downgrade_unverifiable_task_indexed_connections) falls back to
-    "manual" with its source kept verbatim, executing exactly as it
-    originally did but without necessarily recovering every connection
-    for the canvas). The preamble is
-    recovered too, heuristically, by reading `script_path` itself rather
-    than debasher_doc_mod's Markdown (see _extract_preamble). Each
-    process's computational/additional specs are recovered from
-    debasher_doc_mod's --show-specs output (see _to_computational_specs/
-    _to_additional_specs). Everything else debasher_doc_mod doesn't
-    document — execution/program options — is left at its blank/default
-    value for the user to fill in.
+    name: str
+    description: str
+    shared_dirs: list[str]
+    program_type: str
+    processes: list[ProgramProcess]
+    edges: list[ProgramEdge]
+    available_shared_dirs: list[str]
 
-    `debasher_mod_dir`, if given, is both forwarded to debasher_doc_mod
-    (see run_doc_mod) and carried over into the imported program's own
-    envVars, so it keeps working for that program afterwards (e.g. when
-    running it, or re-fetching a process's info from its preamble).
-    """
+
+def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
+    """Reads the processes of a module and their connections (see
+    import_program_from_script), with no step of its own for a resident
+    program."""
     markdown = run_doc_mod(script_path, debasher_mod_dir)
     name, description, shared_dirs, process_chunks = parse_module_markdown(markdown)
+    program_type = parse_program_type(markdown)
 
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
@@ -552,14 +576,18 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
             # fifo isn't direction-restricted — a process can legitimately
             # open an *input* on a fifo it rendezvous on by name rather
             # than a plain connection (see debasher_cycle_trigger_
-            # interactive.sh's worker, whose "-threshold" is a genuine
-            # mandatory cmdline int internally sourced from a fifo).
+            # interactive.sh's worker, whose "-threshold" is an input
+            # fifo that something outside the program writes).
             if option.direction == "output" and option.label in result.value_descriptor_labels:
                 option.channel = "value_desc"
             if option.label in result.fifo_labels:
                 option.channel = "fifo"
             if option.label in result.mirrored_fifo_labels:
                 option.mirror = True
+            # The fifo tag of a resident program ("external" or "control"),
+            # written where a general program writes --mirror.
+            if option.channel == "fifo":
+                option.fifoTag = result.fifo_tags.get(option.label)
             # Not a channel (see ProgramOption.fromProcessSpec) — a
             # process-spec-sourced option is an ordinary literal once
             # resolved, this only flags where the value in `option.value`
@@ -607,12 +635,98 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
 
     edges = _build_edges(processes, pending_connections) + _build_shared_dir_edges(processes)
     _sync_connected_option_values(processes, edges)
+    return _ReadModule(
+        name=name,
+        description=description,
+        shared_dirs=shared_dirs,
+        program_type=program_type,
+        processes=processes,
+        edges=edges,
+        available_shared_dirs=available_shared_dirs,
+    )
+
+
+# The name of the module that read_preamble_processes writes around a
+# preamble: a name that a module loaded by a preamble is unlikely to take.
+_PREAMBLE_MODULE_NAME = "webui_preamble_processes"
+
+
+def read_preamble_processes(
+    preamble: str, process_names: list[str], debasher_mod_dir: str = ""
+) -> tuple[list[ProgramProcess], list[ProgramEdge]]:
+    """
+    The processes that a preamble defines, `process_names` (see
+    debasher_list_proc_names), and their connections, read as those of a
+    resident module made of the preamble and a program that adds every one
+    of them, so that a node can be read together with its Supervisor (see
+    resident_import.reuse_node). Nothing is refused here.
+    """
+    if not process_names:
+        return [], []
+    name = _PREAMBLE_MODULE_NAME
+    added = "\n".join(f'    add_debasher_process "{process}" ""' for process in process_names)
+    module = (
+        f"{preamble}\n\n"
+        f"{name}_document()\n{{\n    :\n}}\n\n"
+        f"{name}_shared_dirs()\n{{\n    :\n}}\n\n"
+        f'{name}_program_type()\n{{\n    program_type "resident"\n}}\n\n'
+        f"{name}_program()\n{{\n{added}\n}}\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        script_path = Path(tmp_dir) / f"{name}.sh"
+        script_path.write_text(module)
+        read = _read_module(script_path, debasher_mod_dir)
+    return read.processes, read.edges
+
+
+def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") -> Program:
+    """
+    Import a Program from an existing DeBasher script by running
+    debasher_doc_mod over it and parsing the Markdown it generates.
+
+    Beyond the program's name/description/shared directories (see
+    parse_module_markdown, which requires debasher_doc_mod's
+    --show-shdirs output, one of run_doc_mod's DEFAULT_FLAGS) and each
+    process's name, description, options, and implementation code, each
+    process's
+    options-handler mode, per-option values, and any process-to-process
+    connections it implies are recovered on a best-effort basis by
+    statically parsing its _define_opts/_generate_opts_size/
+    _generate_opts source (see option_handler_import.py for the
+    recovery rules and their limits: a loop-shaped _define_opts
+    round-trips into "array" mode only when it matches
+    script_generation.py's exact fixed shape; anything else with a loop,
+    other control flow, or a real per-task generator that doesn't verify
+    (see _downgrade_unverifiable_task_indexed_connections) falls back to
+    "manual" with its source kept verbatim, executing exactly as it
+    originally did but without necessarily recovering every connection
+    for the canvas). The preamble is
+    recovered too, heuristically, by reading `script_path` itself rather
+    than debasher_doc_mod's Markdown (see _extract_preamble). Each
+    process's computational/additional specs are recovered from
+    debasher_doc_mod's --show-specs output (see _to_computational_specs/
+    _to_additional_specs). Everything else debasher_doc_mod doesn't
+    document (execution/program options) is left at its blank/default
+    value for the user to fill in.
+
+    `debasher_mod_dir`, if given, is both forwarded to debasher_doc_mod
+    (see run_doc_mod) and carried over into the imported program's own
+    envVars, so it keeps working for that program afterwards (e.g. when
+    running it, or re-fetching a process's info from its preamble).
+    """
+    read = _read_module(script_path, debasher_mod_dir)
+    processes, edges = read.processes, read.edges
+    if read.program_type == "resident":
+        # Turns the processes into nodes and removes the Supervisor wiring,
+        # or refuses the program (see resident_import.py).
+        edges = import_resident_processes(processes, edges)
     _layout_processes(processes, edges)
 
     return Program(
         id=str(uuid.uuid4()),
-        name=name,
-        description=description,
+        name=read.name,
+        programType=read.program_type,
+        description=read.description,
         preamble=_extract_preamble(script_path),
         envVars={"DEBASHER_MOD_DIR": debasher_mod_dir} if debasher_mod_dir else {},
         homeDir="",
@@ -624,8 +738,8 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         # that dialog.
         executionOptions=ExecutionOptions(scheduler="BUILTIN"),
         programOptions={},
-        sharedDirs=shared_dirs,
-        availableSharedDirs=available_shared_dirs,
+        sharedDirs=read.shared_dirs,
+        availableSharedDirs=read.available_shared_dirs,
         processes=processes,
         edges=edges,
     )

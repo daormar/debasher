@@ -9,29 +9,123 @@ easy as it is shown below.
 Installation
 ------------
 
-Basic Installation Procedure
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+DeBasher is developed and tested on Linux. It also runs on Windows
+through WSL2, which runs a Linux system inside Windows, and it should
+run on macOS, where it has not been tested yet. The requirements are
+listed first, then how to meet them on each system, and then how to
+build and install the package, which is the same everywhere.
 
-To install DeBasher, first you need to install the autotools (autoconf,
-autoconf-archive, automake and libtool packages in Ubuntu). DeBasher
-requires Bash 4.0 or above as well as Python 3.x to work. Finally, the
-Graphviz package is also required so as to generate graphic information
-about programs.
+Requirements
+^^^^^^^^^^^^
 
-Assuming Ubuntu is being used, the required packages can be installed as
-follows:
+* Bash 4.3 or newer, which runs every script of DeBasher.
+* Python 3.
+* The usual command line tools of a Linux system: those of GNU
+  coreutils (``realpath`` and ``timeout`` among them), ``grep``,
+  ``sed``, ``awk`` and ``find``, and ``flock``, from util-linux.
+* Graphviz, whose ``dot`` command draws the graphs of programs.
+* The autotools, to configure the package: autoconf 2.71 or newer,
+  automake, libtool and autoconf-archive.
+* For the web interface, which is optional (see the :ref:`webui`
+  Section): Node.js 22.12 or newer, with npm, to build it, and a
+  Python virtual environment for its server. Without npm,
+  ``configure`` leaves the web interface out, as it does when given
+  ``--disable-frontend``.
+
+Some features need further software, described in `Third Party
+Software`_ below.
+
+Linux
+^^^^^
+
+On Ubuntu (or Debian), the required packages are installed with:
 
 ::
 
-    $ sudo apt install autoconf autoconf-archive automake libtool graphviz
+    $ sudo apt install autoconf autoconf-archive automake libtool graphviz python3 python3-venv
 
-On the other hand, some of the functionality incorporated by
-DeBasher requires the previous installation of third-party
-software (`see below <#third-party-software>`__).
+Bash, coreutils and util-linux are part of every installation. The
+Node.js package of the distribution is usually older than 22.12; a
+newer one is installed from `nodejs.org <https://nodejs.org/>`__ or
+with `nvm <https://github.com/nvm-sh/nvm>`__. Other distributions have
+packages of the same names, or close to them.
 
-Once the autotools are available (as well as other required software),
-you can proceed with the installation of the tool by following the next
-sequence of steps:
+Windows
+^^^^^^^
+
+DeBasher runs inside WSL2, the Linux system of Windows. WSL2 is
+installed, with an Ubuntu distribution, from a PowerShell opened as
+administrator:
+
+::
+
+    > wsl --install
+
+Then, in a terminal of that Ubuntu, follow the instructions for Linux
+above. Keep the sources of DeBasher, your programs and their output
+directories in the file system of Linux (under your home directory
+there), not in the drives of Windows that WSL2 mounts under
+``/mnt/c``: DeBasher creates FIFOs and locks files, which those drives
+may not support, and reaching them from Linux is much slower. The web
+interface, started inside WSL2, is reached from a browser of Windows
+at ``http://localhost:8000/``, since WSL2 forwards the ports of
+``localhost`` to Windows.
+
+macOS
+^^^^^
+
+**DeBasher has not been tested on macOS yet.** The steps below install
+everything that it needs, and make the command line tools that it
+finds behave as those of Linux do, which is the setting in which it
+is tested. If something still fails, please report it on the `issues
+page <https://github.com/daormar/debasher/issues>`__ of the project.
+
+#. Install the command line tools of Xcode, which provide ``git`` and
+   ``make``:
+
+   ::
+
+       $ xcode-select --install
+
+#. Install `Homebrew <https://brew.sh/>`__, and with it the rest of
+   the requirements:
+
+   ::
+
+       $ brew install bash coreutils findutils gnu-sed grep gawk flock \
+           autoconf autoconf-archive automake libtool graphviz python node
+
+   macOS ships Bash 3.2 and has no ``flock``, and its ``sed``, ``grep``,
+   ``find`` and the tools of coreutils are those of BSD, which differ
+   in details from the GNU ones that DeBasher is tested with.
+
+#. Put the Bash of Homebrew and the GNU tools first in the ``PATH``,
+   under their usual names (Homebrew installs the GNU tools with a
+   ``g`` prefix, ``gsed`` or ``gtimeout``, and keeps the usual names in
+   ``gnubin`` directories), for example in ``~/.zprofile``:
+
+   ::
+
+       BREW="$(brew --prefix)"
+       export PATH="$BREW/opt/coreutils/libexec/gnubin:$BREW/opt/findutils/libexec/gnubin:$BREW/opt/gnu-sed/libexec/gnubin:$BREW/opt/grep/libexec/gnubin:$BREW/bin:$PATH"
+
+   ``configure`` takes the first ``bash`` of the ``PATH``, which every
+   script of DeBasher then runs with, and refuses one older than 4.3;
+   ``bash --version`` shows which one comes first.
+
+#. Build and install the package as described below, and run
+   ``make installcheck``, which runs the examples of DeBasher and says
+   whether they work.
+
+Mirror taps (the ``--mirror`` option of ``define_fifo_opt``) rely on
+how Linux treats a FIFO opened for both reading and writing, and may
+not work on macOS.
+
+Building and Installing
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Once the requirements are available, the package is built and
+installed with the following steps:
 
 #. Obtain the package using git:
 
@@ -52,6 +146,9 @@ sequence of steps:
 #. Type ``make install`` to install the programs and any data
    files and documentation.
 
+#. Optionally, type ``make installcheck`` to check the installation:
+   it runs the example programs with the installed tools.
+
 #. You can remove the program binaries and object files from the
    source code directory by typing ``make clean``.
 
@@ -62,7 +159,7 @@ requires root privileges, another directory can be specified during Step
 
 ::
 
-    $ configure --prefix=<absolute-installation-path>
+    $ ./configure --prefix=<absolute-installation-path>
 
 For example, if ``user1`` wants to install the DeBasher package in
 the directory ``/home/user1/debasher``, the sequence of commands to
@@ -71,7 +168,7 @@ execute should be the following:
 ::
 
     $ ./reconf
-    $ configure --prefix=/home/user1/debasher
+    $ ./configure --prefix=/home/user1/debasher
     $ make
     $ make install
 
@@ -282,3 +379,21 @@ The output returned by the command is:
     * Resetting output directory for process...
     Function hello_world successfully executed
     Process finished at 07/30/24 18:17:06
+
+Using the Web Interface
+-----------------------
+
+The same kind of program can also be built without writing its module
+by hand, with the DeBasher web interface. Once its Python dependencies
+are installed (see the :ref:`webui` Section), it is started with:
+
+::
+
+    $ debasher_webui
+
+and opened in a browser at ``http://127.0.0.1:8000/``. There, "Create
+new program" starts an empty program, where processes are added and
+their options connected on a canvas; "Save" writes the program and its
+generated module into a directory, and the "Run" menu runs it with
+``debasher_exec``, coloring each process by its status as the run goes
+on.

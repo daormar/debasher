@@ -6,7 +6,6 @@ const MENU_ITEMS = [
   "Show scheduler output",
   "Show inputs and outputs",
   "Watch FIFO",
-  "Stop process",
 ] as const;
 
 export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
@@ -17,7 +16,32 @@ export type ProcessOutputKind = "stdout" | "sched-out" | "opts";
 // output fifo options (see ProgramCanvas's handleProcessMenuSelect).
 // "stop" calls stopProcess directly, skipping the task-index flow the
 // other actions go through, debasher_stop -p has no per-task variant.
-export type ProcessMenuAction = ProcessOutputKind | "io" | "watch-fifo" | "stop";
+// "restart" is "Restart node" on a node of a resident program, which asks
+// for confirmation first; "relaunch" is "Relaunch node" in a resident
+// program without a Supervisor.
+// "node-state" opens NodeStateModal and "batch-runs" BatchRunsModal, on a
+// node of a resident program.
+export type ProcessMenuAction =
+  ProcessOutputKind | "io" | "watch-fifo" | "node-state" | "batch-runs" | "stop" | "restart" | "relaunch";
+
+// An inspection action of a node of a resident program, listed after the
+// others: "Show node state" and, on a launcher node, "Show batch runs".
+export interface ResidentInspection {
+  label: "Show node state" | "Show batch runs";
+  action: "node-state" | "batch-runs";
+  disabled: boolean;
+}
+
+// An action on the process itself, listed after the inspection actions:
+// "Relaunch node" (see offersRelaunchNode), and, in a destructive color,
+// "Stop process" in a general program or "Restart node" on a node of a
+// resident program (see offersRestartNode).
+export interface NodeAction {
+  label: "Stop process" | "Restart node" | "Relaunch node";
+  action: "stop" | "restart" | "relaunch";
+  disabled: boolean;
+  destructive: boolean;
+}
 
 const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show options": "opts",
@@ -25,27 +49,35 @@ const KIND_BY_ITEM: Record<(typeof MENU_ITEMS)[number], ProcessMenuAction> = {
   "Show scheduler output": "sched-out",
   "Show inputs and outputs": "io",
   "Watch FIFO": "watch-fifo",
-  "Stop process": "stop",
 };
-
-// Items rendered in a "destructive action" color (currently just
-// "Stop process"), rather than adding a whole variant prop per item.
-const DESTRUCTIVE_ITEMS = new Set<(typeof MENU_ITEMS)[number]>(["Stop process"]);
 
 interface Props {
   x: number;
   y: number;
   isPending: boolean;
+  // In a resident program "Watch FIFO" is not offered, since the engine
+  // refuses --mirror there, and `residentInspections` are.
+  isResident: boolean;
+  residentInspections: ResidentInspection[];
   onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
+  nodeActions: NodeAction[];
+  // An action of the canvas rather than of the execution of the process,
+  // listed after the others: on the Supervisor, showing or hiding the
+  // Supervisor wiring.
+  canvasAction?: { label: string; onSelect: () => void };
 }
 
 export default function ProcessContextMenu({
   x,
   y,
   isPending,
+  isResident,
+  residentInspections,
   onSelect,
   onClose,
+  nodeActions,
+  canvasAction,
 }: Props) {
 
   const containerRef =
@@ -88,7 +120,7 @@ export default function ProcessContextMenu({
       }}
     >
 
-      {MENU_ITEMS.map(item => (
+      {MENU_ITEMS.filter(item => !(isResident && item === "Watch FIFO")).map(item => (
 
         <button
 
@@ -104,7 +136,6 @@ export default function ProcessContextMenu({
             border: "none",
             background: "none",
             cursor: "pointer",
-            color: DESTRUCTIVE_ITEMS.has(item) ? "#c0392b" : undefined,
           }}
 
         >
@@ -112,6 +143,76 @@ export default function ProcessContextMenu({
         </button>
 
       ))}
+
+      {residentInspections.map(inspection => (
+
+        <button
+
+          key={inspection.label}
+
+          onClick={() => onSelect(inspection.action)}
+
+          disabled={isPending || inspection.disabled}
+
+          style={{
+            textAlign: "left",
+            padding: "8px 12px",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+          }}
+
+        >
+          {inspection.label}
+        </button>
+
+      ))}
+
+      {nodeActions.map(nodeAction => (
+
+        <button
+
+          key={nodeAction.label}
+
+          onClick={() => onSelect(nodeAction.action)}
+
+          disabled={isPending || nodeAction.disabled}
+
+          style={{
+            textAlign: "left",
+            padding: "8px 12px",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            color: nodeAction.destructive ? "#c0392b" : undefined,
+          }}
+
+        >
+          {nodeAction.label}
+        </button>
+
+      ))}
+
+      {canvasAction && (
+
+        <button
+
+          onClick={canvasAction.onSelect}
+
+          style={{
+            textAlign: "left",
+            padding: "8px 12px",
+            border: "none",
+            borderTop: "1px solid #eee",
+            background: "none",
+            cursor: "pointer",
+          }}
+
+        >
+          {canvasAction.label}
+        </button>
+
+      )}
 
     </div>
 

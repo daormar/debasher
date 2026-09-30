@@ -165,7 +165,17 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
         )}
 
         {error && (
-          <div style={{ color: "#b00020", fontSize: 14 }}>
+          // An import that is refused explains itself line by line, one
+          // line for each place of the module that does not fit.
+          <div
+            style={{
+              color: "#b00020",
+              fontSize: 14,
+              whiteSpace: "pre-wrap",
+              maxHeight: 240,
+              overflowY: "auto",
+            }}
+          >
             {error}
           </div>
         )}

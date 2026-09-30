@@ -94,8 +94,115 @@ def _read_pid(path):
         return None
 
 
+def _read_exit_code(run_dir):
+    try:
+        with open(os.path.join(run_dir, _EXIT_CODE_FILE)) as f:
+            return int(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _registrations_dir_of(process_outdir):
+    """Where a launcher node lists its registrations, in the output directory
+    of its process."""
+    return os.path.join(process_outdir, _BOOKKEEPING_DIR, "registrations")
+
+
+def _read_registrations(registrations_dir):
+    """The batch runs registered in `registrations_dir`, (position, run), in
+    the order of their positions; none if it does not exist."""
+    try:
+        names = os.listdir(registrations_dir)
+    except FileNotFoundError:
+        return []
+    registrations = []
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            pos = int(name[: -len(".json")])
+            run = _read_json(os.path.join(registrations_dir, name))["run"]
+        except (ValueError, KeyError, OSError):
+            continue
+        registrations.append((pos, run))
+    return sorted(registrations)
+
+
+def _batch_run_state(run_dir, single_process, program_status):
+    """
+    The state of the batch run of `run_dir`, from what the directory holds
+    alone, so that the node that launched it, a relaunched node and a tool
+    outside the node (debasher_inspect_resident) find the same one. Returns
+    (state, exit code): ("registered", None), never launched; ("running",
+    None); ("finished", 0) or ("failed", code), once it has ended, whether
+    its exit code is already in `exit_code` or follows from what
+    debasher_status says; or ("stopped", None), stopped before it ended
+    together with the shell that ran it, and to be launched again.
+
+    `single_process` is whether the batch run is a single process, run with
+    debasher_exec_process, whose shell writes `exit_code` whatever the exit
+    code; otherwise the shell of debasher_exec writes `submitted` when it
+    ends with 0 and `exit_code` when it fails. `program_status(run_dir)` is
+    the exit code of debasher_status on the directory, or None if the
+    caller does not ask it now, which counts as in progress.
+
+    The PID of the shell is read before its files: a shell writes its file
+    before it ends, so one found gone had written it already, and one that
+    has ended but not yet been waited for, whose PID still shows as alive,
+    is never taken for a running one once its file is there.
+    """
+    pid = _read_pid(os.path.join(run_dir, _PID_FILE))
+    alive = pid is not None and _pid_alive(pid)
+    exit_code = _read_exit_code(run_dir)
+    if exit_code is not None:
+        return ("finished", 0) if exit_code == 0 else ("failed", exit_code)
+    if not single_process and os.path.exists(os.path.join(run_dir, _SUBMITTED_FILE)):
+        return _state_from_program_status(program_status(run_dir), ended=True)
+    if pid is None:
+        return ("registered", None)
+    if alive:
+        return ("running", None)
+    if single_process:
+        return ("stopped", None)
+    return _state_from_program_status(program_status(run_dir), ended=False)
+
+
+def _state_from_program_status(status, ended):
+    """
+    The state of a batch run whose debasher_exec is gone, from the exit
+    code of debasher_status on its run directory (None when not asked, which
+    counts as in progress): running while something of the program is in
+    progress; otherwise finished if everything finished, and, when
+    debasher_exec had ended well (`ended`), failed with that exit code, or
+    else stopped, to be launched again.
+    """
+    if status is None or status == _PROGRAM_IN_PROGRESS:
+        return ("running", None)
+    if status == _PROGRAM_FINISHED:
+        return ("finished", 0)
+    if ended:
+        return ("failed", status)
+    return ("stopped", None)
+
+
+def program_status(debasher_status, run_dir):
+    """The exit code of `debasher_status` (the path of the tool) on a run
+    directory."""
+    result = subprocess.run(
+        [debasher_status, "-d", run_dir],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode
+
+
 class ProgramLauncher(FBPProcess):
     """
+    A node that launches a general program once for each request that it
+    receives, each in a run directory of its own, and can tell a node
+    downstream when each of those batch runs ends.
+
     A subclass names the general program to launch, PFILE, as a module that
     declares the node would load it: a relative path is looked for in the
     directory of that module, where a program keeps its files, and then in
@@ -106,29 +213,49 @@ class ProgramLauncher(FBPProcess):
     RUNS_ROOT, an absolute path under which the run directories go; by
     default they go in the output directory of the process.
 
-    Every input port is a port of requests. If the node has an output port
-    DONE_PORT, observe() brings in the end of every batch run under the name
-    RUNS_DONE_PORT (its observe port, which is not a fifo), and the node
-    sends a notice on DONE_PORT for each.
+    Every input port is a port of requests. A request is a JSON object
+    with `opts`, the options of the general program (names with their
+    leading dash, values as strings), and optionally `run`, the name of its
+    run directory, a relative path none of whose parts starts with a dot:
+    `{"opts": {"-bam": "/data/s17.bam"}, "run": "s17"}`. Without `run`, the
+    run directory is named after the position of the request. A request
+    that does not follow this, or whose run directory belongs to another
+    request, is logged as an error and dropped.
+
+    If the node has an output port DONE_PORT, observe() brings in the end
+    of every batch run under the name RUNS_DONE_PORT (its observe port,
+    which is not a fifo), and the node sends on DONE_PORT a message for
+    each, `{"run": ..., "status": ..., "exit_code": ...}`, with `status`
+    "finished" for an exit code of 0 and "failed" for any other.
+
+    A launcher node cannot be a task of an array process.
     """
 
+    #: The module of the general program to launch (required).
     PFILE = None
+    #: The name of a process of PFILE to launch alone, instead of the whole
+    #: program, or None.
     PROCESS = None
+    #: The absolute path under which the run directories go, or None for the
+    #: output directory of the process.
     RUNS_ROOT = None
     RUNS_DONE_PORT = "runs_done"
+    #: The output port on which the end of each batch run is sent, if the
+    #: node has it.
     DONE_PORT = "outdone"
-    # How many batch runs run at a time. A program sets it for a process in
-    # its computational specifications, max_concurrent_runs.
+    _RUNTIME_CLASS = "ProgramLauncher"
+    #: How many batch runs run at a time. A program sets it for a process in
+    #: its computational specifications, `max_concurrent_runs`.
     MAX_CONCURRENT_RUNS = 1
-    # The scheduler the batch runs use, given to debasher_exec as --sched:
-    # the built-in one by default, as for the resident program itself, so
-    # that the batch runs do not depend on the scheduler a machine would
-    # pick on its own. A program sets it for a process in its computational
-    # specifications, batch_sched (BUILTIN or SLURM).
+    #: The scheduler the batch runs use, given to debasher_exec as `--sched`:
+    #: the built-in one by default, as for the resident program itself, so
+    #: that the batch runs do not depend on the scheduler a machine would
+    #: pick on its own. A program sets it for a process in its computational
+    #: specifications, `batch_sched` (BUILTIN or SLURM).
     BATCH_SCHED = "BUILTIN"
-    # How often, at most, observe() asks debasher_status how a batch run is
-    # going (OBSERVE_INTERVAL_SECS is how often it looks at the run
-    # directories).
+    #: How often, at most, in seconds, observe() asks debasher_status how a
+    #: batch run is going (OBSERVE_INTERVAL_SECS is how often it looks at the
+    #: run directories).
     STATUS_CHECK_INTERVAL_SECS = 5.0
 
     _COMP_SPEC_ATTRS = {
@@ -150,8 +277,8 @@ class ProgramLauncher(FBPProcess):
         # DONE_PORT, so that an end reported twice is announced once.
         self._announced = set()
         self._life_id = None
-        # The batch runs this incarnation launched: run directory -> Popen,
-        # so that their exit codes can be collected.
+        # The batch runs this incarnation launched: run directory -> Popen of
+        # its shell, waited for once it ends so that none is left a zombie.
         self._children = {}
         # When debasher_status was last asked about a run directory, to ask
         # at most once every STATUS_CHECK_INTERVAL_SECS.
@@ -214,8 +341,18 @@ class ProgramLauncher(FBPProcess):
     def _bookkeeping_path(self, *names):
         return os.path.join(self._outdir(), _BOOKKEEPING_DIR, *names)
 
+    def _node_info_extra(self):
+        """What debasher_inspect_resident needs to find the batch runs of
+        the node and tell their states."""
+        return {
+            "launcher": {
+                "runs_root": os.path.abspath(self._runs_root()),
+                "process": self.PROCESS,
+            }
+        }
+
     def _registrations_dir(self):
-        return self._bookkeeping_path("registrations")
+        return _registrations_dir_of(self._outdir())
 
     def _run_dir(self, run):
         return os.path.join(self._runs_root(), run)
@@ -338,9 +475,9 @@ class ProgramLauncher(FBPProcess):
     # -- the observation of the batch runs --
 
     def _observe_port(self):
-        """RUNS_DONE_PORT if the node has DONE_PORT to send notices on, so
-        that observe() brings in the end of each batch run; None otherwise,
-        and observe() only launches."""
+        """RUNS_DONE_PORT if the node has DONE_PORT to send done messages
+        on, so that observe() brings in the end of each batch run; None
+        otherwise, and observe() only launches."""
         return self.RUNS_DONE_PORT if self.DONE_PORT in self.OUTPUT_PORTS else None
 
     def observe(self):
@@ -349,17 +486,7 @@ class ProgramLauncher(FBPProcess):
     def _registrations(self):
         """The registered batch runs, (position, run), in the order of their
         positions."""
-        registrations = []
-        for name in os.listdir(self._registrations_dir()):
-            if not name.endswith(".json"):
-                continue
-            try:
-                pos = int(name[: -len(".json")])
-                run = _read_json(os.path.join(self._registrations_dir(), name))["run"]
-            except (ValueError, KeyError, OSError):
-                continue
-            registrations.append((pos, run))
-        return sorted(registrations)
+        return _read_registrations(self._registrations_dir())
 
     def _check_runs(self):
         """
@@ -367,12 +494,15 @@ class ProgramLauncher(FBPProcess):
         those that ended, reports their ends, and launches what the free
         slots allow, in the order of the positions.
         """
+        self._reap_children()
         running = 0
         to_launch = []
         for _pos, run in self._registrations():
             run_dir = self._run_dir(run)
-            state = self._run_state(run_dir)
-            if state == "ended":
+            state, exit_code = _batch_run_state(run_dir, self.PROCESS is not None, self._program_status)
+            if state in ("finished", "failed"):
+                if not os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
+                    self._end_run(run_dir, exit_code)
                 self._report_end(run, run_dir)
             elif state == "running":
                 running += 1
@@ -384,92 +514,30 @@ class ProgramLauncher(FBPProcess):
             self._launch(run_dir)
             running += 1
 
-    def _run_state(self, run_dir):
+    def _reap_children(self):
         """
-        "ended" (it has an exit code), "running" or "to_launch" (never
-        launched, or its debasher_exec stopped before it had launched the
-        whole program, when the node went down with it). Once its
-        debasher_exec has ended well, how the batch run is going is what
-        debasher_status says, whatever the scheduler: with the built-in one,
-        debasher_exec waits for the program to end, but with SLURM it only
-        submits the jobs, and ends at once.
+        Waits for the shells of the batch runs that this incarnation launched
+        and that have ended, so that none is left a zombie. How a batch run
+        ended is not learned here: its shell wrote it into the run directory
+        before it ended (see _batch_run_state).
         """
-        if os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
-            return "ended"
-        if self.PROCESS is not None:
-            return self._process_run_state(run_dir)
-        child = self._children.get(run_dir)
-        if child is not None:
-            exit_code = child.poll()
-            if exit_code is None:
-                return "running"
-            del self._children[run_dir]
-            if exit_code != 0:
-                self._end_run(run_dir, exit_code)
-                return "ended"
-            with open(os.path.join(run_dir, _SUBMITTED_FILE), "w"):
-                pass
-        elif not os.path.exists(os.path.join(run_dir, _SUBMITTED_FILE)):
-            pid = _read_pid(os.path.join(run_dir, _PID_FILE))
-            if pid is None:
-                return "to_launch"
-            if _pid_alive(pid):
-                return "running"
-        return self._state_from_status(run_dir)
+        for run_dir, child in list(self._children.items()):
+            if child.poll() is not None:
+                del self._children[run_dir]
 
-    def _process_run_state(self, run_dir):
+    def _program_status(self, run_dir):
         """
-        The state of a batch run of a single process, with no exit code yet.
-        The process writes its own exit code when it ends (see _launch), so
-        a crash of the node does not lose it: while it is running, its PID is
-        alive; once that is gone with no exit code, it was stopped before it
-        ended, and it is launched again, from the start, since
-        debasher_exec_process has nothing to resume from.
-        """
-        child = self._children.get(run_dir)
-        if child is not None:
-            if child.poll() is None:
-                return "running"
-            del self._children[run_dir]
-            if os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
-                return "ended"
-            return "to_launch"
-        pid = _read_pid(os.path.join(run_dir, _PID_FILE))
-        if pid is not None and _pid_alive(pid):
-            return "running"
-        return "to_launch"
-
-    def _state_from_status(self, run_dir):
-        """
-        The state of a batch run whose debasher_exec is gone, from what
-        debasher_status says of its run directory, asked at most once every
-        STATUS_CHECK_INTERVAL_SECS. A batch run whose debasher_exec ended well
-        (submitted) is ended when nothing of it is in progress, finished or
-        failed; one whose debasher_exec was stopped before, by a crash of the
-        node, is launched again unless something of it is still in progress.
+        The exit code of debasher_status on a run directory, asked at most
+        once every STATUS_CHECK_INTERVAL_SECS for each; None when it was
+        asked more recently than that, which _batch_run_state counts as in
+        progress.
         """
         now = time.monotonic()
         last = self._status_checked_at.get(run_dir)
         if last is not None and now - last < self.STATUS_CHECK_INTERVAL_SECS:
-            return "running"
+            return None
         self._status_checked_at[run_dir] = now
-        status = self._program_status(run_dir)
-        if status == _PROGRAM_IN_PROGRESS:
-            return "running"
-        submitted = os.path.exists(os.path.join(run_dir, _SUBMITTED_FILE))
-        if status == _PROGRAM_FINISHED or submitted:
-            self._end_run(run_dir, status)
-            return "ended"
-        return "to_launch"
-
-    def _program_status(self, run_dir):
-        result = subprocess.run(
-            [self._tool("debasher_status"), "-d", run_dir],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        return result.returncode
+        return program_status(self._tool("debasher_status"), run_dir)
 
     @staticmethod
     def _end_run(run_dir, exit_code):
@@ -498,13 +566,25 @@ class ProgramLauncher(FBPProcess):
             )
         return os.path.join(libexecdir, name)
 
-    # The shell command that runs a single process and writes its exit code
-    # into the run directory, $1, once it ends, through a temporary file
-    # renamed into place: the process leaves its own exit code, which a crash
-    # of the node that launched it does not lose.
+    # The shell commands that run a batch run and write into its run
+    # directory, $1, how it ended, through a temporary file renamed into
+    # place, before the shell ends: only the parent of a process learns its
+    # exit code, and written there it outlives a crash of the node, and any
+    # process can read it (see _batch_run_state). A single process leaves
+    # its exit code whatever it is; debasher_exec leaves `submitted` when it
+    # ends with 0, since its program may still be running, and its exit code
+    # otherwise.
     _RECORD_EXIT_CODE = (
         'dir=$1; shift; "$@"; code=$?; '
         'echo "$code" > "$dir/exit_code.tmp" && mv "$dir/exit_code.tmp" "$dir/exit_code"'
+    )
+    _RECORD_SUBMITTED = (
+        'dir=$1; shift; "$@"; code=$?; '
+        'if [ "$code" -eq 0 ]; then '
+        ': > "$dir/submitted.tmp" && mv "$dir/submitted.tmp" "$dir/submitted"; '
+        'else '
+        'echo "$code" > "$dir/exit_code.tmp" && mv "$dir/exit_code.tmp" "$dir/exit_code"; '
+        'fi'
     )
 
     def _launch(self, run_dir):
@@ -522,6 +602,11 @@ class ProgramLauncher(FBPProcess):
             opts += [name, value]
         if self.PROCESS is None:
             args = [
+                "/bin/sh",
+                "-c",
+                self._RECORD_SUBMITTED,
+                "debasher_launcher",
+                run_dir,
                 self._tool("debasher_exec"),
                 "--pfile",
                 self._pfile,

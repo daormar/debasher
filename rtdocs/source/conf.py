@@ -1,5 +1,13 @@
 # Configuration file for the Sphinx documentation builder.
 
+import os
+import sys
+
+# The Python runtime of resident programs, whose docstrings the API
+# reference of its classes is built from (sphinx.ext.autodoc). Its
+# modules import only the standard library.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'engine')))
+
 # -- Project information
 
 project = 'DeBasher'
@@ -27,6 +35,10 @@ intersphinx_mapping = {
 intersphinx_disabled_domains = ['std']
 
 templates_path = ['_templates']
+
+# The *_doc.md files that generate_api_files.sh writes are only included
+# into the pages of the API, never built as pages of their own.
+exclude_patterns = ['*_doc.md']
 
 html_static_path = ['_static']
 

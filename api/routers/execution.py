@@ -1,16 +1,27 @@
+import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import file_inspection, paths, persistence
+from .. import (
+    file_inspection,
+    launch_record,
+    node_relaunch,
+    paths,
+    persistence,
+    program_state,
+    resident_fifos,
+    tool_sessions,
+)
 from ..models import Program
+from ..resident_supervisor_wiring import NO_HOLD_FIFOS_LABEL
 
 router = APIRouter(prefix="/api/execution", tags=["execution"])
 
@@ -43,22 +54,68 @@ def _debasher_env(program: Program) -> dict[str, str]:
     return env
 
 
+def _is_resident(program: Program) -> bool:
+    return program.programType == "resident"
+
+
 def _command_line_option_types(program: Program) -> dict[str, str]:
     types: dict[str, str] = {}
     for process in program.processes:
         for option in process.options:
             if option.commandLine and option.label not in types:
                 types[option.label] = option.dataType
+    # The flag of the Supervisor is not in the program model: script
+    # generation writes it with the rest of the Supervisor.
+    if _is_resident(program) and any(p.nodeKind == "Supervisor" for p in program.processes):
+        types.setdefault(NO_HOLD_FIFOS_LABEL, "None")
     return types
 
 
-def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str] | None:
+def _execution_option_flags(program: Program) -> list[str]:
+    """
+    The debasher_exec flags of the execution options. The engine forces the
+    built-in scheduler in oneshot mode on a resident program, and refuses
+    any other scheduler, so a resident program is given only the limits of
+    the built-in scheduler: every other flag is either meant for the Slurm
+    scheduler or for general programs, or would keep some task of a node
+    from running at once.
+    """
+    exec_opts = program.executionOptions
+
+    if _is_resident(program):
+        flags = ["--sched", "BUILTIN"]
+    else:
+        flags = ["--sched", exec_opts.scheduler]
+
+    if exec_opts.builtinSchedCpus:
+        flags += ["--builtinsched-cpus", exec_opts.builtinSchedCpus]
+    if exec_opts.builtinSchedMem:
+        flags += ["--builtinsched-mem", exec_opts.builtinSchedMem]
+
+    if _is_resident(program):
+        return flags
+
+    if exec_opts.dfltNodes:
+        flags += ["--dflt-nodes", exec_opts.dfltNodes]
+    if exec_opts.dfltThrottle:
+        flags += ["--dflt-throttle", exec_opts.dfltThrottle]
+    if exec_opts.rerunOutdatedProcs:
+        flags.append("--rerun-outdated-procs")
+    if exec_opts.condaSupport:
+        flags.append("--conda-support")
+    if exec_opts.dockerSupport:
+        flags.append("--docker-support")
+
+    return flags
+
+
+def _prepare_debasher_exec_command(program: Program, mode_flag: str | None) -> list[str] | None:
     """
     Save `program` to its home directory (the same as pressing "Save"
     in the toolbar, generating its .sh file there) and build the
     debasher_exec command line for it, passing the scheduler, the run
-    output directory, and the command line options set via "Set
-    program options".
+    output directory, the other execution options, `mode_flag` when
+    given, and the command line options set via "Set program options".
 
     Returns None if debasher_exec isn't found.
     """
@@ -73,36 +130,28 @@ def _prepare_debasher_exec_command(program: Program, mode_flag: str) -> list[str
         str(tool),
         "--pfile", str(script_path),
         "--outdir", program.outputDir,
-        "--sched", program.executionOptions.scheduler,
+        *_execution_option_flags(program),
     ]
 
-    exec_opts = program.executionOptions
-    if exec_opts.builtinSchedCpus:
-        command += ["--builtinsched-cpus", exec_opts.builtinSchedCpus]
-    if exec_opts.builtinSchedMem:
-        command += ["--builtinsched-mem", exec_opts.builtinSchedMem]
-    if exec_opts.dfltNodes:
-        command += ["--dflt-nodes", exec_opts.dfltNodes]
-    if exec_opts.dfltThrottle:
-        command += ["--dflt-throttle", exec_opts.dfltThrottle]
-    if exec_opts.rerunOutdatedProcs:
-        command.append("--rerun-outdated-procs")
-    if exec_opts.condaSupport:
-        command.append("--conda-support")
-    if exec_opts.dockerSupport:
-        command.append("--docker-support")
+    if mode_flag is not None:
+        command.append(mode_flag)
 
-    command.append(mode_flag)
+    return command + _program_option_args(program)
 
+
+def _program_option_args(program: Program) -> list[str]:
+    """The program options as debasher_exec is given them: each label
+    followed by its value, except a flag, which is given alone when its value
+    is not empty and left out otherwise."""
+    args: list[str] = []
     option_types = _command_line_option_types(program)
     for label, value in program.programOptions.items():
         if option_types.get(label) == "None":
             if value:
-                command.append(label)
+                args.append(label)
         else:
-            command += [label, value]
-
-    return command
+            args += [label, value]
+    return args
 
 
 def _run_debasher_exec(program: Program, mode_flag: str) -> str:
@@ -115,20 +164,43 @@ def _run_debasher_exec(program: Program, mode_flag: str) -> str:
     return result.stdout + result.stderr
 
 
-def _run_debasher_dir_tool(program: Program, tool_name: str) -> tuple[str, int]:
+def _run_debasher_dir_tool(program: Program, tool_name: str, outdir: str | None = None) -> tuple[str, int]:
     """
     Run a DeBasher bin tool that just takes "-d <outputDir>" (e.g.
-    debasher_status, debasher_stop). Returns (combined output, exit code).
+    debasher_status, debasher_stop), on the output directory of the program
+    or on `outdir`, the run directory of a batch run of a launcher node.
+    Returns (combined output, exit code).
     """
     tool = paths.find_bin_tool(tool_name)
     if tool is None:
         return f"Error: {tool_name} tool not found.", 1
 
-    command = [str(tool), "-d", program.outputDir]
+    command = [str(tool), "-d", outdir if outdir is not None else program.outputDir]
 
     result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
     return result.stdout + result.stderr, result.returncode
+
+
+def _run_debasher_dir_tool_in_own_session(
+    program: Program, tool_name: str, extra_args: list[str] | None = None
+) -> tuple[str, int]:
+    """
+    Run a DeBasher bin tool that takes "-d <outputDir>" and acts on a run
+    (debasher_stop, debasher_stop_resident, debasher_snapshot_resident,
+    debasher_reset_resident), in a session of its own and with its output in
+    a temporary file, so that the backend going away cannot cut it in the
+    middle. `extra_args` follow "-d <outputDir>". Returns (output, exit
+    code).
+    """
+    tool = paths.find_bin_tool(tool_name)
+    if tool is None:
+        return f"Error: {tool_name} tool not found.", 1
+
+    output, exit_code = tool_sessions.run_with_temp_output(
+        [str(tool), "-d", program.outputDir, *(extra_args or [])], _debasher_env(program)
+    )
+    return _cap_lines(output), exit_code
 
 
 def _get_program_state(program: Program) -> tuple[ProgramState, str]:
@@ -241,13 +313,147 @@ def list_schedulers() -> ListSchedulersResponse:
 
 class RunProgramResponse(BaseModel):
     started: bool
+    # Only for a launch that /run waits for, that of a resident program or of
+    # a program run by Slurm: the exit code of debasher_exec and what it
+    # printed, capped at MAX_INSPECT_LINES lines.
+    exitCode: int | None = None
+    output: str | None = None
+
+
+_RUN_LOG_NAME = ".debasher_webui_run.log"
+
+_SNAPSHOT_LOG_NAME = ".debasher_webui_snapshots.log"
+
+
+def _run_log_path(program: Program) -> Path:
+    log_path = Path(program.outputDir).expanduser() / _RUN_LOG_NAME
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    return log_path
+
+
+def _snapshot_period(program: Program) -> str | None:
+    """The period of the periodic snapshots of a resident program, or None
+    for none; a period that is not a positive number of seconds is refused
+    before anything is launched."""
+    period = program.executionOptions.snapshotEverySecs.strip()
+    if not period:
+        return None
+    if not period.isdigit() or int(period) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The snapshot period must be a positive number of seconds, not '{period}'.",
+        )
+    return period
+
+
+def _start_periodic_snapshots(program: Program, period: str) -> None:
+    """
+    Start debasher_snapshot_resident --every <period> on the output
+    directory, detached, in a session of its own and with its output in the
+    snapshot log. The tool ends by itself once no node of the program runs,
+    whatever stopped the program, so nothing has to stop it.
+    """
+    tool = paths.find_bin_tool("debasher_snapshot_resident")
+    if tool is None:
+        raise HTTPException(status_code=500, detail="debasher_snapshot_resident tool not found.")
+
+    tool_sessions.start_detached(
+        [str(tool), "-d", program.outputDir, "--every", period],
+        _debasher_env(program),
+        Path(program.outputDir).expanduser() / _SNAPSHOT_LOG_NAME,
+    )
+
+
+def _launch_and_wait(command: list[str], program: Program) -> RunProgramResponse:
+    """
+    Run debasher_exec to its end, which comes as soon as every process is
+    launched (a resident program) or submitted (Slurm), so that a launch that
+    the engine refuses is reported at once. It runs in a session of its own
+    and writes into the run log, which is read once it ends: a pipe would be
+    inherited by the processes it launches, and waiting for its end would
+    mean waiting for theirs.
+    """
+    log_path = _run_log_path(program)
+    exit_code = tool_sessions.run_in_own_session(command, _debasher_env(program), log_path)
+    output = _cap_lines(log_path.read_text(errors="replace"))
+    return RunProgramResponse(started=exit_code == 0, exitCode=exit_code, output=output)
+
+
+def _launch_resident_program(command: list[str], program: Program) -> RunProgramResponse:
+    """
+    Launch a resident program, waiting for debasher_exec. Once it has ended
+    with 0, the launch record is written, and the periodic snapshots start,
+    when the program has a period for them.
+    """
+    period = _snapshot_period(program)
+
+    response = _launch_and_wait(command, program)
+
+    if response.exitCode == 0:
+        # Only a launch that ended well leaves its record: after a failed
+        # one, the program state may still be that of the previous record,
+        # which has to stay so that the next launch asks again.
+        launch_record.write(program.outputDir, program, _program_option_args(program))
+        if period is not None:
+            _start_periodic_snapshots(program, period)
+
+    return response
+
+
+class LaunchCheckResponse(BaseModel):
+    hasProgramState: bool
+    hasLaunchRecord: bool
+    # Whether the launch has to ask first: there is program state, and no
+    # launch record or one that differs from the program.
+    needsConfirmation: bool
+
+
+def _launch_check(program: Program) -> LaunchCheckResponse:
+    has_state = program_state.has_program_state(program.outputDir)
+    record = launch_record.read(program.outputDir)
+    needs_confirmation = has_state and (
+        record is None or launch_record.differs(record, program, _program_option_args(program))
+    )
+    return LaunchCheckResponse(
+        hasProgramState=has_state,
+        hasLaunchRecord=record is not None,
+        needsConfirmation=needs_confirmation,
+    )
+
+
+@router.post("/launch-check", response_model=LaunchCheckResponse)
+def launch_check(program: Program) -> LaunchCheckResponse:
+    """
+    Whether "Run program" on a resident program has to ask before launching:
+    the output directory holds program state, and the program differs from
+    the launch record (its descriptions left out), or there is no record, as
+    when the state comes from a run launched outside the web UI.
+    """
+    return _launch_check(program)
+
+
+# The code of the conflict with which /run answers when a resident program
+# would resume program state that a different program produced.
+LAUNCH_RECORD_CONFLICT = "launch-record"
 
 
 @router.post("/run", response_model=RunProgramResponse)
-def run_program(program: Program) -> RunProgramResponse:
+def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProgramResponse:
     """
-    Launch a program run (debasher_exec --wait) in the background and
-    return immediately. Poll /status to find out when it's done.
+    Launch a program run, with debasher_exec in a session of its own. A
+    general program run by the built-in scheduler is validated with
+    debasher_exec --validate, which this waits for, and then started in the
+    background, and this returns immediately: the process statuses tell
+    when it's done. With Slurm, and for a resident program, launched with
+    debasher_exec in oneshot mode, this returns once debasher_exec has
+    ended, with its exit code and output.
+
+    A resident program whose output directory holds program state, and that
+    differs from the launch record or has none, is refused with a conflict
+    whose detail has the code "launch-record", unless `resumeChangedProgram`
+    says that the user chose to resume with the changed program. The
+    frontend asks before sending the request; this checks again, since
+    another tab may have launched the program in between.
     """
     state, _ = _get_program_state(program)
     if state == "in-progress":
@@ -256,34 +462,55 @@ def run_program(program: Program) -> RunProgramResponse:
             detail="A run is already in progress for this output directory.",
         )
 
-    command = _prepare_debasher_exec_command(program, "--wait")
+    if _is_resident(program) and not resumeChangedProgram:
+        check = _launch_check(program)
+        if check.needsConfirmation:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": LAUNCH_RECORD_CONFLICT, "hasLaunchRecord": check.hasLaunchRecord},
+            )
+
+    # No --wait: with the built-in scheduler it changes nothing, and with
+    # Slurm it would keep debasher_exec alive for the whole run, only to wait.
+    command = _prepare_debasher_exec_command(program, None)
     if command is None:
         raise HTTPException(status_code=500, detail="debasher_exec tool not found.")
 
-    log_path = Path(program.outputDir).expanduser() / ".debasher_webui_run.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if _is_resident(program):
+        return _launch_resident_program(command, program)
 
-    with open(log_path, "w") as log_file:
-        subprocess.Popen(
-            command,
-            env=_debasher_env(program),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-        )
+    if program.executionOptions.scheduler != "BUILTIN":
+        return _launch_and_wait(command, program)
+
+    # With the built-in scheduler, debasher_exec is the scheduler of the run
+    # and lives as long as it, so it cannot be waited for. The program is
+    # validated first, within the request, so that a program that the engine
+    # refuses is reported at once rather than leaving the output directory as
+    # it was, which the run phase would take for the end of a run.
+    validation = _prepare_debasher_exec_command(program, "--validate")
+    response = _launch_and_wait(validation, program)
+    if response.exitCode != 0:
+        return response
+
+    # Then it is started detached, in a session of its own, so that a signal
+    # that stops the server does not cut the run.
+    tool_sessions.start_detached(command, _debasher_env(program), _run_log_path(program))
 
     return RunProgramResponse(started=True)
 
 
-class RunProgramDebugResponse(BaseModel):
+class ValidateProgramResponse(BaseModel):
     output: str
 
 
-@router.post("/run-debug", response_model=RunProgramDebugResponse)
-def run_program_debug(program: Program) -> RunProgramDebugResponse:
+@router.post("/validate", response_model=ValidateProgramResponse)
+def validate_program(program: Program) -> ValidateProgramResponse:
     """
-    Run a program in debug mode (debasher_exec --debug).
+    Validate a program (debasher_exec --validate): everything but launching
+    its processes, and, with the built-in scheduler, the resources of each
+    process against its limits.
     """
-    return RunProgramDebugResponse(output=_run_debasher_exec(program, "--debug"))
+    return ValidateProgramResponse(output=_run_debasher_exec(program, "--validate"))
 
 
 class ProgramStatusResponse(BaseModel):
@@ -300,8 +527,51 @@ def get_program_status(program: Program) -> ProgramStatusResponse:
     return ProgramStatusResponse(output=output, state=state)
 
 
+class NodeNotice(BaseModel):
+    """The notice that a node of a resident program leaves for whoever
+    watches the program."""
+
+    process: str
+    # The task of an array process, None for a process of one node.
+    task: int | None = None
+    level: str
+    text: str
+    set_at: float | None = None
+
+
 class ProcessStatusesResponse(BaseModel):
     statuses: dict[str, str]
+    # What debasher_status printed, shown when a run did not finish.
+    output: str = ""
+    # Only for a resident program: whether its output directory holds
+    # program state, which the next launch resumes; false otherwise.
+    hasProgramState: bool = False
+    # Only for a resident program: the notices of its nodes.
+    notices: list[NodeNotice] = []
+
+
+def _node_notices(program: Program) -> list[NodeNotice]:
+    """
+    The notices of every node of a resident program, from
+    debasher_inspect_resident -d <outputDir> notices, one call for the whole
+    program. A failure of the tool leaves the canvas without notices, and the
+    statuses as they are, so it gives none.
+    """
+    tool = paths.find_bin_tool("debasher_inspect_resident")
+    if tool is None:
+        return []
+    result = subprocess.run(
+        [str(tool), "-d", program.outputDir, "notices"],
+        env=_debasher_env(program),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return []
+    try:
+        return [NodeNotice(**notice) for notice in json.loads(result.stdout)["notices"]]
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return []
 
 
 @router.post("/process-statuses", response_model=ProcessStatusesResponse)
@@ -316,7 +586,15 @@ def get_process_statuses(program: Program) -> ProcessStatusesResponse:
     this unconditionally and simply show no color in that case.
     """
     output, _ = _run_debasher_dir_tool(program, "debasher_status")
-    return ProcessStatusesResponse(statuses=_parse_process_statuses(output))
+    statuses = _parse_process_statuses(output)
+    resident = _is_resident(program)
+    return ProcessStatusesResponse(
+        statuses=statuses,
+        output=output,
+        hasProgramState=resident and program_state.has_program_state(program.outputDir),
+        # A program never launched has no node, and so no notice.
+        notices=_node_notices(program) if resident and statuses else [],
+    )
 
 
 class ProcessTasksRequest(BaseModel):
@@ -515,6 +793,63 @@ def read_fifo(request: FifoIORequest) -> FifoReadResponse:
     return FifoReadResponse(line=result.stdout)
 
 
+class ResidentFifoWriteRequest(FifoIORequest):
+    text: str
+    # "json": `text` is any JSON value, the payload; "text": `text` is sent
+    # as a JSON string.
+    mode: Literal["json", "text"] = "json"
+
+
+class ResidentEnvelope(BaseModel):
+    type: str
+    seq: int | None = None
+    payload: Any = None
+
+
+class ResidentFifoReadResponse(BaseModel):
+    envelope: ResidentEnvelope | None = None
+    # A line that does not parse as an envelope, as it was read.
+    unparsable: str | None = None
+    # Nothing arrived within the bound: the frontend reads again.
+    timedOut: bool = False
+    error: str | None = None
+
+
+@router.post("/resident-fifo-write", response_model=FifoWriteResponse)
+def write_resident_fifo(request: ResidentFifoWriteRequest) -> FifoWriteResponse:
+    """
+    Write one message into an external input of a resident program, for
+    "Talk to FIFOs": the payload the user gave, wrapped in a DATA envelope
+    and written as one line, whole or not at all. The write ends once the
+    line is in the pipe, not once the node has logged it.
+    """
+    path = _resolve_fifo_path(request.program, request.processName, request.fifoName)
+    try:
+        resident_fifos.write_line(path, resident_fifos.data_line(resident_fifos.payload_of(request.text, request.mode)))
+    except resident_fifos.FifoError as exc:
+        return FifoWriteResponse(ok=False, error=str(exc))
+    return FifoWriteResponse(ok=True)
+
+
+@router.post("/resident-fifo-read", response_model=ResidentFifoReadResponse)
+def read_resident_fifo(request: FifoIORequest) -> ResidentFifoReadResponse:
+    """
+    Read the next envelope from a business output with no reader of a
+    resident program, for "Talk to FIFOs", skipping blank lines and HELLO.
+    It takes the message from the channel.
+    """
+    path = _resolve_fifo_path(request.program, request.processName, request.fifoName)
+    try:
+        found = resident_fifos.read_envelope(path)
+    except resident_fifos.FifoError as exc:
+        return ResidentFifoReadResponse(error=str(exc))
+    if found is None:
+        return ResidentFifoReadResponse(timedOut=True)
+    if found.unparsable is not None:
+        return ResidentFifoReadResponse(unparsable=found.unparsable)
+    return ResidentFifoReadResponse(envelope=ResidentEnvelope(type=found.type, seq=found.seq, payload=found.payload))
+
+
 # There's no "debasher_get_opts" bin tool (unlike stdout/sched-out), the
 # ".opts" file (see engine/debasher_lib_processes.sh's
 # _get_process_opts_filename and debasher_lib_opts.sh's
@@ -589,6 +924,91 @@ def get_process_resolved_options(request: ProcessOutputRequest) -> ProcessResolv
     return ProcessResolvedOptionsResponse(values=_parse_opts_file(opts_path))
 
 
+class InspectNodeRequest(BaseModel):
+    program: Program
+    processName: str
+    # One task of an array or generator process (see /process-tasks); omit
+    # for a process that runs as one node.
+    taskIndex: int | None = None
+    command: Literal["summary", "checkpoint", "log", "runs"]
+    # The epoch of the checkpoint, for "checkpoint".
+    epoch: int | None = None
+    # The input port whose records "log" keeps; omit for every port.
+    port: str | None = None
+
+
+class InspectNodeResponse(BaseModel):
+    # What debasher_inspect_resident printed, parsed; None on an error.
+    result: Any = None
+    error: str | None = None
+
+
+def _inspect_node_command_args(request: InspectNodeRequest) -> list[str]:
+    if request.command == "checkpoint":
+        if request.epoch is None:
+            raise HTTPException(status_code=422, detail="The checkpoint command needs an epoch.")
+        return ["checkpoint", str(request.epoch)]
+    if request.command == "log":
+        # The latest records, cut at the same number of lines as the other
+        # outputs.
+        args = ["log", "--last", str(file_inspection.MAX_INSPECT_LINES)]
+        if request.port is not None:
+            args += ["--port", request.port]
+        return args
+    return [request.command]
+
+
+@router.post("/inspect-node", response_model=InspectNodeResponse)
+def inspect_node(request: InspectNodeRequest) -> InspectNodeResponse:
+    """
+    What a node of a resident program keeps in its execdir, for "Show node
+    state", and the batch runs of a launcher node, for "Show batch runs":
+    debasher_inspect_resident reads them and prints them as JSON, and the
+    backend reads none of those files itself. An error of the tool (a
+    node that keeps no node state, a checkpoint that the node no longer
+    retains) comes back as `error`, without the lines with which the engine
+    reports loading the module.
+    """
+    tool = paths.find_bin_tool("debasher_inspect_resident")
+    if tool is None:
+        return InspectNodeResponse(error="Error: debasher_inspect_resident tool not found.")
+
+    command = [str(tool), "-d", request.program.outputDir, "-p", request.processName]
+    if request.taskIndex is not None:
+        command += ["-t", str(request.taskIndex)]
+    command += _inspect_node_command_args(request)
+
+    result = subprocess.run(command, env=_debasher_env(request.program), capture_output=True, text=True)
+
+    if result.returncode != 0:
+        messages = [line for line in result.stderr.splitlines() if not line.startswith("Loading module ")]
+        error = "\n".join(messages).strip() or f"debasher_inspect_resident ended with exit code {result.returncode}."
+        return InspectNodeResponse(error=_cap_lines(error))
+
+    try:
+        return InspectNodeResponse(result=json.loads(result.stdout))
+    except json.JSONDecodeError:
+        return InspectNodeResponse(error=_cap_lines(f"debasher_inspect_resident printed no JSON:\n{result.stdout}"))
+
+
+class BatchRunStatusRequest(BaseModel):
+    program: Program
+    # The run directory of a batch run, as the "runs" command of
+    # /inspect-node gives it.
+    runDir: str
+
+
+@router.post("/batch-run-status", response_model=ProcessOutputResponse)
+def get_batch_run_status(request: BatchRunStatusRequest) -> ProcessOutputResponse:
+    """
+    What debasher_status says of the run directory of a batch run that is a
+    whole general program, for a row of "Show batch runs". It only reads, as
+    /inspect-path does, anywhere the server's user can read.
+    """
+    output, _ = _run_debasher_dir_tool(request.program, "debasher_status", outdir=request.runDir)
+    return ProcessOutputResponse(output=_cap_lines(output))
+
+
 class InspectPathRequest(BaseModel):
     path: str
 
@@ -656,15 +1076,35 @@ def check_program_options(program: Program) -> CheckProgramOptionsResponse:
 
 class StopProgramResponse(BaseModel):
     output: str
+    # The exit code of the tool, which for a resident program tells an
+    # orderly stop from one that fell back to the hard kill.
+    exitCode: int | None = None
 
 
 @router.post("/stop", response_model=StopProgramResponse)
 def stop_program(program: Program) -> StopProgramResponse:
     """
-    Stop a running program (debasher_stop -d <outputDir>).
+    Stop a running program. A general program is stopped with debasher_stop
+    -d <outputDir>, and a resident one in order, with debasher_stop_resident
+    -d <outputDir> and its default timeout, which this waits for: it halts
+    every node in one round and then stops them, the Supervisor first, and
+    falls back to the hard kill of debasher_stop when the round does not
+    close in time (exit code 2).
     """
-    output, _ = _run_debasher_dir_tool(program, "debasher_stop")
-    return StopProgramResponse(output=output)
+    tool = "debasher_stop_resident" if _is_resident(program) else "debasher_stop"
+    output, exit_code = _run_debasher_dir_tool_in_own_session(program, tool)
+    return StopProgramResponse(output=output, exitCode=exit_code)
+
+
+@router.post("/kill", response_model=StopProgramResponse)
+def kill_program(program: Program) -> StopProgramResponse:
+    """
+    Kill a resident program at once with debasher_stop -d <outputDir>, the
+    hard kill, for a program known to be stuck, whose orderly stop would
+    only reach the hard kill after its timeout.
+    """
+    output, exit_code = _run_debasher_dir_tool_in_own_session(program, "debasher_stop")
+    return StopProgramResponse(output=output, exitCode=exit_code)
 
 
 class StopProcessRequest(BaseModel):
@@ -676,12 +1116,197 @@ class StopProcessRequest(BaseModel):
 def stop_process(request: StopProcessRequest) -> ProcessOutputResponse:
     """
     Stop a single process (debasher_stop -d <outputDir> -p <processName>),
-    for the canvas's right-click "Stop process" action.
+    for the canvas's right-click "Stop process" action, in a session of its
+    own.
     """
-    output = _run_debasher_process_tool(
-        request.program, "debasher_stop", request.processName
+    output, _ = _run_debasher_dir_tool_in_own_session(
+        request.program, "debasher_stop", ["-p", request.processName]
     )
     return ProcessOutputResponse(output=output)
+
+
+def _has_supervisor(program: Program) -> bool:
+    return any(p.nodeKind == "Supervisor" for p in program.processes)
+
+
+class RelaunchNodeResponse(BaseModel):
+    output: str
+    exitCode: int
+    # The tasks that the web UI relaunched, as <process> or <process>:<idx>;
+    # empty when none was down, and for a restart that the Supervisor
+    # relaunches.
+    relaunched: list[str] = []
+
+
+@router.post("/restart-node", response_model=RelaunchNodeResponse)
+def restart_node(request: StopProcessRequest) -> RelaunchNodeResponse:
+    """
+    "Restart node" on a node of a resident program: debasher_stop -d
+    <outputDir> -p <processName> kills every task of the process at once, a
+    crash of the node, which resumes from its last checkpoint and its input
+    log once it is launched again. With a Supervisor, the Supervisor
+    relaunches it. Without one, the backend does, once every task is down,
+    holding the relaunch lock from the stop to the relaunch.
+    """
+    program = request.program
+
+    if _has_supervisor(program):
+        output, exit_code = _run_debasher_dir_tool_in_own_session(
+            program, "debasher_stop", ["-p", request.processName]
+        )
+        return RelaunchNodeResponse(output=output, exitCode=exit_code)
+
+    with node_relaunch.relaunch_lock(program.outputDir):
+        output, exit_code = _run_debasher_dir_tool_in_own_session(
+            program, "debasher_stop", ["-p", request.processName]
+        )
+        if exit_code != 0:
+            return RelaunchNodeResponse(output=output, exitCode=exit_code)
+
+        if not node_relaunch.wait_until_down(program.outputDir, request.processName):
+            return RelaunchNodeResponse(
+                output=output + f"Error: some task of {request.processName} still runs after the stop.\n",
+                exitCode=1,
+            )
+
+        result = node_relaunch.relaunch_down_tasks(
+            program.outputDir, request.processName, _debasher_env(program)
+        )
+
+    return RelaunchNodeResponse(
+        output=_cap_lines(output + result.output),
+        exitCode=result.exit_code,
+        relaunched=result.relaunched,
+    )
+
+
+@router.post("/relaunch-node", response_model=RelaunchNodeResponse)
+def relaunch_node(request: StopProcessRequest) -> RelaunchNodeResponse:
+    """
+    "Relaunch node" on a node of a resident program without a Supervisor:
+    relaunch each task of the process that is down, and only those, with
+    debasher_launch_process, under the relaunch lock.
+    """
+    program = request.program
+
+    if program.programType != "resident" or _has_supervisor(program):
+        raise HTTPException(
+            status_code=400,
+            detail="A node is relaunched by hand only in a resident program without a Supervisor.",
+        )
+
+    with node_relaunch.relaunch_lock(program.outputDir):
+        result = node_relaunch.relaunch_down_tasks(
+            program.outputDir, request.processName, _debasher_env(program)
+        )
+
+    return RelaunchNodeResponse(
+        output=_cap_lines(result.output),
+        exitCode=result.exit_code,
+        relaunched=result.relaunched,
+    )
+
+
+class SnapshotResponse(BaseModel):
+    output: str
+    # 0 for a round that closed at every node, 2 for one that did not close
+    # at some node, 1 for an error of usage or setup.
+    exitCode: int
+    # The epoch of the round, when the tool started one.
+    epoch: int | None = None
+    # With exit code 2, the nodes at which the round did not close, when the
+    # tool names them.
+    pendingNodes: list[str] = []
+
+
+# What debasher_snapshot_resident prints of a round: "Round <epoch> closed
+# at every node ...", or "Warning: round <epoch> did not close ...", and,
+# before the latter, "Error: no checkpoint of round <epoch> or of a newer
+# one at <node> <node> ...".
+_ROUND_EPOCH_RE = re.compile(r"\b[Rr]ound (\d+)\b")
+_PENDING_NODES_RE = re.compile(r"^Error: no checkpoint of round \d+ or of a newer one at (.+)$", re.MULTILINE)
+
+
+@router.post("/snapshot", response_model=SnapshotResponse)
+def take_snapshot(program: Program) -> SnapshotResponse:
+    """
+    "Take snapshot" on a live resident program: debasher_snapshot_resident
+    -d <outputDir> with its default timeout, which starts one round and
+    waits until it closes at every node or the timeout passes.
+    """
+    output, exit_code = _run_debasher_dir_tool_in_own_session(program, "debasher_snapshot_resident")
+
+    epoch_match = _ROUND_EPOCH_RE.search(output)
+    pending_match = _PENDING_NODES_RE.search(output)
+
+    return SnapshotResponse(
+        output=output,
+        exitCode=exit_code,
+        epoch=int(epoch_match.group(1)) if epoch_match else None,
+        pendingNodes=pending_match.group(1).split() if pending_match else [],
+    )
+
+
+class NoHoldFifosResponse(BaseModel):
+    # Whether the Supervisor of the live program was launched with
+    # -no-hold-fifos, as its own ".opts" file says; false when it has none.
+    launchedWithNoHoldFifos: bool
+
+
+@router.post("/launched-with-no-hold-fifos", response_model=NoHoldFifosResponse)
+def launched_with_no_hold_fifos(program: Program) -> NoHoldFifosResponse:
+    """
+    Whether the Supervisor of a resident program was launched with
+    -no-hold-fifos, read from the options it was given, so that it is the
+    launch that counts, whoever made it, and not the program options as the
+    tab holds them now. "Restart node" warns with it that a channel whose
+    two ends are restarted together may lose what it held.
+    """
+    supervisor = next((p for p in program.processes if p.nodeKind == "Supervisor"), None)
+    if supervisor is None:
+        return NoHoldFifosResponse(launchedWithNoHoldFifos=False)
+
+    opts = _parse_opts_file(_get_process_opts_path(program.outputDir, supervisor.name, None))
+    return NoHoldFifosResponse(launchedWithNoHoldFifos=NO_HOLD_FIFOS_LABEL in opts)
+
+
+class ResetProgramStateRequest(BaseModel):
+    program: Program
+    # Delete the program state instead of setting it aside.
+    delete: bool = False
+
+
+class ResetProgramStateResponse(BaseModel):
+    output: str
+    exitCode: int
+
+
+@router.post("/reset-program-state", response_model=ResetProgramStateResponse)
+def reset_program_state(request: ResetProgramStateRequest) -> ResetProgramStateResponse:
+    """
+    "Reset program state" on a resident program: debasher_reset_resident -d
+    <outputDir>, which takes the program state away, for every task of every
+    process, so that the next launch starts every node afresh. It sets the
+    state aside under __reset__/<timestamp>/ in the output directory, or
+    deletes it with `delete` (--delete). Refused while there is a run in
+    progress, which the tool refuses too.
+    """
+    program = request.program
+
+    if not _is_resident(program):
+        raise HTTPException(status_code=400, detail="Only a resident program has program state.")
+
+    state, _ = _get_program_state(program)
+    if state == "in-progress":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot reset the program state while a run is in progress.",
+        )
+
+    output, exit_code = _run_debasher_dir_tool_in_own_session(
+        program, "debasher_reset_resident", ["--delete"] if request.delete else []
+    )
+    return ResetProgramStateResponse(output=output, exitCode=exit_code)
 
 
 class ResetOutputDirResponse(BaseModel):

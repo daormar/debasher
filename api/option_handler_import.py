@@ -29,6 +29,7 @@ import):
   back to "manual" with the pair kept verbatim.
 - _define_opts is matched against the grammar of option-definition
   primitives (define_opt[_from_proc_out[_task_out]|_from_shared_dir],
+  define_infile_opt,
   define_cmdline_opt[_if_given], define_cmdline_infile_opt[_if_given],
   define_cmdline_flag_if_given, define_flag, define_value_desc_opt,
   define_fifo_opt[_generator] — all of them just other ways to define
@@ -131,6 +132,13 @@ class OptionHandlerResult:
     # `mirror` from this. Recovered the same way as fifo_labels itself
     # (best-effort in "manual" mode, exact otherwise).
     mirrored_fifo_labels: set[str] = field(default_factory=set)
+    # The fifo tag of each fifo whose define_fifo_opt[_generator] call
+    # carried one as its last token ("external" or "control", see
+    # script_generation.py's _fifo_tag_flag), by option label: that of a
+    # fanout family for a call in one of its blocks. Scanned from the source
+    # in every mode (see scan_fifo_tags), since a tag says nothing about the
+    # shape of the function.
+    fifo_tags: dict[str, str] = field(default_factory=dict)
     # Labels defined via define_procspec_opt — program_import.py sets
     # their option's fromProcessSpec (not channel — see
     # ProgramOption.fromProcessSpec's own docstring for why) from these.
@@ -260,7 +268,7 @@ _DEFINE_OPTS_CALL_RE = re.compile(
     r"define_cmdline_opt_if_given|define_cmdline_infile_opt|"
     r"define_cmdline_opt|define_value_desc_opt|define_fifo_opt_generator|define_fifo_opt|"
     r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|"
-    r"define_opt_from_shared_dir|define_procspec_opt|define_opt)"
+    r"define_opt_from_shared_dir|define_procspec_opt|define_infile_opt|define_opt)"
     r"(?:\s+(?P<args>.*?))?\s*(?:\|\|.*)?$"
 )
 _TOKEN_RE = re.compile(r'"(?P<q>[^"]*)"|(?P<bare>\S+)')
@@ -282,6 +290,7 @@ _CALL_TOKEN_COUNTS = {
     "define_opt_from_shared_dir": 3,  # <label> <shdirname> <optlist>
     "define_procspec_opt": 4,  # <process_spec> <label> <specname> <optlist>
     "define_opt": 3,  # <label> <value> <optlist>
+    "define_infile_opt": 4,  # <label> <value> <optlist> <process_name>
 }
 
 def _idx_var_re(idx_var: str) -> re.Pattern:
@@ -307,6 +316,14 @@ _FIFO_SCAN_RE = re.compile(r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?
 _MIRRORED_FIFO_SCAN_RE = re.compile(
     r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"[^\n]*--mirror\b'
 )
+# The same call with a trailing fifo tag, which only a resident program
+# writes.
+_TAGGED_FIFO_SCAN_RE = re.compile(
+    r'(?:debasher::)?define_fifo_opt(?:_generator)?\s+"(?P<label>[^"]*)"[^\n]*--(?P<tag>external|control)\b'
+)
+# The tokens that may end a define_fifo_opt[_generator] call after its
+# positional arguments: its mirror, or its fifo tag.
+_FIFO_TRAILING_FLAGS = (("--mirror", False), ("--external", False), ("--control", False))
 # The process_spec argument comes first (typically "${process_spec}", one
 # token with no internal space) — skipped the same way
 # _TASK_CONNECTION_SCAN_RE skips a task-index argument. Unlike
@@ -448,6 +465,10 @@ def _try_parse_fanout_block(
         return None
     func = call_match.group("func")
     tokens = _tokenize(call_match.group("args") or "")
+    # A fifo tag (see scan_fifo_tags) ends a define_fifo_opt of a family
+    # the same way as that of a single option.
+    if func == "define_fifo_opt" and tokens and tokens[-1] in _FIFO_TRAILING_FLAGS[1:]:
+        tokens = tokens[:-1]
     if len(tokens) != _CALL_TOKEN_COUNTS.get(func, -1):
         return None
 
@@ -481,6 +502,225 @@ def _try_parse_fanout_block(
     return None
 
 
+@dataclass
+class _OptionFacts:
+    """
+    What parsing a function body learns of the options of a process: the
+    part of OptionHandlerResult that does not depend on the mode of the
+    options handler (see _result), with the same meaning for each field.
+    """
+
+    values: dict[str, str] = field(default_factory=dict)
+    connections: list[ConnectionRef] = field(default_factory=list)
+    value_descriptor_labels: set[str] = field(default_factory=set)
+    fifo_labels: set[str] = field(default_factory=set)
+    mirrored_fifo_labels: set[str] = field(default_factory=set)
+    procspec_labels: set[str] = field(default_factory=set)
+    fanout_count_source_labels: dict[str, str] = field(default_factory=dict)
+    shared_dir_refs: dict[str, SharedDirRef] = field(default_factory=dict)
+
+
+@dataclass
+class _ParseState:
+    """What _parse_primitive_calls keeps while it goes through a body: the
+    facts it has learned, and the locals it can chase an expression
+    through (see _chase_local_value)."""
+
+    facts: _OptionFacts
+    locals_table: dict[str, str]
+    known_local_names: set[str]
+    idx_re: re.Pattern
+    fanout_consumer_re: re.Pattern | None
+
+    def chase(self, text: str) -> tuple[str, bool]:
+        return _chase_local_value(text, self.locals_table, self.known_local_names)
+
+
+def _is_skipped_line(line: str) -> bool:
+    """A blank line, a comment, or the fixed header or footer of an option
+    definition function, which say nothing of the options."""
+    return (
+        not line
+        or bool(_COMMENT_RE.match(line))
+        or any(regex.match(line) for regex in _HEADER_BOILERPLATE_RES)
+        or any(regex.match(line) for regex in _FOOTER_BOILERPLATE_RES)
+    )
+
+
+def _record_local(state: _ParseState, line: str) -> bool:
+    """Records a `local NAME=EXPR` line, for later values to be chased
+    through; False if `line` is not one."""
+    local_match = _LOCAL_ASSIGN_RE.match(line)
+    if not local_match:
+        return False
+    name = local_match.group("name")
+    expr = _strip_one_quote_layer(local_match.group("expr"))
+    resolved = _resolve_embedded_refs(expr, state.locals_table, state.known_local_names)
+    if resolved is not None:
+        state.locals_table[name] = resolved
+    state.known_local_names.add(name)
+    return True
+
+
+def _record_fanout_block(state: _ParseState, fanout_match) -> None:
+    _consumed, fanout_label, count_label, value_text, connection, is_fifo = fanout_match
+    state.facts.fanout_count_source_labels[fanout_label] = count_label
+    if connection is not None:
+        state.facts.connections.append(connection)
+    else:
+        state.facts.values[fanout_label] = value_text
+        if is_fifo:
+            state.facts.fifo_labels.add(fanout_label)
+
+
+def _strip_trailing_fifo_flags(func: str, tokens: list) -> tuple[list, bool]:
+    """
+    The positional arguments of a call, and whether it is mirrored. A
+    define_fifo_opt[_generator] call may carry one extra trailing
+    "--mirror" token beyond its ordinary positional args (see
+    script_generation.py's _option_definition_line), or a fifo tag in the
+    same place (see scan_fifo_tags, which recovers it): both are stripped
+    before the exact positional-count check, same as every other primitive
+    here.
+    """
+    if func not in ("define_fifo_opt", "define_fifo_opt_generator"):
+        return tokens, False
+    mirrored = bool(tokens) and tokens[-1] == ("--mirror", False)
+    if mirrored:
+        tokens = tokens[:-1]
+    if tokens and tokens[-1] in _FIFO_TRAILING_FLAGS[1:]:
+        tokens = tokens[:-1]
+    return tokens, mirrored
+
+
+# One function for each family of calls of the grammar: each records what the
+# call says of its option in the state, and returns False when the call is
+# outside the grammar after all.
+
+
+def _record_connection(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    label, proc, opt = tokens[0], tokens[1], tokens[-2]
+    opt_ok = opt[1]
+    fanout_consumer_base = None
+    if not opt_ok and func == "define_opt_from_proc_out" and state.fanout_consumer_re is not None:
+        consumer_match = state.fanout_consumer_re.match(opt[0])
+        if consumer_match is not None:
+            fanout_consumer_base = consumer_match.group("base")
+            opt_ok = True
+    if not (label[1] and proc[1] and opt_ok):
+        return False
+    # define_opt_from_proc_task_out's args are <label> <proc> <task_idx>
+    # <opt> <optlist>, one more than the plain define_opt_from_proc_out,
+    # with task_idx in between. Only "connect to my own task"
+    # (${idx_var}/$idx_var) round-trips through the app: script_generation.py
+    # always regenerates exactly that (see _task_idx_var), never an
+    # arbitrary expression, so anything else isn't this grammar at all.
+    if func == "define_opt_from_proc_task_out" and not state.idx_re.match(tokens[2][0]):
+        return False
+    state.facts.connections.append(
+        ConnectionRef(
+            option_label=label[0],
+            source_process=proc[0],
+            source_option=f"{fanout_consumer_base}ith" if fanout_consumer_base is not None else opt[0],
+            task_indexed=func == "define_opt_from_proc_task_out",
+        )
+    )
+    return True
+
+
+def _record_literal(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    # define_infile_opt is define_opt for an input file, whose value the
+    # engine resolves against the module's directory; script_generation.py
+    # writes it for every "file"-typed input given as a literal, so it holds
+    # a value exactly like define_opt's.
+    label, value = tokens[0], tokens[1]
+    if not label[1]:
+        return False
+    value_text, ok = state.chase(value[0])
+    if not ok:
+        return False
+    state.facts.values[label[0]] = value_text
+    return True
+
+
+def _record_shared_dir(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    label, shdirname = tokens[0], tokens[1]
+    if not label[1]:
+        return False
+    state.facts.shared_dir_refs[label[0]] = _shared_dir_ref_from_arg(shdirname[0])
+    # Kept as the option's ordinary value too (see
+    # OptionHandlerResult.shared_dir_refs): a synthesized, behavior-
+    # preserving expression, used only if program_import.py can't confirm
+    # shared_dir_refs[label] against a real shared directory.
+    state.facts.values[label[0]] = f'$(debasher::get_absolute_shdirname "{shdirname[0]}")'
+    return True
+
+
+def _record_value_desc(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    # Its value is an engine-synthesized descriptor for the process's own
+    # output, consumed elsewhere via define_opt_from_proc_out: nothing to
+    # capture but the label, so its option gets channel "value_desc"
+    # instead (see program_import.py).
+    label = tokens[0]
+    if not label[1]:
+        return False
+    state.facts.value_descriptor_labels.add(label[0])
+    return True
+
+
+def _record_fifo(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    # Unlike define_value_desc_opt, the fifo name IS a real, user-chosen
+    # value (not engine-synthesized), kept the same way as a plain
+    # define_opt's value, alongside marking the option's channel as "fifo".
+    label, value = tokens[0], tokens[1]
+    if not label[1]:
+        return False
+    value_text, ok = state.chase(value[0])
+    if not ok:
+        return False
+    state.facts.values[label[0]] = value_text
+    state.facts.fifo_labels.add(label[0])
+    if mirrored:
+        state.facts.mirrored_fifo_labels.add(label[0])
+    return True
+
+
+def _record_procspec(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    # <process_spec> <label> <specname> <optlist>. specname isn't chased
+    # through locals (unlike define_opt/define_fifo_opt's value):
+    # script_generation.py always regenerates it as a literal, never a
+    # computed expression, so anything else isn't this grammar at all.
+    label, specname = tokens[1], tokens[2]
+    if not (label[1] and specname[1]):
+        return False
+    state.facts.values[label[0]] = specname[0]
+    state.facts.procspec_labels.add(label[0])
+    return True
+
+
+def _record_flag(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    return tokens[0][1]
+
+
+def _record_cmdline(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    # The five define_cmdline_* variants: <cmdline_ref> <label> <optlist>.
+    return tokens[1][1]
+
+
+_CALL_RECORDERS = {
+    "define_opt_from_proc_out": _record_connection,
+    "define_opt_from_proc_task_out": _record_connection,
+    "define_opt": _record_literal,
+    "define_infile_opt": _record_literal,
+    "define_opt_from_shared_dir": _record_shared_dir,
+    "define_value_desc_opt": _record_value_desc,
+    "define_fifo_opt": _record_fifo,
+    "define_fifo_opt_generator": _record_fifo,
+    "define_procspec_opt": _record_procspec,
+    "define_flag": _record_flag,
+}
+
+
 def _parse_primitive_calls(
     body: list[str],
     idx_var: str = "task_idx",
@@ -488,10 +728,11 @@ def _parse_primitive_calls(
     allow_fanout_consumer: bool = False,
     initial_locals: dict[str, str] | None = None,
     initial_known_local_names: set[str] | None = None,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
+) -> _OptionFacts | None:
     """
     Parses a function body against the closed grammar of option-
-    definition primitives — used for _define_opts (standard and, inside
+    definition primitives, and returns what it learns of the options
+    (_OptionFacts). It is used for _define_opts (standard and, inside
     the loop, array mode) and (per-task) _generate_opts bodies alike,
     which all share the same call vocabulary. None means the body
     contains something outside that grammar (control flow, a computed
@@ -523,185 +764,56 @@ def _parse_primitive_calls(
     since it never saw the declaration — letting a dangling reference
     to it through instead of correctly rejecting the body to "manual".
     """
-    idx_re = _idx_var_re(idx_var)
-    fanout_consumer_re = _fanout_consumer_opt_re(idx_var) if allow_fanout_consumer else None
-    values: dict[str, str] = {}
-    connections: list[ConnectionRef] = []
-    value_descriptor_labels: set[str] = set()
-    fifo_labels: set[str] = set()
-    mirrored_fifo_labels: set[str] = set()
-    procspec_labels: set[str] = set()
-    fanout_count_source_labels: dict[str, str] = {}
-    shared_dir_refs: dict[str, SharedDirRef] = {}
-    locals_table: dict[str, str] = dict(initial_locals) if initial_locals else {}
-    known_local_names: set[str] = set(initial_known_local_names) if initial_known_local_names else set()
+    state = _ParseState(
+        facts=_OptionFacts(),
+        locals_table=dict(initial_locals) if initial_locals else {},
+        known_local_names=set(initial_known_local_names) if initial_known_local_names else set(),
+        idx_re=_idx_var_re(idx_var),
+        fanout_consumer_re=_fanout_consumer_opt_re(idx_var) if allow_fanout_consumer else None,
+    )
 
     i = 0
     while i < len(body):
         line = body[i]
 
-        if not line or _COMMENT_RE.match(line):
-            i += 1
-            continue
-        if any(regex.match(line) for regex in _HEADER_BOILERPLATE_RES):
-            i += 1
-            continue
-        if any(regex.match(line) for regex in _FOOTER_BOILERPLATE_RES):
+        if _is_skipped_line(line):
             i += 1
             continue
 
         if allow_fanout_blocks:
             fanout_match = _try_parse_fanout_block(body, i)
             if fanout_match is not None:
-                consumed, fanout_label, count_label, value_text, connection, is_fifo = fanout_match
-                fanout_count_source_labels[fanout_label] = count_label
-                if connection is not None:
-                    connections.append(connection)
-                else:
-                    values[fanout_label] = value_text
-                    if is_fifo:
-                        fifo_labels.add(fanout_label)
-                i += consumed
+                _record_fanout_block(state, fanout_match)
+                i += fanout_match[0]
                 continue
 
-        local_match = _LOCAL_ASSIGN_RE.match(line)
-        if local_match:
-            name = local_match.group("name")
-            expr = _strip_one_quote_layer(local_match.group("expr"))
-            resolved = _resolve_embedded_refs(expr, locals_table, known_local_names)
-            if resolved is not None:
-                locals_table[name] = resolved
-            known_local_names.add(name)
+        if _record_local(state, line):
             i += 1
             continue
 
         call_match = _DEFINE_OPTS_CALL_RE.match(line)
         if not call_match:
-            # Control flow (if/for/while/case/...), a computed call
-            # target, or any other statement outside the known grammar.
+            # Control flow (if/for/while/case/...), a computed call target,
+            # or any other statement outside the known grammar.
             return None
 
         func = call_match.group("func")
-        tokens = _tokenize(call_match.group("args") or "")
-
-        # A define_fifo_opt[_generator] call may carry one extra trailing
-        # "--mirror" token beyond its ordinary positional args (see
-        # script_generation.py's _option_definition_line) — strip it
-        # before the exact positional-count check below, same as every
-        # other primitive here, and remember it for the fifo branch.
-        is_mirrored_fifo_call = (
-            func in ("define_fifo_opt", "define_fifo_opt_generator")
-            and tokens
-            and tokens[-1] == ("--mirror", False)
-        )
-        if is_mirrored_fifo_call:
-            tokens = tokens[:-1]
-
+        tokens, mirrored = _strip_trailing_fifo_flags(func, _tokenize(call_match.group("args") or ""))
         if len(tokens) != _CALL_TOKEN_COUNTS[func]:
             return None
-
-        if func in ("define_opt_from_proc_out", "define_opt_from_proc_task_out"):
-            label, proc, opt = tokens[0], tokens[1], tokens[-2]
-            opt_ok = opt[1]
-            fanout_consumer_base = None
-            if not opt_ok and func == "define_opt_from_proc_out" and fanout_consumer_re is not None:
-                consumer_match = fanout_consumer_re.match(opt[0])
-                if consumer_match is not None:
-                    fanout_consumer_base = consumer_match.group("base")
-                    opt_ok = True
-            if not (label[1] and proc[1] and opt_ok):
-                return None
-            # define_opt_from_proc_task_out's args are <label> <proc>
-            # <task_idx> <opt> <optlist> — one more than the plain
-            # define_opt_from_proc_out, with task_idx in between. Only
-            # "connect to my own task" (${idx_var}/$idx_var) round-trips
-            # through the app — script_generation.py always regenerates
-            # exactly that (see _task_idx_var), never an arbitrary
-            # expression — so anything else isn't this grammar at all.
-            if func == "define_opt_from_proc_task_out" and not idx_re.match(tokens[2][0]):
-                return None
-            connections.append(
-                ConnectionRef(
-                    option_label=label[0],
-                    source_process=proc[0],
-                    source_option=f"{fanout_consumer_base}ith" if fanout_consumer_base is not None else opt[0],
-                    task_indexed=func == "define_opt_from_proc_task_out",
-                )
-            )
-        elif func == "define_opt":
-            label, value = tokens[0], tokens[1]
-            if not label[1]:
-                return None
-            value_text, ok = _chase_local_value(value[0], locals_table, known_local_names)
-            if not ok:
-                return None
-            values[label[0]] = value_text
-        elif func == "define_opt_from_shared_dir":
-            label, shdirname = tokens[0], tokens[1]
-            if not label[1]:
-                return None
-            shared_dir_refs[label[0]] = _shared_dir_ref_from_arg(shdirname[0])
-            # Kept as the option's ordinary value too (see
-            # OptionHandlerResult.shared_dir_refs) — a synthesized,
-            # behavior-preserving expression, used only if
-            # program_import.py can't confirm shared_dir_refs[label]
-            # against a real shared directory.
-            values[label[0]] = f'$(debasher::get_absolute_shdirname "{shdirname[0]}")'
-        elif func == "define_value_desc_opt":
-            # Its value is an engine-synthesized descriptor for the
-            # process's own output, consumed elsewhere via
-            # define_opt_from_proc_out — nothing to capture but the
-            # label, so its option gets channel "value_desc" instead
-            # (see program_import.py).
-            label = tokens[0]
-            if not label[1]:
-                return None
-            value_descriptor_labels.add(label[0])
-        elif func in ("define_fifo_opt", "define_fifo_opt_generator"):
-            # Unlike define_value_desc_opt, the fifo name IS a real,
-            # user-chosen value (not engine-synthesized) — kept the same
-            # way as a plain define_opt's value — alongside marking the
-            # option's channel as "fifo".
-            label, value = tokens[0], tokens[1]
-            if not label[1]:
-                return None
-            value_text, ok = _chase_local_value(value[0], locals_table, known_local_names)
-            if not ok:
-                return None
-            values[label[0]] = value_text
-            fifo_labels.add(label[0])
-            if is_mirrored_fifo_call:
-                mirrored_fifo_labels.add(label[0])
-        elif func == "define_procspec_opt":
-            # <process_spec> <label> <specname> <optlist>. specname isn't
-            # chased through locals (unlike define_opt/define_fifo_opt's
-            # value) — script_generation.py always regenerates it as a
-            # literal, never a computed expression, so anything else
-            # isn't this grammar at all.
-            label, specname = tokens[1], tokens[2]
-            if not (label[1] and specname[1]):
-                return None
-            values[label[0]] = specname[0]
-            procspec_labels.add(label[0])
-        elif func == "define_flag":
-            label = tokens[0]
-            if not label[1]:
-                return None
-        else:  # the five define_cmdline_* variants: <cmdline_ref> <label> <optlist>
-            label = tokens[1]
-            if not label[1]:
-                return None
+        if not _CALL_RECORDERS.get(func, _record_cmdline)(state, func, tokens, mirrored):
+            return None
 
         i += 1
 
-    return values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs
+    return state.facts
 
 
 def _parse_function_source(
     source: str,
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
-) -> tuple[dict[str, str], list[ConnectionRef], set[str], set[str], set[str], set[str], dict[str, str], dict[str, SharedDirRef]] | None:
+) -> _OptionFacts | None:
     body = function_body_lines(source)
     if body is None:
         return None
@@ -758,9 +870,7 @@ def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
     return locals_table, known_local_names
 
 
-def _parse_array_define_opts(
-    source: str,
-) -> tuple[str, dict[str, str], list[ConnectionRef], set[str], set[str], set[str], set[str], dict[str, SharedDirRef]] | None:
+def _parse_array_define_opts(source: str) -> tuple[str, _OptionFacts] | None:
     """
     Recognizes script_generation.py's exact array-mode shape (see
     _add_array_opts_func) in a _define_opts body: the standard header
@@ -812,17 +922,16 @@ def _parse_array_define_opts(
     # process's fanout family via "<base>${idx}" (see
     # _fanout_consumer_opt_re) — array mode has no fanout family
     # options of its own, so allow_fanout_blocks stays off.
-    parsed = _parse_primitive_calls(
+    facts = _parse_primitive_calls(
         loop_body,
         idx_var="idx",
         allow_fanout_consumer=True,
         initial_locals=seed_locals,
         initial_known_local_names=seed_known_local_names,
     )
-    if parsed is None:
+    if facts is None:
         return None
-    values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
-    return array_code, values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, shared_dir_refs
+    return array_code, facts
 
 
 def scan_connections(source: str) -> list[ConnectionRef]:
@@ -851,6 +960,20 @@ def scan_value_descriptor_labels(source: str) -> set[str]:
 def scan_fifo_labels(source: str) -> set[str]:
     """Best-effort companion to scan_connections/scan_value_descriptor_labels, same reasoning."""
     return {match.group("label") for match in _FIFO_SCAN_RE.finditer(source)}
+
+
+def scan_fifo_tags(source: str) -> dict[str, str]:
+    """
+    The fifo tag of every define_fifo_opt[_generator] call of `source` that
+    carries one, by option label. A call in a fanout-family block, whose
+    label is "<base>${i}", gives the tag to the family, "<base>ith".
+    """
+    tags = {}
+    for match in _TAGGED_FIFO_SCAN_RE.finditer(source):
+        label = match.group("label")
+        family = _FANOUT_BLOCK_LABEL_RE.match(label)
+        tags[f"{family.group('base')}ith" if family else label] = match.group("tag")
+    return tags
 
 
 def scan_mirrored_fifo_labels(source: str) -> set[str]:
@@ -1037,123 +1160,117 @@ def _verbatim_array_code(script_path: Path, code: str, debasher_mod_dir: str) ->
 def resolve_options_handler(
     option_handler_code: dict[str, str], script_path: Path, debasher_mod_dir: str = ""
 ) -> OptionHandlerResult:
-    generate_opts = option_handler_code.get(PROCESS_METHOD_GENERATE_OPTS_SUFFIX)
+    result = _resolve_options_handler_mode(option_handler_code, script_path, debasher_mod_dir)
+    result.fifo_tags = scan_fifo_tags("\n".join(option_handler_code.values()))
+    return result
+
+
+def _result(handler: OptionsHandler, facts: _OptionFacts | None = None) -> OptionHandlerResult:
+    """The result of resolving an options handler, with the facts learned
+    of its options, none for a handler whose options are unknown."""
+    facts = facts or _OptionFacts()
+    return OptionHandlerResult(
+        handler=handler,
+        option_values=facts.values,
+        connections=facts.connections,
+        value_descriptor_labels=facts.value_descriptor_labels,
+        fifo_labels=facts.fifo_labels,
+        mirrored_fifo_labels=facts.mirrored_fifo_labels,
+        procspec_labels=facts.procspec_labels,
+        fanout_count_source_labels=facts.fanout_count_source_labels,
+        shared_dir_refs=facts.shared_dir_refs,
+    )
+
+
+def _scanned_facts(source: str) -> _OptionFacts:
+    """
+    What can still be recovered, on a best-effort basis, of the options of
+    a function that does not fit the grammar: a process that falls back to
+    "manual" still shouldn't show a connected, value-descriptor, fifo or
+    process-spec option as if it were a fixed-value one just because its
+    call happened to sit inside whatever unparseable statement caused the
+    fallback.
+    """
+    return _OptionFacts(
+        values=scan_procspec_values(source),
+        connections=scan_connections(source),
+        value_descriptor_labels=scan_value_descriptor_labels(source),
+        fifo_labels=scan_fifo_labels(source),
+        mirrored_fifo_labels=scan_mirrored_fifo_labels(source),
+        procspec_labels=scan_procspec_labels(source),
+        shared_dir_refs=scan_shared_dir_refs(source),
+    )
+
+
+def _resolve_generator(
+    generate_opts_size: str, generate_opts: str | None, script_path: Path, debasher_mod_dir: str
+) -> OptionHandlerResult:
+    generator_size_code = _extract_generator_size_code(generate_opts_size)
+    # allow_fanout_consumer: like array mode, a generator's per-task body
+    # may connect to a "standard" process's fanout family via
+    # "<base>${task_idx}" (see _fanout_consumer_opt_re and
+    # script_generation.py's _FANOUT_PARTNER_MODES); generator mode has no
+    # fanout family options of its own, so allow_fanout_blocks stays off.
+    facts = _parse_function_source(generate_opts, allow_fanout_consumer=True) if generate_opts else None
+
+    # A _generate_opts_size with no _generate_opts alongside it can't
+    # actually retrieve a task's options at run time (the engine always
+    # needs the latter once the former exists): it is treated as an
+    # incomplete generator, with no facts, rather than guessing further.
+    if generator_size_code is not None and (facts is not None or not generate_opts):
+        verbatim_size_code = _verbatim_header_stripped_body(script_path, generate_opts_size, debasher_mod_dir)
+        handler = OptionsHandler(
+            mode="generator",
+            generatorSizeCode=verbatim_size_code if verbatim_size_code is not None else generator_size_code,
+        )
+        return _result(handler, facts)
+
+    # generate_opts doesn't fit the primitive-call grammar:
+    # script_generation.py can't reproduce it, so this falls back to manual
+    # with everything kept verbatim.
+    combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
+    combined_verbatim = _verbatim_whole_function(script_path, generate_opts_size, debasher_mod_dir)
+    if generate_opts:
+        combined_verbatim = f"{combined_verbatim}\n\n{_verbatim_whole_function(script_path, generate_opts, debasher_mod_dir)}"
+    return _result(OptionsHandler(mode="manual", manualCode=combined_verbatim), _scanned_facts(combined))
+
+
+def _resolve_define_opts(define_opts: str, script_path: Path, debasher_mod_dir: str) -> OptionHandlerResult:
+    # allow_fanout_blocks: a "standard" body may contain one or more
+    # fanout-family blocks (see _try_parse_fanout_block) interleaved among
+    # the flat primitive calls.
+    facts = _parse_function_source(define_opts, allow_fanout_blocks=True)
+    if facts is not None:
+        return _result(OptionsHandler(mode="standard"), facts)
+
+    # Not the flat "standard" grammar: try script_generation.py's fixed
+    # array-mode shape (see _parse_array_define_opts) before giving up to
+    # "manual".
+    array_parsed = _parse_array_define_opts(define_opts)
+    if array_parsed is not None:
+        array_code, facts = array_parsed
+        verbatim_array_code = _verbatim_array_code(script_path, define_opts, debasher_mod_dir)
+        handler = OptionsHandler(
+            mode="array",
+            arrayCode=verbatim_array_code if verbatim_array_code is not None else array_code,
+        )
+        return _result(handler, facts)
+
+    manual_code = _verbatim_whole_function(script_path, define_opts, debasher_mod_dir)
+    return _result(OptionsHandler(mode="manual", manualCode=manual_code), _scanned_facts(define_opts))
+
+
+def _resolve_options_handler_mode(
+    option_handler_code: dict[str, str], script_path: Path, debasher_mod_dir: str = ""
+) -> OptionHandlerResult:
+    """The mode of the options handler of a process, from the shape of its
+    option definition functions, with what they say of its options: a
+    generator, then a standard or array _define_opts, else manual."""
     generate_opts_size = option_handler_code.get(PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX)
-    define_opts = option_handler_code.get(PROCESS_METHOD_DEFINE_OPTS_SUFFIX)
-
     if generate_opts_size:
-        generator_size_code = _extract_generator_size_code(generate_opts_size)
-        # allow_fanout_consumer: like array mode, a generator's per-task
-        # body may connect to a "standard" process's fanout family via
-        # "<base>${task_idx}" (see _fanout_consumer_opt_re and
-        # script_generation.py's _FANOUT_PARTNER_MODES) — generator mode
-        # has no fanout family options of its own, so allow_fanout_blocks
-        # stays off.
-        parsed = (
-            _parse_function_source(generate_opts, allow_fanout_consumer=True)
-            if generate_opts
-            else None
-        )
-
-        if generator_size_code is not None and parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, _fanout_count_source_labels, shared_dir_refs = parsed
-            verbatim_size_code = _verbatim_header_stripped_body(script_path, generate_opts_size, debasher_mod_dir)
-            return OptionHandlerResult(
-                handler=OptionsHandler(
-                    mode="generator",
-                    generatorSizeCode=verbatim_size_code if verbatim_size_code is not None else generator_size_code,
-                ),
-                option_values=values,
-                connections=connections,
-                value_descriptor_labels=value_descriptor_labels,
-                fifo_labels=fifo_labels,
-                mirrored_fifo_labels=mirrored_fifo_labels,
-                procspec_labels=procspec_labels,
-                shared_dir_refs=shared_dir_refs,
-            )
-
-        if generator_size_code is not None and not generate_opts:
-            # _generate_opts_size with no _generate_opts alongside it can't
-            # actually retrieve a task's options at run time (the engine
-            # always needs the latter once the former exists) — treat it as
-            # an incomplete generator rather than guessing further.
-            verbatim_size_code = _verbatim_header_stripped_body(script_path, generate_opts_size, debasher_mod_dir)
-            return OptionHandlerResult(
-                handler=OptionsHandler(
-                    mode="generator",
-                    generatorSizeCode=verbatim_size_code if verbatim_size_code is not None else generator_size_code,
-                ),
-            )
-
-        # generate_opts doesn't fit the primitive-call grammar —
-        # script_generation.py can't reproduce it, so this falls back to
-        # manual with everything kept verbatim.
-        combined = f"{generate_opts_size}\n\n{generate_opts}" if generate_opts else generate_opts_size
-        combined_verbatim = _verbatim_whole_function(script_path, generate_opts_size, debasher_mod_dir)
-        if generate_opts:
-            combined_verbatim = f"{combined_verbatim}\n\n{_verbatim_whole_function(script_path, generate_opts, debasher_mod_dir)}"
-        return OptionHandlerResult(
-            handler=OptionsHandler(mode="manual", manualCode=combined_verbatim),
-            option_values=scan_procspec_values(combined),
-            connections=scan_connections(combined),
-            value_descriptor_labels=scan_value_descriptor_labels(combined),
-            fifo_labels=scan_fifo_labels(combined),
-            mirrored_fifo_labels=scan_mirrored_fifo_labels(combined),
-            procspec_labels=scan_procspec_labels(combined),
-            shared_dir_refs=scan_shared_dir_refs(combined),
-        )
-
+        generate_opts = option_handler_code.get(PROCESS_METHOD_GENERATE_OPTS_SUFFIX)
+        return _resolve_generator(generate_opts_size, generate_opts, script_path, debasher_mod_dir)
+    define_opts = option_handler_code.get(PROCESS_METHOD_DEFINE_OPTS_SUFFIX)
     if define_opts:
-        # allow_fanout_blocks: a "standard" body may contain one or more
-        # fanout-family blocks (see _try_parse_fanout_block) interleaved
-        # among the flat primitive calls.
-        parsed = _parse_function_source(define_opts, allow_fanout_blocks=True)
-        if parsed is not None:
-            values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, fanout_count_source_labels, shared_dir_refs = parsed
-            return OptionHandlerResult(
-                handler=OptionsHandler(mode="standard"),
-                option_values=values,
-                connections=connections,
-                value_descriptor_labels=value_descriptor_labels,
-                fifo_labels=fifo_labels,
-                mirrored_fifo_labels=mirrored_fifo_labels,
-                procspec_labels=procspec_labels,
-                fanout_count_source_labels=fanout_count_source_labels,
-                shared_dir_refs=shared_dir_refs,
-            )
-
-        # Not the flat "standard" grammar — try script_generation.py's
-        # fixed array-mode shape (see _parse_array_define_opts) before
-        # giving up to "manual".
-        array_parsed = _parse_array_define_opts(define_opts)
-        if array_parsed is not None:
-            array_code, values, connections, value_descriptor_labels, fifo_labels, mirrored_fifo_labels, procspec_labels, shared_dir_refs = array_parsed
-            verbatim_array_code = _verbatim_array_code(script_path, define_opts, debasher_mod_dir)
-            return OptionHandlerResult(
-                handler=OptionsHandler(
-                    mode="array",
-                    arrayCode=verbatim_array_code if verbatim_array_code is not None else array_code,
-                ),
-                option_values=values,
-                connections=connections,
-                value_descriptor_labels=value_descriptor_labels,
-                fifo_labels=fifo_labels,
-                mirrored_fifo_labels=mirrored_fifo_labels,
-                procspec_labels=procspec_labels,
-                shared_dir_refs=shared_dir_refs,
-            )
-
-        return OptionHandlerResult(
-            handler=OptionsHandler(
-                mode="manual", manualCode=_verbatim_whole_function(script_path, define_opts, debasher_mod_dir)
-            ),
-            option_values=scan_procspec_values(define_opts),
-            connections=scan_connections(define_opts),
-            value_descriptor_labels=scan_value_descriptor_labels(define_opts),
-            fifo_labels=scan_fifo_labels(define_opts),
-            mirrored_fifo_labels=scan_mirrored_fifo_labels(define_opts),
-            procspec_labels=scan_procspec_labels(define_opts),
-            shared_dir_refs=scan_shared_dir_refs(define_opts),
-        )
-
-    return OptionHandlerResult(handler=OptionsHandler(mode="standard"))
+        return _resolve_define_opts(define_opts, script_path, debasher_mod_dir)
+    return _result(OptionsHandler(mode="standard"))

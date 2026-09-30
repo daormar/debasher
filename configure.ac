@@ -39,6 +39,7 @@ AC_PATH_PROGS(FLOCK, flock)
 AC_PATH_PROGS(TEE, tee)
 AC_PATH_PROGS(GZIP, gzip)
 AC_PATH_PROGS(SLEEP, sleep)
+AC_PATH_PROGS(TIMEOUT, timeout gtimeout)
 AC_PATH_PROGS(SEQ, seq)
 AC_PATH_PROGS(SSH, ssh)
 
@@ -70,6 +71,11 @@ AC_PATH_PROGS(JAVA, java)
 # `make check`, it never fails the build)
 AC_PATH_PROGS(BATS, bats)
 AM_CONDITIONAL([HAVE_BATS], [test -n "$BATS"])
+# The Python suites need the dependencies of the API (api/requirements.txt,
+# pydantic 2 among them), which usually live in a virtual environment: its
+# pytest is given with ./configure PYTEST=<venv>/bin/pytest, or found first
+# on the PATH when the environment is activated for ./configure.
+AC_ARG_VAR([PYTEST], [pytest to run the Python test suites with, e.g. that of the virtual environment of api/README.md])
 AC_PATH_PROGS(PYTEST, pytest)
 AM_CONDITIONAL([HAVE_PYTEST], [test -n "$PYTEST"])
 
@@ -82,17 +88,17 @@ if test x$BASH = "xno"; then
     AC_MSG_ERROR([bash is required])
 fi
 
-# Extract BASH major and minor versions
-if test -n "$BASH_VERSION"; then
-   AC_MSG_CHECKING(for a bash shell with version >= 4.3)
-   # Extract major and minor version numbers from BASH_VERSION
-   bash_major_version=$(echo "$BASH_VERSION" | cut -d'.' -f1)
-   bash_minor_version=$(echo "$BASH_VERSION" | cut -d'.' -f2)
-   if (( bash_major_version < 4 || (bash_major_version == 4 && bash_minor_version < 3) )); then
-      AC_MSG_ERROR([bash version 4.3 or above is required])
-   else
-      AC_MSG_RESULT(yes)
-   fi
+# Check the version of the bash found above, which runs every script of
+# the package (its path is their shebang), not that of the shell running
+# configure, which may be another shell or another bash
+AC_MSG_CHECKING([whether $BASH is version 4.3 or newer])
+bash_major_version=`"$BASH" -c 'echo "${BASH_VERSINFO[[0]]}"'`
+bash_minor_version=`"$BASH" -c 'echo "${BASH_VERSINFO[[1]]}"'`
+if test "$bash_major_version" -lt 4 || { test "$bash_major_version" -eq 4 && test "$bash_minor_version" -lt 3; }; then
+   AC_MSG_RESULT([no, $bash_major_version.$bash_minor_version])
+   AC_MSG_ERROR([bash version 4.3 or above is required; put a newer bash first in the PATH])
+else
+   AC_MSG_RESULT([yes, $bash_major_version.$bash_minor_version])
 fi
 
 # Check conda (conda is defined as a function so AC_PATH_PROGS may be
@@ -225,9 +231,39 @@ AS_IF([test "x$enable_frontend" != xno], [
     AS_IF([test -z "$NPM"], [
       AC_MSG_WARN([npm not found and no prebuilt frontend/dist/ present; skipping frontend])
       enable_frontend=no
+    ], [
+      dnl npm runs under whatever node comes first in the PATH when make
+      dnl runs (its "#!" line is "env node"), not the one it was installed
+      dnl with, as when nvm installs a Node.js that is not the default one
+      dnl of the shell. Find the node next to npm first, and have the
+      dnl frontend's Makefile put its directory first in the PATH of every
+      dnl npm command, so that the build does not depend on the PATH of the
+      dnl shell that runs make. A NODE given to configure is kept.
+      npm_bindir=`AS_DIRNAME(["$NPM"])`
+      AC_PATH_PROG([NODE], [node], [], [$npm_bindir$PATH_SEPARATOR$PATH])
+      AS_IF([test -z "$NODE"], [
+        AC_MSG_ERROR([npm was found, but no node; give NODE=/path/to/node, or --disable-frontend])
+      ])
+      dnl The oldest Node.js that the build and the tests of the frontend
+      dnl run on: vite asks for 20.19 or 22.12 and newer, and vitest, which
+      dnl make check runs, for 22.12 and newer.
+      node_min_version=22.12
+      AC_MSG_CHECKING([whether $NODE is Node.js $node_min_version or newer])
+      AS_IF(["$NODE" -e '
+          const [[major, minor]] = process.versions.node.split(".").map(Number);
+          const [[min_major, min_minor]] = process.argv[[1]].split(".").map(Number);
+          process.exit(major > min_major || (major === min_major && minor >= min_minor) ? 0 : 1);
+        ' "$node_min_version" >/dev/null 2>&1], [
+        AC_MSG_RESULT([yes])
+      ], [
+        AC_MSG_RESULT([no, `"$NODE" --version 2>/dev/null`])
+        AC_MSG_ERROR([the frontend needs Node.js $node_min_version or newer; put one first in the PATH, give NODE=/path/to/node, or --disable-frontend])
+      ])
+      NODE_BINDIR=`AS_DIRNAME(["$NODE"])`
     ])
   ])
 ])
+AC_SUBST([NODE_BINDIR])
 dnl INSTALL_FRONTEND: a web/ directory should end up installed, whether
 dnl built fresh (BUILD_FRONTEND, below) or copied from a prebuilt
 dnl frontend/dist/ already present in the source tree.
@@ -236,5 +272,5 @@ dnl BUILD_FRONTEND: npm is available, so frontend/dist/ should be
 dnl (re)built from source rather than installed as-is.
 AM_CONDITIONAL([BUILD_FRONTEND], [test -n "$NPM"])
 
-AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile api/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/conda_envs/Makefile test/Makefile test/engine/Makefile test/api/Makefile])
+AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile api/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/webui_programs/Makefile data/conda_envs/Makefile test/Makefile test/engine/Makefile test/api/Makefile])
 AC_OUTPUT

@@ -280,12 +280,12 @@ class Watchdog(Supervisor):
 EOF
     }
     worker_a_heredoc_py() { cat <<'EOF'
-class Worker(FBPProcess):
+class WorkerA(FBPProcess):
     pass
 EOF
     }
     worker_b_heredoc_py() { cat <<'EOF'
-class Worker(FBPProcess):
+class WorkerB(FBPProcess):
     pass
 EOF
     }
@@ -299,7 +299,7 @@ EOF
     DEBASHER_PROGRAM_PROCESSES=(["worker_a"]=1)
 
     worker_a_heredoc_py() { cat <<'EOF'
-class Worker(FBPProcess):
+class WorkerA(FBPProcess):
     pass
 EOF
     }
@@ -313,12 +313,12 @@ EOF
     DEBASHER_PROGRAM_PROCESSES=(["watchdog_a"]=1 ["watchdog_b"]=1)
 
     watchdog_a_heredoc_py() { cat <<'EOF'
-class Watchdog(Supervisor):
+class WatchdogA(Supervisor):
     pass
 EOF
     }
     watchdog_b_heredoc_py() { cat <<'EOF'
-class Watchdog(Supervisor):
+class WatchdogB(Supervisor):
     pass
 EOF
     }
@@ -341,6 +341,131 @@ EOF
     run debasher::_validate_resident_program_processes
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: process plain_worker does not derive from FBPProcess or Supervisor"* ]]
+}
+
+# --- debasher::_check_resident_class_name ----------------------------------
+
+@test "debasher::_check_resident_class_name accepts a class named after its process in CamelCase" {
+    org.ns.count_words_heredoc_py() { cat <<'EOF'
+from dataclasses import dataclass
+from debasher_runtime_lib import FBPProcess
+
+
+@dataclass
+class Counts:
+    total: int = 0
+
+
+class OrgNsCountWords(FBPProcess):
+    pass
+
+
+OrgNsCountWords().run()
+EOF
+    }
+
+    run debasher::_check_resident_class_name "org.ns.count_words"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_resident_class_name refuses a class not named after its process" {
+    counter_heredoc_py() { cat <<'EOF'
+class Count(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_check_resident_class_name "counter"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process counter names its class Count, but the class of a node is named after its process, in CamelCase: Counter"* ]]
+}
+
+@test "debasher::_check_resident_class_name refuses a process whose class would hide a class of the runtime library" {
+    supervisor_heredoc_py() { cat <<'EOF'
+class Supervisor(Supervisor):
+    pass
+EOF
+    }
+
+    run debasher::_check_resident_class_name "supervisor"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the class of process supervisor is named Supervisor, after the process, which is a class of the runtime library that it would hide"* ]]
+}
+
+@test "debasher::_check_resident_class_name refuses a process whose class would hide a Python builtin" {
+    type_error_heredoc_py() { cat <<'EOF'
+class TypeError(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_check_resident_class_name "type_error"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the class of process type_error is named TypeError, after the process, which is a Python builtin that it would hide"* ]]
+}
+
+@test "debasher::_check_resident_class_name refuses a class that hides a name its preamble imports" {
+    path_heredoc_py() { cat <<'EOF'
+from pathlib import Path
+from debasher_runtime_lib import FBPProcess
+
+
+class Path(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_check_resident_class_name "path"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the class of process path, Path, has the name of what its code also defines on line 1, which it would hide"* ]]
+}
+
+@test "debasher::_check_resident_class_name refuses a class that hides a name its code assigns at the top level" {
+    limit_heredoc_py() { cat <<'EOF'
+if True:
+    Limit = 10
+
+
+class Limit(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_check_resident_class_name "limit"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has the name of what its code also defines on line 2"* ]]
+}
+
+@test "debasher::_check_resident_class_name refuses two classes deriving from the runtime library" {
+    worker_heredoc_py() { cat <<'EOF'
+class Worker(FBPProcess):
+    pass
+
+
+class Other(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_check_resident_class_name "worker"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process worker defines 2 classes deriving from a class of the runtime library (Worker, Other), but a node defines exactly one"* ]]
+}
+
+@test "debasher::_validate_resident_program_processes refuses a class not named after its process" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+    DEBASHER_PROGRAM_PROCESSES=(["worker_a"]=1)
+
+    worker_a_heredoc_py() { cat <<'EOF'
+class Worker(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_validate_resident_program_processes
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process worker_a names its class Worker, but the class of a node is named after its process, in CamelCase: WorkerA"* ]]
 }
 
 # --- debasher::_python_heredoc_sys_path_prelude / _create_heredoc_func_body --
@@ -707,15 +832,19 @@ add_fifo() {
     add_fifo worker/worker_out_1 "$(end_of worker 1)" "$(end_of worker 0)" "" -outg -peer
     add_fifo counter/counter_self "$(end_of counter)" "$(end_of counter)" "" -outself -self
     add_fifo start/start_hb "$(end_of start)" "$(end_of sup)" "" -outhb -hb_start
+    add_fifo worker/worker_hb_0 "$(end_of worker 0)" "$(end_of sup)" "" -outhb -hb_worker0
+    add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
+    add_fifo counter/counter_hb "$(end_of counter)" "$(end_of sup)" "" -outhb -hb_counter
 
     debasher::_register_resident_task_ports
-    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start;trigger=outtrig;manual_trigger=;startup=;hold=counter/counter_self,start/start_out_0,start/start_out_1,worker/worker_out_1" ]
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=counter=hb_counter,start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=;startup=;hold=counter/counter_self,start/start_out_0,start/start_out_1,worker/worker_out_1" ]
 }
 
 @test "debasher::_register_resident_task_ports refuses a Supervisor with two manual triggers" {
     set_up_registries
     add_process a fbpprocess
     add_process sup supervisor
+    add_fifo a/a_hb "$(end_of a)" "$(end_of sup)" "" -outhb -hb_a
     add_fifo sup/sup_manual "$(end_of sup)" outside control -manual
     add_fifo sup/sup_manual2 "$(end_of sup)" outside control -manual2
 
@@ -745,6 +874,24 @@ add_fifo() {
     run debasher::_register_resident_task_ports
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: node a has more than one output read by the Supervisor (outhb,outhb2)"* ]]
+}
+
+@test "debasher::_register_resident_task_ports refuses a node with no heartbeat channel in a program with a Supervisor" {
+    # The array has one task more than the Supervisor connects to, as when
+    # the option that sizes its heartbeat channels says 2 and the array
+    # builds 3 tasks: worker:2 would run unsupervised.
+    set_up_registries
+    add_process start fbpprocess
+    add_process worker fbpprocess 3
+    add_process sup supervisor
+    add_fifo start/start_hb "$(end_of start)" "$(end_of sup)" "" -outhb -hb_start
+    add_fifo worker/worker_hb_0 "$(end_of worker 0)" "$(end_of sup)" "" -outhb -hb_worker0
+    add_fifo worker/worker_hb_1 "$(end_of worker 1)" "$(end_of sup)" "" -outhb -hb_worker1
+    add_fifo worker/worker_hb_2 "$(end_of worker 2)" outside "" -outhb
+
+    run debasher::_register_resident_task_ports
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: node worker:2 has no output read by the Supervisor sup, but in a program with a Supervisor every node has a heartbeat channel"* ]]
 }
 
 @test "debasher::_register_resident_task_ports is a no-op for a general program" {

@@ -112,6 +112,62 @@ debasher_builtin_sched::_update_processname_to_idx_info()
 }
 
 ########
+# Prints the cpus and the memory in MB that process $1, of process
+# specification $2, asks for, separated by a space. Returns 1, with an error,
+# when they are not natural numbers or exceed the limits of the built-in
+# scheduler (DEBASHER_BUILTIN_SCHED_CPUS and DEBASHER_BUILTIN_SCHED_MEM).
+debasher_builtin_sched::_process_comp_res()
+{
+    local processname=$1
+    local process_spec=$2
+
+    local spec_throttle=$(debasher::_extract_throttle_from_process_spec "$process_spec")
+    local sched_throttle=$(debasher::_get_scheduler_throttle ${spec_throttle})
+    local array_size=$(debasher::_get_numtasks_for_process "${processname}")
+
+    # Get cpus info
+    local cpus=$(debasher::_extract_cpus_from_process_spec "$process_spec")
+    debasher::_str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $processname should be a natural number" >&2; return 1; }
+
+    # Get mem info (NOTE: if multiple attempts specified, keep
+    # memory specification of the first one)
+    local mem=$(debasher::_extract_mem_from_process_spec "$process_spec")
+    local attempt_no=1
+    mem=$(debasher::_get_mem_attempt_value ${mem} ${attempt_no})
+    mem=$(debasher::_convert_mem_value_to_mb ${mem}) || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }
+    debasher::_str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $processname should be a natural number" >&2; return 1; }
+
+    # Check cpus value
+    debasher_builtin_sched::_cpus_within_limit ${cpus} || { echo "Error: number of cpus for process $processname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
+
+    # Check mem value
+    debasher_builtin_sched::_mem_within_limit ${mem} || { echo "Error: amount of memory for process $processname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
+
+    echo "${cpus} ${mem}"
+}
+
+########
+# Checks, launching nothing and writing nothing, that every process of the
+# process specification file $1 asks for computational resources within the
+# limits of the built-in scheduler, $2 cpus and $3 MB of memory, as
+# execute_program_processes checks them before it launches anything. Returns
+# 1, with an error, at the first process that does not.
+debasher_builtin_sched::check_program_comp_res()
+{
+    local procspec_file=$1
+    DEBASHER_BUILTIN_SCHED_CPUS=$2
+    DEBASHER_BUILTIN_SCHED_MEM=$3
+
+    local process_spec processname
+    while read process_spec; do
+        if debasher::_program_process_spec_is_ok "$process_spec"; then
+            processname=$(debasher::_extract_processname_from_process_spec "$process_spec")
+            debasher_builtin_sched::_process_comp_res "${processname}" "${process_spec}" > /dev/null || return 1
+        fi
+    done < "${procspec_file}"
+}
+
+########
 debasher_builtin_sched::_init_process_info()
 {
     local cmdline=$1
@@ -131,23 +187,11 @@ debasher_builtin_sched::_init_process_info()
             local sched_throttle=$(debasher::_get_scheduler_throttle ${spec_throttle})
             local array_size=$(debasher::_get_numtasks_for_process "${processname}")
 
-            # Get cpus info
-            local cpus=$(debasher::_extract_cpus_from_process_spec "$process_spec")
-            debasher::_str_is_natural_number ${cpus} || { echo "Error: number of cpus ($cpus) for $processname should be a natural number" >&2; return 1; }
-
-            # Get mem info (NOTE: if multiple attempts specified, keep
-            # memory specification of the first one)
-            local mem=$(debasher::_extract_mem_from_process_spec "$process_spec")
-            local attempt_no=1
-            mem=$(debasher::_get_mem_attempt_value ${mem} ${attempt_no})
-            mem=$(debasher::_convert_mem_value_to_mb ${mem}) || { echo "Invalid memory specification for process ${processname}" >&2; return 1; }
-            debasher::_str_is_natural_number ${mem} || { echo "Error: amount of memory ($mem) for $processname should be a natural number" >&2; return 1; }
-
-            # Check cpus value
-            debasher_builtin_sched::_cpus_within_limit ${cpus} || { echo "Error: number of cpus for process $processname exceeds limit (cpus: ${cpus}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
-
-            # Check mem value
-            debasher_builtin_sched::_mem_within_limit ${mem} || { echo "Error: amount of memory for process $processname exceeds limit (mem: ${mem}, array size: ${array_size}, throttle: ${sched_throttle})" >&2; return 1; }
+            # Get and check the computational resources of the process
+            local comp_res
+            comp_res=$(debasher_builtin_sched::_process_comp_res "${processname}" "${process_spec}") || return 1
+            local cpus=${comp_res% *}
+            local mem=${comp_res#* }
 
             # Register process information
             debasher_builtin_sched::_update_processname_to_idx_info ${processname}

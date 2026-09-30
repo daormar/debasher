@@ -5,6 +5,7 @@ from pathlib import Path
 from .debasher_constants import (
     MODULE_DOCUMENT_SUFFIX,
     MODULE_PROGRAM_SUFFIX,
+    MODULE_PROGRAM_TYPE_SUFFIX,
     MODULE_SHARED_DIRS_SUFFIX,
     PROCESS_METHOD_DOCUMENT_SUFFIX,
     PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX,
@@ -23,6 +24,7 @@ from .debasher_constants import (
 from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
 from .models import ComputationalSpecs, AdditionalSpecs, Program
+from .resident_generation import resident_program_for_generation
 
 INDENT_WIDTH = 4
 INDENT = " " * INDENT_WIDTH
@@ -41,7 +43,27 @@ def _computational_specs_str(specs: ComputationalSpecs) -> str:
         parts.append(f"mem={specs.mem:g}")
     if specs.time is not None:
         parts.append(f"time={specs.time}")
+    # The specifications that the nodes of a resident program read, under
+    # the names of the engine (see "Limits of a node" in
+    # doc/design_doc_resident.md), none of them set for a general program.
+    for name in _RESIDENT_COMP_SPEC_NAMES:
+        value = getattr(specs, name)
+        if value is None:
+            continue
+        parts.append(f"{name}={value:g}" if isinstance(value, (int, float)) else f"{name}={value}")
     return " ".join(parts)
+
+
+_RESIDENT_COMP_SPEC_NAMES = (
+    "input_log_max_mb",
+    "out_backlog_max_mb",
+    "out_backlog_fail_mb",
+    "gil_switch_interval_ms",
+    "startup_timeout_s",
+    "max_concurrent_runs",
+    "batch_sched",
+    "heartbeat_timeout_s",
+)
 
 
 def _alias_opt_map_str(specs: AdditionalSpecs) -> str | None:
@@ -90,6 +112,27 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
     return ";".join(parts)
 
 
+# Characters that keep a special meaning inside a double-quoted Bash
+# string: escaping them makes the string stand for exactly its text.
+_DOUBLE_QUOTED_SPECIAL_CHARS = ("\\", '"', "$", "`")
+
+
+def _double_quoted_text(text: str) -> str:
+    """
+    Escapes `text` for use inside a double-quoted Bash string, so that it
+    is taken as plain text, never expanded or run.
+
+    Used for descriptions, which are text: a description written as it is
+    would be expanded (a "$" or a pair of backquotes in it would change
+    it, or run a command, when the module is loaded), and one with a
+    double quote would break the module. Option values are not escaped:
+    they are Bash words on purpose (see _option_definition_line).
+    """
+    for char in _DOUBLE_QUOTED_SPECIAL_CHARS:
+        text = text.replace(char, "\\" + char)
+    return text
+
+
 def _add_preamble(preamble):
     if preamble:
         return [preamble]
@@ -100,11 +143,23 @@ def _add_preamble(preamble):
 def _add_document_module_func(name, description):
     lines = [f"{name}{MODULE_DOCUMENT_SUFFIX}()", "{"]
     if description:
-        lines.append(f'{INDENT}debasher::document_module "{description}"')
+        lines.append(f'{INDENT}debasher::document_module "{_double_quoted_text(description)}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
     return lines
+
+
+def _add_program_type_func(name):
+    """The module-level function that makes a module a resident program; a
+    general program writes none, since a module without one is general."""
+    return [f"{name}{MODULE_PROGRAM_TYPE_SUFFIX}()", "{", f'{INDENT}debasher::program_type "resident"', "}"]
+
+
+def _fifo_tag_flag(option) -> str:
+    """The fifo tag of a resident program, written as the last argument of
+    define_fifo_opt, where a general program writes --mirror."""
+    return f" --{option.fifoTag}" if option.fifoTag else ""
 
 
 def _add_shared_dirs_func(name, shared_dirs):
@@ -121,7 +176,7 @@ def _add_shared_dirs_func(name, shared_dirs):
 def _add_document_proc_func(process):
     lines = [f"{process.name}{PROCESS_METHOD_DOCUMENT_SUFFIX}()", "{"]
     if process.description:
-        lines.append(f'{INDENT}debasher::document_process "{process.description}"')
+        lines.append(f'{INDENT}debasher::document_process "{_double_quoted_text(process.description)}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
@@ -133,13 +188,13 @@ def _add_explain_opts_func(process):
     if process.options:
         for option in process.options:
             if option.dataType == "None":
-                lines.append(f'{INDENT}debasher::explain_flag "{option.label}" "{option.description}"')
+                lines.append(f'{INDENT}debasher::explain_flag "{option.label}" "{_double_quoted_text(option.description)}"')
             else:
                 # By convention throughout data/programs, e.g. "<int>",
                 # "<string>", purely the value's type; how it's
                 # delivered (option.channel) isn't encoded here, see
                 # markdown_parsing.py's _OPTION_TYPE_RE.
-                lines.append(f'{INDENT}debasher::explain_opt "{option.label}" "<{option.dataType}>" "{option.description}"')
+                lines.append(f'{INDENT}debasher::explain_opt "{option.label}" "<{option.dataType}>" "{_double_quoted_text(option.description)}"')
     else:
         lines.append(INDENT + ":")
     lines.append("}")
@@ -374,8 +429,9 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
 
     if option.direction == "output":
         func = "define_fifo_opt" if option.channel == "fifo" else "define_opt"
+        tag_flag = _fifo_tag_flag(option) if option.channel == "fifo" else ""
         lines.append(
-            f'{indent}{INDENT}debasher::{func} "{base_label}${{i}}" "{option.value}" optlist || return 1'
+            f'{indent}{INDENT}debasher::{func} "{base_label}${{i}}" "{option.value}" optlist{tag_flag} || return 1'
         )
     else:
         conn_proc, conn_opt = _get_process_plus_opt(option)
@@ -387,26 +443,35 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
     return lines
 
 
-def _option_definition_line(process, option, process_modes, connections_by_option):
+def _check_option_sources(process, option) -> None:
     """
-    Returns the _define_opts/_generate_opts line(s) for `option`, a
-    list since a connected, non-command-line, non-fanout option may
-    have more than one incoming edge (fan-in): one
-    define_opt_from_proc_out[_task_out] call is emitted per connection
-    in connections_by_option (see _connections_by_option), each
-    independently choosing the task-indexed variant based on its own
-    source's mode. Every other case still returns exactly one line.
+    Refuses an option whose value would come from two places at once. A
+    command line option takes its value from the command line and nowhere
+    else, so it can be neither delivered through an option channel nor
+    taken from the process specifications: the engine itself would take
+    whatever value the process defined.
     """
-    # channel is checked ahead of commandLine: an option can be both a
-    # mandatory command-line option (for _identify_cmdline_opts/
-    # documentation purposes) and, in _define_opts, actually sourced
-    # from a fifo/value descriptor instead, see
-    # debasher_cycle_trigger_interactive.sh's worker, whose "-threshold"
-    # is exactly that.
-    if option.dataType == "None":
-        if option.commandLine:
-            return [f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
-        return [f'debasher::define_flag "{option.label}" optlist || return 1']
+    if option.commandLine and option.channel != "none":
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" can\'t be both '
+            f'command-line and delivered through channel "{option.channel}".'
+        )
+    if option.commandLine and option.fromProcessSpec:
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" can\'t be both '
+            '"from process spec" and command-line.'
+        )
+
+
+def _flag_lines(option) -> list[str]:
+    if option.commandLine:
+        return [f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
+    return [f'debasher::define_flag "{option.label}" optlist || return 1']
+
+
+def _channel_lines(option) -> list[str]:
+    """The line of an option delivered through an option channel, whatever
+    its connections."""
     if option.channel == "value_desc":
         return [f'debasher::define_value_desc_opt "{option.label}" optlist || return 1']
     if option.channel == "fifo":
@@ -416,99 +481,130 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         # frontend's OptionEditor already only ever offers the checkbox
         # for direction == "output".
         mirror_flag = " --mirror" if option.mirror and option.direction == "output" else ""
-        return [f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist{mirror_flag} || return 1']
-    if option.channel == "shared_dir":
-        # Always define_opt_from_shared_dir, regardless of any edges
-        # into/out of this option, those exist purely to document the
-        # dependency in the canvas (see the frontend's
-        # isValidProgramConnection); the engine derives the real
-        # processdeps on its own, from every writer of the same
-        # directory resolving to an identical absolute path.
-        return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
-    if option.fromProcessSpec:
-        # Not a channel (see ProgramOption.fromProcessSpec's own
-        # docstring), mutually exclusive with commandLine, unlike the
-        # three channel checks above: a process-spec-sourced option's
-        # value comes from exactly one define_procspec_opt call, which
-        # can't also be a define_cmdline_opt call for the same label.
-        if option.commandLine:
-            raise ValueError(
-                f'Option "{option.label}" on "{process.name}" can\'t be both '
-                '"from process spec" and command-line.'
-            )
-        return [f'debasher::define_procspec_opt "${{process_spec}}" "{option.label}" "{option.value}" optlist || return 1']
-    if option.commandLine:
-        # A file-typed command-line option gets the validating variant
-        # (checks the path exists and normalizes it to absolute),
-        # see debasher::define_cmdline_infile_opt[_if_given] in
-        # engine/debasher_lib_opts.sh.
-        base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
-        if option.mandatory:
-            return [f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1']
-        return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
-    if _opt_is_connected_to_proc(option):
-        conn_proc, conn_opt = _get_process_plus_opt(option)
-        if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
-            # Consumer side of a scatter connection: conn_opt is a fanout
-            # family declared on a "standard" process (e.g. "-outfith"),
-            # so it isn't a real option name by itself, the member this
-            # option actually reads is picked by this (_FANOUT_PARTNER_MODES,
-            # i.e. "array"- or "generator"-mode) process's own per-task loop
-            # variable. One save_opt_list
-            # call on the source side (unlike _TASK_INDEXED_MODES, which
-            # addresses N repeated calls of the SAME name), hence plain
-            # define_opt_from_proc_out rather than _task_out. Fanout
-            # options stay single-connection, so this is never fan-in.
-            if process.optionsHandler.mode not in _FANOUT_PARTNER_MODES:
-                raise ValueError(
-                    f'Option "{option.label}" on "{process.name}" is connected to fanout '
-                    f'family "{conn_opt}" on "{conn_proc}", but "{process.name}" is not '
-                    '"array"- or "generator"-mode, v1 only supports standard <-> '
-                    "array/generator fanout pairings."
-                )
-            idx_var = _task_idx_var(process.optionsHandler.mode)
-            base_conn_opt = _fanout_base_label(conn_opt)
-            return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1']
-
-        # Plain connection: one define_opt_from_proc_out[_task_out] per
-        # edge into this option, usually just one, but a non-command-
-        # line input may gather from several (fan-in; see
-        # isValidProgramConnection in the frontend). Falls back to the
-        # single value-sentinel-derived connection if no matching edge
-        # was found, e.g. a hand-edited/stale file.
-        connections = connections_by_option.get(option.id) or [
-            (conn_proc, conn_opt, process_modes.get(conn_proc))
+        return [
+            f'debasher::define_fifo_opt "{option.label}" "{option.value}" optlist'
+            f"{mirror_flag}{_fifo_tag_flag(option)} || return 1"
         ]
+    # "shared_dir": always define_opt_from_shared_dir, regardless of any
+    # edges into/out of this option, those exist purely to document the
+    # dependency in the canvas (see the frontend's
+    # isValidProgramConnection); the engine derives the real processdeps
+    # on its own, from every writer of the same directory resolving to an
+    # identical absolute path.
+    return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
 
-        lines = []
-        for src_proc, src_opt, src_mode in connections:
-            if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
-                idx_var = _task_idx_var(process.optionsHandler.mode)
-                lines.append(
-                    f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{idx_var}}}" "{src_opt}" optlist || return 1'
-                )
-            else:
-                lines.append(
-                    f'debasher::define_opt_from_proc_out "{option.label}" "{src_proc}" "{src_opt}" optlist || return 1'
-                )
-        return lines
+
+def _procspec_lines(option) -> list[str]:
+    # Not a channel (see ProgramOption.fromProcessSpec's own docstring): a
+    # process-spec-sourced option's value comes from exactly one
+    # define_procspec_opt call.
+    return [f'debasher::define_procspec_opt "${{process_spec}}" "{option.label}" "{option.value}" optlist || return 1']
+
+
+def _cmdline_lines(option) -> list[str]:
+    # A file-typed command-line option gets the validating variant
+    # (checks the path exists and normalizes it to absolute), see
+    # debasher::define_cmdline_infile_opt[_if_given] in
+    # engine/debasher_lib_opts.sh.
+    base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
+    if option.mandatory:
+        return [f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1']
+    return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
+
+
+def _connection_lines(process, option, process_modes, connections_by_option) -> list[str]:
+    """
+    The lines of an option connected to the output of a process: the
+    consumer side of a scatter, when the output is a fanout family, or else
+    one define_opt_from_proc_out[_task_out] call for each connection.
+    """
+    conn_proc, conn_opt = _get_process_plus_opt(option)
+    if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
+        # Consumer side of a scatter connection: conn_opt is a fanout
+        # family declared on a "standard" process (e.g. "-outfith"), so it
+        # isn't a real option name by itself, the member this option
+        # actually reads is picked by this (_FANOUT_PARTNER_MODES, i.e.
+        # "array"- or "generator"-mode) process's own per-task loop
+        # variable. One save_opt_list call on the source side (unlike
+        # _TASK_INDEXED_MODES, which addresses N repeated calls of the SAME
+        # name), hence plain define_opt_from_proc_out rather than
+        # _task_out. Fanout options stay single-connection, so this is
+        # never fan-in.
+        if process.optionsHandler.mode not in _FANOUT_PARTNER_MODES:
+            raise ValueError(
+                f'Option "{option.label}" on "{process.name}" is connected to fanout '
+                f'family "{conn_opt}" on "{conn_proc}", but "{process.name}" is not '
+                '"array"- or "generator"-mode, v1 only supports standard <-> '
+                "array/generator fanout pairings."
+            )
+        idx_var = _task_idx_var(process.optionsHandler.mode)
+        base_conn_opt = _fanout_base_label(conn_opt)
+        return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1']
+
+    # Plain connection: one define_opt_from_proc_out[_task_out] per edge
+    # into this option, usually just one, but a non-command-line input may
+    # gather from several (fan-in; see isValidProgramConnection in the
+    # frontend). Falls back to the single value-sentinel-derived
+    # connection if no matching edge was found, e.g. a hand-edited/stale
+    # file.
+    connections = connections_by_option.get(option.id) or [
+        (conn_proc, conn_opt, process_modes.get(conn_proc))
+    ]
+
+    lines = []
+    for src_proc, src_opt, src_mode in connections:
+        if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
+            idx_var = _task_idx_var(process.optionsHandler.mode)
+            lines.append(
+                f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{idx_var}}}" "{src_opt}" optlist || return 1'
+            )
+        else:
+            lines.append(
+                f'debasher::define_opt_from_proc_out "{option.label}" "{src_proc}" "{src_opt}" optlist || return 1'
+            )
+    return lines
+
+
+def _literal_lines(process, option) -> list[str]:
     if option.dataType == "file" and option.direction == "input":
         # Resolved relative to the .sh defining the process (see
-        # debasher::define_infile_opt in engine/debasher_lib_opts.sh);
-        # lets a baked-in file value point at something shipped
-        # alongside the program (e.g. via the webui's program-files
-        # browser) with a portable, relative path, the same way
-        # AdditionalSpecs.externalAlias already does for process
-        # scripts. Output-direction options fall through to the plain
-        # define_opt below instead: define_infile_opt requires the
-        # value to already exist on disk, which a "file"-typed output
-        # (e.g. "-outf") never does until the process itself creates
-        # it at run time.
+        # debasher::define_infile_opt in engine/debasher_lib_opts.sh); lets
+        # a baked-in file value point at something shipped alongside the
+        # program (e.g. via the webui's program-files browser) with a
+        # portable, relative path, the same way
+        # AdditionalSpecs.externalAlias already does for process scripts.
+        # Output-direction options fall through to the plain define_opt
+        # below instead: define_infile_opt requires the value to already
+        # exist on disk, which a "file"-typed output (e.g. "-outf") never
+        # does until the process itself creates it at run time.
         return [
             f'debasher::define_infile_opt "{option.label}" "{option.value}" optlist '
             f'"{process.name}" || return 1'
         ]
     return [f'debasher::define_opt "{option.label}" "{option.value}" optlist || return 1']
+
+
+def _option_definition_line(process, option, process_modes, connections_by_option):
+    """
+    Returns the _define_opts/_generate_opts line(s) for `option`: a list,
+    since a connected, non-command-line, non-fanout option may have more
+    than one incoming edge (fan-in), each written as a line of its own (see
+    _connection_lines). The order of the checks below is the precedence of
+    the sources of a value: a flag, an option channel, the process
+    specifications, the command line, a connection, and a literal value.
+    """
+    _check_option_sources(process, option)
+    if option.dataType == "None":
+        return _flag_lines(option)
+    if option.channel != "none":
+        return _channel_lines(option)
+    if option.fromProcessSpec:
+        return _procspec_lines(option)
+    if option.commandLine:
+        return _cmdline_lines(option)
+    if _opt_is_connected_to_proc(option):
+        return _connection_lines(process, option, process_modes, connections_by_option)
+    return _literal_lines(process, option)
 
 
 def _add_opts_definition_func(process, suffix, header_lines, process_modes, connections_by_option):
@@ -611,25 +707,29 @@ def _add_opts_handler(process, process_modes, connections_by_option):
 
 
 # A process implemented in anything but bash isn't a bash function at
-# all: the engine recognizes it via a variable named
-# "<processname>_<suffix>" (debasher_lib.sh's DEBASHER_PROCESS_VARNAMES/
-# DEBASHER_HEREDOC_LANGUAGES) holding the raw interpreter source, and
-# auto-generates the actual "<processname>()" wrapper around it
-# (debasher::_create_process_func_heredoc), see
-# debasher::_is_heredoc_process in engine/debasher_lib_programs.sh.
-_HEREDOC_LANGUAGE_SUFFIXES = {
-    "python": "py",
-    "r": "r",
-    "perl": "perl",
-    "groovy": "groovy",
+# all: the engine recognizes it via a function named
+# "<processname>_heredoc_<suffix>" (debasher_lib.sh's
+# DEBASHER_PROCESS_FUNCNAMES/DEBASHER_HEREDOC_LANGUAGES) that prints the
+# raw interpreter source, and auto-generates the actual "<processname>()"
+# wrapper around it (debasher::_create_process_func_heredoc), see
+# debasher::_is_heredoc_process in engine/debasher_lib_programs.sh. The
+# engine also accepts the legacy variable form, "<processname>_<suffix>",
+# which import still reads, but a Bash variable name cannot contain the
+# "." of a namespaced process ("mymodule.hello_py=..." runs as a command),
+# so script generation always writes the function.
+_HEREDOC_FUNCNAME_SUFFIXES = {
+    "python": "heredoc_py",
+    "r": "heredoc_r",
+    "perl": "heredoc_perl",
+    "groovy": "heredoc_groovy",
 }
 
 
 def _code_definition_lines(process_name: str, language: str, code: str) -> list[str]:
     if language == "bash":
         return [code]
-    suffix = _HEREDOC_LANGUAGE_SUFFIXES[language]
-    return [f"{process_name}_{suffix}=$(cat <<'EOF'", code, "EOF", ")"]
+    suffix = _HEREDOC_FUNCNAME_SUFFIXES[language]
+    return [f"{process_name}_{suffix}()", "{", "    cat <<'EOF'", code, "EOF", "}"]
 
 
 def _add_exec_func(process):
@@ -755,6 +855,11 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
     lines.extend(_add_shared_dirs_func(program.name, program.sharedDirs))
     lines.extend(["", ""])
 
+    # Add the program type of a resident program
+    if program.programType == "resident":
+        lines.extend(_add_program_type_func(program.name))
+        lines.extend(["", ""])
+
     # Add process functions
     for process in program.processes:
         lines.extend(_add_document_proc_func(process))
@@ -809,7 +914,7 @@ def _own_code_canonicalized(process_name: str, language: str, code: str, debashe
     _module_provided_code's output despite process.code being free-typed
     rather than already in debasher_doc_mod/debasher_get_proc_info's own
     printed format. Wrapped the same way _add_exec_func embeds it (a
-    heredoc variable assignment for a non-bash language), so
+    heredoc function for a non-bash language), so
     debasher_get_proc_info recognizes it the same way it would in the
     generated script.
     """
@@ -974,5 +1079,10 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
     away right after one debasher_doc_mod call, where the duplicate-code
     concern _find_redundant_exec_funcs exists for doesn't apply.
     """
+    if program.programType == "resident":
+        # The code of every node is assembled from its parts, never taken
+        # from a module that the preamble loads, so there is nothing
+        # redundant to leave out.
+        return _build_script(resident_program_for_generation(program))
     skip_exec_for = frozenset() if skip_redundant_check else _find_redundant_exec_funcs(program)
     return _build_script(program, skip_exec_for=skip_exec_for)

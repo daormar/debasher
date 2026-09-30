@@ -296,6 +296,23 @@ def run_doc_mod_resolve_vars(
     return parse_resolved_vars_markdown(markdown)
 
 
+def parse_program_type(markdown: str) -> str:
+    """
+    The program type that debasher_doc_mod prints in the "## Program Type"
+    section of a module, the one that the engine resolved: "resident", or
+    "general" for a module without the section or with any other type.
+    """
+    in_section = False
+    for line in markdown.splitlines():
+        heading_match = _PROCESS_HEADING_RE.match(line)
+        if heading_match:
+            in_section = heading_match.group("name").strip() == "Program Type"
+            continue
+        if in_section and line.strip():
+            return "resident" if line.strip().strip("`") == "resident" else "general"
+    return "general"
+
+
 def parse_module_markdown(
     markdown: str,
 ) -> tuple[str, str, list[str], list[tuple[str, str]]]:

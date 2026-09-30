@@ -1,4 +1,4 @@
-SUBDIRS= programs conda_envs
+SUBDIRS= programs webui_programs conda_envs
 
 EXTRA_DIST = debasher_check_installation.sh
 
@@ -48,6 +48,7 @@ SUFFIXES= .sh
 	echo "TEE=\"$(TEE)\"" >> $@
 	echo "GZIP=\"$(GZIP)\"" >> $@
 	echo "SLEEP=\"$(SLEEP)\"" >> $@
+	echo "TIMEOUT=\"$(TIMEOUT)\"" >> $@
 	echo "SEQ=\"$(SEQ)\"" >> $@
 	echo "DOCKER=\"$(DOCKER)\"" >> $@
 	echo "SRUN=\"$(SRUN)\"" >> $@

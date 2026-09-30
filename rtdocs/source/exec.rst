@@ -78,11 +78,15 @@ are useful for that purpose:
   error message is shown. Otherwise, the options are shown and the tool
   finishes its execution.
 
-* ``--debug``: this option carries out all the necessary steps to
+* ``--validate``: this option carries out all the necessary steps to
   execute a DeBasher program, with the exception of the execution
-  itself. This includes the option checking process that can be done
-  using the ``--check-proc-opts`` option, but also the current status of
-  the different processes involved in the program.
+  itself, and shows the current status of the different processes
+  involved in the program. This includes the option checking process
+  that can be done using the ``--check-proc-opts`` option. With the
+  built-in scheduler, it also checks that the computational resources of
+  each process fit the limits given with ``--builtinsched-cpus`` and
+  ``--builtinsched-mem``. A program that passes the validation is not
+  refused for its options or for the resources of a single process.
 
 Executing Programs Using the Built-In Scheduler
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -107,6 +111,13 @@ following two options can be used:
 * ``--builtinsched-mem <int>``: indicates the amount of RAM in MB that
   can be used by the built-in scheduler. A value of -1 (the default)
   means unlimited memory.
+
+A resident program (see the :ref:`resident` Section) always runs with
+the built-in scheduler, which ``debasher_exec`` selects on its own for
+it, refusing any other. Its processes are meant to run until they are
+stopped, so ``debasher_exec`` launches all of them at once and returns
+without waiting for them; the resources given with the two options
+above must be enough for every process of the program together.
 
 Executing Programs Using External Schedulers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

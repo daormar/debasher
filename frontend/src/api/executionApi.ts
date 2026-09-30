@@ -1,4 +1,6 @@
+import type { InspectNodeCommand, NodeNotice } from "../models/nodeState";
 import type { Program } from "../models/program";
+import type { ResidentFifoRead, TalkMode } from "../models/residentTalk";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
@@ -26,32 +28,96 @@ export async function listSchedulers(): Promise<string[]> {
   return schedulers;
 }
 
-// Launches the run in the background and returns as soon as it's
-// started — it does not wait for the program to finish. Poll
-// getProgramState() to find out when it's done.
-export async function runProgram(program: Program): Promise<void> {
-  const response = await fetch("/api/execution/run", {
+export interface RunProgramResult {
+  started: boolean;
+  // Only for a resident program, whose launch the backend waits for: the
+  // exit code of debasher_exec and what it printed. Null for a general
+  // program.
+  exitCode: number | null;
+  output: string | null;
+}
+
+// /run refused to resume the program state of a resident program, since the
+// program differs from the launch record, or there is none: the user has to
+// choose between resuming with the changed program and starting afresh.
+export class LaunchRecordConflict extends Error {
+  readonly hasLaunchRecord: boolean;
+
+  constructor(hasLaunchRecord: boolean) {
+    super("The program state in the output directory was produced by another program.");
+    this.hasLaunchRecord = hasLaunchRecord;
+  }
+}
+
+// Launches the run of a general program in the background and returns as
+// soon as it's started: it does not wait for the program to finish. Poll
+// getProgramState() to find out when it's done. The launch of a resident
+// program is waited for, and returns once debasher_exec has launched every
+// process, or failed to; `resumeChangedProgram` says that the user chose to
+// resume the program state with a program that differs from the launch
+// record, which /run refuses otherwise with a LaunchRecordConflict.
+export async function runProgram(
+  program: Program,
+  resumeChangedProgram = false
+): Promise<RunProgramResult> {
+  const query = resumeChangedProgram ? "?resumeChangedProgram=true" : "";
+  const response = await fetch(`/api/execution/run${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
   });
+
+  if (response.status === 409) {
+    const body = await response.clone().json().catch(() => null);
+    if (body?.detail?.code === "launch-record") {
+      throw new LaunchRecordConflict(Boolean(body.detail.hasLaunchRecord));
+    }
+  }
 
   if (!response.ok) {
     throw new Error(
       await errorDetail(response, `Failed to run program (${response.status})`)
     );
   }
+
+  const { started, exitCode, output } = await response.json();
+  return { started, exitCode: exitCode ?? null, output: output ?? null };
 }
 
-export async function runProgramDebug(program: Program): Promise<string> {
-  const response = await fetch("/api/execution/run-debug", {
+export interface LaunchCheckResult {
+  hasProgramState: boolean;
+  hasLaunchRecord: boolean;
+  // There is program state, and no launch record or one that differs from
+  // the program: "Run program" asks before launching.
+  needsConfirmation: boolean;
+}
+
+export async function checkLaunch(program: Program): Promise<LaunchCheckResult> {
+  const response = await fetch("/api/execution/launch-check", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to run program (debug) (${response.status})`);
+    throw new Error(await errorDetail(response, `Failed to check the launch (${response.status})`));
+  }
+
+  return response.json();
+}
+
+// "Validate program" (debasher_exec --validate): everything but launching
+// the processes, and, with the built-in scheduler, the resources of each
+// process against its limits.
+export async function validateProgram(program: Program): Promise<string> {
+  const response = await fetch("/api/execution/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to validate the program (${response.status})`);
   }
 
   const { output } = await response.json();
@@ -96,11 +162,24 @@ export async function getProgramState(program: Program): Promise<ProgramState> {
   return state;
 }
 
-// Per-process statuses as reported by debasher_status (e.g. "FINISHED",
-// "IN-PROGRESS", "UNFINISHED", "UNFINISHED_BUT_RUNNABLE", "TO-DO"),
-// keyed by process name. Used to color nodes in the canvas — see
-// ProgramContext's status polling and ProcessNode's use of it.
-export async function getProcessStatuses(program: Program): Promise<Record<string, string>> {
+export interface ProcessStatusesResult {
+  // Per-process statuses as reported by debasher_status (e.g. "FINISHED",
+  // "IN-PROGRESS", "UNFINISHED", "UNFINISHED_BUT_RUNNABLE", "TO-DO"),
+  // keyed by process name.
+  statuses: Record<string, string>;
+  // Only for a resident program: whether its output directory holds
+  // program state, which the next launch resumes. False otherwise.
+  hasProgramState: boolean;
+  // What debasher_status printed, shown when a run did not finish.
+  output: string;
+  // Only for a resident program: the notices of its nodes.
+  notices: NodeNotice[];
+}
+
+// Used to color nodes in the canvas, see ProgramContext's status polling
+// and ProcessNode's use of it, and to derive the run phase of a resident
+// program.
+export async function getProcessStatuses(program: Program): Promise<ProcessStatusesResult> {
   const response = await fetch("/api/execution/process-statuses", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -111,8 +190,8 @@ export async function getProcessStatuses(program: Program): Promise<Record<strin
     throw new Error(`Failed to get process statuses (${response.status})`);
   }
 
-  const { statuses } = await response.json();
-  return statuses;
+  const { statuses, hasProgramState, output, notices } = await response.json();
+  return { statuses, hasProgramState: hasProgramState ?? false, output: output ?? "", notices: notices ?? [] };
 }
 
 async function fetchProcessOutput(
@@ -262,6 +341,52 @@ export async function readFifo(
   return response.json();
 }
 
+// Writes one message into an external input of a resident program ("Talk
+// to FIFOs"): the backend wraps the payload in a DATA envelope and writes it
+// as one line, whole or not at all. In JSON mode `text` is any JSON value; in
+// text mode it is sent as a string.
+export async function writeResidentFifo(
+  program: Program,
+  processName: string,
+  fifoName: string,
+  text: string,
+  mode: TalkMode
+): Promise<{ ok: boolean; error?: string }> {
+  const response = await fetch("/api/execution/resident-fifo-write", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, fifoName, text, mode }),
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: await errorDetail(response, `Failed to write to ${fifoName}.`) };
+  }
+
+  return response.json();
+}
+
+// Reads the next envelope from a business output with no reader of a
+// resident program ("Talk to FIFOs"), skipping blank lines and HELLO. It
+// takes the message from the channel. `timedOut: true` means nothing arrived
+// within the backend's short bound: the caller reads again.
+export async function readResidentFifo(
+  program: Program,
+  processName: string,
+  fifoName: string
+): Promise<ResidentFifoRead> {
+  const response = await fetch("/api/execution/resident-fifo-read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, fifoName }),
+  });
+
+  if (!response.ok) {
+    return { error: await errorDetail(response, `Failed to read from ${fifoName}.`) };
+  }
+
+  return response.json();
+}
+
 // An {label: resolved value} map for a process's command-line options,
 // parsed from its ".opts" file (the canvas's right-click "Inspect
 // execution" menu's "Show inputs and outputs") — empty when the
@@ -287,6 +412,49 @@ export async function getProcessResolvedOptions(
   return values;
 }
 
+// What a node of a resident program keeps in its execdir, or the batch runs
+// of a launcher node, read by debasher_inspect_resident for "Show node
+// state" and "Show batch runs": what the tool printed, parsed, or the error
+// it reported (a node that keeps no node state, a checkpoint that the node
+// no longer retains).
+export async function inspectNode<T>(
+  program: Program,
+  processName: string,
+  taskIndex: number | undefined,
+  command: InspectNodeCommand
+): Promise<{ result: T | null; error: string | null }> {
+  const response = await fetch("/api/execution/inspect-node", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName, taskIndex, ...command }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await errorDetail(response, `Failed to inspect node ${processName}.`)
+    );
+  }
+
+  return response.json();
+}
+
+// What debasher_status says of the run directory of a batch run of a
+// launcher node that is a whole general program, for "Show batch runs".
+export async function getBatchRunStatus(program: Program, runDir: string): Promise<string> {
+  const response = await fetch("/api/execution/batch-run-status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, runDir }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to get the status of ${runDir}.`));
+  }
+
+  const { output } = await response.json();
+  return output;
+}
+
 export type PathInspection =
   | { kind: "file"; content: string }
   | { kind: "binary" }
@@ -308,6 +476,18 @@ export async function inspectPath(path: string): Promise<PathInspection> {
   }
 
   return response.json();
+}
+
+// What an inspected path shows as text: a file's content, a directory's
+// listing, or why neither is shown.
+export function pathInspectionText(path: string, result: PathInspection): string {
+  return result.kind === "file"
+    ? result.content
+    : result.kind === "directory"
+      ? (result.entries.length > 0 ? result.entries.join("\n") : "(empty directory)")
+      : result.kind === "binary"
+        ? `Warning: ${path} looks like a binary file. Content not shown.`
+        : `Path not found: ${path}`;
 }
 
 // The task indices that have a stdout, scheduler-output, or options
@@ -373,19 +553,150 @@ export async function resetOutputDir(program: Program): Promise<boolean> {
   return cleared;
 }
 
-export async function stopProgram(program: Program): Promise<string> {
-  const response = await fetch("/api/execution/stop", {
+export interface ResetProgramStateResult {
+  output: string;
+  exitCode: number;
+}
+
+// "Reset program state" on a resident program (debasher_reset_resident):
+// sets the program state aside under __reset__/<timestamp>/ in the output
+// directory, or deletes it with `deleteState`.
+export async function resetProgramState(
+  program: Program,
+  deleteState: boolean
+): Promise<ResetProgramStateResult> {
+  const response = await fetch("/api/execution/reset-program-state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, delete: deleteState }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await errorDetail(response, `Failed to reset the program state (${response.status})`)
+    );
+  }
+
+  return response.json();
+}
+
+
+export interface StopResult {
+  output: string;
+  exitCode: number | null;
+}
+
+async function postStop(endpoint: string, program: Program, fallback: string): Promise<StopResult> {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to stop program (${response.status})`);
+    throw new Error(await errorDetail(response, `${fallback} (${response.status})`));
   }
 
-  const { output } = await response.json();
-  return output;
+  const { output, exitCode } = await response.json();
+  return { output, exitCode: exitCode ?? null };
+}
+
+// "Stop program": debasher_stop on a general program, and the orderly stop
+// of a resident program (debasher_stop_resident), which resolves once the
+// program has stopped, up to about the timeout of the tool: exit code 0 for
+// an orderly stop, 2 for one that fell back to the hard kill, 1 for an error
+// of usage or setup.
+export async function stopProgram(program: Program): Promise<StopResult> {
+  return postStop("/api/execution/stop", program, "Failed to stop program");
+}
+
+// The hard kill of a resident program (debasher_stop).
+export async function killProgram(program: Program): Promise<StopResult> {
+  return postStop("/api/execution/kill", program, "Failed to kill program");
+}
+
+export interface RelaunchResult {
+  output: string;
+  exitCode: number;
+  // The tasks that the web UI relaunched, as <process> or <process>:<idx>.
+  relaunched: string[];
+}
+
+async function postNodeAction(
+  endpoint: string,
+  program: Program,
+  processName: string,
+  fallback: string
+): Promise<RelaunchResult> {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ program, processName }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `${fallback} (${response.status})`));
+  }
+
+  const { output, exitCode, relaunched } = await response.json();
+  return { output, exitCode, relaunched: relaunched ?? [] };
+}
+
+// "Restart node" on a node of a resident program (debasher_stop -p): a crash
+// of the node, which the Supervisor relaunches, or the backend in a program
+// without a Supervisor.
+export async function restartNode(program: Program, processName: string): Promise<RelaunchResult> {
+  return postNodeAction("/api/execution/restart-node", program, processName, "Failed to restart node");
+}
+
+// "Relaunch node" in a resident program without a Supervisor: relaunches the
+// tasks of the node that are down.
+export async function relaunchNode(program: Program, processName: string): Promise<RelaunchResult> {
+  return postNodeAction("/api/execution/relaunch-node", program, processName, "Failed to relaunch node");
+}
+
+export interface SnapshotResult {
+  output: string;
+  // 0 a round that closed at every node, 2 one that did not close at some
+  // node, 1 an error of usage or setup.
+  exitCode: number;
+  epoch: number | null;
+  // With exit code 2, the nodes at which the round did not close.
+  pendingNodes: string[];
+}
+
+// "Take snapshot" (debasher_snapshot_resident): starts one round and
+// resolves once it has closed at every node, or its timeout has passed.
+export async function takeSnapshot(program: Program): Promise<SnapshotResult> {
+  const response = await fetch("/api/execution/snapshot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to take a snapshot (${response.status})`));
+  }
+
+  const { output, exitCode, epoch, pendingNodes } = await response.json();
+  return { output, exitCode, epoch: epoch ?? null, pendingNodes: pendingNodes ?? [] };
+}
+
+// Whether the Supervisor of the live program was launched with
+// -no-hold-fifos, as the options it was given say.
+export async function launchedWithNoHoldFifos(program: Program): Promise<boolean> {
+  const response = await fetch("/api/execution/launched-with-no-hold-fifos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to read the launch options (${response.status})`);
+  }
+
+  const { launchedWithNoHoldFifos } = await response.json();
+  return launchedWithNoHoldFifos;
 }
 
 // Stop a single process (the canvas's right-click "Stop process"

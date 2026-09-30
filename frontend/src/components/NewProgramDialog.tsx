@@ -1,14 +1,37 @@
 import { useState } from "react";
 
+import type { ProgramType } from "../models/program";
+
 interface Props {
-  onCreate: (name: string) => void;
+  onCreate: (name: string, programType: ProgramType) => void;
   onClose: () => void;
 }
+
+// The type of a program is chosen here, once: it never changes
+// afterwards, since the two types accept different processes and
+// connections.
+const PROGRAM_TYPES: { value: ProgramType; label: string; description: string }[] = [
+  {
+    value: "general",
+    label: "General program",
+    description: "A run that starts and finishes.",
+  },
+  {
+    value: "resident",
+    label: "Resident program",
+    description:
+      "Nodes that stay alive, keep state, recover from crashes and go " +
+      "through rounds. The type cannot be changed later.",
+  },
+];
 
 export default function NewProgramDialog({ onCreate, onClose }: Props) {
 
   const [name, setName] =
     useState("");
+
+  const [programType, setProgramType] =
+    useState<ProgramType>("general");
 
   const [error, setError] =
     useState<string | null>(null);
@@ -20,7 +43,7 @@ export default function NewProgramDialog({ onCreate, onClose }: Props) {
       return;
     }
 
-    onCreate(name.trim());
+    onCreate(name.trim(), programType);
 
   }
 
@@ -84,6 +107,31 @@ export default function NewProgramDialog({ onCreate, onClose }: Props) {
           }}
 
         />
+
+        <label style={{ fontSize: 14 }}>
+          Program type
+        </label>
+
+        {PROGRAM_TYPES.map(({ value, label, description }) => (
+          <label
+            key={value}
+            style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 14 }}
+          >
+            <input
+              type="radio"
+              name="program-type"
+              value={value}
+              checked={programType === value}
+              onChange={() => setProgramType(value)}
+            />
+            <span>
+              {label}
+              <span style={{ display: "block", color: "#666", fontSize: 12 }}>
+                {description}
+              </span>
+            </span>
+          </label>
+        ))}
 
         {error && (
           <div style={{ color: "#b00020", fontSize: 14 }}>

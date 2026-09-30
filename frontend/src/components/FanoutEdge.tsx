@@ -1,5 +1,9 @@
 import type { EdgeProps } from "@xyflow/react";
 
+import { WIRING_EDGE_COLOR } from "../adapters/reactFlowAdapter";
+import { backEdgeRoute, taperedBand } from "./edgeRoutes";
+import type { BackEdgeRouteData, Point } from "./edgeRoutes";
+
 // Half-widths (px) at the narrow ("standard" family option) and wide
 // ("array" process) ends of the wedge.
 const NARROW_HALF_WIDTH = 1.5;
@@ -17,7 +21,9 @@ const MIN_HIT_HALF_WIDTH = 8;
  * family option (see isFanoutOption) and the paired "array" process —
  * drawn as a filled wedge, narrow at the family end and wide at the
  * array end, so the single edge visually reads as "one becomes many"
- * rather than a plain 1:1 connection.
+ * rather than a plain 1:1 connection. The wedge follows the route of
+ * the edge: a straight line, or the detour of a back edge when its
+ * target sits at or above its source.
  */
 export default function FanoutEdge({
   sourceX,
@@ -28,34 +34,37 @@ export default function FanoutEdge({
   selected,
 }: EdgeProps) {
 
-  const fanoutData = data as { narrowEnd?: "source" | "target"; isFifo?: boolean } | undefined;
+  const fanoutData = data as
+    | ({ narrowEnd?: "source" | "target"; isFifo?: boolean; wiring?: boolean } & BackEdgeRouteData)
+    | undefined;
   const narrowEnd = fanoutData?.narrowEnd ?? "source";
   const isFifo = fanoutData?.isFifo ?? false;
+  // An edge of the Supervisor wiring keeps the color and the dots of the
+  // other edges of the wiring (see supervisorWiring).
+  const isWiring = fanoutData?.wiring ?? false;
 
   // Standard/FIFO edges pick up ReactFlow's built-in selected-edge
   // highlight for free, since it targets the `react-flow__edge-path`
   // class BaseEdge renders. This edge draws its own filled polygon
   // instead, so it has to mirror that highlight color itself.
-  const fill = selected ? "var(--xy-edge-stroke-selected-default, #555)" : "#999";
+  const fill = selected
+    ? "var(--xy-edge-stroke-selected-default, #555)"
+    : isWiring
+    ? WIRING_EDGE_COLOR
+    : "#999";
 
   const sourceHalfWidth = narrowEnd === "source" ? NARROW_HALF_WIDTH : WIDE_HALF_WIDTH;
   const targetHalfWidth = narrowEnd === "source" ? WIDE_HALF_WIDTH : NARROW_HALF_WIDTH;
 
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-  const length = Math.hypot(dx, dy) || 1;
-
-  // Unit normal to the source->target line.
-  const nx = -dy / length;
-  const ny = dx / length;
+  // The route that the edge would take if it were not a fanout edge: the
+  // detour of a back edge when the adapter gives one, a straight line
+  // otherwise. The wedge is drawn along it.
+  const route: Point[] = fanoutData?.detourX !== undefined
+    ? backEdgeRoute(sourceX, sourceY, targetX, targetY, fanoutData)
+    : [[sourceX, sourceY], [targetX, targetY]];
 
   const wedgePoints = (sourceHW: number, targetHW: number) =>
-    [
-      [sourceX + nx * sourceHW, sourceY + ny * sourceHW],
-      [targetX + nx * targetHW, targetY + ny * targetHW],
-      [targetX - nx * targetHW, targetY - ny * targetHW],
-      [sourceX - nx * sourceHW, sourceY - ny * sourceHW],
-    ]
+    taperedBand(route, sourceHW, targetHW)
       .map(([x, y]) => `${x},${y}`)
       .join(" ");
 
@@ -77,7 +86,7 @@ export default function FanoutEdge({
         fill={fill}
         fillOpacity={isFifo ? 0.35 : 1}
         stroke={isFifo ? fill : "none"}
-        strokeDasharray={isFifo ? "6 4" : undefined}
+        strokeDasharray={isWiring ? "2 4" : isFifo ? "6 4" : undefined}
         pointerEvents="none"
       />
     </>

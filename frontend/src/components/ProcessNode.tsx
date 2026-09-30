@@ -8,12 +8,34 @@ import type {
   Node,
 } from "@xyflow/react";
 
-import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
-import { optionRow } from "../adapters/reactFlowAdapter";
-import { fanoutBaseLabel, isFanoutOption } from "../models/option";
-import { processNodeBackground } from "../models/processStatus";
+import type { ProgramProcessData, WiringHandle } from "../adapters/reactFlowAdapter";
+import type { ProgramOption } from "../models/option";
+import type { ProgramProcess } from "../models/process";
+import { configurationSource, noHoldFifosOption, nodeOptionRole, observesOutside } from "../models/node";
+import { WIRING_EDGE_COLOR, optionRow } from "../adapters/reactFlowAdapter";
+import { fanoutBaseLabel, isFanoutOption, optionValueSource } from "../models/option";
+import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
+import {
+  HEAD_BAND_COLOR,
+  InitiatorMark,
+  NodeKindChip,
+  NoticeMark,
+  ObserveMark,
+  OutsideMark,
+  SUPERVISOR_HEAD_BAND_COLOR,
+  TriggerMark,
+} from "./NodeMarks";
 import { useProgram } from "../store/ProgramContext";
-import { groupColor } from "../utils/groupColor";
+import { noticeMarkLevel, noticesOfProcess, noticeTooltip, type NodeNotice } from "../models/nodeState";
+import { SELECTED_NODE_COLOR, groupColor } from "../utils/groupColor";
+
+// What the tag of a hollow handle says, in full.
+const VALUE_SOURCE_TITLE: Record<string, string> = {
+  cmdline: "Given on the command line of the program",
+  spec: "Taken from the process specifications",
+  flag: "A flag that the module always gives",
+  fixed: "A value that the module gives",
+};
 
 function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) {
 
@@ -30,6 +52,232 @@ function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) 
 
 }
 
+/**
+ * The handle of an option and its label, along the top or the bottom edge
+ * of a canvas node, with the handle on the outer side of the label. In a
+ * resident program an option whose data cross the border of the program
+ * carries a mark outside its handle, and an external input's handle takes
+ * no connection. An option whose value comes from elsewhere than a
+ * connection has a hollow handle, which takes none either, and a tag after
+ * its label that says where its value comes from.
+ */
+function OptionHandle({
+  option,
+  row,
+  isFanout,
+  connectable = true,
+  outsideMark,
+  valueSource,
+}: {
+  option: ProgramOption;
+  row: "top" | "bottom";
+  isFanout: boolean;
+  connectable?: boolean;
+  outsideMark?: "externalInput" | "readOutside";
+  valueSource?: string;
+}) {
+
+  const handle = (
+    <Handle
+      id={option.id}
+      type={option.direction === "input" ? "target" : "source"}
+      position={row === "top" ? Position.Top : Position.Bottom}
+      isConnectable={connectable}
+      {...(valueSource ? { style: { background: "#fff", border: "1px solid #555" } } : {})}
+    />
+  );
+
+  return (
+
+    <div
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        ...(row === "top" ? { paddingTop: 10 } : { paddingBottom: 10 }),
+      }}
+    >
+
+      {outsideMark && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            lineHeight: 0,
+            ...(row === "top" ? { top: -18 } : { bottom: -18 }),
+          }}
+        >
+          <OutsideMark kind={outsideMark} />
+        </div>
+      )}
+
+      {row === "top" && handle}
+
+      <span
+        title={isFanout ? "Fanout family option (dynamic count)" : undefined}
+        style={{
+          fontSize: 11,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <OptionLabel label={option.label} isFanout={isFanout} />
+        {valueSource && (
+          <span
+            data-value-source={valueSource}
+            title={VALUE_SOURCE_TITLE[valueSource]}
+            style={{ marginLeft: 4, fontSize: 9, color: "#888" }}
+          >
+            {valueSource}
+          </span>
+        )}
+      </span>
+
+      {row === "bottom" && handle}
+
+    </div>
+
+  );
+
+}
+
+/**
+ * A handle of the Supervisor wiring, read only: it accepts no connection,
+ * and its label is set apart from those of the options. A trigger port is a
+ * lightning bolt instead of the round handle, and the manual trigger port
+ * of the Supervisor carries the mark of what is written from outside the
+ * program, as an external input does.
+ */
+function WiringHandleView({ handle }: { handle: WiringHandle }) {
+
+  const isTrigger = handle.kind === "trigger";
+
+  const handleElement = (
+    <Handle
+      id={handle.id}
+      type={handle.type}
+      position={handle.row === "top" ? Position.Top : Position.Bottom}
+      isConnectable={false}
+      style={
+        isTrigger
+          ? { width: 12, height: 14, minWidth: 0, minHeight: 0, background: "none", border: "none", lineHeight: 0 }
+          : { background: WIRING_EDGE_COLOR, borderColor: WIRING_EDGE_COLOR }
+      }
+    >
+      {isTrigger && <TriggerMark />}
+    </Handle>
+  );
+
+  return (
+
+    <div
+      data-wiring-handle={handle.kind}
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        ...(handle.row === "top" ? { paddingTop: 10 } : { paddingBottom: 10 }),
+      }}
+    >
+
+      {handle.kind === "manual" && (
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            lineHeight: 0,
+            top: -18,
+          }}
+        >
+          <OutsideMark kind="externalInput" />
+        </div>
+      )}
+
+      {handle.row === "top" && handleElement}
+
+      <span
+        style={{
+          fontSize: 10,
+          fontStyle: "italic",
+          color: WIRING_EDGE_COLOR,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {handle.label}
+        {handle.tag && (
+          <span data-wiring-tag={handle.tag} style={{ marginLeft: 4, fontSize: 9, fontStyle: "normal" }}>
+            {handle.tag}
+          </span>
+        )}
+      </span>
+
+      {handle.row === "bottom" && handleElement}
+
+    </div>
+
+  );
+
+}
+
+/**
+ * The head of a canvas node of a resident program: its name, its node kind
+ * and the marks of an initiator, of a node that observes the outside world
+ * and of the notice of its node (of its tasks, for an array), on a band that
+ * groups them (see HEAD_BAND_COLOR). The notice mark is dimmed while the
+ * process is not IN-PROGRESS: the notice is then that of the latest
+ * incarnation of a node that no longer runs.
+ */
+function ResidentHead({ process, notices, status }: {
+  process: ProgramProcess;
+  notices: NodeNotice[];
+  status: string | undefined;
+}) {
+
+  const noticeLevel = noticeMarkLevel(notices);
+
+  const isSupervisor = process.nodeKind === "Supervisor";
+
+  return (
+
+    <div style={{ marginBottom: 12, textAlign: "center" }}>
+
+      <div
+        data-head={isSupervisor ? "supervisor" : "node"}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 4,
+          background: isSupervisor ? SUPERVISOR_HEAD_BAND_COLOR : HEAD_BAND_COLOR,
+          borderRadius: 6,
+          padding: "4px 8px",
+        }}
+      >
+
+        <div style={{ fontWeight: "bold" }}>
+          {process.name}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {process.nodeKind && <NodeKindChip kind={process.nodeKind} />}
+          {process.initiator && <InitiatorMark />}
+          {observesOutside(process) && <ObserveMark />}
+          {noticeLevel && (
+            <NoticeMark level={noticeLevel} title={noticeTooltip(notices)} dimmed={status !== "IN-PROGRESS"} />
+          )}
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
 export default function ProcessNode({
   data,
   selected,
@@ -38,9 +286,15 @@ export default function ProcessNode({
   const process = data.process;
   const flippedOptionIds = data.flippedOptionIds;
 
-  const { processStatuses } = useProgram();
+  const { program, processStatuses, nodeNotices } = useProgram();
 
-  const background = processNodeBackground(processStatuses[process.name]);
+  const isResident = program.programType === "resident";
+
+  const status = processStatuses[process.name];
+
+  const background = processNodeBackground(
+    isResident ? residentProcessStatus(status) : status
+  );
 
   const optionsHandlerMode = process.optionsHandler.mode;
   const isStandard = optionsHandlerMode === "standard";
@@ -48,23 +302,79 @@ export default function ProcessNode({
   const isManual = optionsHandlerMode === "manual";
 
 
+  // Every option has a handle. The Supervisor also has its flag
+  // -no-hold-fifos, which script generation writes although the program
+  // model does not hold it.
+  const handleOptions = isResident && process.nodeKind === "Supervisor"
+    ? [...process.options, noHoldFifosOption()]
+    : process.options;
+
   const topOptions =
-    process.options.filter(
+    handleOptions.filter(
       option => optionRow(option, flippedOptionIds) === "top"
     );
 
 
   const bottomOptions =
-    process.options.filter(
+    handleOptions.filter(
       option => optionRow(option, flippedOptionIds) === "bottom"
     );
 
-  const groupSource = process.groupSource;
+  // A business output with no connection is read outside the program. It
+  // depends on the edges, which are not part of the structural key, so it
+  // is read here from the store rather than from the canvas node's data.
+  function outsideMark(option: ProgramOption): "externalInput" | "readOutside" | undefined {
+    if (!isResident) {
+      return undefined;
+    }
+    const role = nodeOptionRole(option);
+    if (role === "externalInput") {
+      return "externalInput";
+    }
+    if (role === "businessOutput" && !program.edges.some(edge => edge.sourceOptionId === option.id)) {
+      return "readOutside";
+    }
+    return undefined;
+  }
+
+  // Where the value of an option comes from when no connection can give it,
+  // which its hollow handle is tagged with: in a resident program, for every
+  // configuration option; in a general one, for an input of the command line,
+  // of the process specifications or a flag, which script generation writes
+  // before it looks at any connection.
+  function valueSource(option: ProgramOption): string | undefined {
+    if (isResident) {
+      return nodeOptionRole(option) === "configuration" ? configurationSource(option) : undefined;
+    }
+    return option.direction === "input" ? optionValueSource(option) ?? undefined : undefined;
+  }
+
+  // In a resident program only a business output and an input that a
+  // connection can reach take a connection; an option with a hollow handle
+  // takes none in either type of program.
+  function optionHandle(option: ProgramOption, row: "top" | "bottom") {
+    const role = isResident ? nodeOptionRole(option) : null;
+    const source = valueSource(option);
+    return (
+      <OptionHandle
+        key={option.id}
+        option={option}
+        row={row}
+        isFanout={isStandard && isFanoutOption(option.label)}
+        connectable={!source && (!role || role === "businessOutput" || role === "businessInput")}
+        outsideMark={outsideMark(option)}
+        valueSource={source}
+      />
+    );
+  }
+
+  // A resident program has no groups.
+  const groupSource = isResident ? undefined : process.groupSource;
   const groupBorderColor = groupSource ? groupColor(groupSource.groupId) : null;
 
 
   const borderWidth = selected || groupBorderColor ? 2 : 1;
-  const borderColor = selected ? "#1a73e8" : groupBorderColor ?? "#999";
+  const borderColor = selected ? SELECTED_NODE_COLOR : groupBorderColor ?? "#999";
   const borderStyle = isManual ? "dashed" : "solid";
 
   return (
@@ -96,57 +406,36 @@ export default function ProcessNode({
         }}
       >
 
-        {topOptions.map(
-          option => (
+        {topOptions.map(option => optionHandle(option, "top"))}
 
-            <div
-              key={option.id}
-              style={{
-                position: "relative",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                paddingTop: 10,
-              }}
-            >
-
-              <Handle
-
-                id={option.id}
-
-                type={option.direction === "input" ? "target" : "source"}
-
-                position={Position.Top}
-
-              />
-
-              <span
-                title={isStandard && isFanoutOption(option.label) ? "Fanout family option (dynamic count)" : undefined}
-                style={{
-                  fontSize: 11,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <OptionLabel label={option.label} isFanout={isStandard && isFanoutOption(option.label)} />
-              </span>
-
-            </div>
-
-          )
-        )}
+        {data.wiringHandles
+          .filter(handle => handle.row === "top")
+          .map(handle => <WiringHandleView key={handle.id} handle={handle} />)}
 
       </div>
 
 
-      <div
-        style={{
-          fontWeight: "bold",
-          marginBottom: groupSource ? 2 : 12,
-          textAlign: "center",
-        }}
-      >
-        {process.name}
-      </div>
+      {isResident ? (
+
+        <ResidentHead
+          process={process}
+          notices={noticesOfProcess(nodeNotices, process.name)}
+          status={status}
+        />
+
+      ) : (
+
+        <div
+          style={{
+            fontWeight: "bold",
+            marginBottom: groupSource ? 2 : 12,
+            textAlign: "center",
+          }}
+        >
+          {process.name}
+        </div>
+
+      )}
 
       {groupSource && (
         <div
@@ -175,44 +464,11 @@ export default function ProcessNode({
         }}
       >
 
-        {bottomOptions.map(
-          option => (
+        {bottomOptions.map(option => optionHandle(option, "bottom"))}
 
-            <div
-              key={option.id}
-              style={{
-                position: "relative",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                paddingBottom: 10,
-              }}
-            >
-
-              <span
-                title={isStandard && isFanoutOption(option.label) ? "Fanout family option (dynamic count)" : undefined}
-                style={{
-                  fontSize: 11,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <OptionLabel label={option.label} isFanout={isStandard && isFanoutOption(option.label)} />
-              </span>
-
-              <Handle
-
-                id={option.id}
-
-                type={option.direction === "input" ? "target" : "source"}
-
-                position={Position.Bottom}
-
-              />
-
-            </div>
-
-          )
-        )}
+        {data.wiringHandles
+          .filter(handle => handle.row === "bottom")
+          .map(handle => <WiringHandleView key={handle.id} handle={handle} />)}
 
       </div>
 

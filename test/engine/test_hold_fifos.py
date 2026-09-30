@@ -72,8 +72,8 @@ def test_the_flag_no_hold_fifos_makes_the_supervisor_hold_nothing(tmp_path, monk
     monkeypatch.setenv(
         "DEBASHER_PROCESS_PORTS", "nodes=;trigger=;manual_trigger=;startup=;hold=a/a_to_b"
     )
-    proc = _Holder(argv=["-c", "--", "-no_hold_fifos"])
-    assert proc.opts == {"no_hold_fifos": True}
+    proc = _Holder(argv=["-c", "--", "-no-hold-fifos"])
+    assert proc.opts == {"no-hold-fifos": True}
     assert proc.HOLD_FIFOS == []
     assert proc._fds_needed() == lib.Supervisor.FD_MARGIN
     # Nothing is opened, so the missing fifo is no error.

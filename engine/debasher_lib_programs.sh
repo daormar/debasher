@@ -277,15 +277,18 @@ debasher::program_type()
 }
 
 ########
-# Public: Sets the type of the program being defined.
+# Public: Sets the type of the program being defined, from the
+# `program_type` method of its module.
 #
-# $1 - Program type.
+# $1 - Program type: "general" (the default, when the module defines no
+#      `program_type` method) or "resident".
 #
 # Examples
 #
 #    program_type "resident"
 #
-# The function does not return any value
+# The function does not return any value. It aborts the execution when
+# given any other type.
 program_type() { debasher::program_type "$@"; }
 
 ########
@@ -564,11 +567,162 @@ debasher::_classify_resident_process_role()
 }
 
 ########
+# Echoes the source of the (small, self-contained) Python program that
+# checks the name of the class of a resident process, read from stdin,
+# with the name of the process as its only argument. The class that
+# derives from a class of the runtime library (resolved as
+# debasher::_resident_role_classifier_src resolves it) is the node, and
+# there is exactly one. It is named after its process, in CamelCase:
+# every part of the process name between dots and underscores, with its
+# first letter in upper case ("counter" -> "Counter", "org.ns.count_words"
+# -> "OrgNsCountWords"), so that the name, which the runtime also gives
+# to the logger of the node, follows from the process. And that name
+# hides nothing that the code of the node could need: a class of the
+# runtime library, a Python builtin, or a name that the heredoc binds at
+# its top level, such as an import of its preamble. Prints nothing and
+# exits 0 if the class passes, or prints the first violation to stderr
+# and exits 1. Like the classifier, it only parses the source.
+debasher::_resident_class_name_checker_src()
+{
+    cat <<'EOF'
+import ast
+import builtins
+import sys
+
+RUNTIME_CLASSES = ("FBPProcess", "Supervisor", "ProgramLauncher", "DirectoryWatcher")
+
+# Nodes whose names live in a scope of their own, not in the module's
+SCOPES = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
+def camel_case(processname):
+    parts = processname.replace(".", "_").split("_")
+    return "".join(part[:1].upper() + part[1:] for part in parts if part)
+
+
+def runtime_aliases(tree):
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in RUNTIME_CLASSES:
+                    aliases[alias.asname or alias.name] = alias.name
+    return aliases
+
+
+def base_identifier(base_node):
+    if isinstance(base_node, ast.Name):
+        return base_node.id
+    if isinstance(base_node, ast.Attribute):
+        return base_node.attr
+    return None
+
+
+def node_classes(tree):
+    aliases = runtime_aliases(tree)
+    classes = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for base in node.bases:
+            name = base_identifier(base)
+            if name is not None and aliases.get(name, name) in RUNTIME_CLASSES:
+                classes.append(node)
+                break
+    return classes
+
+
+def bindings(node):
+    """The names that `node`, a statement at the top level, binds in the module."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        yield node.name, node.lineno
+        return
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        for alias in node.names:
+            if alias.name != "*":
+                yield alias.asname or alias.name.split(".")[0], node.lineno
+        return
+    if isinstance(node, SCOPES):
+        return
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+        yield node.id, node.lineno
+    for child in ast.iter_child_nodes(node):
+        yield from bindings(child)
+
+
+def check(processname, source):
+    tree = ast.parse(source)
+    expected = camel_case(processname)
+
+    if expected in RUNTIME_CLASSES:
+        return (f"the class of process {processname} is named {expected}, after the process, "
+                "which is a class of the runtime library that it would hide: rename the process")
+    if expected in dir(builtins):
+        return (f"the class of process {processname} is named {expected}, after the process, "
+                "which is a Python builtin that it would hide: rename the process")
+
+    classes = node_classes(tree)
+    if len(classes) != 1:
+        names = ", ".join(node.name for node in classes)
+        return (f"process {processname} defines {len(classes)} classes deriving from a class of "
+                f"the runtime library ({names}), but a node defines exactly one")
+    node_class = classes[0]
+    if node_class.name != expected:
+        return (f"process {processname} names its class {node_class.name}, but the class of a "
+                f"node is named after its process, in CamelCase: {expected}")
+
+    for statement in tree.body:
+        if statement is node_class:
+            continue
+        for name, line in bindings(statement):
+            if name == expected:
+                return (f"the class of process {processname}, {expected}, has the name of what "
+                        f"its code also defines on line {line}, which it would hide")
+    return None
+
+
+def main():
+    try:
+        violation = check(sys.argv[1], sys.stdin.read())
+    except SyntaxError as exc:
+        print(f"Error: invalid Python source ({exc})", file=sys.stderr)
+        sys.exit(1)
+    if violation is not None:
+        print(f"Error: {violation}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+EOF
+}
+
+########
+# Checks the name of the class of a resident program's process by running
+# debasher::_resident_class_name_checker_src against its Python heredoc
+# source (see debasher::_get_resident_process_source). Returns 1, with an
+# error on stderr, if the name breaks one of its rules, or if the process
+# is not a Python heredoc process at all.
+debasher::_check_resident_class_name()
+{
+    local processname=$1
+
+    local source
+    if ! source=$(debasher::_get_resident_process_source "${processname}"); then
+        echo "Error: process ${processname} does not provide its code as a Python heredoc, required for a resident program" >&2
+        return 1
+    fi
+
+    printf '%s' "${source}" | "${PYTHON}" -c "$(debasher::_resident_class_name_checker_src)" "${processname}"
+}
+
+########
 # Validates every process of a "resident" program (see to_do_fbp.md):
 # each one must classify (via debasher::_classify_resident_process_role)
-# as either "supervisor" or "fbpprocess", and at most one process may
-# be a "supervisor" (a supervisor is optional -- like ext2/3/4
-# journaling -- but never more than one). A no-op, returning 0
+# as either "supervisor" or "fbpprocess", with its class named as
+# debasher::_check_resident_class_name requires, and at most one process
+# may be a "supervisor" (a supervisor is optional, like ext2/3/4
+# journaling, but never more than one). A no-op, returning 0
 # immediately, when DEBASHER_PROGRAM_TYPE is not "resident". Exits
 # with an error message on the first violation found.
 debasher::_validate_resident_program_processes()
@@ -601,6 +755,8 @@ debasher::_validate_resident_program_processes()
                 return 1
                 ;;
         esac
+
+        debasher::_check_resident_class_name "${processname}" || return 1
     done
 }
 
@@ -809,8 +965,10 @@ debasher::_sorted_comma_list()
 # debasher::_validate_resident_channels to have passed, and
 # DEBASHER_RESIDENT_PROCESS_ROLES. Returns 1, with an error, if a task has
 # more than one output port read by the Supervisor (a node has a single
-# heartbeat channel), if the Supervisor has more than one manual trigger, or
-# if it defines a fifo that is neither.
+# heartbeat channel), or none while the program has a Supervisor (the node
+# would run unsupervised, with nothing to say so, as a task of an array
+# beyond those the Supervisor connects to would), if the Supervisor has more
+# than one manual trigger, or if it defines a fifo that is neither.
 debasher::_register_resident_task_ports()
 {
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
@@ -896,9 +1054,18 @@ debasher::_register_resident_task_ports()
         fi
     done
 
+    # The Supervisor, if there is one: every node then needs a heartbeat
+    # channel to it
+    local supervisor="" processname
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        if [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "supervisor" ]; then
+            supervisor="${processname}"
+        fi
+    done
+
     # One entry for every task, also for one with no port at all, so that
     # every node of the program takes its ports from here
-    local processname idx num_tasks node field list entry
+    local idx num_tasks node field list entry
     for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
         [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
         num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
@@ -909,6 +1076,10 @@ debasher::_register_resident_task_ports()
                 list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
                 if [ "${field}" = "supervisor" ] && [[ "${list}" == *,* ]]; then
                     echo "Error: node $(debasher::_resident_node_display_name "${node}") has more than one output read by the Supervisor (${list}), but a node has a single heartbeat channel" >&2
+                    return 1
+                fi
+                if [ "${field}" = "supervisor" ] && [ -z "${list}" ] && [ -n "${supervisor}" ]; then
+                    echo "Error: node $(debasher::_resident_node_display_name "${node}") has no output read by the Supervisor ${supervisor}, but in a program with a Supervisor every node has a heartbeat channel: without one, the node would run unsupervised" >&2
                     return 1
                 fi
                 entry+=";${field}=${list}"

@@ -19,6 +19,17 @@ import type { ProgramProcess } from "../models/process";
 import type { ProgramOption, FanoutFamily } from "../models/option";
 import { fanoutBaseLabel, isFanoutOption } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
+import { showsGeneralIndicator } from "../models/generalRun";
+import { hasSupervisor } from "../models/node";
+import { offersShowBatchRuns, offersShowNodeState, wasLaunched } from "../models/nodeState";
+import {
+  offersRelaunchNode,
+  offersRestartNode,
+  relaunchOutcome,
+  restartNodeWarning,
+  restartsWithBothEnds,
+  stoppedInOrder,
+} from "../models/residentRun";
 import {
   getProcessOpts,
   getProcessResolvedOptions,
@@ -26,6 +37,10 @@ import {
   getProcessStdout,
   getProcessTasks,
   inspectPath,
+  pathInspectionText,
+  launchedWithNoHoldFifos,
+  relaunchNode,
+  restartNode,
   stopProcess,
 } from "../api/executionApi";
 
@@ -36,17 +51,30 @@ import {
   connectionToProgramEdge,
   isValidProgramConnection,
   computeFlippedOptionIds,
+  canvasStructuralKey,
+  supervisorWiring,
 } from "../adapters/reactFlowAdapter";
 import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
 import BackEdge from "./BackEdge";
+import SelfLoopEdge from "./SelfLoopEdge";
+import ConfirmDialog from "./ConfirmDialog";
+import ResidentRunIndicator from "./ResidentRunIndicator";
 import RunStatusIndicator from "./RunStatusIndicator";
-import ProcessContextMenu, { type ProcessMenuAction, type ProcessOutputKind } from "./ProcessContextMenu";
+import ProcessContextMenu, {
+  type NodeAction,
+  type ProcessMenuAction,
+  type ProcessOutputKind,
+  type ResidentInspection,
+} from "./ProcessContextMenu";
 import ProcessTaskPicker from "./ProcessTaskPicker";
 import CommandOutputModal from "./CommandOutputModal";
+import NodeStateModal from "./NodeStateModal";
+import BatchRunsModal from "./BatchRunsModal";
 import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
 import ProgramFilesPanel from "./ProgramFilesPanel";
+import CanvasLegend from "./CanvasLegend";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
   opts: "options",
@@ -61,7 +89,11 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
   ...OUTPUT_KIND_LABEL,
   io: "inputs and outputs",
   "watch-fifo": "mirrored fifo output",
+  "node-state": "node state",
+  "batch-runs": "batch runs",
   stop: "process stop",
+  restart: "node restart",
+  relaunch: "node relaunch",
 };
 
 // Above this many indices, listing the family inline stops being
@@ -173,18 +205,42 @@ export default function ProgramCanvas() {
     disconnect,
     runPhase,
     runOutput,
-    dismissProgramRun,
+    runEndSeen,
+    processStatuses,
+    residentPhase,
   } = useProgram();
+
+  const isResident = program.programType === "resident";
+
+  const inOrder = stoppedInOrder(processStatuses);
+
+  // The indicator of the run, hidden by its Hide button until the run phase
+  // changes: what it shows is then new.
+  const indicatorKey = isResident
+    ? (residentPhase === "stopped" ? `stopped:${inOrder}` : residentPhase)
+    : runPhase;
+
+  const [hiddenIndicator, setHiddenIndicator] =
+    useState<string | null>(null);
+
+  // Whether the Supervisor wiring of a resident program is shown. It belongs
+  // to the tab, like the selection, and is not saved.
+  const [showWiring, setShowWiring] = useState(false);
 
   // "Business" nodes: recalculated whenever program changes.
   const nodes = useMemo(
-    () => programToReactFlowNodes(program),
-    [program]
+    () => programToReactFlowNodes(program, showWiring),
+    [program, showWiring]
   );
 
+  // The edges of the Supervisor wiring, read only, come after those of the
+  // program, derived from it as its handles are.
   const edges = useMemo(
-    () => programToReactFlowEdges(program),
-    [program]
+    () => [
+      ...programToReactFlowEdges(program),
+      ...(showWiring ? supervisorWiring(program).edges : []),
+    ],
+    [program, showWiring]
   );
 
   const nodeTypes = useMemo(
@@ -198,6 +254,7 @@ export default function ProgramCanvas() {
     () => ({
       fanout: FanoutEdge,
       backedge: BackEdge,
+      selfloop: SelfLoopEdge,
     }),
     []
   );
@@ -206,21 +263,11 @@ export default function ProgramCanvas() {
   // frame during dragging, via applyNodeChanges.
   const [localNodes, setLocalNodes] = useState(nodes);
 
-  // "Fingerprint" of everything except position: id, name, options
-  // handler mode, and options. Changes whenever a process is
-  // added/removed/renamed, its options handler mode is switched, or an
-  // option is added/removed/edited, never when a process is moved.
+  // Everything but the positions that the canvas nodes draw from their
+  // processes (see canvasStructuralKey).
   const structuralKey = useMemo(
-    () =>
-      program.processes
-        .map(
-          process =>
-            `${process.id}:${process.name}:${process.optionsHandler.mode}:${process.options
-              .map(o => `${o.id}:${o.label}:${o.direction}`)
-              .join(",")}`
-        )
-        .join("|"),
-    [program.processes]
+    () => canvasStructuralKey(program, showWiring),
+    [program, showWiring]
   );
 
   // Fingerprint of which options are currently rendered with a flipped
@@ -348,7 +395,11 @@ export default function ProgramCanvas() {
     useState(false);
 
   const [processCommandOutput, setProcessCommandOutput] =
-    useState<{ title: string; output: string } | null>(null);
+    useState<{ title: string; message?: string; output: string } | null>(null);
+
+  // "Restart node" waiting for the user's confirmation, with its warning.
+  const [restartConfirm, setRestartConfirm] =
+    useState<{ process: ProgramProcess; warning: string[] } | null>(null);
 
   // Set instead of fetching straight away whenever the process ran as
   // more than one task (see ProcessTaskPicker), populated only after
@@ -400,6 +451,14 @@ export default function ProgramCanvas() {
     fifoName: string;
     taskIndex?: number;
   } | null>(null);
+
+  // "Show node state" on a node of a resident program.
+  const [nodeState, setNodeState] =
+    useState<{ process: ProgramProcess; taskIndex?: number } | null>(null);
+
+  // "Show batch runs" on a launcher node, which is never a task of an array.
+  const [batchRunsOf, setBatchRunsOf] =
+    useState<ProgramProcess | null>(null);
 
   // Set instead of opening fifoWatch directly whenever a process has
   // more than one mirrored output fifo option, mirrors
@@ -596,6 +655,29 @@ export default function ProgramCanvas() {
         return;
       }
 
+      if (action === "restart") {
+        await askRestartNode(process);
+        setProcessContextMenu(null);
+        return;
+      }
+
+      if (action === "batch-runs") {
+        setBatchRunsOf(process);
+        setProcessContextMenu(null);
+        return;
+      }
+
+      if (action === "relaunch") {
+        const result = await relaunchNode(program, process.name);
+        setProcessCommandOutput({
+          title: `${process.name}: relaunch`,
+          message: relaunchOutcome(result.relaunched, result.exitCode),
+          output: result.output,
+        });
+        setProcessContextMenu(null);
+        return;
+      }
+
       // A "standard" process has no per-task files at all (empty list,
       // so taskIndices[0] is undefined, the plain no-task-index
       // request) and a process that only ever ran as one task doesn't
@@ -611,6 +693,8 @@ export default function ProgramCanvas() {
 
       if (action === "io") {
         setProcessIO(await fetchProcessIO(process, taskIndices[0]));
+      } else if (action === "node-state") {
+        setNodeState({ process, taskIndex: taskIndices[0] });
       } else if (action === "watch-fifo") {
         openFifoWatch(process, taskIndices[0]);
       } else {
@@ -630,6 +714,100 @@ export default function ProgramCanvas() {
 
   }
 
+  // "Restart node" asks first, with a warning that says what the restart
+  // does. When the node has a channel whose two ends restart together, the
+  // warning says that it may lose what it held: without a Supervisor always,
+  // with one only when it was launched with -no-hold-fifos.
+  async function askRestartNode(process: ProgramProcess) {
+
+    const supervised = hasSupervisor(program.processes);
+
+    const losesHeldChannel =
+      restartsWithBothEnds(program.edges, process.id) &&
+      (!supervised || await launchedWithNoHoldFifos(program));
+
+    setRestartConfirm({
+      process,
+      warning: restartNodeWarning(process, supervised, losesHeldChannel),
+    });
+
+  }
+
+  async function handleConfirmRestart() {
+
+    if (!restartConfirm) {
+      return;
+    }
+
+    const { process } = restartConfirm;
+    setRestartConfirm(null);
+
+    try {
+      const result = await restartNode(program, process.name);
+      setProcessCommandOutput({
+        title: `${process.name}: restart`,
+        message: !hasSupervisor(program.processes)
+          ? relaunchOutcome(result.relaunched, result.exitCode)
+          : result.exitCode === 0
+          ? "The node was stopped, and the Supervisor relaunches it from its last checkpoint and its input log."
+          : `debasher_stop ended with exit code ${result.exitCode}. What it printed:`,
+        output: result.output,
+      });
+    } catch (err) {
+      setProcessCommandOutput({
+        title: `${process.name}: restart`,
+        output: err instanceof Error ? err.message : "Failed to restart the node.",
+      });
+    }
+
+  }
+
+  // The actions on the process itself in its context menu; those of a
+  // resident program act on a live program only.
+  function nodeActionsOf(process: ProgramProcess): NodeAction[] {
+
+    if (!isResident) {
+      return [{ label: "Stop process", action: "stop", disabled: false, destructive: true }];
+    }
+
+    const notLive = residentPhase !== "live";
+    const actions: NodeAction[] = [];
+
+    if (offersRelaunchNode(program)) {
+      actions.push({ label: "Relaunch node", action: "relaunch", disabled: notLive, destructive: false });
+    }
+
+    if (offersRestartNode(program, process)) {
+      actions.push({ label: "Restart node", action: "restart", disabled: notLive, destructive: true });
+    }
+
+    return actions;
+
+  }
+
+  // The inspection actions of a node of a resident program, enabled once the
+  // node has been launched, whatever the run phase.
+  function residentInspectionsOf(process: ProgramProcess): ResidentInspection[] {
+
+    if (!isResident) {
+      return [];
+    }
+
+    const disabled = !wasLaunched(processStatuses[process.name]);
+    const inspections: ResidentInspection[] = [];
+
+    if (offersShowNodeState(process)) {
+      inspections.push({ label: "Show node state", action: "node-state", disabled });
+    }
+
+    if (offersShowBatchRuns(process)) {
+      inspections.push({ label: "Show batch runs", action: "batch-runs", disabled });
+    }
+
+    return inspections;
+
+  }
+
   async function handleTaskPickerConfirm(taskIndex: number) {
 
     if (!processTaskPicker) {
@@ -644,12 +822,17 @@ export default function ProgramCanvas() {
     try {
       if (kind === "io") {
         setProcessIO(await fetchProcessIO(process, taskIndex));
+      } else if (kind === "node-state") {
+        setNodeState({ process, taskIndex });
       } else if (kind === "watch-fifo") {
         openFifoWatch(process, taskIndex);
-      } else if (kind === "stop") {
+      } else if (kind === "batch-runs") {
+        setBatchRunsOf(process);
+      } else if (kind === "stop" || kind === "restart" || kind === "relaunch") {
         // Unreachable in practice, handleProcessMenuSelect handles
-        // "stop" before ever reaching the task picker, kept here only
-        // so this switch stays exhaustive over ProcessMenuAction.
+        // these actions before ever reaching the task picker,
+        // kept here only so this switch stays exhaustive over
+        // ProcessMenuAction.
         setProcessCommandOutput({
           title: `${process.name}: stop`,
           output: await stopProcess(program, process.name),
@@ -679,15 +862,7 @@ export default function ProgramCanvas() {
       const result = await inspectPath(resolvedValue);
       const title = `${option.label}: ${resolvedValue}`;
 
-      const output = result.kind === "file"
-        ? result.content
-        : result.kind === "directory"
-          ? (result.entries.length > 0 ? result.entries.join("\n") : "(empty directory)")
-          : result.kind === "binary"
-            ? `Warning: ${resolvedValue} looks like a binary file. Content not shown.`
-            : `Path not found: ${resolvedValue}`;
-
-      setPathContent({ title, output });
+      setPathContent({ title, output: pathInspectionText(resolvedValue, result) });
     } catch (err) {
       setPathContent({
         title: option.label,
@@ -731,12 +906,28 @@ export default function ProgramCanvas() {
           <ProgramFilesPanel />
         </Panel>
 
-        {runPhase !== "idle" && (
+        <Panel position="top-right">
+          <CanvasLegend programType={program.programType} />
+        </Panel>
+
+        {!isResident && runPhase !== "idle" && showsGeneralIndicator(runPhase, runEndSeen) &&
+          hiddenIndicator !== indicatorKey && (
           <Panel position="bottom-right" style={{ marginBottom: 170 }}>
             <RunStatusIndicator
               phase={runPhase}
               output={runOutput}
-              onClose={dismissProgramRun}
+              onHide={() => setHiddenIndicator(indicatorKey)}
+            />
+          </Panel>
+        )}
+
+        {isResident && residentPhase !== "new" &&
+          hiddenIndicator !== indicatorKey && (
+          <Panel position="bottom-right" style={{ marginBottom: 170 }}>
+            <ResidentRunIndicator
+              phase={residentPhase}
+              inOrder={inOrder}
+              onHide={() => setHiddenIndicator(indicatorKey)}
             />
           </Panel>
         )}
@@ -747,8 +938,23 @@ export default function ProgramCanvas() {
           x={processContextMenu.x}
           y={processContextMenu.y}
           isPending={isProcessOutputPending}
+          isResident={isResident}
+          residentInspections={residentInspectionsOf(processContextMenu.process)}
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
+          nodeActions={nodeActionsOf(processContextMenu.process)}
+          canvasAction={
+            program.programType === "resident" &&
+            processContextMenu.process.nodeKind === "Supervisor"
+              ? {
+                  label: showWiring ? "Hide Supervisor wiring" : "Show Supervisor wiring",
+                  onSelect: () => {
+                    setShowWiring(shown => !shown);
+                    setProcessContextMenu(null);
+                  },
+                }
+              : undefined
+          }
         />
       )}
 
@@ -764,9 +970,25 @@ export default function ProgramCanvas() {
         />
       )}
 
+      {restartConfirm && (
+        <ConfirmDialog
+          title={`Restart node ${restartConfirm.process.name}?`}
+          confirmLabel="Restart"
+          onConfirm={handleConfirmRestart}
+          onCancel={() => setRestartConfirm(null)}
+        >
+          {restartConfirm.warning.map(paragraph => (
+            <p key={paragraph} style={{ margin: 0 }}>
+              {paragraph}
+            </p>
+          ))}
+        </ConfirmDialog>
+      )}
+
       {processCommandOutput && (
         <CommandOutputModal
           title={processCommandOutput.title}
+          message={processCommandOutput.message}
           output={processCommandOutput.output}
           onClose={() => setProcessCommandOutput(null)}
         />
@@ -845,6 +1067,21 @@ export default function ProgramCanvas() {
             </div>
           </div>
         </div>
+      )}
+
+      {nodeState && (
+        <NodeStateModal
+          process={nodeState.process}
+          taskIndex={nodeState.taskIndex}
+          onClose={() => setNodeState(null)}
+        />
+      )}
+
+      {batchRunsOf && (
+        <BatchRunsModal
+          process={batchRunsOf}
+          onClose={() => setBatchRunsOf(null)}
+        />
       )}
 
       {fifoWatch && (

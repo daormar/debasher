@@ -39,3 +39,16 @@ In spite of the fact that DeBasher uses Bash as native language, it
 should be highlighted that flow-based programming is by nature language
 agnostic. Because of that, DeBasher allows the user to implement the
 program components in multiple programming languages and not only Bash.
+
+DeBasher runs two types of program. A general program processes a
+batch of inputs: each of its processes runs once, as soon as its
+inputs are ready, and ends. A resident program processes a stream:
+its processes are long-lived Python classes with a state of their own,
+which exchange messages through FIFOs, possibly in cycles, react to
+what is written into the program from outside, and survive the crash
+of any of them, returning to the state they had (see the
+:ref:`resident` Section).
+
+Programs of both types can be written by hand, as Bash modules, or
+built, run and observed from a browser with the DeBasher web interface
+(see the :ref:`webui` Section).

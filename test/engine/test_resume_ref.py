@@ -124,6 +124,8 @@ def test_a_reset_sets_the_state_aside_and_the_next_run_starts_afresh(outdir):
     _put_result(outdir)
     _halt(outdir)
     assert all(os.path.exists(p) for p in _state_paths(outdir))
+    # A notice speaks of a node whose state the reset takes away.
+    Path(outdir, "__exec__", "solo", "notice").write_text('{"level": "info", "text": "t", "set_at": 1}')
 
     result = _reset(outdir)
 
@@ -133,6 +135,8 @@ def test_a_reset_sets_the_state_aside_and_the_next_run_starts_afresh(outdir):
     (reset_dir,) = Path(outdir, "__reset__").iterdir()
     assert (reset_dir / "__exec__" / "solo" / "checkpoints").is_dir()
     assert (reset_dir / "__exec__" / "solo" / "log").is_dir()
+    assert (reset_dir / "__exec__" / "solo" / "notice").is_file()
+    assert not Path(outdir, "__exec__", "solo", "notice").exists()
     assert (reset_dir / "solo" / "result.txt").read_text() == "kept\n"
 
     launch(PFILE, outdir)

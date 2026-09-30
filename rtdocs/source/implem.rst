@@ -125,12 +125,12 @@ See the :doc:`namespace_example` example for a module that reimplements
 One exception: a process implemented in another language (Python, R,
 Perl or Groovy) provides its code through a suffixed variable (legacy,
 e.g. ``hello_world_py``) or function (preferred, e.g.
-``hello_world_heredoc_py`` — a longer, more specific suffix than the
+``hello_world_heredoc_py``, a longer, more specific suffix than the
 legacy variable's, since it is reserved as a process method name).
 Only the function form can be named after a namespaced process, since
-a Bash variable name cannot contain a ``.`` — see :doc:`hello_world_py`
+a Bash variable name cannot contain a ``.`` (see :doc:`hello_world_py`
 versus its legacy, variable-based counterpart
-:doc:`hello_world_py_legacy`.
+:doc:`hello_world_py_legacy`).
 
 A DeBasher process can have input and output options, that are provided
 to the process as if it was a standard UNIX command.
@@ -316,6 +316,20 @@ result, we define the corresponding ``explain_opts`` and
 particular process. **For a given process, its ``explain_opts`` method
 never changes. However, the ``identify_cmdline_opts`` method for a
 process may be different from one program to another**.
+
+**IMPORTANT NOTE**: a command-line option takes its value from the
+command line and from nowhere else. When the process defines its
+options (see below), an option marked with ``opt_is_cmdline`` or
+``opt_is_non_mandatory_cmdline`` can only be defined with
+``define_cmdline_opt`` or one of its variants
+(``define_cmdline_opt_if_given``, ``define_cmdline_infile_opt``,
+``define_cmdline_infile_opt_if_given``,
+``define_cmdline_flag_if_given``), or not be defined at all, for
+instance when it is only read to build the tasks of the process (such as
+a number of tasks). ``debasher_exec`` stops with an error when a process
+gives a command-line option a value of its own. When the tasks of a
+process need a value derived from a command-line option, they should
+receive it through a different option.
 
 **IMPORTANT NOTE**: initially, only the command-line options of each
 process were documented by means of the ``explain_cmdline_opt``
@@ -694,9 +708,26 @@ DeBasher module can define its own methods, similarly to a process (see
   A shared directory declared this way is created once, before any
   process in the program executes, and its absolute path can then be
   retrieved from any process's own methods by means of
-  ``get_absolute_shdirname`` (e.g. ``get_absolute_shdirname "data"``) —
-  letting two processes agree on a common directory without one having
-  to pass it to the other as a regular connected option.
+  ``get_absolute_shdirname`` (e.g. ``get_absolute_shdirname "data"``).
+  This lets two processes agree on a common directory without one
+  having to pass it to the other as a regular connected option.
+* ``program_type``: declares the type of the program, using
+  ``program_type``, either ``general`` (the default, when the module
+  defines no such method) or ``resident``:
+
+  .. code-block:: bash
+
+      webui_running_sum_program_type()
+      {
+          program_type "resident"
+      }
+
+  A general program is the kind described in this section, whose
+  processes run once and end. A resident program is made of long-lived,
+  stateful Python processes (see the :ref:`resident` Section). Only the
+  type declared by the module given to ``debasher_exec`` counts: a
+  module loaded by it to reuse its processes or its program has its own
+  ``program_type`` method ignored.
 
 Once a module (and/or its processes) defines any of these methods, the
 ``debasher_doc_mod`` tool can be used to generate Markdown
@@ -899,7 +930,7 @@ pairs, second argument):
   and wall-clock time budget assigned to the process.
 * ``nodes``, ``account``, ``partition``: SLURM-specific scheduling
   attributes (number of nodes, billing account, and partition/queue to
-  submit to) — only meaningful when running under the SLURM scheduler.
+  submit to), only meaningful when running under the SLURM scheduler.
 * ``throttle``: caps how many tasks of an array/generator process are
   scheduled at the same time.
 

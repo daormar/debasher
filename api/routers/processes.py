@@ -3,14 +3,17 @@ import re
 import subprocess
 import tempfile
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import paths
+from .. import inherited_hooks, paths
 from ..debasher_constants import (
     RESERVED_HEREDOC_SUFFIXES,
     RESERVED_PROCESS_METHOD_SUFFIXES,
 )
+from ..models import NodeCode, NodeKind, OptionsHandler, ProgramOption
+from ..program_import import read_preamble_processes
+from ..resident_import import preamble_node_kinds, reuse_node
 from ..markdown_parsing import (
     ProcessInfo,
     ProcessInfoOption,
@@ -255,3 +258,121 @@ def get_process_info(request: GetProcessInfoRequest) -> GetProcessInfoResponse:
     return GetProcessInfoResponse(
         info=_get_proc_info(request.preamble, request.name, request.envVars)
     )
+
+
+# --- the nodes of a preamble, for a resident program -----------------
+#
+# A node can only be told from the processes around it: its heartbeat
+# channel is recognized by the Supervisor that reads it. So the processes
+# that the preamble defines are read together, by the rules of import (see
+# program_import.read_preamble_processes and resident_import.reuse_node),
+# where a general program reads a single process with
+# debasher_get_proc_info.
+
+
+class SuggestNodesRequest(BaseModel):
+    preamble: str
+    envVars: dict[str, str]
+
+
+class SuggestedNode(BaseModel):
+    name: str
+    nodeKind: NodeKind
+
+
+class SuggestNodesResponse(BaseModel):
+    nodes: list[SuggestedNode]
+
+
+@router.post("/suggest-nodes", response_model=SuggestNodesResponse)
+def suggest_nodes(request: SuggestNodesRequest) -> SuggestNodesResponse:
+    """
+    The nodes that the modules of the preamble define, with their node
+    kinds, which the dialog that names a new process of a resident program
+    suggests: never a Supervisor, nor a process that is not a node.
+    Suggestions are a convenience: when the preamble cannot be read, there
+    are none.
+    """
+    names = _list_proc_names(request.preamble, request.envVars)
+    try:
+        processes, edges = read_preamble_processes(
+            request.preamble, names, request.envVars.get("DEBASHER_MOD_DIR", "")
+        )
+    except RuntimeError:
+        return SuggestNodesResponse(nodes=[])
+    kinds = preamble_node_kinds(processes, edges)
+    return SuggestNodesResponse(
+        nodes=[SuggestedNode(name=name, nodeKind=kinds[name]) for name in names if name in kinds]
+    )
+
+
+class NodeInfo(BaseModel):
+    """What a node of a module brings to the resident program it is added
+    to: its description, node kind, code and options, without the
+    Supervisor wiring or its connections."""
+
+    description: str
+    nodeKind: NodeKind
+    nodeCode: NodeCode
+    options: list[ProgramOption]
+    optionsHandler: OptionsHandler
+
+
+class GetNodeInfoRequest(BaseModel):
+    preamble: str
+    envVars: dict[str, str]
+    name: str
+
+
+class GetNodeInfoResponse(BaseModel):
+    info: NodeInfo
+
+
+@router.post("/get-node-info", response_model=GetNodeInfoResponse)
+def get_node_info(request: GetNodeInfoRequest) -> GetNodeInfoResponse:
+    """
+    A node that the modules of the preamble define, by the rules of import,
+    to add it to a resident program. A node that the web UI cannot hold is
+    refused with a 400 that says why, line by line, as import does.
+    """
+    names = _list_proc_names(request.preamble, request.envVars)
+    try:
+        processes, edges = read_preamble_processes(
+            request.preamble, names, request.envVars.get("DEBASHER_MOD_DIR", "")
+        )
+        node = reuse_node(processes, edges, request.name)
+    except RuntimeError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    return GetNodeInfoResponse(
+        info=NodeInfo(
+            description=node.description,
+            nodeKind=node.nodeKind,
+            nodeCode=node.nodeCode,
+            options=node.options,
+            optionsHandler=node.optionsHandler,
+        )
+    )
+
+
+class InheritedHooksRequest(BaseModel):
+    kind: str
+
+
+class InheritedHooksResponse(BaseModel):
+    # {field of NodeCode: source of the method} for each hook that the class
+    # of the node kind implements; empty for an FBPProcess.
+    hooks: dict[str, str] = {}
+    error: str | None = None
+
+
+@router.post("/inherited-hooks", response_model=InheritedHooksResponse)
+def get_inherited_hooks(request: InheritedHooksRequest) -> InheritedHooksResponse:
+    """
+    The code of the hooks that a node of `kind` inherits from its class of
+    the runtime library, for the node code editor, which shows it read only
+    next to each hook: a body given for the hook replaces it.
+    """
+    try:
+        return InheritedHooksResponse(hooks=inherited_hooks.inherited_hooks(request.kind))
+    except inherited_hooks.InheritedHooksError as exc:
+        return InheritedHooksResponse(error=str(exc))

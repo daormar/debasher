@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { getCommandLineOptions } from "../models/option";
+import { programCommandLineOptions } from "../models/node";
 import type { ProgramOption } from "../models/option";
 import { useProgram } from "../store/ProgramContext";
 
@@ -16,8 +16,8 @@ export default function ProgramOptionsEditor({ onClose }: Props) {
   } = useProgram();
 
   const options = useMemo(
-    () => getCommandLineOptions(program.processes),
-    [program.processes]
+    () => programCommandLineOptions(program),
+    [program.programType, program.processes]
   );
 
   const mandatoryOptions = useMemo(

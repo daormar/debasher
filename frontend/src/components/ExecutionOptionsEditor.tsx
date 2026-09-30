@@ -14,6 +14,12 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
     setExecutionOptions,
   } = useProgram();
 
+  // The engine forces the built-in scheduler in oneshot mode on a resident
+  // program, which launches every process at once: there is no scheduler to
+  // choose, and only the limits of the built-in scheduler apply.
+  const isResident =
+    program.programType === "resident";
+
   // ProgramContext's normalizeProgram guarantees this is never falsy, so
   // no fallback here — a fallback would just mask a genuinely empty
   // stored value behind a display that looks fine, which is exactly what
@@ -42,16 +48,28 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   const [dockerSupport, setDockerSupport] =
     useState(program.executionOptions.dockerSupport ?? false);
 
+  const [snapshotEverySecs, setSnapshotEverySecs] =
+    useState(program.executionOptions.snapshotEverySecs ?? "");
+
+  // Empty, or a positive number of seconds, as debasher_snapshot_resident
+  // --every takes it.
+  const isSnapshotPeriodValid =
+    /^\s*(\d*[1-9]\d*)?\s*$/.test(snapshotEverySecs);
+
   const [schedulers, setSchedulers] =
     useState<string[]>([]);
 
   const [isLoading, setLoading] =
-    useState(true);
+    useState(!isResident);
 
   const [error, setError] =
     useState<string | null>(null);
 
   useEffect(() => {
+
+    if (isResident) {
+      return;
+    }
 
     let cancelled = false;
 
@@ -78,7 +96,7 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
       cancelled = true;
     };
 
-  }, []);
+  }, [isResident]);
 
   function handleSave() {
     setExecutionOptions({
@@ -90,6 +108,7 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
       rerunOutdatedProcs,
       condaSupport,
       dockerSupport,
+      snapshotEverySecs: snapshotEverySecs.trim(),
     });
     onClose();
   }
@@ -125,47 +144,64 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
           Execution options
         </h3>
 
-        <label style={{ fontSize: 14 }}>
-          Scheduler
-        </label>
+        {isResident ? (
 
-        <select
+          <p style={{ margin: 0, fontSize: 14, color: "#555" }}>
+            A resident program runs under the built-in scheduler, which
+            launches every process at once. The launch is refused, before
+            any process starts, when the processes do not all fit in the
+            limits below.
+          </p>
 
-          value={scheduler}
+        ) : (
 
-          onChange={(event) =>
-            setScheduler(event.target.value)
-          }
+          <>
 
-          disabled={isLoading}
+            <label style={{ fontSize: 14 }}>
+              Scheduler
+            </label>
 
-          style={{
-            width: "100%",
-          }}
+            <select
 
-        >
+              value={scheduler}
 
-          {isLoading && (
-            <option value="">
-              Loading...
-            </option>
-          )}
+              onChange={(event) =>
+                setScheduler(event.target.value)
+              }
 
-          {schedulers.map(name => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
+              disabled={isLoading}
 
-        </select>
+              style={{
+                width: "100%",
+              }}
 
-        {error && (
-          <div style={{ color: "#b00020", fontSize: 14 }}>
-            {error}
-          </div>
+            >
+
+              {isLoading && (
+                <option value="">
+                  Loading...
+                </option>
+              )}
+
+              {schedulers.map(name => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+
+            </select>
+
+            {error && (
+              <div style={{ color: "#b00020", fontSize: 14 }}>
+                {error}
+              </div>
+            )}
+
+          </>
+
         )}
 
-        {scheduler === "BUILTIN" && (
+        {(isResident || scheduler === "BUILTIN") && (
           <>
 
             <label style={{ fontSize: 14 }}>
@@ -195,7 +231,40 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
           </>
         )}
 
-        {scheduler === "SLURM" && (
+        {isResident && (
+          <>
+
+            <label style={{ fontSize: 14 }}>
+              Snapshot period in seconds (blank = no periodic snapshots)
+            </label>
+
+            <input
+              type="text"
+              value={snapshotEverySecs}
+              placeholder="e.g. 300"
+              onChange={(event) => setSnapshotEverySecs(event.target.value)}
+              style={{ width: "100%" }}
+            />
+
+            {!isSnapshotPeriodValid && (
+              <div style={{ color: "#b00020", fontSize: 13 }}>
+                The period must be a positive number of seconds.
+              </div>
+            )}
+
+            <p style={{ margin: 0, fontSize: 13, color: "#555" }}>
+              The nodes write checkpoints and prune their input logs only when
+              a round closes. With no period, the only rounds are those of
+              "Take snapshot", and the input logs grow until their size cap
+              stops the nodes. A period has to be longer than a round takes,
+              or each round replaces the one before it and none closes. It
+              applies from the next launch from the web UI.
+            </p>
+
+          </>
+        )}
+
+        {!isResident && scheduler === "SLURM" && (
           <>
 
             <label style={{ fontSize: 14 }}>
@@ -213,44 +282,50 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
           </>
         )}
 
-        <label style={{ fontSize: 14 }}>
-          Default job array throttle (blank = unthrottled)
-        </label>
+        {!isResident && (
+          <>
 
-        <input
-          type="text"
-          value={dfltThrottle}
-          placeholder="e.g. 10"
-          onChange={(event) => setDfltThrottle(event.target.value)}
-          style={{ width: "100%" }}
-        />
+            <label style={{ fontSize: 14 }}>
+              Default job array throttle (blank = unthrottled)
+            </label>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-          <input
-            type="checkbox"
-            checked={rerunOutdatedProcs}
-            onChange={(event) => setRerunOutdatedProcs(event.target.checked)}
-          />
-          Rerun processes with outdated code
-        </label>
+            <input
+              type="text"
+              value={dfltThrottle}
+              placeholder="e.g. 10"
+              onChange={(event) => setDfltThrottle(event.target.value)}
+              style={{ width: "100%" }}
+            />
 
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-          <input
-            type="checkbox"
-            checked={condaSupport}
-            onChange={(event) => setCondaSupport(event.target.checked)}
-          />
-          Enable conda support
-        </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={rerunOutdatedProcs}
+                onChange={(event) => setRerunOutdatedProcs(event.target.checked)}
+              />
+              Rerun processes with outdated code
+            </label>
 
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-          <input
-            type="checkbox"
-            checked={dockerSupport}
-            onChange={(event) => setDockerSupport(event.target.checked)}
-          />
-          Enable docker support
-        </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={condaSupport}
+                onChange={(event) => setCondaSupport(event.target.checked)}
+              />
+              Enable conda support
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={dockerSupport}
+                onChange={(event) => setDockerSupport(event.target.checked)}
+              />
+              Enable docker support
+            </label>
+
+          </>
+        )}
 
         <div
           style={{
@@ -264,7 +339,7 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
             Cancel
           </button>
 
-          <button onClick={handleSave}>
+          <button onClick={handleSave} disabled={!isSnapshotPeriodValid}>
             Save
           </button>
 

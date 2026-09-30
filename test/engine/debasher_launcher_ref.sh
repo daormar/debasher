@@ -28,7 +28,7 @@ launch_explain_opts()
 {
     explain_opt "-requests" "<fifo>" "externally fed fifo of requests"
     explain_opt "-trigger" "<fifo>" "control fifo from the supervisor"
-    explain_opt "-outdone" "<fifo>" "output fifo to sink, one notice per batch run"
+    explain_opt "-outdone" "<fifo>" "output fifo to sink, one message per batch run that ends"
     explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
 }
 
@@ -67,7 +67,7 @@ EOF
 ########
 sink_document()
 {
-    document_process "Receives the notices of launch; its input log is the trace a test reads."
+    document_process "Receives the done messages of launch; its input log is the trace a test reads."
 }
 
 sink_explain_opts()

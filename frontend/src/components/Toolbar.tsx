@@ -10,6 +10,8 @@ import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
 import AddProgramDialog from "./AddProgramDialog";
 import RunMenu from "./RunMenu";
+import { runGoesOnMessage } from "../models/generalRun";
+import { hasSupervisor } from "../models/node";
 
 // Mirrors the shape of an identifier DeBasher can turn into function
 // names (<name>_document, <name>_shared_dirs, <name>_program) — no
@@ -18,7 +20,8 @@ import RunMenu from "./RunMenu";
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 interface Props {
-  onClose: () => void;
+  // Leaves the editor, with the message to show when a run goes on.
+  onClose: (runMessage: string | null) => void;
 }
 
 export default function Toolbar({ onClose }: Props) {
@@ -28,6 +31,7 @@ export default function Toolbar({ onClose }: Props) {
     setName,
     addProcess,
     mergeProgram,
+    isRunInProgress,
   } = useProgram();
 
   const [isPreambleOpen, setPreambleOpen] =
@@ -175,6 +179,9 @@ export default function Toolbar({ onClose }: Props) {
           existingNames={program.processes.map(process => process.name)}
           preamble={program.preamble}
           envVars={program.envVars}
+          programType={program.programType}
+          chooseNodeKind={program.programType === "resident"}
+          supervisorTaken={hasSupervisor(program.processes)}
           onConfirm={addProcess}
           onClose={() => setNewProcessOpen(false)}
         />
@@ -232,7 +239,7 @@ export default function Toolbar({ onClose }: Props) {
       <RunMenu />
 
       <button
-        onClick={onClose}
+        onClick={() => onClose(runGoesOnMessage(program, isRunInProgress))}
         style={{ marginLeft: "auto" }}
       >
         Close

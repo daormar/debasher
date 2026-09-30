@@ -11,3 +11,17 @@ SUBDIRS = m4 engine api frontend doc data test
 dist-vendored:
 	$(MAKE) -C frontend all
 	$(MAKE) dist DEBASHER_VENDOR_FRONTEND=yes
+
+# CRAP report of the Python code (see test/Makefile.am) and of the
+# frontend (see frontend/Makefile.am).
+.PHONY: crap
+crap:
+	$(MAKE) -C test crap
+	@echo
+	$(MAKE) -C frontend crap
+
+# Complexity of the Bash functions of the engine, hotspots of the code and
+# its change coupling, see test/Makefile.am.
+.PHONY: bash-complexity hotspots coupling
+bash-complexity hotspots coupling:
+	$(MAKE) -C test $@

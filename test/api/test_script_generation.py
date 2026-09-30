@@ -1,3 +1,5 @@
+import pytest
+
 from api.models import (
     AdditionalSpecs,
     ComputationalSpecs,
@@ -64,3 +66,25 @@ def test_input_file_option_still_uses_define_infile_opt():
 
     assert len(lines) == 1
     assert "debasher::define_infile_opt " in lines[0]
+
+
+def test_command_line_option_with_an_option_channel_is_refused():
+    # A command-line option takes its value from the command line only
+    # (the engine refuses one defined otherwise), so a model option that
+    # is both command-line and a fifo would produce a module the engine
+    # rejects: script generation refuses it instead.
+    option = ProgramOption(
+        id="o1",
+        label="-threshold",
+        direction="input",
+        dataType="int",
+        channel="fifo",
+        description="",
+        value="threshold_fifo",
+        commandLine=True,
+        mandatory=True,
+    )
+    process = _make_process([option])
+
+    with pytest.raises(ValueError, match="command-line and delivered through channel"):
+        _option_definition_line(process, option, {}, {})
