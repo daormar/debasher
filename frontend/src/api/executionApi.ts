@@ -411,6 +411,18 @@ export async function inspectPath(path: string): Promise<PathInspection> {
   return response.json();
 }
 
+// What an inspected path shows as text: a file's content, a directory's
+// listing, or why neither is shown.
+export function pathInspectionText(path: string, result: PathInspection): string {
+  return result.kind === "file"
+    ? result.content
+    : result.kind === "directory"
+      ? (result.entries.length > 0 ? result.entries.join("\n") : "(empty directory)")
+      : result.kind === "binary"
+        ? `Warning: ${path} looks like a binary file. Content not shown.`
+        : `Path not found: ${path}`;
+}
+
 // The task indices that have a stdout, scheduler-output, or options
 // file for `processName` — empty for a "standard" one-task process,
 // otherwise the "Inspect execution" menu shows a task picker before

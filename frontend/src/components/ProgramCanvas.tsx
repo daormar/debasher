@@ -37,6 +37,7 @@ import {
   getProcessStdout,
   getProcessTasks,
   inspectPath,
+  pathInspectionText,
   launchedWithNoHoldFifos,
   relaunchNode,
   restartNode,
@@ -819,15 +820,7 @@ export default function ProgramCanvas() {
       const result = await inspectPath(resolvedValue);
       const title = `${option.label}: ${resolvedValue}`;
 
-      const output = result.kind === "file"
-        ? result.content
-        : result.kind === "directory"
-          ? (result.entries.length > 0 ? result.entries.join("\n") : "(empty directory)")
-          : result.kind === "binary"
-            ? `Warning: ${resolvedValue} looks like a binary file. Content not shown.`
-            : `Path not found: ${resolvedValue}`;
-
-      setPathContent({ title, output });
+      setPathContent({ title, output: pathInspectionText(resolvedValue, result) });
     } catch (err) {
       setPathContent({
         title: option.label,
