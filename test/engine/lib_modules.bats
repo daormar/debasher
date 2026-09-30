@@ -29,9 +29,11 @@ setup() {
     declare -ga DEBASHER_PROGRAM_MODULES
     declare -ga DEBASHER_MODULE_LOAD_STACK
 
-    cwd_dir="${BATS_TEST_TMPDIR}/cwd"
-    mod_dir="${BATS_TEST_TMPDIR}/mods"
-    mkdir -p "${cwd_dir}" "${mod_dir}"
+    # Canonical paths, as the engine gives a module: BATS_TEST_TMPDIR
+    # may go through a symbolic link (on macOS, /var is one)
+    mkdir -p "${BATS_TEST_TMPDIR}/cwd" "${BATS_TEST_TMPDIR}/mods"
+    cwd_dir="$("${REALPATH}" "${BATS_TEST_TMPDIR}/cwd")"
+    mod_dir="$("${REALPATH}" "${BATS_TEST_TMPDIR}/mods")"
     cd "${cwd_dir}"
 }
 
@@ -190,4 +192,37 @@ EOM
     [ "${status}" -ne 0 ]
     [ "${status}" -ne 124 ]
     [[ "${output}" == *"(mod_self.sh -> mod_self.sh)"* ]]
+}
+
+@test "load_debasher_module loads once a module reached through a link and through the current directory" {
+    cat > "${mod_dir}/mod_b.sh" <<'EOM'
+echo "loading b" >> "${LOAD_LOG}"
+EOM
+    cat > "${mod_dir}/mod_a.sh" <<'EOM'
+load_debasher_module mod_b
+echo "loading a" >> "${LOAD_LOG}"
+EOM
+    ln -s "${mod_dir}" "${BATS_TEST_TMPDIR}/link"
+    export LOAD_LOG="${BATS_TEST_TMPDIR}/load.log"
+    DEBASHER_MOD_DIR="${BATS_TEST_TMPDIR}/link"
+
+    # mod_b is first reached through the link, and then, while mod_a
+    # loads, through the current directory, that of mod_a
+    load_debasher_module mod_b 2> /dev/null
+    load_debasher_module mod_a 2> /dev/null
+
+    [ "$(cat "${LOAD_LOG}")" = "$(printf 'loading b\nloading a')" ]
+    [ "${DEBASHER_PROGRAM_MODULES[*]}" = "${mod_dir}/mod_b.sh ${mod_dir}/mod_a.sh" ]
+}
+
+@test "load_debasher_module names the cycle of two modules reached through a link" {
+    echo "load_debasher_module mod_b" > "${mod_dir}/mod_a.sh"
+    echo "load_debasher_module mod_a" > "${mod_dir}/mod_b.sh"
+    ln -s "${mod_dir}" "${BATS_TEST_TMPDIR}/link"
+    DEBASHER_MOD_DIR="${BATS_TEST_TMPDIR}/link"
+
+    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_a"
+    [ "${status}" -ne 0 ]
+    [ "${status}" -ne 124 ]
+    [[ "${output}" == *"modules load each other in a cycle (mod_a.sh -> mod_b.sh -> mod_a.sh)"* ]]
 }
