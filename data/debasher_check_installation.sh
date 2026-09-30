@@ -25,6 +25,15 @@ print_skipped_check()
 }
 
 ########
+# Whether conda can activate an environment here, as the conda example
+# does: a conda command is not enough, conda has to be set up in the shell
+# (conda init). Tried in a subshell, which leaves this one as it was.
+conda_is_usable()
+{
+    ( conda activate base && conda deactivate ) > /dev/null 2>&1
+}
+
+########
 check_program()
 {
     local tmpdir=$1
@@ -69,6 +78,13 @@ check_program_file()
         local debasher_status_out="${tmpdir}/${outdirname}_status.out"
         "${TIMEOUT}" -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1
         ret=$?
+        # A program that debasher_status finds still in progress (2) or
+        # unfinished (3), a process of it having failed, fails the check
+        case $ret in
+            2|3)
+                ret=1
+                ;;
+        esac
     fi
 
     case $ret in
@@ -726,7 +742,7 @@ esac
 
 # Check debasher_conda_example if conda is available
 progname="debasher_conda_example"
-if command -v conda > /dev/null 2>&1; then
+if conda_is_usable; then
     sched="BUILTIN"
     bs_cpus=4
     bs_mem=1024
@@ -743,7 +759,7 @@ if command -v conda > /dev/null 2>&1; then
             ;;
     esac
 else
-    print_skipped_check "${progname}" "conda not found"
+    print_skipped_check "${progname}" "conda not found or not set up in the shell"
     ((checks_skipped++))
 fi
 
