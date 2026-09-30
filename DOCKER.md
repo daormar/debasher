@@ -37,6 +37,30 @@ saved `.debasher/program.json` projects, so use the UI's "Import" flow (not
 "Load") to open one; point it at a path under that directory, e.g.
 `/usr/local/share/debasher/programs/debasher_hello_world.sh`.
 
+## Programs built with the web UI
+
+The programs of `data/webui_programs/` (`webui_running_sum`, `webui_fifo_sum`,
+etc.) are installed under `/usr/local/share/debasher/webui_programs/`, which
+the `debasher` user cannot write to. So that they can be changed and run in
+place, `docker-entrypoint.sh`, the entry point of the image, copies each of
+them into `/data/webui_programs/` every time the container starts, before it
+launches the web UI. Open one with the UI's "Load program" (not "Import"),
+e.g. `/data/webui_programs/webui_running_sum`.
+
+A program already present under `/data/webui_programs/` is never
+overwritten, so the changes made to it are kept across restarts; delete its
+directory to get the shipped version back on the next start. A program added
+to `data/webui_programs/` (and to its `Makefile.am`, which is what installs
+it) appears there once the image is rebuilt and the container restarted. The
+copies land side by side, as they are installed, so that
+`webui_batch_launcher` still finds `webui_batch_greet` by its relative path.
+
+With compose, `/data` is `./demo-data` on the host, so the copies show up at
+`./demo-data/webui_programs/`, which `demo-data/.gitignore` keeps out of git.
+Without compose, `/data` is a directory of the container, lost when the
+container is removed; set `DEBASHER_DEMO_DIR` (`-e DEBASHER_DEMO_DIR=...`) to
+copy them somewhere else.
+
 ## Working with real data
 
 `docker-compose.yml` also bind-mounts `./demo-data` (on the host) to `/data`
@@ -51,9 +75,16 @@ writes there directly on its own (the container's) filesystem, so it only
 works for paths that exist inside the container, whether that's the
 `/home/debasher` volume, `/data`, or another mount you add.
 
-`demo-data/` is `chmod 777` in this repo on purpose: the container runs as a
+`demo-data/` has to be writable by everyone: the container runs as a
 non-root `debasher` user (uid 1000), almost certainly a different uid than
 your host user, so a plain bind mount would otherwise deny it write access.
+Git does not keep the permissions of a directory, so after cloning, run
+once, before the first `docker compose up`:
+
+```bash
+chmod 777 demo-data
+```
+
 That's fine for a local demo; don't rely on it where real permission
 boundaries matter.
 
@@ -90,14 +121,18 @@ Three stages:
    since the project's Vite/React frontend needs a newer Node than Debian
    bookworm ships.
 2. `builder` (`debian:bookworm-slim`): builds engine + API the normal
-   autotools way (`./reconf`, `./configure --disable-frontend`, `make`,
-   `make install DESTDIR=/out`).
+   autotools way (`./reconf`, `./configure --disable-frontend`,
+   `make clean`, `make`, `make install DESTDIR=/out`). `make clean` removes
+   the scripts that a build on the host left in the source tree, which
+   hold the host's prefix and tool paths and would otherwise be installed
+   as they are.
    `--disable-frontend` is used because this stage has no npm; the frontend
    built in stage 1 is copied in separately instead.
 3. `runtime` (`debian:bookworm-slim`): copies the installed engine/API from
    stage 2 and the built frontend from stage 1, creates a Python venv and
-   `pip install`s `api/requirements.txt` into it, and runs as a non-root
-   `debasher` user.
+   `pip install`s `api/requirements.txt` into it, and runs
+   `docker-entrypoint.sh` (see "Programs built with the web UI") as a
+   non-root `debasher` user.
 
 ## Updating the image after a code change
 
