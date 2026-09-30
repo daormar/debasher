@@ -90,7 +90,7 @@ Three stages:
    since the project's Vite/React frontend needs a newer Node than Debian
    bookworm ships.
 2. `builder` (`debian:bookworm-slim`): builds engine + API the normal
-   autotools way (`autoreconf`, `./configure --disable-frontend`, `make`,
+   autotools way (`./reconf`, `./configure --disable-frontend`, `make`,
    `make install DESTDIR=/out`).
    `--disable-frontend` is used because this stage has no npm; the frontend
    built in stage 1 is copied in separately instead.
@@ -98,11 +98,6 @@ Three stages:
    stage 2 and the built frontend from stage 1, creates a Python venv and
    `pip install`s `api/requirements.txt` into it, and runs as a non-root
    `debasher` user.
-
-Note: the image runs `autoreconf -i -I m4 --force` directly rather than the
-repo's `./reconf` script, because `reconf`'s preflight check looks for a
-`libtool` binary that Debian's `libtool` package doesn't ship (only
-`libtoolize`, which is what `autoreconf` actually needs).
 
 ## Updating the image after a code change
 
