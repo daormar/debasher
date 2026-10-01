@@ -46,8 +46,9 @@ disk, and "Execution and observation" how it runs a program and follows it.
 "Sequential processes in the web UI" describes how a program keeps the
 sequential processes of its module. "Guarantees and non-goals" gathers the
 guarantees stated along the way. "Resident programs in the web UI" designs the
-extension to resident programs, and says which parts of it are built, and
-"Future work" lists what is known to be missing.
+extension to resident programs, and says which parts of it are built. "Editing
+a program from an agent: the MCP server" designs a second client of the
+backend, for AI agents, and "Future work" lists what is known to be missing.
 
 # Glossary
 
@@ -153,6 +154,10 @@ refer to it.
   (`Program.outputDir`).
 - **program metadata**: the program model saved as JSON in
   `.debasher/program.json` under the home directory.
+- **revision**: a counter in the program metadata that every save increments;
+  a write of the program metadata names the revision it started from, and is
+  refused when the program metadata holds another (see "Revisions of the
+  program metadata"; designed, not built).
 - **generated script**: the module that script generation writes as `<name>.sh`
   in the home directory.
 - **reserved name**: a file or directory name that the engine or the web UI
@@ -240,6 +245,24 @@ refer to it.
   a fanout family, whose other end is an external end in the sense of the
   engine, left to someone outside the program, such as a person using "Talk to
   FIFOs".
+
+## The MCP server
+
+Designed, not built (see "Editing a program from an agent: the MCP server").
+
+- **MCP server**: the program, run as `debasher_mcp`, that offers the editing,
+  running and following of programs to an agent through the Model Context
+  Protocol; a client of the backend, like the frontend.
+- **agent**: an AI application, driven by a model, that calls the MCP tools,
+  such as Claude Code.
+- **MCP tool**: an operation that the MCP server offers to an agent, with
+  named parameters and an answer in text. A bare "tool" is still a command
+  line tool of the engine.
+- **named edit**: an edit written with names instead of ids: a process by its
+  name, an option by its label, an edge by its two ends.
+- **proposal**: what an MCP tool called with `dry_run` answers: the edits it
+  would apply, resolved and validated, and what they would change, with nothing
+  saved.
 
 # Architecture
 
@@ -2676,8 +2699,177 @@ too.
 - **Changing the period of the snapshots of a live program.** A new period
   applies from the next launch.
 
+# Editing a program from an agent: the MCP server
+
+The MCP server offers to an agent, such as Claude Code, what the editor offers
+to a person: reading a program, editing it, running it and following its run,
+as MCP tools. It is a second client of the backend, beside the frontend, and a
+first move towards an assistant in the web UI that helps to design and build a
+program, which would call the same MCP tools (see "Future work"). This section
+is a design: nothing in it is built yet, and the guarantees and non-goals
+stated before it do not change until it is.
+
+The design follows from one rule: the MCP server edits a program with the
+same code as the editor. The edits, their validation, the rule of which groups
+they touch and the normalization live in `frontend/src/models/` and depend on
+nothing outside the program model (see "Screens and the store"), so the MCP
+server is written in TypeScript and imports them, rather than repeating them
+in another language.
+
+## Architecture of the MCP server
+
+The MCP server is a Node.js program that speaks the Model Context Protocol over
+its standard input and output, so the agent starts it and talks to it as a
+child process. It keeps no state between two calls, like the backend: every
+MCP tool reads the program from its home directory, acts, and writes it back.
+
+It reaches the backend over HTTP, at a URL given on its command line (by
+default the one where `debasher_webui` listens), and uses the endpoints that
+the frontend uses: `programs` to load, save and import a program, `processes`
+to look up the processes that the modules of the preamble define, and
+`execution` to run, observe and stop it. The backend has to be running; the
+MCP server starts nothing. It widens nothing either: the backend already runs
+the engine's tools, as the user who started it, for whoever reaches it, and
+the MCP server is reached only by the agent that started it.
+
+## Programs, processes and options by name
+
+An agent names what it acts on as a person would, never by an internal id. A
+program is named by its home directory, a process by its name, an option by
+its process and its label, and an edge by its two ends, each a process and a
+label. Names of processes are unique in a program (sequential processes
+included), so a process name is enough. Option labels have to be unique within
+a process for the same to hold: the engine already treats a label as the key
+of an option, and merges two options of a process with the same label into
+one, failing at run time if they get different values. The web UI therefore
+adds the rule that the labels of the options of a process are distinct: the
+editor of an option and `validateEdits` refuse a label that the process
+already has, and loading a program whose metadata breaks the rule shows a
+warning on the process rather than refusing the program.
+
+A **named edit** is an edit written with names: `{op: "connect", from:
+{process: "a", option: "-outf"}, to: {process: "b", option: "-in"}}`.
+`models/programRefs.ts` resolves a list of named edits into edits, giving new
+ids to what they add, and reports a name that matches nothing. The answers of
+the MCP tools name things the same way and show no ids.
+
+## Edits from an agent
+
+Every MCP tool that edits a program applies its edits whole or not at all,
+with the actions that the store takes, and an answer in place of the dialogs:
+
+1. Load the program from its home directory, with its revision (see
+   "Revisions of the program metadata").
+2. Resolve the named edits into edits.
+3. Check them with `validateEdits`; a problem ends the call with the list of
+   problems, and nothing is written.
+4. Find the groups that they touch with `groupsTouchedBy`. Where the store
+   asks the user, the MCP tool refuses, naming each group and the program it
+   came from, unless the call says `detach_groups`, in which case the groups
+   are dissolved with the edits, as when the user agrees.
+5. Apply them with `applyEdits`, which normalizes the result.
+6. Save the program, naming the revision it was loaded with.
+
+An MCP tool called with `dry_run` stops before the save and answers with a
+**proposal**: a summary of what the edits would change, the groups they would
+dissolve, and the edits themselves, already resolved. An assistant in the web
+UI would show a proposal on the canvas and let the frontend apply it with
+`applyEdits` if the user accepts it, which needs no other code.
+
+A process added by an agent has no position chosen by hand. The MCP server
+places it to the right of the rightmost process, with a function of the model
+that the editor can use too, so that the canvas shows every process apart; an
+agent can move it afterwards.
+
+## Revisions of the program metadata
+
+Today the last save wins (see "Non-goals"): a tab that saves a program
+overwrites what another tab saved since it loaded it. A tab and an agent
+editing the same program would lose work the same way, silently, and an agent
+saves often. The program metadata therefore gets a **revision**, a counter
+that every save increments. Loading returns it, the store and the MCP server
+keep it, and every request that writes the program metadata (saving, and the
+requests that save before they run, such as "Run program") names the revision
+that it started from and, when it succeeds, answers with the new one. The
+backend compares the two and writes under a lock on the program metadata, so
+that two writes arriving together cannot both pass the comparison. It refuses
+the write when the program metadata holds another revision, and answers with
+the one it holds. The editor then says that the program changed on disk since
+it was loaded, and offers to load it again; the MCP server ends the call with
+the same message, and the agent loads the program again. Only a first save
+into a directory with no program metadata names no revision, which is why
+`create_program` and `import_module` refuse a directory that already holds
+one. The revision is a guard against overwriting, not a merge: the edits of
+the side that is refused are lost unless it makes them again.
+
+## The MCP tools
+
+The MCP tools are grouped by what they do. Each answers with short text meant
+for a model to read, not with the program model as JSON: a program is shown as
+its processes with their options and their connections, one per line, and the
+output of a process is cut to its last lines unless the call asks for more.
+
+- **Reading.** `get_program` (the settings of the program, its processes, its
+  sequential processes and its connections), `get_process` (one process in
+  full, its code included) and `import_module` (import a module and save it
+  into a new home directory).
+- **The library.** `search_library` and `get_library_process`, which list and
+  describe the processes and nodes that the modules of the preamble define,
+  through the `processes` endpoints.
+- **Editing.** `create_program`; `add_process`, `update_process`,
+  `remove_process` and `move_process`; `add_option`, `update_option` and
+  `remove_option`; `connect` and `disconnect`; `set_program_settings` (name,
+  description, preamble, environment variables, output directory, execution
+  options and program options); `set_seq_processes`; and `apply_edits`, which
+  takes a list of named edits and applies them whole or not at all. Each takes
+  `dry_run` and `detach_groups`. "Add program" is not offered.
+- **Running.** `validate_program` (validating the program and checking its
+  options, as the Run menu does), `run_program`, `stop_program` (an orderly
+  stop or a hard kill), `get_status` (the run phase and the process statuses),
+  `get_process_output` (the standard output, the scheduler output, the options
+  or the resolved options of a process, or of one of its tasks) and
+  `get_process_tasks`. `reset_output_dir` and `reset_program_state` delete
+  what a run left, and so are refused unless the call says `confirm`.
+- **Resident programs.** `inspect_node`, `snapshot`, `restart_node` and
+  `relaunch_node`, and reading and writing the FIFOs that "Talk to FIFOs"
+  offers, with its rules (see "Observing and talking to a live program").
+
+The MCP tools keep the guards of the editor through the backend, not by
+repeating them: one run per output directory and the two directories of a
+program apart are refused by the backend today, and refusing a save, a reset
+of the output directory or a change of it while there is a run in progress,
+which only the frontend refuses today, moves into the backend first (see
+"Guards in the backend" in "Future work").
+
+## Building, installing and testing
+
+The MCP server lives in `frontend/mcp/` and imports `frontend/src/models/`. The
+build bundles it, with the models it uses and the MCP library, into a single
+JavaScript file, as it bundles the frontend into a single `index.html`, and
+`make install` installs that file with a `debasher_mcp` launcher. Node.js,
+which the frontend needs only to be built, is then needed to run the MCP
+server too. An agent registers it with the URL of the backend, for example
+`claude mcp add debasher -- debasher_mcp --url http://127.0.0.1:8000`.
+
+The tests need no backend: the resolution of named edits and each MCP tool are
+tested under Node.js against a fake client of the backend, and the revision
+check is tested in the backend's own tests.
+
 # Future work
 
+- **Building the MCP server.** Building what "Editing a program from an agent:
+  the MCP server" designs: the unique option labels, the revisions of the
+  program metadata, the guards in the backend (see "Guards in the backend"
+  below), the resolution of named edits, the placement of a new process, and the
+  server with its MCP tools.
+- **An assistant in the web UI.** A chat in the editor that helps to design and
+  build the program, backed by an agent that calls the MCP tools and whose edits
+  reach the canvas as proposals for the user to accept. Not designed beyond what
+  the MCP server gives it. It shares the open questions of the assistant on the
+  documentation (see "An assistant on the documentation of DeBasher" below):
+  where the key of the AI service lives on a server with no authentication, and
+  that the program, and maybe its files, leave the machine for that service,
+  which the user has to know.
 - **Round trip at run time.** Running each module of `data/programs/` and the
   module generated from it, and comparing what they do, beyond the comparison
   of models that `test/api/test_round_trip.py` makes.
