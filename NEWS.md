@@ -44,8 +44,8 @@ make each one.
 
 - **Functions removed from the public interface.** `read_value_from_desc`
   (use `read_opt_value_from_func_args`, which already reads a value
-  descriptor), `read_fifo_line` (read the fifo directly) and
-  `seq_execute_slurm` (use `seq_execute`). The helpers of the engine that
+  descriptor) and `read_fifo_line` (read the fifo directly, with
+  `IFS= read -r line < "${fifo}"`). The helpers of the engine that
   1.0 exposed without a prefix, such as `get_absolute_path`,
   `file_exists` or `log_err_msg`, are now internal, under the
   `debasher::` namespace, and a module that called them has to use its

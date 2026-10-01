@@ -1076,7 +1076,24 @@ debasher::_get_script_log_filenames_slurm()
 }
 
 ########
-debasher::_seq_execute_slurm()
+# Public: Executes a function or command as a job step of Slurm, with
+# srun, and waits for it to end.
+#
+# Unlike seq_execute, which runs it on the scheduler of the program, it
+# always goes to Slurm: a program that uses fifos runs on the built-in
+# scheduler, and can still send a heavy step of one of its processes to
+# the cluster. The step runs with the context of the process scripts of
+# the program, so it can call the functions of its modules.
+#
+# $1 - Function or command to execute.
+# $2.. - Its arguments.
+#
+# Examples
+#
+#   debasher::seq_execute_slurm transform "${value}" "${outd}/result.txt"
+#
+# Returns 1 if the step could not be launched or failed.
+debasher::seq_execute_slurm()
 {
     is_variable()
     {
@@ -1110,17 +1127,24 @@ debasher::_seq_execute_slurm()
     local tmpfile_templ
     tmpfile_templ="${FUNCNAME[0]}_${process_to_launch}.XXXXXX"
 
-    # Obtain file name
+    # Obtain file name, in the output directory of the program and not in
+    # the temporary directory of this machine, since srun runs the script
+    # on a node of the cluster
     local script_name
-    script_name=$("${MKTEMP}" -t "${tmpfile_templ}") || return 1
+    script_name=$("${MKTEMP}" "$(debasher::_get_prg_exec_dir)/${tmpfile_templ}") || return 1
 
     # Create script
-    create_seq_execute_script "${DEBASHER_PROGRAM_OUTDIR}" "${process_to_launch}" "${script_name}" || return 1
+    create_seq_execute_script "${DEBASHER_PROGRAM_OUTDIR}" "${process_to_launch}" "${script_name}" || { "${RM}" -f "${script_name}"; return 1; }
 
     # Launch script
     shift
-    "${SRUN}" "${script_name}" "$@" || return 1
+    local ret=0
+    "${SRUN}" "${script_name}" "$@" || ret=1
 
-    # Clean temporary files on exit
-    "${RM}" "${script_name}"
+    # Clean temporary files
+    "${RM}" -f "${script_name}"
+
+    return ${ret}
 }
+
+seq_execute_slurm() { debasher::seq_execute_slurm "$@"; }

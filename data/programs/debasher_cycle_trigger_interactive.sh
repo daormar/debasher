@@ -226,7 +226,8 @@ worker()
         fi
 
         # Read threshold
-        local threshold=$(read_fifo_line "${threshold_fifo}")
+        local threshold
+        IFS= read -r threshold < "${threshold_fifo}"
         echo "Threshold value ${threshold}"
 
         # Decide transformation function depending on threshold

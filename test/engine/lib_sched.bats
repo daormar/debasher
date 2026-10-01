@@ -78,3 +78,54 @@ EOM
     [ "${status}" -eq 0 ]
     [ "${output}" = "[]" ]
 }
+
+# Runs seq_execute_slurm from a bash that has loaded the engine, with an
+# srun that records the script it is given and runs it here, so that no
+# Slurm is needed. $1 is the text that the step writes, or "fail" for a
+# step that fails. Leaves the path of the script in srun_arg and prints
+# the exit code of seq_execute_slurm.
+run_seq_execute_slurm() {
+    local outd="${BATS_TEST_TMPDIR}/out"
+    mkdir -p "${outd}/__exec__"
+    cat > "${BATS_TEST_TMPDIR}/srun" <<EOS
+#!${BASH}
+echo "\$1" > "${BATS_TEST_TMPDIR}/srun_arg"
+exec "\$@"
+EOS
+    chmod +x "${BATS_TEST_TMPDIR}/srun"
+    env -i PATH="/usr/bin:/bin" HOME=/tmp ENGINE_BUILDDIR="${ENGINE_BUILDDIR}" \
+        OUTD="${outd}" SRUN_STUB="${BATS_TEST_TMPDIR}/srun" STEP_ARG="$1" \
+        "${BASH}" -c '
+            debasher_pkglibdir="${ENGINE_BUILDDIR}"
+            CAT="$(command -v cat)"
+            MKTEMP="$(command -v mktemp)"
+            RM="$(command -v rm)"
+            SRUN="${SRUN_STUB}"
+            source "${ENGINE_BUILDDIR}/debasher_lib.sh"
+            step() { [ "$1" = fail ] && return 1; echo "step $1" > "$2"; }
+            DEBASHER_PROGRAM_OUTDIR="${OUTD}"
+            debasher::_write_exec_context "$(debasher::_get_exec_context_fname "${OUTD}")"
+            seq_execute_slurm step "${STEP_ARG}" "${OUTD}/result.txt"
+            echo "rc=$?"
+        '
+}
+
+@test "seq_execute_slurm runs a function of the program through srun, from the output directory" {
+    run run_seq_execute_slurm hello
+    [ "$status" -eq 0 ]
+    [ "$output" = "rc=0" ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/out/result.txt")" = "step hello" ]
+    # The script was in the output directory of the program, which the
+    # nodes of a cluster share, and is removed
+    local script
+    script=$(cat "${BATS_TEST_TMPDIR}/srun_arg")
+    [[ "${script}" == "${BATS_TEST_TMPDIR}/out/__exec__/"* ]]
+    [ ! -e "${script}" ]
+}
+
+@test "seq_execute_slurm fails when the step fails, and removes its script" {
+    run run_seq_execute_slurm fail
+    [ "$status" -eq 0 ]
+    [ "$output" = "rc=1" ]
+    [ ! -e "$(cat "${BATS_TEST_TMPDIR}/srun_arg")" ]
+}

@@ -553,7 +553,7 @@ debasher::seq_execute()
 
     case $sched in
         ${DEBASHER_SLURM_SCHEDULER})
-            debasher::_seq_execute_slurm "$@"
+            debasher::seq_execute_slurm "$@"
             ;;
         ${DEBASHER_BUILTIN_SCHEDULER})
             debasher::_seq_execute_builtin "$@"
