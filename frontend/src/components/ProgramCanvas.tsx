@@ -50,10 +50,10 @@ import {
   programToReactFlowEdges,
   connectionToProgramEdge,
   isValidProgramConnection,
-  computeFlippedOptionIds,
   canvasStructuralKey,
   supervisorWiring,
 } from "../adapters/reactFlowAdapter";
+import { computeFlippedOptionIds } from "../models/optionLayout";
 import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
 import BackEdge from "./BackEdge";

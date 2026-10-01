@@ -41,7 +41,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   const isResident = programType === "resident";
 
   // A non-command-line, non-fanout input may gather from more than one
-  // source (see isValidProgramConnection) — everything below keys off
+  // source (see isValidEdge): everything below keys off
   // the full list; connectedSourceOption (its first/only entry) remains
   // for the fanout-gather and scatter-consumer checks below, which stay
   // single-connection by construction.
@@ -212,7 +212,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     // channel describes how the *source* option got its value, not how
     // this one receives it, so a connected option's own channel is always
     // "none". "shared_dir" is the one exception: its value never depends
-    // on a connection at all (see isValidProgramConnection), so a
+    // on a connection at all (see isValidEdge), so a
     // "shared_dir" option keeps its channel regardless of edges.
     if (connectedSourceLabel && channel !== "none" && channel !== "shared_dir") {
       setChannel("none");
@@ -416,7 +416,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             file
           </option>
 
-          {/* A flag takes no connection (see isValidProgramConnection), nor
+          {/* A flag takes no connection (see isValidEdge), nor
               does a command line option or one from the process spec. */}
           {direction === "input" && !isConnected && (
             <option value="None">

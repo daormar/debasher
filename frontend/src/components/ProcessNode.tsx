@@ -12,7 +12,8 @@ import type { ProgramProcessData, WiringHandle } from "../adapters/reactFlowAdap
 import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
 import { configurationSource, noHoldFifosOption, nodeOptionRole, observesOutside } from "../models/node";
-import { WIRING_EDGE_COLOR, optionRow } from "../adapters/reactFlowAdapter";
+import { WIRING_EDGE_COLOR } from "../adapters/reactFlowAdapter";
+import { optionRow } from "../models/optionLayout";
 import { fanoutBaseLabel, isFanoutOption, optionValueSource } from "../models/option";
 import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
 import {

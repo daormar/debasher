@@ -62,7 +62,7 @@ function normalizeConnectedOptionValues(source: Program): Program {
         // A "shared_dir" option's value is always its declared
         // directory name, independent of any connection, a connection
         // into/out of it exists purely to document the multi-writer
-        // dependency in the canvas (see isValidProgramConnection), not
+        // dependency in the canvas (see isValidEdge), not
         // to supply its value the way a "none"-channel connection does.
         if (option.channel === "shared_dir") {
           return option;
@@ -289,7 +289,7 @@ export function removeOption(program: Program, processId: string, optionId: stri
  * into a matching "shared_dir" option too, instead of the usual
  * "[proc;option]" sentinel, so a second connection from another writer of
  * the same directory validates against an already-tagged, matching target
- * (see isValidProgramConnection) and both keep generating the same compact
+ * (see isValidEdge) and both keep generating the same compact
  * get_absolute_shdirname-based code (see script_generation.py's shared_dir
  * branch) rather than one becoming a define_opt_from_proc_out reference to
  * this specific source.

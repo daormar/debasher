@@ -25,7 +25,7 @@ class ProgramOption(BaseModel):
     # get_absolute_shdirname(value) regardless of any connection — value
     # holds the shared directory's name (one of Program.sharedDirs), not
     # a path. Connections between two shared_dir options (see
-    # frontend's isValidProgramConnection) are purely documentary/DAG-
+    # frontend's isValidEdge) are purely documentary/DAG-
     # visualization aids: the engine already derives the real dependency
     # from every writer resolving to the identical absolute path
     # (DEBASHER_OUT_VALUE_TO_PROCESSES in engine/debasher_lib_opts.sh),

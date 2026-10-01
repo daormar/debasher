@@ -26,7 +26,7 @@ import type { ProgramEdge } from "../models/edge";
 import type { SeqProcess } from "../models/seqProcess";
 import type { Position } from "../models/position";
 import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
-import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
+import { reorderOptionRow } from "../models/optionLayout";
 import { saveProgram } from "../storage/programStorage";
 import type {
   ProcessStatusesResult,
@@ -790,40 +790,15 @@ export function ProgramProvider({
     edit({ op: "removeOption", processId, optionId });
   }
 
-  // Reorders the options drawn in one row of the process node, leaving the
-  // other row in place; an order that does not list the whole row is
-  // ignored.
+  // Reorders the options drawn in one row of the process node (see
+  // reorderOptionRow).
   function reorderOptionGroup(processId: string, row: "top" | "bottom", orderedIds: string[]) {
 
-    const current = programRef.current;
-    const process = current.processes.find(p => p.id === processId);
+    const options = reorderOptionRow(programRef.current, processId, row, orderedIds);
 
-    if (!process) {
-      return;
+    if (options) {
+      updateProcess(processId, { options });
     }
-
-    const flippedOptionIds = computeFlippedOptionIds(current);
-
-    const groupIndices = process.options.reduce<number[]>(
-      (indices, o, i) => optionRow(o, flippedOptionIds) === row ? [...indices, i] : indices,
-      []
-    );
-
-    if (groupIndices.length !== orderedIds.length) {
-      return;
-    }
-
-    const optionsById = new Map(process.options.map(o => [o.id, o]));
-    const options = [...process.options];
-
-    groupIndices.forEach((index, i) => {
-      const option = optionsById.get(orderedIds[i]);
-      if (option) {
-        options[index] = option;
-      }
-    });
-
-    updateProcess(processId, { options });
 
   }
 

@@ -265,7 +265,7 @@ def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, s
     single one implied by option.value's own "[proc;opt]" sentinel (see
     _opt_is_connected_to_proc/_get_process_plus_opt), which only ever
     records one. A non-command-line, non-fanout input may have more
-    than one entry here (fan-in, see isValidProgramConnection in the
+    than one entry here (fan-in, see isValidEdge in the
     frontend); every other option has at most one, or none.
     """
     processes_by_id = {process.id: process for process in program.processes}
@@ -491,7 +491,7 @@ def _channel_lines(option) -> list[str]:
     # "shared_dir": always define_opt_from_shared_dir, regardless of any
     # edges into/out of this option, those exist purely to document the
     # dependency in the canvas (see the frontend's
-    # isValidProgramConnection); the engine derives the real processdeps
+    # isValidEdge); the engine derives the real processdeps
     # on its own, from every writer of the same directory resolving to an
     # identical absolute path.
     return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
@@ -546,7 +546,7 @@ def _connection_lines(process, option, process_modes, connections_by_option) -> 
 
     # Plain connection: one define_opt_from_proc_out[_task_out] per edge
     # into this option, usually just one, but a non-command-line input may
-    # gather from several (fan-in; see isValidProgramConnection in the
+    # gather from several (fan-in; see isValidEdge in the
     # frontend). Falls back to the single value-sentinel-derived
     # connection if no matching edge was found, e.g. a hand-edited/stale
     # file.

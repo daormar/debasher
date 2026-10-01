@@ -1138,7 +1138,15 @@ list of edits can be built in one place, shown, and applied in another as one
 change (`applyEdits`, which normalizes once at the end). `groupsTouchedBy`
 tells which groups a list of edits touches, which have to be dissolved
 (`dissolveGroups`) before it is applied; the store asks the user about them
-first.
+first. `validateEdits` (`models/editValidation.ts`) checks a list of edits,
+each against the program that the edits before it leave, with the rules that
+the dialogs and the canvas apply, through the same functions: the names of
+processes, the labels of options, the single Supervisor of a resident program,
+the sequential processes, the rules of "Connections" (`isValidEdge` in
+`models/connections.ts`, which the canvas applies while an edge is drawn), and
+that the ids an edit refers to exist and those it adds are free. Whether the
+engine accepts the name of a process is left to the backend, and what "Add
+program" brings is checked before its edit is built (`mergeRefusal`).
 
 The store keeps no history and no record of unsaved changes: there is no
 undo, and leaving the editor or closing the tab loses the changes made since

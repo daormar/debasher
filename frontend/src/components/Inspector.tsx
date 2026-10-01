@@ -29,7 +29,7 @@ import NodeCodeEditor from "./NodeCodeEditor";
 import { isReservedNodeOptionLabel } from "../models/node";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
 import { isValidOptionLabel } from "../models/option";
-import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
+import { computeFlippedOptionIds, optionRow } from "../models/optionLayout";
 
 
 export default function Inspector() {
@@ -282,9 +282,9 @@ export default function Inspector() {
           title="Change process name"
           confirmLabel="Change"
           initialName={selectedProcess.name}
-          existingNames={program.processes
-            .filter(process => process.id !== selectedProcess.id)
-            .map(process => process.name)}
+          existingNames={[...program.processes, ...program.seqProcesses]
+            .filter(member => member.id !== selectedProcess.id)
+            .map(member => member.name)}
           preamble={program.preamble}
           envVars={program.envVars}
           programType={program.programType}

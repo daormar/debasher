@@ -189,7 +189,7 @@ export default function Toolbar({ onClose }: Props) {
         <ProcessNameDialog
           title="Add process"
           confirmLabel="Add"
-          existingNames={program.processes.map(process => process.name)}
+          existingNames={[...program.processes, ...program.seqProcesses].map(member => member.name)}
           preamble={program.preamble}
           envVars={program.envVars}
           programType={program.programType}

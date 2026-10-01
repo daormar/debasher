@@ -407,7 +407,7 @@ def _build_shared_dir_edges(processes: list[ProgramProcess]) -> list[ProgramEdge
     Synthesizes one edge for every (output, input) pair of "shared_dir"
     options naming the identical directory, across the whole program —
     mirrors what hand-connecting them in the canvas would produce (see
-    reactFlowAdapter.ts's isValidProgramConnection's fan-in rule), so an
+    frontend/src/models/connections.ts's isValidEdge's fan-in rule), so an
     imported program's canvas shows the same writer/reader relationships
     a hand-built one would. Purely documentary: script_generation.py's
     "shared_dir" codegen branch ignores connections entirely, so a

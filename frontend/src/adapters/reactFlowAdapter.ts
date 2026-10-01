@@ -9,11 +9,11 @@ import type { ProgramProcess } from "../models/process";
 import type { ProgramEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
-import { isFanoutOption, optionValueSource } from "../models/option";
+import { optionValueSource } from "../models/option";
+import { isFanoutEndpoint, isFanoutPartnerMode, isValidEdge } from "../models/connections";
+import { computeFlippedOptionIds } from "../models/optionLayout";
 import {
   configurationSource,
-  isBusinessInputCandidate,
-  isBusinessOutput,
   nodeOptionRole,
   observesOutside,
 } from "../models/node";
@@ -221,30 +221,6 @@ export function canvasStructuralKey(program: Program, showWiring = false): strin
     .join("|") + wiring;
 }
 
-/**
- * Whether `option` (declared on `process`) is a fanout family option —
- * see isFanoutOption. Only meaningful on a "standard"-mode process.
- */
-function isFanoutEndpoint(
-  process: ProgramProcess | undefined,
-  option: { label: string } | undefined
-): boolean {
-  return (
-    process?.optionsHandler.mode === "standard" &&
-    !!option &&
-    isFanoutOption(option.label)
-  );
-}
-
-// The non-"-ith" side of a fanout/fanin pairing — mirrors
-// script_generation.py's _FANOUT_PARTNER_MODES.
-function isFanoutPartnerMode(process: ProgramProcess | undefined): boolean {
-  return (
-    process?.optionsHandler.mode === "array" ||
-    process?.optionsHandler.mode === "generator"
-  );
-}
-
 // Horizontal clearance (px) between the detour lane a back edge (see
 // isBackEdge) is routed through and the rightmost process in the
 // program, so the lane sits clear of every node's box. Unlike a
@@ -273,95 +249,6 @@ function isBackEdge(
     !!targetProcess &&
     targetProcess.position.y <= sourceProcess.position.y
   );
-}
-
-/**
- * Option ids whose handle should render on the opposite side from its
- * direction's default (Position.Top for input, Position.Bottom for
- * output). This applies only to the two options carrying the "return"
- * edge of a direct, mutual FIFO cycle between two vertically stacked
- * processes — e.g. process A above sends A.output(fifo) to
- * B.input(fifo), and B replies via B.output(fifo) to A.input(fifo).
- * Flipping just that return pair turns it into a short direct edge
- * instead of routing all the way around via isBackEdge/BackEdge. A
- * FIFO option is point-to-point by construction (one writer, one
- * reader — see isValidProgramConnection's shared_dir-only fan-out/
- * fan-in allowance), so each flipped option id unambiguously refers
- * back to the one edge that earned it.
- */
-export function computeFlippedOptionIds(program: Program): Set<string> {
-
-  const byPair = new Map<string, { forward: ProgramEdge[]; backward: ProgramEdge[] }>();
-
-  for (const edge of program.edges) {
-
-    const sourceProcess = program.processes.find(process => process.id === edge.sourceProcessId);
-    const targetProcess = program.processes.find(process => process.id === edge.targetProcessId);
-    const sourceOption = sourceProcess?.options.find(option => option.id === edge.sourceOptionId);
-    const targetOption = targetProcess?.options.find(option => option.id === edge.targetOptionId);
-
-    if (!sourceProcess || !targetProcess || sourceOption?.channel !== "fifo") {
-      continue;
-    }
-    if (isFanoutEndpoint(sourceProcess, sourceOption) || isFanoutEndpoint(targetProcess, targetOption)) {
-      continue;
-    }
-
-    const [firstId, secondId] = [sourceProcess.id, targetProcess.id].sort();
-    const pairKey = `${firstId}|${secondId}`;
-    const entry = byPair.get(pairKey) ?? { forward: [], backward: [] };
-
-    if (sourceProcess.id === firstId) {
-      entry.forward.push(edge);
-    } else {
-      entry.backward.push(edge);
-    }
-
-    byPair.set(pairKey, entry);
-
-  }
-
-  const flippedOptionIds = new Set<string>();
-
-  for (const { forward, backward } of byPair.values()) {
-
-    if (forward.length === 0 || backward.length === 0) {
-      continue;
-    }
-
-    const firstProcess = program.processes.find(process => process.id === forward[0].sourceProcessId)!;
-    const secondProcess = program.processes.find(process => process.id === backward[0].sourceProcessId)!;
-
-    if (firstProcess.position.y === secondProcess.position.y) {
-      continue;
-    }
-
-    const lowerIsFirst = firstProcess.position.y > secondProcess.position.y;
-    const returnEdge = lowerIsFirst ? forward[0] : backward[0];
-
-    flippedOptionIds.add(returnEdge.sourceOptionId);
-    flippedOptionIds.add(returnEdge.targetOptionId);
-
-  }
-
-  return flippedOptionIds;
-
-}
-
-/**
- * Which edge of its process node `option` renders at — used both by
- * ProcessNode (to group options into its top/bottom flex rows) and by
- * the Inspector's option-reorder UI (so dragging there matches what's
- * actually adjacent on the canvas, including a flipped option — see
- * computeFlippedOptionIds).
- */
-export function optionRow(
-  option: ProgramOption,
-  flippedOptionIds: Set<string>
-): "top" | "bottom" {
-  return (option.direction === "input") !== flippedOptionIds.has(option.id)
-    ? "top"
-    : "bottom";
 }
 
 /**
@@ -501,74 +388,7 @@ export function programToReactFlowEdges(
 
 }
 
-/**
- * Whether `to` can be reached from `from` (or is `from` itself) through
- * edges whose source option is not a fifo. Each such edge makes its
- * target wait for its source to finish (an afterok dependency of the
- * engine), while a fifo edge makes no dependency at all (see
- * debasher::_get_procdeps_for_process_task), so a cycle made only of
- * edges like these is one the engine refuses with "circular dependency
- * detected".
- */
-function reachesWithoutFifo(program: Program, from: string, to: string): boolean {
-
-  const channelOf = (processId: string, optionId: string) =>
-    program.processes
-      .find(process => process.id === processId)
-      ?.options.find(option => option.id === optionId)?.channel;
-
-  const visited = new Set<string>();
-  const pending = [from];
-
-  while (pending.length > 0) {
-    const processId = pending.pop()!;
-    if (processId === to) {
-      return true;
-    }
-    if (visited.has(processId)) {
-      continue;
-    }
-    visited.add(processId);
-    for (const edge of program.edges) {
-      if (
-        edge.sourceProcessId === processId &&
-        channelOf(edge.sourceProcessId, edge.sourceOptionId) !== "fifo"
-      ) {
-        pending.push(edge.targetProcessId);
-      }
-    }
-  }
-
-  return false;
-
-}
-
-/**
- * Whether a connection is allowed: it must go from an output option to
- * an input option whose value does not come from elsewhere: not a flag,
- * which takes no value, nor a command line option, nor one taken from the
- * process specifications, all of which script generation writes before it
- * looks at any connection. Both may
- * belong to the same process: a self-loop, which lets a process feed
- * itself. Every cycle, a self-loop included,
- * needs at least one edge from a fifo: a connection that is not from a
- * fifo is refused when it would close a cycle of connections that are
- * not from a fifo either, since the engine refuses such a cycle (see
- * reachesWithoutFifo). An output may always feed multiple inputs
- * (fan-out). An
- * input, by default, accepts at most one connected output — except a
- * "shared_dir" input (and not a fanout-family one, which keeps its own
- * single-source pairing rule), which may accept several, one per writer
- * of that same shared directory. That's the one case the engine
- * actually guarantees every connected source resolves to an identical
- * value (debasher::_dedup_resolved_opts) — every "shared_dir" option
- * naming the same directory always resolves via get_absolute_shdirname
- * to the same absolute path — which is what makes gathering several
- * connections into one option safe in the first place; a plain option
- * has no such guarantee, so it stays limited to a single connection. A
- * "shared_dir" option, on either end, may also only ever pair with
- * another "shared_dir" option naming the identical directory.
- */
+// Whether a connection drawn on the canvas is allowed (see isValidEdge).
 export function isValidProgramConnection(
   program: Program,
   connection: Connection | Edge
@@ -576,110 +396,17 @@ export function isValidProgramConnection(
 
   const { source, target, sourceHandle, targetHandle } = connection;
 
-  if (
-    !source ||
-    !target ||
-    !sourceHandle ||
-    !targetHandle
-  ) {
-    return false;
-  }
-
-  const sourceProcess = program.processes.find(process => process.id === source);
-  const targetProcess = program.processes.find(process => process.id === target);
-
-  const sourceOptionDef = sourceProcess?.options.find(
-    option => option.id === sourceHandle
-  );
-
-  const targetOptionDef = targetProcess?.options.find(
-    option => option.id === targetHandle
-  );
-
-  if (
-    targetOptionDef?.dataType === "None" ||
-    targetOptionDef?.commandLine ||
-    targetOptionDef?.fromProcessSpec
-  ) {
-    return false;
-  }
-
-  // A resident program accepts a connection only from a business output to
-  // an input that it makes a business input, of another node or of the
-  // same one: every channel between its nodes is a FIFO. An external input
-  // takes none, and the Supervisor wiring is never drawn by hand.
-  if (
-    program.programType === "resident" &&
-    !(
-      sourceOptionDef &&
-      targetOptionDef &&
-      isBusinessOutput(sourceOptionDef) &&
-      isBusinessInputCandidate(targetOptionDef)
-    )
-  ) {
-    return false;
-  }
-
-  // A fanout family option (see isFanoutOption) on a "standard" process
-  // may only pair with an "array"- or "generator"-mode process on the
-  // other end (mirrors script_generation.py's _FANOUT_PARTNER_MODES),
-  // and fanout options can't chain directly into one another.
-  const sourceIsFanout = isFanoutEndpoint(sourceProcess, sourceOptionDef);
-  const targetIsFanout = isFanoutEndpoint(targetProcess, targetOptionDef);
-
-  if (sourceIsFanout && (!isFanoutPartnerMode(targetProcess) || targetIsFanout)) {
-    return false;
-  }
-  if (targetIsFanout && (!isFanoutPartnerMode(sourceProcess) || sourceIsFanout)) {
-    return false;
-  }
-
-  const sourceIsSharedDir = sourceOptionDef?.channel === "shared_dir";
-  const targetIsSharedDir = targetOptionDef?.channel === "shared_dir";
-
-  // Fan-in (more than one incoming connection into the same input) is
-  // only ever allowed when both ends are "shared_dir" options naming
-  // the identical directory — the one case the engine guarantees every
-  // connected source resolves to an identical value
-  // (debasher::_dedup_resolved_opts). A single connection into any
-  // other input follows the ordinary one-source rule regardless of
-  // either option's channel — e.g. a "shared_dir" output can still
-  // feed a single, ordinary "none"-channel input just like any other
-  // output, exactly as decompress_deliverable's "-out-extractdir" feeds
-  // a plain "-extractd" input.
-  const targetAllowsMultipleConnections =
-    targetIsSharedDir && sourceIsSharedDir && !targetIsFanout;
-
-  const targetAlreadyConnected = program.edges.some(
-    edge =>
-      edge.targetProcessId === target &&
-      edge.targetOptionId === targetHandle
-  );
-
-  if (targetAlreadyConnected && !targetAllowsMultipleConnections) {
-    return false;
-  }
-
-  // Two "shared_dir" options may only ever pair with each other, and
-  // only when they name the identical directory — a mismatched pair
-  // would resolve to two different absolute paths, which is exactly
-  // the case debasher::_dedup_resolved_opts rejects at run time.
-  if (sourceIsSharedDir && targetIsSharedDir) {
-    if (!sourceOptionDef!.value || sourceOptionDef!.value !== targetOptionDef!.value) {
-      return false;
-    }
-  }
-
-  if (
-    sourceOptionDef?.channel !== "fifo" &&
-    reachesWithoutFifo(program, target, source)
-  ) {
-    return false;
-  }
-
   return (
-    sourceOptionDef?.direction === "output" &&
-    targetOptionDef?.direction === "input"
+    !!source &&
+    !!target &&
+    !!sourceHandle &&
+    !!targetHandle &&
+    isValidEdge(program, {
+      sourceProcessId: source,
+      sourceOptionId: sourceHandle,
+      targetProcessId: target,
+      targetOptionId: targetHandle,
+    })
   );
 
 }

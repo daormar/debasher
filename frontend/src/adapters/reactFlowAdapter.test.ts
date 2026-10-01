@@ -7,12 +7,12 @@ import { emptyNodeCode } from "../models/node";
 import { createEmptyProgram } from "../storage/programStorage";
 import {
   canvasStructuralKey,
-  computeFlippedOptionIds,
   isValidProgramConnection,
   programToReactFlowEdges,
   programToReactFlowNodes,
   supervisorWiring,
 } from "./reactFlowAdapter";
+import { computeFlippedOptionIds } from "../models/optionLayout";
 
 function option(id: string, label: string, fields: Partial<ProgramOption> = {}): ProgramOption {
   return {

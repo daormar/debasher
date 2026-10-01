@@ -2,7 +2,8 @@ import type { Position } from "./position";
 import type { OptionDataType, ProgramOption } from "./option";
 import { createOption } from "./option";
 import type { NodeCode, NodeInfo, NodeKind } from "./node";
-import { emptyNodeCode } from "./node";
+import type { ProgramType } from "./program";
+import { emptyNodeCode, nodeNameProblem } from "./node";
 
 export type ProcessLanguage =
   | "bash"
@@ -282,3 +283,33 @@ export function createProcess(
   };
 
 }
+
+/**
+ * Why `name` cannot name a process, or null if it can, given the names
+ * already taken in the program: those of the other processes and of the
+ * sequential processes, which share one set of names with them in the
+ * engine. Whether the engine accepts the name at all is a question for the
+ * backend (see processApi's validateProcessName).
+ */
+export function processNameProblem(
+  takenNames: string[],
+  name: string,
+  programType: ProgramType
+): string | null {
+
+  const trimmed = name.trim();
+
+  if (!trimmed) {
+    return "Please enter a process name.";
+  }
+
+  if (takenNames.some(taken => taken.toLowerCase() === trimmed.toLowerCase())) {
+    return "A process with this name already exists.";
+  }
+
+  const nodeProblem = programType === "resident" ? nodeNameProblem(trimmed) : null;
+
+  return nodeProblem && `${nodeProblem} Choose another name.`;
+
+}
+

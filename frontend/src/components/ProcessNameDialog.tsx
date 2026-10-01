@@ -8,14 +8,17 @@ import {
   validateProcessName,
 } from "../api/processApi";
 import type { ProcessInfo } from "../models/process";
+import { processNameProblem } from "../models/process";
 import type { ProgramType } from "../models/program";
 import type { NodeInfo, NodeKind, SuggestedNode } from "../models/node";
-import { NODE_KINDS, nodeNameProblem } from "../models/node";
+import { NODE_KINDS } from "../models/node";
 
 interface Props {
   title: string;
   confirmLabel: string;
   initialName?: string;
+  // The names of the other processes and of the sequential processes,
+  // which share one set of names (see processNameProblem).
   existingNames: string[];
   preamble: string;
   envVars: Record<string, string>;
@@ -126,26 +129,11 @@ export default function ProcessNameDialog({
 
     const trimmedName = name.trim();
 
-    if (!trimmedName) {
-      setError("Please enter a process name.");
+    const nameProblem = processNameProblem(existingNames, trimmedName, programType);
+
+    if (nameProblem) {
+      setError(nameProblem);
       return;
-    }
-
-    const isDuplicate = existingNames.some(
-      existingName => existingName.toLowerCase() === trimmedName.toLowerCase()
-    );
-
-    if (isDuplicate) {
-      setError("A process with this name already exists.");
-      return;
-    }
-
-    if (isResident) {
-      const problem = nodeNameProblem(trimmedName);
-      if (problem) {
-        setError(`${problem} Choose another name.`);
-        return;
-      }
     }
 
     if (chooseNodeKind && effectiveKind === "Supervisor" && supervisorTaken) {
