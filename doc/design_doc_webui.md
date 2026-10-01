@@ -26,14 +26,16 @@ layout of each dialog or the look of the canvas.
 general and resident (see the Glossary), and the web UI knows both, resident
 programs only in part: a subsection of "Resident programs in the web UI" that is
 built says so. Every section before "Resident programs in the web UI" describes
-the design for general programs, and what it says holds for them. A resident
-program, whose design is in `doc/design_doc_resident.md`, follows rules of its
-own in several places: it is always run by the built-in scheduler, its processes
-are meant to live until they are stopped, and it is stopped, snapshotted and
-reset with tools of its own. The section on resident programs says, for each
-part of the design described before it, whether it applies to resident programs
-unchanged, changes, or is replaced, and nothing in the earlier sections should
-be read as holding for resident programs unless that section says so.
+the design for general programs, and what it says holds for them; of those
+sections, only "Sequential processes in the web UI" is designed and not built. A
+resident program, whose design is in `doc/design_doc_resident.md`, follows rules
+of its own in several places: it is always run by the built-in scheduler, its
+processes are meant to live until they are stopped, and it is stopped,
+snapshotted and reset with tools of its own. The section on resident programs
+says, for each part of the design described before it, whether it applies to
+resident programs unchanged, changes, or is replaced, and nothing in the earlier
+sections should be read as holding for resident programs unless that section
+says so.
 
 The document is organized as follows. The Glossary defines the terms it uses.
 "Architecture" presents the three layers of the web UI and where its state
@@ -43,10 +45,11 @@ the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
 disk, and "Execution and observation" how it runs a program and follows it.
 "Frontend state and the canvas" describes the frontend's own state, and
-"Guarantees and non-goals" gathers the guarantees stated along the way.
-"Resident programs in the web UI" designs the extension to resident programs,
-and says which parts of it are built, and "Future work" lists what is known to
-be missing.
+"Sequential processes in the web UI" designs how a program keeps the sequential
+processes of its module. "Guarantees and non-goals" gathers the guarantees
+stated along the way. "Resident programs in the web UI" designs the extension to
+resident programs, and says which parts of it are built, and "Future work" lists
+what is known to be missing.
 
 # Glossary
 
@@ -135,10 +138,15 @@ refer to it.
 - **preamble**: Bash code that the generated module carries verbatim before its
   own functions, typically the `load_debasher_module` lines of the modules it
   builds on.
-- **group**: the processes that "Add program" brings in, in one operation, from
-  another program saved with the web UI, which the generated module declares
-  with a single `add_debasher_program` while none of them has been edited or
-  removed (see "Groups").
+- **step**: as defined in the design of the engine.
+- **sequential process**: as defined in the design of the engine. In the web UI,
+  designed and not built, an element of the program's list of sequential
+  processes, not a process of the program (see "Sequential processes in the web
+  UI").
+- **group**: the processes, and the sequential processes, that "Add program"
+  brings in, in one operation, from another program saved with the web UI,
+  which the generated module declares with a single `add_debasher_program`
+  while none of them has been edited or removed (see "Groups").
 
 ## Files and directories
 
@@ -1145,6 +1153,114 @@ so a dissolved group keeps its color and its badge on the canvas until then
 canvas node reads it from the store. Neither do the edges, which are derived
 again from the store on every change.
 
+# Sequential processes in the web UI
+
+*Designed, not built.* A process can run code of its own as a step, with
+`seq_execute`, and a sequential process gives such code a name and a process
+specification, so that it can be written in another language, be an alias, or
+ask Slurm for resources of its own (see "Sequential processes" in
+`doc/design_doc_engine.md`). Today the web UI knows nothing of them: import
+loses the `add_debasher_seq_process` lines and the code that belongs to no
+process, and a program whose processes call a sequential process no longer
+runs once it goes through the web UI. This section designs how a sequential
+process enters the program model, how it is generated and imported, and where
+the editor shows it. Once it is built, what it adds to script generation and
+import moves into "Layout of the generated module", "What script generation
+refuses", "Building the program" and "What the round trip preserves".
+
+## Sequential processes in the program model
+
+A program carries its sequential processes in `Program.seqProcesses`, a list of
+`SeqProcess`, beside its processes and not inside any of them, since a step can
+be run by any process of the program. A sequential process has an `id`, a
+`name`, a `description`, its code (`language` and `code`, as a process has
+them), its specifications and, when it came with "Add program", a
+`groupSource`. It has no options, no options handler, no additional methods and
+no position: the engine calls nothing of it but its process function, and it
+is not part of the dependency graph that the canvas draws.
+
+Its name follows the rules of a process name, and is unique across the
+processes and the sequential processes of the program, as the engine requires.
+Its specifications are those of a process that the engine accepts on a
+sequential process: the computational specifications `cpus`, `mem` and `time`,
+each optional, and the additional specifications `alias`, `externalAlias` and
+`aliasOptMap`. The model has no place for `processdeps` and `force`, which the
+engine refuses on a sequential process, and, as for a process, none for
+`nodes`, `account` and `partition`.
+
+## Generating and importing a sequential process
+
+**Script generation.** After the functions of the processes, the generated
+module holds, for each sequential process in the order of the model, its
+`_document` function and its code, written as the code of a process is: a Bash
+function as it is, and code in another language as a heredoc function
+`<name>_heredoc_<suffix>`. A sequential process with an alias gets no code, and
+the check of "Code that a loaded module already provides" applies to it as to a
+process. `<name>_program` then has one `add_debasher_seq_process` for each
+sequential process, after the `add_debasher_process` lines, with its
+specifications. Script generation refuses a program in which a sequential
+process and a process, or two sequential processes, share a name. When the
+module is generated to read its environment variables (see "Environment
+variables of a program"), a sequential process without code gets a function
+that does nothing, like a process. Saving copies the file of a relative
+`externalAlias` of a sequential process into the home directory, as it copies
+that of a process (see "The home directory").
+
+**The module documentation.** `debasher_doc_mod` gains the flag
+`--show-seq-procs`, which import adds to the flags it always gives. With it,
+after the processes, the module documentation has one section for each
+sequential process that the `_program` method adds, under a heading of its own
+that the parser of the module documentation learns to tell apart from that of
+a process. The section holds what the other flags ask for and a sequential
+process has: its description, its implementation (its code and language, or
+the target of its alias) and its specifications. The engine finds the
+sequential processes in the same `_program` run that gives the processes, so
+nothing new has to load.
+
+The code of a process includes the functions of the same file that it calls
+(see "What the engine reports"), and a process that runs a step names its
+function. The engine leaves a sequential process out of the functions that it
+includes in the code of a process, so that its code comes back once, as that of
+the sequential process. A function that a process runs with `seq_execute`
+without declaring it as a sequential process is still included in the code of
+that process, as any other function it calls.
+
+**Import.** Each section of a sequential process becomes a `SeqProcess`, with
+its code replaced by its verbatim source as the code of a process is (see
+"What the engine reports"), and the specifications that the model does not
+hold dropped. The round trip keeps the sequential processes, their code and the
+specifications that the model holds, in both directions.
+`test/api/test_round_trip.py` imports every module of `data/programs/`, and
+checks besides that the import of `debasher_cycle_dyn_sched.sh` has its
+sequential process, since a fixed point alone would not catch one lost on
+every import.
+
+**Groups.** "Add program" brings the sequential processes of the other program
+with its processes, marked with the same `groupSource`, and `groupSize` counts
+both. While the group is whole, with every process and sequential process
+still present and none edited, its `add_debasher_program` adds them too, and
+changing or removing a sequential process of the group dissolves it, as
+changing a process of the group does (see "Groups"). A name that the other
+program shares with a process or a sequential process of the current one makes
+script generation refuse the program until one of them is renamed.
+
+## Sequential processes in the editor
+
+A sequential process is not drawn on the canvas, which shows the processes
+and their connections, and a sequential process has neither. The toolbar opens
+a "Sequential processes" dialog, beside those of the preamble, the shared
+directories and the environment variables, which lists them and adds, renames
+or removes one. Each one opens an editor with its name, description and
+specifications, its alias included, and its code in the same code editor as
+the code of a process. As every dialog, it edits a draft and hands it to the
+store when the user accepts it.
+
+The web UI does not read the code of the processes, and so does not know which
+of them run which sequential process: renaming or removing a sequential process
+leaves the calls to `seq_execute` that name it as they are, and the program
+fails when such a call runs. A resident program has no sequential processes
+(see "The program model of a resident program").
+
 # Guarantees and non-goals
 
 This section gathers the guarantees that the web UI gives today for general
@@ -1443,6 +1559,11 @@ module added with `add_debasher_program` carries its own Supervisor wiring,
 while the wiring of the whole program has to be derived again with the new
 nodes. A program that already has a `Supervisor` refuses a program that brings
 another.
+
+**Sequential processes.** "Sequential processes in the web UI" does not apply:
+the engine refuses a sequential process in a resident program (see "Defining a
+node" in `doc/design_doc_resident.md`), so the toolbar of a resident program has
+no "Sequential processes" dialog, and the program has none.
 
 **What applies unchanged.** The ids, names and positions of the processes, the
 rule that gives an option its direction, command line options and program
@@ -2541,6 +2662,9 @@ too.
 - **Restarting one task of a node.** "Restart node" on a single task of an
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.
+- **Building sequential processes in the web UI.** Building what "Sequential
+  processes in the web UI" designs, with the flag `--show-seq-procs` of
+  `debasher_doc_mod` that it relies on.
 - **Building the web UI for resident programs.** Building what "Resident
   programs in the web UI" designs, where a subsection does not say that it is
   built.
