@@ -1549,6 +1549,20 @@ debasher::_resolve_process()
 }
 
 ########
+# Fails, with an error, if a process has no method that declares its
+# options: _explain_opts, or the older _explain_cmdline_opts.
+debasher::_check_process_explains_opts()
+{
+    local processname=$1
+
+    if [ "$(debasher::_get_explain_opts_funcname "${processname}")" = "${DEBASHER_FUNCT_NOT_FOUND}" ] \
+           && [ "$(debasher::_get_explain_cmdline_opts_funcname "${processname}")" = "${DEBASHER_FUNCT_NOT_FOUND}" ]; then
+        echo "Error: process ${processname} has no ${processname}${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_OPTS} method declaring its options. Aborting execution..." >&2
+        return 1
+    fi
+}
+
+########
 # Public: Adds a process to a DeBasher program.
 #
 # $1 - Name of the process to add into the program.
@@ -1579,6 +1593,12 @@ debasher::add_debasher_process()
     # Check the name and build the process function, aborting execution
     # if necessary
     debasher::_resolve_process "${processname}" "${process_additional_specs}" || exit 1
+
+    # A process declares its options, and the method that does it is
+    # also what tells a process apart from any other function of a
+    # module, so it is required (a sequential process does not need it)
+    debasher::_check_process_explains_opts "${processname}" || exit 1
+
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_RESOLVED_PROCESS_TYPE}"
 
     # Store process entry

@@ -505,7 +505,7 @@ when a process does not define it:
 | process function | by the task, with its options as arguments | the process cannot be added, unless it is a heredoc process or an alias |
 | `_define_opts` | while the run is prepared, to build the option list of every task | the process needs an option generator |
 | `_generate_opts_size`, `_generate_opts` | while the run is prepared, and by the task to build its own option list | the process uses `_define_opts` |
-| `_explain_opts` | to list the options of the program (`--show-cmdline-opts`) and to check the options that a task defines | the options of the process are not checked |
+| `_explain_opts` | to list the options of the program (`--show-cmdline-opts`) and to check the options that a task defines | the process cannot be added, unless it has `_explain_cmdline_opts` |
 | `_identify_cmdline_opts` | together with `_explain_opts`, to mark which options are command line options | the process has no command line options |
 | `_explain_cmdline_opts` | an older form of the two methods above, whose options are all command line options | the two methods above are used |
 | `_define_opt_deps` | while the dependencies are inferred, for each option on each producer | the inferred dependency type is used |
@@ -700,7 +700,8 @@ no tasks, no dependencies, no exec directory and no status, and it is not in
 specification, which reach the tasks through the execution context like every
 function and variable of the shell of `debasher_exec` (see "The process script:
 how code travels"). A step runs the process function only, and the engine calls
-no other method of a sequential process.
+no other method of a sequential process, which therefore needs no
+`_explain_opts` method.
 
 The additional specifications `alias`, `ext_alias` and `alias_opt_map` mean what
 they mean for a process. `processdeps` and `force`, which only a scheduled
@@ -933,11 +934,15 @@ and `explain_flag`, and marks which of them are command line options in its
 `_identify_cmdline_opts` method, with `opt_is_cmdline` for a mandatory one and
 `opt_is_non_mandatory_cmdline` for an optional one. The older
 `_explain_cmdline_opts` method declares command line options, all of them
-mandatory, with `explain_cmdline_opt`. The declarations document the program:
-`debasher_exec --show-cmdline-opts` lists the command line options of every
-process, by category, and `debasher_doc_mod` documents them. Whether a mandatory
-option is given is decided by `define_cmdline_opt` when the options are built,
-not by the declaration.
+mandatory, with `explain_cmdline_opt`. Every process has one of the two methods,
+even a process with no options, and `add_debasher_process` refuses a process
+without them: besides declaring the options, the method is what tells a process
+apart from any other function of a module, for the tools that list the processes
+of a module without running its `_program` method. The declarations document the
+program: `debasher_exec --show-cmdline-opts` lists the command line options of
+every process, by category, and `debasher_doc_mod` documents them. Whether a
+mandatory option is given is decided by `define_cmdline_opt` when the options
+are built, not by the declaration.
 
 ## Arrays and option generators
 
@@ -962,17 +967,16 @@ every time for the same command line and task index. A FIFO defined by a
 generator is defined with `define_fifo_opt_generator`, which takes the task
 index; `define_fifo_opt` is refused inside a generator.
 
-**Checking the options against their declaration.** When a process has an
-`_explain_opts` or an `_explain_cmdline_opts` method, the options of its first
-task are checked against the declared ones while the run is prepared. An option
-that the task defines but the process does not declare stops the preparation, as
-it usually means a typo or a declaration out of date; a declared option that the
-first task does not define only gives a warning, since an option added only when
-it is given on the command line is often absent. Only the first task is checked,
-and the check assumes that the tasks of an array have the same option names. A
-process whose number of options depends on the run, such as `-outf0`, `-outf1`,
-and so on, declares the whole fanout family once, as `-outfith`, and any option
-made of the prefix and a number matches it.
+**Checking the options against their declaration.** The options of the first
+task of every process are checked against the declared ones while the run is
+prepared. An option that the task defines but the process does not declare stops
+the preparation, as it usually means a typo or a declaration out of date; a
+declared option that the first task does not define only gives a warning, since
+an option added only when it is given on the command line is often absent. Only
+the first task is checked, and the check assumes that the tasks of an array have
+the same option names. A process whose number of options depends on the run,
+such as `-outf0`, `-outf1`, and so on, declares the whole fanout family once, as
+`-outfith`, and any option made of the prefix and a number matches it.
 
 ## How option values reach a task
 

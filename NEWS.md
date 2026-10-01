@@ -25,11 +25,13 @@ make each one.
 - **Every option a process defines has to be explained.** The
   `<process>_explain_opts` method declares each option of the process,
   with `explain_opt` (or `explain_flag`), and defining an option that it
-  does not declare is an error. In 1.0, `<process>_explain_cmdline_opts`
-  declared only the options given on the command line, and options
-  connected to other processes (`-inf`, `-outf`, ...) went undeclared.
-  `<process>_explain_cmdline_opts` and `explain_cmdline_opt` still work,
-  but are deprecated.
+  does not declare is an error. Every process needs the method, even one
+  with no options (`<process>_explain_opts() { :; }`), and
+  `add_debasher_process` refuses a process without it. In 1.0,
+  `<process>_explain_cmdline_opts` declared only the options given on
+  the command line, and options connected to other processes (`-inf`,
+  `-outf`, ...) went undeclared. `<process>_explain_cmdline_opts` and
+  `explain_cmdline_opt` still work, but are deprecated.
 
 - **Command-line options are declared as such, and required unless said
   otherwise.** `<process>_identify_cmdline_opts` says which of the

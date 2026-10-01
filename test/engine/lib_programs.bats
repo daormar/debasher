@@ -1150,7 +1150,9 @@ PYEOF
 @test "add_debasher_seq_process refuses a name that a process or a sequential process already has" {
     prepare_add_process
     first() { :; }
+    first_explain_opts() { :; }
     second() { :; }
+    second_explain_opts() { :; }
 
     add_debasher_process first "cpus=1;mem=32;time=00:01:00"
     run add_debasher_seq_process first ""
@@ -1175,4 +1177,33 @@ PYEOF
     run add_debasher_seq_process "bad-name" ""
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"not valid"* ]]
+}
+
+@test "add_debasher_process refuses a process with no method that declares its options" {
+    prepare_add_process
+    noexplain() { :; }
+
+    run add_debasher_process noexplain "cpus=1;mem=32;time=00:01:00"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has no noexplain_explain_opts method"* ]]
+}
+
+@test "add_debasher_process accepts _explain_opts, or the older _explain_cmdline_opts" {
+    prepare_add_process
+    modern() { :; }
+    modern_explain_opts() { :; }
+    legacy() { :; }
+    legacy_explain_cmdline_opts() { :; }
+
+    add_debasher_process modern "cpus=1;mem=32;time=00:01:00"
+    add_debasher_process legacy "cpus=1;mem=32;time=00:01:00"
+    [ "$(debasher::_get_num_processes)" -eq 2 ]
+}
+
+@test "add_debasher_seq_process needs no method that declares options" {
+    prepare_add_process
+    seqstep() { :; }
+
+    add_debasher_seq_process seqstep ""
+    [ -n "${DEBASHER_SEQ_PROCESSES[seqstep]+x}" ]
 }
