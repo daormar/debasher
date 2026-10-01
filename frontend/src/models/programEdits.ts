@@ -1,7 +1,8 @@
 import type { ProgramEdge } from "./edge";
 import { buildConnectionSentinel } from "./edge";
+import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
-import type { ProgramProcess } from "./process";
+import type { GroupSource, ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { DEFAULT_SCHEDULER } from "./program";
 import type { SeqProcess } from "./seqProcess";
@@ -335,5 +336,176 @@ export function disconnect(program: Program, edgeId: string): Program {
     : program;
 
   return { ...disconnected, edges: disconnected.edges.filter(e => e.id !== edgeId) };
+
+}
+
+// Matches engine/debasher_lib.sh's DEBASHER_MOD_DIR_SEP.
+const MOD_DIR_SEP = ":";
+
+/**
+ * Why "Add program" cannot bring `loaded` into `program`, or null if it can.
+ * Only a program of the same type is added, a program has at most one
+ * Supervisor, and no process or sequential process of `loaded` may have the
+ * name of one of `program` (a process and a sequential process share one set
+ * of names, in the engine as here): the names can't be deduped by renaming,
+ * since add_debasher_program only knows the source module's own original
+ * names.
+ */
+export function mergeRefusal(program: Program, loaded: Program): string | null {
+
+  if (loaded.programType !== program.programType) {
+    return (
+      `Cannot add program "${loaded.name}": it is a ${loaded.programType} ` +
+      `program, and this one is a ${program.programType} program. "Add ` +
+      `program" brings in only a program of the same type.`
+    );
+  }
+
+  if (
+    program.programType === "resident" &&
+    hasSupervisor(program.processes) &&
+    hasSupervisor(loaded.processes)
+  ) {
+    return (
+      `Cannot add program "${loaded.name}": it has a Supervisor, and this ` +
+      `program already has one. A program has at most one Supervisor.`
+    );
+  }
+
+  const existingNames = new Set(
+    [...program.processes, ...program.seqProcesses].map(member => member.name.toLowerCase())
+  );
+  const collisionName = [...loaded.processes, ...(loaded.seqProcesses ?? [])].find(member =>
+    existingNames.has(member.name.toLowerCase())
+  )?.name;
+
+  if (collisionName) {
+    return (
+      `Cannot add program "${loaded.name}": it has a process or sequential ` +
+      `process named "${collisionName}", whose name already exists in this ` +
+      `program. Rename the conflicting one (in either program) and try again.`
+    );
+  }
+
+  return null;
+
+}
+
+// What "Add program" brings into a program (see prepareMerge and addGroup).
+export interface MergedGroup {
+
+  processes: ProgramProcess[];
+
+  seqProcesses: SeqProcess[];
+
+  edges: ProgramEdge[];
+
+  // The directory to add to DEBASHER_MOD_DIR, so that the engine finds the
+  // module of the group, or null when nothing is loaded from it.
+  modDir: string | null;
+
+}
+
+/**
+ * The copies of the processes, sequential processes and edges of `loaded`
+ * that "Add program" brings into `program`, from the directory `sourceDir`,
+ * with new ids from `newId`. In a general program they all form one group,
+ * tagged with the same GroupSource, so that script generation emits a single
+ * add_debasher_program call for them while the group stays intact. A
+ * resident program is merged process by process, never as a group, and
+ * loads nothing from where they came from: a module added with
+ * add_debasher_program would carry its own Supervisor wiring, while the
+ * wiring of the whole program has to be derived again with the new nodes.
+ * Names are kept exactly as in `loaded` (see mergeRefusal).
+ */
+export function prepareMerge(
+  program: Program,
+  loaded: Program,
+  sourceDir: string,
+  newId: () => string
+): MergedGroup {
+
+  const isResident = program.programType === "resident";
+  const loadedSeqProcesses = loaded.seqProcesses ?? [];
+
+  const groupSource: GroupSource | undefined = isResident
+    ? undefined
+    : {
+        programName: loaded.name,
+        groupId: newId(),
+        groupSize: loaded.processes.length + loadedSeqProcesses.length,
+        sourceDir,
+      };
+
+  // Places the merged batch to the right of whatever's already on the
+  // canvas, preserving the relative layout its processes had in `loaded`:
+  // there's no bounding-box UI to keep in sync (see ProcessNode's per-group
+  // color instead), just a one-off offset at merge time.
+  const currentMaxX = program.processes.reduce(
+    (max, process) => Math.max(max, process.position.x),
+    0
+  );
+
+  const loadedMinX = loaded.processes.reduce(
+    (min, process) => Math.min(min, process.position.x),
+    Infinity
+  );
+
+  const offsetX = loadedMinX === Infinity ? 0 : currentMaxX + 250 - loadedMinX;
+
+  const idMap = new Map<string, string>();
+
+  const processes = loaded.processes.map(process => {
+    const id = newId();
+    idMap.set(process.id, id);
+    return {
+      ...process,
+      id,
+      position: { x: process.position.x + offsetX, y: process.position.y },
+      groupSource,
+    };
+  });
+
+  // A resident program has no sequential processes.
+  const seqProcesses = loadedSeqProcesses.map(seqProcess => ({
+    ...seqProcess,
+    id: newId(),
+    groupSource,
+  }));
+
+  const edges = loaded.edges.map(edge => ({
+    ...edge,
+    id: newId(),
+    sourceProcessId: idMap.get(edge.sourceProcessId) ?? edge.sourceProcessId,
+    targetProcessId: idMap.get(edge.targetProcessId) ?? edge.targetProcessId,
+  }));
+
+  return { processes, seqProcesses, edges, modDir: isResident ? null : sourceDir };
+
+}
+
+// Adds what prepareMerge made, and its directory to DEBASHER_MOD_DIR unless
+// it is there already.
+export function addGroup(program: Program, group: MergedGroup): Program {
+
+  const modDirEntries = (program.envVars.DEBASHER_MOD_DIR ?? "")
+    .split(MOD_DIR_SEP)
+    .map(entry => entry.trim())
+    .filter(Boolean);
+
+  const envVars = group.modDir === null || modDirEntries.includes(group.modDir)
+    ? program.envVars
+    : {
+        ...program.envVars,
+        DEBASHER_MOD_DIR: [...modDirEntries, group.modDir].join(MOD_DIR_SEP),
+      };
+
+  return {
+    ...program,
+    processes: [...program.processes, ...group.processes],
+    seqProcesses: [...program.seqProcesses, ...group.seqProcesses],
+    edges: [...program.edges, ...group.edges],
+    envVars,
+  };
 
 }

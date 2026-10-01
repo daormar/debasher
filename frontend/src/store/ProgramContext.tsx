@@ -27,7 +27,7 @@ import type { ProgramEdge } from "../models/edge";
 import type { SeqProcess } from "../models/seqProcess";
 import type { Position } from "../models/position";
 import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
-import { emptyNodeCode, hasSupervisor } from "../models/node";
+import { emptyNodeCode } from "../models/node";
 import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 import { saveProgram } from "../storage/programStorage";
 import type {
@@ -56,9 +56,6 @@ import {
 import type { ResidentRequest, ResidentRunPhase } from "../models/residentRun";
 import { residentRunPhase } from "../models/residentRun";
 import type { NodeNotice } from "../models/nodeState";
-
-// Matches engine/debasher_lib.sh's DEBASHER_MOD_DIR_SEP.
-const MOD_DIR_SEP = ":";
 
 // How often to poll debasher_status for the process statuses, from which
 // the canvas colors the nodes and the run phase is derived, in
@@ -156,20 +153,10 @@ interface ProgramContextType {
   // code, options and options handler.
   addProcess: (name: string, info: ProcessInfo | null, nodeKind?: NodeKind, nodeInfo?: NodeInfo) => void;
 
-  // Merges `loaded`'s processes/edges into the current program as a new
-  // group (see "Add program"): every merged process is tagged with a
-  // GroupSource so script_generation.py can emit a single
-  // add_debasher_program call for it while the group stays intact. Fails
-  // (via window.alert) instead of merging if any of `loaded`'s process
-  // names, or of its sequential processes, collide with an existing one,
-  // they can't be deduped by renaming, since add_debasher_program only
-  // knows the source module's own original names. The sequential
-  // processes of `loaded` come in the same group as its processes. Only a program of the same type is merged. A
-  // resident program is merged process by process, never as a group: a
-  // module added with add_debasher_program would carry its own Supervisor
-  // wiring, while the wiring of the whole program has to be derived again
-  // with the new nodes. A program with a Supervisor refuses one that brings
-  // another.
+  // "Add program": brings the processes, sequential processes and edges of
+  // `loaded`, read from `sourceDir`, into the current program (see
+  // edits.prepareMerge), or tells the user with window.alert why it can't
+  // (see edits.mergeRefusal).
   mergeProgram: (loaded: Program, sourceDir: string) => void;
 
   setName: (
@@ -684,142 +671,16 @@ export function ProgramProvider({
 
   function mergeProgram(loaded: Program, sourceDir: string) {
 
-    if (loaded.programType !== program.programType) {
-      window.alert(
-        `Cannot add program "${loaded.name}": it is a ${loaded.programType} ` +
-        `program, and this one is a ${program.programType} program. "Add ` +
-        `program" brings in only a program of the same type.`
-      );
+    const refusal = edits.mergeRefusal(programRef.current, loaded);
+
+    if (refusal) {
+      window.alert(refusal);
       return;
     }
 
-    if (
-      program.programType === "resident" &&
-      hasSupervisor(program.processes) &&
-      hasSupervisor(loaded.processes)
-    ) {
-      window.alert(
-        `Cannot add program "${loaded.name}": it has a Supervisor, and this ` +
-        `program already has one. A program has at most one Supervisor.`
-      );
-      return;
-    }
+    const group = edits.prepareMerge(programRef.current, loaded, sourceDir, () => crypto.randomUUID());
 
-    // A process and a sequential process share one set of names, in the
-    // engine as here
-    const loadedSeqProcesses = loaded.seqProcesses ?? [];
-    const existingNames = new Set(
-      [...program.processes, ...program.seqProcesses].map(member => member.name.toLowerCase())
-    );
-    const collisionName = [...loaded.processes, ...loadedSeqProcesses].find(member =>
-      existingNames.has(member.name.toLowerCase())
-    )?.name;
-
-    if (collisionName) {
-      window.alert(
-        `Cannot add program "${loaded.name}": it has a process or sequential ` +
-        `process named "${collisionName}", whose name already exists in this ` +
-        `program. Rename the conflicting one (in either program) and try again.`
-      );
-      return;
-    }
-
-    const isResident = program.programType === "resident";
-
-    const groupId = crypto.randomUUID();
-
-    // Places the merged batch to the right of whatever's already on the
-    // canvas, preserving the relative layout its processes had in
-    // `loaded`, there's no bounding-box UI to keep in sync (see
-    // ProcessNode's per-group color instead), just a one-off offset at
-    // merge time, same spirit as addProcess's own hardcoded position.
-    const currentMaxX = program.processes.reduce(
-      (max, process) => Math.max(max, process.position.x),
-      0
-    );
-
-    const loadedMinX = loaded.processes.reduce(
-      (min, process) => Math.min(min, process.position.x),
-      Infinity
-    );
-
-    const offsetX = loadedMinX === Infinity ? 0 : currentMaxX + 250 - loadedMinX;
-
-    const idMap = new Map<string, string>();
-
-    // Names are kept exactly as in `loaded` (checked above), renaming a
-    // merged process's own name would desync it from the
-    // add_debasher_program call, which internally re-declares each
-    // process under its original name.
-    const mergedProcesses: ProgramProcess[] = loaded.processes.map(process => {
-
-      const id = crypto.randomUUID();
-      idMap.set(process.id, id);
-
-      return {
-        ...process,
-        id,
-        position: {
-          x: process.position.x + offsetX,
-          y: process.position.y,
-        },
-        groupSource: isResident
-          ? undefined
-          : {
-              programName: loaded.name,
-              groupId,
-              groupSize: loaded.processes.length + loadedSeqProcesses.length,
-              sourceDir,
-            },
-      };
-
-    });
-
-    // The sequential processes come with the processes, in the same group
-    // (a resident program has none)
-    const mergedSeqProcesses: SeqProcess[] = loadedSeqProcesses.map(seqProcess => ({
-      ...seqProcess,
-      id: crypto.randomUUID(),
-      groupSource: {
-        programName: loaded.name,
-        groupId,
-        groupSize: loaded.processes.length + loadedSeqProcesses.length,
-        sourceDir,
-      },
-    }));
-
-    const mergedEdges: ProgramEdge[] = loaded.edges.map(edge => ({
-      ...edge,
-      id: crypto.randomUUID(),
-      sourceProcessId: idMap.get(edge.sourceProcessId) ?? edge.sourceProcessId,
-      targetProcessId: idMap.get(edge.targetProcessId) ?? edge.targetProcessId,
-    }));
-
-    setProgram(current => {
-
-      const modDirEntries = (current.envVars.DEBASHER_MOD_DIR ?? "")
-        .split(MOD_DIR_SEP)
-        .map(entry => entry.trim())
-        .filter(Boolean);
-
-      // Merged process by process, a resident program loads nothing from
-      // the directory it came from.
-      const envVars = isResident || modDirEntries.includes(sourceDir)
-        ? current.envVars
-        : {
-            ...current.envVars,
-            DEBASHER_MOD_DIR: [...modDirEntries, sourceDir].join(MOD_DIR_SEP),
-          };
-
-      return {
-        ...current,
-        processes: [...current.processes, ...mergedProcesses],
-        seqProcesses: [...current.seqProcesses, ...mergedSeqProcesses],
-        edges: [...current.edges, ...mergedEdges],
-        envVars,
-      };
-
-    });
+    setProgram(current => edits.addGroup(current, group));
 
   }
 

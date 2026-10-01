@@ -6,7 +6,17 @@ import { describe, expect, it } from "vitest";
 import type { Program } from "./program";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
-import { connect, disconnect, normalizeProgram, removeProcess, updateProcess } from "./programEdits";
+import {
+  addGroup,
+  connect,
+  disconnect,
+  mergeRefusal,
+  normalizeProgram,
+  prepareMerge,
+  removeProcess,
+  updateProcess,
+} from "./programEdits";
+import { createSeqProcess } from "./seqProcess";
 
 function option(id: string, label: string): ProgramOption {
   return {
@@ -91,6 +101,70 @@ describe("the edits of a program", () => {
     expect(renamed.processes[1].options[0].value).toBe("[a;-outf]");
 
     expect(normalizeProgram(renamed).processes[1].options[0].value).toBe("[producer;-outf]");
+  });
+
+});
+
+describe("Add program", () => {
+
+  function counter() {
+    let next = 0;
+    return () => `new-${next++}`;
+  }
+
+  function other(): Program {
+    return {
+      ...program(),
+      name: "other",
+      processes: [
+        { ...process("x", [option("xo", "-outf")]), position: { x: 40, y: 10 } },
+        { ...process("y", [option("yi", "-in")]), position: { x: 90, y: 60 } },
+      ],
+      seqProcesses: [{ ...createSeqProcess("step"), id: "s1" }],
+      edges: [{ id: "e9", sourceProcessId: "id-x", sourceOptionId: "xo", targetProcessId: "id-y", targetOptionId: "yi" }],
+    };
+  }
+
+  it("refuses a name that the program has already, whatever its case", () => {
+    const loaded = { ...other(), processes: [process("A", [])] };
+    expect(mergeRefusal(program(), loaded)).toMatch(/named "A"/);
+    expect(mergeRefusal(program(), other())).toBeNull();
+  });
+
+  it("brings in copies with new ids, as one group, to the right of the canvas", () => {
+    const target = { ...program(), processes: [{ ...process("a", []), position: { x: 300, y: 0 } }] };
+
+    const group = prepareMerge(target, other(), "/src/other", counter());
+
+    const groupSource = { programName: "other", groupId: "new-0", groupSize: 3, sourceDir: "/src/other" };
+    expect(group.processes.map(p => [p.name, p.id, p.position, p.groupSource])).toEqual([
+      ["x", "new-1", { x: 550, y: 10 }, groupSource],
+      ["y", "new-2", { x: 600, y: 60 }, groupSource],
+    ]);
+    expect(group.seqProcesses.map(s => [s.name, s.id, s.groupSource])).toEqual([["step", "new-3", groupSource]]);
+    expect(group.edges).toEqual([
+      { id: "new-4", sourceProcessId: "new-1", sourceOptionId: "xo", targetProcessId: "new-2", targetOptionId: "yi" },
+    ]);
+    expect(group.modDir).toBe("/src/other");
+  });
+
+  it("brings the nodes of a resident program one by one, loading nothing from where they came from", () => {
+    const resident = (p: Program): Program => ({ ...p, programType: "resident", seqProcesses: [] });
+
+    const group = prepareMerge(resident(program()), resident(other()), "/src/other", counter());
+
+    expect(group.processes.every(p => p.groupSource === undefined)).toBe(true);
+    expect(group.modDir).toBeNull();
+  });
+
+  it("adds the directory of the group to DEBASHER_MOD_DIR once", () => {
+    const group = prepareMerge(program(), other(), "/src/other", counter());
+
+    const once = addGroup({ ...program(), envVars: { DEBASHER_MOD_DIR: "/lib" } }, group);
+    expect(once.envVars.DEBASHER_MOD_DIR).toBe("/lib:/src/other");
+    expect(once.processes.map(p => p.name)).toEqual(["a", "b", "x", "y"]);
+
+    expect(addGroup(once, group).envVars.DEBASHER_MOD_DIR).toBe("/lib:/src/other");
   });
 
 });
