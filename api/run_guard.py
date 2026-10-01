@@ -12,10 +12,8 @@ another client of the backend, so the backend checks again, with
 debasher_status, which sees a run whoever launched it.
 """
 
-import json
 import os
 import subprocess
-from pathlib import Path
 
 from fastapi import HTTPException
 
@@ -49,14 +47,9 @@ def run_in_progress(output_dir: str, debasher_mod_dir: str) -> bool:
 def _saved_output_dir(home_dir: str) -> str:
     """
     The output directory that the program metadata in `home_dir` records,
-    or "" when there is none. Read as plain JSON, so that metadata the
-    program model would refuse still names its output directory.
+    or "" when there is none.
     """
-    metadata = Path(home_dir).expanduser() / persistence.METADATA_DIRNAME / persistence.PROGRAM_FILENAME
-    try:
-        return str(json.loads(metadata.read_text()).get("outputDir", "") or "")
-    except (OSError, ValueError, AttributeError):
-        return ""
+    return str((persistence.read_raw_metadata(home_dir) or {}).get("outputDir", "") or "")
 
 
 def refuse_while_running(program: Program, action: str, home_dir: str | None = None) -> None:

@@ -39,7 +39,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import paths, persistence
+from api import paths, persistence, script_generation
 from api.models import (
     AdditionalMethods,
     AdditionalSpecs,
@@ -113,9 +113,14 @@ def _canonical_program(program: Program) -> dict:
     return {"program": top, "processes": processes, "seqProcesses": seq_processes, "edges": edges}
 
 
+def _write_script(directory: str, program: Program) -> None:
+    """Write the generated script of `program` into `directory`, as a save does."""
+    (Path(directory) / f"{program.name}.sh").write_text(script_generation.generate_script(program))
+
+
 def _generate_and_import(program: Program, debasher_mod_dir: str) -> Program:
     with tempfile.TemporaryDirectory() as tmp_dir:
-        persistence.save_script(tmp_dir, program)
+        _write_script(tmp_dir, program)
         persistence.copy_ext_alias_files(program, tmp_dir)
         return import_program_from_script(Path(tmp_dir) / f"{program.name}.sh", debasher_mod_dir)
 
@@ -511,7 +516,7 @@ def test_a_plain_function_that_an_alias_runs_survives_the_round_trip_and_runs(tm
     # The generated module defines the targets, so that it loads and runs
     saved_dir = tmp_path / "saved"
     saved_dir.mkdir()
-    persistence.save_script(str(saved_dir), imported)
+    _write_script(str(saved_dir), imported)
     script = (saved_dir / "rt_alias_target.sh").read_text()
     assert script.count("greet()") == 1
     assert script.count("increment()") == 1

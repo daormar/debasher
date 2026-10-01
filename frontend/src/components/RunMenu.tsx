@@ -2,14 +2,11 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   checkLaunch,
-  checkProgramOptions,
   getProgramStatus,
   takeSnapshot,
-  validateProgram,
 } from "../api/executionApi";
 import type { RunProgramResult } from "../api/executionApi";
 import { LaunchRecordConflict } from "../api/executionApi";
-import type { Program } from "../models/program";
 import { useProgram } from "../store/ProgramContext";
 import { HARD_KILL_CONSEQUENCES, orderlyStopOutcome, snapshotOutcome } from "../models/residentRun";
 import CommandOutputModal from "./CommandOutputModal";
@@ -114,6 +111,8 @@ export default function RunMenu() {
     runPhase,
     isRunInProgress,
     startProgramRun,
+    validateProgram,
+    checkProgramOptions,
     resetOutputDir,
     residentPhase,
     stopRun,
@@ -257,14 +256,14 @@ export default function RunMenu() {
   async function runOutputAction(
     item: MenuItem,
     title: string,
-    action: (program: Program) => Promise<string>
+    action: () => Promise<string>
   ) {
 
     setPendingAction(item);
     setActionError(null);
 
     try {
-      const output = await action(program);
+      const output = await action();
       setCommandOutput({ title, output });
       setOpen(false);
     } catch (err) {
@@ -454,7 +453,7 @@ export default function RunMenu() {
     } else if (item === "Run program") {
       handleRunProgram();
     } else if (item === "Get program status") {
-      runOutputAction(item, "Program status", getProgramStatus);
+      runOutputAction(item, "Program status", () => getProgramStatus(program));
     } else if (item === "Stop program") {
       handleStop();
     } else if (item === "Reset program state") {

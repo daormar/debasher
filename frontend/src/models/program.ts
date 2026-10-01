@@ -75,6 +75,13 @@ export interface Program {
   // from outputDir, which is where a run's results are written.
   homeDir: string;
 
+  // The revision of the program metadata that the program was loaded with,
+  // or saved as; every request that writes the program metadata names it,
+  // and the backend refuses the write when the metadata holds another (see
+  // api/revisionConflict.ts). Absent from metadata saved without it, which
+  // is at revision 0.
+  revision?: number;
+
   outputDir: string;
 
   // Absolute directory of the .sh this program was imported from (empty

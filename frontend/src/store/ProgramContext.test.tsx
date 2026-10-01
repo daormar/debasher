@@ -275,12 +275,79 @@ describe("saving a program", () => {
     });
     act(() => result.current.setDescription("edited while saving"));
     await act(async () => {
-      finishSave(new Response(null, { status: 200 }));
+      finishSave(new Response(JSON.stringify({ path: "", scriptPath: "", revision: 3 }), { status: 200 }));
       await saving;
     });
 
     expect(result.current.program.homeDir).toBe("/home/p");
     expect(result.current.program.description).toBe("edited while saving");
+    expect(result.current.program.revision).toBe(3);
+  });
+
+
+  function conflictThenLoad(saved: Program) {
+    const requests: { url: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url === "/api/programs/save") {
+        return new Response(
+          JSON.stringify({ detail: { code: "revision", revision: 7, message: "The program changed on disk." } }),
+          { status: 409 }
+        );
+      }
+      if (url === "/api/programs/load") {
+        return new Response(JSON.stringify(saved), { status: 200 });
+      }
+      throw new Error(`unexpected request to ${url}`);
+    }));
+    return requests;
+  }
+
+  const loadedProgram = (): Program => ({ ...createEmptyProgram("p"), homeDir: "/home/p", revision: 2 });
+
+  it("sends the home directory it was loaded from, which tells a save from a save as", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const requests = conflictThenLoad(loadedProgram());
+    const { result } = renderStore(loadedProgram());
+
+    await act(async () => {
+      await result.current.save("/elsewhere").catch(() => {});
+    });
+
+    expect(requests[0].body).toMatchObject({ outputDir: "/elsewhere", program: { homeDir: "/home/p", revision: 2 } });
+  });
+
+  it("keeps the tab's program when the user declines to load it again after a conflict", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    conflictThenLoad({ ...loadedProgram(), description: "saved elsewhere", revision: 7 });
+    const { result } = renderStore(loadedProgram());
+    act(() => result.current.setDescription("this tab's change"));
+
+    let error: unknown = null;
+    await act(async () => {
+      await result.current.save("/home/p").catch(err => { error = err; });
+    });
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(String(error)).toMatch(/changed on disk/);
+    expect(result.current.program.description).toBe("this tab's change");
+    expect(result.current.program.revision).toBe(2);
+  });
+
+  it("loads the program again from disk when the user agrees after a conflict", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    conflictThenLoad({ ...loadedProgram(), description: "saved elsewhere", revision: 7 });
+    const { result } = renderStore(loadedProgram());
+    act(() => result.current.setDescription("this tab's change"));
+
+    let error: unknown = null;
+    await act(async () => {
+      await result.current.save("/home/p").catch(err => { error = err; });
+    });
+
+    expect(String(error)).toMatch(/loaded again from disk/);
+    expect(result.current.program.description).toBe("saved elsewhere");
+    expect(result.current.program.revision).toBe(7);
   });
 
 });
@@ -700,3 +767,66 @@ describe("editing a process added with another program", () => {
   });
 
 });
+
+describe("the requests of a run that save the program", () => {
+
+  const runnable = (): Program => ({
+    ...createEmptyProgram("p"),
+    homeDir: "/home/p",
+    outputDir: "/out/p",
+    revision: 2,
+  });
+
+  function backend(answers: Record<string, () => Response>) {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/execution/process-statuses") {
+        return new Response(JSON.stringify({ statuses: {}, hasProgramState: false, output: "", notices: [] }));
+      }
+      if (url === "/api/execution/status") {
+        return new Response(JSON.stringify({ state: "unfinished", output: "" }));
+      }
+      const answer = answers[url];
+      if (!answer) {
+        throw new Error(`unexpected request to ${url}`);
+      }
+      return answer();
+    }));
+  }
+
+  it("take the revision that validating wrote", async () => {
+    backend({ "/api/execution/validate": () => new Response(JSON.stringify({ output: "valid", revision: 5 })) });
+    const { result } = renderStore(runnable());
+
+    let output = "";
+    await act(async () => {
+      output = await result.current.validateProgram();
+    });
+
+    expect(output).toBe("valid");
+    expect(result.current.program.revision).toBe(5);
+  });
+
+  it("offer to load the program again when a launch meets a revision conflict", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    backend({
+      "/api/execution/run": () => new Response(
+        JSON.stringify({ detail: { code: "revision", revision: 9, message: "The program changed on disk." } }),
+        { status: 409 }
+      ),
+      "/api/programs/load": () => new Response(JSON.stringify({ ...runnable(), description: "saved elsewhere", revision: 9 })),
+    });
+    const { result } = renderStore(runnable());
+
+    let error: unknown = null;
+    await act(async () => {
+      await result.current.startProgramRun().catch(err => { error = err; });
+    });
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(String(error)).toMatch(/loaded again from disk/);
+    expect(result.current.program.revision).toBe(9);
+    expect(result.current.program.description).toBe("saved elsewhere");
+  });
+
+});
+

@@ -1,0 +1,4 @@
+# The lock and the temporary file of a save of a program in place (see
+# api/persistence.py).
+*/.debasher/program.lock
+*/.debasher/program.json.tmp

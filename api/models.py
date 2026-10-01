@@ -266,6 +266,12 @@ class Program(BaseModel):
     # metadata saved without it is a general program.
     programType: Literal["general", "resident"] = "general"
     description: str = ""
+    # The revision of the program metadata that the program was loaded
+    # with, or saved as: every save that changes the program metadata
+    # increments it, and such a save into the program's own home directory
+    # is refused when the metadata there holds another (see
+    # persistence.save). Program metadata saved without it is at revision 0.
+    revision: int = 0
     preamble: str
     envVars: dict[str, str]
     homeDir: str = ""

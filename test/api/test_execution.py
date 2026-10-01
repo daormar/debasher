@@ -175,9 +175,26 @@ def _general(tmp_path, **program_fields):
     return Program(**{**defaults, **program_fields})
 
 
+def _launched(program, **kwargs):
+    """
+    Run `program` and return it at the revision that the launch saved, as
+    the tab that launched it goes on editing it.
+    """
+    response = execution.run_program(program, **kwargs)
+    assert response.exitCode == 0
+    return program.model_copy(update={"revision": response.revision})
+
+
 def _flags(command):
     """The command after `--pfile <script> --outdir <dir>`."""
     return command[5:]
+
+
+def _command(program):
+    """The debasher_exec command of `program`, with no mode flag."""
+    return execution._debasher_exec_command(
+        program, Path("debasher_exec"), Path(program.homeDir) / f"{program.name}.sh", None
+    )
 
 
 # --- the command --------------------------------------------------------------
@@ -186,7 +203,7 @@ def _flags(command):
 def test_a_general_program_is_given_every_execution_option(tmp_path):
     program = _general(tmp_path, executionOptions=_ALL_EXECUTION_OPTIONS, programOptions={"-n": "3"})
 
-    command = execution._prepare_debasher_exec_command(program, None)
+    command = _command(program)
 
     assert _flags(command) == [
         "--sched", "SLURM",
@@ -204,7 +221,7 @@ def test_a_general_program_is_given_every_execution_option(tmp_path):
 def test_a_resident_program_gets_the_built_in_scheduler_and_its_limits_only(tmp_path):
     program = _relay(tmp_path, executionOptions=_ALL_EXECUTION_OPTIONS)
 
-    command = execution._prepare_debasher_exec_command(program, None)
+    command = _command(program)
 
     assert _flags(command) == [
         "--sched", "BUILTIN",
@@ -216,7 +233,7 @@ def test_a_resident_program_gets_the_built_in_scheduler_and_its_limits_only(tmp_
 def test_the_flag_of_the_supervisor_is_given_alone_when_set(tmp_path):
     program = _relay(tmp_path, programOptions={"-no-hold-fifos": "true"})
 
-    command = execution._prepare_debasher_exec_command(program, None)
+    command = _command(program)
 
     assert _flags(command) == ["--sched", "BUILTIN", "-no-hold-fifos"]
 
@@ -224,7 +241,7 @@ def test_the_flag_of_the_supervisor_is_given_alone_when_set(tmp_path):
 def test_the_flag_of_the_supervisor_is_left_out_when_not_set(tmp_path):
     program = _relay(tmp_path, programOptions={"-no-hold-fifos": ""})
 
-    command = execution._prepare_debasher_exec_command(program, None)
+    command = _command(program)
 
     assert _flags(command) == ["--sched", "BUILTIN"]
 
@@ -1052,8 +1069,7 @@ def test_a_launch_that_fails_leaves_the_previous_record(tmp_path, monkeypatch):
 
 def test_the_same_program_resumes_its_state_without_asking(tmp_path, monkeypatch):
     _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
-    program = _relay(tmp_path)
-    assert execution.run_program(program).exitCode == 0
+    program = _launched(_relay(tmp_path))
     _with_program_state(tmp_path)
 
     described = program.model_copy(deep=True)
@@ -1073,8 +1089,7 @@ def test_the_same_program_resumes_its_state_without_asking(tmp_path, monkeypatch
 )
 def test_a_changed_program_asks_before_resuming_its_state(tmp_path, monkeypatch, change):
     _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
-    program = _relay(tmp_path)
-    assert execution.run_program(program).exitCode == 0
+    program = _launched(_relay(tmp_path))
     _with_program_state(tmp_path)
     changed = change(program)
 
@@ -1105,8 +1120,7 @@ def test_program_state_with_no_record_asks_too(tmp_path, monkeypatch):
 
 def test_a_program_with_no_state_never_asks(tmp_path, monkeypatch):
     _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
-    program = _relay(tmp_path)
-    assert execution.run_program(program).exitCode == 0
+    program = _launched(_relay(tmp_path))
 
     changed = _with_code(program, "pass")
 

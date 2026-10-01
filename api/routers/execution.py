@@ -19,6 +19,7 @@ from .. import (
     program_state,
     resident_fifos,
     run_guard,
+    saving,
     tool_sessions,
 )
 from ..models import Program
@@ -110,23 +111,28 @@ def _execution_option_flags(program: Program) -> list[str]:
     return flags
 
 
-def _prepare_debasher_exec_command(program: Program, mode_flag: str | None) -> list[str] | None:
+def _prepare_exec(program: Program) -> tuple[Path, persistence.SavedProgram]:
     """
-    Save `program` to its home directory (the same as pressing "Save"
-    in the toolbar, generating its .sh file there) and build the
-    debasher_exec command line for it, passing the scheduler, the run
-    output directory, the other execution options, `mode_flag` when
-    given, and the command line options set via "Set program options".
-
-    Returns None if debasher_exec isn't found.
+    Find debasher_exec and save `program` to its home directory, as "Save"
+    in the toolbar does (see saving.save_or_refuse), before debasher_exec
+    runs its generated script. debasher_exec is looked for first, so that
+    nothing is written when it is missing, which is a server error.
     """
-    persistence.save_program(program.homeDir, program)
-    script_path = persistence.save_script(program.homeDir, program)
-
     tool = paths.find_bin_tool("debasher_exec")
     if tool is None:
-        return None
+        raise HTTPException(status_code=500, detail="debasher_exec tool not found.")
+    return tool, saving.save_or_refuse(program.homeDir, program)
 
+
+def _debasher_exec_command(
+    program: Program, tool: Path, script_path: Path, mode_flag: str | None
+) -> list[str]:
+    """
+    The debasher_exec command line for the generated script at
+    `script_path`, passing the scheduler, the run output directory, the
+    other execution options, `mode_flag` when given, and the command line
+    options set via "Set program options".
+    """
     command = [
         str(tool),
         "--pfile", str(script_path),
@@ -155,14 +161,18 @@ def _program_option_args(program: Program) -> list[str]:
     return args
 
 
-def _run_debasher_exec(program: Program, mode_flag: str) -> str:
-    command = _prepare_debasher_exec_command(program, mode_flag)
-    if command is None:
-        return "Error: debasher_exec tool not found."
+def _run_debasher_exec(program: Program, mode_flag: str) -> tuple[str, int]:
+    """
+    Save the program and run debasher_exec with `mode_flag` on it, waiting
+    for its end. Returns what it printed and the revision of the program
+    metadata just written.
+    """
+    tool, saved = _prepare_exec(program)
+    command = _debasher_exec_command(program, tool, saved.script_path, mode_flag)
 
     result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
-    return result.stdout + result.stderr
+    return result.stdout + result.stderr, saved.revision
 
 
 def _run_debasher_dir_tool(program: Program, tool_name: str, outdir: str | None = None) -> tuple[str, int]:
@@ -319,6 +329,9 @@ class RunProgramResponse(BaseModel):
     # printed, capped at MAX_INSPECT_LINES lines.
     exitCode: int | None = None
     output: str | None = None
+    # The revision of the program metadata that the launch wrote, when it
+    # got as far as saving the program (see persistence.save).
+    revision: int | None = None
 
 
 _RUN_LOG_NAME = ".debasher_webui_run.log"
@@ -456,7 +469,7 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
     frontend asks before sending the request; this checks again, since
     another tab may have launched the program in between.
     """
-    # Launching saves the program first (see _prepare_debasher_exec_command).
+    # Launching saves the program first (see _prepare_exec).
     run_guard.refuse_while_running(program, "run the program", program.homeDir)
 
     if _is_resident(program) and not resumeChangedProgram:
@@ -467,11 +480,21 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
                 detail={"code": LAUNCH_RECORD_CONFLICT, "hasLaunchRecord": check.hasLaunchRecord},
             )
 
+    tool, saved = _prepare_exec(program)
+    response = _launch(program, tool, saved.script_path)
+    return response.model_copy(update={"revision": saved.revision})
+
+
+def _launch(program: Program, tool: Path, script_path: Path) -> RunProgramResponse:
+    """
+    Launch the program saved as `script_path` with `tool`: a resident
+    program, or one run by Slurm, is waited for; a general program run by
+    the built-in scheduler is validated first and then started detached.
+    The response has no revision yet: run_program adds it.
+    """
     # No --wait: with the built-in scheduler it changes nothing, and with
     # Slurm it would keep debasher_exec alive for the whole run, only to wait.
-    command = _prepare_debasher_exec_command(program, None)
-    if command is None:
-        raise HTTPException(status_code=500, detail="debasher_exec tool not found.")
+    command = _debasher_exec_command(program, tool, script_path, None)
 
     if _is_resident(program):
         return _launch_resident_program(command, program)
@@ -484,7 +507,7 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
     # validated first, within the request, so that a program that the engine
     # refuses is reported at once rather than leaving the output directory as
     # it was, which the run phase would take for the end of a run.
-    validation = _prepare_debasher_exec_command(program, "--validate")
+    validation = _debasher_exec_command(program, tool, script_path, "--validate")
     response = _launch_and_wait(validation, program)
     if response.exitCode != 0:
         return response
@@ -498,6 +521,8 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
 
 class ValidateProgramResponse(BaseModel):
     output: str
+    # The revision of the program metadata written before validating.
+    revision: int
 
 
 @router.post("/validate", response_model=ValidateProgramResponse)
@@ -509,7 +534,8 @@ def validate_program(program: Program) -> ValidateProgramResponse:
     since it saves the program first.
     """
     run_guard.refuse_while_running(program, "validate the program", program.homeDir)
-    return ValidateProgramResponse(output=_run_debasher_exec(program, "--validate"))
+    output, revision = _run_debasher_exec(program, "--validate")
+    return ValidateProgramResponse(output=output, revision=revision)
 
 
 class ProgramStatusResponse(BaseModel):
@@ -1061,6 +1087,8 @@ def inspect_path(request: InspectPathRequest) -> InspectPathResponse:
 
 class CheckProgramOptionsResponse(BaseModel):
     output: str
+    # The revision of the program metadata written before checking.
+    revision: int
 
 
 @router.post("/check-program-options", response_model=CheckProgramOptionsResponse)
@@ -1071,9 +1099,8 @@ def check_program_options(program: Program) -> CheckProgramOptionsResponse:
     first.
     """
     run_guard.refuse_while_running(program, "check the program options", program.homeDir)
-    return CheckProgramOptionsResponse(
-        output=_run_debasher_exec(program, "--check-proc-opts")
-    )
+    output, revision = _run_debasher_exec(program, "--check-proc-opts")
+    return CheckProgramOptionsResponse(output=output, revision=revision)
 
 
 class StopProgramResponse(BaseModel):

@@ -123,7 +123,7 @@ def test_program_metadata_saved_without_the_fields_is_a_general_program(tmp_path
 def test_a_resident_program_keeps_what_it_adds_in_its_metadata(tmp_path):
     program = _resident_program()
 
-    persistence.save_program(str(tmp_path), program)
+    persistence.save(str(tmp_path), program)
     loaded = persistence.load_program(str(tmp_path))
 
     assert loaded.programType == "resident"

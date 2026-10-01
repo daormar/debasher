@@ -1,6 +1,7 @@
 import type { InspectNodeCommand, NodeNotice } from "../models/nodeState";
 import type { Program } from "../models/program";
 import type { ResidentFifoRead, TalkMode } from "../models/residentTalk";
+import { throwIfRevisionConflict } from "./revisionConflict";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
@@ -35,6 +36,17 @@ export interface RunProgramResult {
   // program.
   exitCode: number | null;
   output: string | null;
+  // The revision of the program metadata that the launch saved, null when
+  // it did not get as far as saving.
+  revision: number | null;
+}
+
+// What "Validate program" and "Check program options" answer: what
+// debasher_exec printed, and the revision of the program metadata saved
+// before it ran.
+export interface SavedOutput {
+  output: string;
+  revision: number;
 }
 
 // /run refused to resume the program state of a resident program, since the
@@ -74,14 +86,16 @@ export async function runProgram(
     }
   }
 
+  await throwIfRevisionConflict(response);
+
   if (!response.ok) {
     throw new Error(
       await errorDetail(response, `Failed to run program (${response.status})`)
     );
   }
 
-  const { started, exitCode, output } = await response.json();
-  return { started, exitCode: exitCode ?? null, output: output ?? null };
+  const { started, exitCode, output, revision } = await response.json();
+  return { started, exitCode: exitCode ?? null, output: output ?? null, revision: revision ?? null };
 }
 
 export interface LaunchCheckResult {
@@ -109,19 +123,21 @@ export async function checkLaunch(program: Program): Promise<LaunchCheckResult> 
 // "Validate program" (debasher_exec --validate): everything but launching
 // the processes, and, with the built-in scheduler, the resources of each
 // process against its limits.
-export async function validateProgram(program: Program): Promise<string> {
+export async function validateProgram(program: Program): Promise<SavedOutput> {
   const response = await fetch("/api/execution/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
   });
 
+  await throwIfRevisionConflict(response);
+
   if (!response.ok) {
     throw new Error(await errorDetail(response, `Failed to validate the program (${response.status})`));
   }
 
-  const { output } = await response.json();
-  return output;
+  const { output, revision } = await response.json();
+  return { output, revision };
 }
 
 export type ProgramState = "finished" | "in-progress" | "unfinished";
@@ -517,19 +533,21 @@ export async function getProcessTasks(
   return taskIndices;
 }
 
-export async function checkProgramOptions(program: Program): Promise<string> {
+export async function checkProgramOptions(program: Program): Promise<SavedOutput> {
   const response = await fetch("/api/execution/check-program-options", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
   });
 
+  await throwIfRevisionConflict(response);
+
   if (!response.ok) {
     throw new Error(await errorDetail(response, `Failed to check program options (${response.status})`));
   }
 
-  const { output } = await response.json();
-  return output;
+  const { output, revision } = await response.json();
+  return { output, revision };
 }
 
 // Deletes everything inside program.outputDir. Resolves to false

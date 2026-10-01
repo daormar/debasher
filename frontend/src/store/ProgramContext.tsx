@@ -26,7 +26,7 @@ import type { SeqProcess } from "../models/seqProcess";
 import type { Position } from "../models/position";
 import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
 import { reorderOptionRow } from "../models/optionLayout";
-import { saveProgram } from "../storage/programStorage";
+import { loadProgram, saveProgram } from "../storage/programStorage";
 import type {
   ResetProgramStateResult,
   RunProgramResult,
@@ -35,7 +35,8 @@ import type {
 import type { GeneralRunPhase } from "../models/generalRun";
 import type { ResidentRunPhase } from "../models/residentRun";
 import type { NodeNotice } from "../models/nodeState";
-import { useProgramRun } from "./useProgramRun";
+import { useProgramRun, type WriteProgram } from "./useProgramRun";
+import { RevisionConflict } from "../api/revisionConflict";
 
 export type ProgramRunPhase = GeneralRunPhase;
 
@@ -104,6 +105,12 @@ interface ProgramContextType {
   // program with a program that differs from the launch record (see
   // runProgram). Nothing that happens to the tab stops the run.
   startProgramRun: (resumeChangedProgram?: boolean) => Promise<RunProgramResult>;
+
+  // "Validate program" and "Check program options": both save the program
+  // first, and answer with what debasher_exec printed.
+  validateProgram: () => Promise<string>;
+
+  checkProgramOptions: () => Promise<string>;
 
   // The run phase of a resident program, derived from processStatuses,
   // from whether the output directory holds program state, and from a
@@ -306,7 +313,7 @@ export function ProgramProvider({
   async function save(outputDir: string) {
 
     // Saving regenerates the .sh script in homeDir (see
-    // persistence.save_script), but engine/debasher_exec_process
+    // persistence.save), but engine/debasher_exec_process
     // reloads that same file from disk each time a process starts,
     // not just once when the run launches. Overwriting it while a run
     // is in progress can leave already-started processes on the old
@@ -336,12 +343,50 @@ export function ProgramProvider({
       );
     }
 
-    await saveProgram({ ...program, homeDir: outputDir }, outputDir);
-    // Only homeDir is taken from the saved copy: the user may have kept
-    // editing while the request was in flight, and putting the copy back
-    // whole would silently drop those edits.
+    // The program goes with the home directory it was loaded from, which
+    // tells the backend a save into it, checked against the revision of the
+    // program metadata there, from a save into another directory.
+    await writeProgram(() => saveProgram(program, outputDir));
+    // Only homeDir and the revision are taken from the save: the user may
+    // have kept editing while the request was in flight, and putting the
+    // saved copy back whole would silently drop those edits.
     setProgram(current => ({ ...current, homeDir: outputDir }));
   }
+
+  // Replaces the program of the tab with the one saved in its home
+  // directory.
+  async function reloadFromDisk() {
+    const loaded = await loadProgram(programRef.current.homeDir);
+    setProgram(() => loaded);
+  }
+
+  // Sends a request that writes the program metadata, and takes the
+  // revision it wrote. When someone else saved the program since it was
+  // loaded, the backend refuses it, and the user may load the program
+  // again, which loses what this tab changed since it was loaded.
+  const writeProgram: WriteProgram = async request => {
+    let result;
+    try {
+      result = await request();
+    } catch (err) {
+      if (
+        err instanceof RevisionConflict &&
+        window.confirm(
+          `${err.message}\n\nLoad it again now? What was changed in this tab ` +
+          "since it was loaded is lost."
+        )
+      ) {
+        await reloadFromDisk();
+        throw new Error("The program was loaded again from disk, with the changes saved elsewhere.");
+      }
+      throw err;
+    }
+    const { revision } = result;
+    if (revision !== null) {
+      setProgram(current => ({ ...current, revision }));
+    }
+    return result;
+  };
 
   const {
     isRunInProgress,
@@ -352,11 +397,13 @@ export function ProgramProvider({
     nodeNotices,
     residentPhase,
     startProgramRun,
+    validateProgram,
+    checkProgramOptions,
     stopRun,
     killResidentProgram,
     resetOutputDir,
     resetProgramState,
-  } = useProgramRun(program, programRef);
+  } = useProgramRun(program, programRef, writeProgram);
 
   const [selectedProcessId, setSelectedProcessId] =
     useState<string | null>(null);
@@ -612,6 +659,10 @@ export function ProgramProvider({
     resetProgramState,
 
     startProgramRun,
+
+    validateProgram,
+
+    checkProgramOptions,
 
     runEndSeen,
 

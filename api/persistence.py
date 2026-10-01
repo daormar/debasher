@@ -1,6 +1,9 @@
+import fcntl
 import json
+import os
 import shutil
-
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import script_generation
@@ -12,6 +15,10 @@ from .models import Program
 METADATA_DIRNAME = ".debasher"
 
 PROGRAM_FILENAME = "program.json"
+
+# The lock file that a save holds while it compares and writes the revision
+# of the program metadata (see save).
+LOCK_FILENAME = "program.lock"
 
 
 def is_reserved_name(name: str) -> bool:
@@ -49,6 +56,20 @@ def same_dir(a: str, b: str) -> bool:
     return Path(a).expanduser().resolve() == Path(b).expanduser().resolve()
 
 
+def read_raw_metadata(home_dir: str) -> dict | None:
+    """
+    The program metadata in `home_dir` as plain JSON, so that metadata the
+    program model would refuse can still be read, or None when it is absent
+    or is not a JSON object.
+    """
+    metadata_path = Path(home_dir).expanduser() / METADATA_DIRNAME / PROGRAM_FILENAME
+    try:
+        metadata = json.loads(metadata_path.read_text())
+    except (OSError, ValueError):
+        return None
+    return metadata if isinstance(metadata, dict) else None
+
+
 def delete_stale_script(output_dir: str, new_name: str) -> None:
     """
     If a program was already saved to `output_dir` under a different
@@ -57,20 +78,12 @@ def delete_stale_script(output_dir: str, new_name: str) -> None:
     otherwise renaming a program leaves a stale script sitting alongside
     the current one on every subsequent save.
 
-    Must be called before save_program overwrites the metadata file,
-    since that's the only record of what the program used to be named.
-    A missing or unreadable metadata file just means there's no prior
-    save to clean up after, not an error.
+    Called by save before it replaces the metadata file, since that's the
+    only record of what the program used to be named. A missing or
+    unreadable metadata file just means there's no prior save to clean up
+    after, not an error.
     """
-    metadata_path = Path(output_dir).expanduser() / METADATA_DIRNAME / PROGRAM_FILENAME
-
-    if not metadata_path.is_file():
-        return
-
-    try:
-        old_name = json.loads(metadata_path.read_text()).get("name")
-    except (OSError, ValueError):
-        return
+    old_name = (read_raw_metadata(output_dir) or {}).get("name")
 
     if not old_name or old_name == new_name:
         return
@@ -129,42 +142,6 @@ def copy_ext_alias_files(program: Program, output_dir: str) -> None:
             continue
 
 
-def save_program(output_dir: str, program: Program) -> Path:
-    """
-    Serialize `program` into <output_dir>/.debasher/program.json,
-    creating `output_dir` (and the hidden directory) if needed.
-
-    Returns the path to the written file.
-    """
-    resolved_output_dir = Path(output_dir).expanduser()
-    resolved_output_dir.mkdir(parents=True, exist_ok=True)
-
-    metadata_dir = resolved_output_dir / METADATA_DIRNAME
-    metadata_dir.mkdir(parents=True, exist_ok=True)
-
-    program_path = metadata_dir / PROGRAM_FILENAME
-    program_path.write_text(program.model_dump_json(indent=2))
-
-    return program_path
-
-
-def save_script(output_dir: str, program: Program) -> Path:
-    """
-    Generate `program`'s Bash script via `script_generation.generate_script`
-    and write it to <output_dir>/<program.name>.sh, creating `output_dir`
-    if needed.
-
-    Returns the path to the written file.
-    """
-    resolved_output_dir = Path(output_dir).expanduser()
-    resolved_output_dir.mkdir(parents=True, exist_ok=True)
-
-    script_path = resolved_output_dir / f"{program.name}.sh"
-    script_path.write_text(script_generation.generate_script(program))
-
-    return script_path
-
-
 def load_program(input_dir: str) -> Program:
     """
     Read and deserialize <input_dir>/.debasher/program.json.
@@ -203,3 +180,117 @@ def resolve_script_path(script_path: str) -> Path:
         raise FileNotFoundError(f"No such file: {resolved_script_path}")
 
     return resolved_script_path
+
+
+class RevisionConflict(Exception):
+    """
+    A save that names a revision of the program metadata other than the one
+    the home directory holds: someone else saved the program since it was
+    loaded. `revision` is the one it holds.
+    """
+
+    def __init__(self, revision: int):
+        super().__init__(
+            "The program changed on disk since it was loaded (another tab or "
+            "another client of the backend saved it). Load it again to see "
+            "those changes: saving now would discard them."
+        )
+        self.revision = revision
+
+
+def _saved_revision(home_dir: str) -> int | None:
+    """
+    The revision of the program metadata in `home_dir`, 0 for metadata that
+    records none or cannot be read, or None when there is no program
+    metadata there.
+    """
+    if not (Path(home_dir).expanduser() / METADATA_DIRNAME / PROGRAM_FILENAME).is_file():
+        return None
+    revision = (read_raw_metadata(home_dir) or {}).get("revision", 0)
+    return revision if isinstance(revision, int) else 0
+
+
+@contextmanager
+def _metadata_lock(home_dir: Path):
+    metadata_dir = home_dir / METADATA_DIRNAME
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    with open(metadata_dir / LOCK_FILENAME, "a") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def _same_metadata(program_path: Path, program: Program) -> bool:
+    """
+    Whether the program metadata at `program_path` holds `program`, apart
+    from its revision and its home directory, which loading replaces.
+    """
+    try:
+        saved = Program.model_validate_json(program_path.read_text())
+    except (OSError, ValueError):
+        return False
+    ignored = {"revision", "homeDir"}
+    return saved.model_dump(exclude=ignored) == program.model_dump(exclude=ignored)
+
+
+@dataclass
+class SavedProgram:
+    program_path: Path
+    script_path: Path
+    revision: int
+
+
+def save(home_dir: str, program: Program) -> SavedProgram:
+    """
+    Save `program` into `home_dir`: its program metadata with the next
+    revision, its generated script, the files of its relative external
+    aliases (see copy_ext_alias_files), and, when it was renamed, the
+    removal of the script with its old name.
+
+    The script is generated first, so that a program that script generation
+    refuses (ValueError, NotImplementedError) leaves the home directory as it
+    was. A save that would leave the program metadata as it is (apart from
+    its revision and home directory) keeps its revision, whatever revision
+    the program names: it overwrites nobody's work. Any other save into the
+    program's own home directory is refused with RevisionConflict unless the
+    program metadata there holds the revision the program was loaded with
+    (`program.revision`); a save into another directory replaces
+    what is there, as a first save does. The comparison and the writes happen
+    under a lock on the program metadata, so that two saves arriving together
+    cannot both pass the comparison.
+    """
+    script = script_generation.generate_script(program)
+
+    home = Path(home_dir).expanduser()
+    home.mkdir(parents=True, exist_ok=True)
+
+    program_path = home / METADATA_DIRNAME / PROGRAM_FILENAME
+
+    with _metadata_lock(home):
+        current = _saved_revision(home_dir)
+
+        if current is not None and _same_metadata(program_path, program):
+            revision = current
+        else:
+            if current is not None and same_dir(home_dir, program.homeDir) and current != program.revision:
+                raise RevisionConflict(current)
+
+            # Before the metadata is replaced, since it is the only record
+            # of the old name.
+            delete_stale_script(home_dir, program.name)
+
+            revision = (current or 0) + 1
+            saved = program.model_copy(update={"revision": revision, "homeDir": str(home)})
+            temp_path = program_path.with_suffix(".json.tmp")
+            temp_path.write_text(saved.model_dump_json(indent=2))
+            os.replace(temp_path, program_path)
+
+        script_path = home / f"{program.name}.sh"
+        script_path.write_text(script)
+
+    copy_ext_alias_files(program, home_dir)
+
+    return SavedProgram(program_path=program_path, script_path=script_path, revision=revision)
+

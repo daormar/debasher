@@ -10,6 +10,8 @@ import {
   resetProgramState as requestProgramStateReset,
   runProgram,
   stopProgram,
+  checkProgramOptions as requestOptionsCheck,
+  validateProgram as requestValidation,
 } from "../api/executionApi";
 import type { GeneralRunTracking } from "../models/generalRun";
 import {
@@ -29,14 +31,20 @@ import type { NodeNotice } from "../models/nodeState";
 // whoever launched the run in it.
 const PROCESS_STATUS_POLL_INTERVAL_MS = 5000;
 
+// How the store sends a request of the run that saves the program first
+// (launching, validating, checking its options): it handles a revision
+// conflict, which it rethrows, and takes the revision the request wrote.
+export type WriteProgram = <T extends { revision: number | null }>(request: () => Promise<T>) => Promise<T>;
+
 /**
  * The run of the program in its output directory as the tab follows it: the
  * process statuses, polled while an output directory is set, the run phase
  * derived from them and from the requests of the tab not answered yet, and
- * the requests themselves (launch, stop, kill, and the resets). `programRef`
- * holds the latest program, which a poll sends.
+ * the requests themselves (launch, stop, kill, validate, check the options,
+ * and the resets). `programRef` holds the latest program, which a poll
+ * sends, and `writeProgram` sends the requests that save the program.
  */
-export function useProgramRun(program: Program, programRef: RefObject<Program>) {
+export function useProgramRun(program: Program, programRef: RefObject<Program>, writeProgram: WriteProgram) {
 
   async function ensureNoRunInProgress() {
 
@@ -91,7 +99,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>) 
     if (program.programType === "resident") {
       return withRunRequest("launching", async () => {
         await ensureNoRunInProgress();
-        return runProgram(program, resumeChangedProgram);
+        return writeProgram(() => runProgram(program, resumeChangedProgram));
       });
     }
 
@@ -102,7 +110,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>) 
 
     try {
       await ensureNoRunInProgress();
-      const result = await runProgram(program);
+      const result = await writeProgram(() => runProgram(program));
       if (result.started) {
         setGeneralTracking(LAUNCHED_GENERAL_TRACKING);
       }
@@ -111,6 +119,18 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>) 
       setRunRequest(null);
     }
 
+  }
+
+  // "Validate program" and "Check program options", which save the program
+  // before debasher_exec runs; each answers with what it printed.
+  async function validateProgram() {
+    const { output } = await writeProgram(() => requestValidation(program));
+    return output;
+  }
+
+  async function checkProgramOptions() {
+    const { output } = await writeProgram(() => requestOptionsCheck(program));
+    return output;
   }
 
   function stopRun() {
@@ -262,6 +282,8 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>) 
     nodeNotices,
     residentPhase,
     startProgramRun,
+    validateProgram,
+    checkProgramOptions,
     stopRun,
     killResidentProgram,
     resetOutputDir,

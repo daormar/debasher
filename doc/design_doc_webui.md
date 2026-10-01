@@ -154,10 +154,10 @@ refer to it.
   (`Program.outputDir`).
 - **program metadata**: the program model saved as JSON in
   `.debasher/program.json` under the home directory.
-- **revision**: a counter in the program metadata that every save increments;
-  a write of the program metadata names the revision it started from, and is
-  refused when the program metadata holds another (see "Revisions of the
-  program metadata"; designed, not built).
+- **revision**: a counter in the program metadata that a save which changes it
+  increments; a write into the program's own home directory that would change
+  the metadata is refused when the metadata there holds another revision than
+  the one the program was loaded with (see "Revisions of the program metadata").
 - **generated script**: the module that script generation writes as `<name>.sh`
   in the home directory.
 - **reserved name**: a file or directory name that the engine or the web UI
@@ -641,10 +641,9 @@ or `fifo`, or whose input is not connected to a process in `array` or
 `generator` mode; a connection to a fanout family from a process in another
 mode; and a sequential process in a resident program, or with the name of a
 process or of another sequential process (see "Generating and importing a
-sequential process"). The save writes the program metadata before it generates
-the script, so a program that script generation refuses is still saved, and the
-home directory keeps the script of the previous save. The save answers with the
-reason of the refusal, which the frontend shows.
+sequential process"). The save generates the script before it writes anything,
+so a program that script generation refuses leaves the home directory as it was.
+The save answers with the reason of the refusal, which the frontend shows.
 
 ## Environment variables of a program
 
@@ -824,14 +823,15 @@ whole program model as JSON), the generated script (`<name>.sh`) and the user
 files.
 
 **Saving.** The user saves into a directory of their choice, which becomes the
-program's home directory. The backend writes the program metadata, then the
-generated script, and then copies the file of each `ext_alias` given as a
-relative path from the program's `sourceDir` into the home directory, at the
-same relative path: the engine resolves such a path against the directory of
-the module that declares it, so without the copy a program imported and saved
-elsewhere would lose its aliased scripts. When the program has been renamed
-since the last save, the backend first deletes the script with the old name,
-which it reads from the program metadata before overwriting it.
+program's home directory. The backend generates the script first, so that a
+program that script generation refuses leaves the home directory as it was, then
+writes the program metadata, then the generated script, and then copies the file
+of each `ext_alias` given as a relative path from the program's `sourceDir` into
+the home directory, at the same relative path: the engine resolves such a path
+against the directory of the module that declares it, so without the copy a
+program imported and saved elsewhere would lose its aliased scripts. When the
+program has been renamed since the last save, the backend deletes the script
+with the old name before it writes the metadata, from which it reads that name.
 
 A save is refused while there is a run in progress on the output directory. The
 engine reads the generated script again each time it starts a process, so
@@ -846,11 +846,12 @@ save that changes the output directory still writes the script that a run in the
 old one reads.
 
 Running also saves. "Run program", "Validate program" and "Check program
-options" all save the program metadata and the generated script into the home
-directory before calling `debasher_exec` (see "Launching a run"), so that the
-engine always runs the program as it is in the editor. All three are refused
-while there is a run in progress, by the frontend, which disables them, and by
-the backend, with the same check as a save.
+options" all save the program into the home directory, as a save does and with
+its revision (see "Revisions of the program metadata"), before calling
+`debasher_exec` (see "Launching a run"), so that the engine always runs the
+program as it is in the editor. All three are refused while there is a run in
+progress, by the frontend, which disables them, and by the backend, with the
+same check as a save.
 
 **Loading.** Loading reads the program metadata of a directory and opens the
 program as it was saved, except for `homeDir`, which becomes the absolute path
@@ -879,6 +880,35 @@ general program to its end, and a resident one, which does not end on its own,
 launched, fed through its external input until its output read outside the
 program carries the expected message, and stopped in an orderly way, after which
 every node has to be finished.
+
+## Revisions of the program metadata
+
+Two tabs, or a tab and another client of the backend, may edit the same
+program, and without a guard the last save would overwrite what another saved
+since its tab loaded the program. The program metadata therefore holds a
+**revision**, a counter that a save increments. Loading returns it, the store
+keeps it, and every request that writes the program metadata (saving, and the
+requests that save before they run, such as "Run program") carries it and,
+when it succeeds, answers with the revision it wrote.
+
+The backend refuses the write, with a conflict whose detail names the revision
+it holds, when the program goes into its own home directory, the metadata there
+holds another revision, and the write would change what the metadata holds apart
+from its revision and home directory. A write that changes nothing keeps the
+revision and is never refused, since it overwrites nobody's work. The store
+sends the program with the home directory it was loaded from, so the backend
+tells a save into it from a save into another directory, which replaces what is
+there, as a first save into a directory with no program metadata does. The
+backend makes the comparison and the writes under a lock on the program
+metadata, and replaces the metadata file whole, so that two writes arriving
+together cannot both pass the comparison (`persistence.save`).
+
+When a write is refused, the editor says that the program changed on disk since
+it was loaded, and offers to load it again. Loading it again replaces the
+program of the tab with the one on disk, and loses what was changed in the tab
+since it was loaded; declining keeps the tab as it is, and its saves into the
+home directory stay refused until the program is loaded again. The revision is a
+guard against overwriting, not a merge.
 
 ## Reserved names and user files
 
@@ -1400,6 +1430,9 @@ non-goals of a resident program".
 
 - **Two directories apart.** A program is never saved into its output
   directory, and the output directory is never set to the home directory.
+- **No save over another's.** A save into a program's own home directory never
+  overwrites what another tab or client saved there since the program was loaded
+  (see "Revisions of the program metadata").
 - **A program lives where it is loaded from.** Its home directory is the
   directory it was loaded from, even if it was copied or moved there (see
   "The home directory").
@@ -1443,8 +1476,10 @@ non-goals of a resident program".
   authentication, and it runs every tool, and reads any path, as the user who
   started it. It listens only on the local machine unless told otherwise.
 - **Several people on one program.** Two tabs on the same program or the same
-  directories are not coordinated: the last save wins, and only the guards
-  based on the engine's own files (a run in progress) see the other tab.
+  directories are not coordinated beyond two guards: a save over what another
+  saved since the program was loaded is refused (see "Revisions of the program
+  metadata"), and the guards based on the engine's own files (a run in progress)
+  see the other tab. Nothing merges the changes of two tabs.
 - **Keeping unsaved work.** There is no autosave, no undo and no warning
   before unsaved changes are lost.
 - **Live updates.** The web UI learns what happens in a run by polling, every
@@ -2726,10 +2761,10 @@ MCP tools. It is a second client of the backend, beside the frontend, and a
 first move towards an assistant in the web UI that helps to design and build a
 program, which would call the same MCP tools (see "Future work"). This section
 is a design: apart from what it relies on that the editor has too, the distinct
-option labels (see "Processes and options") and the guards of the backend
-against a run in progress (see "The home directory"), nothing in it is built
-yet, and the guarantees and non-goals stated before it do not change until it
-is.
+option labels (see "Processes and options"), the guards of the backend against a
+run in progress (see "The home directory") and the revisions of the program
+metadata (see "Revisions of the program metadata"), nothing in it is built yet,
+and the guarantees and non-goals stated before it do not change until it is.
 
 The design follows from one rule: the MCP server edits a program with the
 same code as the editor. The edits, their validation, the rule of which groups
@@ -2786,7 +2821,10 @@ with the actions that the store takes, and an answer in place of the dialogs:
    came from, unless the call says `detach_groups`, in which case the groups
    are dissolved with the edits, as when the user agrees.
 5. Apply them with `applyEdits`, which normalizes the result.
-6. Save the program, naming the revision it was loaded with.
+6. Save the program, naming the revision it was loaded with. A save refused
+   for its revision ends the call with the message of the backend's conflict,
+   and the agent loads the program again (see "Revisions of the program
+   metadata").
 
 An MCP tool called with `dry_run` stops before the save and answers with a
 **proposal**: a summary of what the edits would change, the groups they would
@@ -2798,27 +2836,6 @@ A process added by an agent has no position chosen by hand. The MCP server
 places it to the right of the rightmost process, with a function of the model
 that the editor can use too, so that the canvas shows every process apart; an
 agent can move it afterwards.
-
-## Revisions of the program metadata
-
-Today the last save wins (see "Non-goals"): a tab that saves a program
-overwrites what another tab saved since it loaded it. A tab and an agent
-editing the same program would lose work the same way, silently, and an agent
-saves often. The program metadata therefore gets a **revision**, a counter
-that every save increments. Loading returns it, the store and the MCP server
-keep it, and every request that writes the program metadata (saving, and the
-requests that save before they run, such as "Run program") names the revision
-that it started from and, when it succeeds, answers with the new one. The
-backend compares the two and writes under a lock on the program metadata, so
-that two writes arriving together cannot both pass the comparison. It refuses
-the write when the program metadata holds another revision, and answers with
-the one it holds. The editor then says that the program changed on disk since
-it was loaded, and offers to load it again; the MCP server ends the call with
-the same message, and the agent loads the program again. Only a first save
-into a directory with no program metadata names no revision, which is why
-`create_program` and `import_module` refuse a directory that already holds
-one. The revision is a guard against overwriting, not a merge: the edits of
-the side that is refused are lost unless it makes them again.
 
 ## The MCP tools
 
@@ -2834,13 +2851,16 @@ output of a process is cut to its last lines unless the call asks for more.
 - **The library.** `search_library` and `get_library_process`, which list and
   describe the processes and nodes that the modules of the preamble define,
   through the `processes` endpoints.
-- **Editing.** `create_program`; `add_process`, `update_process`,
-  `remove_process` and `move_process`; `add_option`, `update_option` and
-  `remove_option`; `connect` and `disconnect`; `set_program_settings` (name,
-  description, preamble, environment variables, output directory, execution
-  options and program options); `set_seq_processes`; and `apply_edits`, which
-  takes a list of named edits and applies them whole or not at all. Each takes
-  `dry_run` and `detach_groups`. "Add program" is not offered.
+- **Editing.** `create_program`, which, like `import_module`, refuses a
+  directory that already holds program metadata, since a save of a program not
+  loaded from a directory replaces what is there (see "Revisions of the program
+  metadata"); `add_process`, `update_process`, `remove_process` and
+  `move_process`; `add_option`, `update_option` and `remove_option`; `connect`
+  and `disconnect`; `set_program_settings` (name, description, preamble,
+  environment variables, output directory, execution options and program
+  options); `set_seq_processes`; and `apply_edits`, which takes a list of named
+  edits and applies them whole or not at all. Each takes `dry_run` and
+  `detach_groups`. "Add program" is not offered.
 - **Running.** `validate_program` (validating the program and checking its
   options, as the Run menu does), `run_program`, `stop_program` (an orderly
   stop or a hard kill), `get_status` (the run phase and the process statuses),
@@ -2874,9 +2894,8 @@ check is tested in the backend's own tests.
 # Future work
 
 - **Building the MCP server.** Building what "Editing a program from an agent:
-  the MCP server" designs: the revisions of the program metadata, the resolution
-  of named edits, the placement of a new process, and the server with its MCP
-  tools.
+  the MCP server" designs: the resolution of named edits, the placement of a new
+  process, and the server with its MCP tools.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what
@@ -2888,9 +2907,6 @@ check is tested in the backend's own tests.
 - **Round trip at run time.** Running each module of `data/programs/` and the
   module generated from it, and comparing what they do, beyond the comparison
   of models that `test/api/test_round_trip.py` makes.
-- **Refused programs and the saved script.** Generating the script before
-  writing the program metadata, so that a program that script generation
-  refuses leaves the home directory as it was.
 - **The group on the canvas.** Adding the group to the structural key of the
   canvas, so that a dissolved group loses its color and badge at once (see
   "Keeping the canvas in step with the store").

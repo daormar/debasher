@@ -85,10 +85,10 @@ debasher::_is_ui_program_dir()
     # $2 - module name that a genuine UI program directory here would
     #      have as its "name" field
     #
-    # api/persistence.py::save_script always names the script after the
-    # program's own "name", and save_program always writes that same
-    # name into the sibling .debasher/program.json (api/persistence.py::
-    # METADATA_DIRNAME/PROGRAM_FILENAME) -- so a real UI directory whose
+    # api/persistence.py::save always names the script after the
+    # program's own "name", and always writes that same name into the
+    # sibling .debasher/program.json (api/persistence.py::
+    # METADATA_DIRNAME/PROGRAM_FILENAME): so a real UI directory whose
     # script is "${module}.sh" always has "name": "${module}" in that
     # file. The directory itself need not be called "${module}" (the UI
     # lets a program be saved under any output directory name), so this

@@ -1,5 +1,6 @@
 import type { Program, ProgramType } from "../models/program";
 import { DEFAULT_SCHEDULER } from "../models/program";
+import { throwIfRevisionConflict } from "../api/revisionConflict";
 
 // ---------------------------------------------------------------
 // FAKE IMPLEMENTATION — replace the body of each function below
@@ -26,19 +27,27 @@ async function errorMessage(response: Response): Promise<string> {
   return body;
 }
 
+// Saves the program into `outputDir` and returns the revision of the program
+// metadata written there, or throws a RevisionConflict when someone else
+// saved the program since it was loaded.
 export async function saveProgram(
   program: Program,
   outputDir: string
-): Promise<void> {
+): Promise<{ revision: number }> {
   const response = await fetch("/api/programs/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ outputDir, program }),
   });
 
+  await throwIfRevisionConflict(response);
+
   if (!response.ok) {
     throw new Error(`Failed to save program: ${await errorMessage(response)}`);
   }
+
+  const { revision } = await response.json();
+  return { revision };
 }
 
 export async function loadProgram(inputDir: string): Promise<Program> {
@@ -104,6 +113,7 @@ export function createEmptyProgram(name: string, programType: ProgramType = "gen
     homeDir: "",
     outputDir: "",
     sourceDir: "",
+    revision: 0,
     // Matches ExecutionOptionsEditor's own displayed default, so a
     // program that's run without ever opening that dialog still gets
     // a real --sched value instead of an empty one.

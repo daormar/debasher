@@ -2,7 +2,7 @@ import pydantic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import persistence, program_import, run_guard, script_generation
+from .. import persistence, program_import, run_guard, saving, script_generation
 from ..models import Program
 
 router = APIRouter(prefix="/api/programs", tags=["programs"])
@@ -16,6 +16,8 @@ class SaveProgramRequest(BaseModel):
 class SaveProgramResponse(BaseModel):
     path: str
     scriptPath: str
+    # The revision of the program metadata just written.
+    revision: int
 
 
 class LoadProgramRequest(BaseModel):
@@ -41,7 +43,10 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     Serialize the whole program into a hidden directory inside
     `request.outputDir`, creating the output directory if needed. Refused
     while there is a run in progress in the program's output directory, or
-    in the one that the metadata already saved there names (see run_guard).
+    in the one that the metadata already saved there names (see run_guard),
+    and, for a save into the program's own home directory, when the program
+    metadata there holds another revision than the program's, with a
+    conflict whose detail has the code "revision" (see persistence.save).
     """
     if not request.outputDir.strip():
         raise HTTPException(status_code=400, detail="outputDir must not be empty")
@@ -60,24 +65,11 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
 
     run_guard.refuse_while_running(request.program, "save the program", request.outputDir)
 
-    # Must run before save_program, which is what overwrites the
-    # metadata file this reads the previous name from.
-    persistence.delete_stale_script(request.outputDir, request.program.name)
+    saved = saving.save_or_refuse(request.outputDir, request.program)
 
-    program_path = persistence.save_program(request.outputDir, request.program)
-
-    try:
-        script_path = persistence.save_script(request.outputDir, request.program)
-    except NotImplementedError as err:
-        raise HTTPException(status_code=501, detail=str(err))
-    except ValueError as err:
-        # What script generation refuses: the program metadata is already
-        # saved, and the reason goes back to the user.
-        raise HTTPException(status_code=400, detail=str(err))
-
-    persistence.copy_ext_alias_files(request.program, request.outputDir)
-
-    return SaveProgramResponse(path=str(program_path), scriptPath=str(script_path))
+    return SaveProgramResponse(
+        path=str(saved.program_path), scriptPath=str(saved.script_path), revision=saved.revision
+    )
 
 
 @router.post("/load", response_model=Program)
