@@ -37,6 +37,7 @@ function node(name: string, nodeKind: ProgramProcess["nodeKind"]): ProgramProces
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("the processes of a resident program", () => {
@@ -251,6 +252,33 @@ describe("the sequential processes of a program", () => {
     act(() => result.current.setProcessDescription(workerId, "changed"));
 
     expect(result.current.program.seqProcesses[0].groupSource).toBeUndefined();
+  });
+
+});
+
+describe("saving a program", () => {
+
+  it("keeps the edits made while the save is in flight", async () => {
+    let finishSave: (response: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string) =>
+      url === "/api/programs/save"
+        ? new Promise<Response>(resolve => { finishSave = resolve; })
+        : Promise.reject(new Error(`unexpected request to ${url}`))
+    ));
+    const { result } = renderStore(createEmptyProgram("p"));
+
+    let saving: Promise<void> = Promise.resolve();
+    act(() => {
+      saving = result.current.save("/home/p");
+    });
+    act(() => result.current.setDescription("edited while saving"));
+    await act(async () => {
+      finishSave(new Response(null, { status: 200 }));
+      await saving;
+    });
+
+    expect(result.current.program.homeDir).toBe("/home/p");
+    expect(result.current.program.description).toBe("edited while saving");
   });
 
 });

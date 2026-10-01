@@ -504,9 +504,11 @@ export function ProgramProvider({
       );
     }
 
-    const updated = { ...program, homeDir: outputDir };
-    await saveProgram(updated, outputDir);
-    setProgram(() => updated);
+    await saveProgram({ ...program, homeDir: outputDir }, outputDir);
+    // Only homeDir is taken from the saved copy: the user may have kept
+    // editing while the request was in flight, and putting the copy back
+    // whole would silently drop those edits.
+    setProgram(current => ({ ...current, homeDir: outputDir }));
   }
 
   async function ensureNoRunInProgress() {
