@@ -18,6 +18,7 @@ from .. import (
     persistence,
     program_state,
     resident_fifos,
+    run_guard,
     tool_sessions,
 )
 from ..models import Program
@@ -33,7 +34,7 @@ ProgramState = Literal["finished", "in-progress", "unfinished"]
 
 _STATE_BY_EXIT_CODE: dict[int, ProgramState] = {
     0: "finished",
-    2: "in-progress",
+    run_guard.STATUS_IN_PROGRESS: "in-progress",
 }
 
 
@@ -455,12 +456,8 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
     frontend asks before sending the request; this checks again, since
     another tab may have launched the program in between.
     """
-    state, _ = _get_program_state(program)
-    if state == "in-progress":
-        raise HTTPException(
-            status_code=409,
-            detail="A run is already in progress for this output directory.",
-        )
+    # Launching saves the program first (see _prepare_debasher_exec_command).
+    run_guard.refuse_while_running(program, "run the program", program.homeDir)
 
     if _is_resident(program) and not resumeChangedProgram:
         check = _launch_check(program)
@@ -508,8 +505,10 @@ def validate_program(program: Program) -> ValidateProgramResponse:
     """
     Validate a program (debasher_exec --validate): everything but launching
     its processes, and, with the built-in scheduler, the resources of each
-    process against its limits.
+    process against its limits. Refused while there is a run in progress,
+    since it saves the program first.
     """
+    run_guard.refuse_while_running(program, "validate the program", program.homeDir)
     return ValidateProgramResponse(output=_run_debasher_exec(program, "--validate"))
 
 
@@ -1068,7 +1067,10 @@ class CheckProgramOptionsResponse(BaseModel):
 def check_program_options(program: Program) -> CheckProgramOptionsResponse:
     """
     Check a program's command line options (debasher_exec --check-proc-opts).
+    Refused while there is a run in progress, since it saves the program
+    first.
     """
+    run_guard.refuse_while_running(program, "check the program options", program.homeDir)
     return CheckProgramOptionsResponse(
         output=_run_debasher_exec(program, "--check-proc-opts")
     )
@@ -1330,11 +1332,14 @@ def reset_output_dir(program: Program) -> ResetOutputDirResponse:
     equals the program's own homeDir: that's where the generated .sh
     and .debasher/program.json live, and any files added through the
     program-files panel, none of which "resetting the output directory"
-    should ever be able to wipe out.
+    should ever be able to wipe out. Refused while there is a run in
+    progress in it, whose processes may still use its files.
     """
     outdir = program.outputDir.strip()
     if not outdir:
         return ResetOutputDirResponse(cleared=False)
+
+    run_guard.refuse_while_running(program, "reset the output directory")
 
     resolved = Path(outdir).expanduser().resolve()
 

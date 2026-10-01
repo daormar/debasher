@@ -2,7 +2,7 @@ import pydantic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import persistence, program_import, script_generation
+from .. import persistence, program_import, run_guard, script_generation
 from ..models import Program
 
 router = APIRouter(prefix="/api/programs", tags=["programs"])
@@ -39,7 +39,9 @@ class GetAllEnvVarsResponse(BaseModel):
 def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     """
     Serialize the whole program into a hidden directory inside
-    `request.outputDir`, creating the output directory if needed.
+    `request.outputDir`, creating the output directory if needed. Refused
+    while there is a run in progress in the program's output directory, or
+    in the one that the metadata already saved there names (see run_guard).
     """
     if not request.outputDir.strip():
         raise HTTPException(status_code=400, detail="outputDir must not be empty")
@@ -55,6 +57,8 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
                 "directory would delete the saved program along with them."
             ),
         )
+
+    run_guard.refuse_while_running(request.program, "save the program", request.outputDir)
 
     # Must run before save_program, which is what overwrites the
     # metadata file this reads the previous name from.

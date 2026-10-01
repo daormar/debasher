@@ -833,18 +833,24 @@ elsewhere would lose its aliased scripts. When the program has been renamed
 since the last save, the backend first deletes the script with the old name,
 which it reads from the program metadata before overwriting it.
 
-A save is refused while there is a run in progress on the output directory.
-The engine reads the generated script again each time it starts a process, so
+A save is refused while there is a run in progress on the output directory. The
+engine reads the generated script again each time it starts a process, so
 overwriting it during a run would leave the processes already started on one
 version and the rest on another, with nothing to show it. The frontend checks
-this before sending the save; the backend does not.
+this before sending the save, and the backend checks it again with
+`debasher_status` (`run_guard.py`), whenever it finds that tool, so that a
+request from another tab or another client of the backend is refused too. The
+backend also refuses a save while there is a run in progress in the output
+directory named by the program metadata already saved in the home directory: a
+save that changes the output directory still writes the script that a run in the
+old one reads.
 
 Running also saves. "Run program", "Validate program" and "Check program
 options" all save the program metadata and the generated script into the home
 directory before calling `debasher_exec` (see "Launching a run"), so that the
-engine always runs the program as it is in the editor. Only "Run program" first
-checks that there is no run in progress; the other two are not blocked during a
-run, and so bypass the guard of the save.
+engine always runs the program as it is in the editor. All three are refused
+while there is a run in progress, by the frontend, which disables them, and by
+the backend, with the same check as a save.
 
 **Loading.** Loading reads the program metadata of a directory and opens the
 program as it was saved, except for `homeDir`, which becomes the absolute path
@@ -908,10 +914,12 @@ reset does nothing, rather than fail, when the output directory is blank
 (which would otherwise resolve to the server's current directory), does not
 exist, is the root of the file system or the user's home, or is the program's
 home directory. It removes a symbolic link as itself and never follows it. The
-frontend refuses to reset while there is a run in progress, and to change the
-output directory while there is one: the status, the stop and the inspection
-actions all name the output directory, so changing it would leave the run out
-of reach of the web UI.
+reset is refused while there is a run in progress, by the frontend and by the
+backend, whose processes may still use the files. The frontend also refuses to
+change the output directory while there is one: the status, the stop and the
+inspection actions all name the output directory, so changing it would leave
+the run out of reach of the web UI; the backend refuses to save the change
+(see "The home directory").
 
 # Execution and observation
 
@@ -1402,9 +1410,9 @@ non-goals of a resident program".
   inside it, and does nothing when it is blank, missing, the root, the user's
   home or the home directory (see "The output directory").
 - **No change under a running program.** While there is a run in progress, the
-  frontend refuses to save, to reset the output directory and to change it.
-  Only the frontend enforces this, and two actions of the Run menu bypass the
-  save's guard (see "The home directory").
+  web UI refuses to save, to run, validate or check the options of the
+  program, to reset the output directory and to change it. The backend refuses
+  them too, whoever sends the request (see "The home directory").
 
 **Execution and observation**
 
@@ -2157,13 +2165,13 @@ all start at once.
 **The guards.** The guards that depend on a run in progress apply unchanged,
 since they already read the process statuses and not the run phase: while the
 program is `live`, the frontend refuses to save, to reset the program state and
-to change the output directory, and `/run` refuses to launch. What changes is
-which actions are offered only while the program is `live`: "Stop program",
-"Kill program", "Restart node", "Relaunch node" and "Take snapshot", while
-"Reset program state" is offered only while it is `stopped`. What the tab does
-with a live program when it is closed, reloaded or leaves the editor is in "A
-run that outlives the tab", and what a resident program adds to it in "A program
-that outlives the tab".
+to change the output directory, and the backend refuses them too and `/run`
+refuses to launch. What changes is which actions are offered only while the
+program is `live`: "Stop program", "Kill program", "Restart node", "Relaunch
+node" and "Take snapshot", while "Reset program state" is offered only while it
+is `stopped`. What the tab does with a live program when it is closed, reloaded
+or leaves the editor is in "A run that outlives the tab", and what a resident
+program adds to it in "A program that outlives the tab".
 
 ## Observing and talking to a live program
 
@@ -2654,9 +2662,10 @@ too.
 - **A reset loses no checkpoint unless asked to.** "Reset program state" sets
   the program state aside by default (see "The directories of a resident
   program").
-- **No change under a live program.** While the program is `live`, the
-  frontend refuses to save, to reset the program state and to change the
-  output directory (see "Running a resident program").
+- **No change under a live program.** While the program is `live`, the frontend
+  refuses to save, to reset the program state and to change the output
+  directory, and the backend refuses them too (see "Running a resident
+  program").
 
 **Execution and observation**
 
@@ -2712,13 +2721,15 @@ too.
 # Editing a program from an agent: the MCP server
 
 The MCP server offers to an agent, such as Claude Code, what the editor offers
-to a person: reading a program, editing it, running it and following its run,
-as MCP tools. It is a second client of the backend, beside the frontend, and a
+to a person: reading a program, editing it, running it and following its run, as
+MCP tools. It is a second client of the backend, beside the frontend, and a
 first move towards an assistant in the web UI that helps to design and build a
 program, which would call the same MCP tools (see "Future work"). This section
-is a design: apart from the distinct option labels that it relies on (see
-"Processes and options"), nothing in it is built yet, and the guarantees and
-non-goals stated before it do not change until it is.
+is a design: apart from what it relies on that the editor has too, the distinct
+option labels (see "Processes and options") and the guards of the backend
+against a run in progress (see "The home directory"), nothing in it is built
+yet, and the guarantees and non-goals stated before it do not change until it
+is.
 
 The design follows from one rule: the MCP server edits a program with the
 same code as the editor. The edits, their validation, the rule of which groups
@@ -2842,11 +2853,9 @@ output of a process is cut to its last lines unless the call asks for more.
   offers, with its rules (see "Observing and talking to a live program").
 
 The MCP tools keep the guards of the editor through the backend, not by
-repeating them: one run per output directory and the two directories of a
-program apart are refused by the backend today, and refusing a save, a reset
-of the output directory or a change of it while there is a run in progress,
-which only the frontend refuses today, moves into the backend first (see
-"Guards in the backend" in "Future work").
+repeating them: the backend refuses a second run on an output directory, the two
+directories of a program in one, and a save, a reset of the output directory or
+a change of it while there is a run in progress.
 
 ## Building, installing and testing
 
@@ -2865,9 +2874,8 @@ check is tested in the backend's own tests.
 # Future work
 
 - **Building the MCP server.** Building what "Editing a program from an agent:
-  the MCP server" designs: the revisions of the program metadata, the guards in
-  the backend (see the "Guards in the backend" item below), the resolution of
-  named edits, the placement of a new process, and the server with its MCP
+  the MCP server" designs: the revisions of the program metadata, the resolution
+  of named edits, the placement of a new process, and the server with its MCP
   tools.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
@@ -2883,11 +2891,6 @@ check is tested in the backend's own tests.
 - **Refused programs and the saved script.** Generating the script before
   writing the program metadata, so that a program that script generation
   refuses leaves the home directory as it was.
-- **Guards in the backend.** Refusing in the backend, and not only in the
-  frontend, a save, a reset of the output directory or a change of it while
-  there is a run in progress, and blocking "Validate program" and "Check
-  program options" during a run, which today save the generated script
-  without that check.
 - **The group on the canvas.** Adding the group to the structural key of the
   canvas, so that a dissolved group loses its color and badge at once (see
   "Keeping the canvas in step with the store").

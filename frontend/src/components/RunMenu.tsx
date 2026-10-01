@@ -551,6 +551,10 @@ export default function RunMenu() {
                 // A run in progress is read from the process statuses,
                 // whoever launched it.
                 (item === "Run program" && isRunInProgress) ||
+                // Both save the generated script, which the processes of
+                // a run read again each time one starts.
+                (item === "Validate program" && isRunInProgress) ||
+                (item === "Check program options" && isRunInProgress) ||
                 // Nothing else acts on the program while this tab
                 // launches, stops or kills it.
                 (ACTS_ON_PROGRAM.has(item) && isRequestPending) ||

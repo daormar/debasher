@@ -117,7 +117,7 @@ export async function validateProgram(program: Program): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to validate the program (${response.status})`);
+    throw new Error(await errorDetail(response, `Failed to validate the program (${response.status})`));
   }
 
   const { output } = await response.json();
@@ -525,7 +525,7 @@ export async function checkProgramOptions(program: Program): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to check program options (${response.status})`);
+    throw new Error(await errorDetail(response, `Failed to check program options (${response.status})`));
   }
 
   const { output } = await response.json();
