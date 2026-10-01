@@ -48,6 +48,10 @@ export interface ExecutionOptions {
 
 }
 
+// The scheduler of a program that names none, as program_import.py's own
+// default.
+export const DEFAULT_SCHEDULER = "BUILTIN";
+
 // Chosen when the program is created, and never changed afterwards: the
 // two types accept different processes and connections.
 export type ProgramType = "general" | "resident";

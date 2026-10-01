@@ -20,8 +20,8 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   const isResident =
     program.programType === "resident";
 
-  // ProgramContext's normalizeProgram guarantees this is never falsy, so
-  // no fallback here — a fallback would just mask a genuinely empty
+  // programEdits.ts's normalizeProgram guarantees this is never falsy, so
+  // no fallback here: a fallback would just mask a genuinely empty
   // stored value behind a display that looks fine, which is exactly what
   // let that case go unnoticed before (see normalizeProgram).
   const [scheduler, setScheduler] =

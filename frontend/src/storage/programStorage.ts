@@ -1,4 +1,5 @@
 import type { Program, ProgramType } from "../models/program";
+import { DEFAULT_SCHEDULER } from "../models/program";
 
 // ---------------------------------------------------------------
 // FAKE IMPLEMENTATION — replace the body of each function below
@@ -106,7 +107,7 @@ export function createEmptyProgram(name: string, programType: ProgramType = "gen
     // Matches ExecutionOptionsEditor's own displayed default, so a
     // program that's run without ever opening that dialog still gets
     // a real --sched value instead of an empty one.
-    executionOptions: { scheduler: "BUILTIN" },
+    executionOptions: { scheduler: DEFAULT_SCHEDULER },
     programOptions: {},
     sharedDirs: [],
     availableSharedDirs: [],

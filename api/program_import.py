@@ -443,8 +443,8 @@ def _build_shared_dir_edges(processes: list[ProgramProcess]) -> list[ProgramEdge
 def _sync_connected_option_values(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> None:
     """
     Sets every connected option's `value` to its "[sourceProcess;
-    sourceOption]" sentinel, mutating `processes` in place — the same
-    thing frontend/src/store/ProgramContext.tsx's
+    sourceOption]" sentinel, mutating `processes` in place, the same
+    thing frontend/src/models/programEdits.ts's
     normalizeConnectedOptionValues does on load, needed here for the
     same reason: script_generation.py's _opt_is_connected_to_proc (and
     thus _option_definition_line/_validate_fanout_option) treats that

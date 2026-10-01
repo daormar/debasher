@@ -12,9 +12,9 @@ export interface ProgramEdge {
 
 }
 
-// The "[proc;opt]" sentinel a connected option's value takes — shared by
-// ProgramContext's derivation of it and any UI that needs to display the
-// same thing read-only.
+// The "[proc;opt]" sentinel a connected option's value takes, shared by
+// the edits that derive it (see programEdits.ts) and any UI that needs to
+// display the same thing read-only.
 export function buildConnectionSentinel(
   sourceProcessName: string,
   sourceOptionLabel: string

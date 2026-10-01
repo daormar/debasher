@@ -22,9 +22,9 @@ import type {
 import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
 import type { ProgramOption } from "../models/option";
 import { getOptionDirection } from "../models/option";
+import * as edits from "../models/programEdits";
 import type { ProgramEdge } from "../models/edge";
 import type { SeqProcess } from "../models/seqProcess";
-import { buildConnectionSentinel } from "../models/edge";
 import type { Position } from "../models/position";
 import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
 import { emptyNodeCode, hasSupervisor } from "../models/node";
@@ -328,127 +328,6 @@ function toProgramOption(info: ProcessInfoOption): ProgramOption {
 const ProgramContext =
   createContext<ProgramContextType | null>(null);
 
-/**
- * Makes each option's `value` reflect its incoming edge (if any): connected
- * options get the "[process;option]" reference, others are cleared of any
- * stale one. Self-heals programs whose edges/values fell out of sync, e.g.
- * a file saved before this syncing existed, or a hand-edited JSON file.
- */
-function normalizeConnectedOptionValues(source: Program): Program {
-
-  const connectedValueByOptionKey = new Map<string, string>();
-
-  for (const edge of source.edges) {
-
-    const sourceProcess = source.processes.find(
-      process => process.id === edge.sourceProcessId
-    );
-
-    const sourceOption = sourceProcess?.options.find(
-      o => o.id === edge.sourceOptionId
-    );
-
-    if (sourceProcess && sourceOption) {
-      connectedValueByOptionKey.set(
-        `${edge.targetProcessId}:${edge.targetOptionId}`,
-        buildConnectionSentinel(sourceProcess.name, sourceOption.label)
-      );
-    }
-
-  }
-
-  return {
-
-    ...source,
-
-    processes: source.processes.map(process => ({
-
-      ...process,
-
-      options: process.options.map(option => {
-
-        // A "shared_dir" option's value is always its declared
-        // directory name, independent of any connection, a connection
-        // into/out of it exists purely to document the multi-writer
-        // dependency in the canvas (see isValidProgramConnection), not
-        // to supply its value the way a "none"-channel connection does.
-        if (option.channel === "shared_dir") {
-          return option;
-        }
-
-        const connectedValue =
-          connectedValueByOptionKey.get(`${process.id}:${option.id}`);
-
-        if (connectedValue !== undefined) {
-          return option.value === connectedValue
-            ? option
-            : { ...option, value: connectedValue };
-        }
-
-        return option.value.startsWith("[") && option.value.endsWith("]")
-          ? { ...option, value: "" }
-          : option;
-
-      }),
-
-    })),
-
-  };
-
-}
-
-// Matches createEmptyProgram's/program_import.py's own default.
-const DEFAULT_SCHEDULER = "BUILTIN";
-
-/**
- * Self-heals a falsy executionOptions.scheduler (e.g. a file saved
- * while it was blank, see ExecutionOptionsEditor, whose dropdown
- * defaults its *displayed* value to "BUILTIN" without ever correcting
- * a genuinely empty stored one, since Cancel is a no-op) back to a
- * valid default. Without this, debasher_exec/debasher_status get
- * "--sched ''" and fail with "Error: is not a valid scheduler" even
- * though the UI appears to show "BUILTIN" selected.
- */
-function normalizeProgram(source: Program): Program {
-
-  const normalized = normalizeConnectedOptionValues(source);
-
-  return normalized.executionOptions.scheduler
-    ? normalized
-    : {
-        ...normalized,
-        executionOptions: {
-          ...normalized.executionOptions,
-          scheduler: DEFAULT_SCHEDULER,
-        },
-      };
-
-}
-
-/**
- * Strips groupSource from every process and sequential process of the given
- * groups, which are then generated one by one (see confirmDetachIfGrouped).
- */
-function dissolveGroups(source: Program, groupIds: Set<string>): Program {
-
-  if (groupIds.size === 0) {
-    return source;
-  }
-
-  const inGroup = (groupId?: string) => groupId !== undefined && groupIds.has(groupId);
-
-  return {
-    ...source,
-    processes: source.processes.map(process =>
-      inGroup(process.groupSource?.groupId) ? { ...process, groupSource: undefined } : process
-    ),
-    seqProcesses: (source.seqProcesses ?? []).map(seqProcess =>
-      inGroup(seqProcess.groupSource?.groupId) ? { ...seqProcess, groupSource: undefined } : seqProcess
-    ),
-  };
-
-}
-
 interface Props {
   children: ReactNode;
   initialProgram: Program;
@@ -460,15 +339,12 @@ export function ProgramProvider({
 }: Props) {
 
   const [program, setProgramRaw] =
-    useState<Program>(() => normalizeProgram(initialProgram));
+    useState<Program>(() => edits.normalizeProgram(initialProgram));
 
-  // Re-derives every connected option's "[process;option]" value from the
-  // current edges/names on every update, so renaming a process or a
-  // connected option's label can't leave a stale reference behind in what
-  // gets saved/generated, and re-heals executionOptions.scheduler if it's
-  // ever falsy (see normalizeProgram above).
+  // Every edit is followed by normalizeProgram, which keeps the references
+  // of the connected options in step with the edges and names.
   function setProgram(updater: (current: Program) => Program) {
-    setProgramRaw(current => normalizeProgram(updater(current)));
+    setProgramRaw(current => edits.normalizeProgram(updater(current)));
   }
 
   async function save(outputDir: string) {
@@ -802,10 +678,7 @@ export function ProgramProvider({
 
     };
 
-    setProgram(current => ({
-      ...current,
-      processes: [...current.processes, process],
-    }));
+    setProgram(current => edits.addProcess(current, process));
 
   }
 
@@ -952,17 +825,17 @@ export function ProgramProvider({
 
   // A process tagged with GroupSource ("Add program") represents a
   // process add_debasher_program will re-declare, unmodified, from its
-  // source module. Anything that changes that process's own definition
-  //, or which edges target it, since a connected option's
+  // source module. Anything that changes that process's own definition,
+  // or which edges target it (a connected option's
   // define_opt_from_proc_out call lives in the *target*'s own generated
-  // function (see api/script_generation.py's _option_definition_line)
-  //, would silently get overwritten by that re-declaration once
+  // function, see api/script_generation.py's _option_definition_line),
+  // would silently get overwritten by that re-declaration once
   // generated. So any such change first confirms detaching the whole
   // group (stripping groupSource from every process sharing its
   // groupId, not just this one) with the user, and is aborted if
   // declined. Connecting/disconnecting an edge whose target ISN'T
-  // grouped stays free even when its source is (see connect/disconnect)
-  //, that only touches the (ungrouped) target's own function.
+  // grouped stays free even when its source is (see connect/disconnect):
+  // that only touches the (ungrouped) target's own function.
   function confirmDetachIfGrouped(processId: string): boolean {
 
     const groupSource = program.processes.find(
@@ -985,7 +858,7 @@ export function ProgramProvider({
       return false;
     }
 
-    setProgram(current => dissolveGroups(current, new Set([groupSource.groupId])));
+    setProgram(current => edits.dissolveGroups(current, new Set([groupSource.groupId])));
 
     return true;
 
@@ -1000,22 +873,13 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
+    const options = info.options.map(toProgramOption);
 
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? {
-              ...process,
-              description: info.description,
-              options: info.options.map(toProgramOption),
-              language: info.language,
-              code: info.code,
-            }
-          : process
-      ),
-
+    setProgram(current => edits.updateProcess(current, processId, {
+      description: info.description,
+      options,
+      language: info.language,
+      code: info.code,
     }));
 
   }
@@ -1024,10 +888,7 @@ export function ProgramProvider({
     name: string
   ) {
 
-    setProgram(current => ({
-      ...current,
-      name,
-    }));
+    setProgram(current => edits.setProgramFields(current, { name }));
 
   }
 
@@ -1035,10 +896,7 @@ export function ProgramProvider({
     description: string
   ) {
 
-    setProgram(current => ({
-      ...current,
-      description,
-    }));
+    setProgram(current => edits.setProgramFields(current, { description }));
 
   }
 
@@ -1046,10 +904,7 @@ export function ProgramProvider({
     preamble: string
   ) {
 
-    setProgram(current => ({
-      ...current,
-      preamble,
-    }));
+    setProgram(current => edits.setProgramFields(current, { preamble }));
 
   }
 
@@ -1086,7 +941,7 @@ export function ProgramProvider({
     }
 
     setProgram(current =>
-      dissolveGroups({ ...current, seqProcesses }, new Set(touchedGroups.keys()))
+      edits.dissolveGroups({ ...current, seqProcesses }, new Set(touchedGroups.keys()))
     );
 
     return true;
@@ -1097,10 +952,7 @@ export function ProgramProvider({
     sharedDirs: string[]
   ) {
 
-    setProgram(current => ({
-      ...current,
-      sharedDirs,
-    }));
+    setProgram(current => edits.setProgramFields(current, { sharedDirs }));
 
   }
 
@@ -1109,10 +961,7 @@ export function ProgramProvider({
     value: string
   ) {
 
-    setProgram(current => ({
-      ...current,
-      envVars: { ...current.envVars, [name]: value },
-    }));
+    setProgram(current => edits.setEnvVar(current, name, value));
 
   }
 
@@ -1134,10 +983,7 @@ export function ProgramProvider({
       );
     }
 
-    setProgram(current => ({
-      ...current,
-      outputDir,
-    }));
+    setProgram(current => edits.setProgramFields(current, { outputDir }));
 
   }
 
@@ -1145,10 +991,7 @@ export function ProgramProvider({
     executionOptions: ExecutionOptions
   ) {
 
-    setProgram(current => ({
-      ...current,
-      executionOptions,
-    }));
+    setProgram(current => edits.setProgramFields(current, { executionOptions }));
 
   }
 
@@ -1156,10 +999,7 @@ export function ProgramProvider({
     programOptions: Record<string, string>
   ) {
 
-    setProgram(current => ({
-      ...current,
-      programOptions,
-    }));
+    setProgram(current => edits.setProgramFields(current, { programOptions }));
 
   }
 
@@ -1171,22 +1011,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.filter(
-        process => process.id !== processId
-      ),
-
-      // Drop any edges left dangling by the removed process.
-      edges: current.edges.filter(
-        edge =>
-          edge.sourceProcessId !== processId &&
-          edge.targetProcessId !== processId
-      ),
-
-    }));
+    setProgram(current => edits.removeProcess(current, processId));
 
     setSelectedProcessId(current =>
       current === processId ? null : current
@@ -1199,17 +1024,7 @@ export function ProgramProvider({
     position: Position
   ) {
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, position }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { position }));
 
   }
 
@@ -1222,17 +1037,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, name }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { name }));
 
   }
 
@@ -1245,17 +1050,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, description }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { description }));
 
   }
 
@@ -1268,17 +1063,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, language }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { language }));
 
   }
 
@@ -1291,17 +1076,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, code }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { code }));
 
   }
 
@@ -1310,17 +1085,7 @@ export function ProgramProvider({
     nodeCode: NodeCode
   ) {
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, nodeCode }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { nodeCode }));
 
   }
 
@@ -1329,17 +1094,7 @@ export function ProgramProvider({
     initiator: boolean
   ) {
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, initiator }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { initiator }));
 
   }
 
@@ -1352,17 +1107,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, computationalSpecs }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { computationalSpecs }));
 
   }
 
@@ -1375,17 +1120,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, additionalSpecs }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { additionalSpecs }));
 
   }
 
@@ -1398,17 +1133,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, optionsHandler }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { optionsHandler }));
 
   }
 
@@ -1421,17 +1146,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? { ...process, additionalMethods }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateProcess(current, processId, { additionalMethods }));
 
   }
 
@@ -1470,23 +1185,7 @@ export function ProgramProvider({
 
     };
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? {
-              ...process,
-              options: [
-                ...process.options,
-                option,
-              ],
-            }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.addOption(current, processId, option));
 
   }
 
@@ -1500,24 +1199,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? {
-              ...process,
-              options: process.options.map(o =>
-                o.id === optionId
-                  ? { ...o, ...changes }
-                  : o
-              ),
-            }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.updateOption(current, processId, optionId, changes));
 
   }
 
@@ -1530,22 +1212,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => ({
-
-      ...current,
-
-      processes: current.processes.map(process =>
-        process.id === processId
-          ? {
-              ...process,
-              options: process.options.filter(
-                o => o.id !== optionId
-              ),
-            }
-          : process
-      ),
-
-    }));
+    setProgram(current => edits.removeOption(current, processId, optionId));
 
   }
 
@@ -1611,50 +1278,6 @@ export function ProgramProvider({
 
   }
 
-  function setOptionValue(
-    processes: ProgramProcess[],
-    processId: string,
-    optionId: string,
-    value: string
-  ): ProgramProcess[] {
-
-    return processes.map(process =>
-      process.id === processId
-        ? {
-            ...process,
-            options: process.options.map(o =>
-              o.id === optionId
-                ? { ...o, value }
-                : o
-            ),
-          }
-        : process
-    );
-
-  }
-
-  function setOptionSharedDir(
-    processes: ProgramProcess[],
-    processId: string,
-    optionId: string,
-    sharedDirName: string
-  ): ProgramProcess[] {
-
-    return processes.map(process =>
-      process.id === processId
-        ? {
-            ...process,
-            options: process.options.map(o =>
-              o.id === optionId
-                ? { ...o, channel: "shared_dir" as const, value: sharedDirName }
-                : o
-            ),
-          }
-        : process
-    );
-
-  }
-
   function connect(
     edge: ProgramEdge
   ) {
@@ -1667,52 +1290,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => {
-
-      const sourceProcess = current.processes.find(
-        process => process.id === edge.sourceProcessId
-      );
-
-      const sourceOption = sourceProcess?.options.find(
-        o => o.id === edge.sourceOptionId
-      );
-
-      // A "shared_dir" source's channel/value already fully determines
-      // its resolved path, connecting it into a plain target promotes
-      // that target into a matching "shared_dir" option too, instead
-      // of the usual "[proc;option]" sentinel, so a second connection
-      // from another writer of the same directory validates against an
-      // already-tagged, matching target (see isValidProgramConnection)
-      // and both keep generating the same compact
-      // get_absolute_shdirname-based code (see script_generation.py's
-      // shared_dir branch) rather than one becoming a
-      // define_opt_from_proc_out reference to this specific source.
-      const processes = sourceProcess && sourceOption
-        ? sourceOption.channel === "shared_dir"
-          ? setOptionSharedDir(
-              current.processes,
-              edge.targetProcessId,
-              edge.targetOptionId,
-              sourceOption.value
-            )
-          : setOptionValue(
-              current.processes,
-              edge.targetProcessId,
-              edge.targetOptionId,
-              buildConnectionSentinel(sourceProcess.name, sourceOption.label)
-            )
-        : current.processes;
-
-      return {
-        ...current,
-        processes,
-        edges: [
-          ...current.edges,
-          edge,
-        ],
-      };
-
-    });
+    setProgram(current => edits.connect(current, edge));
 
   }
 
@@ -1728,37 +1306,7 @@ export function ProgramProvider({
       return;
     }
 
-    setProgram(current => {
-
-      const removedEdge = current.edges.find(
-        e => e.id === edgeId
-      );
-
-      const targetOption = removedEdge && current.processes
-        .find(process => process.id === removedEdge.targetProcessId)
-        ?.options.find(o => o.id === removedEdge.targetOptionId);
-
-      // A "shared_dir" option's value is independent of any connection
-      // (see connect above), removing an edge into one shouldn't
-      // clear its declared directory name.
-      const processes = removedEdge && targetOption?.channel !== "shared_dir"
-        ? setOptionValue(
-            current.processes,
-            removedEdge.targetProcessId,
-            removedEdge.targetOptionId,
-            ""
-          )
-        : current.processes;
-
-      return {
-        ...current,
-        processes,
-        edges: current.edges.filter(
-          e => e.id !== edgeId
-        ),
-      };
-
-    });
+    setProgram(current => edits.disconnect(current, edgeId));
 
   }
 

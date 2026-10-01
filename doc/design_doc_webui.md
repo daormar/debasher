@@ -1112,6 +1112,16 @@ saved. An operation that would change a process of a group first asks the
 user, and dissolves the whole group if the user agrees (see "Groups"); if not,
 the program is left as it was.
 
+The operations rest on plain functions of the program model, in
+`models/programEdits.ts`: each takes a program and returns the edited one
+without changing its input, and depends on nothing outside the model, neither
+React nor the browser. The normalization lives there too. What the store adds
+around them is what needs the tab: asking the user before a group is
+dissolved, generating the ids of new processes, options and edges, and keeping
+the result as the program of the tab. Code outside the store that edits a
+program is to reuse these functions, so that it obeys the same rules as the
+editor.
+
 The store keeps no history and no record of unsaved changes: there is no
 undo, and leaving the editor or closing the tab loses the changes made since
 the last save, without a warning.
