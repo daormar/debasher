@@ -1066,6 +1066,16 @@ importing anything, that the heredoc has a top-level class deriving from
 never instantiates it: the heredoc itself creates the object, which parses the
 options of the process from `argv`, and calls `run()`.
 
+A resident program has nodes only, and no sequential processes (see "Sequential
+processes" in `doc/design_doc_engine.md`): the engine refuses
+`add_debasher_seq_process` in it. The work of a node is in `process_data`, which
+replay runs again on the `DATA` records of its input log, and a step run from
+it, such as a job sent to Slurm, would run again on every replay, with nothing
+that ties it to the run before. A node that needs such work launches a general
+program, which may have sequential processes, through a `ProgramLauncher`, whose
+batch runs are registered so that a replay does not launch them twice (see
+"`ProgramLauncher`: batch runs from a node").
+
 The class is named after its process, in CamelCase: every part of the process
 name between dots and underscores, with its first letter in upper case
 (`counter` gives `Counter`, `org.ns.count_words` gives `OrgNsCountWords`). The

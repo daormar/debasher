@@ -708,9 +708,10 @@ they mean for a process. `processdeps` and `force`, which only a scheduled
 process can use, are refused. Every computational specification is optional,
 `cpus`, `mem` and `time` included, since the built-in scheduler uses none of
 them for a step. `throttle` is refused, and so is a list of values in `mem` or
-`time`, since a step runs once and has no further attempts. These checks run
-when the sequential process is added, so an error stops the preparation of the
-run.
+`time`, since a step runs once and has no further attempts. A resident program
+cannot have sequential processes, as "Defining a node" in
+`doc/design_doc_resident.md` explains. These checks run when the sequential
+process is added, so an error stops the preparation of the run.
 
 **Running a step.** `seq_execute` runs the step on the scheduler of the run.
 Under the built-in scheduler it calls the function in the shell of the task,

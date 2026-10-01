@@ -1682,7 +1682,8 @@ debasher::_check_seq_process_specs()
 # a process are, so it can be a heredoc process or an alias, and its
 # name cannot be that of a process or of another sequential process.
 # Every computational specification is optional, and is only used when
-# the step runs under Slurm, as options of srun.
+# the step runs under Slurm, as options of srun. A resident program
+# cannot have sequential processes.
 #
 # $1 - Name of the sequential process.
 # $2 - Computational specifications. "throttle" and a list of values in
@@ -1700,6 +1701,14 @@ debasher::add_debasher_seq_process()
     local processname=$1
     local process_computational_specs=$2
     local process_additional_specs=$3
+
+    # A resident program has no sequential processes: the work of a node
+    # is in process_data, which replay runs again, and a step run from it
+    # would run again with nothing that ties it to the run before
+    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        echo "Error: sequential process ${processname} cannot be added to a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program. Aborting execution..." >&2
+        exit 1
+    fi
 
     # Check the specifications and the name, and build the process
     # function, aborting execution if necessary

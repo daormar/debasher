@@ -1207,3 +1207,13 @@ PYEOF
     add_debasher_seq_process seqstep ""
     [ -n "${DEBASHER_SEQ_PROCESSES[seqstep]+x}" ]
 }
+
+@test "add_debasher_seq_process refuses a sequential process in a resident program" {
+    prepare_add_process
+    seqstep() { :; }
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
+
+    run add_debasher_seq_process seqstep ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"cannot be added to a 'resident' program"* ]]
+}
