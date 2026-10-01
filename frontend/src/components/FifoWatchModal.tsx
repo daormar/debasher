@@ -3,8 +3,8 @@ import type { Program } from "../models/program";
 import { getFifoMirror } from "../api/executionApi";
 
 // Fast enough to feel "live" for an interactive debugging panel, unlike
-// the coarser status polling in ProgramContext.tsx (PROCESS_STATUS_POLL_
-// INTERVAL_MS) — there's no streaming/SSE infra in this codebase, so a
+// the coarser status polling in useProgramRun.ts (PROCESS_STATUS_POLL_
+// INTERVAL_MS): there's no streaming/SSE infra in this codebase, so a
 // plain re-fetch-and-replace poll is the whole mechanism (see
 // api/routers/execution.py's /fifo-mirror, which just cats the mirror
 // log file each time).

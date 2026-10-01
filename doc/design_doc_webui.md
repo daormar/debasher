@@ -1103,8 +1103,12 @@ program, and the editor. Opening a program in the editor creates a store with it
 discards the store, which stops nothing (see "A run that outlives the tab"). The
 store holds the program, the selected process, the run phase with the last
 output of `debasher_status`, and the process statuses, from which it derives
-whether there is a run in progress. The dialogs edit a draft of their own and
-hand it to the store only when the user accepts it.
+whether there is a run in progress. What follows the run (the polling of the
+process statuses, the run phase derived from them, and the requests to launch,
+stop or kill it and to reset the output directory or the program state) is
+kept apart from the edits of the program, in `store/useProgramRun.ts`. The
+dialogs edit a draft of their own and hand it to the store only when the user
+accepts it.
 
 Every change to the program goes through an operation of the store
 (`addProcess`, `connect`, `updateOption`, ...), and every operation passes its

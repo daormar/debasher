@@ -132,7 +132,7 @@ export interface ProgramStatusResult {
 }
 
 // Exported (not just used internally by getProgramStatus/getProgramState
-// below) so the run-completion poll in ProgramContext can get both the
+// below) so the run-completion poll in useProgramRun can get both the
 // state and the debasher_status output from one call, to show the
 // latter alongside an "unfinished" run-finished notice.
 export async function fetchProgramStatus(program: Program): Promise<ProgramStatusResult> {
@@ -176,7 +176,7 @@ export interface ProcessStatusesResult {
   notices: NodeNotice[];
 }
 
-// Used to color nodes in the canvas, see ProgramContext's status polling
+// Used to color nodes in the canvas, see useProgramRun's status polling
 // and ProcessNode's use of it, and to derive the run phase of a resident
 // program.
 export async function getProcessStatuses(program: Program): Promise<ProcessStatusesResult> {
