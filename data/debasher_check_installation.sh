@@ -720,6 +720,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_seq_process_example program
+progname="debasher_seq_process_example"
+sched="BUILTIN"
+bs_cpus=1
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 20"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_telegram_morrison program
 progname="debasher_telegram_morrison"
 sched="BUILTIN"
@@ -932,6 +950,26 @@ if command -v "${SBATCH}" > /dev/null 2>&1; then
     bs_cpus=1   # Not used with SLURM scheduler
     bs_mem=1024 # Not used with SLURM scheduler
     check_program "${tmpdir}" "${progname}" "${progname}_slurm" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+
+    # Check debasher_seq_process_example, whose steps run as job steps of
+    # Slurm, with the computational specifications of its sequential
+    # process as options of srun
+    progname="debasher_seq_process_example"
+    sched="SLURM"
+    bs_cpus=1   # Not used with SLURM scheduler
+    bs_mem=1024 # Not used with SLURM scheduler
+    check_program "${tmpdir}" "${progname}" "${progname}_slurm" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 20"
     case $? in
         0)
             ((checks_passed++))

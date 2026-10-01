@@ -1095,8 +1095,10 @@ a step:
 * A resident program cannot have sequential processes (see
   :ref:`resident`).
 
-``debasher_doc_mod --show-seq-procs`` documents the sequential
-processes of a module, after its processes.
+The ``debasher_seq_process_example`` example (see :ref:`Examples`)
+runs two sequential processes with ``seq_execute``: one in Python, and
+one alias of a sequential process in Bash. ``debasher_doc_mod --show-seq-procs``
+documents the sequential processes of a module, after its processes.
 
 Recording finished steps
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1283,6 +1285,8 @@ repository.
    telegram_jobsteps
 
    telegram_imperative
+
+   seq_process_example
 
    telegram_morrison
 
