@@ -59,9 +59,9 @@ export function defaultSeqCode(name: string, language: ProcessLanguage): string 
   return language === "bash" ? `${name}()\n{\n    :\n}` : "";
 }
 
-export function createSeqProcess(name: string): SeqProcess {
+export function createSeqProcess(name: string, id: string = crypto.randomUUID()): SeqProcess {
   return {
-    id: crypto.randomUUID(),
+    id,
     name,
     description: "",
     language: "bash",

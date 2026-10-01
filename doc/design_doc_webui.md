@@ -258,8 +258,9 @@ Designed, not built (see "Editing a program from an agent: the MCP server").
 - **MCP tool**: an operation that the MCP server offers to an agent, with
   named parameters and an answer in text. A bare "tool" is still a command
   line tool of the engine.
-- **named edit**: an edit written with names instead of ids: a process by its
-  name, an option by its label, an edge by its two ends.
+- **named edit**: an edit written with names instead of ids: a process or a
+  sequential process by its name, an option by its process and its label, an
+  edge by its two ends.
 - **proposal**: what an MCP tool called with `dry_run` answers: the edits it
   would apply, resolved and validated, and what they would change, with nothing
   saved.
@@ -2762,9 +2763,11 @@ first move towards an assistant in the web UI that helps to design and build a
 program, which would call the same MCP tools (see "Future work"). This section
 is a design: apart from what it relies on that the editor has too, the distinct
 option labels (see "Processes and options"), the guards of the backend against a
-run in progress (see "The home directory") and the revisions of the program
-metadata (see "Revisions of the program metadata"), nothing in it is built yet,
-and the guarantees and non-goals stated before it do not change until it is.
+run in progress (see "The home directory"), the revisions of the program
+metadata (see "Revisions of the program metadata") and the resolution of named
+edits (see "Programs, processes and options by name"), nothing in it is built
+yet, and the guarantees and non-goals stated before it do not change until it
+is.
 
 The design follows from one rule: the MCP server edits a program with the
 same code as the editor. The edits, their validation, the rule of which groups
@@ -2800,11 +2803,21 @@ included), and the labels of the options of a process are distinct (see
 are enough. A program that still holds repeated labels is refused by an MCP
 tool that names one of them, until the user relabels them.
 
-A **named edit** is an edit written with names: `{op: "connect", from:
-{process: "a", option: "-outf"}, to: {process: "b", option: "-in"}}`.
-`models/programRefs.ts` resolves a list of named edits into edits, giving new
-ids to what they add, and reports a name that matches nothing. The answers of
-the MCP tools name things the same way and show no ids.
+A **named edit** is an edit written with names: `{op: "connect", from: {process:
+"a", option: "-outf"}, to: {process: "b", option: "-in"}}`. `resolveNamedEdits`
+(`models/programRefs.ts`) resolves a list of named edits into edits, giving new
+ids to what they add. It resolves each named edit against the program that the
+edits before it leave, so that a named edit may name a process or an option that
+an earlier one added, and it stops at the first name that matches nothing, or at
+a label that two options of a process share, saying which named edit it is.
+Beyond the edits, a named edit adds, changes or removes one sequential process
+by its name, which resolves into one edit that replaces the whole list of
+sequential processes; names the option that gives the count of a fanout family
+by its label; and, when it changes the label of an option, also gives the option
+the direction that follows from the new label, as the editor of an option does.
+Resolving only resolves names: whether the edits are allowed is for
+`validateEdits`. The answers of the MCP tools name things the same way and show
+no ids.
 
 ## Edits from an agent
 
@@ -2894,8 +2907,8 @@ check is tested in the backend's own tests.
 # Future work
 
 - **Building the MCP server.** Building what "Editing a program from an agent:
-  the MCP server" designs: the resolution of named edits, the placement of a new
-  process, and the server with its MCP tools.
+  the MCP server" designs: the placement of a new process, and the server with
+  its MCP tools.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what
