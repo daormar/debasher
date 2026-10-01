@@ -104,4 +104,15 @@ describe("validateEdits", () => {
     ]);
   });
 
+  it("refuses a label that another option of the process has", () => {
+    expect(validateEdits(program(), [
+      { op: "addOption", processId: "id-a", option: createOption("x", "-in") },
+      { op: "updateOption", processId: "id-a", optionId: "ai", changes: { label: "-outf" } },
+      { op: "updateOption", processId: "id-a", optionId: "ai", changes: { label: "-in" } },
+    ])).toEqual([
+      'Process "a" already has an option labeled -in.',
+      'Process "a" already has an option labeled -outf.',
+    ]);
+  });
+
 });

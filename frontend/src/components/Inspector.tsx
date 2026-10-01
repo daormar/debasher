@@ -26,9 +26,8 @@ import ArrayConfigEditor from "./ArrayConfigEditor";
 import ManualConfigEditor from "./ManualConfigEditor";
 import ProcessNameDialog from "./ProcessNameDialog";
 import NodeCodeEditor from "./NodeCodeEditor";
-import { isReservedNodeOptionLabel } from "../models/node";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
-import { isValidOptionLabel } from "../models/option";
+import { optionLabelProblem, repeatedOptionLabels } from "../models/process";
 import { computeFlippedOptionIds, optionRow } from "../models/optionLayout";
 
 
@@ -132,9 +131,11 @@ export default function Inspector() {
     ? ["standard", "array", "generator"]
     : ["standard", "array", "generator", "manual"];
 
-  const optionLabelReserved = isResident && isReservedNodeOptionLabel(optionLabel);
+  const optionProblem = optionLabelProblem(selectedProcess, optionLabel, program.programType);
 
-  const canAddOption = isValidOptionLabel(optionLabel) && !optionLabelReserved;
+  const canAddOption = optionProblem === null;
+
+  const repeatedLabels = repeatedOptionLabels(selectedProcess);
 
   function handleOptionDragEnd(event: DragEndEvent) {
 
@@ -248,6 +249,15 @@ export default function Inspector() {
       {isResident && (
         <div style={{ marginBottom: 8, fontSize: 14 }}>
           Node kind: <strong>{selectedProcess.nodeKind}</strong>
+        </div>
+      )}
+
+
+      {repeatedLabels.length > 0 && (
+        <div style={{ color: "#b00020", fontSize: 13, marginBottom: 8 }}>
+          More than one option of this process is labeled{" "}
+          {repeatedLabels.join(", ")}. The engine merges options with the same
+          label into one: relabel or remove all but one of them.
         </div>
       )}
 
@@ -510,10 +520,9 @@ export default function Inspector() {
       </button>
 
 
-      {optionLabelReserved && (
+      {optionProblem && optionLabel.trim() && (
         <div style={{ color: "#b00020", fontSize: 13, marginTop: 4 }}>
-          {optionLabel.trim()} belongs to the Supervisor wiring, which script
-          generation writes: choose another label.
+          {optionProblem}
         </div>
       )}
 

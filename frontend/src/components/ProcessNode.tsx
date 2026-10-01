@@ -11,6 +11,7 @@ import type {
 import type { ProgramProcessData, WiringHandle } from "../adapters/reactFlowAdapter";
 import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
+import { repeatedOptionLabels } from "../models/process";
 import { configurationSource, noHoldFifosOption, nodeOptionRole, observesOutside } from "../models/node";
 import { WIRING_EDGE_COLOR } from "../adapters/reactFlowAdapter";
 import { optionRow } from "../models/optionLayout";
@@ -371,6 +372,9 @@ export default function ProcessNode({
 
   // A resident program has no groups.
   const groupSource = isResident ? undefined : process.groupSource;
+
+  const repeatedLabels = repeatedOptionLabels(process);
+
   const groupBorderColor = groupSource ? groupColor(groupSource.groupId) : null;
 
 
@@ -449,6 +453,15 @@ export default function ProcessNode({
           }}
         >
           {groupSource.programName}
+        </div>
+      )}
+
+      {repeatedLabels.length > 0 && (
+        <div
+          title="The engine merges options with the same label into one: relabel or remove all but one of them in the inspector."
+          style={{ fontSize: 10, color: "#b00020", textAlign: "center", marginBottom: 10 }}
+        >
+          repeated label: {repeatedLabels.join(", ")}
         </div>
       )}
 

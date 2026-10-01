@@ -1,9 +1,9 @@
 import type { Position } from "./position";
 import type { OptionDataType, ProgramOption } from "./option";
-import { createOption } from "./option";
+import { createOption, isValidOptionLabel } from "./option";
 import type { NodeCode, NodeInfo, NodeKind } from "./node";
 import type { ProgramType } from "./program";
-import { emptyNodeCode, nodeNameProblem } from "./node";
+import { emptyNodeCode, isReservedNodeOptionLabel, nodeNameProblem } from "./node";
 
 export type ProcessLanguage =
   | "bash"
@@ -311,5 +311,51 @@ export function processNameProblem(
 
   return nodeProblem && `${nodeProblem} Choose another name.`;
 
+}
+
+/**
+ * Why `label` cannot label an option of `process`, or null if it can: it has
+ * to start with "-", it may not be a label of the Supervisor wiring in a
+ * resident program, and no other option of the process may have it, since
+ * the engine treats a label as the key of an option of a process and merges
+ * two options with the same label. `exceptOptionId` is the option being
+ * relabeled, whose own label does not count.
+ */
+export function optionLabelProblem(
+  process: ProgramProcess,
+  label: string,
+  programType: ProgramType,
+  exceptOptionId?: string
+): string | null {
+
+  const trimmed = label.trim();
+
+  if (!isValidOptionLabel(trimmed)) {
+    return `"${trimmed}" is not an option label: it has to start with "-".`;
+  }
+
+  if (programType === "resident" && isReservedNodeOptionLabel(trimmed)) {
+    return `${trimmed} belongs to the Supervisor wiring, which script generation writes: choose another label.`;
+  }
+
+  if (process.options.some(option => option.id !== exceptOptionId && option.label.trim() === trimmed)) {
+    return `Process "${process.name}" already has an option labeled ${trimmed}.`;
+  }
+
+  return null;
+
+}
+
+// The labels that more than one option of the process has, which only a
+// program whose metadata breaks the rule, such as one edited by hand, can
+// hold (see optionLabelProblem).
+export function repeatedOptionLabels(process: ProgramProcess): string[] {
+  const seen = new Set<string>();
+  const repeated = new Set<string>();
+  for (const option of process.options) {
+    const label = option.label.trim();
+    (seen.has(label) ? repeated : seen).add(label);
+  }
+  return [...repeated];
 }
 

@@ -7,7 +7,7 @@ import type {
   OptionChannel,
 } from "../models/option";
 import type { ProgramType } from "../models/program";
-import { isReservedNodeOptionLabel } from "../models/node";
+import { optionLabelProblem } from "../models/process";
 import {
   getOptionDirection,
   isValidOptionLabel,
@@ -145,7 +145,10 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   const direction = getOptionDirection(label);
 
-  const labelReserved = isResident && isReservedNodeOptionLabel(label);
+  // Shown once something is typed (see optionLabelProblem).
+  const labelProblem = ownerProcess
+    ? optionLabelProblem(ownerProcess, label, programType, option.id)
+    : null;
 
   // Reactive to the label as it's being typed, so the "Count source"
   // field appears/disappears live as the user adds/removes the "ith"
@@ -335,10 +338,9 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
         />
 
-        {labelReserved && (
+        {labelProblem && label.trim() && (
           <div style={{ color: "#b00020", fontSize: 13 }}>
-            {label.trim()} belongs to the Supervisor wiring, which script
-            generation writes: choose another label.
+            {labelProblem}
           </div>
         )}
 
@@ -776,7 +778,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
           <button
             onClick={handleSave}
-            disabled={!isValidOptionLabel(label) || labelReserved}
+            disabled={!isValidOptionLabel(label) || labelProblem !== null}
           >
             Save
           </button>

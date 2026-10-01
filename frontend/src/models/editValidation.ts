@@ -1,8 +1,7 @@
 import { isValidEdge } from "./connections";
-import { hasSupervisor, isReservedNodeOptionLabel } from "./node";
-import { isValidOptionLabel } from "./option";
+import { hasSupervisor } from "./node";
 import type { ProgramProcess } from "./process";
-import { processNameProblem } from "./process";
+import { optionLabelProblem, processNameProblem } from "./process";
 import type { Program } from "./program";
 import type { EditOp } from "./programEdits";
 import { applyEdit } from "./programEdits";
@@ -45,16 +44,6 @@ function editProblem(program: Program, edit: EditOp): string | null {
     [...program.processes, ...program.seqProcesses]
       .filter(member => member.id !== exceptId)
       .map(member => member.name);
-
-  const optionLabelProblem = (label: string) => {
-    if (!isValidOptionLabel(label)) {
-      return `"${label}" is not an option label: it has to start with "-".`;
-    }
-    if (program.programType === "resident" && isReservedNodeOptionLabel(label)) {
-      return `"${label}" is a label of the Supervisor wiring, which no option may take.`;
-    }
-    return null;
-  };
 
   const missingProcess = (id: string) => `There is no process with id "${id}".`;
 
@@ -100,7 +89,7 @@ function editProblem(program: Program, edit: EditOp): string | null {
       if (process.options.some(option => option.id === edit.option.id)) {
         return `Process "${process.name}" already has an option with id "${edit.option.id}".`;
       }
-      return optionLabelProblem(edit.option.label);
+      return optionLabelProblem(process, edit.option.label, program.programType);
     }
 
     case "updateOption": {
@@ -110,7 +99,9 @@ function editProblem(program: Program, edit: EditOp): string | null {
       }
       return (
         missingOption(process, edit.optionId) ??
-        (edit.changes.label === undefined ? null : optionLabelProblem(edit.changes.label))
+        (edit.changes.label === undefined
+          ? null
+          : optionLabelProblem(process, edit.changes.label, program.programType, edit.optionId))
       );
     }
 

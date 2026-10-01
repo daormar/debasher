@@ -378,6 +378,16 @@ the reader). An option's direction always follows from its label, by the
 engine's convention: output if the label starts with `-out` or `--out`, input
 otherwise.
 
+The labels of the options of a process are distinct, compared without the spaces
+around them, case included. The engine treats a label as the key of an option of
+a process: it merges two options with the same label into one, and fails at run
+time if they get different values. The editor refuses a label that the process
+already has, and `validateEdits` refuses it too (`optionLabelProblem` in
+`models/process.ts`). A program whose metadata breaks the rule, for example one
+edited by hand, still loads: the canvas node and the inspector of each such
+process name the repeated labels, so that the user relabels or removes all but
+one.
+
 What `value` holds depends on the other fields, and is always what the
 generated script has to write, not what the process will receive at run time:
 
@@ -2706,8 +2716,9 @@ to a person: reading a program, editing it, running it and following its run,
 as MCP tools. It is a second client of the backend, beside the frontend, and a
 first move towards an assistant in the web UI that helps to design and build a
 program, which would call the same MCP tools (see "Future work"). This section
-is a design: nothing in it is built yet, and the guarantees and non-goals
-stated before it do not change until it is.
+is a design: apart from the distinct option labels that it relies on (see
+"Processes and options"), nothing in it is built yet, and the guarantees and
+non-goals stated before it do not change until it is.
 
 The design follows from one rule: the MCP server edits a program with the
 same code as the editor. The edits, their validation, the rule of which groups
@@ -2738,14 +2749,10 @@ An agent names what it acts on as a person would, never by an internal id. A
 program is named by its home directory, a process by its name, an option by
 its process and its label, and an edge by its two ends, each a process and a
 label. Names of processes are unique in a program (sequential processes
-included), so a process name is enough. Option labels have to be unique within
-a process for the same to hold: the engine already treats a label as the key
-of an option, and merges two options of a process with the same label into
-one, failing at run time if they get different values. The web UI therefore
-adds the rule that the labels of the options of a process are distinct: the
-editor of an option and `validateEdits` refuse a label that the process
-already has, and loading a program whose metadata breaks the rule shows a
-warning on the process rather than refusing the program.
+included), and the labels of the options of a process are distinct (see
+"Processes and options"), so a process name, and a process name with a label,
+are enough. A program that still holds repeated labels is refused by an MCP
+tool that names one of them, until the user relabels them.
 
 A **named edit** is an edit written with names: `{op: "connect", from:
 {process: "a", option: "-outf"}, to: {process: "b", option: "-in"}}`.
@@ -2858,10 +2865,10 @@ check is tested in the backend's own tests.
 # Future work
 
 - **Building the MCP server.** Building what "Editing a program from an agent:
-  the MCP server" designs: the unique option labels, the revisions of the
-  program metadata, the guards in the backend (see "Guards in the backend"
-  below), the resolution of named edits, the placement of a new process, and the
-  server with its MCP tools.
+  the MCP server" designs: the revisions of the program metadata, the guards in
+  the backend (see the "Guards in the backend" item below), the resolution of
+  named edits, the placement of a new process, and the server with its MCP
+  tools.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what
