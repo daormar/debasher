@@ -172,11 +172,6 @@ interface ProgramContextType {
   // another.
   mergeProgram: (loaded: Program, sourceDir: string) => void;
 
-  applyProcessInfo: (
-    processId: string,
-    info: ProcessInfo
-  ) => void;
-
   setName: (
     name: string
   ) => void;
@@ -219,18 +214,26 @@ interface ProgramContextType {
     programOptions: Record<string, string>
   ) => void;
 
-  removeProcess: (
-    processId: string
-  ) => void;
+  // Removes the processes and edges deleted together on the canvas, with a
+  // single confirmation for the groups they touch. Returns whether they
+  // were removed, so the canvas keeps them when the user declines.
+  removeFromCanvas: (
+    processIds: string[],
+    edgeIds: string[]
+  ) => boolean;
 
   moveProcess: (
     processId: string,
     position: Position
   ) => void;
 
+  // Renames the process and, when `info` is given, replaces its
+  // description, options, language and code with what the library brings
+  // for the new name.
   renameProcess: (
     processId: string,
-    name: string
+    name: string,
+    info?: ProcessInfo | null
   ) => void;
 
   setProcessDescription: (
@@ -304,9 +307,6 @@ interface ProgramContextType {
     edge: ProgramEdge
   ) => void;
 
-  disconnect: (
-    edgeId: string
-  ) => void;
 }
 
 function toProgramOption(info: ProcessInfoOption): ProgramOption {
@@ -341,10 +341,21 @@ export function ProgramProvider({
   const [program, setProgramRaw] =
     useState<Program>(() => edits.normalizeProgram(initialProgram));
 
+  // The latest program, ahead of `program` until React renders again:
+  // every edit applies to it, so that several edits within one event (or
+  // an edit after an await) build on each other, and what an edit
+  // decides from the program (whether it touches a group, see
+  // editProcesses) is never decided from a stale render. The status poll
+  // below reads it too, to send the current program.
+  const programRef =
+    useRef(program);
+
   // Every edit is followed by normalizeProgram, which keeps the references
   // of the connected options in step with the edges and names.
   function setProgram(updater: (current: Program) => Program) {
-    setProgramRaw(current => edits.normalizeProgram(updater(current)));
+    const next = edits.normalizeProgram(updater(programRef.current));
+    programRef.current = next;
+    setProgramRaw(next);
   }
 
   async function save(outputDir: string) {
@@ -496,17 +507,6 @@ export function ProgramProvider({
 
   const runOutput =
     runPhase === "unfinished" ? statusOutput : null;
-
-  // Kept in sync on every render so the status-poll effect below (which
-  // only restarts when outputDir/DEBASHER_MOD_DIR change, not on every
-  // program edit) always sends the current program rather than a stale
-  // closure over it.
-  const programRef =
-    useRef(program);
-
-  useEffect(() => {
-    programRef.current = program;
-  }, [program]);
 
   function applyProcessStatuses(result: ProcessStatusesResult) {
     setProcessStatuses(result.statuses);
@@ -825,63 +825,43 @@ export function ProgramProvider({
 
   // A process tagged with GroupSource ("Add program") represents a
   // process add_debasher_program will re-declare, unmodified, from its
-  // source module. Anything that changes that process's own definition,
-  // or which edges target it (a connected option's
-  // define_opt_from_proc_out call lives in the *target*'s own generated
-  // function, see api/script_generation.py's _option_definition_line),
-  // would silently get overwritten by that re-declaration once
-  // generated. So any such change first confirms detaching the whole
-  // group (stripping groupSource from every process sharing its
-  // groupId, not just this one) with the user, and is aborted if
-  // declined. Connecting/disconnecting an edge whose target ISN'T
-  // grouped stays free even when its source is (see connect/disconnect):
-  // that only touches the (ungrouped) target's own function.
-  function confirmDetachIfGrouped(processId: string): boolean {
+  // source module, so an edit that would be overwritten by that
+  // re-declaration first asks the user, once for all the groups it
+  // touches (see edits.groupsOfProcesses), and either dissolves them
+  // together with the edit or, if the user declines, leaves the program
+  // as it was. Returns whether the edit was applied.
+  function editTouchingGroups(
+    groups: edits.TouchedGroups,
+    edit: (current: Program) => Program
+  ): boolean {
 
-    const groupSource = program.processes.find(
-      process => process.id === processId
-    )?.groupSource;
-
-    if (!groupSource) {
-      return true;
+    if (groups.size > 0) {
+      const programNames = [...new Set(groups.values())].join('", "');
+      const confirmed = window.confirm(
+        `This changes what was added from program "${programNames}" via ` +
+        `"Add program". Changing it here will disconnect the whole group ` +
+        `from that program: it will stop being generated as ` +
+        `add_debasher_program and each of its processes and sequential ` +
+        `processes will be generated on its own instead. Continue?`
+      );
+      if (!confirmed) {
+        return false;
+      }
     }
 
-    const confirmed = window.confirm(
-      `This process was added from program "${groupSource.programName}" via ` +
-      `"Add program". Changing it here will disconnect the whole group from ` +
-      `that program: it will stop being generated as ` +
-      `add_debasher_program "${groupSource.programName}" and each of its ` +
-      `processes will be generated on its own instead. Continue?`
-    );
-
-    if (!confirmed) {
-      return false;
-    }
-
-    setProgram(current => edits.dissolveGroups(current, new Set([groupSource.groupId])));
+    setProgram(current => edit(edits.dissolveGroups(current, new Set(groups.keys()))));
 
     return true;
 
   }
 
-  function applyProcessInfo(
-    processId: string,
-    info: ProcessInfo
-  ) {
-
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    const options = info.options.map(toProgramOption);
-
-    setProgram(current => edits.updateProcess(current, processId, {
-      description: info.description,
-      options,
-      language: info.language,
-      code: info.code,
-    }));
-
+  // An edit of the definition of the given processes (see
+  // editTouchingGroups).
+  function editProcesses(
+    processIds: string[],
+    edit: (current: Program) => Program
+  ): boolean {
+    return editTouchingGroups(edits.groupsOfProcesses(programRef.current, processIds), edit);
   }
 
   function setName(
@@ -912,39 +892,10 @@ export function ProgramProvider({
     seqProcesses: SeqProcess[]
   ): boolean {
 
-    // The groups of the sequential processes that the change edits or
-    // removes, which add_debasher_program could no longer declare
-    const newById = new Map(seqProcesses.map(seqProcess => [seqProcess.id, seqProcess]));
-    const touchedGroups = new Map<string, string>();
-    for (const old of program.seqProcesses) {
-      if (!old.groupSource) {
-        continue;
-      }
-      const changed = newById.get(old.id);
-      if (!changed || JSON.stringify(changed) !== JSON.stringify(old)) {
-        touchedGroups.set(old.groupSource.groupId, old.groupSource.programName);
-      }
-    }
-
-    if (touchedGroups.size > 0) {
-      const programNames = [...new Set(touchedGroups.values())].join('", "');
-      const confirmed = window.confirm(
-        `A sequential process that you changed or removed was added from ` +
-        `program "${programNames}" via "Add program". Changing it here will ` +
-        `disconnect the whole group from that program: it will stop being ` +
-        `generated as add_debasher_program and each of its processes and ` +
-        `sequential processes will be generated on its own instead. Continue?`
-      );
-      if (!confirmed) {
-        return false;
-      }
-    }
-
-    setProgram(current =>
-      edits.dissolveGroups({ ...current, seqProcesses }, new Set(touchedGroups.keys()))
+    return editTouchingGroups(
+      edits.groupsOfChangedSeqProcesses(programRef.current, seqProcesses),
+      current => ({ ...current, seqProcesses })
     );
-
-    return true;
 
   }
 
@@ -1003,22 +954,39 @@ export function ProgramProvider({
 
   }
 
-  function removeProcess(
-    processId: string
-  ) {
+  // Removes the processes and edges deleted together on the canvas, asking
+  // once for all the groups they touch (see editTouchingGroups). Returns
+  // whether they were removed.
+  function removeFromCanvas(
+    processIds: string[],
+    edgeIds: string[]
+  ): boolean {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
+    const current = programRef.current;
+    const groups = new Map([
+      ...edits.groupsOfProcesses(current, processIds),
+      ...edits.groupsOfEdgeTargets(current, edgeIds),
+    ]);
+
+    const removed = editTouchingGroups(groups, program =>
+      processIds.reduce(
+        (edited, processId) => edits.removeProcess(edited, processId),
+        edgeIds.reduce((edited, edgeId) => edits.disconnect(edited, edgeId), program)
+      )
+    );
+
+    if (removed) {
+      setSelectedProcessId(selected =>
+        selected !== null && processIds.includes(selected) ? null : selected
+      );
     }
 
-    setProgram(current => edits.removeProcess(current, processId));
-
-    setSelectedProcessId(current =>
-      current === processId ? null : current
-    );
+    return removed;
 
   }
 
+  // The position is not part of what add_debasher_program declares, so
+  // moving a process of a group leaves the group as it is.
   function moveProcess(
     processId: string,
     position: Position
@@ -1030,14 +998,21 @@ export function ProgramProvider({
 
   function renameProcess(
     processId: string,
-    name: string
+    name: string,
+    info?: ProcessInfo | null
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
+    const options = info?.options.map(toProgramOption);
 
-    setProgram(current => edits.updateProcess(current, processId, { name }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, {
+      name,
+      ...(info && {
+        description: info.description,
+        options,
+        language: info.language,
+        code: info.code,
+      }),
+    }));
 
   }
 
@@ -1046,11 +1021,7 @@ export function ProgramProvider({
     description: string
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateProcess(current, processId, { description }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, { description }));
 
   }
 
@@ -1059,11 +1030,7 @@ export function ProgramProvider({
     language: ProcessLanguage
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateProcess(current, processId, { language }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, { language }));
 
   }
 
@@ -1072,14 +1039,12 @@ export function ProgramProvider({
     code: string
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateProcess(current, processId, { code }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, { code }));
 
   }
 
+  // A node and its initiator flag exist only in a resident program, which
+  // has no groups (see mergeProgram), so neither setter asks.
   function setNodeCode(
     processId: string,
     nodeCode: NodeCode
@@ -1103,11 +1068,7 @@ export function ProgramProvider({
     computationalSpecs: ComputationalSpecs
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateProcess(current, processId, { computationalSpecs }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, { computationalSpecs }));
 
   }
 
@@ -1116,11 +1077,7 @@ export function ProgramProvider({
     additionalSpecs: AdditionalSpecs
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateProcess(current, processId, { additionalSpecs }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, { additionalSpecs }));
 
   }
 
@@ -1129,11 +1086,7 @@ export function ProgramProvider({
     optionsHandler: OptionsHandler
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateProcess(current, processId, { optionsHandler }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, { optionsHandler }));
 
   }
 
@@ -1142,11 +1095,7 @@ export function ProgramProvider({
     additionalMethods: AdditionalMethods
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateProcess(current, processId, { additionalMethods }));
+    editProcesses([processId], current => edits.updateProcess(current, processId, { additionalMethods }));
 
   }
 
@@ -1154,10 +1103,6 @@ export function ProgramProvider({
     processId: string,
     label: string
   ) {
-
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
 
     const option: ProgramOption = {
 
@@ -1185,7 +1130,7 @@ export function ProgramProvider({
 
     };
 
-    setProgram(current => edits.addOption(current, processId, option));
+    editProcesses([processId], current => edits.addOption(current, processId, option));
 
   }
 
@@ -1195,11 +1140,7 @@ export function ProgramProvider({
     changes: Partial<Omit<ProgramOption, "id">>
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.updateOption(current, processId, optionId, changes));
+    editProcesses([processId], current => edits.updateOption(current, processId, optionId, changes));
 
   }
 
@@ -1208,11 +1149,7 @@ export function ProgramProvider({
     optionId: string
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => edits.removeOption(current, processId, optionId));
+    editProcesses([processId], current => edits.removeOption(current, processId, optionId));
 
   }
 
@@ -1222,11 +1159,7 @@ export function ProgramProvider({
     orderedIds: string[]
   ) {
 
-    if (!confirmDetachIfGrouped(processId)) {
-      return;
-    }
-
-    setProgram(current => {
+    editProcesses([processId], current => {
 
       const flippedOptionIds = computeFlippedOptionIds(current);
 
@@ -1282,31 +1215,7 @@ export function ProgramProvider({
     edge: ProgramEdge
   ) {
 
-    // Only the *target*'s own generated function embeds the connection
-    // (see confirmDetachIfGrouped), a grouped process's output feeding
-    // something new outside the group stays free, since that's encoded
-    // in the (ungrouped) target's function instead.
-    if (!confirmDetachIfGrouped(edge.targetProcessId)) {
-      return;
-    }
-
-    setProgram(current => edits.connect(current, edge));
-
-  }
-
-  function disconnect(
-    edgeId: string
-  ) {
-
-    const targetProcessId = program.edges.find(
-      e => e.id === edgeId
-    )?.targetProcessId;
-
-    if (targetProcessId && !confirmDetachIfGrouped(targetProcessId)) {
-      return;
-    }
-
-    setProgram(current => edits.disconnect(current, edgeId));
+    editProcesses([edge.targetProcessId], current => edits.connect(current, edge));
 
   }
 
@@ -1353,7 +1262,6 @@ export function ProgramProvider({
 
     mergeProgram,
 
-    applyProcessInfo,
 
     setName,
 
@@ -1373,7 +1281,7 @@ export function ProgramProvider({
 
     setProgramOptions,
 
-    removeProcess,
+    removeFromCanvas,
 
     moveProcess,
 
@@ -1407,7 +1315,6 @@ export function ProgramProvider({
 
     connect,
 
-    disconnect,
 
   }), [
     program,

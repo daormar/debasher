@@ -369,11 +369,11 @@ describe("editing the processes of a program", () => {
     expect(blank.nodeKind).toBeUndefined();
   });
 
-  it("replaces what a process got from the library, keeping its name", () => {
+  it("renames a process with what the library brings for the new name", () => {
     const { result } = renderStore(programWith([bashProcess("a", [option("o1", "-x")])]));
 
     act(() =>
-      result.current.applyProcessInfo("id-a", {
+      result.current.renameProcess("id-a", "sorter", {
         description: "new",
         language: "perl",
         code: "print 1;",
@@ -381,11 +381,32 @@ describe("editing the processes of a program", () => {
       })
     );
 
+    const sorter = processNamed(result.current.program, "sorter");
+    expect(sorter.description).toBe("new");
+    expect(sorter.language).toBe("perl");
+    expect(sorter.code).toBe("print 1;");
+    expect(sorter.options.map(o => o.label)).toEqual(["-y"]);
+  });
+
+  it("renames a process keeping what it has when the library brings nothing", () => {
+    const { result } = renderStore(programWith([bashProcess("a", [option("o1", "-x")])]));
+
+    act(() => result.current.renameProcess("id-a", "b", null));
+
+    const b = processNamed(result.current.program, "b");
+    expect(b.options.map(o => o.id)).toEqual(["o1"]);
+  });
+
+  it("applies several edits made within one event one after another", () => {
+    const { result } = renderStore(programWith([bashProcess("a")]));
+
+    act(() => {
+      result.current.setProcessCode("id-a", "echo 1");
+      result.current.setProcessDescription("id-a", "described");
+    });
+
     const a = processNamed(result.current.program, "a");
-    expect(a.description).toBe("new");
-    expect(a.language).toBe("perl");
-    expect(a.code).toBe("print 1;");
-    expect(a.options.map(o => o.label)).toEqual(["-y"]);
+    expect([a.code, a.description]).toEqual(["echo 1", "described"]);
   });
 
   it("removes a process with the connections that touch it, and unselects it", () => {
@@ -401,7 +422,7 @@ describe("editing the processes of a program", () => {
     );
     act(() => result.current.selectProcess("id-b"));
 
-    act(() => result.current.removeProcess("id-b"));
+    act(() => result.current.removeFromCanvas(["id-b"], []));
 
     expect(result.current.program.processes.map(p => p.name)).toEqual(["a", "c"]);
     expect(result.current.program.edges).toEqual([]);
@@ -471,7 +492,7 @@ describe("connections between processes", () => {
     const { result } = renderStore(twoProcesses());
     act(() => result.current.connect(edge("e1", ["a", "ao"], ["b", "bi"])));
 
-    act(() => result.current.disconnect("e1"));
+    act(() => result.current.removeFromCanvas([], ["e1"]));
 
     expect(result.current.program.edges).toEqual([]);
     expect(optionValue(result.current.program, "b", "bi")).toBe("");
@@ -483,7 +504,7 @@ describe("connections between processes", () => {
     );
     act(() => result.current.connect(edge("e1", ["a", "ao"], ["b", "bi"])));
 
-    act(() => result.current.disconnect("e1"));
+    act(() => result.current.removeFromCanvas([], ["e1"]));
 
     expect(optionValue(result.current.program, "b", "bi")).toBe("shdir");
   });
@@ -591,7 +612,7 @@ describe("editing a process added with another program", () => {
     const before = result.current.program;
 
     act(() => result.current.renameProcess("id-a", "renamed"));
-    act(() => result.current.removeProcess("id-b"));
+    act(() => result.current.removeFromCanvas(["id-b"], []));
 
     expect(result.current.program).toEqual(before);
   });
@@ -618,6 +639,64 @@ describe("editing a process added with another program", () => {
     act(() => result.current.connect(edge("e2", ["c", "co"], ["b", "bi"])));
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(processNamed(result.current.program, "b").groupSource).toBeUndefined();
+  });
+
+  it("asks once for all the processes and edges deleted together", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderStore({
+      ...grouped(),
+      edges: [edge("e1", ["c", "co"], ["b", "bi"])],
+    });
+
+    let removed = false;
+    act(() => {
+      removed = result.current.removeFromCanvas(["id-a", "id-b"], ["e1"]);
+    });
+
+    expect(removed).toBe(true);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(result.current.program.processes.map(p => p.name)).toEqual(["c"]);
+    expect(result.current.program.edges).toEqual([]);
+    expect(result.current.program.seqProcesses[0].groupSource).toBeUndefined();
+  });
+
+  it("keeps everything deleted together when the user declines", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { result } = renderStore(grouped());
+    const before = result.current.program;
+
+    let removed = true;
+    act(() => {
+      removed = result.current.removeFromCanvas(["id-a", "id-c"], []);
+    });
+
+    expect(removed).toBe(false);
+    expect(result.current.program).toEqual(before);
+  });
+
+  it("asks no more once a first edit within the same event has freed the group", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderStore(grouped());
+
+    act(() => {
+      result.current.setProcessCode("id-a", "echo changed");
+      result.current.setProcessCode("id-b", "echo changed too");
+    });
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(result.current.program.processes.map(p => p.code)).toEqual(["echo changed", "echo changed too", ""]);
+  });
+
+  it("asks once when a process is renamed with what the library brings", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderStore(grouped());
+
+    act(() =>
+      result.current.renameProcess("id-a", "renamed", { description: "d", language: "bash", code: "", options: [] })
+    );
+
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(processNamed(result.current.program, "renamed").description).toBe("d");
   });
 
 });

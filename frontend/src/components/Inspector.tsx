@@ -38,7 +38,6 @@ export default function Inspector() {
     program,
     selectedProcess,
     renameProcess,
-    applyProcessInfo,
     setProcessDescription,
     addOption,
     removeOption,
@@ -289,12 +288,7 @@ export default function Inspector() {
           preamble={program.preamble}
           envVars={program.envVars}
           programType={program.programType}
-          onConfirm={(name, info) => {
-            renameProcess(selectedProcess.id, name);
-            if (info) {
-              applyProcessInfo(selectedProcess.id, info);
-            }
-          }}
+          onConfirm={(name, info) => renameProcess(selectedProcess.id, name, info)}
           onClose={() => setChangeNameOpen(false)}
         />
       )}

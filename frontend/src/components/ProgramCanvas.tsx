@@ -200,9 +200,8 @@ export default function ProgramCanvas() {
     program,
     selectProcess,
     moveProcess,
-    removeProcess,
+    removeFromCanvas,
     connect,
-    disconnect,
     runPhase,
     runOutput,
     runEndSeen,
@@ -362,18 +361,13 @@ export default function ProgramCanvas() {
     []
   );
 
-  const onNodesDelete = useCallback(
-    (deletedNodes: Node<ProgramProcessData>[]) => {
-      deletedNodes.forEach(node => removeProcess(node.id));
-    },
-    [removeProcess]
-  );
-
-  const onEdgesDelete = useCallback(
-    (deletedEdges: Edge[]) => {
-      deletedEdges.forEach(edge => disconnect(edge.id));
-    },
-    [disconnect]
+  // Asked before React Flow removes anything from its own copy, so the
+  // processes and edges deleted together get a single confirmation for the
+  // groups they touch, and stay on the canvas when the user declines.
+  const onBeforeDelete = useCallback(
+    async ({ nodes, edges }: { nodes: Node<ProgramProcessData>[]; edges: Edge[] }) =>
+      removeFromCanvas(nodes.map(node => node.id), edges.map(edge => edge.id)),
+    [removeFromCanvas]
   );
 
   const onNodeClick = useCallback(
@@ -893,8 +887,7 @@ export default function ProgramCanvas() {
         onPaneClick={onPaneClick}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onNodesDelete={onNodesDelete}
-        onEdgesDelete={onEdgesDelete}
+        onBeforeDelete={onBeforeDelete}
         deleteKeyCode={["Delete", "Backspace"]}
         fitView
       >

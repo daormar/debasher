@@ -4,6 +4,7 @@ import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { DEFAULT_SCHEDULER } from "./program";
+import type { SeqProcess } from "./seqProcess";
 
 // The edits of a program, as plain functions that take a program and return
 // the edited one without changing their input. They depend on nothing but the
@@ -139,6 +140,65 @@ export function dissolveGroups(source: Program, groupIds: Set<string>): Program 
       inGroup(seqProcess.groupSource?.groupId) ? { ...seqProcess, groupSource: undefined } : seqProcess
     ),
   };
+
+}
+
+// The groups that an edit would dissolve, by groupId, each with the name of
+// the program it was added from.
+export type TouchedGroups = Map<string, string>;
+
+/**
+ * The groups of the given processes: those that an edit of their
+ * definition, or of an edge that targets one of them, dissolves. Moving a
+ * process touches no group, nor does connecting an output of a grouped
+ * process to a process outside the group, since that connection lives in
+ * the target's own generated function.
+ */
+export function groupsOfProcesses(program: Program, processIds: Iterable<string>): TouchedGroups {
+
+  const ids = new Set(processIds);
+  const groups: TouchedGroups = new Map();
+
+  for (const process of program.processes) {
+    if (ids.has(process.id) && process.groupSource) {
+      groups.set(process.groupSource.groupId, process.groupSource.programName);
+    }
+  }
+
+  return groups;
+
+}
+
+// The groups of the edges' targets (see groupsOfProcesses).
+export function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): TouchedGroups {
+  const ids = new Set(edgeIds);
+  return groupsOfProcesses(
+    program,
+    program.edges.filter(edge => ids.has(edge.id)).map(edge => edge.targetProcessId)
+  );
+}
+
+/**
+ * The groups that replacing the sequential processes with the given ones
+ * dissolves: those of a grouped sequential process that the replacement
+ * changes or leaves out.
+ */
+export function groupsOfChangedSeqProcesses(program: Program, seqProcesses: SeqProcess[]): TouchedGroups {
+
+  const newById = new Map(seqProcesses.map(seqProcess => [seqProcess.id, seqProcess]));
+  const groups: TouchedGroups = new Map();
+
+  for (const old of program.seqProcesses) {
+    if (!old.groupSource) {
+      continue;
+    }
+    const changed = newById.get(old.id);
+    if (!changed || JSON.stringify(changed) !== JSON.stringify(old)) {
+      groups.set(old.groupSource.groupId, old.groupSource.programName);
+    }
+  }
+
+  return groups;
 
 }
 

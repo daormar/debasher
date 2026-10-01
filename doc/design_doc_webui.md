@@ -464,8 +464,8 @@ none has been edited, script generation declares them with a single
 the one place where they are defined. The engine cannot express a module minus
 one process, or with one process changed, so editing the content of any
 process of the group, removing one, or connecting an input of one to something
-new first asks the user, and then dissolves the whole group: its processes are
-then generated one by one, like any other.
+new or disconnecting it first asks the user, and then dissolves the whole
+group: its processes are then generated one by one, like any other.
 
 # From the model to a module: script generation
 
@@ -1110,17 +1110,24 @@ from the edges and restores the default scheduler if it is blank. The rules of
 "Connections" therefore hold after every change, not only when the program is
 saved. An operation that would change a process of a group first asks the
 user, and dissolves the whole group if the user agrees (see "Groups"); if not,
-the program is left as it was.
+the program is left as it was. One action of the user asks once, for all the
+groups it touches: deleting a selection on the canvas removes its processes
+and edges in one operation, asked before the canvas drops anything, so a
+declined deletion leaves them drawn; renaming a process along with the
+definition that a loaded module provides for the new name is one operation
+too. Every operation applies to the latest program, not to the one of the last
+render, so the operations of one event build on each other, and once the first
+has dissolved a group the next ones do not ask again.
 
 The operations rest on plain functions of the program model, in
 `models/programEdits.ts`: each takes a program and returns the edited one
 without changing its input, and depends on nothing outside the model, neither
-React nor the browser. The normalization lives there too. What the store adds
-around them is what needs the tab: asking the user before a group is
-dissolved, generating the ids of new processes, options and edges, and keeping
-the result as the program of the tab. Code outside the store that edits a
-program is to reuse these functions, so that it obeys the same rules as the
-editor.
+React nor the browser. The normalization lives there too, and so does the rule
+of which groups an operation touches. What the store adds around them is what
+needs the tab: asking the user before a group is dissolved, generating the ids
+of new processes, options and edges, and keeping the result as the program of
+the tab. Code outside the store that edits a program is to reuse these
+functions, so that it obeys the same rules as the editor.
 
 The store keeps no history and no record of unsaved changes: there is no
 undo, and leaving the editor or closing the tab loses the changes made since
