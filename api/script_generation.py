@@ -859,7 +859,53 @@ def _check_seq_processes(program: Program) -> None:
         seen.add(seq_process.name)
 
 
-def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset()) -> str:
+def _defines_bash_function(code: str, name: str) -> bool:
+    """
+    Whether Bash `code` defines a function named `name`, in either form
+    that Bash accepts ("name()" or "function name"). Mirrors
+    definesBashFunction in frontend/src/models/seqProcess.ts.
+    """
+    escaped = re.escape(name)
+    pattern = rf"^\s*(function\s+{escaped}(\s*\(\s*\)|\s|$)|{escaped}\s*\(\s*\))"
+    return re.search(pattern, code, re.MULTILINE) is not None
+
+
+def _alias_target_codes(program: Program) -> dict[str, str]:
+    """
+    The code of each alias target that nothing else in the program
+    writes, keyed by target name: the engine builds the function of an
+    alias from its target, so script generation writes no code for the
+    alias itself, but import keeps, as the code of an alias, that of its
+    target (see "What the engine reports" in doc/design_doc_webui.md).
+    When the target is a plain function of the imported module, which is
+    neither a process nor a sequential process, that code is the only
+    copy of it, and leaving it out would leave the alias with nothing to
+    run. It is written when the target is not a process or a sequential
+    process of the program and the code is Bash that defines a function
+    of the target's name: the code of an alias created in the web UI is
+    whatever the user left there, which normally does not, and is then
+    not written. One copy per target.
+    Whether a module of the preamble already provides the target is
+    checked apart (see _find_module_provided_alias_targets).
+    """
+    own_names = {member.name for member in [*program.processes, *program.seqProcesses]}
+    codes: dict[str, str] = {}
+    for member in [*program.processes, *program.seqProcesses]:
+        target = member.additionalSpecs.alias
+        if not target or member.additionalSpecs.externalAlias:
+            continue
+        if target in own_names or target in codes:
+            continue
+        if member.language == "bash" and _defines_bash_function(member.code, target):
+            codes[target] = member.code
+    return codes
+
+
+def _build_script(
+    program: Program,
+    skip_exec_for: frozenset[str] = frozenset(),
+    alias_target_codes: dict[str, str] | None = None,
+) -> str:
     """
     Build the <program.name>.sh contents, omitting the exec function
     (_add_exec_func) for any process whose name is in `skip_exec_for`, used by generate_script to leave out processes _find_redundant_exec_funcs
@@ -922,6 +968,12 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
             if exec_func_lines:
                 lines.extend(exec_func_lines)
                 lines.extend(["", ""])
+
+    # Add the functions that aliases run and nothing else in the program
+    # writes (see _alias_target_codes)
+    for code in (alias_target_codes or {}).values():
+        lines.append(code)
+        lines.extend(["", ""])
 
     # Add program function
     lines.extend(_add_program_function(program))
@@ -1118,6 +1170,34 @@ def _find_redundant_exec_funcs(program: Program) -> frozenset[str]:
     return frozenset(redundant)
 
 
+def _find_module_provided_alias_targets(program: Program, alias_target_codes: dict[str, str]) -> frozenset[str]:
+    """
+    The alias targets of `alias_target_codes` that a module the preamble
+    loads already defines, identically, whose code script generation
+    leaves out as it leaves out that of a process (see
+    _find_redundant_exec_funcs). A target that the preamble defines
+    differently is written, since in the imported module its own
+    definition, loaded later, was the one that ran. A check that fails
+    counts as not provided, so that the code is written: it can only save
+    a duplicate, never lose code.
+    """
+    if not alias_target_codes:
+        return frozenset()
+    debasher_mod_dir = program.envVars.get("DEBASHER_MOD_DIR", "")
+    provided: set[str] = set()
+    for target, code in alias_target_codes.items():
+        try:
+            module_code = _module_provided_code(target, program.preamble, debasher_mod_dir)
+            if not module_code:
+                continue
+            own_code = _own_code_canonicalized(target, "bash", code, debasher_mod_dir)
+        except RuntimeError:
+            continue
+        if module_code == own_code:
+            provided.add(target)
+    return frozenset(provided)
+
+
 def generate_script(program: Program, skip_redundant_check: bool = False) -> str:
     """
     Generate the contents of the <program.name>.sh file for `program`.
@@ -1142,4 +1222,10 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
         # redundant to leave out.
         return _build_script(resident_program_for_generation(program))
     skip_exec_for = frozenset() if skip_redundant_check else _find_redundant_exec_funcs(program)
-    return _build_script(program, skip_exec_for=skip_exec_for)
+    alias_target_codes = _alias_target_codes(program)
+    if not skip_redundant_check:
+        provided = _find_module_provided_alias_targets(program, alias_target_codes)
+        alias_target_codes = {
+            target: code for target, code in alias_target_codes.items() if target not in provided
+        }
+    return _build_script(program, skip_exec_for=skip_exec_for, alias_target_codes=alias_target_codes)

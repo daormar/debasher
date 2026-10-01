@@ -500,7 +500,9 @@ The generated module holds, in this order:
    generation never writes it.
 4. For each sequential process, its `_document` function and its code (see
    "Generating and importing a sequential process").
-5. `<name>_program`, with one `add_debasher_process` per process, carrying its
+5. The code of each function that an alias runs and that nothing else in the
+   program writes (see "Code that a loaded module already provides").
+6. `<name>_program`, with one `add_debasher_process` per process, carrying its
    computational specifications (`cpus=... mem=... time=...`) and its
    additional specifications (`force=yes;processdeps=...;alias=...`), then one
    `add_debasher_seq_process` per sequential process. The members of a group
@@ -570,14 +572,26 @@ written, and a backquote in it is never run as a command.
 ## Code that a loaded module already provides
 
 A process imported from a module can carry code that one of the modules its
-preamble loads already defines. Before writing the code of each process,
-script generation asks `debasher_get_proc_info` for the canonical form of the
-process's code as the preamble alone defines it, and for the canonical form of
-the process's own code. If both exist and are equal, the generated module
-leaves the code out and relies on the loaded module. If either query fails, it
-writes the code: the check can only save a duplicate, never lose code. A
-process with an `alias` or an `ext_alias` gets no code at all, since the engine
-builds its function from the aliased one.
+preamble loads already defines. Before writing the code of each process, script
+generation asks `debasher_get_proc_info` for the canonical form of the process's
+code as the preamble alone defines it, and for the canonical form of the
+process's own code. If both exist and are equal, the generated module leaves the
+code out and relies on the loaded module. If either query fails, it writes the
+code: the check can only save a duplicate, never lose code. A process with an
+`alias` or an `ext_alias` gets no code of its own, since the engine builds its
+function from the aliased one.
+
+Import keeps, as the code of an `alias` (not an `ext_alias`), the code of the
+function it runs, since that is the implementation that the engine reports for
+it. When that function is a plain function of the imported module, neither a
+process nor a sequential process, this code is the only copy of it in the
+program, and a module without it would leave the alias with nothing to run.
+Script generation therefore writes it, once for each function, when the function
+is not a process or a sequential process of the program, when the code of the
+alias is Bash that defines a function of that name, and when no module of the
+preamble already defines the same function, by the comparison above. The code of
+an alias created in the web UI holds whatever the user left there, which
+normally does not define the function it runs, and so is not written.
 
 ## What script generation refuses
 
@@ -742,8 +756,9 @@ held in a heredoc variable comes back in a heredoc function. Some things a
 module can say have no place in the model and are lost: the explicit dependency
 types of `_define_opt_deps`, which the module documentation shows and import
 does not keep; the program type of `_program_type`; any code of the module after
-its first function that belongs to no process or sequential process; and the
-specifications the model does not hold.
+its first function that belongs to no process or sequential process, unless it
+is a Bash function that an alias runs (see "Code that a loaded module already
+provides"); and the specifications the model does not hold.
 
 `test/api/test_round_trip.py` checks both directions. From the model to a
 module and back, it builds programs that cover every options handler mode,
@@ -1194,15 +1209,16 @@ engine refuses on a sequential process, and, as for a process, none for
 module holds, for each sequential process in the order of the model, its
 `_document` function and its code, written as the code of a process is: a Bash
 function as it is, and code in another language as a heredoc function
-`<name>_heredoc_<suffix>`. A sequential process with an alias gets no code, and
-the check of "Code that a loaded module already provides" applies to it as to a
+`<name>_heredoc_<suffix>`. A sequential process with an alias gets no code of
+its own, the code of the function it runs is written as for a process, and the
+check of "Code that a loaded module already provides" applies to it as to a
 process. `<name>_program` then has one `add_debasher_seq_process` for each
 sequential process, after the `add_debasher_process` lines, with its
 specifications. Script generation refuses a program in which a sequential
 process and a process, or two sequential processes, share a name. When the
 module is generated to read its environment variables (see "Environment
-variables of a program"), a sequential process without code gets a function
-that does nothing, like a process. Saving copies the file of a relative
+variables of a program"), a sequential process without code gets a function that
+does nothing, like a process. Saving copies the file of a relative
 `externalAlias` of a sequential process into the home directory, as it copies
 that of a process (see "The home directory").
 

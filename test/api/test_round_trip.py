@@ -20,6 +20,7 @@ Two properties are checked:
   metadata (see _canonical_program).
 """
 
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -38,7 +39,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import persistence
+from api import paths, persistence
 from api.models import (
     AdditionalMethods,
     AdditionalSpecs,
@@ -434,6 +435,101 @@ def test_sequential_processes_survive_the_round_trip(tmp_path):
     )
 
     _assert_model_round_trip(program, tmp_path)
+
+
+# A module whose aliases run plain functions of its own, which are neither
+# processes nor sequential processes: a process alias of "greet" and a
+# sequential alias of "increment", which "calc" runs as a step.
+_ALIAS_TARGET_MODULE = r"""
+greet()
+{
+    echo "hello from greet"
+}
+
+increment()
+{
+    echo $(( $1 + 1 )) > "$2"
+}
+
+greeter_document()
+{
+    debasher::document_process "Greets."
+}
+
+greeter_explain_opts()
+{
+    :
+}
+
+greeter_define_opts()
+{
+    local optlist=""
+    save_opt_list optlist
+}
+
+calc_document()
+{
+    debasher::document_process "Adds one with a step."
+}
+
+calc_explain_opts()
+{
+    explain_opt "-outd" "<file>" "output directory"
+}
+
+calc_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outd" "${process_outdir}" optlist || return 1
+    save_opt_list optlist
+}
+
+calc()
+{
+    local outd=$(read_opt_value_from_func_args "-outd" "$@")
+    seq_execute add_one 4 "${outd}/result.txt"
+}
+
+rt_alias_target_program()
+{
+    add_debasher_process "greeter" "cpus=1 mem=32 time=00:01:00" "alias=greet"
+    add_debasher_process "calc" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_seq_process "add_one" "" "alias=increment"
+}
+"""
+
+
+def test_a_plain_function_that_an_alias_runs_survives_the_round_trip_and_runs(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    module = source_dir / "rt_alias_target.sh"
+    module.write_text(_ALIAS_TARGET_MODULE)
+
+    imported = import_program_from_script(module, "")
+
+    # The generated module defines the targets, so that it loads and runs
+    saved_dir = tmp_path / "saved"
+    saved_dir.mkdir()
+    persistence.save_script(str(saved_dir), imported)
+    script = (saved_dir / "rt_alias_target.sh").read_text()
+    assert script.count("greet()") == 1
+    assert script.count("increment()") == 1
+
+    reimported = import_program_from_script(saved_dir / "rt_alias_target.sh", "")
+    assert _canonical_program(reimported) == _canonical_program(imported)
+
+    debasher_exec = paths.find_bin_tool("debasher_exec")
+    assert debasher_exec is not None
+    outdir = tmp_path / "out"
+    run = subprocess.run(
+        [str(debasher_exec), "--pfile", str(saved_dir / "rt_alias_target.sh"),
+         "--outdir", str(outdir), "--sched", "BUILTIN"],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert (outdir / "calc" / "result.txt").read_text().strip() == "5"
+    assert "hello from greet" in (outdir / "__exec__" / "greeter" / "greeter.stdout").read_text()
 
 
 # --- Resident programs -----------------------------------------------------

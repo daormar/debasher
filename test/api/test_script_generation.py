@@ -195,3 +195,45 @@ def test_a_sequential_process_without_code_gets_a_stub_for_reading_environment_v
     stubbed = _stub_processes_missing_code(_seq_program([step]))
 
     assert stubbed.seqProcesses[0].code == "step()\n{\n    :\n}"
+
+
+# --- The code of an alias target -------------------------------------------
+
+_INCREMENT = "increment()\n{\n    echo $(( $1 + 1 ))\n}"
+
+
+def test_the_code_of_a_plain_function_that_aliases_run_is_written_once():
+    first = SeqProcess(id="a", name="add_one", code=_INCREMENT, additionalSpecs=SeqAdditionalSpecs(alias="increment"))
+    second = SeqProcess(id="b", name="plus_one", code=_INCREMENT, additionalSpecs=SeqAdditionalSpecs(alias="increment"))
+    script = generate_script(_seq_program([first, second]), skip_redundant_check=True)
+
+    assert script.count("increment()") == 1
+    assert script.index("increment()") < script.index("prog_program()")
+
+
+def test_the_code_of_an_alias_is_not_written_when_the_target_is_a_process_of_the_program():
+    target = _make_process([]).model_copy(update={"code": "count()\n{\n    :\n}"})
+    alias = SeqProcess(id="a", name="alias", code="count()\n{\n    :\n}", additionalSpecs=SeqAdditionalSpecs(alias="count"))
+    script = generate_script(_seq_program([alias], [target]), skip_redundant_check=True)
+
+    assert script.count("count()") == 1
+
+
+def test_the_code_of_an_alias_is_not_written_when_it_does_not_define_the_target():
+    # As an alias created in the web UI, whose code is its own template
+    alias = SeqProcess(
+        id="a", name="add_one", code="add_one()\n{\n    :\n}", additionalSpecs=SeqAdditionalSpecs(alias="increment")
+    )
+    script = generate_script(_seq_program([alias]), skip_redundant_check=True)
+
+    assert "add_one()" not in script
+    assert "increment()" not in script
+
+
+def test_the_code_of_an_external_alias_is_never_written():
+    alias = SeqProcess(
+        id="a", name="ext", code=_INCREMENT, additionalSpecs=SeqAdditionalSpecs(externalAlias="increment.sh")
+    )
+    script = generate_script(_seq_program([alias]), skip_redundant_check=True)
+
+    assert "increment()" not in script
