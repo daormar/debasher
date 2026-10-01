@@ -74,7 +74,7 @@ echo_fifo_define_opts()
 
     # Define option for output FIFO (mirrored so its traffic can be
     # watched from the frontend without stealing data from the real
-    # downstream reader — see engine's define_fifo_opt --mirror)
+    # downstream reader, see engine's define_fifo_opt --mirror)
     local outfifoname="echo_fifo_out"
     define_fifo_opt "-outf" "${outfifoname}" optlist --mirror || return 1
 
