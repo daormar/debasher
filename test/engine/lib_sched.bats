@@ -129,3 +129,25 @@ EOS
     [ "$output" = "rc=1" ]
     [ ! -e "$(cat "${BATS_TEST_TMPDIR}/srun_arg")" ]
 }
+
+# Runs a command from a bash that has loaded the engine
+run_with_engine() {
+    env -i PATH="/usr/bin:/bin" HOME=/tmp ENGINE_BUILDDIR="${ENGINE_BUILDDIR}" \
+        DIR="${BATS_TEST_TMPDIR}" CMD="$1" \
+        "${BASH}" -c '
+            debasher_pkglibdir="${ENGINE_BUILDDIR}"
+            source "${ENGINE_BUILDDIR}/debasher_lib.sh"
+            eval "${CMD}"
+        '
+}
+
+@test "is_step_done tells a step marked with mark_step_done from one that is not" {
+    run run_with_engine 'mark_step_done "${DIR}" 0_a.txt && is_step_done "${DIR}" 0_a.txt && ! is_step_done "${DIR}" 0_b.txt'
+    [ "$status" -eq 0 ]
+    [ -f "${BATS_TEST_TMPDIR}/DEBASHER_STEP_DONE_0_a.txt" ]
+}
+
+@test "mark_step_done fails when the step is already marked" {
+    run run_with_engine 'mark_step_done "${DIR}" s && mark_step_done "${DIR}" s'
+    [ "$status" -eq 1 ]
+}

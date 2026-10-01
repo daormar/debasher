@@ -28,7 +28,7 @@ load_debasher_module "debasher_dynamic_fanout"
 #################
 
 ########
-debasher_dynamic_fanout_taskdone_shared_dirs()
+debasher_dynamic_fanout_stepdone_shared_dirs()
 {
     :
 }
@@ -38,21 +38,21 @@ debasher_dynamic_fanout_taskdone_shared_dirs()
 ######################################
 
 ########
-worker_taskdone_document()
+worker_stepdone_document()
 {
-    document_process "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one. When each subtask is completed, it is marked as done, so that they it is not reexecuted."
+    document_process "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one, as a step. Each step that succeeds is marked as done, so that a new run does not execute it again."
 }
 
 ########
-worker_taskdone_reset_outdir()
+worker_stepdone_reset_outfiles()
 {
-    # Output directory for worker is not reset, so as to enable marking
-    # tasks as done
+    # The output directory of the worker is not reset, so that the
+    # markers of the steps that succeeded survive to the next run
     :
 }
 
 ########
-worker_taskdone_explain_opts()
+worker_stepdone_explain_opts()
 {
     # -w option
     local description="Number of workers."
@@ -72,13 +72,13 @@ worker_taskdone_explain_opts()
 }
 
 ########
-worker_taskdone_identify_cmdline_opts()
+worker_stepdone_identify_cmdline_opts()
 {
     opt_is_cmdline "-w"
 }
 
 ########
-worker_taskdone_define_opts()
+worker_stepdone_define_opts()
 {
     # Initialize variables
     local cmdline=$1
@@ -133,7 +133,7 @@ worker_task()
 }
 
 ########
-worker_taskdone()
+worker_stepdone()
 {
     # Initialize variables
     local id=$(read_opt_value_from_func_args "-id" "$@")
@@ -147,7 +147,6 @@ worker_taskdone()
     fi
 
     # Read the input file line by line (each line is a file path)
-    local retval=$?
     while IFS= read -r filepath; do
         [ -z "$filepath" ] && continue
         [ -e "$filepath" ] || continue
@@ -155,22 +154,30 @@ worker_taskdone()
         local base
         base=$(basename "$filepath")
 
-        local taskid
-        taskid="${id}_${base}"
+        # The id of the step carries a checksum of its input, so that
+        # the marker of an earlier run stops counting when the block
+        # changes
+        local sum
+        sum=$(cksum < "$filepath" | awk '{print $1}')
+        local stepid
+        stepid="${id}_${base}_${sum}"
 
-        # Execute worker task. The task is only carried out if it is not
-        # marked as done
-        if debasher::is_task_done "${outd}" "${taskid}"; then
-            echo "Task ${taskid} was already completed and marked as done" >&2
+        # Execute the step of the worker, only if it is not marked as
+        # done. The step reads its standard input from /dev/null, since
+        # under Slurm srun would take the rest of the list from the loop
+        if is_step_done "${outd}" "${stepid}"; then
+            echo "Step ${stepid} was already completed and marked as done" >&2
         else
-            worker_task "$filepath" "$outd/$base"
-            retval=$?
-            if [ "${retval}" -eq 0 ]; then
-                debasher::mark_task_done "${outd}" "${taskid}" || return 1
-                echo "Task ${taskid} completed and marked as done" >&2
+            # Remove the markers of this block left by an earlier run
+            # with another input, since the step overwrites the output
+            # they stand for
+            rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${id}_${base}_"*
+            if seq_execute worker_task "$filepath" "$outd/$base" < /dev/null; then
+                mark_step_done "${outd}" "${stepid}" || return 1
+                echo "Step ${stepid} completed and marked as done" >&2
             else
                 exit_code=1
-                echo "Error: task ${taskid} failed with exit code ${retval}" >&2
+                echo "Error: step ${stepid} failed" >&2
             fi
         fi
     done < "$inf"
@@ -194,7 +201,7 @@ aggregate_define_opts()
     # Define parameters so as to collect workers output
     local w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
     for ((i=0; i<w; i++)); do
-        define_opt_from_proc_task_out "-ind${i}" "worker_taskdone" "${i}" "-outd" optlist || return 1
+        define_opt_from_proc_task_out "-ind${i}" "worker_stepdone" "${i}" "-outd" optlist || return 1
     done
 
     # Define name of output file
@@ -210,12 +217,12 @@ aggregate_define_opts()
 #################################
 
 ########
-debasher_dynamic_fanout_taskdone_program()
+debasher_dynamic_fanout_stepdone_program()
 {
     add_debasher_process "generate"        "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "count"           "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "fragment"        "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:count"
     add_debasher_process "dispatch"        "cpus=1 mem=32 time=00:01:00"
-    add_debasher_process "worker_taskdone" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "worker_stepdone" "cpus=1 mem=32 time=00:01:00"
     add_debasher_process "aggregate"       "cpus=1 mem=32 time=00:01:00"
 }

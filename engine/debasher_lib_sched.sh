@@ -570,26 +570,53 @@ debasher::seq_execute()
 seq_execute() { debasher::seq_execute "$@"; }
 
 ########
-debasher::mark_task_done()
+# Public: Marks a step as done, by creating its step marker, an empty
+# file named after the id of the step in the given directory.
+#
+# The engine never reads a step marker: a process that wants to skip
+# the steps that an earlier run finished checks them itself with
+# is_step_done. The marker is created atomically, so that of two
+# callers that mark the same step only one succeeds.
+#
+# $1 - Directory of the step marker.
+# $2 - Id of the step, unique within the directory.
+#
+# Examples
+#
+#   debasher::mark_step_done "${outd}" "${id}_${base}"
+#
+# Returns 1 if the marker could not be created or already existed.
+debasher::mark_step_done()
 {
     local dir="$1"
     local id="$2"
 
-    if ( set -o noclobber; : > "$dir/${DEBASHER_TASK_MARKER_PREFIX}${id}" ) 2>/dev/null; then
+    if ( set -o noclobber; : > "$dir/${DEBASHER_STEP_MARKER_PREFIX}${id}" ) 2>/dev/null; then
         return 0
     else
         return 1
     fi
 }
 
+mark_step_done() { debasher::mark_step_done "$@"; }
+
 ########
-debasher::is_task_done()
+# Public: Tells whether a step has been marked as done with
+# mark_step_done.
+#
+# $1 - Directory of the step marker.
+# $2 - Id of the step.
+#
+# Returns 0 if the step marker exists, 1 otherwise.
+debasher::is_step_done()
 {
     local dir="$1"
     local id="$2"
 
-    [ -e "$dir/${DEBASHER_TASK_MARKER_PREFIX}${id}" ]
+    [ -e "$dir/${DEBASHER_STEP_MARKER_PREFIX}${id}" ]
 }
+
+is_step_done() { debasher::is_step_done "$@"; }
 
 ########
 debasher::_format_elapsed_time()

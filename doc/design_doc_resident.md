@@ -3501,7 +3501,7 @@ Design ideas from Future work move here once they are actually built.
 - **Dynamic process launching**: the architecture described in this document
   does not, from the outset, support dynamically launching processes. "General"
   programs already sketch a mechanism for this (see
-  `data/programs/debasher_dynamic_fanout_taskdone.sh`), but it would need to be
+  `data/programs/debasher_dynamic_fanout_stepdone.sh`), but it would need to be
   studied how to combine it with checkpointing, and for Python processes the
   mechanism could be entirely different. Noted here so it is not forgotten and
   can be tackled later, so that `resident` programs have as much expressiveness
