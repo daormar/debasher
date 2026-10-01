@@ -1,11 +1,11 @@
 import type { ProgramEdge } from "./edge";
-import type { NodeKind } from "./node";
+import type { NodeInfo, NodeKind } from "./node";
 import type { ProgramOption } from "./option";
 import { createOption, getOptionDirection } from "./option";
 import type { Position } from "./position";
 import type { ProcessInfo, ProgramProcess } from "./process";
 import { createProcess } from "./process";
-import type { Program } from "./program";
+import type { ExecutionOptions, Program } from "./program";
 import type { EditOp, OptionChanges, ProcessChanges, ProgramFields } from "./programEdits";
 import { applyEdit } from "./programEdits";
 import type { SeqProcess } from "./seqProcess";
@@ -15,7 +15,9 @@ import { createSeqProcess, withSeqProcessChanges } from "./seqProcess";
 // or a sequential process by its name, an option by its process and its
 // label, and an edge by its two ends. resolveNamedEdits turns them into edits
 // (see programEdits.ts), giving new ids to what they add. It only resolves
-// names: whether the edits are allowed is for validateEdits.
+// names: whether the edits are allowed is for validateEdits. A named edit
+// gives, of a field that holds an object, such as the computational
+// specifications of a process, only what it changes.
 
 // One end of an edge: a process and the label of one of its options.
 export interface OptionRef {
@@ -30,20 +32,67 @@ export type NamedOptionFields = Omit<OptionChanges, "label" | "direction" | "cou
   countSource?: string;
 };
 
+// The fields of a process that hold an object, of which a named edit gives
+// only the fields that it changes: the rest keep their values.
+const NESTED_PROCESS_FIELDS = [
+  "optionsHandler",
+  "computationalSpecs",
+  "additionalSpecs",
+  "additionalMethods",
+  "nodeCode",
+] as const;
+
+type NestedProcessField = typeof NESTED_PROCESS_FIELDS[number];
+
 // What a named edit may change in a process: its options, position and
 // group are changed by edits of their own.
-export type NamedProcessChanges = Omit<ProcessChanges, "options" | "position" | "groupSource">;
+export type NamedProcessChanges =
+  Omit<ProcessChanges, "options" | "position" | "groupSource" | NestedProcessField> &
+  { [Field in NestedProcessField]?: Partial<NonNullable<ProgramProcess[Field]>> };
+
+// The same for a sequential process, whose name is given apart.
+const NESTED_SEQ_PROCESS_FIELDS = ["computationalSpecs", "additionalSpecs"] as const;
+
+type NestedSeqProcessField = typeof NESTED_SEQ_PROCESS_FIELDS[number];
+
+export type NamedSeqProcessChanges =
+  Partial<Omit<SeqProcess, "id" | "name" | "groupSource" | NestedSeqProcessField>> &
+  { [Field in NestedSeqProcessField]?: Partial<SeqProcess[Field]> };
+
+// `changes` with each of the `fields` that hold an object merged into the
+// value that `current` holds.
+function withNestedFields<T extends object>(
+  current: T,
+  changes: object,
+  fields: readonly (keyof T)[]
+): Partial<T> {
+  const merged: Partial<T> = { ...changes };
+  for (const field of fields) {
+    const change = (changes as Partial<T>)[field];
+    if (change !== undefined) {
+      merged[field] = { ...current[field], ...change };
+    }
+  }
+  return merged;
+}
+
+// The fields of the program that a named edit sets.
+export type NamedProgramFields = Omit<ProgramFields, "executionOptions"> & {
+  executionOptions?: Partial<ExecutionOptions>;
+};
 
 export type NamedEdit =
-  | { op: "setProgramFields"; changes: ProgramFields }
+  | { op: "setProgramFields"; changes: NamedProgramFields }
   | { op: "setEnvVar"; name: string; value: string }
   | {
       op: "addProcess";
       name: string;
       // What the library brings for the name, or, in a resident program,
-      // the node kind of the new process (see createProcess).
+      // the node kind of the new process or what the module that defines
+      // the node brings (see createProcess).
       info?: ProcessInfo | null;
       nodeKind?: NodeKind;
+      nodeInfo?: NodeInfo;
       changes?: NamedProcessChanges;
       options?: ({ label: string } & NamedOptionFields)[];
       position?: Position;
@@ -56,8 +105,8 @@ export type NamedEdit =
   | { op: "removeOption"; process: string; option: string }
   | { op: "connect"; from: OptionRef; to: OptionRef }
   | { op: "disconnect"; from: OptionRef; to: OptionRef }
-  | { op: "addSeqProcess"; name: string; changes?: Partial<Omit<SeqProcess, "id" | "name" | "groupSource">> }
-  | { op: "updateSeqProcess"; name: string; changes: Partial<Omit<SeqProcess, "id" | "groupSource">> }
+  | { op: "addSeqProcess"; name: string; changes?: NamedSeqProcessChanges }
+  | { op: "updateSeqProcess"; name: string; changes: NamedSeqProcessChanges & { name?: string } }
   | { op: "removeSeqProcess"; name: string };
 
 export type Resolution = { edits: EditOp[] } | { error: string };
@@ -125,20 +174,28 @@ function edgeBetween(program: Program, from: OptionRef, to: OptionRef): ProgramE
   return edge;
 }
 
+function seqProcessWithChanges(seqProcess: SeqProcess, changes: NamedSeqProcessChanges): SeqProcess {
+  return withSeqProcessChanges(seqProcess, withNestedFields(seqProcess, changes, NESTED_SEQ_PROCESS_FIELDS));
+}
+
 function resolveOne(program: Program, named: NamedEdit, newId: () => string): EditOp {
   switch (named.op) {
 
     case "setProgramFields":
+      return { op: "setProgramFields", changes: withNestedFields(program, named.changes, ["executionOptions"]) };
+
     case "setEnvVar":
       return named;
 
     case "addProcess": {
-      const process = createProcess(newId(), named.name, { info: named.info, nodeKind: named.nodeKind }, newId);
+      const process = createProcess(
+        newId(), named.name, { info: named.info, nodeKind: named.nodeKind, nodeInfo: named.nodeInfo }, newId
+      );
       const namedOptions = named.options ?? [];
       const created = namedOptions.map(({ label }) => createOption(newId(), label));
       const draft: ProgramProcess = {
         ...process,
-        ...named.changes,
+        ...withNestedFields(process, named.changes ?? {}, NESTED_PROCESS_FIELDS),
         position: named.position ?? process.position,
         options: [...process.options, ...created],
       };
@@ -161,8 +218,14 @@ function resolveOne(program: Program, named: NamedEdit, newId: () => string): Ed
     case "moveProcess":
       return { op: "moveProcess", processId: processNamed(program, named.process).id, position: named.position };
 
-    case "updateProcess":
-      return { op: "updateProcess", processId: processNamed(program, named.process).id, changes: named.changes };
+    case "updateProcess": {
+      const process = processNamed(program, named.process);
+      return {
+        op: "updateProcess",
+        processId: process.id,
+        changes: withNestedFields(process, named.changes, NESTED_PROCESS_FIELDS),
+      };
+    }
 
     case "addOption": {
       const process = processNamed(program, named.process);
@@ -212,7 +275,7 @@ function resolveOne(program: Program, named: NamedEdit, newId: () => string): Ed
         op: "setSeqProcesses",
         seqProcesses: [
           ...program.seqProcesses,
-          withSeqProcessChanges(createSeqProcess(named.name, newId()), named.changes ?? {}),
+          seqProcessWithChanges(createSeqProcess(named.name, newId()), named.changes ?? {}),
         ],
       };
 
@@ -221,7 +284,7 @@ function resolveOne(program: Program, named: NamedEdit, newId: () => string): Ed
       return {
         op: "setSeqProcesses",
         seqProcesses: program.seqProcesses.map(candidate =>
-          candidate === seqProcess ? withSeqProcessChanges(candidate, named.changes) : candidate
+          candidate === seqProcess ? seqProcessWithChanges(candidate, named.changes) : candidate
         ),
       };
     }

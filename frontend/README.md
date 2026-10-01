@@ -18,6 +18,11 @@ run manually:
 npm run build
 ```
 
+The build also bundles the MCP server (`mcp/`), which imports the program
+model of `src/models/`, into `mcp/dist/debasher_mcp.mjs`; `make install`
+installs it with its `debasher_mcp` launcher. See "Editing a program from an
+agent: the MCP server" in `doc/design_doc_webui.md`.
+
 ## CRAP report
 
 ```bash

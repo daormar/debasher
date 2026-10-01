@@ -358,3 +358,31 @@ a virtual environment, installing them there, and either activating
 that environment before running the tool or pointing it directly at
 the environment's interpreter through the ``DEBASHER_WEBUI_PYTHON``
 environment variable.
+
+debasher_mcp
+^^^^^^^^^^^^
+
+``debasher_mcp`` runs the MCP server of DeBasher, which offers to an AI
+agent, such as Claude Code, what the web interface offers to a person:
+reading a program, editing it, running it and following its run, as tools
+of the Model Context Protocol. The agent starts it and talks to it over its
+standard input and output. It is a client of the server that
+``debasher_webui`` launches, which has to be running, and it edits programs
+with the same rules as the editor of the web interface: each tool that
+edits a program applies its edits whole or not at all, refuses a save over
+changes saved elsewhere since it read the program, and, called with
+``dry_run``, answers with what it would change and saves nothing.
+
+::
+
+    $ debasher_mcp [--url <string>]
+
+* ``--url <string>``: URL of the server of the web interface
+  (``http://127.0.0.1:8000`` by default).
+
+The tool needs Node.js: it runs under the ``node`` named by the
+``DEBASHER_MCP_NODE`` environment variable, or else the one found when
+DeBasher was configured, or else the first one on ``PATH``. To make it
+available to Claude Code, for example::
+
+    $ claude mcp add debasher -- debasher_mcp --url http://127.0.0.1:8000

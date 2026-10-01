@@ -47,7 +47,7 @@ disk, and "Execution and observation" how it runs a program and follows it.
 sequential processes of its module. "Guarantees and non-goals" gathers the
 guarantees stated along the way. "Resident programs in the web UI" designs the
 extension to resident programs, and says which parts of it are built. "Editing
-a program from an agent: the MCP server" designs a second client of the
+a program from an agent: the MCP server" describes a second client of the
 backend, for AI agents, and "Future work" lists what is known to be missing.
 
 # Glossary
@@ -248,7 +248,7 @@ refer to it.
 
 ## The MCP server
 
-Designed, not built (see "Editing a program from an agent: the MCP server").
+See "Editing a program from an agent: the MCP server".
 
 - **MCP server**: the program, run as `debasher_mcp`, that offers the editing,
   running and following of programs to an agent through the Model Context
@@ -258,6 +258,9 @@ Designed, not built (see "Editing a program from an agent: the MCP server").
 - **MCP tool**: an operation that the MCP server offers to an agent, with
   named parameters and an answer in text. A bare "tool" is still a command
   line tool of the engine.
+- **library**: the processes, or in a resident program the nodes, that the
+  modules loaded by the preamble of a program define, which a new process of
+  the same name takes its description, options and code from.
 - **named edit**: an edit written with names instead of ids: a process or a
   sequential process by its name, an option by its process and its label, an
   edge by its two ends.
@@ -2779,21 +2782,22 @@ The MCP server offers to an agent, such as Claude Code, what the editor offers
 to a person: reading a program, editing it, running it and following its run, as
 MCP tools. It is a second client of the backend, beside the frontend, and a
 first move towards an assistant in the web UI that helps to design and build a
-program, which would call the same MCP tools (see "Future work"). This section
-is a design: apart from what it relies on that the editor has too, the distinct
-option labels (see "Processes and options"), the guards of the backend against a
-run in progress (see "The home directory"), the revisions of the program
-metadata (see "Revisions of the program metadata"), the resolution of named
-edits (see "Programs, processes and options by name") and the placement of
-processes (see "From the store to the canvas"), nothing in it is built yet, and
-the guarantees and non-goals stated before it do not change until it is.
+program, which would call the same MCP tools (see "Future work"). It relies on
+what the editor relies on too: the distinct option labels (see "Processes and
+options"), the guards of the backend against a run in progress (see "The home
+directory"), the revisions of the program metadata (see "Revisions of the
+program metadata"), the resolution of named edits (see "Programs, processes
+and options by name") and the placement of processes (see "From the store to
+the canvas").
 
 The design follows from one rule: the MCP server edits a program with the
 same code as the editor. The edits, their validation, the rule of which groups
 they touch and the normalization live in `frontend/src/models/` and depend on
 nothing outside the program model (see "Screens and the store"), so the MCP
 server is written in TypeScript and imports them, rather than repeating them
-in another language.
+in another language. It sends its requests with the frontend's own clients of
+the backend (`frontend/src/api/` and `frontend/src/storage/`) for the same
+reason.
 
 ## Architecture of the MCP server
 
@@ -2806,10 +2810,21 @@ It reaches the backend over HTTP, at a URL given on its command line (by
 default the one where `debasher_webui` listens), and uses the endpoints that
 the frontend uses: `programs` to load, save and import a program, `processes`
 to look up the processes that the modules of the preamble define, and
-`execution` to run, observe and stop it. The backend has to be running; the
-MCP server starts nothing. It widens nothing either: the backend already runs
-the engine's tools, as the user who started it, for whoever reaches it, and
-the MCP server is reached only by the agent that started it.
+`execution` to run, observe and stop it. The frontend's clients name an
+endpoint by a path relative to the page that serves them, and under Node.js
+there is no page: the MCP server resolves every relative URL against the URL
+of the backend before it sends the request (`frontend/mcp/src/backend.ts`).
+The backend has to be running; the MCP server starts nothing, and a call that
+cannot reach the backend says so. It widens nothing either: the backend
+already runs the engine's tools, as the user who started it, for whoever
+reaches it, and the MCP server is reached only by the agent that started it.
+
+The code is in `frontend/mcp/src/`: `backend.ts` gathers the clients of the
+backend into one object, which the tests replace with a fake one;
+`editing.ts` holds the steps of an edit (see "Edits from an agent");
+`describe.ts` the text that shows a program; `schemas.ts` the parameters of
+the MCP tools; `tools.ts` the MCP tools themselves; and `server.ts` and
+`main.ts` register them with the MCP library and read the command line.
 
 ## Programs, processes and options by name
 
@@ -2834,77 +2849,114 @@ by its name, which resolves into one edit that replaces the whole list of
 sequential processes; names the option that gives the count of a fanout family
 by its label; and, when it changes the label of an option, also gives the option
 the direction that follows from the new label, as the editor of an option does.
-Resolving only resolves names: whether the edits are allowed is for
-`validateEdits`. The answers of the MCP tools name things the same way and show
-no ids.
+Of a field that holds an object, such as the computational specifications of a
+process, the code of a node or the execution options of the program, a named
+edit gives only the fields that it changes, and the others keep their values;
+a map, such as the program options, is given whole. A named edit that adds a
+process may carry what the library brings for it, as the dialog that names a
+new process does. Resolving only resolves names: whether the edits are allowed
+is for `validateEdits`. The answers of the MCP tools name things the same way
+and show no ids.
 
 ## Edits from an agent
 
 Every MCP tool that edits a program applies its edits whole or not at all,
-with the actions that the store takes, and an answer in place of the dialogs:
+with the actions that the store takes, and an answer in place of the dialogs
+(`editProgram` in `frontend/mcp/src/editing.ts`):
 
 1. Load the program from its home directory, with its revision (see
-   "Revisions of the program metadata").
-2. Resolve the named edits into edits.
-3. Check them with `validateEdits`; a problem ends the call with the list of
+   "Revisions of the program metadata"), and normalize it as the store does.
+2. Bring what the library has for each process that the named edits add, as
+   the dialog that names a new process does: in a general program, a process
+   that a module of the preamble defines comes with its description, options
+   and code; in a resident program, a node that a module defines comes with
+   what that module brings, and any other name needs the node kind of the new
+   node, or the call is refused. Then ask the backend whether the engine
+   accepts each name that the named edits give to a process or a sequential
+   process, and refuse the call at the first it does not.
+3. Resolve the named edits into edits.
+4. Check them with `validateEdits`; a problem ends the call with the list of
    problems, and nothing is written.
-4. Find the groups that they touch with `groupsTouchedBy`. Where the store
-   asks the user, the MCP tool refuses, naming each group and the program it
-   came from, unless the call says `detach_groups`, in which case the groups
-   are dissolved with the edits, as when the user agrees.
-5. Apply them with `applyEdits`, which normalizes the result.
-6. Save the program, naming the revision it was loaded with. A save refused
+5. Find the groups that they touch with `groupsTouchedBy`. Where the store
+   asks the user, the MCP tool refuses, naming the program each group came
+   from, unless the call says `detach_groups`, in which case the groups are
+   dissolved with the edits, as when the user agrees.
+6. Apply them with `applyEdits`, which normalizes the result.
+7. Save the program, naming the revision it was loaded with. A save refused
    for its revision ends the call with the message of the backend's conflict,
    and the agent loads the program again (see "Revisions of the program
    metadata").
 
 An MCP tool called with `dry_run` stops before the save and answers with a
-**proposal**: a summary of what the edits would change, the groups they would
-dissolve, and the edits themselves, already resolved. An assistant in the web
-UI would show a proposal on the canvas and let the frontend apply it with
-`applyEdits` if the user accepts it, which needs no other code.
+**proposal**: the lines that the edits would add to the program and remove
+from it, each a line that says on its own what it belongs to (a process, an
+option of a process, a line of the code of a process, a connection), the groups
+they would dissolve, and, as structured content beside the text, the edits
+themselves, already resolved. An assistant in the web UI would show a
+proposal on the canvas and let the frontend apply it with `applyEdits` if the
+user accepts it, which needs no other code. A saved edit answers with the
+revision it wrote and the same lines.
 
 A process added by an agent has no position chosen by hand. The MCP server
-places it with `nextFreePosition`, and a program that it imports with
-`layoutProcesses`, so that the canvas shows every process apart (see "From the
-store to the canvas"); an agent can move a process afterwards, or lay out the
-whole program again in layers.
+places it with `nextFreePosition`, each process that a call adds after the ones
+before it, and a program that it imports with `layoutProcesses`, so that the
+canvas shows every process apart (see "From the store to the canvas"); an agent
+can move a process afterwards, or lay out the whole program again in layers.
 
 ## The MCP tools
 
 The MCP tools are grouped by what they do. Each answers with short text meant
 for a model to read, not with the program model as JSON: a program is shown as
 its processes with their options and their connections, one per line, and the
-output of a process is cut to its last lines unless the call asks for more.
+output of a process is cut to its last lines unless the call asks for more. A
+call that is refused, or that the backend fails, answers with the reason as an
+error.
 
 - **Reading.** `get_program` (the settings of the program, its processes, its
-  sequential processes and its connections), `get_process` (one process in full,
-  its code included) and `import_module` (import a module, place its processes
-  and derive its connection sentinels as the store does on load, and save it
-  into a new home directory).
+  sequential processes and its connections), `get_process` (one process or
+  sequential process in full, its code included) and `import_module` (import a
+  module, place its processes and derive its connection sentinels as the store
+  does on load, and save it into a new home directory).
 - **The library.** `search_library` and `get_library_process`, which list and
-  describe the processes and nodes that the modules of the preamble define,
-  through the `processes` endpoints.
+  describe the processes, or in a resident program the nodes, that the modules
+  of the preamble define, through the `processes` endpoints.
 - **Editing.** `create_program`, which, like `import_module`, refuses a
   directory that already holds program metadata, since a save of a program not
   loaded from a directory replaces what is there (see "Revisions of the program
   metadata"); `add_process`, `update_process`, `remove_process` and
-  `move_process`; `add_option`, `update_option` and `remove_option`; `connect`
-  and `disconnect`; `set_program_settings` (name, description, preamble,
-  environment variables, output directory, execution options and program
-  options); `set_seq_processes`; and `apply_edits`, which takes a list of named
-  edits and applies them whole or not at all. Each takes `dry_run` and
-  `detach_groups`. "Add program" is not offered.
+  `move_process` (which, with `layout`, lays out every process again in
+  layers); `add_option`, `update_option` and `remove_option`; `connect` and
+  `disconnect`; `set_program_settings` (name, description, preamble,
+  environment variables, output directory, execution options, program options
+  and shared directories); `set_seq_processes`, each of whose entries adds the
+  sequential process it names, or changes or removes it if it exists; and
+  `apply_edits`, which takes a list of named edits and applies them whole or
+  not at all. Each takes `dry_run` and `detach_groups`. "Add program" is not
+  offered.
 - **Running.** `validate_program` (validating the program and checking its
   options, as the Run menu does), `run_program`, `stop_program` (an orderly
-  stop or a hard kill), `get_status` (the run phase and the process statuses),
-  `get_process_output` (the standard output, the scheduler output, the options
-  or the resolved options of a process, or of one of its tasks) and
-  `get_process_tasks`. `reset_output_dir` and `reset_program_state` delete
-  what a run left, and so are refused unless the call says `confirm`.
-- **Resident programs.** `inspect_node`, `snapshot`, `restart_node` and
-  `relaunch_node`, and reading and writing the FIFOs that "Talk to FIFOs"
-  offers, with its rules (see "Observing and talking to a live program").
+  stop, or a hard kill), `get_status` (the run phase and the process statuses,
+  and for a resident program the notices of its nodes), `get_process_output`
+  (the standard output, the scheduler output, the options or the resolved
+  options of a process, or of one of its tasks) and `get_process_tasks`. The
+  launch of a general program runs in the background, and the first readings
+  of the process statuses after it may still show the run before, so
+  `run_program` answers once they show a process in progress, or statuses
+  other than those before the launch, or after a few seconds. A resident
+  program whose output directory holds program state that this program did
+  not produce, or that no launch record describes, is launched only when the
+  call says `resume_changed_program`, as the Run menu asks; the answer of the
+  refusal says so, and that `reset_program_state` starts afresh instead.
+  `reset_output_dir` deletes what a run left, `reset_program_state` sets the
+  program state aside or deletes it, and a hard kill loses what the FIFOs
+  held, so they are refused unless the call says `confirm`.
+- **Resident programs.** `inspect_node` (the summary of a node, a checkpoint,
+  its input log, or the batch runs of a launcher node), `snapshot`,
+  `restart_node` (refused unless the call says `confirm`, with the warning
+  that "Restart node" asks the user to confirm) and `relaunch_node`, offered
+  on the nodes on which the canvas offers them; and `list_fifos`, `write_fifo`
+  and `read_fifo`, which talk to the FIFOs that "Talk to FIFOs" offers, with
+  its rules (see "Observing and talking to a live program").
 
 The MCP tools keep the guards of the editor through the backend, not by
 repeating them: the backend refuses a second run on an output directory, the two
@@ -2914,21 +2966,28 @@ a change of it while there is a run in progress.
 ## Building, installing and testing
 
 The MCP server lives in `frontend/mcp/` and imports `frontend/src/models/`. The
-build bundles it, with the models it uses and the MCP library, into a single
-JavaScript file, as it bundles the frontend into a single `index.html`, and
-`make install` installs that file with a `debasher_mcp` launcher. Node.js,
-which the frontend needs only to be built, is then needed to run the MCP
-server too. An agent registers it with the URL of the backend, for example
+build of the frontend (`npm run build`, which `make` runs) bundles it too, with
+the models it uses and the MCP library, into a single JavaScript module,
+`frontend/mcp/dist/debasher_mcp.mjs` (`frontend/mcp/vite.config.ts`), as it
+bundles the frontend into a single `index.html`. `make install` installs that
+module in the `mcp` directory of the package data, beside `web`, with a
+`debasher_mcp` launcher among the installed commands (`bindir`), and
+`make dist-vendored` vendors it with the built frontend. Node.js, which the
+frontend needs only to be built, is then needed to run the MCP server too:
+the launcher runs the module under the node named by `DEBASHER_MCP_NODE`, or
+else the one that configure found, or else the one in the `PATH`. An agent
+registers it with the URL of the backend, for example
 `claude mcp add debasher -- debasher_mcp --url http://127.0.0.1:8000`.
 
-The tests need no backend: the resolution of named edits and each MCP tool are
-tested under Node.js against a fake client of the backend, and the revision
-check is tested in the backend's own tests.
+The tests need no backend: the resolution of named edits is tested with the
+model (`frontend/src/models/programRefs.test.ts`), and each MCP tool, and the
+server over the protocol, under Node.js against a fake client of the backend
+that keeps the program metadata in memory with the revision check of the backend
+(`frontend/mcp/src/tools.test.ts`); the revision check itself is tested in the
+backend's own tests.
 
 # Future work
 
-- **Building the MCP server.** Building what "Editing a program from an agent:
-  the MCP server" designs: the server with its MCP tools.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what

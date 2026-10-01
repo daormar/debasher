@@ -51,12 +51,19 @@ export async function saveProgram(
   return { revision };
 }
 
+// The directory holds no program metadata to load.
+export class NoProgramMetadata extends Error {}
+
 export async function loadProgram(inputDir: string): Promise<Program> {
   const response = await fetch("/api/programs/load", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ inputDir }),
   });
+
+  if (response.status === 404) {
+    throw new NoProgramMetadata(`Failed to load program: ${await errorMessage(response)}`);
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to load program: ${await errorMessage(response)}`);

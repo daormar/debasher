@@ -15,9 +15,13 @@ if BUILD_FRONTEND
 # not depend on the PATH of the shell that runs make.
 NPM_ENV = PATH="$(NODE_BINDIR):$$PATH"
 
-# Rebuild only when package.json, the lockfile, or source files change
-$(FRONTEND_STAMP): package.json package-lock.json \
-                    $(shell find $(srcdir)/src -type f 2>/dev/null)
+# Rebuild only when package.json, the lockfile, or source files change.
+# The build makes both the frontend (dist/) and the MCP server
+# (mcp/dist/debasher_mcp.mjs), which imports the program model of the
+# frontend.
+$(FRONTEND_STAMP): package.json package-lock.json vite.config.ts \
+                    mcp/vite.config.ts \
+                    $(shell find $(srcdir)/src $(srcdir)/mcp/src -type f 2>/dev/null)
 	$(NPM_ENV) $(NPM) ci
 	$(NPM_ENV) $(NPM) run build
 	touch $@
@@ -28,15 +32,32 @@ check-local: $(FRONTEND_STAMP)
 	$(NPM_ENV) $(NPM) run test
 
 clean-local:
-	rm -rf dist $(FRONTEND_STAMP)
+	rm -rf dist mcp/dist $(FRONTEND_STAMP)
 endif
 
 install-data-local: $(FRONTEND_STAMP)
 	$(MKDIR_P) $(DESTDIR)$(pkgdatadir)/web
 	cp -r dist/. $(DESTDIR)$(pkgdatadir)/web/
+	$(MKDIR_P) $(DESTDIR)$(pkgdatadir)/mcp
+	cp mcp/dist/debasher_mcp.mjs $(DESTDIR)$(pkgdatadir)/mcp/
 
 uninstall-local:
-	rm -rf $(DESTDIR)$(pkgdatadir)/web
+	rm -rf $(DESTDIR)$(pkgdatadir)/web $(DESTDIR)$(pkgdatadir)/mcp
+
+# The launcher of the MCP server, which runs the module installed above
+# under Node.js. Makefile: built again after a new configure, whose values
+# it carries.
+bin_SCRIPTS = debasher_mcp
+
+CLEANFILES = debasher_mcp
+
+debasher_mcp: mcp/debasher_mcp.sh Makefile
+	rm -f $@
+	echo "#! " $(BASH) > $@
+	echo "debasher_pkgdatadir=\"$(pkgdatadir)\"" >> $@
+	echo "debasher_node=\"$(NODE)\"" >> $@
+	cat $(srcdir)/mcp/debasher_mcp.sh >> $@
+	chmod ugo+x $@
 
 distclean-local:
 	rm -rf node_modules
@@ -44,7 +65,8 @@ distclean-local:
 endif
 
 EXTRA_DIST = src public scripts index.html package.json package-lock.json \
-             vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json
+             vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json \
+             tsconfig.mcp.json mcp/src mcp/vite.config.ts mcp/debasher_mcp.sh
 
 # CRAP report of the frontend (scripts/crap_report.mjs), called by the
 # `crap` target of the root Makefile. Like check-local, it runs where npm
@@ -67,9 +89,10 @@ endif
 # installing that prebuilt dist/ as-is when npm isn't found).
 dist-hook:
 	rm -rf $(distdir)/node_modules
-	rm -rf $(distdir)/dist
+	rm -rf $(distdir)/dist $(distdir)/mcp/dist
 	if test "x$(DEBASHER_VENDOR_FRONTEND)" = "xyes"; then \
-	  $(MKDIR_P) $(distdir)/dist; \
+	  $(MKDIR_P) $(distdir)/dist $(distdir)/mcp/dist; \
 	  cp -r dist/. $(distdir)/dist/; \
+	  cp mcp/dist/debasher_mcp.mjs $(distdir)/mcp/dist/; \
 	  : > $(distdir)/dist/.vendored; \
 	fi

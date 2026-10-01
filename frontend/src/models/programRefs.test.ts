@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { validateEdits } from "./editValidation";
+import { emptyNodeCode } from "./node";
 import { createOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
@@ -103,6 +104,40 @@ describe("resolveNamedEdits", () => {
     }
     const [count, family] = edit.process.options;
     expect(family.countSourceOptionId).toBe(count.id);
+  });
+
+  it("adds a node with what the module that defines it brings", () => {
+    const nodeInfo = {
+      description: "counts",
+      nodeKind: "FBPProcess" as const,
+      nodeCode: { ...emptyNodeCode(), processData: "pass" },
+      options: [createOption("lib-in", "-in")],
+      optionsHandler: { mode: "standard" as const },
+    };
+
+    const [edit] = resolved([{ op: "addProcess", name: "counter", nodeInfo }]);
+
+    if (edit.op !== "addProcess") {
+      throw new Error(edit.op);
+    }
+    expect(edit.process.nodeKind).toBe("FBPProcess");
+    expect(edit.process.nodeCode?.processData).toBe("pass");
+    expect(edit.process.options.map(o => o.label)).toEqual(["-in"]);
+  });
+
+  it("changes only the given fields of a field that holds an object", () => {
+    const from = program();
+    from.processes[0].computationalSpecs = { cpus: 1, mem: 256 };
+    from.seqProcesses[0].additionalSpecs = { alias: "other" };
+
+    const edited = applyEdits(from, resolved([
+      { op: "updateProcess", process: "a", changes: { computationalSpecs: { cpus: 4 } } },
+      { op: "updateSeqProcess", name: "step", changes: { computationalSpecs: { time: "1:00" } } },
+    ], from));
+
+    expect(edited.processes[0].computationalSpecs).toEqual({ cpus: 4, mem: 256 });
+    expect(edited.seqProcesses[0].computationalSpecs).toEqual({ time: "1:00" });
+    expect(edited.seqProcesses[0].additionalSpecs).toEqual({ alias: "other" });
   });
 
   it("gives a relabeled option the direction of its new label", () => {
