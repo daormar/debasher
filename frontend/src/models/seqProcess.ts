@@ -53,23 +53,57 @@ export interface SeqProcess {
 
 }
 
+// The code a new sequential process starts with: a Bash function of its
+// name that does nothing, or no code in another language.
+export function defaultSeqCode(name: string, language: ProcessLanguage): string {
+  return language === "bash" ? `${name}()\n{\n    :\n}` : "";
+}
+
 export function createSeqProcess(name: string): SeqProcess {
   return {
     id: crypto.randomUUID(),
     name,
     description: "",
     language: "bash",
-    code: `${name}()\n{\n    :\n}`,
+    code: defaultSeqCode(name, "bash"),
     computationalSpecs: {},
     additionalSpecs: {},
   };
 }
 
 /**
+ * The changes that renaming a sequential process, or changing its language,
+ * makes: code still as it started follows the new name and language, since a
+ * Bash function named after the old name would not implement it.
+ */
+export function withSeqProcessChanges(seqProcess: SeqProcess, changes: Partial<SeqProcess>): SeqProcess {
+  const changed = { ...seqProcess, ...changes };
+  const untouched = seqProcess.code === defaultSeqCode(seqProcess.name, seqProcess.language);
+  if (untouched && changes.code === undefined && (changes.name !== undefined || changes.language !== undefined)) {
+    changed.code = defaultSeqCode(changed.name, changed.language);
+  }
+  return changed;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Whether Bash code defines a function with the given name, as the engine
+// needs for a sequential process without an alias.
+export function definesBashFunction(code: string, name: string): boolean {
+  const escaped = escapeRegExp(name);
+  return new RegExp(
+    `^\\s*(function\\s+${escaped}(\\s*\\(\\s*\\)|\\s|$)|${escaped}\\s*\\(\\s*\\))`,
+    "m"
+  ).test(code);
+}
+
+/**
  * What makes the sequential processes of a program wrong before the engine
  * sees them, or null: a blank name, a name shared by two of them or by a
- * process (the engine refuses both), and an alias together with an external
- * alias. Whether a name follows the rules of a process name is checked by
+ * process (the engine refuses both), an alias together with an external
+ * alias, and Bash code that defines no function of the name. Whether a name follows the rules of a process name is checked by
  * the backend, as for a process.
  */
 export function seqProcessesProblem(
@@ -93,8 +127,12 @@ export function seqProcessesProblem(
       return `Two sequential processes are named "${name}".`;
     }
     seen.add(key);
+    const hasAlias = seqProcess.additionalSpecs.alias || seqProcess.additionalSpecs.externalAlias;
     if (seqProcess.additionalSpecs.alias && seqProcess.additionalSpecs.externalAlias) {
       return `"${name}" has both an alias and an external alias: give only one.`;
+    }
+    if (!hasAlias && seqProcess.language === "bash" && !definesBashFunction(seqProcess.code, name)) {
+      return `The Bash code of "${name}" does not define a function "${name}", which the step runs.`;
     }
   }
 

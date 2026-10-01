@@ -11,6 +11,7 @@ import {
   aliasOptMapToText,
   createSeqProcess,
   seqProcessesProblem,
+  withSeqProcessChanges,
 } from "../models/seqProcess";
 
 interface Props {
@@ -51,7 +52,7 @@ export default function SeqProcessesEditor({ onClose }: Props) {
 
   function update(changes: Partial<SeqProcess>) {
     setDrafts(current =>
-      current.map(draft => (draft.id === selectedId ? { ...draft, ...changes } : draft))
+      current.map(draft => (draft.id === selectedId ? withSeqProcessChanges(draft, changes) : draft))
     );
   }
 

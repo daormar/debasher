@@ -1254,11 +1254,15 @@ directories and the environment variables, which lists them and adds, renames or
 removes one. The one selected in the list is edited beside it: its name,
 description and specifications, its alias included, and its code in the same
 code editor as the code of a process. As every dialog, it edits a draft of the
-whole list, and hands it to the store when the user accepts it, once the names
-are checked: none blank, none shared by two sequential processes or by a
-process, each one valid as a process name, and none with both an alias and an
-external alias. Accepting a draft that changes or removes a sequential process
-of a group first asks to dissolve the group.
+whole list, and hands it to the store when the user accepts it, once the draft
+is checked: no name blank, none shared by two sequential processes or by a
+process, each one valid as a process name, none with both an alias and an
+external alias, and none in Bash, without an alias or an external alias, whose
+code defines no function of its name, which the engine would refuse. A new
+sequential process starts with a Bash function of its name that does nothing,
+and this code follows its name and its language (no code in another language)
+until it is edited. Accepting a draft that changes or removes a sequential
+process of a group first asks to dissolve the group.
 
 The web UI does not read the code of the processes, and so does not know which
 of them run which sequential process: renaming or removing a sequential process
