@@ -7,6 +7,7 @@ import { createEmptyProgram } from "../storage/programStorage";
 import type { Program } from "../models/program";
 import type { ProgramProcess } from "../models/process";
 import { emptyNodeCode } from "../models/node";
+import { createSeqProcess } from "../models/seqProcess";
 
 function renderStore(initialProgram: Program) {
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -160,6 +161,96 @@ describe("Add program in a resident program", () => {
     expect(processes.map(p => p.name)).toEqual(["counter", "sup"]);
     expect(processes.every(p => p.groupSource === undefined)).toBe(true);
     expect(result.current.program.envVars.DEBASHER_MOD_DIR).toBeUndefined();
+  });
+
+});
+
+describe("the sequential processes of a program", () => {
+
+  function general(name: string): ProgramProcess {
+    return { ...node(name, undefined), language: "bash" };
+  }
+
+  function loadedWithSeq(): Program {
+    return {
+      ...createEmptyProgram("other"),
+      processes: [general("worker")],
+      seqProcesses: [createSeqProcess("step")],
+    };
+  }
+
+  it("replaces the sequential processes", () => {
+    const { result } = renderStore(createEmptyProgram("p"));
+    const step = createSeqProcess("step");
+
+    act(() => {
+      result.current.setSeqProcesses([step]);
+    });
+
+    expect(result.current.program.seqProcesses).toEqual([step]);
+  });
+
+  it("brings in the sequential processes of an added program in the same group as its processes", () => {
+    const { result } = renderStore(createEmptyProgram("p"));
+
+    act(() => result.current.mergeProgram(loadedWithSeq(), "/src"));
+
+    const [worker] = result.current.program.processes;
+    const [step] = result.current.program.seqProcesses;
+    expect(step.name).toBe("step");
+    expect(step.groupSource).toEqual(worker.groupSource);
+    expect(worker.groupSource?.groupSize).toBe(2);
+  });
+
+  it("refuses an added program whose sequential process has the name of a process", () => {
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const { result } = renderStore({ ...createEmptyProgram("p"), processes: [general("step")] });
+
+    act(() => result.current.mergeProgram(loadedWithSeq(), "/src"));
+
+    expect(alert).toHaveBeenCalledWith(expect.stringMatching(/"step"/));
+    expect(result.current.program.seqProcesses).toEqual([]);
+  });
+
+  it("dissolves the whole group when a sequential process of it is removed, once the user agrees", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderStore(createEmptyProgram("p"));
+    act(() => result.current.mergeProgram(loadedWithSeq(), "/src"));
+
+    let replaced = false;
+    act(() => {
+      replaced = result.current.setSeqProcesses([]);
+    });
+
+    expect(replaced).toBe(true);
+    expect(result.current.program.seqProcesses).toEqual([]);
+    expect(result.current.program.processes[0].groupSource).toBeUndefined();
+  });
+
+  it("changes nothing when the user declines to dissolve the group", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { result } = renderStore(createEmptyProgram("p"));
+    act(() => result.current.mergeProgram(loadedWithSeq(), "/src"));
+    const before = result.current.program;
+
+    let replaced = true;
+    act(() => {
+      replaced = result.current.setSeqProcesses([]);
+    });
+
+    expect(replaced).toBe(false);
+    expect(result.current.program).toEqual(before);
+  });
+
+  it("frees the sequential processes of a group when a process of the group changes", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderStore(createEmptyProgram("p"));
+    act(() => result.current.mergeProgram(loadedWithSeq(), "/src"));
+
+    const workerId = result.current.program.processes[0].id;
+    act(() => result.current.setProcessDescription(workerId, "changed"));
+
+    expect(result.current.program.seqProcesses[0].groupSource).toBeUndefined();
   });
 
 });

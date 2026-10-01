@@ -194,6 +194,43 @@ class ProgramProcess(BaseModel):
     nodeCode: Optional[NodeCode] = None
 
 
+class SeqComputationalSpecs(BaseModel):
+    # The computational specifications that a sequential process may have,
+    # each optional: under Slurm they become options of srun when a task
+    # runs it as a step, and the built-in scheduler uses none of them (see
+    # "Sequential processes" in doc/design_doc_engine.md).
+    cpus: Optional[float] = None
+    mem: Optional[float] = None
+    time: Optional[str] = None
+
+
+class SeqAdditionalSpecs(BaseModel):
+    # The additional specifications that the engine accepts on a
+    # sequential process: "processdeps" and "force" belong to a scheduled
+    # process only, so the model has no place for them.
+    alias: Optional[str] = None
+    aliasOptMap: list[AliasOptMapping] = []
+    externalAlias: Optional[str] = None
+
+
+class SeqProcess(BaseModel):
+    # A sequential process of the program (add_debasher_seq_process): code
+    # that a process runs as a step with seq_execute, kept beside the
+    # processes since any of them may run it. It has no options, options
+    # handler, additional methods or position, since the engine calls
+    # nothing of it but its process function and it is not part of the
+    # dependency graph (see "Sequential processes in the web UI" in
+    # doc/design_doc_webui.md).
+    id: str
+    name: str
+    description: str = ""
+    language: Literal["bash", "python", "perl", "r", "groovy"] = "bash"
+    code: str = ""
+    computationalSpecs: SeqComputationalSpecs = SeqComputationalSpecs()
+    additionalSpecs: SeqAdditionalSpecs = SeqAdditionalSpecs()
+    groupSource: Optional[GroupSource] = None
+
+
 class ProgramEdge(BaseModel):
     id: str
     sourceProcessId: str
@@ -256,4 +293,6 @@ class Program(BaseModel):
     # never redeclares.
     availableSharedDirs: list[str] = []
     processes: list[ProgramProcess]
+    # Never in a resident program, whose engine refuses them.
+    seqProcesses: list[SeqProcess] = []
     edges: list[ProgramEdge]

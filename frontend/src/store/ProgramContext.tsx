@@ -23,6 +23,7 @@ import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
 import type { ProgramOption } from "../models/option";
 import { getOptionDirection } from "../models/option";
 import type { ProgramEdge } from "../models/edge";
+import type { SeqProcess } from "../models/seqProcess";
 import { buildConnectionSentinel } from "../models/edge";
 import type { Position } from "../models/position";
 import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
@@ -160,9 +161,10 @@ interface ProgramContextType {
   // GroupSource so script_generation.py can emit a single
   // add_debasher_program call for it while the group stays intact. Fails
   // (via window.alert) instead of merging if any of `loaded`'s process
-  // names collide with an existing one, they can't be deduped by
-  // renaming, since add_debasher_program only knows the source module's
-  // own original names. Only a program of the same type is merged. A
+  // names, or of its sequential processes, collide with an existing one,
+  // they can't be deduped by renaming, since add_debasher_program only
+  // knows the source module's own original names. The sequential
+  // processes of `loaded` come in the same group as its processes. Only a program of the same type is merged. A
   // resident program is merged process by process, never as a group: a
   // module added with add_debasher_program would carry its own Supervisor
   // wiring, while the wiring of the whole program has to be derived again
@@ -190,6 +192,15 @@ interface ProgramContextType {
   setSharedDirs: (
     sharedDirs: string[]
   ) => void;
+
+  // Replaces the sequential processes of the program. When the change
+  // edits or removes a sequential process of a group ("Add program"), it
+  // first asks to dissolve the group, as a change to a process of the group
+  // does, and changes nothing if the user declines. Returns whether the
+  // sequential processes were replaced.
+  setSeqProcesses: (
+    seqProcesses: SeqProcess[]
+  ) => boolean;
 
   setEnvVar: (
     name: string,
@@ -411,6 +422,30 @@ function normalizeProgram(source: Program): Program {
           scheduler: DEFAULT_SCHEDULER,
         },
       };
+
+}
+
+/**
+ * Strips groupSource from every process and sequential process of the given
+ * groups, which are then generated one by one (see confirmDetachIfGrouped).
+ */
+function dissolveGroups(source: Program, groupIds: Set<string>): Program {
+
+  if (groupIds.size === 0) {
+    return source;
+  }
+
+  const inGroup = (groupId?: string) => groupId !== undefined && groupIds.has(groupId);
+
+  return {
+    ...source,
+    processes: source.processes.map(process =>
+      inGroup(process.groupSource?.groupId) ? { ...process, groupSource: undefined } : process
+    ),
+    seqProcesses: (source.seqProcesses ?? []).map(seqProcess =>
+      inGroup(seqProcess.groupSource?.groupId) ? { ...seqProcess, groupSource: undefined } : seqProcess
+    ),
+  };
 
 }
 
@@ -795,17 +830,21 @@ export function ProgramProvider({
       return;
     }
 
-    const collisionName = loaded.processes.find(process =>
-      program.processes.some(
-        existing => existing.name.toLowerCase() === process.name.toLowerCase()
-      )
+    // A process and a sequential process share one set of names, in the
+    // engine as here
+    const loadedSeqProcesses = loaded.seqProcesses ?? [];
+    const existingNames = new Set(
+      [...program.processes, ...program.seqProcesses].map(member => member.name.toLowerCase())
+    );
+    const collisionName = [...loaded.processes, ...loadedSeqProcesses].find(member =>
+      existingNames.has(member.name.toLowerCase())
     )?.name;
 
     if (collisionName) {
       window.alert(
-        `Cannot add program "${loaded.name}": it has a process named ` +
-        `"${collisionName}", which already exists in this program. Rename ` +
-        `the conflicting process (in either program) and try again.`
+        `Cannot add program "${loaded.name}": it has a process or sequential ` +
+        `process named "${collisionName}", whose name already exists in this ` +
+        `program. Rename the conflicting one (in either program) and try again.`
       );
       return;
     }
@@ -854,12 +893,25 @@ export function ProgramProvider({
           : {
               programName: loaded.name,
               groupId,
-              groupSize: loaded.processes.length,
+              groupSize: loaded.processes.length + loadedSeqProcesses.length,
               sourceDir,
             },
       };
 
     });
+
+    // The sequential processes come with the processes, in the same group
+    // (a resident program has none)
+    const mergedSeqProcesses: SeqProcess[] = loadedSeqProcesses.map(seqProcess => ({
+      ...seqProcess,
+      id: crypto.randomUUID(),
+      groupSource: {
+        programName: loaded.name,
+        groupId,
+        groupSize: loaded.processes.length + loadedSeqProcesses.length,
+        sourceDir,
+      },
+    }));
 
     const mergedEdges: ProgramEdge[] = loaded.edges.map(edge => ({
       ...edge,
@@ -887,6 +939,7 @@ export function ProgramProvider({
       return {
         ...current,
         processes: [...current.processes, ...mergedProcesses],
+        seqProcesses: [...current.seqProcesses, ...mergedSeqProcesses],
         edges: [...current.edges, ...mergedEdges],
         envVars,
       };
@@ -930,14 +983,7 @@ export function ProgramProvider({
       return false;
     }
 
-    setProgram(current => ({
-      ...current,
-      processes: current.processes.map(process =>
-        process.groupSource?.groupId === groupSource.groupId
-          ? { ...process, groupSource: undefined }
-          : process
-      ),
-    }));
+    setProgram(current => dissolveGroups(current, new Set([groupSource.groupId])));
 
     return true;
 
@@ -1002,6 +1048,46 @@ export function ProgramProvider({
       ...current,
       preamble,
     }));
+
+  }
+
+  function setSeqProcesses(
+    seqProcesses: SeqProcess[]
+  ): boolean {
+
+    // The groups of the sequential processes that the change edits or
+    // removes, which add_debasher_program could no longer declare
+    const newById = new Map(seqProcesses.map(seqProcess => [seqProcess.id, seqProcess]));
+    const touchedGroups = new Map<string, string>();
+    for (const old of program.seqProcesses) {
+      if (!old.groupSource) {
+        continue;
+      }
+      const changed = newById.get(old.id);
+      if (!changed || JSON.stringify(changed) !== JSON.stringify(old)) {
+        touchedGroups.set(old.groupSource.groupId, old.groupSource.programName);
+      }
+    }
+
+    if (touchedGroups.size > 0) {
+      const programNames = [...new Set(touchedGroups.values())].join('", "');
+      const confirmed = window.confirm(
+        `A sequential process that you changed or removed was added from ` +
+        `program "${programNames}" via "Add program". Changing it here will ` +
+        `disconnect the whole group from that program: it will stop being ` +
+        `generated as add_debasher_program and each of its processes and ` +
+        `sequential processes will be generated on its own instead. Continue?`
+      );
+      if (!confirmed) {
+        return false;
+      }
+    }
+
+    setProgram(current =>
+      dissolveGroups({ ...current, seqProcesses }, new Set(touchedGroups.keys()))
+    );
+
+    return true;
 
   }
 
@@ -1726,6 +1812,8 @@ export function ProgramProvider({
     setPreamble,
 
     setSharedDirs,
+
+    setSeqProcesses,
 
     setEnvVar,
 

@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from . import paths
+from .debasher_constants import SEQ_PROCESS_DOC_HEADING_PREFIX
 
 _DOC_MOD_TOOL_NAME = "debasher_doc_mod"
 _GET_PROC_INFO_TOOL_NAME = "debasher_get_proc_info"
@@ -20,6 +21,7 @@ DEFAULT_FLAGS = (
     "--show-opthnd",
     "--show-impl",
     "--show-specs",
+    "--show-seq-procs",
 )
 
 _MODULE_TITLE_RE = re.compile(r"^# (?P<name>.+)$")
@@ -375,3 +377,23 @@ def parse_module_markdown(
     description = "\n".join(description_lines).strip()
 
     return name, description, shared_dirs, processes
+
+
+def split_seq_process_chunks(
+    chunks: list[tuple[str, str]],
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """
+    Splits the (name, Markdown) pairs of parse_module_markdown into those
+    of the processes and those of the sequential processes, which
+    debasher_doc_mod --show-seq-procs prints after the processes under a
+    heading of their own (SEQ_PROCESS_DOC_HEADING_PREFIX followed by the
+    name). The name of a sequential process comes without the prefix.
+    """
+    processes = []
+    seq_processes = []
+    for name, chunk in chunks:
+        if name.startswith(SEQ_PROCESS_DOC_HEADING_PREFIX):
+            seq_processes.append((name[len(SEQ_PROCESS_DOC_HEADING_PREFIX):], chunk))
+        else:
+            processes.append((name, chunk))
+    return processes, seq_processes

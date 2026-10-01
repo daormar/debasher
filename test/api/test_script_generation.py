@@ -88,3 +88,110 @@ def test_command_line_option_with_an_option_channel_is_refused():
 
     with pytest.raises(ValueError, match="command-line and delivered through channel"):
         _option_definition_line(process, option, {}, {})
+
+
+# --- Sequential processes ------------------------------------------------
+
+from api.models import (  # noqa: E402
+    ExecutionOptions,
+    GroupSource,
+    Program,
+    SeqAdditionalSpecs,
+    SeqComputationalSpecs,
+    SeqProcess,
+)
+from api.script_generation import _stub_processes_missing_code, generate_script  # noqa: E402
+
+
+def _seq_program(seq_processes, processes=(), **fields):
+    defaults = dict(
+        id="prog",
+        name="prog",
+        preamble="",
+        envVars={},
+        outputDir="",
+        executionOptions=ExecutionOptions(scheduler="BUILTIN"),
+        programOptions={},
+        processes=list(processes),
+        seqProcesses=list(seq_processes),
+        edges=[],
+    )
+    return Program(**(defaults | fields))
+
+
+def test_a_sequential_process_is_written_after_the_processes_and_added_with_its_specs():
+    step = SeqProcess(
+        id="s",
+        name="step",
+        description="Adds two.",
+        language="python",
+        code="print(2)",
+        computationalSpecs=SeqComputationalSpecs(cpus=1, mem=32, time="00:01:00"),
+    )
+    script = generate_script(_seq_program([step], [_make_process([])]), skip_redundant_check=True)
+
+    assert script.index("count_document()") < script.index("step_document()")
+    assert 'debasher::document_process "Adds two."' in script
+    assert "step_heredoc_py()" in script
+    assert script.index('add_debasher_process "count"') < script.index(
+        'add_debasher_seq_process "step" "cpus=1 mem=32 time=00:01:00" ""'
+    )
+
+
+def test_a_sequential_process_with_an_alias_gets_no_code():
+    alias = SeqProcess(
+        id="a",
+        name="aliased",
+        code="aliased()\n{\n    :\n}",
+        additionalSpecs=SeqAdditionalSpecs(alias="target"),
+    )
+    script = generate_script(_seq_program([alias]), skip_redundant_check=True)
+
+    assert "aliased()" not in script
+    assert 'add_debasher_seq_process "aliased" "" "alias=target"' in script
+
+
+def test_a_name_shared_by_a_process_and_a_sequential_process_is_refused():
+    clash = SeqProcess(id="c", name="count", code="count()\n{\n    :\n}")
+    with pytest.raises(ValueError, match="has the name of a process"):
+        generate_script(_seq_program([clash], [_make_process([])]), skip_redundant_check=True)
+
+
+def test_two_sequential_processes_with_one_name_are_refused():
+    first = SeqProcess(id="a", name="step")
+    second = SeqProcess(id="b", name="step")
+    with pytest.raises(ValueError, match="Two sequential processes"):
+        generate_script(_seq_program([first, second]), skip_redundant_check=True)
+
+
+def test_a_resident_program_with_a_sequential_process_is_refused():
+    step = SeqProcess(id="s", name="step")
+    with pytest.raises(ValueError, match="resident program"):
+        generate_script(_seq_program([step], programType="resident"), skip_redundant_check=True)
+
+
+def test_an_intact_group_adds_its_sequential_processes_with_its_add_debasher_program():
+    group = GroupSource(programName="other", groupId="g", groupSize=2, sourceDir="/other")
+    process = _make_process([]).model_copy(update={"groupSource": group})
+    step = SeqProcess(id="s", name="step", code="step()\n{\n    :\n}", groupSource=group)
+    script = generate_script(_seq_program([step], [process]), skip_redundant_check=True)
+
+    assert script.count('add_debasher_program "other"') == 1
+    assert "add_debasher_seq_process" not in script
+    assert 'add_debasher_process "count"' not in script
+
+
+def test_a_group_missing_its_sequential_process_is_generated_member_by_member():
+    group = GroupSource(programName="other", groupId="g", groupSize=2, sourceDir="/other")
+    process = _make_process([]).model_copy(update={"groupSource": group})
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert "add_debasher_program" not in script
+    assert 'add_debasher_process "count"' in script
+
+
+def test_a_sequential_process_without_code_gets_a_stub_for_reading_environment_variables():
+    step = SeqProcess(id="s", name="step")
+    stubbed = _stub_processes_missing_code(_seq_program([step]))
+
+    assert stubbed.seqProcesses[0].code == "step()\n{\n    :\n}"

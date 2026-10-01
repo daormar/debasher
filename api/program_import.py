@@ -17,6 +17,7 @@ from .doc_mod import (
     run_doc_mod_all_shared_dirs,
     run_doc_mod_resolve_vars,
     run_get_verbatim_func_source,
+    split_seq_process_chunks,
 )
 from .additional_methods_import import resolve_additional_methods
 from .markdown_parsing import (
@@ -36,6 +37,9 @@ from .models import (
     ProgramEdge,
     ProgramOption,
     ProgramProcess,
+    SeqAdditionalSpecs,
+    SeqComputationalSpecs,
+    SeqProcess,
 )
 from .option_handler_import import ConnectionRef, SharedDirRef, resolve_options_handler
 from .resident_import import import_resident_processes
@@ -532,6 +536,30 @@ def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge])
         next_x_by_layer[process_layer] = x + _PROCESS_X_SPACING
 
 
+def _to_seq_process(name: str, chunk: str, script_path: Path, debasher_mod_dir: str) -> SeqProcess:
+    """
+    A sequential process from its section of the module documentation (see
+    doc_mod.split_seq_process_chunks), with its code replaced by its
+    verbatim source as the code of a process is, and only the
+    specifications that a sequential process has (see SeqComputationalSpecs
+    and SeqAdditionalSpecs).
+    """
+    info = parse_proc_info_markdown(chunk)
+    comp = _to_computational_specs(info.computationalSpecs)
+    add = _to_additional_specs(info.additionalSpecs)
+    return SeqProcess(
+        id=str(uuid.uuid4()),
+        name=name,
+        description=info.description,
+        language=info.language,
+        code=_verbatim_code(script_path, info.code, debasher_mod_dir),
+        computationalSpecs=SeqComputationalSpecs(cpus=comp.cpus, mem=comp.mem, time=comp.time),
+        additionalSpecs=SeqAdditionalSpecs(
+            alias=add.alias, aliasOptMap=add.aliasOptMap, externalAlias=add.externalAlias
+        ),
+    )
+
+
 @dataclass
 class _ReadModule:
     """What import reads of a module before it lays out its processes: its
@@ -544,6 +572,7 @@ class _ReadModule:
     processes: list[ProgramProcess]
     edges: list[ProgramEdge]
     available_shared_dirs: list[str]
+    seq_processes: list[SeqProcess]
 
 
 def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
@@ -551,7 +580,8 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
     import_program_from_script), with no step of its own for a resident
     program."""
     markdown = run_doc_mod(script_path, debasher_mod_dir)
-    name, description, shared_dirs, process_chunks = parse_module_markdown(markdown)
+    name, description, shared_dirs, chunks = parse_module_markdown(markdown)
+    process_chunks, seq_process_chunks = split_seq_process_chunks(chunks)
     program_type = parse_program_type(markdown)
 
     processes: list[ProgramProcess] = []
@@ -643,6 +673,10 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
         processes=processes,
         edges=edges,
         available_shared_dirs=available_shared_dirs,
+        seq_processes=[
+            _to_seq_process(seq_process_name, chunk, script_path, debasher_mod_dir)
+            for seq_process_name, chunk in seq_process_chunks
+        ],
     )
 
 
@@ -741,5 +775,6 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         sharedDirs=read.shared_dirs,
         availableSharedDirs=read.available_shared_dirs,
         processes=processes,
+        seqProcesses=read.seq_processes,
         edges=edges,
     )

@@ -62,3 +62,9 @@ RESERVED_MODULE_METHOD_SUFFIXES = [
     MODULE_PROGRAM_SUFFIX,
     MODULE_PROGRAM_TYPE_SUFFIX,
 ]
+
+# Mirrors DEBASHER_SEQ_PROCESS_DOC_HEADING_PREFIX: the start of the
+# heading under which debasher_doc_mod --show-seq-procs documents a
+# sequential process, which a process name, having no blank, never
+# starts with.
+SEQ_PROCESS_DOC_HEADING_PREFIX = "Sequential Process: "

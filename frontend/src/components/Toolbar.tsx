@@ -6,6 +6,7 @@ import EnvVarsEditor from "./EnvVarsEditor";
 import PreambleEditor from "./PreambleEditor";
 import ProgramDescriptionEditor from "./ProgramDescriptionEditor";
 import SharedDirsEditor from "./SharedDirsEditor";
+import SeqProcessesEditor from "./SeqProcessesEditor";
 import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
 import AddProgramDialog from "./AddProgramDialog";
@@ -41,6 +42,9 @@ export default function Toolbar({ onClose }: Props) {
     useState(false);
 
   const [isSharedDirsOpen, setSharedDirsOpen] =
+    useState(false);
+
+  const [isSeqProcessesOpen, setSeqProcessesOpen] =
     useState(false);
 
   const [isEnvVarsOpen, setEnvVarsOpen] =
@@ -166,6 +170,15 @@ export default function Toolbar({ onClose }: Props) {
         Shared dirs
       </button>
 
+      {/* A resident program has no sequential processes */}
+      {program.programType !== "resident" && (
+        <button
+          onClick={() => setSeqProcessesOpen(true)}
+        >
+          Sequential processes
+        </button>
+      )}
+
       <button
         onClick={() => setNewProcessOpen(true)}
       >
@@ -215,6 +228,12 @@ export default function Toolbar({ onClose }: Props) {
       {isSharedDirsOpen && (
         <SharedDirsEditor
           onClose={() => setSharedDirsOpen(false)}
+        />
+      )}
+
+      {isSeqProcessesOpen && (
+        <SeqProcessesEditor
+          onClose={() => setSeqProcessesOpen(false)}
         />
       )}
 

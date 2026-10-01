@@ -26,16 +26,14 @@ layout of each dialog or the look of the canvas.
 general and resident (see the Glossary), and the web UI knows both, resident
 programs only in part: a subsection of "Resident programs in the web UI" that is
 built says so. Every section before "Resident programs in the web UI" describes
-the design for general programs, and what it says holds for them; of those
-sections, only "Sequential processes in the web UI" is designed and not built. A
-resident program, whose design is in `doc/design_doc_resident.md`, follows rules
-of its own in several places: it is always run by the built-in scheduler, its
-processes are meant to live until they are stopped, and it is stopped,
-snapshotted and reset with tools of its own. The section on resident programs
-says, for each part of the design described before it, whether it applies to
-resident programs unchanged, changes, or is replaced, and nothing in the earlier
-sections should be read as holding for resident programs unless that section
-says so.
+the design for general programs, and what it says holds for them. A resident
+program, whose design is in `doc/design_doc_resident.md`, follows rules of its
+own in several places: it is always run by the built-in scheduler, its processes
+are meant to live until they are stopped, and it is stopped, snapshotted and
+reset with tools of its own. The section on resident programs says, for each
+part of the design described before it, whether it applies to resident programs
+unchanged, changes, or is replaced, and nothing in the earlier sections should
+be read as holding for resident programs unless that section says so.
 
 The document is organized as follows. The Glossary defines the terms it uses.
 "Architecture" presents the three layers of the web UI and where its state
@@ -45,11 +43,11 @@ the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
 disk, and "Execution and observation" how it runs a program and follows it.
 "Frontend state and the canvas" describes the frontend's own state, and
-"Sequential processes in the web UI" designs how a program keeps the sequential
-processes of its module. "Guarantees and non-goals" gathers the guarantees
-stated along the way. "Resident programs in the web UI" designs the extension to
-resident programs, and says which parts of it are built, and "Future work" lists
-what is known to be missing.
+"Sequential processes in the web UI" describes how a program keeps the
+sequential processes of its module. "Guarantees and non-goals" gathers the
+guarantees stated along the way. "Resident programs in the web UI" designs the
+extension to resident programs, and says which parts of it are built, and
+"Future work" lists what is known to be missing.
 
 # Glossary
 
@@ -140,9 +138,8 @@ refer to it.
   builds on.
 - **step**: as defined in the design of the engine.
 - **sequential process**: as defined in the design of the engine. In the web UI,
-  designed and not built, an element of the program's list of sequential
-  processes, not a process of the program (see "Sequential processes in the web
-  UI").
+  an element of `Program.seqProcesses` (`SeqProcess`), not a process of the
+  program (see "Sequential processes in the web UI").
 - **group**: the processes, and the sequential processes, that "Add program"
   brings in, in one operation, from another program saved with the web UI,
   which the generated module declares with a single `add_debasher_program`
@@ -501,10 +498,14 @@ The generated module holds, in this order:
    variable `<process>_<suffix>`, which import reads, but a Bash variable
    name cannot contain the dot of a namespaced process, so script
    generation never writes it.
-4. `<name>_program`, with one `add_debasher_process` per process, carrying its
+4. For each sequential process, its `_document` function and its code (see
+   "Generating and importing a sequential process").
+5. `<name>_program`, with one `add_debasher_process` per process, carrying its
    computational specifications (`cpus=... mem=... time=...`) and its
-   additional specifications (`force=yes;processdeps=...;alias=...`), or one
-   `add_debasher_program` for each group that is still whole.
+   additional specifications (`force=yes;processdeps=...;alias=...`), then one
+   `add_debasher_seq_process` per sequential process. The members of a group
+   that is still whole, of either kind, give way to one `add_debasher_program`
+   for the group.
 
 A function with nothing to say gets the body `:`, since the engine expects it
 to exist. What the model holds about runs or about the canvas stays out of the
@@ -582,16 +583,18 @@ builds its function from the aliased one.
 
 Script generation raises an error, and writes no module, for a program that
 would produce a wrong one: an option both `fromProcessSpec` and a command line
-option; a command line option with an option channel other than `none`; a
-fanout family that is a flag, a command line option or taken from
-the process specifications, whose count option is missing or is not a command
-line option, whose output is connected, mirrored or uses an option channel
-other than `none` or `fifo`, or whose input is not connected to a process in
-`array` or `generator` mode; and a connection to a fanout family from a
-process in another mode. The save writes the program metadata before it
-generates the script, so a program that script generation refuses is still
-saved, and the home directory keeps the script of the previous save. The save
-answers with the reason of the refusal, which the frontend shows.
+option; a command line option with an option channel other than `none`; a fanout
+family that is a flag, a command line option or taken from the process
+specifications, whose count option is missing or is not a command line option,
+whose output is connected, mirrored or uses an option channel other than `none`
+or `fifo`, or whose input is not connected to a process in `array` or
+`generator` mode; a connection to a fanout family from a process in another
+mode; and a sequential process in a resident program, or with the name of a
+process or of another sequential process (see "Generating and importing a
+sequential process"). The save writes the program metadata before it generates
+the script, so a program that script generation refuses is still saved, and the
+home directory keeps the script of the previous save. The save answers with the
+reason of the refusal, which the frontend shows.
 
 ## Environment variables of a program
 
@@ -703,6 +706,9 @@ With the processes read, import assembles the program:
   the order of the module documentation. The number of passes is bounded, so a
   cycle ends with some layering rather than none. A self-loop says nothing
   about the order of two processes, and is left out of the layering.
+- **Sequential processes.** Each section of a sequential process in the module
+  documentation becomes one (see "Generating and importing a sequential
+  process").
 - **The rest.** `sourceDir` is the module's directory, the home and output
   directories are left empty, the scheduler is `BUILTIN` and there are no
   program options.
@@ -717,16 +723,15 @@ script generation writes: the flat definitions of `standard` mode, the fixed
 loop of `array` mode, the pair of functions of `generator` mode, and the
 functions of `manual` mode, which come back as they went. The processes, their
 options with their values, option channels and flags, the connections, the
-modes, the code, the additional methods, the specifications and the
-descriptions survive. The order of
-the processes, and of the options of a process, follows the module
-documentation and may differ from the original. What lives only in the program
-metadata does not survive: the ids, which are new; the positions, which are
-laid out again; the groups, which come back flattened; the environment
-variables, except the `DEBASHER_MOD_DIR` given to import; the execution
-options and program options; and the home and output directories. A `manual`
-function that happens to fit the grammar of `standard` mode comes back in
-`standard` mode, which defines the same options.
+modes, the code, the additional methods, the specifications, the descriptions
+and the sequential processes survive. The order of the processes, and of the
+options of a process, follows the module documentation and may differ from the
+original. What lives only in the program metadata does not survive: the ids,
+which are new; the positions, which are laid out again; the groups, which come
+back flattened; the environment variables, except the `DEBASHER_MOD_DIR` given
+to import; the execution options and program options; and the home and output
+directories. A `manual` function that happens to fit the grammar of `standard`
+mode comes back in `standard` mode, which defines the same options.
 
 **From a module to the model and back.** A module that import recognizes comes
 back with the same behavior, but written the way script generation writes it:
@@ -737,8 +742,8 @@ held in a heredoc variable comes back in a heredoc function. Some things a
 module can say have no place in the model and are lost: the explicit dependency
 types of `_define_opt_deps`, which the module documentation shows and import
 does not keep; the program type of `_program_type`; any code of the module after
-its first function that belongs to no process; and the specifications the model
-does not hold.
+its first function that belongs to no process or sequential process; and the
+specifications the model does not hold.
 
 `test/api/test_round_trip.py` checks both directions. From the model to a
 module and back, it builds programs that cover every options handler mode,
@@ -1155,18 +1160,13 @@ again from the store on every change.
 
 # Sequential processes in the web UI
 
-*Designed, not built.* A process can run code of its own as a step, with
-`seq_execute`, and a sequential process gives such code a name and a process
-specification, so that it can be written in another language, be an alias, or
-ask Slurm for resources of its own (see "Sequential processes" in
-`doc/design_doc_engine.md`). Today the web UI knows nothing of them: import
-loses the `add_debasher_seq_process` lines and the code that belongs to no
-process, and a program whose processes call a sequential process no longer
-runs once it goes through the web UI. This section designs how a sequential
-process enters the program model, how it is generated and imported, and where
-the editor shows it. Once it is built, what it adds to script generation and
-import moves into "Layout of the generated module", "What script generation
-refuses", "Building the program" and "What the round trip preserves".
+A process can run code of its own as a step, with `seq_execute`, and a
+sequential process gives such code a name and a process specification, so that
+it can be written in another language, be an alias, or ask Slurm for resources
+of its own (see "Sequential processes" in `doc/design_doc_engine.md`). A program
+whose processes run sequential processes keeps them through the web UI: this
+section describes how a sequential process enters the program model, how it is
+generated and imported, and where the editor shows it.
 
 ## Sequential processes in the program model
 
@@ -1206,16 +1206,16 @@ that does nothing, like a process. Saving copies the file of a relative
 `externalAlias` of a sequential process into the home directory, as it copies
 that of a process (see "The home directory").
 
-**The module documentation.** `debasher_doc_mod` gains the flag
+**The module documentation.** `debasher_doc_mod` has the flag
 `--show-seq-procs`, which import adds to the flags it always gives. With it,
 after the processes, the module documentation has one section for each
 sequential process that the `_program` method adds, under a heading of its own
-that the parser of the module documentation learns to tell apart from that of
-a process. The section holds what the other flags ask for and a sequential
-process has: its description, its implementation (its code and language, or
-the target of its alias) and its specifications. The engine finds the
-sequential processes in the same `_program` run that gives the processes, so
-nothing new has to load.
+(`Sequential Process: <name>`), which the parser of the module documentation
+tells apart from that of a process, since a process name has no blank. The
+section holds what the other flags ask for and a sequential process has: its
+description, its implementation (its code and language, or the target of its
+alias) and its specifications. The engine finds the sequential processes in the
+same `_program` run that gives the processes, so nothing new has to load.
 
 The code of a process includes the functions of the same file that it calls
 (see "What the engine reports"), and a process that runs a step names its
@@ -1237,23 +1237,28 @@ every import.
 
 **Groups.** "Add program" brings the sequential processes of the other program
 with its processes, marked with the same `groupSource`, and `groupSize` counts
-both. While the group is whole, with every process and sequential process
-still present and none edited, its `add_debasher_program` adds them too, and
-changing or removing a sequential process of the group dissolves it, as
-changing a process of the group does (see "Groups"). A name that the other
-program shares with a process or a sequential process of the current one makes
-script generation refuse the program until one of them is renamed.
+both. While the group is whole, with every process and sequential process still
+present and none edited, its `add_debasher_program` adds them too, and changing
+or removing a sequential process of the group dissolves it, as changing a
+process of the group does (see "Groups"). "Add program" refuses a program that
+brings a process or a sequential process with a name that the current program
+already has, whatever its kind, as `add_debasher_program` declares each one
+under its own name.
 
 ## Sequential processes in the editor
 
-A sequential process is not drawn on the canvas, which shows the processes
-and their connections, and a sequential process has neither. The toolbar opens
-a "Sequential processes" dialog, beside those of the preamble, the shared
-directories and the environment variables, which lists them and adds, renames
-or removes one. Each one opens an editor with its name, description and
-specifications, its alias included, and its code in the same code editor as
-the code of a process. As every dialog, it edits a draft and hands it to the
-store when the user accepts it.
+A sequential process is not drawn on the canvas, which shows the processes and
+their connections, and a sequential process has neither. The toolbar opens a
+"Sequential processes" dialog, beside those of the preamble, the shared
+directories and the environment variables, which lists them and adds, renames or
+removes one. The one selected in the list is edited beside it: its name,
+description and specifications, its alias included, and its code in the same
+code editor as the code of a process. As every dialog, it edits a draft of the
+whole list, and hands it to the store when the user accepts it, once the names
+are checked: none blank, none shared by two sequential processes or by a
+process, each one valid as a process name, and none with both an alias and an
+external alias. Accepting a draft that changes or removes a sequential process
+of a group first asks to dissolve the group.
 
 The web UI does not read the code of the processes, and so does not know which
 of them run which sequential process: renaming or removing a sequential process
@@ -2662,9 +2667,6 @@ too.
 - **Restarting one task of a node.** "Restart node" on a single task of an
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.
-- **Building sequential processes in the web UI.** Building what "Sequential
-  processes in the web UI" designs, on the flag `--show-seq-procs` of
-  `debasher_doc_mod`, which the engine already has.
 - **Building the web UI for resident programs.** Building what "Resident
   programs in the web UI" designs, where a subsection does not say that it is
   built.

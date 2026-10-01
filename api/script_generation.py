@@ -23,7 +23,7 @@ from .debasher_constants import (
 )
 from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
-from .models import ComputationalSpecs, AdditionalSpecs, Program
+from .models import ComputationalSpecs, AdditionalSpecs, Program, SeqAdditionalSpecs, SeqComputationalSpecs
 from .resident_generation import resident_program_for_generation
 
 INDENT_WIDTH = 4
@@ -35,7 +35,7 @@ def _indent_block(text: str, indent: str) -> str:
     return "\n".join(indent + line if line else line for line in text.splitlines())
 SCRIPT_HEADER = "# AUTOMATICALLY GENERATED DEBASHER SCRIPT"
 
-def _computational_specs_str(specs: ComputationalSpecs) -> str:
+def _computational_specs_str(specs: ComputationalSpecs | SeqComputationalSpecs) -> str:
     parts = []
     if specs.cpus is not None:
         parts.append(f"cpus={specs.cpus:g}")
@@ -45,9 +45,10 @@ def _computational_specs_str(specs: ComputationalSpecs) -> str:
         parts.append(f"time={specs.time}")
     # The specifications that the nodes of a resident program read, under
     # the names of the engine (see "Limits of a node" in
-    # doc/design_doc_resident.md), none of them set for a general program.
+    # doc/design_doc_resident.md), none of them set for a general program
+    # and none held by the specifications of a sequential process.
     for name in _RESIDENT_COMP_SPEC_NAMES:
-        value = getattr(specs, name)
+        value = getattr(specs, name, None)
         if value is None:
             continue
         parts.append(f"{name}={value:g}" if isinstance(value, (int, float)) else f"{name}={value}")
@@ -72,9 +73,10 @@ def _alias_opt_map_str(specs: AdditionalSpecs) -> str | None:
     return ",".join(f"{m.fromLabel}:{m.toLabel}" for m in specs.aliasOptMap)
 
 
-def _additional_specs_str(specs: AdditionalSpecs) -> str:
+def _additional_specs_str(specs: AdditionalSpecs | SeqAdditionalSpecs) -> str:
     parts = []
-    if specs.force:
+    # A sequential process has neither "force" nor "processdeps"
+    if getattr(specs, "force", False):
         # The engine only recognizes "force=yes" (see
         # debasher::_extract_force_from_process_spec /
         # _define_forced_rerun_processes in
@@ -82,8 +84,9 @@ def _additional_specs_str(specs: AdditionalSpecs) -> str:
         # `[ ${process_forced} = "yes" ]`), a bare "forced" token would
         # never match.
         parts.append("force=yes")
-    if specs.processdeps:
-        parts.append(f"processdeps={specs.processdeps}")
+    processdeps = getattr(specs, "processdeps", None)
+    if processdeps:
+        parts.append(f"processdeps={processdeps}")
     if specs.alias:
         parts.append(f"alias={specs.alias}")
         # The engine's own attribute key is "alias_opt_map" (see
@@ -787,17 +790,17 @@ def _add_additional_methods_funcs(process):
 def _intact_group_ids(program):
     """
     groupIds whose full original membership (groupSource.groupSize) is
-    still present among program.processes, i.e. an "Add program" batch
-    nothing has been edited or removed from yet (see
-    frontend/src/store/ProgramContext.tsx's confirmDetachIfGrouped,
-    which is what normally guarantees this before generation ever runs;
-    this is only a defensive re-check, e.g. for a hand-edited
-    program.json).
+    still present among program.processes and program.seqProcesses,
+    i.e. an "Add program" batch nothing has been edited or removed from
+    yet (see frontend/src/store/ProgramContext.tsx's
+    confirmDetachIfGrouped, which is what normally guarantees this
+    before generation ever runs; this is only a defensive re-check,
+    e.g. for a hand-edited program.json).
     """
     group_sizes = {}
     member_counts = {}
-    for process in program.processes:
-        group = process.groupSource
+    for member in [*program.processes, *program.seqProcesses]:
+        group = member.groupSource
         if group is None:
             continue
         group_sizes[group.groupId] = group.groupSize
@@ -813,21 +816,47 @@ def _add_program_function(program):
     lines = [f"{program.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
     intact_group_ids = _intact_group_ids(program)
     emitted_group_ids = set()
-    for process in program.processes:
-        group = process.groupSource
+    # The processes, then the sequential processes: a member of an intact
+    # group, of either kind, is added by its group's add_debasher_program,
+    # written once, where its first member comes
+    members = [(process, "add_debasher_process") for process in program.processes]
+    members += [(seq_process, "add_debasher_seq_process") for seq_process in program.seqProcesses]
+    for member, add_function in members:
+        group = member.groupSource
         if group is not None and group.groupId in intact_group_ids:
             if group.groupId in emitted_group_ids:
                 continue
             emitted_group_ids.add(group.groupId)
             lines.append(f'{INDENT}add_debasher_program "{group.programName}"')
             continue
-        comp_specs = _computational_specs_str(process.computationalSpecs)
-        add_specs = _additional_specs_str(process.additionalSpecs)
+        comp_specs = _computational_specs_str(member.computationalSpecs)
+        add_specs = _additional_specs_str(member.additionalSpecs)
         lines.append(
-            f'{INDENT}add_debasher_process "{process.name}" "{comp_specs}" "{add_specs}"'
+            f'{INDENT}{add_function} "{member.name}" "{comp_specs}" "{add_specs}"'
         )
     lines.append("}")
     return lines
+
+
+def _check_seq_processes(program: Program) -> None:
+    """
+    Refuses a program whose sequential processes the engine would refuse:
+    any in a resident program, and a name that a process and a sequential
+    process, or two sequential processes, share (see
+    debasher::add_debasher_seq_process in engine/debasher_lib_programs.sh).
+    """
+    if not program.seqProcesses:
+        return
+    if program.programType == "resident":
+        raise ValueError("A resident program cannot have sequential processes.")
+    process_names = {process.name for process in program.processes}
+    seen = set()
+    for seq_process in program.seqProcesses:
+        if seq_process.name in process_names:
+            raise ValueError(f'Sequential process "{seq_process.name}" has the name of a process.')
+        if seq_process.name in seen:
+            raise ValueError(f'Two sequential processes are named "{seq_process.name}".')
+        seen.add(seq_process.name)
 
 
 def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset()) -> str:
@@ -882,6 +911,18 @@ def _build_script(program: Program, skip_exec_for: frozenset[str] = frozenset())
 
         lines.extend(_add_additional_methods_funcs(process))
 
+    # Add the functions of the sequential processes: their description and
+    # their code, written as those of a process
+    for seq_process in program.seqProcesses:
+        lines.extend(_add_document_proc_func(seq_process))
+        lines.extend(["", ""])
+
+        if seq_process.name not in skip_exec_for:
+            exec_func_lines = _add_exec_func(seq_process)
+            if exec_func_lines:
+                lines.extend(exec_func_lines)
+                lines.extend(["", ""])
+
     # Add program function
     lines.extend(_add_program_function(program))
 
@@ -926,8 +967,8 @@ def _own_code_canonicalized(process_name: str, language: str, code: str, debashe
 
 def _stub_processes_missing_code(program: Program) -> Program:
     """
-    Returns a copy of `program` where every non-alias process with no
-    code yet gets a trivial bash stub ("<name>() { :; }"), just enough
+    Returns a copy of `program` where every non-alias process, or
+    sequential process, with no code yet gets a trivial bash stub ("<name>() { :; }"), just enough
     to satisfy add_debasher_process's exec-function check (see
     get_all_envvars), leaving every other process, and the real
     `program` passed in, untouched. An alias/external-alias process
@@ -946,7 +987,19 @@ def _stub_processes_missing_code(program: Program) -> Program:
         stubbed_processes.append(
             process.copy(update={"language": "bash", "code": f"{process.name}()\n{{\n    :\n}}"})
         )
-    return program.copy(update={"processes": stubbed_processes}) if changed else program
+    stubbed_seq_processes = []
+    for seq_process in program.seqProcesses:
+        has_alias = seq_process.additionalSpecs.alias or seq_process.additionalSpecs.externalAlias
+        if has_alias or seq_process.code:
+            stubbed_seq_processes.append(seq_process)
+            continue
+        changed = True
+        stubbed_seq_processes.append(
+            seq_process.copy(update={"language": "bash", "code": f"{seq_process.name}()\n{{\n    :\n}}"})
+        )
+    if not changed:
+        return program
+    return program.copy(update={"processes": stubbed_processes, "seqProcesses": stubbed_seq_processes})
 
 
 def get_all_envvars(program: Program) -> dict[str, str]:
@@ -1043,7 +1096,9 @@ def _find_redundant_exec_funcs(program: Program) -> frozenset[str]:
     debasher_mod_dir = program.envVars.get("DEBASHER_MOD_DIR", "")
     redundant: set[str] = set()
 
-    for process in program.processes:
+    # A sequential process has its code written like that of a process, so
+    # a loaded module may provide it too
+    for process in [*program.processes, *program.seqProcesses]:
         # An alias/external alias process embeds no code of its own (see
         # _add_exec_func), so there's nothing here to compare.
         if process.additionalSpecs.alias or process.additionalSpecs.externalAlias:
@@ -1080,6 +1135,7 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
     away right after one debasher_doc_mod call, where the duplicate-code
     concern _find_redundant_exec_funcs exists for doesn't apply.
     """
+    _check_seq_processes(program)
     if program.programType == "resident":
         # The code of every node is assembled from its parts, never taken
         # from a module that the preamble loads, so there is nothing

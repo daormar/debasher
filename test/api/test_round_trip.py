@@ -51,6 +51,8 @@ from api.models import (
     ProgramEdge,
     ProgramOption,
     ProgramProcess,
+    SeqComputationalSpecs,
+    SeqProcess,
 )
 from api.program_import import import_program_from_script
 
@@ -98,11 +100,16 @@ def _canonical_program(program: Program) -> dict:
         for edge in program.edges
     )
 
+    seq_processes = {
+        seq_process.name: seq_process.model_dump(exclude={"id", "groupSource"})
+        for seq_process in program.seqProcesses
+    }
+
     top = program.model_dump(
         include={"name", "description", "preamble", "sharedDirs"}
     )
 
-    return {"program": top, "processes": processes, "edges": edges}
+    return {"program": top, "processes": processes, "seqProcesses": seq_processes, "edges": edges}
 
 
 def _generate_and_import(program: Program, debasher_mod_dir: str) -> Program:
@@ -123,6 +130,26 @@ def test_import_is_a_fixed_point_of_the_round_trip(module):
     reimported = _generate_and_import(imported, debasher_mod_dir)
 
     assert _canonical_program(reimported) == _canonical_program(imported)
+
+
+def test_the_sequential_process_of_a_module_is_imported():
+    # A fixed point alone would not catch a sequential process lost on
+    # every import
+    module = _PROGRAMS_DIR / "debasher_cycle_dyn_sched.sh"
+
+    imported = import_program_from_script(module, str(_PROGRAMS_DIR))
+
+    seq_processes = {seq_process.name: seq_process for seq_process in imported.seqProcesses}
+    assert list(seq_processes) == ["transformation_b"]
+    assert seq_processes["transformation_b"].language == "python"
+    assert "f.write(str(value + 2))" in seq_processes["transformation_b"].code
+    assert seq_processes["transformation_b"].computationalSpecs == SeqComputationalSpecs(
+        cpus=1, mem=32, time="00:01:00"
+    )
+    # Its code is that of the sequential process only, never also in the
+    # code of the process that runs it
+    worker = next(process for process in imported.processes if process.name == "worker")
+    assert "transformation_b" not in worker.code.replace("seq_execute_slurm transformation_b", "")
 
 
 # --- From the model to a module and back ---------------------------------
@@ -372,6 +399,38 @@ def test_code_methods_specs_and_texts_survive_the_round_trip(tmp_path):
         [],
         description="A program whose texts hold `backquotes` and $dollars",
         preamble="# Preamble comment\nMY_CONSTANT=1",
+    )
+
+    _assert_model_round_trip(program, tmp_path)
+
+
+def test_sequential_processes_survive_the_round_trip(tmp_path):
+    caller = _process(
+        "caller",
+        [],
+        code='caller()\n{\n    seq_execute bashstep "$@"\n    seq_execute pystep 1\n}',
+    )
+    program = _program(
+        "rt_seq",
+        [caller],
+        [],
+        seqProcesses=[
+            SeqProcess(
+                id="bashstep",
+                name="bashstep",
+                description="A step in Bash",
+                language="bash",
+                code="bashstep()\n{\n    echo bash step\n}",
+            ),
+            SeqProcess(
+                id="pystep",
+                name="pystep",
+                description="A step in Python",
+                language="python",
+                code="import sys\nprint(sys.argv)",
+                computationalSpecs=SeqComputationalSpecs(cpus=2, mem=128, time="00:02:00"),
+            ),
+        ],
     )
 
     _assert_model_round_trip(program, tmp_path)

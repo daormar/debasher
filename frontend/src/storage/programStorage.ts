@@ -110,6 +110,7 @@ export function createEmptyProgram(name: string, programType: ProgramType = "gen
     programOptions: {},
     sharedDirs: [],
     availableSharedDirs: [],
+    seqProcesses: [],
     processes: [],
     edges: [],
   };

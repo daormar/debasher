@@ -1,5 +1,6 @@
 import type { ProgramEdge } from "./edge";
 import type { ProgramProcess } from "./process";
+import type { SeqProcess } from "./seqProcess";
 
 export interface ExecutionOptions {
 
@@ -97,6 +98,10 @@ export interface Program {
   availableSharedDirs: string[];
 
   processes: ProgramProcess[];
+
+  // The sequential processes of the program, never in a resident program
+  // (see models/seqProcess.ts).
+  seqProcesses: SeqProcess[];
 
   edges: ProgramEdge[];
 

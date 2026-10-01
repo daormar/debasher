@@ -82,9 +82,9 @@ def delete_stale_script(output_dir: str, new_name: str) -> None:
 
 def copy_ext_alias_files(program: Program, output_dir: str) -> None:
     """
-    Copies each process's external-alias script (AdditionalSpecs.
-    externalAlias, see AdditionalSpecsEditor.tsx and
-    script_generation.py's _additional_specs_str, which writes it into
+    Copies each process's, and each sequential process's, external-alias
+    script (AdditionalSpecs.externalAlias, see AdditionalSpecsEditor.tsx
+    and script_generation.py's _additional_specs_str, which writes it into
     the generated .sh as "ext_alias=<path>") from where `program` was
     originally imported from (program.sourceDir) into `output_dir`,
     preserving the same relative path.
@@ -111,7 +111,8 @@ def copy_ext_alias_files(program: Program, output_dir: str) -> None:
     source_root = Path(program.sourceDir).expanduser()
     resolved_output_dir = Path(output_dir).expanduser()
 
-    for process in program.processes:
+    # A sequential process may have an external alias too
+    for process in [*program.processes, *program.seqProcesses]:
         external_alias = process.additionalSpecs.externalAlias
         if not external_alias or Path(external_alias).is_absolute():
             continue
