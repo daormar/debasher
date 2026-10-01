@@ -751,11 +751,9 @@ With the processes read, import assembles the program:
 - **Specifications.** They come from the module documentation. The engine
   attributes that the model does not hold (`nodes`, `account`, `partition`,
   `throttle`) are dropped.
-- **Layout.** The module says nothing about positions, so import places the
-  processes in layers by the depth of their connections, left to right in
-  the order of the module documentation. The number of passes is bounded, so a
-  cycle ends with some layering rather than none. A self-loop says nothing
-  about the order of two processes, and is left out of the layering.
+- **Layout.** The module says nothing about positions, so import leaves them
+  to the frontend, which places the imported processes in layers by their
+  connections (see "From the store to the canvas").
 - **Sequential processes.** Each section of a sequential process in the module
   documentation becomes one (see "Generating and importing a sequential
   process").
@@ -1265,6 +1263,20 @@ Of what the canvas shows, only the positions belong to the program model and
 are saved. The selection, the part of the canvas in view (fitted to the
 program when the editor opens), whether the legend is folded and the colors
 are not.
+
+Where the program brings processes whose position nobody chose, a function of
+the model chooses it (`models/programLayout.ts`). The processes of an imported
+program, whose module says nothing about positions, are placed in layers by the
+depth of their connections (`layoutProcesses`): a process that feeds another is
+placed above it, so that edges run down the canvas, from the outputs along the
+bottom of a canvas node to the inputs along the top of the next, and the
+processes of one layer are placed side by side, in their order in the program.
+The number of passes is bounded, so a cycle ends with some layering rather than
+none, and a self-loop, which says nothing about the order of two processes, is
+left out. `nextFreePosition` gives the place to the right of the rightmost
+process, where "Add program" moves the processes it brings, as a block that
+keeps their layout. A process that the user adds in the editor is the exception:
+it starts at a fixed place of the canvas, and the user drags it.
 
 ## Keeping the canvas in step with the store
 
@@ -2764,10 +2776,10 @@ program, which would call the same MCP tools (see "Future work"). This section
 is a design: apart from what it relies on that the editor has too, the distinct
 option labels (see "Processes and options"), the guards of the backend against a
 run in progress (see "The home directory"), the revisions of the program
-metadata (see "Revisions of the program metadata") and the resolution of named
-edits (see "Programs, processes and options by name"), nothing in it is built
-yet, and the guarantees and non-goals stated before it do not change until it
-is.
+metadata (see "Revisions of the program metadata"), the resolution of named
+edits (see "Programs, processes and options by name") and the placement of
+processes (see "From the store to the canvas"), nothing in it is built yet, and
+the guarantees and non-goals stated before it do not change until it is.
 
 The design follows from one rule: the MCP server edits a program with the
 same code as the editor. The edits, their validation, the rule of which groups
@@ -2846,9 +2858,10 @@ UI would show a proposal on the canvas and let the frontend apply it with
 `applyEdits` if the user accepts it, which needs no other code.
 
 A process added by an agent has no position chosen by hand. The MCP server
-places it to the right of the rightmost process, with a function of the model
-that the editor can use too, so that the canvas shows every process apart; an
-agent can move it afterwards.
+places it with `nextFreePosition`, and a program that it imports with
+`layoutProcesses`, so that the canvas shows every process apart (see "From the
+store to the canvas"); an agent can move a process afterwards, or lay out the
+whole program again in layers.
 
 ## The MCP tools
 
@@ -2907,8 +2920,7 @@ check is tested in the backend's own tests.
 # Future work
 
 - **Building the MCP server.** Building what "Editing a program from an agent:
-  the MCP server" designs: the placement of a new process, and the server with
-  its MCP tools.
+  the MCP server" designs: the server with its MCP tools.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what

@@ -140,8 +140,8 @@ describe("Add program", () => {
 
     const groupSource = { programName: "other", groupId: "new-0", groupSize: 3, sourceDir: "/src/other" };
     expect(group.processes.map(p => [p.name, p.id, p.position, p.groupSource])).toEqual([
-      ["x", "new-1", { x: 550, y: 10 }, groupSource],
-      ["y", "new-2", { x: 600, y: 60 }, groupSource],
+      ["x", "new-1", { x: 520, y: 10 }, groupSource],
+      ["y", "new-2", { x: 570, y: 60 }, groupSource],
     ]);
     expect(group.seqProcesses.map(s => [s.name, s.id, s.groupSource])).toEqual([["step", "new-3", groupSource]]);
     expect(group.edges).toEqual([

@@ -322,7 +322,7 @@ def test_a_fanout_family_survives_the_round_trip(tmp_path):
     _assert_model_round_trip(program, tmp_path)
 
 
-def test_a_self_loop_survives_the_round_trip_and_keeps_its_layer(tmp_path):
+def test_a_self_loop_survives_the_round_trip(tmp_path):
     counter = _process(
         "counter",
         [
@@ -339,13 +339,6 @@ def test_a_self_loop_survives_the_round_trip_and_keeps_its_layer(tmp_path):
     )
 
     _assert_model_round_trip(program, tmp_path)
-
-    # The self-loop does not push its process down: it stays in the first
-    # layer, above the process it feeds.
-    reimported = _generate_and_import(program, str(tmp_path))
-    y = {process.name: process.position.y for process in reimported.processes}
-    assert y["counter"] < y["sink"]
-    assert y["counter"] == min(y.values())
 
 
 def test_code_of_a_namespaced_process_in_another_language_survives_the_round_trip(tmp_path):

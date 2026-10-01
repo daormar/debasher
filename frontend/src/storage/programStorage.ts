@@ -1,5 +1,6 @@
 import type { Program, ProgramType } from "../models/program";
 import { DEFAULT_SCHEDULER } from "../models/program";
+import { layoutProcesses } from "../models/programLayout";
 import { throwIfRevisionConflict } from "../api/revisionConflict";
 
 // ---------------------------------------------------------------
@@ -64,6 +65,9 @@ export async function loadProgram(inputDir: string): Promise<Program> {
   return response.json();
 }
 
+// Imports the module at `scriptPath`, whose processes, about whose
+// positions the module says nothing, are placed in layers by their
+// connections (see layoutProcesses).
 export async function importProgram(
   scriptPath: string,
   debasherModDir: string
@@ -78,7 +82,7 @@ export async function importProgram(
     throw new Error(`Failed to import program: ${await errorMessage(response)}`);
   }
 
-  return response.json();
+  return layoutProcesses(await response.json());
 }
 
 export async function getAllEnvVars(

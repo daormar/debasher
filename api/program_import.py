@@ -45,15 +45,6 @@ from .option_handler_import import ConnectionRef, SharedDirRef, resolve_options_
 from .resident_import import import_resident_processes
 from .script_generation import SCRIPT_HEADER
 
-# Default layout for imported processes: debasher_doc_mod's output
-# carries no position information, so processes are laid out in layers
-# by data-flow depth (see _layout_processes) instead of just stacking
-# them in script-declaration order.
-_PROCESS_START_X = 100.0
-_PROCESS_START_Y = 100.0
-_PROCESS_X_SPACING = 220.0
-_PROCESS_Y_SPACING = 160.0
-
 # A top-level bash function definition header — "name()", "name ()",
 # "name() {", or the same with a leading "function " keyword — anchored
 # to column 0 since that's how every function is written throughout
@@ -486,56 +477,6 @@ def _sync_connected_option_values(processes: list[ProgramProcess], edges: list[P
                 option.value = ""
 
 
-def _layout_processes(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> None:
-    """
-    Positions processes in layers by data-flow depth, so a process
-    feeding another's input via a recovered connection is placed above
-    it (smaller y) rather than in raw script-declaration order — mutates
-    each process's `position` in place.
-
-    Layer assignment is longest-path relaxation (Bellman-Ford-style): a
-    target's layer is pushed below its source's on every pass, repeated
-    until nothing changes. DeBasher explicitly allows cyclic process
-    dependencies (e.g. debasher_cycle_state.sh), which would make that
-    relaxation loop forever chasing an ever-growing layer around the
-    cycle — so passes are capped at len(processes): every node can gain
-    at most one extra layer per full pass over all edges, so that many
-    passes is always enough to reach the fixpoint for the acyclic part
-    of the graph, and for a cyclic part it just guarantees termination
-    with a bounded (not necessarily "correct", since no single layering
-    is correct for a cycle) result rather than hanging.
-
-    A self-loop (a process connected to itself) says nothing about the
-    order of two processes, and relaxing it would only push its process
-    one layer down on every pass, so it is left out.
-
-    Processes sharing a layer are placed side by side, left to right in
-    their original script order, for a deterministic layout.
-    """
-    layer = {process.id: 0 for process in processes}
-
-    for _ in range(len(processes)):
-        changed = False
-        for edge in edges:
-            if edge.sourceProcessId not in layer or edge.targetProcessId not in layer:
-                continue
-            if edge.sourceProcessId == edge.targetProcessId:
-                continue
-            candidate = layer[edge.sourceProcessId] + 1
-            if candidate > layer[edge.targetProcessId]:
-                layer[edge.targetProcessId] = candidate
-                changed = True
-        if not changed:
-            break
-
-    next_x_by_layer: dict[int, float] = {}
-    for process in processes:
-        process_layer = layer[process.id]
-        x = next_x_by_layer.get(process_layer, _PROCESS_START_X)
-        process.position = Position(x=x, y=_PROCESS_START_Y + process_layer * _PROCESS_Y_SPACING)
-        next_x_by_layer[process_layer] = x + _PROCESS_X_SPACING
-
-
 def _to_seq_process(name: str, chunk: str, script_path: Path, debasher_mod_dir: str) -> SeqProcess:
     """
     A sequential process from its section of the module documentation (see
@@ -646,7 +587,9 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
                 id=str(uuid.uuid4()),
                 name=process_name,
                 description=info.description,
-                position=Position(x=_PROCESS_START_X, y=_PROCESS_START_Y),
+                # The module says nothing about positions: the frontend
+                # places the imported processes (see programLayout.ts).
+                position=Position(x=0, y=0),
                 options=options,
                 optionsHandler=result.handler,
                 language=info.language,
@@ -754,7 +697,6 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         # Turns the processes into nodes and removes the Supervisor wiring,
         # or refuses the program (see resident_import.py).
         edges = import_resident_processes(processes, edges)
-    _layout_processes(processes, edges)
 
     return Program(
         id=str(uuid.uuid4()),

@@ -5,6 +5,7 @@ import type { ProgramOption } from "./option";
 import type { Position } from "./position";
 import type { GroupSource, ProgramProcess } from "./process";
 import type { Program } from "./program";
+import { nextFreePosition } from "./programLayout";
 import { DEFAULT_SCHEDULER } from "./program";
 import type { SeqProcess } from "./seqProcess";
 
@@ -438,21 +439,16 @@ export function prepareMerge(
         sourceDir,
       };
 
-  // Places the merged batch to the right of whatever's already on the
-  // canvas, preserving the relative layout its processes had in `loaded`:
-  // there's no bounding-box UI to keep in sync (see ProcessNode's per-group
-  // color instead), just a one-off offset at merge time.
-  const currentMaxX = program.processes.reduce(
-    (max, process) => Math.max(max, process.position.x),
-    0
-  );
-
+  // Places the merged batch where a process added to the program goes (see
+  // nextFreePosition), preserving the relative layout its processes had in
+  // `loaded`: there's no bounding-box UI to keep in sync (see ProcessNode's
+  // per-group color instead), just a one-off offset at merge time.
   const loadedMinX = loaded.processes.reduce(
     (min, process) => Math.min(min, process.position.x),
     Infinity
   );
 
-  const offsetX = loadedMinX === Infinity ? 0 : currentMaxX + 250 - loadedMinX;
+  const offsetX = loadedMinX === Infinity ? 0 : nextFreePosition(program).x - loadedMinX;
 
   const idMap = new Map<string, string>();
 
