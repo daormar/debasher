@@ -2663,8 +2663,8 @@ too.
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.
 - **Building sequential processes in the web UI.** Building what "Sequential
-  processes in the web UI" designs, with the flag `--show-seq-procs` of
-  `debasher_doc_mod` that it relies on.
+  processes in the web UI" designs, on the flag `--show-seq-procs` of
+  `debasher_doc_mod`, which the engine already has.
 - **Building the web UI for resident programs.** Building what "Resident
   programs in the web UI" designs, where a subsection does not say that it is
   built.

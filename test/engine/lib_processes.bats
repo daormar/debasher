@@ -1281,3 +1281,52 @@ REOF
     [ "${status}" -eq 0 ]
     [ "${output}" = $'```python\nimport sys\nprint(sys.argv)\n```' ]
 }
+
+# --- sequential processes in the documentation ------------------------
+
+@test "debasher::_collect_func_deps leaves out a sequential process that the function runs as a step" {
+    local scriptfile="${BATS_TEST_TMPDIR}/script.sh"
+    cat > "${scriptfile}" <<'EOF2'
+seqstep()
+{
+    :
+}
+
+main_proc()
+{
+    seq_execute seqstep
+}
+EOF2
+    declare -gA DEBASHER_SEQ_PROCESSES=([seqstep]="${DEBASHER_REGULAR_PROCESS_TYPE}")
+
+    result=$(collect_deps "${scriptfile}" "main_proc")
+    [ "${result}" = "" ]
+}
+
+@test "debasher::_show_seq_process_documentation shows the description, specifications and implementation of a sequential process" {
+    declare -gA DEBASHER_SEQ_PROCESSES=([seqstep]="${DEBASHER_HEREDOC_PROCESS_TYPE}")
+    declare -gA DEBASHER_SEQ_PROCESS_SPEC=([seqstep]="seqstep cpus=2;mem=64 ${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP} ")
+    seqstep_document() { echo "Adds two."; }
+    seqstep_heredoc_py() { echo 'print(1 + 1)'; }
+
+    run debasher::_show_seq_process_documentation seqstep 1 1
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == "## Sequential Process: seqstep"* ]]
+    [[ "${output}" == *$'### Description\nAdds two.'* ]]
+    [[ "${output}" == *'- `cpus`: 2'* ]]
+    [[ "${output}" == *'- `mem`: 64'* ]]
+    [[ "${output}" == *$'```python\nprint(1 + 1)\n```'* ]]
+}
+
+@test "debasher::_show_seq_process_documentation shows what a sequential process alias runs" {
+    declare -gA DEBASHER_SEQ_PROCESSES=([seqalias]="${DEBASHER_ALIAS_PROCESS_TYPE}")
+    declare -gA DEBASHER_SEQ_PROCESS_SPEC=([seqalias]="seqalias ${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP} alias=target")
+    declare -gA DEBASHER_PROCESS_ALIAS_TARGETS=([seqalias]="target")
+    target_heredoc_r() { echo 'print(2)'; }
+
+    run debasher::_show_seq_process_documentation seqalias 1 1
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *'- `alias`: target'* ]]
+    [[ "${output}" == *$'```r\nprint(2)\n```'* ]]
+    [[ "${output}" != *"Warning"* ]]
+}

@@ -177,7 +177,9 @@ debasher::_show_proc_specs()
 {
     local processname=$1
 
-    local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
+    # The specification of a process, or else that of a sequential
+    # process
+    local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]-${DEBASHER_SEQ_PROCESS_SPEC[${processname}]-}}"
 
     echo "### Computational Specifications"
     local cpus=$(debasher::_extract_cpus_from_process_spec "${process_spec}")
@@ -345,6 +347,9 @@ debasher::_collect_func_deps()
     for word in $(declare -f "${funcname}" | debasher::_blank_string_literals | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | sort -u); do
         [ -n "${_collected[$word]+x}" ] && continue
         [ -n "${declared_vars[$word]+x}" ] && continue
+        # A sequential process that the function runs as a step has
+        # code of its own, documented apart from that of the process
+        [ -n "${DEBASHER_SEQ_PROCESSES[$word]+x}" ] && continue
         local defsite
         defsite=$(declare -F "${word}" 2>/dev/null)
         [ -z "${defsite}" ] && continue
@@ -369,7 +374,8 @@ debasher::_show_proc_implem_delegate()
 {
     local processname=$1
 
-    case "${DEBASHER_PROGRAM_PROCESSES[${processname}]-}" in
+    # The type of a process, or else that of a sequential process
+    case "${DEBASHER_PROGRAM_PROCESSES[${processname}]-${DEBASHER_SEQ_PROCESSES[${processname}]-}}" in
         "${DEBASHER_ALIAS_PROCESS_TYPE}")
             debasher::_show_proc_implem "${DEBASHER_PROCESS_ALIAS_TARGETS[${processname}]}"
             return $?
@@ -567,6 +573,51 @@ debasher::_show_process_documentation()
             echo "${implementation}"
         else
             echo "Warning: implementation for process ${processname} was not found" >&2
+        fi
+        echo ""
+    fi
+}
+
+########
+# Prints the documentation of a sequential process (see
+# debasher::add_debasher_seq_process), under a heading of its own that
+# tells it apart from that of a process: its description, when it has a
+# _document method, and, as requested, its specifications and its
+# implementation. A sequential process has no options, option handler
+# or other methods to show.
+#
+# $1 - Name of the sequential process.
+# $2 - 1 to show its implementation.
+# $3 - 1 to show its specifications.
+debasher::_show_seq_process_documentation()
+{
+    local processname=$1
+    local show_implem=$2
+    local show_specs=$3
+
+    echo "## ${DEBASHER_SEQ_PROCESS_DOC_HEADING_PREFIX}${processname}"
+    echo ""
+
+    echo "### Description"
+    local document_funcname=$(debasher::_get_proc_document_funcname "${processname}")
+    if [ "${document_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        ${document_funcname}
+    fi
+    echo ""
+
+    if [ "${show_specs}" = 1 ]; then
+        debasher::_show_proc_specs "${processname}"
+        echo ""
+    fi
+
+    if [ "${show_implem}" = 1 ]; then
+        echo "### Process Implementation"
+        local implementation
+        implementation=$(debasher::_show_proc_implem "${processname}")
+        if [ $? -eq 0 ]; then
+            echo "${implementation}"
+        else
+            echo "Warning: implementation for sequential process ${processname} was not found" >&2
         fi
         echo ""
     fi

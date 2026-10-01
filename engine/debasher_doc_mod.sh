@@ -34,7 +34,7 @@ usage()
     echo "                          [--show-meths] [--show-meths-with-code]"
     echo "                          [--show-vars] [--show-vars-with-values]"
     echo "                          [--show-opts] [--show-opthnd]"
-    echo "                          [--show-impl] [--show-specs]"
+    echo "                          [--show-impl] [--show-specs] [--show-seq-procs]"
     echo "                          [--resolve-var <string>]... [--help]"
     echo ""
     echo "-m <string>               Module file name (a relative path is looked for in"
@@ -61,6 +61,9 @@ usage()
     echo "--show-opthnd             Show process option handler information"
     echo "--show-impl               Show process implementation information"
     echo "--show-specs              Show process computational and additional specifications"
+    echo "--show-seq-procs          Show, after the processes, the sequential processes"
+    echo "                          that the program adds, with their implementation and"
+    echo "                          specifications as --show-impl and --show-specs ask"
     echo "--help                    Display this help and exit"
 }
 
@@ -80,6 +83,7 @@ read_pars()
     showopthnd_given=0
     showimpl_given=0
     showspecs_given=0
+    showseqprocs_given=0
     resolvevars=()
     while [ $# -ne 0 ]; do
         case $1 in
@@ -119,6 +123,8 @@ read_pars()
             "--show-impl") showimpl_given=1
                           ;;
             "--show-specs") showspecs_given=1
+                          ;;
+            "--show-seq-procs") showseqprocs_given=1
                           ;;
             "--resolve-var") shift
                           if [ $# -ne 0 ]; then
@@ -220,6 +226,17 @@ obtain_info_for_module()
             debasher::_show_process_documentation "${processname}" "${showmeths_given}" "${showmethswithcode_given}" "${showvars_given}" "${showvarswithvalues_given}" "${showopts_given}" "${showopthnd_given}" "${showimpl_given}" "${showspecs_given}"
         fi
     done
+
+    # Iterate over the sequential processes, in a stable order
+    if [ "${showseqprocs_given}" -eq 1 ]; then
+        local seqprocessname
+        while IFS= read -r seqprocessname; do
+            [ -z "${seqprocessname}" ] && continue
+            if [ "${s_given}" -eq 0 ] || [ "${seqprocessname}" = "${given_processname}" ]; then
+                debasher::_show_seq_process_documentation "${seqprocessname}" "${showimpl_given}" "${showspecs_given}"
+            fi
+        done < <(printf '%s\n' "${!DEBASHER_SEQ_PROCESSES[@]}" | "${SORT}")
+    fi
 }
 
 ########

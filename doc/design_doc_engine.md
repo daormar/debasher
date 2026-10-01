@@ -701,7 +701,11 @@ specification, which reach the tasks through the execution context like every
 function and variable of the shell of `debasher_exec` (see "The process script:
 how code travels"). A step runs the process function only, and the engine calls
 no other method of a sequential process, which therefore needs no
-`_explain_opts` method.
+`_explain_opts` method. `debasher_doc_mod` documents the sequential processes
+only when asked with `--show-seq-procs`, after the processes and each under a
+heading of its own, and leaves a sequential process out of the code of a process
+that runs it, which includes the other functions of its module that the process
+calls.
 
 The additional specifications `alias`, `ext_alias` and `alias_opt_map` mean what
 they mean for a process. `processdeps` and `force`, which only a scheduled

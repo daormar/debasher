@@ -324,6 +324,12 @@ DEBASHER_HEREDOC_FEXTS=(
     "${DEBASHER_GROOVY_FEXT}"
 )
 
+# DOCUMENTATION
+# Start of the heading under which debasher_doc_mod documents a
+# sequential process, which a process name, having no blank, never
+# starts with
+DEBASHER_SEQ_PROCESS_DOC_HEADING_PREFIX="Sequential Process: "
+
 # FILE NAMES
 DEBASHER_PRG_PREF="program"
 DEBASHER_PRG_COMMAND_LINE_BASENAME="command_line.sh"
