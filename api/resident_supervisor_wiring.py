@@ -63,9 +63,8 @@ def _option(label, direction, description, **fields) -> ProgramOption:
 
 
 def _connect(edges, source_process, source_option, target_process, target_option) -> None:
-    """Connects two options of the copy of the program, as the frontend would:
-    an edge, and the value of the target that names its source."""
-    target_option.value = f"[{source_process.name};{source_option.label}]"
+    """Connects two options of the copy of the program with an edge, which is
+    all that script generation reads to tell that an option is connected."""
     edges.append(
         ProgramEdge(
             id=str(uuid.uuid4()),

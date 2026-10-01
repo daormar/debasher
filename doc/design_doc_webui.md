@@ -389,12 +389,14 @@ edited by hand, still loads: the canvas node and the inspector of each such
 process name the repeated labels, so that the user relabels or removes all but
 one.
 
-What `value` holds depends on the other fields, and is always what the
-generated script has to write, not what the process will receive at run time:
+What `value` holds depends on the other fields, and is, except for a connected
+input, what the generated script has to write, not what the process will
+receive at run time:
 
 - a literal value, for an option with option channel `none` that is neither
   connected nor a command line option;
-- a connection sentinel, for a connected input (see "Connections");
+- a connection sentinel, for a connected input, which script generation does
+  not read (see "Connections");
 - the FIFO's name, for option channel `fifo`;
 - the shared directory's name, never a path, for option channel `shared_dir`;
 - the attribute's name, such as `cpus`, when `fromProcessSpec` is set;
@@ -420,11 +422,15 @@ connected. The value of a connected input, its connection sentinel, is derived
 from them: the store recomputes it from the edges after every change to the
 program, so renaming a process or an option never leaves a sentinel that names
 the old one, and a program loaded with values out of step with its edges is
-repaired on load. Script generation also reads the edges, and emits one
-definition per edge; the sentinel is only its fallback when no edge matches. A
-`shared_dir` input is the exception: its value stays the name of its directory,
-and its edges only document on the canvas a dependency that the engine derives
-on its own from every writer resolving to the same path.
+repaired on load. Script generation reads only the edges, and emits one
+definition per edge. The sentinel is what the editor shows and the program
+metadata keeps, never what makes an option connected, so the backend never
+computes it: import, which builds the edges, leaves the value of a connected
+input empty, and the normalization of the store (`normalizeProgram`, see
+"Screens and the store") derives the sentinel on every program the store loads.
+A `shared_dir` input is the exception: its value stays the name of its
+directory, and its edges only document on the canvas a dependency that the
+engine derives on its own from every writer resolving to the same path.
 
 The canvas accepts a new connection only when it keeps the program valid for
 the engine:
@@ -776,10 +782,12 @@ and the sequential processes survive. The order of the processes, and of the
 options of a process, follows the module documentation and may differ from the
 original. What lives only in the program metadata does not survive: the ids,
 which are new; the positions, which are laid out again; the groups, which come
-back flattened; the environment variables, except the `DEBASHER_MOD_DIR` given
-to import; the execution options and program options; and the home and output
-directories. A `manual` function that happens to fit the grammar of `standard`
-mode comes back in `standard` mode, which defines the same options.
+back flattened; the connection sentinels, derived again from the connections
+when the program is loaded; the environment variables, except the
+`DEBASHER_MOD_DIR` given to import; the execution options and program options;
+and the home and output directories. A `manual` function that happens to fit the
+grammar of `standard` mode comes back in `standard` mode, which defines the same
+options.
 
 **From a module to the model and back.** A module that import recognizes comes
 back with the same behavior, but written the way script generation writes it:
@@ -1182,19 +1190,19 @@ accepts it.
 
 Every change to the program goes through an operation of the store
 (`addProcess`, `connect`, `updateOption`, ...), and every operation passes its
-result through the same normalization, which derives the connection sentinels
-from the edges and restores the default scheduler if it is blank. The rules of
-"Connections" therefore hold after every change, not only when the program is
-saved. An operation that would change a process of a group first asks the
-user, and dissolves the whole group if the user agrees (see "Groups"); if not,
-the program is left as it was. One action of the user asks once, for all the
-groups it touches: deleting a selection on the canvas removes its processes
-and edges in one operation, asked before the canvas drops anything, so a
-declined deletion leaves them drawn; renaming a process along with the
-definition that a loaded module provides for the new name is one operation
-too. Every operation applies to the latest program, not to the one of the last
-render, so the operations of one event build on each other, and once the first
-has dissolved a group the next ones do not ask again.
+result through the same normalization (`normalizeProgram`), which derives the
+connection sentinels from the edges and restores the default scheduler if it is
+blank. The rules of "Connections" therefore hold after every change, not only
+when the program is saved. An operation that would change a process of a group
+first asks the user, and dissolves the whole group if the user agrees (see
+"Groups"); if not, the program is left as it was. One action of the user asks
+once, for all the groups it touches: deleting a selection on the canvas removes
+its processes and edges in one operation, asked before the canvas drops
+anything, so a declined deletion leaves them drawn; renaming a process along
+with the definition that a loaded module provides for the new name is one
+operation too. Every operation applies to the latest program, not to the one of
+the last render, so the operations of one event build on each other, and once
+the first has dissolved a group the next ones do not ask again.
 
 The operations rest on plain functions of the program model, in
 `models/programEdits.ts`: each takes a program and returns the edited one
@@ -1609,9 +1617,8 @@ business channels" in `doc/design_doc_resident.md`).
 **The Supervisor wiring.** The channels between the `Supervisor` and the nodes
 are not part of the program model. Script generation derives them every time
 from whether the program has a `Supervisor`, from its nodes and from which of
-them are initiators, as the store derives the connection sentinels from the
-edges, so adding or removing a node needs no change to the `Supervisor`. They
-are:
+them are initiators, so adding or removing a node needs no change to the
+`Supervisor`. They are:
 
 - a heartbeat channel from every node, one for each task of an `array` or
   `generator` process: an output of the node, read by an input of the
@@ -2871,8 +2878,9 @@ its processes with their options and their connections, one per line, and the
 output of a process is cut to its last lines unless the call asks for more.
 
 - **Reading.** `get_program` (the settings of the program, its processes, its
-  sequential processes and its connections), `get_process` (one process in
-  full, its code included) and `import_module` (import a module and save it
+  sequential processes and its connections), `get_process` (one process in full,
+  its code included) and `import_module` (import a module, place its processes
+  and derive its connection sentinels as the store does on load, and save it
   into a new home directory).
 - **The library.** `search_library` and `get_library_process`, which list and
   describe the processes and nodes that the modules of the preamble define,

@@ -248,25 +248,21 @@ def _define_opts_func_foot():
     return lines
 
 
-def _opt_is_connected_to_proc(option):
-    return option.value.startswith("[") and option.value.endswith("]")
+# The connections into one option: (source process name, source option
+# label, source process mode) for each edge that targets it.
+Connections = list[tuple[str, str, str]]
 
 
-def _get_process_plus_opt(option):
-    return tuple(option.value[1:-1].split(";"))
-
-
-def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, str]]]:
+def _connections_by_option(program: Program) -> dict[tuple[str, str], Connections]:
     """
-    Maps a target option's id to every edge connected to it, as
-    (source process name, source option label, source process mode)
-    triples, used by _option_definition_line to emit one
-    define_opt_from_proc_out[_task_out] per connection instead of the
-    single one implied by option.value's own "[proc;opt]" sentinel (see
-    _opt_is_connected_to_proc/_get_process_plus_opt), which only ever
-    records one. A non-command-line, non-fanout input may have more
-    than one entry here (fan-in, see isValidEdge in the
-    frontend); every other option has at most one, or none.
+    Maps a target option, as (process id, option id), to the edges
+    connected to it, as (source process name, source option label, source
+    process mode) triples. The edges are the one source of truth about what
+    is connected: an option is connected when it has an entry here, whatever
+    its value holds (the "[proc;opt]" connection sentinel that the frontend
+    derives from the edges is only shown and saved). A non-command-line,
+    non-fanout input may have more than one entry (fan-in, see isValidEdge
+    in the frontend); every other option has at most one, or none.
     """
     processes_by_id = {process.id: process for process in program.processes}
     result: dict[str, list[tuple[str, str, str]]] = {}
@@ -281,7 +277,7 @@ def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, s
         )
         if source_option is None:
             continue
-        result.setdefault(edge.targetOptionId, []).append(
+        result.setdefault((edge.targetProcessId, edge.targetOptionId), []).append(
             (source_process.name, source_option.label, source_process.optionsHandler.mode)
         )
 
@@ -295,7 +291,7 @@ def _connections_by_option(program: Program) -> dict[str, list[tuple[str, str, s
 # a source in one of these modes can be trusted to actually have a task
 # N to connect to; a standard source has only task 0, and a manual
 # source's task shape is unknown, so both default to task 0 instead (see
-# _opt_is_connected_to_proc below).
+# _connection_lines below).
 _TASK_INDEXED_MODES = {"generator", "array"}
 
 # The non-"-ith" side of a fanout/fanin pairing: whatever "array"-mode
@@ -359,7 +355,7 @@ def _fanout_count_source_option(process, option):
     return source
 
 
-def _validate_fanout_option(process, option, process_modes) -> None:
+def _validate_fanout_option(process, option, process_modes, connections: Connections) -> None:
     if option.dataType == "None":
         raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t be a flag.')
     if option.commandLine:
@@ -382,7 +378,7 @@ def _validate_fanout_option(process, option, process_modes) -> None:
                 f'Fanout output "{option.label}" on "{process.name}" can\'t be mirrored, '
                 '"Watch FIFO" only supports a single, non-fanout output fifo for now.'
             )
-        if _opt_is_connected_to_proc(option):
+        if connections:
             raise ValueError(
                 f'Fanout output "{option.label}" on "{process.name}" can\'t be connected, '
                 'give it a literal value referencing "$i" instead.'
@@ -393,12 +389,12 @@ def _validate_fanout_option(process, option, process_modes) -> None:
         # incompatible with any other channel.
         if option.channel != "none":
             raise ValueError(f'Fanout input "{option.label}" on "{process.name}" must use channel "none".')
-        if not _opt_is_connected_to_proc(option):
+        if not connections:
             raise ValueError(
                 f'Fanout input "{option.label}" on "{process.name}" must be connected '
                 'to an "array"- or "generator"-mode process output.'
             )
-        conn_proc, _ = _get_process_plus_opt(option)
+        conn_proc, _, _ = connections[0]
         if process_modes.get(conn_proc) not in _FANOUT_PARTNER_MODES:
             raise ValueError(
                 f'Fanout input "{option.label}" on "{process.name}" is connected to '
@@ -407,7 +403,7 @@ def _validate_fanout_option(process, option, process_modes) -> None:
             )
 
 
-def _fanout_definition_lines(process, option, process_modes, indent: str) -> list[str]:
+def _fanout_definition_lines(process, option, process_modes, connections_by_option, indent: str) -> list[str]:
     """
     Multi-line _define_opts codegen for a fanout family option on a
     "standard" process: reads its runtime count off another cmdline
@@ -419,7 +415,8 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
     data/programs/debasher_dynamic_fanout.sh's dispatch_define_opts/
     aggregate_define_opts for the hand-written equivalent.
     """
-    _validate_fanout_option(process, option, process_modes)
+    connections = connections_by_option.get((process.id, option.id), [])
+    _validate_fanout_option(process, option, process_modes, connections)
 
     count_source = _fanout_count_source_option(process, option)
     count_var = _fanout_count_var(count_source.label)
@@ -437,7 +434,7 @@ def _fanout_definition_lines(process, option, process_modes, indent: str) -> lis
             f'{indent}{INDENT}debasher::{func} "{base_label}${{i}}" "{option.value}" optlist{tag_flag} || return 1'
         )
     else:
-        conn_proc, conn_opt = _get_process_plus_opt(option)
+        conn_proc, conn_opt, _ = connections[0]
         lines.append(
             f'{indent}{INDENT}debasher::define_opt_from_proc_task_out "{base_label}${{i}}" "{conn_proc}" "${{i}}" "{conn_opt}" optlist || return 1'
         )
@@ -515,13 +512,13 @@ def _cmdline_lines(option) -> list[str]:
     return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
 
 
-def _connection_lines(process, option, process_modes, connections_by_option) -> list[str]:
+def _connection_lines(process, option, process_modes, connections: Connections) -> list[str]:
     """
     The lines of an option connected to the output of a process: the
     consumer side of a scatter, when the output is a fanout family, or else
     one define_opt_from_proc_out[_task_out] call for each connection.
     """
-    conn_proc, conn_opt = _get_process_plus_opt(option)
+    conn_proc, conn_opt, _ = connections[0]
     if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
         # Consumer side of a scatter connection: conn_opt is a fanout
         # family declared on a "standard" process (e.g. "-outfith"), so it
@@ -546,13 +543,7 @@ def _connection_lines(process, option, process_modes, connections_by_option) -> 
 
     # Plain connection: one define_opt_from_proc_out[_task_out] per edge
     # into this option, usually just one, but a non-command-line input may
-    # gather from several (fan-in; see isValidEdge in the
-    # frontend). Falls back to the single value-sentinel-derived
-    # connection if no matching edge was found, e.g. a hand-edited/stale
-    # file.
-    connections = connections_by_option.get(option.id) or [
-        (conn_proc, conn_opt, process_modes.get(conn_proc))
-    ]
+    # gather from several (fan-in; see isValidEdge in the frontend).
 
     lines = []
     for src_proc, src_opt, src_mode in connections:
@@ -605,8 +596,9 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
         return _procspec_lines(option)
     if option.commandLine:
         return _cmdline_lines(option)
-    if _opt_is_connected_to_proc(option):
-        return _connection_lines(process, option, process_modes, connections_by_option)
+    connections = connections_by_option.get((process.id, option.id))
+    if connections:
+        return _connection_lines(process, option, process_modes, connections)
     return _literal_lines(process, option)
 
 
@@ -617,7 +609,7 @@ def _add_opts_definition_func(process, suffix, header_lines, process_modes, conn
     if process.options:
         for option in process.options:
             if process.optionsHandler.mode == "standard" and _is_fanout_label(option.label):
-                lines.extend(_fanout_definition_lines(process, option, process_modes, INDENT))
+                lines.extend(_fanout_definition_lines(process, option, process_modes, connections_by_option, INDENT))
             else:
                 lines.extend(
                     INDENT + line

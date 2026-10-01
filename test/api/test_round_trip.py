@@ -62,6 +62,16 @@ _PROGRAMS_DIR = _REPO_ROOT / "data" / "programs"
 _EXAMPLE_MODULES = sorted(_PROGRAMS_DIR.glob("*.sh"))
 
 
+def _option_exclusions(process, option, connected) -> set[str]:
+    """The fields of an option left out of the comparison (see
+    _canonical_program): a shared_dir option keeps its directory as its
+    value, connected or not."""
+    excluded = {"id", "countSourceOptionId"}
+    if (process.id, option.id) in connected and option.channel != "shared_dir":
+        excluded.add("value")
+    return excluded
+
+
 def _canonical_program(program: Program) -> dict:
     """
     The part of `program` that a module can carry, in a form that two
@@ -70,10 +80,16 @@ def _canonical_program(program: Program) -> dict:
     module documentation), connections named by process and option.
     What lives only in the program metadata is left out: ids, positions,
     groups, environment variables, execution and program options, the
-    three directories, and the shared directories reachable through
-    loaded modules, which only import fills.
+    three directories, the shared directories reachable through loaded
+    modules, which only import fills, and the value of a connected input,
+    its connection sentinel, which the frontend derives from the edges
+    compared here.
     """
     processes_by_id = {process.id: process for process in program.processes}
+    connected = {
+        (edge.targetProcessId, edge.targetOptionId)
+        for edge in program.edges
+    }
 
     def option_label(process_id: str, option_id: str) -> str:
         process = processes_by_id[process_id]
@@ -83,7 +99,7 @@ def _canonical_program(program: Program) -> dict:
     for process in program.processes:
         labels_by_id = {option.id: option.label for option in process.options}
         options = {
-            option.label: option.model_dump(exclude={"id", "countSourceOptionId"})
+            option.label: option.model_dump(exclude=_option_exclusions(process, option, connected))
             | {"countSource": labels_by_id.get(option.countSourceOptionId)}
             for option in process.options
         }

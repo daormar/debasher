@@ -68,6 +68,24 @@ def test_input_file_option_still_uses_define_infile_opt():
     assert "debasher::define_infile_opt " in lines[0]
 
 
+def test_the_edges_alone_say_what_is_connected():
+    # The value of an input is not looked at to tell whether it is
+    # connected: an edge into it connects it, even with no connection
+    # sentinel in its value, and a value that looks like one, with no
+    # edge, is a literal value.
+    option = _make_file_option("input", label="-inf", value="")
+    process = _make_process([option])
+    connections = {("p1", "o1"): [("producer", "-outf", "standard")]}
+
+    connected = _option_definition_line(process, option, {}, connections)
+    stale = _option_definition_line(
+        process, option.model_copy(update={"value": "[producer;-outf]", "dataType": "string"}), {}, {}
+    )
+
+    assert connected == ['debasher::define_opt_from_proc_out "-inf" "producer" "-outf" optlist || return 1']
+    assert stale == ['debasher::define_opt "-inf" "[producer;-outf]" optlist || return 1']
+
+
 def test_command_line_option_with_an_option_channel_is_refused():
     # A command-line option takes its value from the command line only
     # (the engine refuses one defined otherwise), so a model option that
