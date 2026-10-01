@@ -1722,8 +1722,25 @@ debasher::add_debasher_seq_process()
 }
 
 ########
-# Public: Adds a sequential process to a DeBasher program (see
-# debasher::add_debasher_seq_process).
+# Public: Adds a sequential process to a DeBasher program: a function
+# that the engine never schedules, and that the process function of a
+# task runs as a step with seq_execute or seq_execute_slurm.
+#
+# Its name and its process function are checked and built as those of
+# a process are, so its code can be a heredoc in Python, R, Perl or
+# Groovy ("<name>_heredoc_py", ...) or an alias, and its name cannot be
+# that of a process or of another sequential process. It needs no
+# methods besides its process function. A resident program cannot have
+# sequential processes.
+#
+# $1 - Name of the sequential process.
+# $2 - Computational specifications, each optional ("cpus", "mem",
+#      "time", "nodes", "account", "partition"), which become options of
+#      srun when the step runs under Slurm. "throttle" and a list of
+#      values in "mem" or "time" are refused.
+# $3 - Additional specifications: "alias", "ext_alias" and
+#      "alias_opt_map", as for a process. "processdeps" and "force" are
+#      refused.
 #
 # Examples
 #

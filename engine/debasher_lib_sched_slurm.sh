@@ -1165,4 +1165,19 @@ debasher::seq_execute_slurm()
     return ${ret}
 }
 
+########
+# Public: Runs a function or command as a job step of Slurm, with
+# srun, and waits for it to end, whatever the scheduler of the program
+# (see debasher::seq_execute_slurm). When the function is a sequential
+# process (see add_debasher_seq_process), its computational
+# specifications become options of srun.
+#
+# $1 - Function or command to execute.
+# $2.. - Its arguments, passed as they are given.
+#
+# Examples
+#
+#   seq_execute_slurm transform "${value}" "${outd}/result.txt"
+#
+# Returns 1 if the step could not be launched or failed.
 seq_execute_slurm() { debasher::seq_execute_slurm "$@"; }

@@ -40,8 +40,16 @@ for name in "${shdir_symbols[@]}"; do
 done
 
 # Generate program definition API file
-prog_def_symbols=("add_debasher_process()" "add_debasher_program()" "program_type()")
+prog_def_symbols=("add_debasher_process()" "add_debasher_seq_process()" "add_debasher_program()" "program_type()")
 rm -f rtdocs/source/api_prog_def_doc.md
 for name in "${prog_def_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_programs.sh >> rtdocs/source/api_prog_def_doc.md
 done
+
+# Generate steps API file
+steps_symbols=("seq_execute()" "mark_step_done()" "is_step_done()")
+rm -f rtdocs/source/api_steps_doc.md
+for name in "${steps_symbols[@]}"; do
+    sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_sched.sh >> rtdocs/source/api_steps_doc.md
+done
+sh rtdocs/tomdoc.sh -m -s "seq_execute_slurm()" engine/debasher_lib_sched_slurm.sh >> rtdocs/source/api_steps_doc.md

@@ -290,6 +290,12 @@ defined as follows:
         opt_is_cmdline "-s"
     }
 
+**HINT**: every process needs an ``explain_opts`` method, even one with
+no options at all, which can be just ``:``. Besides documenting the
+options, the method is what tells a process apart from any other
+function of a module, and ``add_debasher_process`` refuses a process
+without it (the older ``explain_cmdline_opts`` is also accepted).
+
 On the other hand, the ``file_reader`` process will not require any
 command line option. However, the process needs the path of an input
 file. This path is not provided through the command line, but instead it
@@ -979,6 +985,160 @@ Instead of incorporating additional detailed explanations here, it can
 be more useful to provide a list of examples exploiting different
 aspects of the Debasher's functionality. Such examples are described in
 the :ref:`Examples` Section.
+
+.. _steps:
+
+Steps and Sequential Processes
+------------------------------
+
+The dependency graph of a program is fixed before it runs, but some
+processes only know what to run next while they run: a loop that sends
+each value it reads to one of two transformations, or a process that
+skips its second stage when the first one produced nothing. Such a
+process runs its stages itself, as *steps*, from its own
+implementation.
+
+Running a step
+^^^^^^^^^^^^^^
+
+``seq_execute <function> <args>`` runs a function, or a command, waits
+for it to end and returns an error if it fails. The
+``debasher_telegram_imperative`` example (see :ref:`Examples`) runs two
+functions of another module this way, and skips the second one when the
+first produced no words:
+
+.. code-block:: bash
+
+    seq_execute decomposer -f "${file}" -outf "${outd}"/words.txt || return 1
+    ...
+    seq_execute recomposer -c "${char_lim}" -inf "${outd}"/words.txt -outf "${outd}"/output.txt || return 1
+
+How the step runs depends on the scheduler of the program:
+
+* With the built-in scheduler, the function runs in the shell of the
+  task. A step that calls ``exit`` therefore ends the whole task, as the
+  implementation of a process would.
+* With the SLURM scheduler, the step runs as a job step, through
+  ``srun``. ``seq_execute_slurm`` does the same whatever the scheduler of
+  the program: a program that uses FIFOs runs on the built-in scheduler,
+  and can still send a heavy step to the cluster.
+
+The arguments reach the function as they are given, positional or
+options. What the step prints to its standard output goes to that of
+``seq_execute``, and so to the ``.stdout`` file of the task unless the
+caller captures it; its standard error goes to the log of the task.
+
+**HINT**: the step reads the standard input of the call. Inside a loop
+that reads its own standard input, such as ``while read``, give the
+step ``/dev/null`` (``seq_execute f "$x" < /dev/null``): under SLURM,
+``srun`` would otherwise take the rest of the loop's input, whether the
+step reads it or not.
+
+Sequential processes
+^^^^^^^^^^^^^^^^^^^^
+
+Any function of the program can run as a step. Declaring it as a
+*sequential process*, with ``add_debasher_seq_process`` in the
+``program`` method, is needed only when its code is not a Bash function
+(a heredoc in Python, R, Perl or Groovy), when it borrows the code of
+another process or of an external script (``alias``, ``ext_alias``), or
+when the step asks SLURM for resources of its own. The
+``debasher_cycle_dyn_sched`` module in ``data/programs`` does it for a
+transformation written in Python, which its ``worker`` process runs as
+a step:
+
+.. code-block:: bash
+
+    transformation_b_heredoc_py()
+    {
+        cat <<'EOF'
+    import sys
+    value = int(sys.argv[1])
+    fname = sys.argv[2]
+    with open(fname, 'w') as f:
+        f.write(str(value + 2))
+    EOF
+    }
+
+    worker()
+    {
+        ...
+        seq_execute_slurm transformation_b "${value}" "${outd}/transformation_result.txt"
+        ...
+    }
+
+    debasher_cycle_dyn_sched_program()
+    {
+        add_debasher_process "master" "cpus=1 mem=32 time=00:10:00"
+        add_debasher_process "worker" "cpus=1 mem=32 time=00:10:00"
+        add_debasher_seq_process "transformation_b" "cpus=1 mem=32 time=00:01:00"
+    }
+
+``add_debasher_seq_process`` takes the same arguments as
+``add_debasher_process``, with these differences:
+
+* Every computational specification is optional. Under SLURM, ``cpus``,
+  ``mem``, ``time``, ``nodes``, ``account`` and ``partition`` become
+  options of ``srun``; the built-in scheduler uses none of them. Inside
+  a SLURM job, a step gets its resources from the allocation of the job,
+  and one that asks for more than the job has fails. ``throttle`` and a
+  list of values in ``mem`` or ``time`` are refused, since a step runs
+  once.
+* Of the additional specifications, ``alias``, ``ext_alias`` and
+  ``alias_opt_map`` mean what they mean for a process; ``processdeps``
+  and ``force`` are refused.
+* A sequential process needs no method besides its implementation (no
+  ``explain_opts``, ``define_opts``, ...): DeBasher never schedules it,
+  and it has no options, tasks or status of its own.
+* Its name cannot be that of a process or of another sequential
+  process.
+* A resident program cannot have sequential processes (see
+  :ref:`resident`).
+
+``debasher_doc_mod --show-seq-procs`` documents the sequential
+processes of a module, after its processes.
+
+Recording finished steps
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+DeBasher keeps no record of a step: when a task fails halfway through
+its steps, the next run runs all of them again. A process that wants to
+skip the steps that an earlier run finished records them itself, with
+``mark_step_done <dir> <id>``, which creates an empty marker file for
+the step, and ``is_step_done <dir> <id>``, which tells whether it
+exists. The ``debasher_dynamic_fanout_stepdone`` module in
+``data/programs`` runs one step per file of its list:
+
+.. code-block:: bash
+
+    local sum
+    sum=$(cksum < "$filepath" | awk '{print $1}')
+    local stepid="${id}_${base}_${sum}"
+
+    if is_step_done "${outd}" "${stepid}"; then
+        echo "Step ${stepid} was already completed and marked as done" >&2
+    else
+        rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${id}_${base}_"*
+        if seq_execute worker_task "$filepath" "$outd/$base" < /dev/null; then
+            mark_step_done "${outd}" "${stepid}" || return 1
+        else
+            exit_code=1
+        fi
+    fi
+
+Two things are left to the process:
+
+* **The markers have to survive.** A process with a single task has
+  its output directory emptied when it starts, unless it has a
+  ``reset_outfiles`` method that keeps them; the example defines one
+  that does nothing.
+* **A marker has to stop counting when the work changes.** A process
+  that runs again because its options or its inputs changed still finds
+  the markers of the earlier run. The example puts a checksum of the
+  input in the id, so that a changed input has a new id, and removes
+  the markers that other inputs left for the same output before it runs
+  the step, so that an input that comes back does not find an old
+  marker for an output that was overwritten since.
 
 Reusing Processes and Programs
 ------------------------------

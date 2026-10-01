@@ -114,6 +114,8 @@ edits the selected process, and a toolbar above:
   processes the program uses.
 * **Description**: the description of the program.
 * **Shared dirs**: the shared directories that the program declares.
+* **Sequential processes**: the code that the processes run as steps
+  (see `Sequential Processes`_ below). A resident program has none.
 * **Add process**: adds a process, by name. The names of the processes
   that the modules of the preamble define are suggested, and choosing
   one brings its options and code in.
@@ -210,7 +212,26 @@ module, so that the other program stays the one place where they are
 defined. Changing a process of the group, removing one, or connecting
 one of its inputs to something new asks first, and then dissolves the
 group: its processes are then written into the generated script one by
-one.
+one. The same holds for a sequential process that the group brought in.
+
+Sequential Processes
+^^^^^^^^^^^^^^^^^^^^
+
+The sequential processes of a general program (see :ref:`steps`) are
+not drawn on the canvas: they have no options and no connections. The
+"Sequential processes" dialog of the toolbar lists them, adds, renames
+and removes them, and edits the one selected: its name, description,
+computational specifications, alias, and code, in Bash or in another
+language. A new one starts with a Bash function of its name that does
+nothing. Saving the dialog checks the names (not blank, not that of a
+process or of another sequential process, valid as a process name) and
+that the Bash code of each one defines a function of its name, which
+the step runs.
+
+The web interface does not read the code of the processes: renaming or
+removing a sequential process does not change the calls to
+``seq_execute`` that name it. "Add program" brings the sequential
+processes of the other program into the same group as its processes.
 
 Program Files
 ^^^^^^^^^^^^^

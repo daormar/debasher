@@ -547,6 +547,26 @@ debasher::_write_env_vars_and_funcs()
 }
 
 ########
+# Public: Runs a function or command as a step: from the process
+# function of a task, it runs it, waits for it to end and returns an
+# error if it fails.
+#
+# Under the built-in scheduler the function runs in the shell of the
+# task; under the Slurm scheduler it runs as a job step through srun
+# (see seq_execute_slurm), with the computational specifications of
+# the function when it is a sequential process (see
+# add_debasher_seq_process). The step reads the standard input of the
+# call, so a step inside a loop that reads its standard input takes
+# its own from /dev/null.
+#
+# $1 - Function or command to execute.
+# $2.. - Its arguments, passed as they are given.
+#
+# Examples
+#
+#   seq_execute transform "${value}" "${outd}/result.txt" < /dev/null
+#
+# Returns 1 if the step failed or could not be launched.
 debasher::seq_execute()
 {
     local sched=$(debasher::_get_scheduler)
@@ -567,6 +587,27 @@ debasher::seq_execute()
     esac
 }
 
+########
+# Public: Runs a function or command as a step: from the process
+# function of a task, it runs it, waits for it to end and returns an
+# error if it fails.
+#
+# Under the built-in scheduler the function runs in the shell of the
+# task; under the Slurm scheduler it runs as a job step through srun
+# (see seq_execute_slurm), with the computational specifications of
+# the function when it is a sequential process (see
+# add_debasher_seq_process). The step reads the standard input of the
+# call, so a step inside a loop that reads its standard input takes
+# its own from /dev/null.
+#
+# $1 - Function or command to execute.
+# $2.. - Its arguments, passed as they are given.
+#
+# Examples
+#
+#   seq_execute transform "${value}" "${outd}/result.txt" < /dev/null
+#
+# Returns 1 if the step failed or could not be launched.
 seq_execute() { debasher::seq_execute "$@"; }
 
 ########
@@ -598,6 +639,20 @@ debasher::mark_step_done()
     fi
 }
 
+########
+# Public: Marks a step as done, by creating its step marker (see
+# debasher::mark_step_done). The engine never reads a step marker: a
+# process that wants to skip the steps that an earlier run finished
+# checks them itself with is_step_done.
+#
+# $1 - Directory of the step marker.
+# $2 - Id of the step, unique within the directory.
+#
+# Examples
+#
+#   mark_step_done "${outd}" "${id}_${base}_${checksum}"
+#
+# Returns 1 if the marker could not be created or already existed.
 mark_step_done() { debasher::mark_step_done "$@"; }
 
 ########
@@ -616,6 +671,18 @@ debasher::is_step_done()
     [ -e "$dir/${DEBASHER_STEP_MARKER_PREFIX}${id}" ]
 }
 
+########
+# Public: Tells whether a step has been marked as done with
+# mark_step_done.
+#
+# $1 - Directory of the step marker.
+# $2 - Id of the step.
+#
+# Examples
+#
+#   is_step_done "${outd}" "${id}_${base}_${checksum}" || seq_execute work "${base}"
+#
+# Returns 0 if the step marker exists, 1 otherwise.
 is_step_done() { debasher::is_step_done "$@"; }
 
 ########

@@ -17,4 +17,6 @@ DeBasher API
 
    api_prog_def
 
+   api_steps
+
    api_resident_nodes

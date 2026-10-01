@@ -133,7 +133,8 @@ make each one.
   process runs as a step with `seq_execute`, in any language or through
   an alias, and that under Slurm asks `srun` for resources of its own.
   `mark_step_done` and `is_step_done` let a process skip the steps that
-  an earlier run finished.
+  an earlier run finished. The web interface edits them in a dialog of
+  its own, and keeps them through import and "Add program".
 - Tested on Linux, on macOS and on Windows under WSL2 in continuous
   integration, with a Docker image for trying the web interface and a
   conda recipe.
