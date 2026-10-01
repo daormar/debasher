@@ -8,8 +8,10 @@ import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import {
   addGroup,
+  applyEdits,
   connect,
   disconnect,
+  groupsTouchedBy,
   mergeRefusal,
   normalizeProgram,
   prepareMerge,
@@ -165,6 +167,36 @@ describe("Add program", () => {
     expect(once.processes.map(p => p.name)).toEqual(["a", "b", "x", "y"]);
 
     expect(addGroup(once, group).envVars.DEBASHER_MOD_DIR).toBe("/lib:/src/other");
+  });
+
+});
+
+describe("edits as data", () => {
+
+  it("are applied one after another, then normalized", () => {
+    const edited = applyEdits(program(), [
+      { op: "connect", edge: ab },
+      { op: "updateProcess", processId: "id-a", changes: { name: "producer" } },
+      { op: "moveProcess", processId: "id-b", position: { x: 3, y: 4 } },
+    ]);
+
+    expect(edited.processes[0].name).toBe("producer");
+    expect(edited.processes[1].position).toEqual({ x: 3, y: 4 });
+    expect(edited.processes[1].options[0].value).toBe("[producer;-outf]");
+  });
+
+  it("touch the group of what they change, and nothing when they only move or connect out of it", () => {
+    const groupSource = { programName: "other", groupId: "g1", groupSize: 1, sourceDir: "/src" };
+    const grouped = { ...program(), edges: [ab] };
+    grouped.processes = grouped.processes.map(p => p.name === "b" ? { ...p, groupSource } : p);
+    const touched = (ops: Parameters<typeof groupsTouchedBy>[1]) => [...groupsTouchedBy(grouped, ops).keys()];
+
+    expect(touched([{ op: "moveProcess", processId: "id-b", position: { x: 0, y: 0 } }])).toEqual([]);
+    expect(touched([{ op: "updateProcess", processId: "id-a", changes: { code: "x" } }])).toEqual([]);
+    expect(touched([{ op: "updateProcess", processId: "id-b", changes: { code: "x" } }])).toEqual(["g1"]);
+    expect(touched([{ op: "disconnect", edgeId: "e1" }])).toEqual(["g1"]);
+    expect(touched([{ op: "removeOption", processId: "id-b", optionId: "bi" }])).toEqual(["g1"]);
+    expect(touched([{ op: "setProgramFields", changes: { name: "renamed" } }])).toEqual([]);
   });
 
 });

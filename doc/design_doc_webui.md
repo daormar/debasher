@@ -202,6 +202,9 @@ refer to it.
 - **tab**: one browser tab with the web UI open, holding its own store.
 - **store**: the state of the frontend in a tab (`ProgramContext`): the program
   being edited and what the tab last read of its run.
+- **edit**: one change of a program as plain data (`EditOp` in
+  `models/programEdits.ts`), such as adding a process or connecting two
+  options; an operation of the store applies one or more edits.
 - **run phase**: the state of the run of a program as the tab shows it
   (`ProgramRunPhase`), derived from the process statuses, whoever launched the
   run, and from the requests of the tab not answered yet (see "Following a
@@ -1128,6 +1131,14 @@ needs the tab: asking the user before a group is dissolved, generating the ids
 of new processes, options and edges, and keeping the result as the program of
 the tab. Code outside the store that edits a program is to reuse these
 functions, so that it obeys the same rules as the editor.
+
+Each operation of the store is expressed as one or more edits, plain data
+(`EditOp`) with everything they need, the ids of what they add included. A
+list of edits can be built in one place, shown, and applied in another as one
+change (`applyEdits`, which normalizes once at the end). `groupsTouchedBy`
+tells which groups a list of edits touches, which have to be dissolved
+(`dissolveGroups`) before it is applied; the store asks the user about them
+first.
 
 The store keeps no history and no record of unsaved changes: there is no
 undo, and leaving the editor or closing the tab loses the changes made since

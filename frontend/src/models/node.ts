@@ -1,6 +1,6 @@
 import type { ComputationalSpecs, OptionsHandler, ProgramProcess } from "./process";
 import type { OptionValueSource, ProgramOption } from "./option";
-import { getCommandLineOptions, optionValueSource } from "./option";
+import { createOption, getCommandLineOptions, optionValueSource } from "./option";
 import type { Program } from "./program";
 
 // The node kinds of a resident program: the classes of the engine's runtime
@@ -280,19 +280,11 @@ export function configurationSource(option: ProgramOption): OptionValueSource | 
 export const NO_HOLD_FIFOS_LABEL = "-no-hold-fifos";
 
 export function noHoldFifosOption(): ProgramOption {
-  return {
-    id: "supervisor:no-hold-fifos",
-    label: NO_HOLD_FIFOS_LABEL,
-    direction: "input",
+  return createOption("supervisor:no-hold-fifos", NO_HOLD_FIFOS_LABEL, {
     dataType: "None",
-    channel: "none",
-    mirror: false,
     description: "do not hold the FIFOs of the business channels",
-    value: "",
     commandLine: true,
-    mandatory: false,
-    fromProcessSpec: false,
-  };
+  });
 }
 
 // The computational specifications that each node kind reads, besides

@@ -73,6 +73,29 @@ export function getOptionDirection(label: string): OptionDirection {
     : "input";
 }
 
+// A new option with the given label, its direction from the label and every
+// other field at its default unless `fields` gives it.
+export function createOption(
+  id: string,
+  label: string,
+  fields: Partial<Omit<ProgramOption, "id" | "label">> = {}
+): ProgramOption {
+  return {
+    id,
+    label,
+    direction: getOptionDirection(label),
+    dataType: "string",
+    channel: "none",
+    mirror: false,
+    description: "",
+    value: "",
+    commandLine: false,
+    mandatory: false,
+    fromProcessSpec: false,
+    ...fields,
+  };
+}
+
 export function isValidOptionLabel(label: string): boolean {
   return label.trim().startsWith("-");
 }

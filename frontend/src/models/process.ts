@@ -1,6 +1,8 @@
 import type { Position } from "./position";
 import type { OptionDataType, ProgramOption } from "./option";
-import type { NodeCode, NodeKind } from "./node";
+import { createOption } from "./option";
+import type { NodeCode, NodeInfo, NodeKind } from "./node";
+import { emptyNodeCode } from "./node";
 
 export type ProcessLanguage =
   | "bash"
@@ -207,5 +209,76 @@ export interface ProcessInfo {
   language: ProcessLanguage;
 
   code: string;
+
+}
+
+// A new option from what the library brings for it.
+export function optionFromInfo(info: ProcessInfoOption, id: string): ProgramOption {
+  return createOption(id, info.label, {
+    dataType: info.dataType,
+    description: info.description,
+    commandLine: info.commandLine,
+    mandatory: info.mandatory,
+  });
+}
+
+// Where a new process comes from: what the library brings for its name, or,
+// in a resident program, the node kind chosen for it and, for a node that a
+// module of the preamble defines, what that module brings.
+export interface NewProcessSource {
+
+  info?: ProcessInfo | null;
+
+  nodeKind?: NodeKind;
+
+  nodeInfo?: NodeInfo;
+
+}
+
+/**
+ * A new process, with the ids of its options from `newId`. A node is written
+ * in Python, in the parts of NodeCode, and a Supervisor has no code of its
+ * own.
+ */
+export function createProcess(
+  id: string,
+  name: string,
+  { info, nodeKind, nodeInfo }: NewProcessSource,
+  newId: () => string
+): ProgramProcess {
+
+  const nodeFields: Partial<ProgramProcess> = nodeInfo
+    ? {
+        nodeKind: nodeInfo.nodeKind,
+        initiator: false,
+        nodeCode: nodeInfo.nodeCode,
+        language: "python",
+        description: nodeInfo.description,
+        options: nodeInfo.options,
+        optionsHandler: nodeInfo.optionsHandler,
+      }
+    : nodeKind
+      ? {
+          nodeKind,
+          initiator: false,
+          nodeCode: nodeKind === "Supervisor" ? undefined : emptyNodeCode(),
+          language: "python",
+        }
+      : {};
+
+  return {
+    id,
+    name,
+    description: info?.description ?? "",
+    position: { x: 100, y: 100 },
+    options: info ? info.options.map(option => optionFromInfo(option, newId())) : [],
+    optionsHandler: { mode: "standard" },
+    language: info?.language ?? "bash",
+    code: info?.code ?? "",
+    computationalSpecs: { ...DEFAULT_COMPUTATIONAL_SPECS },
+    additionalSpecs: { force: false },
+    additionalMethods: {},
+    ...nodeFields,
+  };
 
 }

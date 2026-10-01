@@ -17,17 +17,15 @@ import type {
   OptionsHandler,
   AdditionalMethods,
   ProcessInfo,
-  ProcessInfoOption,
 } from "../models/process";
-import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
+import { createProcess, optionFromInfo } from "../models/process";
 import type { ProgramOption } from "../models/option";
-import { getOptionDirection } from "../models/option";
+import { createOption } from "../models/option";
 import * as edits from "../models/programEdits";
 import type { ProgramEdge } from "../models/edge";
 import type { SeqProcess } from "../models/seqProcess";
 import type { Position } from "../models/position";
 import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
-import { emptyNodeCode } from "../models/node";
 import { computeFlippedOptionIds, optionRow } from "../adapters/reactFlowAdapter";
 import { saveProgram } from "../storage/programStorage";
 import type {
@@ -294,22 +292,6 @@ interface ProgramContextType {
     edge: ProgramEdge
   ) => void;
 
-}
-
-function toProgramOption(info: ProcessInfoOption): ProgramOption {
-  return {
-    id: crypto.randomUUID(),
-    direction: getOptionDirection(info.label),
-    label: info.label,
-    dataType: info.dataType,
-    channel: "none",
-    mirror: false,
-    description: info.description,
-    value: "",
-    commandLine: info.commandLine,
-    mandatory: info.mandatory,
-    fromProcessSpec: false,
-  };
 }
 
 const ProgramContext =
@@ -609,92 +591,18 @@ export function ProgramProvider({
     setSelectedProcessId(processId);
   }
 
-  function addProcess(name: string, info: ProcessInfo | null, nodeKind?: NodeKind, nodeInfo?: NodeInfo) {
-
-    const nodeFields: Partial<ProgramProcess> = nodeInfo
-      ? {
-          nodeKind: nodeInfo.nodeKind,
-          initiator: false,
-          nodeCode: nodeInfo.nodeCode,
-          language: "python",
-          description: nodeInfo.description,
-          options: nodeInfo.options,
-          optionsHandler: nodeInfo.optionsHandler,
-        }
-      : nodeKind
-        ? {
-            nodeKind,
-            initiator: false,
-            nodeCode: nodeKind === "Supervisor" ? undefined : emptyNodeCode(),
-            language: "python",
-          }
-        : {};
-
-    const process: ProgramProcess = {
-
-      id: crypto.randomUUID(),
-
-      name,
-
-      description: info?.description ?? "",
-
-      position: {
-        x: 100,
-        y: 100,
-      },
-
-      options: info ? info.options.map(toProgramOption) : [],
-
-      optionsHandler: {
-        mode: "standard",
-      },
-
-      language: info?.language ?? "bash",
-
-      code: info?.code ?? "",
-
-      computationalSpecs: { ...DEFAULT_COMPUTATIONAL_SPECS },
-
-      additionalSpecs: {
-        force: false,
-      },
-
-      additionalMethods: {},
-
-      ...nodeFields,
-
-    };
-
-    setProgram(current => edits.addProcess(current, process));
-
-  }
-
-  function mergeProgram(loaded: Program, sourceDir: string) {
-
-    const refusal = edits.mergeRefusal(programRef.current, loaded);
-
-    if (refusal) {
-      window.alert(refusal);
-      return;
-    }
-
-    const group = edits.prepareMerge(programRef.current, loaded, sourceDir, () => crypto.randomUUID());
-
-    setProgram(current => edits.addGroup(current, group));
-
-  }
+  const newId = () => crypto.randomUUID();
 
   // A process tagged with GroupSource ("Add program") represents a
   // process add_debasher_program will re-declare, unmodified, from its
-  // source module, so an edit that would be overwritten by that
-  // re-declaration first asks the user, once for all the groups it
-  // touches (see edits.groupsOfProcesses), and either dissolves them
-  // together with the edit or, if the user declines, leaves the program
-  // as it was. Returns whether the edit was applied.
-  function editTouchingGroups(
-    groups: edits.TouchedGroups,
-    edit: (current: Program) => Program
-  ): boolean {
+  // source module, so edits that would be overwritten by that
+  // re-declaration first ask the user, once for all the groups they
+  // touch (see edits.groupsTouchedBy), and are then applied together with
+  // the dissolution of those groups or, if the user declines, not at all.
+  // Returns whether the edits were applied.
+  function edit(...ops: edits.EditOp[]): boolean {
+
+    const groups = edits.groupsTouchedBy(programRef.current, ops);
 
     if (groups.size > 0) {
       const programNames = [...new Set(groups.values())].join('", "');
@@ -710,76 +618,61 @@ export function ProgramProvider({
       }
     }
 
-    setProgram(current => edit(edits.dissolveGroups(current, new Set(groups.keys()))));
+    setProgram(current => ops.reduce(
+      (edited, op) => edits.applyEdit(edited, op),
+      edits.dissolveGroups(current, new Set(groups.keys()))
+    ));
 
     return true;
 
   }
 
-  // An edit of the definition of the given processes (see
-  // editTouchingGroups).
-  function editProcesses(
-    processIds: string[],
-    edit: (current: Program) => Program
-  ): boolean {
-    return editTouchingGroups(edits.groupsOfProcesses(programRef.current, processIds), edit);
+  function addProcess(name: string, info: ProcessInfo | null, nodeKind?: NodeKind, nodeInfo?: NodeInfo) {
+    edit({ op: "addProcess", process: createProcess(newId(), name, { info, nodeKind, nodeInfo }, newId) });
   }
 
-  function setName(
-    name: string
-  ) {
+  function mergeProgram(loaded: Program, sourceDir: string) {
 
-    setProgram(current => edits.setProgramFields(current, { name }));
+    const refusal = edits.mergeRefusal(programRef.current, loaded);
 
-  }
+    if (refusal) {
+      window.alert(refusal);
+      return;
+    }
 
-  function setDescription(
-    description: string
-  ) {
-
-    setProgram(current => edits.setProgramFields(current, { description }));
+    edit({ op: "addGroup", group: edits.prepareMerge(programRef.current, loaded, sourceDir, newId) });
 
   }
 
-  function setPreamble(
-    preamble: string
-  ) {
-
-    setProgram(current => edits.setProgramFields(current, { preamble }));
-
+  function setProgramFields(changes: edits.ProgramFields) {
+    edit({ op: "setProgramFields", changes });
   }
 
-  function setSeqProcesses(
-    seqProcesses: SeqProcess[]
-  ): boolean {
-
-    return editTouchingGroups(
-      edits.groupsOfChangedSeqProcesses(programRef.current, seqProcesses),
-      current => ({ ...current, seqProcesses })
-    );
-
+  function setName(name: string) {
+    setProgramFields({ name });
   }
 
-  function setSharedDirs(
-    sharedDirs: string[]
-  ) {
-
-    setProgram(current => edits.setProgramFields(current, { sharedDirs }));
-
+  function setDescription(description: string) {
+    setProgramFields({ description });
   }
 
-  function setEnvVar(
-    name: string,
-    value: string
-  ) {
-
-    setProgram(current => edits.setEnvVar(current, name, value));
-
+  function setPreamble(preamble: string) {
+    setProgramFields({ preamble });
   }
 
-  function setOutputDir(
-    outputDir: string
-  ) {
+  function setSeqProcesses(seqProcesses: SeqProcess[]): boolean {
+    return edit({ op: "setSeqProcesses", seqProcesses });
+  }
+
+  function setSharedDirs(sharedDirs: string[]) {
+    setProgramFields({ sharedDirs });
+  }
+
+  function setEnvVar(name: string, value: string) {
+    edit({ op: "setEnvVar", name, value });
+  }
+
+  function setOutputDir(outputDir: string) {
 
     // Changing outputDir while a run is going for the current one
     // would silently redirect isRunInProgress itself, plus "Stop
@@ -795,45 +688,26 @@ export function ProgramProvider({
       );
     }
 
-    setProgram(current => edits.setProgramFields(current, { outputDir }));
+    setProgramFields({ outputDir });
 
   }
 
-  function setExecutionOptions(
-    executionOptions: ExecutionOptions
-  ) {
-
-    setProgram(current => edits.setProgramFields(current, { executionOptions }));
-
+  function setExecutionOptions(executionOptions: ExecutionOptions) {
+    setProgramFields({ executionOptions });
   }
 
-  function setProgramOptions(
-    programOptions: Record<string, string>
-  ) {
-
-    setProgram(current => edits.setProgramFields(current, { programOptions }));
-
+  function setProgramOptions(programOptions: Record<string, string>) {
+    setProgramFields({ programOptions });
   }
 
-  // Removes the processes and edges deleted together on the canvas, asking
-  // once for all the groups they touch (see editTouchingGroups). Returns
-  // whether they were removed.
-  function removeFromCanvas(
-    processIds: string[],
-    edgeIds: string[]
-  ): boolean {
+  // Removes the processes and edges deleted together on the canvas, with
+  // one confirmation for the groups they touch (see edit). Returns whether
+  // they were removed.
+  function removeFromCanvas(processIds: string[], edgeIds: string[]): boolean {
 
-    const current = programRef.current;
-    const groups = new Map([
-      ...edits.groupsOfProcesses(current, processIds),
-      ...edits.groupsOfEdgeTargets(current, edgeIds),
-    ]);
-
-    const removed = editTouchingGroups(groups, program =>
-      processIds.reduce(
-        (edited, processId) => edits.removeProcess(edited, processId),
-        edgeIds.reduce((edited, edgeId) => edits.disconnect(edited, edgeId), program)
-      )
+    const removed = edit(
+      ...edgeIds.map(edgeId => ({ op: "disconnect", edgeId }) as const),
+      ...processIds.map(processId => ({ op: "removeProcess", processId }) as const)
     );
 
     if (removed) {
@@ -848,236 +722,113 @@ export function ProgramProvider({
 
   // The position is not part of what add_debasher_program declares, so
   // moving a process of a group leaves the group as it is.
-  function moveProcess(
-    processId: string,
-    position: Position
-  ) {
-
-    setProgram(current => edits.updateProcess(current, processId, { position }));
-
+  function moveProcess(processId: string, position: Position) {
+    edit({ op: "moveProcess", processId, position });
   }
 
-  function renameProcess(
-    processId: string,
-    name: string,
-    info?: ProcessInfo | null
-  ) {
+  function updateProcess(processId: string, changes: edits.ProcessChanges) {
+    edit({ op: "updateProcess", processId, changes });
+  }
 
-    const options = info?.options.map(toProgramOption);
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, {
+  function renameProcess(processId: string, name: string, info?: ProcessInfo | null) {
+    updateProcess(processId, {
       name,
       ...(info && {
         description: info.description,
-        options,
+        options: info.options.map(option => optionFromInfo(option, newId())),
         language: info.language,
         code: info.code,
       }),
-    }));
-
+    });
   }
 
-  function setProcessDescription(
-    processId: string,
-    description: string
-  ) {
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, { description }));
-
+  function setProcessDescription(processId: string, description: string) {
+    updateProcess(processId, { description });
   }
 
-  function setProcessLanguage(
-    processId: string,
-    language: ProcessLanguage
-  ) {
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, { language }));
-
+  function setProcessLanguage(processId: string, language: ProcessLanguage) {
+    updateProcess(processId, { language });
   }
 
-  function setProcessCode(
-    processId: string,
-    code: string
-  ) {
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, { code }));
-
+  function setProcessCode(processId: string, code: string) {
+    updateProcess(processId, { code });
   }
 
-  // A node and its initiator flag exist only in a resident program, which
-  // has no groups (see mergeProgram), so neither setter asks.
-  function setNodeCode(
-    processId: string,
-    nodeCode: NodeCode
-  ) {
-
-    setProgram(current => edits.updateProcess(current, processId, { nodeCode }));
-
+  function setNodeCode(processId: string, nodeCode: NodeCode) {
+    updateProcess(processId, { nodeCode });
   }
 
-  function setInitiator(
-    processId: string,
-    initiator: boolean
-  ) {
-
-    setProgram(current => edits.updateProcess(current, processId, { initiator }));
-
+  function setInitiator(processId: string, initiator: boolean) {
+    updateProcess(processId, { initiator });
   }
 
-  function setComputationalSpecs(
-    processId: string,
-    computationalSpecs: ComputationalSpecs
-  ) {
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, { computationalSpecs }));
-
+  function setComputationalSpecs(processId: string, computationalSpecs: ComputationalSpecs) {
+    updateProcess(processId, { computationalSpecs });
   }
 
-  function setAdditionalSpecs(
-    processId: string,
-    additionalSpecs: AdditionalSpecs
-  ) {
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, { additionalSpecs }));
-
+  function setAdditionalSpecs(processId: string, additionalSpecs: AdditionalSpecs) {
+    updateProcess(processId, { additionalSpecs });
   }
 
-  function setOptionsHandler(
-    processId: string,
-    optionsHandler: OptionsHandler
-  ) {
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, { optionsHandler }));
-
+  function setOptionsHandler(processId: string, optionsHandler: OptionsHandler) {
+    updateProcess(processId, { optionsHandler });
   }
 
-  function setAdditionalMethods(
-    processId: string,
-    additionalMethods: AdditionalMethods
-  ) {
-
-    editProcesses([processId], current => edits.updateProcess(current, processId, { additionalMethods }));
-
+  function setAdditionalMethods(processId: string, additionalMethods: AdditionalMethods) {
+    updateProcess(processId, { additionalMethods });
   }
 
-  function addOption(
-    processId: string,
-    label: string
-  ) {
-
-    const option: ProgramOption = {
-
-      id: crypto.randomUUID(),
-
-      direction: getOptionDirection(label),
-
-      label,
-
-      dataType: "string",
-
-      channel: "none",
-
-      mirror: false,
-
-      description: "",
-
-      value: "",
-
-      commandLine: false,
-
-      mandatory: false,
-
-      fromProcessSpec: false,
-
-    };
-
-    editProcesses([processId], current => edits.addOption(current, processId, option));
-
+  function addOption(processId: string, label: string) {
+    edit({ op: "addOption", processId, option: createOption(newId(), label) });
   }
 
-  function updateOption(
-    processId: string,
-    optionId: string,
-    changes: Partial<Omit<ProgramOption, "id">>
-  ) {
-
-    editProcesses([processId], current => edits.updateOption(current, processId, optionId, changes));
-
+  function updateOption(processId: string, optionId: string, changes: edits.OptionChanges) {
+    edit({ op: "updateOption", processId, optionId, changes });
   }
 
-  function removeOption(
-    processId: string,
-    optionId: string
-  ) {
-
-    editProcesses([processId], current => edits.removeOption(current, processId, optionId));
-
+  function removeOption(processId: string, optionId: string) {
+    edit({ op: "removeOption", processId, optionId });
   }
 
-  function reorderOptionGroup(
-    processId: string,
-    row: "top" | "bottom",
-    orderedIds: string[]
-  ) {
+  // Reorders the options drawn in one row of the process node, leaving the
+  // other row in place; an order that does not list the whole row is
+  // ignored.
+  function reorderOptionGroup(processId: string, row: "top" | "bottom", orderedIds: string[]) {
 
-    editProcesses([processId], current => {
+    const current = programRef.current;
+    const process = current.processes.find(p => p.id === processId);
 
-      const flippedOptionIds = computeFlippedOptionIds(current);
+    if (!process) {
+      return;
+    }
 
-      return {
+    const flippedOptionIds = computeFlippedOptionIds(current);
 
-        ...current,
+    const groupIndices = process.options.reduce<number[]>(
+      (indices, o, i) => optionRow(o, flippedOptionIds) === row ? [...indices, i] : indices,
+      []
+    );
 
-        processes: current.processes.map(process => {
+    if (groupIndices.length !== orderedIds.length) {
+      return;
+    }
 
-          if (process.id !== processId) {
-            return process;
-          }
+    const optionsById = new Map(process.options.map(o => [o.id, o]));
+    const options = [...process.options];
 
-          const groupIndices = process.options.reduce<number[]>(
-            (indices, o, i) =>
-              optionRow(o, flippedOptionIds) === row
-                ? [...indices, i]
-                : indices,
-            []
-          );
-
-          if (groupIndices.length !== orderedIds.length) {
-            return process;
-          }
-
-          const optionsById = new Map(
-            process.options.map(o => [o.id, o])
-          );
-
-          const options = [...process.options];
-
-          groupIndices.forEach((index, i) => {
-
-            const option = optionsById.get(orderedIds[i]);
-
-            if (option) {
-              options[index] = option;
-            }
-
-          });
-
-          return { ...process, options };
-
-        }),
-
-      };
-
+    groupIndices.forEach((index, i) => {
+      const option = optionsById.get(orderedIds[i]);
+      if (option) {
+        options[index] = option;
+      }
     });
 
+    updateProcess(processId, { options });
+
   }
 
-  function connect(
-    edge: ProgramEdge
-  ) {
-
-    editProcesses([edge.targetProcessId], current => edits.connect(current, edge));
-
+  function connect(edge: ProgramEdge) {
+    edit({ op: "connect", edge });
   }
 
   const selectedProcess =

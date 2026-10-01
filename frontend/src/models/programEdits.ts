@@ -2,6 +2,7 @@ import type { ProgramEdge } from "./edge";
 import { buildConnectionSentinel } from "./edge";
 import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
+import type { Position } from "./position";
 import type { GroupSource, ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { DEFAULT_SCHEDULER } from "./program";
@@ -155,7 +156,7 @@ export type TouchedGroups = Map<string, string>;
  * process to a process outside the group, since that connection lives in
  * the target's own generated function.
  */
-export function groupsOfProcesses(program: Program, processIds: Iterable<string>): TouchedGroups {
+function groupsOfProcesses(program: Program, processIds: Iterable<string>): TouchedGroups {
 
   const ids = new Set(processIds);
   const groups: TouchedGroups = new Map();
@@ -171,7 +172,7 @@ export function groupsOfProcesses(program: Program, processIds: Iterable<string>
 }
 
 // The groups of the edges' targets (see groupsOfProcesses).
-export function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): TouchedGroups {
+function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): TouchedGroups {
   const ids = new Set(edgeIds);
   return groupsOfProcesses(
     program,
@@ -184,7 +185,7 @@ export function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>)
  * dissolves: those of a grouped sequential process that the replacement
  * changes or leaves out.
  */
-export function groupsOfChangedSeqProcesses(program: Program, seqProcesses: SeqProcess[]): TouchedGroups {
+function groupsOfChangedSeqProcesses(program: Program, seqProcesses: SeqProcess[]): TouchedGroups {
 
   const newById = new Map(seqProcesses.map(seqProcess => [seqProcess.id, seqProcess]));
   const groups: TouchedGroups = new Map();
@@ -507,5 +508,111 @@ export function addGroup(program: Program, group: MergedGroup): Program {
     edges: [...program.edges, ...group.edges],
     envVars,
   };
+
+}
+
+// One edit of a program as plain data, so that an edit can be built in one
+// place and applied in another (the editor, a tool that edits a program
+// outside the browser, a proposal shown before it is accepted), and that a
+// list of them can be applied as one. Everything an edit needs is in it,
+// the ids of new elements included.
+export type EditOp =
+  | { op: "setProgramFields"; changes: ProgramFields }
+  | { op: "setEnvVar"; name: string; value: string }
+  | { op: "addProcess"; process: ProgramProcess }
+  | { op: "removeProcess"; processId: string }
+  | { op: "moveProcess"; processId: string; position: Position }
+  | { op: "updateProcess"; processId: string; changes: ProcessChanges }
+  | { op: "addOption"; processId: string; option: ProgramOption }
+  | { op: "updateOption"; processId: string; optionId: string; changes: OptionChanges }
+  | { op: "removeOption"; processId: string; optionId: string }
+  | { op: "connect"; edge: ProgramEdge }
+  | { op: "disconnect"; edgeId: string }
+  | { op: "setSeqProcesses"; seqProcesses: SeqProcess[] }
+  | { op: "addGroup"; group: MergedGroup };
+
+// Applies one edit, without normalizeProgram (see applyEdits).
+export function applyEdit(program: Program, edit: EditOp): Program {
+  switch (edit.op) {
+    case "setProgramFields":
+      return setProgramFields(program, edit.changes);
+    case "setEnvVar":
+      return setEnvVar(program, edit.name, edit.value);
+    case "addProcess":
+      return addProcess(program, edit.process);
+    case "removeProcess":
+      return removeProcess(program, edit.processId);
+    case "moveProcess":
+      return updateProcess(program, edit.processId, { position: edit.position });
+    case "updateProcess":
+      return updateProcess(program, edit.processId, edit.changes);
+    case "addOption":
+      return addOption(program, edit.processId, edit.option);
+    case "updateOption":
+      return updateOption(program, edit.processId, edit.optionId, edit.changes);
+    case "removeOption":
+      return removeOption(program, edit.processId, edit.optionId);
+    case "connect":
+      return connect(program, edit.edge);
+    case "disconnect":
+      return disconnect(program, edit.edgeId);
+    case "setSeqProcesses":
+      return { ...program, seqProcesses: edit.seqProcesses };
+    case "addGroup":
+      return addGroup(program, edit.group);
+  }
+}
+
+// Applies the edits one after another, then normalizeProgram once. This
+// does not dissolve the groups they touch (see groupsTouchedBy).
+export function applyEdits(program: Program, edits: EditOp[]): Program {
+  return normalizeProgram(edits.reduce((edited, edit) => applyEdit(edited, edit), program));
+}
+
+/**
+ * The groups that the edits touch in `program`, which have to be dissolved
+ * (see dissolveGroups) before they are applied. An edit touches the group of
+ * a process whose definition it changes, of a process it removes, and of the
+ * target of an edge it adds or removes, since a connected option's
+ * define_opt_from_proc_out call lives in the target's own generated function
+ * (see api/script_generation.py's _option_definition_line). Replacing the
+ * sequential processes touches the groups of those it changes or leaves out.
+ * Moving a process, editing the program's own fields and adding processes or
+ * a group touch none.
+ */
+export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroups {
+
+  const groups: TouchedGroups = new Map();
+
+  for (const edit of edits) {
+
+    const touched = (() => {
+      switch (edit.op) {
+        case "removeProcess":
+        case "updateProcess":
+        case "addOption":
+        case "updateOption":
+        case "removeOption":
+          return groupsOfProcesses(program, [edit.processId]);
+        case "connect":
+          return groupsOfProcesses(program, [edit.edge.targetProcessId]);
+        case "disconnect":
+          return groupsOfEdgeTargets(program, [edit.edgeId]);
+        case "setSeqProcesses":
+          return groupsOfChangedSeqProcesses(program, edit.seqProcesses);
+        case "setProgramFields":
+        case "setEnvVar":
+        case "addProcess":
+        case "moveProcess":
+        case "addGroup":
+          return new Map<string, string>();
+      }
+    })();
+
+    touched.forEach((programName, groupId) => groups.set(groupId, programName));
+
+  }
+
+  return groups;
 
 }
