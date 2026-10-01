@@ -1178,9 +1178,7 @@ debasher::_add_debasher_heredoc_process()
     # Heredoc code was provided for process
     debasher::_create_process_func_heredoc "${processname}" || return 1
 
-    # Store process name in associative array (the variable name
-    # containing the heredoc is also stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_HEREDOC_PROCESS_TYPE}"
+    DEBASHER_RESOLVED_PROCESS_TYPE="${DEBASHER_HEREDOC_PROCESS_TYPE}"
 }
 
 ########
@@ -1194,8 +1192,7 @@ debasher::_add_debasher_regular_process()
         return 1
     fi
 
-    # Store process name in associative array
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_REGULAR_PROCESS_TYPE}"
+    DEBASHER_RESOLVED_PROCESS_TYPE="${DEBASHER_REGULAR_PROCESS_TYPE}"
 }
 
 ########
@@ -1306,9 +1303,8 @@ debasher::_add_debasher_alias_process()
     # Create process function
     debasher::_create_process_func_alias "${processname}" "${process_alias}" "${alias_opt_map}"
 
-    # Store process name in associative array (alias information is also
-    # stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_ALIAS_PROCESS_TYPE}"
+    # Store alias information
+    DEBASHER_RESOLVED_PROCESS_TYPE="${DEBASHER_ALIAS_PROCESS_TYPE}"
     DEBASHER_PROCESS_ALIAS_TARGETS["${processname}"]="${process_alias}"
 }
 
@@ -1465,9 +1461,8 @@ debasher::_add_debasher_ext_alias_process()
     # Create process function
     debasher::_create_process_func_ext_alias "${processname}" "${external_file}" "${alias_opt_map}" || return 1
 
-    # Store process name in associative array (alias information is also
-    # stored)
-    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_EXT_ALIAS_PROCESS_TYPE}"
+    # Store alias information
+    DEBASHER_RESOLVED_PROCESS_TYPE="${DEBASHER_EXT_ALIAS_PROCESS_TYPE}"
     DEBASHER_PROCESS_EXT_ALIAS_FILES["${processname}"]="${external_file}"
 }
 
@@ -1479,6 +1474,78 @@ debasher::_print_process_entry()
     local process_additional_specs=$3
 
     echo "${processname}" "${process_computational_specs}" "${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}" "${process_additional_specs}"
+}
+
+########
+# Checks the name of a process or of a sequential process, records the
+# directory of the module that adds it, and builds its process function
+# when it is a heredoc process or an alias, leaving its type in
+# DEBASHER_RESOLVED_PROCESS_TYPE. Shared by debasher::add_debasher_process
+# and debasher::add_debasher_seq_process, which register the name each
+# in its own array.
+#
+# $1 - Name of the process.
+# $2 - Additional specifications of the process.
+#
+# Returns 1, with an error, if the name is not valid or already taken,
+# or if the process function cannot be built.
+debasher::_resolve_process()
+{
+    local processname=$1
+    local process_additional_specs=$2
+
+    # Check correctness of process name
+    if ! debasher::_is_valid_processname "${processname}"; then
+        echo "Error: process name ${processname} not valid. Aborting execution..." >&2
+        return 1
+    fi
+
+    # Check if the name has already been taken by a process or a
+    # sequential process
+    if [[ -v 'DEBASHER_PROGRAM_PROCESSES["${processname}"]' || -v 'DEBASHER_SEQ_PROCESSES["${processname}"]' ]]; then
+        echo "Error: process name ${processname} has already been defined. Aborting execution..." >&2
+        return 1
+    fi
+
+    # Record which .sh directory added this process, while
+    # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK still holds it (see
+    # DEBASHER_PROCESS_PFILE_DIR's own declaration in debasher_lib.sh)
+    DEBASHER_PROCESS_PFILE_DIR["${processname}"]=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
+
+    # Treat heredoc code if provided
+    if debasher::_is_heredoc_process "${processname}" >/dev/null; then
+        debasher::_add_debasher_heredoc_process "${processname}" || return 1
+        return 0
+    fi
+
+    # alias_opt_map is shared by alias and ext_alias: it is extracted
+    # once, and whichever of the two (mutually exclusive) is present
+    # gets it
+    local process_alias_opt_map=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias_opt_map")
+    [ "${process_alias_opt_map}" = "${DEBASHER_ATTR_NOT_FOUND}" ] && process_alias_opt_map=""
+
+    # Treat process alias if provided
+    local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
+    if [ "${process_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        debasher::_add_debasher_alias_process "${processname}" "${process_alias}" "${process_alias_opt_map}" || return 1
+        return 0
+    fi
+
+    # Treat process external alias if provided
+    local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
+    if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        debasher::_add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" "${process_alias_opt_map}" || return 1
+        return 0
+    fi
+
+    # alias_opt_map only makes sense alongside alias or ext_alias
+    if [ -n "${process_alias_opt_map}" ]; then
+        echo "Error: alias_opt_map given for process ${processname} without an alias or ext_alias attribute. Aborting execution..." >&2
+        return 1
+    fi
+
+    # No heredoc nor aliases were given
+    debasher::_add_debasher_regular_process "${processname}" || return 1
 }
 
 ########
@@ -1509,56 +1576,10 @@ debasher::add_debasher_process()
     local process_computational_specs=$2
     local process_additional_specs=$3
 
-    # Check correctness of process name and abort execution if necessary
-    if ! debasher::_is_valid_processname "${processname}"; then
-        echo "Error: process name ${processname} not valid. Aborting execution..." >&2
-        exit 1
-    fi
-
-    # Check if process has already been defined
-    if [[ -v 'DEBASHER_PROGRAM_PROCESSES["${processname}"]' ]]; then
-        echo "Error: process name ${processname} has already been defined. Aborting execution..." >&2
-        exit 1
-    fi
-
-    # Record which .sh directory added this process, while
-    # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK still holds it (see
-    # DEBASHER_PROCESS_PFILE_DIR's own declaration in debasher_lib.sh)
-    DEBASHER_PROCESS_PFILE_DIR["${processname}"]=$("${DIRNAME}" "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]}")
-
-    # Treat heredoc code if provided
-    if debasher::_is_heredoc_process "${processname}" >/dev/null; then
-        debasher::_add_debasher_heredoc_process "${processname}" || exit 1
-    else
-        # alias_opt_map is shared by alias and ext_alias -- extracted
-        # once, whichever of the two (mutually exclusive) is present
-        # gets it.
-        local process_alias_opt_map=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias_opt_map")
-        [ "${process_alias_opt_map}" = "${DEBASHER_ATTR_NOT_FOUND}" ] && process_alias_opt_map=""
-
-        # Treat process alias if provided
-        local process_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "alias")
-        if [ "${process_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-            # A process alias was given
-            debasher::_add_debasher_alias_process "${processname}" "${process_alias}" "${process_alias_opt_map}" || exit 1
-        else
-            # Treat process external alias if provided
-            local process_ext_alias=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "ext_alias")
-            if [ "${process_ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-                # A process external alias was given
-                debasher::_add_debasher_ext_alias_process "${processname}" "${process_ext_alias}" "${process_alias_opt_map}" || exit 1
-            else
-                # alias_opt_map only makes sense alongside alias or ext_alias
-                if [ -n "${process_alias_opt_map}" ]; then
-                    echo "Error: alias_opt_map given for process ${processname} without an alias or ext_alias attribute. Aborting execution..." >&2
-                    exit 1
-                fi
-
-                # No heredoc nor aliases were given
-                debasher::_add_debasher_regular_process "${processname}" || exit 1
-            fi
-        fi
-    fi
+    # Check the name and build the process function, aborting execution
+    # if necessary
+    debasher::_resolve_process "${processname}" "${process_additional_specs}" || exit 1
+    DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_RESOLVED_PROCESS_TYPE}"
 
     # Store process entry
     local process_entry=$(debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}")
@@ -1596,6 +1617,89 @@ debasher::add_debasher_process()
 # by the DeBasher library, and creates a wrapper function when an
 # alias or heredoc code is provided.
 add_debasher_process() { debasher::add_debasher_process "$@"; }
+
+########
+# Fails, with an error, if the specifications of a sequential process
+# carry an attribute that only a scheduled process can use: the
+# additional specifications "processdeps" and "force", the computational
+# specification "throttle", and a list of attempts in "mem" or "time",
+# since a step runs once.
+debasher::_check_seq_process_specs()
+{
+    local processname=$1
+    local process_computational_specs=$2
+    local process_additional_specs=$3
+
+    local attr
+    for attr in processdeps force; do
+        if [ "$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "${attr}")" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+            echo "Error: sequential process ${processname} cannot have the additional specification ${attr}. Aborting execution..." >&2
+            return 1
+        fi
+    done
+
+    if [ "$(debasher::extract_attr_from_process_comp_specs "${process_computational_specs}" "throttle")" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        echo "Error: sequential process ${processname} cannot have the computational specification throttle. Aborting execution..." >&2
+        return 1
+    fi
+
+    local value
+    for attr in mem time; do
+        value=$(debasher::extract_attr_from_process_comp_specs "${process_computational_specs}" "${attr}")
+        if [[ "${value}" == *,* ]]; then
+            echo "Error: sequential process ${processname} gives a list of values for ${attr} (${value}), but a step runs only once. Aborting execution..." >&2
+            return 1
+        fi
+    done
+}
+
+########
+# Public: Adds a sequential process to a DeBasher program: a function
+# that the engine never schedules, and that a task runs as a step with
+# seq_execute or seq_execute_slurm.
+#
+# Its name and its process function are checked and built as those of
+# a process are, so it can be a heredoc process or an alias, and its
+# name cannot be that of a process or of another sequential process.
+# Every computational specification is optional, and is only used when
+# the step runs under Slurm, as options of srun.
+#
+# $1 - Name of the sequential process.
+# $2 - Computational specifications. "throttle" and a list of values in
+#      "mem" or "time" are refused.
+# $3 - Additional specifications: "alias", "ext_alias" and
+#      "alias_opt_map", as for a process. "processdeps" and "force" are
+#      refused.
+#
+# Examples
+#
+#    debasher::add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00"
+debasher::add_debasher_seq_process()
+{
+    # Initialize variables
+    local processname=$1
+    local process_computational_specs=$2
+    local process_additional_specs=$3
+
+    # Check the specifications and the name, and build the process
+    # function, aborting execution if necessary
+    debasher::_check_seq_process_specs "${processname}" "${process_computational_specs}" "${process_additional_specs}" || exit 1
+    debasher::_resolve_process "${processname}" "${process_additional_specs}" || exit 1
+    DEBASHER_SEQ_PROCESSES["${processname}"]="${DEBASHER_RESOLVED_PROCESS_TYPE}"
+
+    # Store its specification, which seq_execute_slurm reads from the
+    # execution context
+    DEBASHER_SEQ_PROCESS_SPEC["${processname}"]=$(debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}")
+}
+
+########
+# Public: Adds a sequential process to a DeBasher program (see
+# debasher::add_debasher_seq_process).
+#
+# Examples
+#
+#    add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00"
+add_debasher_seq_process() { debasher::add_debasher_seq_process "$@"; }
 
 ########
 debasher::add_debasher_program()

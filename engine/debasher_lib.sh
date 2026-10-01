@@ -448,6 +448,18 @@ declare DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
 # Declare associative array to store processes added to a program
 declare -A DEBASHER_PROGRAM_PROCESSES
 
+# Declare associative arrays to store the sequential processes added to
+# a program (see debasher::add_debasher_seq_process), apart from its
+# processes so that nothing that walks the processes sees them, and
+# their specifications
+declare -A DEBASHER_SEQ_PROCESSES
+declare -A DEBASHER_SEQ_PROCESS_SPEC
+
+# Declare variable used by debasher::_resolve_process to hand the type
+# of the process it resolved back to its callers, which register the
+# name in their own array
+declare DEBASHER_RESOLVED_PROCESS_TYPE
+
 # Declare associative arrays to recover, for an alias/ext_alias process,
 # what it actually delegates to -- the alias's target process name, or
 # the ext_alias's resolved external file -- so debasher::_show_proc_implem

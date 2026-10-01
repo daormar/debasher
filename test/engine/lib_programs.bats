@@ -1059,3 +1059,120 @@ write_command_line_file() {
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"was run in"* ]]
 }
+
+# --- debasher::add_debasher_seq_process -----------------------------------
+
+# Prepares the shell to add processes, as the _program method of a
+# module in ${BATS_TEST_TMPDIR} would
+prepare_add_process() {
+    declare -gA DEBASHER_SEQ_PROCESSES DEBASHER_SEQ_PROCESS_SPEC \
+        DEBASHER_INITIAL_PROCESS_SPEC DEBASHER_PROCESS_PFILE_DIR \
+        DEBASHER_PROCESS_ALIAS_TARGETS DEBASHER_PROCESS_EXT_ALIAS_FILES
+    declare -ga DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK=("${BATS_TEST_TMPDIR}/mod.sh")
+    DIRNAME="$(command -v dirname)"
+    REALPATH="$(command -v realpath)"
+}
+
+@test "add_debasher_seq_process registers a sequential process apart from the processes of the program" {
+    prepare_add_process
+    seqstep() { echo "seq step $*"; }
+
+    add_debasher_seq_process seqstep "cpus=2;mem=64"
+
+    [ "${DEBASHER_SEQ_PROCESSES[seqstep]}" = "${DEBASHER_REGULAR_PROCESS_TYPE}" ]
+    [ -z "${DEBASHER_PROGRAM_PROCESSES[seqstep]+x}" ]
+    [ -z "${DEBASHER_INITIAL_PROCESS_SPEC[seqstep]+x}" ]
+    [ "$(debasher::_get_num_processes)" -eq 0 ]
+    [ "$(debasher::_extract_cpus_from_process_spec "${DEBASHER_SEQ_PROCESS_SPEC[seqstep]}")" = "2" ]
+    [ "${DEBASHER_PROCESS_PFILE_DIR[seqstep]}" = "${BATS_TEST_TMPDIR}" ]
+}
+
+@test "add_debasher_seq_process turns a heredoc into a function" {
+    prepare_add_process
+    seqpy_heredoc_py() {
+        cat <<'PYEOF'
+import sys
+print("python step " + sys.argv[1])
+PYEOF
+    }
+
+    add_debasher_seq_process seqpy ""
+
+    [ "${DEBASHER_SEQ_PROCESSES[seqpy]}" = "${DEBASHER_HEREDOC_PROCESS_TYPE}" ]
+    [ "$(seqpy 7)" = "python step 7" ]
+}
+
+@test "add_debasher_seq_process turns an alias, with its option map, into a function" {
+    prepare_add_process
+    target() { echo "target $*"; }
+
+    add_debasher_seq_process seqalias "" "alias=target;alias_opt_map=-a:-b"
+
+    [ "${DEBASHER_SEQ_PROCESSES[seqalias]}" = "${DEBASHER_ALIAS_PROCESS_TYPE}" ]
+    [ "$(seqalias -a 1)" = "target -b 1" ]
+}
+
+@test "add_debasher_seq_process resolves an external alias against the directory of the module that adds it" {
+    prepare_add_process
+    printf 'echo "external $1"\n' > "${BATS_TEST_TMPDIR}/ext.sh"
+
+    add_debasher_seq_process seqext "" "ext_alias=ext.sh"
+
+    [ "${DEBASHER_SEQ_PROCESSES[seqext]}" = "${DEBASHER_EXT_ALIAS_PROCESS_TYPE}" ]
+    [ "$(seqext 3)" = "external 3" ]
+}
+
+@test "add_debasher_seq_process refuses the specifications that only a scheduled process can use" {
+    prepare_add_process
+    seqstep() { :; }
+
+    run add_debasher_seq_process seqstep "" "processdeps=afterok:other"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"cannot have the additional specification processdeps"* ]]
+
+    run add_debasher_seq_process seqstep "" "force=yes"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"cannot have the additional specification force"* ]]
+
+    run add_debasher_seq_process seqstep "throttle=2"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"cannot have the computational specification throttle"* ]]
+
+    run add_debasher_seq_process seqstep "cpus=1;mem=32,64"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"list of values for mem"* ]]
+
+    run add_debasher_seq_process seqstep "time=00:01:00,00:02:00"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"list of values for time"* ]]
+}
+
+@test "add_debasher_seq_process refuses a name that a process or a sequential process already has" {
+    prepare_add_process
+    first() { :; }
+    second() { :; }
+
+    add_debasher_process first "cpus=1;mem=32;time=00:01:00"
+    run add_debasher_seq_process first ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has already been defined"* ]]
+
+    add_debasher_seq_process second ""
+    run add_debasher_process second "cpus=1;mem=32;time=00:01:00"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has already been defined"* ]]
+    run add_debasher_seq_process second ""
+    [ "${status}" -eq 1 ]
+}
+
+@test "add_debasher_seq_process refuses a name with no function, and an invalid name" {
+    prepare_add_process
+
+    run add_debasher_seq_process nofunc ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has not a function implementing it"* ]]
+
+    run add_debasher_seq_process "bad-name" ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"not valid"* ]]
+}

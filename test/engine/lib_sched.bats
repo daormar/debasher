@@ -151,3 +151,50 @@ run_with_engine() {
     run run_with_engine 'mark_step_done "${DIR}" s && mark_step_done "${DIR}" s'
     [ "$status" -eq 1 ]
 }
+
+# Runs seq_execute_slurm on a sequential process with the given
+# computational specifications, with an srun that records its arguments
+# and runs the script, the first argument in __exec__, with the rest.
+# Prints the arguments that srun got, with the script replaced by SCRIPT
+run_seq_execute_slurm_on_seq_process() {
+    local outd="${BATS_TEST_TMPDIR}/out"
+    mkdir -p "${outd}/__exec__"
+    cat > "${BATS_TEST_TMPDIR}/srun" <<EOS
+#!${BASH}
+echo "\$*" > "${BATS_TEST_TMPDIR}/srun_args"
+while [[ "\$1" != */__exec__/* ]]; do shift; done
+exec "\$@"
+EOS
+    chmod +x "${BATS_TEST_TMPDIR}/srun"
+    env -i PATH="/usr/bin:/bin" HOME=/tmp ENGINE_BUILDDIR="${ENGINE_BUILDDIR}" \
+        OUTD="${outd}" SRUN_STUB="${BATS_TEST_TMPDIR}/srun" COMP_SPECS="$1" \
+        "${BASH}" -c '
+            debasher_pkglibdir="${ENGINE_BUILDDIR}"
+            CAT="$(command -v cat)"
+            MKTEMP="$(command -v mktemp)"
+            RM="$(command -v rm)"
+            DIRNAME="$(command -v dirname)"
+            SRUN="${SRUN_STUB}"
+            source "${ENGINE_BUILDDIR}/debasher_lib.sh"
+            step() { echo "step $1" > "$2"; }
+            DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK=("${OUTD}/mod.sh")
+            add_debasher_seq_process step "${COMP_SPECS}"
+            DEBASHER_PROGRAM_OUTDIR="${OUTD}"
+            debasher::_write_exec_context "$(debasher::_get_exec_context_fname "${OUTD}")"
+            seq_execute_slurm step hello "${OUTD}/result.txt" || exit 1
+        ' || return 1
+    sed "s|${outd}/__exec__/[^ ]*|SCRIPT|" "${BATS_TEST_TMPDIR}/srun_args"
+}
+
+@test "seq_execute_slurm passes the computational specifications of a sequential process to srun" {
+    run run_seq_execute_slurm_on_seq_process "cpus=2;mem=64;time=00:05:00;partition=short;account=lab"
+    [ "$status" -eq 0 ]
+    [ "$output" = "--cpus-per-task=2 --mem=64 --time=00:05:00 -A lab --partition=short SCRIPT hello ${BATS_TEST_TMPDIR}/out/result.txt" ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/out/result.txt")" = "step hello" ]
+}
+
+@test "seq_execute_slurm asks srun for nothing for a sequential process with no computational specifications" {
+    run run_seq_execute_slurm_on_seq_process ""
+    [ "$status" -eq 0 ]
+    [ "$output" = "SCRIPT hello ${BATS_TEST_TMPDIR}/out/result.txt" ]
+}

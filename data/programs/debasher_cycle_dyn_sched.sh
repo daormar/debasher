@@ -186,24 +186,16 @@ transformation_a()
 }
 
 ########
-transformation_b()
+transformation_b_heredoc_py()
 {
-    local value=$1
-    local outf=$2
-
-    value=$((value + 2))
-    echo ${value} > ${outf}
-}
-
-########
-transformation_b_py=$(cat <<EOF
+    cat <<'EOF'
 import sys
 value = int(sys.argv[1])
 fname = sys.argv[2]
 with open(fname, 'w') as f:
     f.write(str(value + 2))
 EOF
-)
+}
 
 ########
 worker()
@@ -228,7 +220,7 @@ worker()
             seq_execute_slurm transformation_a "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         else
-            seq_execute_slurm transformation_b_py "${value}" "${outd}/transformation_result.txt"
+            seq_execute_slurm transformation_b "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         fi
 
@@ -255,4 +247,9 @@ debasher_cycle_dyn_sched_program()
 {
     add_debasher_process "master" "cpus=1 mem=32 time=00:10:00"
     add_debasher_process "worker" "cpus=1 mem=32 time=00:10:00"
+
+    # transformation_b is Python code, which the worker runs as a step:
+    # declaring it as a sequential process turns it into a function, and
+    # gives the resources that its step asks Slurm for
+    add_debasher_seq_process "transformation_b" "cpus=1 mem=32 time=00:01:00"
 }

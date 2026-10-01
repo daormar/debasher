@@ -62,6 +62,15 @@ make each one.
   A flag and an option given an empty value are told apart: an empty
   value reaches the process as an empty value, not as a flag.
 
+- **Steps in other languages.** `seq_execute` and `seq_execute_slurm`
+  run only functions and commands: a variable that holds the code of a
+  step in another language (`transformation_b_py`) is not run anymore.
+  Give the code in a `<name>_heredoc_py` (or `_r`, `_perl`, `_groovy`)
+  function and declare the step in the `_program` method with
+  `add_debasher_seq_process <name> "<specs>"`, which turns it into a
+  function of that name; the same works for an `alias` or an
+  `ext_alias`.
+
 - **Cycles of modules.** Modules that load each other, and a module that
   loads itself, are an error that names the cycle, instead of loading
   forever.
@@ -118,6 +127,11 @@ make each one.
 - Flags (`define_flag`, `explain_flag`), options defined from a shared
   directory (`define_opt_from_shared_dir`) and alias processes that rename
   the options of their target (`alias_opt_map`).
+- Sequential processes (`add_debasher_seq_process`): code that a
+  process runs as a step with `seq_execute`, in any language or through
+  an alias, and that under Slurm asks `srun` for resources of its own.
+  `mark_step_done` and `is_step_done` let a process skip the steps that
+  an earlier run finished.
 - Tested on Linux, on macOS and on Windows under WSL2 in continuous
   integration, with a Docker image for trying the web interface and a
   conda recipe.

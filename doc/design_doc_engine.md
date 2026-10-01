@@ -12,19 +12,18 @@ guarantees it gives.
 
 # Introduction
 
-DeBasher is a flow-based programming extension for Bash. Flow-based
-programming builds a program as a network of components that exchange data
-through connections defined outside them: the order in which the components
-run follows from the flow of data between them, not from a sequence of steps
-written by hand, and components that do not depend on each other run in
-parallel. In DeBasher a component is a process, a set of Bash functions with
-named input and output options; a connection is an input option that takes the
-value of an output option of another process; and a program is the set of
-processes that a module adds. The engine infers the dependencies between
-processes from their connections, since a process that reads a file written by
-another waits for it. Data can also stream between two processes through a
-FIFO while both run, which lets a program hold cycles that the dependency
-graph never sees.
+DeBasher is a flow-based programming extension for Bash. Flow-based programming
+builds a program as a network of components that exchange data through
+connections defined outside them: the order in which the components run follows
+from the flow of data between them, not from an order written by hand, and
+components that do not depend on each other run in parallel. In DeBasher a
+component is a process, a set of Bash functions with named input and output
+options; a connection is an input option that takes the value of an output
+option of another process; and a program is the set of processes that a module
+adds. The engine infers the dependencies between processes from their
+connections, since a process that reads a file written by another waits for it.
+Data can also stream between two processes through a FIFO while both run, which
+lets a program hold cycles that the dependency graph never sees.
 
 The engine is language agnostic. Bash is the language in which processes are
 declared and connected, but the code of a process can be written in Python, R,
@@ -55,18 +54,18 @@ document does not repeat it, and gives an example only where one shows a
 design point.
 
 The document is organized as follows. The Glossary defines the terms it uses.
-"Architecture" follows a program from its module to its running processes,
-and says what lives in memory and what on disk. "Modules and programs"
-describes how modules load, what a process is made of and how a program is
-composed. "Options" describes how a task gets its options and how options
-connect processes, and "The dependency graph" how the engine derives the order
-of the processes from them. "FIFOs" describes streaming between processes.
-"Scheduling" presents the scheduler abstraction and its two implementations,
-and "Running a process" what happens from the launch of a process to the end
-of its tasks. "The state of a run" describes the output directory, the status
-of a process, reruns and the tools that read a run. "Guarantees and non-goals"
-gathers the guarantees stated along the way, and "Future work" lists what is
-known to be missing.
+"Architecture" follows a program from its module to its running processes, and
+says what lives in memory and what on disk. "Modules and programs" describes how
+modules load, what a process is made of, how a program is composed and how a
+task runs steps of its own. "Options" describes how a task gets its options and
+how options connect processes, and "The dependency graph" how the engine derives
+the order of the processes from them. "FIFOs" describes streaming between
+processes. "Scheduling" presents the scheduler abstraction and its two
+implementations, and "Running a process" what happens from the launch of a
+process to the end of its tasks. "The state of a run" describes the output
+directory, the status of a process, reruns and the tools that read a run.
+"Guarantees and non-goals" gathers the guarantees stated along the way, and
+"Future work" lists what is known to be missing.
 
 # Glossary
 
@@ -109,7 +108,7 @@ relative to the output directory of the run.
   given moment, such as `_define_opts`, `_explain_cmdline_opts`, `_skip`,
   `_post` or `_reset_outfiles` (see "Processes and their methods").
 - **process function**: the method with no suffix, named as the process itself,
-  which does the work of each task.
+  which does the work of each task, or of a step for a sequential process.
 - **heredoc process**: a process whose code is in Python, R, Perl or Groovy,
   given in a `_heredoc_py`, `_heredoc_r`, `_heredoc_perl` or `_heredoc_groovy`
   method and run by the interpreter of that language.
@@ -117,12 +116,21 @@ relative to the output directory of the run.
   another process (the `alias` additional specification) or of an external
   script (`ext_alias`).
 - **process specification**: what `add_debasher_process` records about a
-  process: its computational specifications and its additional specifications.
+  process, or `add_debasher_seq_process` about a sequential process: its
+  computational specifications and its additional specifications.
 - **computational specification**: a resource that a process asks for: `cpus`,
   `mem` and `time`, always given, and `nodes`, `account`, `partition` and
   `throttle`.
 - **additional specification**: an attribute that changes how the engine treats
   a process: `processdeps`, `force`, `alias`, `ext_alias` and `alias_opt_map`.
+- **step**: an execution of a function or a command from inside a task, with
+  `seq_execute` or `seq_execute_slurm`, which waits for it to end.
+- **sequential process**: a function with a name and a process
+  specification, added with `add_debasher_seq_process`, that the engine never
+  schedules: it runs only as a step. It is not a process of the program.
+- **step marker**: an empty file `DEBASHER_STEP_DONE_<id>`, named after an id
+  that the process chooses for a step, that the process creates with
+  `mark_step_done` once the step succeeds, so that a later run can skip it.
 
 ## Options and tasks
 
@@ -417,7 +425,8 @@ prepares a run, from modules that define processes and from the `_program`
 methods that add those processes to the program. This section describes how a
 module is found and loaded, what a process is made of, how a process can run
 code in another language or borrow the code of another process, how a program
-is composed of subprograms, and what the engine records about each process.
+is composed of subprograms, what the engine records about each process, and
+how a task runs steps of its own.
 
 ## Modules and how they load
 
@@ -522,7 +531,9 @@ code of the process. When a process is added to the program,
 `add_debasher_process` builds the process function itself in two cases: for a
 heredoc process, whose code is in another language, and for an alias, whose
 code belongs to another process or to an external script. In both cases the
-other methods of the process are still Bash functions of its own.
+other methods of the process are still Bash functions of its own. A sequential
+process gets its process function in the same way (see "Sequential
+processes").
 
 **Heredoc processes.** A heredoc process gives its code in a method named after
 the language, `_heredoc_py`, `_heredoc_r`, `_heredoc_perl` or `_heredoc_groovy`,
@@ -581,16 +592,19 @@ which it was loaded, and so expects the calling module to have loaded it; the
 module is not searched for again from the current directory, which is no
 longer the directory of the module that loaded it.
 
-Only the processes that some `_program` method adds are part of the program. A
-module can define processes that no program adds; their functions are loaded,
-and reach the execution context, but the engine never schedules them.
+Only the processes that some `_program` method adds with `add_debasher_process`
+are part of the program. A module can define processes that no program adds;
+their functions are loaded, and reach the execution context, but the engine
+never schedules them. Neither does it schedule the sequential processes that a
+`_program` method adds with `add_debasher_seq_process`, which are not part of
+the program either.
 
-While a `_program` method runs, the engine records, for each process it adds,
-the directory of the module that the method belongs to. A relative path that
-belongs to a process, that of an external alias or the value of an option
-defined with `define_infile_opt`, is resolved against that directory, which is
-the directory of the module that added the process to the program, not
-necessarily the one that defines its functions.
+While a `_program` method runs, the engine records, for each process and each
+sequential process it adds, the directory of the module that the method belongs
+to. A relative path that belongs to a process, that of an external alias or the
+value of an option defined with `define_infile_opt`, is resolved against that
+directory, which is the directory of the module that added the process to the
+program, not necessarily the one that defines its functions.
 
 The type of the program comes from the `_program_type` method of the program
 file alone, called before its `_program` method; the `_program_type` method of
@@ -646,6 +660,126 @@ file_reader cpus=1 mem=32 time=00:01:00 |||  ; processdeps=afterok:file_writer
 This file is the list of the processes of the run for every tool that reads
 it, and the final process specification is where each scheduler takes the
 resources and the dependencies of a process from.
+
+## Sequential processes
+
+The dependency graph is fixed before the run starts, and some programs decide
+what runs next only while they run: a loop that sends each value it reads to one
+of two transformations, depending on what it has added up so far, or a process
+that skips its second part when the first one produced nothing. Such a process
+runs its parts itself, as steps: `seq_execute <function> <args>` runs the
+function, waits for it to end and returns an error if it fails. The scheduling
+code that runs a step calls a function and nothing else; the code of a step that
+is written in another language, or borrowed from another process or from an
+external script, is turned into a function by declaring a sequential process.
+
+**Declaring a sequential process.** `add_debasher_seq_process` takes the same
+arguments as `add_debasher_process`, the name, the computational
+specifications and the additional specifications, and is called from a
+`_program` method in the same way:
+
+```
+add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00"
+```
+
+It checks the name with the rules of "Processes and their methods", and builds
+the process function of a heredoc process or of an alias as "Processes in other
+languages, and aliases" describes: when the module defines
+`transformation_b_heredoc_py`, the function above runs its Python code. A
+relative path of an external alias is resolved against the directory of the
+module that adds the sequential process, as for a process (see "Programs and
+subprograms"). A name is unique across the processes and the sequential
+processes of the program: adding a name that `add_debasher_process` or
+`add_debasher_seq_process` has already added is refused. Sequential processes do
+not count towards the limit of 5000 processes of a program.
+
+The engine records a sequential process apart from the processes of the program,
+and nothing that walks the processes of the program sees it: it has no options,
+no tasks, no dependencies, no exec directory and no status, and it is not in
+`program.procspec`. What it leaves is its process function and its
+specification, which reach the tasks through the execution context like every
+function and variable of the shell of `debasher_exec` (see "The process script:
+how code travels"). A step runs the process function only, and the engine calls
+no other method of a sequential process.
+
+The additional specifications `alias`, `ext_alias` and `alias_opt_map` mean what
+they mean for a process. `processdeps` and `force`, which only a scheduled
+process can use, are refused. Every computational specification is optional,
+`cpus`, `mem` and `time` included, since the built-in scheduler uses none of
+them for a step. `throttle` is refused, and so is a list of values in `mem` or
+`time`, since a step runs once and has no further attempts. These checks run
+when the sequential process is added, so an error stops the preparation of the
+run.
+
+**Running a step.** `seq_execute` runs the step on the scheduler of the run.
+Under the built-in scheduler it calls the function in the shell of the task,
+and the computational specifications are not used. Under the Slurm scheduler
+it hands the step to `seq_execute_slurm`, which a process function can also
+call directly to send a step to Slurm whatever the scheduler of the run: a
+program with FIFOs runs on the built-in scheduler, and can still send a heavy
+step to the cluster. `seq_execute_slurm` writes a script in `__exec__`, made of
+the execution context and a call to the function with its arguments, runs it
+with `srun`, and removes it once it ends. When the function is a sequential
+process, its computational specifications become options of `srun`, as those
+of a process become options of `sbatch` (see "The Slurm scheduler"). Called
+outside a Slurm job, as by a task of the built-in scheduler, `srun` gets a job
+of its own with those resources. Called from a task of a Slurm job, it runs
+the step as a job step of Slurm inside that job, which takes its resources
+from the allocation of the job, and a step that asks for more than the job has
+fails.
+
+The function given to `seq_execute` need not be a sequential process: any
+function of the execution context, or any command, can run as a step, with no
+resources asked for. A sequential process is needed only when the code is not
+a Bash function, or when the step asks for resources of its own.
+
+The arguments reach the function as they are given. The engine builds no option
+list for a step, so a function can take positional arguments or options, and
+`alias_opt_map` renames an argument equal to one of its option names, wherever
+it appears. The step reads the standard input of the call, under both
+schedulers, so a step called inside a loop that reads its standard input has to
+take its own from `/dev/null`: under the built-in scheduler a step that reads
+its standard input consumes what the loop has still to read, and under the Slurm
+scheduler `srun` consumes it whether the step reads it or not. What the step
+prints to its standard output goes to the standard output of `seq_execute`, and
+so to the `.stdout` file of the task unless the caller captures it; what it
+prints to its standard error goes to the log of the task. `seq_execute` returns
+an error when the step fails, or when `srun` cannot launch it. The engine
+records nothing of a step, and the process function that called it decides what
+a failure means. Under the built-in scheduler, a step that calls `exit` ends the
+whole task, as a process function does (see "Executing a task").
+
+**Recording finished steps.** When a task fails, or is stopped, halfway through
+its steps, the next run runs all of them again, since the engine records nothing
+of a step. A process that wants to skip the steps that an earlier run finished
+records them itself, with step markers: `mark_step_done <dir> <id>` creates the
+step marker of the step `<id>` in the directory `<dir>`, and
+`is_step_done <dir> <id>` tells whether it exists. The marker is created
+atomically, so that of two calls that mark the same step only one succeeds. The
+engine never creates a step marker on its own, nor reads one: only the process
+knows what makes two steps the same work, and a step that runs again on
+purpose, as a transformation called on each value of a loop, must not be
+skipped.
+`data/programs/debasher_dynamic_fanout_stepdone.sh` shows the pattern: each task
+runs one step for each file of its list, with the task index, the name of the
+file and a checksum of its contents as the id.
+
+Two conditions are left to the process. The markers have to survive the reset of
+its process output directory when they are kept there: a process with a single
+task needs a `_reset_outfiles` method that leaves them in place, since the
+default reset empties the directory (see "Executing a task"). And a marker has
+to stop counting when the work it stands for changes: a run that reruns the
+process, for any of the reasons of "Reruns", leaves the markers of the earlier
+run in place, and they would skip steps whose inputs are new. Removing them when
+the process starts would skip nothing, since a process cannot tell a rerun from
+a run that resumes after a failure; the process builds the id of each step from
+what the step depends on instead, such as a checksum of its input. When steps
+with different inputs write the same output, the process also removes, before it
+runs a step, the markers that other inputs left for that output, so that each
+output has at most one marker, the one of the input it holds: otherwise an input
+that comes back would find its old marker and skip a step whose output another
+input has since overwritten. `data/programs/debasher_dynamic_fanout_stepdone.sh`
+does both.
 
 # Options
 
@@ -1376,8 +1510,8 @@ has three parts:
   Under the built-in scheduler it makes the script ignore `SIGTERM` (see "The
   built-in scheduler").
 - **A body** that runs one task, the one whose index the scheduler gives it
-  (`BUILTIN_ARRAY_TASK_ID` or `SLURM_ARRAY_TASK_ID`), with the steps of
-  "Executing a task", and sends its output and errors to the log of the task.
+  (`BUILTIN_ARRAY_TASK_ID` or `SLURM_ARRAY_TASK_ID`), as "Executing a task"
+  describes, and sends its output and errors to the log of the task.
 
 Since the context is copied when the script is written, a task runs the code
 that the modules had when its run was prepared, and a later run, which writes
@@ -1387,7 +1521,7 @@ script of an alias (see "Processes in other languages, and aliases").
 
 ## Executing a task
 
-A task goes through the same steps under both schedulers:
+A task does the same, in this order, under both schedulers:
 
 1. It gets its option list, from its line of `.sched_opts` or from the option
    generator of its process (see "How option values reach a task"), and
@@ -1425,10 +1559,10 @@ run").
 
 The process function runs in the same shell as the task, not in a shell of its
 own. A process function that calls `exit`, or that is killed by a signal such
-as `SIGPIPE`, therefore ends the whole task: the remaining steps never run, so
-there is no `_post`, no error message from the engine and no completion
-marker, and the process is `UNFINISHED` (see "When one end fails"). A process
-function signals a failure by returning a status other than zero.
+as `SIGPIPE`, therefore ends the whole task: nothing after it runs, so there
+is no `_post`, no error message from the engine and no completion marker, and
+the process is `UNFINISHED` (see "When one end fails"). A process function
+signals a failure by returning a status other than zero.
 
 Under the built-in scheduler, the task also exports, before it runs the
 process function, the directories and the facts that a process may read about
@@ -1699,6 +1833,10 @@ leaves, by design, to the program or to whoever runs it.
 - **Names.** A process, or a shared directory, may have the name of a file of
   the engine at the top of the output directory, and the engine does not
   refuse it (see "The output directory").
+- **Steps.** The engine keeps no record of a step: it has no status, no log
+  of its own and no completion marker, and a new run does not know which steps
+  of an earlier one succeeded unless the process records them with step
+  markers, which the engine never invalidates (see "Sequential processes").
 - **Mirror taps.** A mirror tap forwards lines of text, and relies on opening
   a FIFO for reading and writing, which POSIX leaves undefined (see "Mirror
   taps").
@@ -1727,3 +1865,5 @@ What is known to be missing from the design, or left open by it:
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
+- **Sequential processes in the web UI.** The web UI neither shows the
+  sequential processes of a program nor keeps them when it saves the program.

@@ -1076,6 +1076,27 @@ debasher::_get_script_log_filenames_slurm()
 }
 
 ########
+# Prints the options of srun that the computational specifications of a
+# sequential process give, as those of a process give the options of
+# sbatch, or nothing when the name is not that of a sequential process.
+debasher::_get_srun_opts_for_seq_process()
+{
+    local processname=$1
+
+    [[ -v 'DEBASHER_SEQ_PROCESSES["${processname}"]' ]] || return 0
+
+    local process_spec="${DEBASHER_SEQ_PROCESS_SPEC[${processname}]}"
+    local cpus=$(debasher::_extract_cpus_from_process_spec "${process_spec}")
+    local mem=$(debasher::_extract_mem_from_process_spec "${process_spec}")
+    local time=$(debasher::_extract_time_from_process_spec "${process_spec}")
+    local account=$(debasher::_extract_account_from_process_spec "${process_spec}")
+    local partition=$(debasher::_extract_partition_from_process_spec "${process_spec}")
+    local nodes=$(debasher::_extract_nodes_from_process_spec "${process_spec}")
+
+    echo $(debasher::_get_slurm_cpus_opt ${cpus}) $(debasher::_get_slurm_mem_opt ${mem}) $(debasher::_get_slurm_time_opt ${time}) $(debasher::_get_slurm_account_opt ${account}) $(debasher::_get_slurm_partition_opt ${partition}) $(debasher::_get_slurm_nodes_opt ${nodes})
+}
+
+########
 # Public: Executes a function or command as a job step of Slurm, with
 # srun, and waits for it to end.
 #
@@ -1083,7 +1104,10 @@ debasher::_get_script_log_filenames_slurm()
 # always goes to Slurm: a program that uses fifos runs on the built-in
 # scheduler, and can still send a heavy step of one of its processes to
 # the cluster. The step runs with the context of the process scripts of
-# the program, so it can call the functions of its modules.
+# the program, so it can call the functions of its modules. When the
+# function is a sequential process (see add_debasher_seq_process), its
+# computational specifications become options of srun; any other
+# function or command runs with no resources asked for.
 #
 # $1 - Function or command to execute.
 # $2.. - Its arguments.
@@ -1095,12 +1119,6 @@ debasher::_get_script_log_filenames_slurm()
 # Returns 1 if the step could not be launched or failed.
 debasher::seq_execute_slurm()
 {
-    is_variable()
-    {
-        local name="$1"
-        declare -p "$name" > /dev/null 2>&1
-    }
-
     create_seq_execute_script()
     {
         local dirname=$1
@@ -1139,7 +1157,7 @@ debasher::seq_execute_slurm()
     # Launch script
     shift
     local ret=0
-    "${SRUN}" "${script_name}" "$@" || ret=1
+    "${SRUN}" $(debasher::_get_srun_opts_for_seq_process "${process_to_launch}") "${script_name}" "$@" || ret=1
 
     # Clean temporary files
     "${RM}" -f "${script_name}"

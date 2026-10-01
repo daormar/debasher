@@ -964,8 +964,9 @@ def get_all_envvars(program: Program) -> dict[str, str]:
     file to define a "_program" function and calls add_debasher_process
     for every process in it (see _add_program_function), which
     hard-fails the *whole* run if any one process has no exec function
-    (debasher::_add_debasher_regular_process's `|| exit 1` in
-    engine/debasher_lib_programs.sh, not a per-process skip). Since this
+    (debasher::_add_debasher_regular_process fails, and
+    add_debasher_process exits, in engine/debasher_lib_programs.sh,
+    not a per-process skip). Since this
     runs live while the program is still being edited, where an
     in-progress process routinely has no code yet, every such process
     gets a trivial stub for this check only (_stub_processes_missing_code),
