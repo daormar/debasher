@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProgramProvider, useProgram } from "./ProgramContext";
 import { createEmptyProgram } from "../storage/programStorage";
 import type { Program } from "../models/program";
-import type { ProgramProcess } from "../models/process";
+import type { ProcessInfo, ProgramProcess } from "../models/process";
+import type { ProgramEdge } from "../models/edge";
+import type { ProgramOption } from "../models/option";
 import { emptyNodeCode } from "../models/node";
 import { createSeqProcess } from "../models/seqProcess";
 
@@ -279,6 +281,343 @@ describe("saving a program", () => {
 
     expect(result.current.program.homeDir).toBe("/home/p");
     expect(result.current.program.description).toBe("edited while saving");
+  });
+
+});
+
+function option(id: string, label: string, changes: Partial<ProgramOption> = {}): ProgramOption {
+  return {
+    id,
+    label,
+    direction: label.startsWith("-out") ? "output" : "input",
+    dataType: "string",
+    channel: "none",
+    mirror: false,
+    description: "",
+    value: "",
+    commandLine: false,
+    mandatory: false,
+    fromProcessSpec: false,
+    ...changes,
+  };
+}
+
+function bashProcess(name: string, options: ProgramOption[] = []): ProgramProcess {
+  return { ...node(name, undefined), language: "bash", options };
+}
+
+function edge(id: string, source: [string, string], target: [string, string]): ProgramEdge {
+  return {
+    id,
+    sourceProcessId: `id-${source[0]}`,
+    sourceOptionId: source[1],
+    targetProcessId: `id-${target[0]}`,
+    targetOptionId: target[1],
+  };
+}
+
+function programWith(processes: ProgramProcess[], edges: ProgramEdge[] = []): Program {
+  return { ...createEmptyProgram("p"), processes, edges };
+}
+
+function processNamed(program: Program, name: string): ProgramProcess {
+  return program.processes.find(process => process.name === name)!;
+}
+
+function optionValue(program: Program, processName: string, optionId: string): string {
+  return processNamed(program, processName).options.find(o => o.id === optionId)!.value;
+}
+
+describe("editing the processes of a program", () => {
+
+  it("adds a process with what the library brings for it", () => {
+    const { result } = renderStore(createEmptyProgram("p"));
+    const info: ProcessInfo = {
+      description: "sorts",
+      language: "python",
+      code: "print(1)",
+      options: [
+        { label: "-in", dataType: "file", description: "input", commandLine: true, mandatory: true },
+        { label: "-outf", dataType: "file", description: "output", commandLine: false, mandatory: false },
+      ],
+    };
+
+    act(() => result.current.addProcess("sorter", info));
+
+    const [sorter] = result.current.program.processes;
+    expect(sorter.name).toBe("sorter");
+    expect(sorter.description).toBe("sorts");
+    expect(sorter.language).toBe("python");
+    expect(sorter.code).toBe("print(1)");
+    expect(sorter.position).toEqual({ x: 100, y: 100 });
+    expect(sorter.optionsHandler).toEqual({ mode: "standard" });
+    expect(sorter.additionalSpecs).toEqual({ force: false });
+    expect(sorter.options.map(o => [o.label, o.direction, o.dataType, o.commandLine, o.mandatory]))
+      .toEqual([["-in", "input", "file", true, true], ["-outf", "output", "file", false, false]]);
+    expect(sorter.options.every(o => o.channel === "none" && o.value === "")).toBe(true);
+  });
+
+  it("adds an empty Bash process when the library brings nothing", () => {
+    const { result } = renderStore(createEmptyProgram("p"));
+
+    act(() => result.current.addProcess("blank", null));
+
+    const [blank] = result.current.program.processes;
+    expect(blank.language).toBe("bash");
+    expect(blank.code).toBe("");
+    expect(blank.options).toEqual([]);
+    expect(blank.nodeKind).toBeUndefined();
+  });
+
+  it("replaces what a process got from the library, keeping its name", () => {
+    const { result } = renderStore(programWith([bashProcess("a", [option("o1", "-x")])]));
+
+    act(() =>
+      result.current.applyProcessInfo("id-a", {
+        description: "new",
+        language: "perl",
+        code: "print 1;",
+        options: [{ label: "-y", dataType: "int", description: "", commandLine: true, mandatory: false }],
+      })
+    );
+
+    const a = processNamed(result.current.program, "a");
+    expect(a.description).toBe("new");
+    expect(a.language).toBe("perl");
+    expect(a.code).toBe("print 1;");
+    expect(a.options.map(o => o.label)).toEqual(["-y"]);
+  });
+
+  it("removes a process with the connections that touch it, and unselects it", () => {
+    const { result } = renderStore(
+      programWith(
+        [
+          bashProcess("a", [option("ao", "-outf")]),
+          bashProcess("b", [option("bi", "-in"), option("bo", "-outf")]),
+          bashProcess("c", [option("ci", "-in")]),
+        ],
+        [edge("e1", ["a", "ao"], ["b", "bi"]), edge("e2", ["b", "bo"], ["c", "ci"])]
+      )
+    );
+    act(() => result.current.selectProcess("id-b"));
+
+    act(() => result.current.removeProcess("id-b"));
+
+    expect(result.current.program.processes.map(p => p.name)).toEqual(["a", "c"]);
+    expect(result.current.program.edges).toEqual([]);
+    expect(result.current.selectedProcess).toBeNull();
+  });
+
+  it("adds an option whose direction comes from its label", () => {
+    const { result } = renderStore(programWith([bashProcess("a")]));
+
+    act(() => result.current.addOption("id-a", "-in"));
+    act(() => result.current.addOption("id-a", "-outf"));
+
+    const [input, output] = processNamed(result.current.program, "a").options;
+    expect([input.label, input.direction]).toEqual(["-in", "input"]);
+    expect([output.label, output.direction]).toEqual(["-outf", "output"]);
+    expect(input).toMatchObject({
+      dataType: "string",
+      channel: "none",
+      mirror: false,
+      value: "",
+      commandLine: false,
+      mandatory: false,
+      fromProcessSpec: false,
+    });
+  });
+
+  it("changes and removes an option", () => {
+    const { result } = renderStore(programWith([bashProcess("a", [option("o1", "-x"), option("o2", "-y")])]));
+
+    act(() => result.current.updateOption("id-a", "o1", { dataType: "int", value: "3" }));
+    act(() => result.current.removeOption("id-a", "o2"));
+
+    const options = processNamed(result.current.program, "a").options;
+    expect(options.map(o => [o.id, o.dataType, o.value])).toEqual([["o1", "int", "3"]]);
+  });
+
+});
+
+describe("connections between processes", () => {
+
+  function twoProcesses(sourceChanges: Partial<ProgramOption> = {}, targetChanges: Partial<ProgramOption> = {}): Program {
+    return programWith([
+      bashProcess("a", [option("ao", "-outf", sourceChanges)]),
+      bashProcess("b", [option("bi", "-in", targetChanges)]),
+    ]);
+  }
+
+  it("gives the target of a connection the reference to its source", () => {
+    const { result } = renderStore(twoProcesses());
+
+    act(() => result.current.connect(edge("e1", ["a", "ao"], ["b", "bi"])));
+
+    expect(result.current.program.edges.map(e => e.id)).toEqual(["e1"]);
+    expect(optionValue(result.current.program, "b", "bi")).toBe("[a;-outf]");
+  });
+
+  it("makes the target of a shared directory connection name the same directory", () => {
+    const { result } = renderStore(twoProcesses({ channel: "shared_dir", value: "shdir" }));
+
+    act(() => result.current.connect(edge("e1", ["a", "ao"], ["b", "bi"])));
+
+    const target = processNamed(result.current.program, "b").options[0];
+    expect([target.channel, target.value]).toEqual(["shared_dir", "shdir"]);
+  });
+
+  it("clears the value of the target when the connection is removed", () => {
+    const { result } = renderStore(twoProcesses());
+    act(() => result.current.connect(edge("e1", ["a", "ao"], ["b", "bi"])));
+
+    act(() => result.current.disconnect("e1"));
+
+    expect(result.current.program.edges).toEqual([]);
+    expect(optionValue(result.current.program, "b", "bi")).toBe("");
+  });
+
+  it("keeps the directory of a shared directory target when the connection is removed", () => {
+    const { result } = renderStore(
+      twoProcesses({ channel: "shared_dir", value: "shdir" }, { channel: "shared_dir", value: "shdir" })
+    );
+    act(() => result.current.connect(edge("e1", ["a", "ao"], ["b", "bi"])));
+
+    act(() => result.current.disconnect("e1"));
+
+    expect(optionValue(result.current.program, "b", "bi")).toBe("shdir");
+  });
+
+  it("follows a renamed source process or source option in the reference", () => {
+    const { result } = renderStore(twoProcesses());
+    act(() => result.current.connect(edge("e1", ["a", "ao"], ["b", "bi"])));
+
+    act(() => result.current.renameProcess("id-a", "producer"));
+    expect(optionValue(result.current.program, "b", "bi")).toBe("[producer;-outf]");
+
+    act(() => result.current.updateOption("id-a", "ao", { label: "-outfile" }));
+    expect(optionValue(result.current.program, "b", "bi")).toBe("[producer;-outfile]");
+  });
+
+  it("puts the references of a loaded program back in step with its connections", () => {
+    const { result } = renderStore(
+      programWith(
+        [
+          bashProcess("a", [option("ao", "-outf")]),
+          bashProcess("b", [
+            option("bi", "-in", { value: "[old;-outf]" }),
+            option("bj", "-stale", { value: "[gone;-outf]" }),
+            option("bk", "-literal", { value: "42" }),
+          ]),
+        ],
+        [edge("e1", ["a", "ao"], ["b", "bi"])]
+      )
+    );
+
+    const program = result.current.program;
+    expect(optionValue(program, "b", "bi")).toBe("[a;-outf]");
+    expect(optionValue(program, "b", "bj")).toBe("");
+    expect(optionValue(program, "b", "bk")).toBe("42");
+  });
+
+  it("gives a loaded program without a scheduler the default one", () => {
+    const { result } = renderStore({ ...createEmptyProgram("p"), executionOptions: { scheduler: "" } });
+
+    expect(result.current.program.executionOptions.scheduler).toBe("BUILTIN");
+  });
+
+});
+
+describe("reordering the options of a process", () => {
+
+  const options = [
+    option("i1", "-a"),
+    option("o1", "-outa"),
+    option("i2", "-b"),
+    option("i3", "-c"),
+  ];
+
+  it("reorders the options of one row, leaving the other row in place", () => {
+    const { result } = renderStore(programWith([bashProcess("a", options)]));
+
+    act(() => result.current.reorderOptionGroup("id-a", "top", ["i3", "i1", "i2"]));
+
+    expect(processNamed(result.current.program, "a").options.map(o => o.id))
+      .toEqual(["i3", "o1", "i1", "i2"]);
+  });
+
+  it("ignores an order that does not list the whole row", () => {
+    const { result } = renderStore(programWith([bashProcess("a", options)]));
+
+    act(() => result.current.reorderOptionGroup("id-a", "top", ["i3", "i1"]));
+
+    expect(processNamed(result.current.program, "a").options.map(o => o.id))
+      .toEqual(["i1", "o1", "i2", "i3"]);
+  });
+
+});
+
+describe("editing a process added with another program", () => {
+
+  const groupSource = { programName: "other", groupId: "g1", groupSize: 3, sourceDir: "/src" };
+
+  function grouped(): Program {
+    return {
+      ...programWith([
+        { ...bashProcess("a", [option("ao", "-outf")]), groupSource },
+        { ...bashProcess("b", [option("bi", "-in")]), groupSource },
+        bashProcess("c", [option("ci", "-in"), option("co", "-outf")]),
+      ]),
+      seqProcesses: [{ ...createSeqProcess("step"), groupSource }],
+    };
+  }
+
+  it("frees the whole group and applies the change once the user agrees", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderStore(grouped());
+
+    act(() => result.current.setProcessCode("id-a", "echo changed"));
+
+    const program = result.current.program;
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(processNamed(program, "a").code).toBe("echo changed");
+    expect(program.processes.every(p => p.groupSource === undefined)).toBe(true);
+    expect(program.seqProcesses[0].groupSource).toBeUndefined();
+  });
+
+  it("changes nothing when the user declines", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { result } = renderStore(grouped());
+    const before = result.current.program;
+
+    act(() => result.current.renameProcess("id-a", "renamed"));
+    act(() => result.current.removeProcess("id-b"));
+
+    expect(result.current.program).toEqual(before);
+  });
+
+  it("moves a process of the group without asking", () => {
+    const confirm = vi.spyOn(window, "confirm");
+    const { result } = renderStore(grouped());
+
+    act(() => result.current.moveProcess("id-a", { x: 5, y: 7 }));
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(processNamed(result.current.program, "a").position).toEqual({ x: 5, y: 7 });
+    expect(processNamed(result.current.program, "a").groupSource).toEqual(groupSource);
+  });
+
+  it("asks only when the target of a connection is in the group", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { result } = renderStore(grouped());
+
+    act(() => result.current.connect(edge("e1", ["a", "ao"], ["c", "ci"])));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(processNamed(result.current.program, "a").groupSource).toEqual(groupSource);
+
+    act(() => result.current.connect(edge("e2", ["c", "co"], ["b", "bi"])));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(processNamed(result.current.program, "b").groupSource).toBeUndefined();
   });
 
 });
