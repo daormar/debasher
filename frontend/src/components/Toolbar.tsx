@@ -11,6 +11,7 @@ import SaveDialog from "./SaveDialog";
 import ProcessNameDialog from "./ProcessNameDialog";
 import AddProgramDialog from "./AddProgramDialog";
 import RunMenu from "./RunMenu";
+import HelpMenu from "./HelpMenu";
 import { runGoesOnMessage } from "../models/generalRun";
 import { hasSupervisor } from "../models/node";
 
@@ -257,12 +258,24 @@ export default function Toolbar({ onClose }: Props) {
 
       <RunMenu />
 
-      <button
-        onClick={() => onClose(runGoesOnMessage(program, isRunInProgress))}
-        style={{ marginLeft: "auto" }}
+      {/* Help and Close sit together at the right end of the toolbar */}
+      <div
+        style={{
+          marginLeft: "auto",
+          display: "flex",
+          gap: 8,
+        }}
       >
-        Close
-      </button>
+
+        <HelpMenu />
+
+        <button
+          onClick={() => onClose(runGoesOnMessage(program, isRunInProgress))}
+        >
+          Close
+        </button>
+
+      </div>
 
 
     </div>

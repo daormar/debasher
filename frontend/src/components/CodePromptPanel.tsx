@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 
+import { copyOrSelect } from "../utils/clipboard";
+
 interface Props {
   // The code prompt, composed by the editor from the code request.
   prompt: string;
@@ -20,18 +22,10 @@ export default function CodePromptPanel({ prompt, request, onRequestChange, past
 
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  // The clipboard is missing on a page opened from a file, and a browser
-  // may refuse it: the prompt is then selected, for the keyboard to copy.
   async function handleCopy() {
-    try {
-      if (!navigator.clipboard) {
-        throw new Error("no clipboard");
-      }
-      await navigator.clipboard.writeText(prompt);
+    if (await copyOrSelect(prompt, promptRef.current)) {
       setCopyNote(`Copied. ${pasteHint}`);
-    } catch {
-      promptRef.current?.focus();
-      promptRef.current?.select();
+    } else {
       setCopyNote("The browser did not let the page copy: the prompt is selected, copy it with the keyboard.");
     }
   }

@@ -17,6 +17,10 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:8000",
     },
+    // The tests read files of the repository outside frontend/ (the sources
+    // of the documentation that the Help menu links to); the dev server keeps
+    // serving frontend/ only.
+    ...(process.env.VITEST ? { fs: { allow: [".."] } } : {}),
   },
   test: {
     environment: "jsdom",

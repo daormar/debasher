@@ -122,7 +122,12 @@ edits the selected process, and a toolbar above:
 * **Add program**: brings every process of another program saved with
   the web interface into this one (see `Groups`_ below).
 * **Save**, **Run** (the menu described in `Running a General
-  Program`_ below) and **Close**, which goes back to the home screen.
+  Program`_ below), **Help** and **Close**, which goes back to the home
+  screen. The Help menu links to this documentation and to the
+  repository of DeBasher, each in a new tab of the browser, so that the
+  program open in the editor stays as it is, and its "How to cite
+  DeBasher" gives the reference of the article to cite, as text and as
+  BibTeX.
 
 The name of the program, at the left of the toolbar, can be edited in
 place. It names the generated script and prefixes the functions of the
