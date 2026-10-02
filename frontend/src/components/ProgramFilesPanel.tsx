@@ -161,7 +161,23 @@ function FileTreeNode({ entry, depth, expanded, selectedPath, onToggle, onSelect
 
 }
 
-export default function ProgramFilesPanel() {
+// A request, from outside the panel, to open it on a file it may not know
+// of yet, such as the test skeleton that "Add test" has just written: a new
+// request each time, even for the same path, so that a second "Add test" on
+// the same process opens the file again.
+export interface OpenFileRequest {
+  path: string;
+  // A line to show above the file while it stays open, such as what to do
+  // with a test skeleton just written
+  notice?: string;
+  nonce: number;
+}
+
+interface Props {
+  openRequest?: OpenFileRequest | null;
+}
+
+export default function ProgramFilesPanel({ openRequest = null }: Props) {
 
   const { program } = useProgram();
 
@@ -201,6 +217,11 @@ export default function ProgramFilesPanel() {
   const [savingContent, setSavingContent] =
     useState(false);
 
+  // The line shown above the file that an open request named, while that
+  // file stays the one shown
+  const [openNotice, setOpenNotice] =
+    useState<{ path: string; text: string } | null>(null);
+
   const [isDragOver, setDragOver] =
     useState(false);
 
@@ -228,6 +249,31 @@ export default function ProgramFilesPanel() {
     // elsewhere in the app.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // The panel holds no other notice of a file written outside it, so it
+  // reads the tree again before it shows the file, with every directory
+  // above it expanded.
+  useEffect(() => {
+    if (!openRequest) {
+      return;
+    }
+    const { path, notice } = openRequest;
+    setOpen(true);
+    setOpenNotice(notice ? { path, text: notice } : null);
+    void (async () => {
+      await refresh();
+      setExpanded(current => {
+        const next = new Set(current);
+        for (let dir = parentOf(path); dir; dir = parentOf(dir)) {
+          next.add(dir);
+        }
+        return next;
+      });
+      await handleSelect({ name: nameOf(path), path, type: "file", readonly: false, children: null });
+    })();
+    // Only a new request opens a file, not a change of what the panel shows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
 
   const selectedEntry =
     selectedPath ? findEntry(tree, selectedPath) : null;
@@ -582,6 +628,15 @@ export default function ProgramFilesPanel() {
                   flexDirection: "column",
                 }}
               >
+
+                {openNotice && preview?.path === openNotice.path && (
+                  <div
+                    data-testid="open-notice"
+                    style={{ padding: "6px 8px", background: "#fff8e1", borderBottom: "1px solid #eee", fontSize: 13 }}
+                  >
+                    {openNotice.text}
+                  </div>
+                )}
 
                 {previewLoading ? (
                   <div style={{ padding: 8, color: "#888" }}>Loading…</div>

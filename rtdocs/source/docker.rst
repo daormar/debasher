@@ -6,10 +6,11 @@ Docker Example
     # This module shows how a process can run inside a Docker container
     # managed by DeBasher itself. docker_example_docker_imgs declares
     # the "library/hello-world" image with pull_docker_img, and the
-    # docker_example process simply runs "docker run hello-world" and
-    # redirects its output to a file. DeBasher takes care of pulling
-    # the declared image before the process executes, so the process
-    # code can assume it is already available locally.
+    # docker_example process simply runs "${DOCKER}" run hello-world,
+    # the docker found when DeBasher was configured, and redirects its
+    # output to a file. When the program runs with --docker-support,
+    # DeBasher pulls the declared image before the process executes,
+    # so the process code can assume it is already available locally.
 
     docker_example_document()
     {
@@ -50,7 +51,7 @@ Docker Example
         local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
         # Write python version to file
-        docker run hello-world > "${outf}" || return 1
+        "${DOCKER}" run hello-world > "${outf}" || return 1
     }
 
     docker_example_docker_imgs()

@@ -68,5 +68,8 @@ debasher_check_installation: Makefile
 	echo "GROOVY=\"$(GROOVY)\"" >> $@
 	echo "JAVA=\"$(JAVA)\"" >> $@
 	echo "DOT=\"$(DOT)\"" >> $@
+	echo "BATS=\"$(BATS)\"" >> $@
+	echo "CONDA=\"$(CONDA)\"" >> $@
+	echo "PYTEST=\"$(PYTEST)\"" >> $@
 	cat $< >> $@
 	chmod ugo+x $@

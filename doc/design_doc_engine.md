@@ -64,8 +64,10 @@ processes. "Scheduling" presents the scheduler abstraction and its two
 implementations, and "Running a process" what happens from the launch of a
 process to the end of its tasks. "The state of a run" describes the output
 directory, the status of a process, reruns and the tools that read a run.
-"Guarantees and non-goals" gathers the guarantees stated along the way, and
-"Future work" lists what is known to be missing.
+"Business tests of a program" describes how the processes of a program are
+tested one at a time, outside any run. "Guarantees and non-goals" gathers the
+guarantees stated along the way, and "Future work" lists what is known to be
+missing.
 
 # Glossary
 
@@ -284,6 +286,37 @@ relative to the output directory of the run.
   one of its FIFOs runs again), propagated to the processes that depend on it
   and to the other ends of its FIFOs.
 
+## Business tests
+
+Terms of resident programs used in this group and in "Business tests of a
+program" (node, packet, node state, envelope) have the meaning that
+`doc/design_doc_resident.md` gives them.
+
+- **business test**: a test of the business logic of one process: what the
+  process does with the values of its options, run on its own, outside any run.
+- **program directory**: a directory, of any name, that holds a program and
+  its tests: the program file is `<name>.sh` at its top, where `<name>` is the
+  name of the program that the program metadata of the web UI gives, or,
+  without that metadata, the only `*.sh` file at its top. The home directory of
+  a program of the web UI is one (see `doc/design_doc_webui.md`). Only a
+  program in a program directory has business tests.
+- **test directory**: `test` inside a program directory, which holds the test
+  files of the program and the data that they read.
+- **process test**: a test, written in a bats file `*.bats` of the test
+  directory, that runs a process of the program through
+  `debasher_exec_process`.
+- **node test**: a test, written in a pytest file `test_*.py` of the test
+  directory, of the business logic of a node of a resident program: what it
+  sends for what it receives, and what its node state brings back.
+- **node harness**: `debasher_runtime_testing`, the module of the runtime
+  library of resident programs with which a node test builds a node without
+  the engine (see "Testing a node without the engine" in
+  `doc/design_doc_resident.md`).
+- **test helpers**: `debasher_bats_helpers`, the Bash library that a process
+  test loads, which defines `debasher_process`.
+- **test runner**: `debasher_test`, which runs the tests of a program
+  directory.
+
 # Architecture
 
 The engine is a set of Bash libraries and the command line tools built on
@@ -474,7 +507,9 @@ tasks through the execution context, and code at the top level that does
 something else, such as printing or creating a file, runs while the run is
 prepared and never in a task. Besides `debasher_exec`, only the tools that
 run a process function outside a run (`debasher_exec_process`) or document a
-module (`debasher_doc_mod`), and the tool that resets a resident program, load
+module (`debasher_doc_mod`), the tool that resets a resident program, and the
+tool that gives the node harness the code of a node (`debasher_get_node_source`,
+see "Testing a node without the engine" in `doc/design_doc_resident.md`), load
 modules; the tools that read a run do not.
 
 ## Processes and their methods
@@ -1602,9 +1637,26 @@ process is launched:
 
 The engine only makes sure that the environment or the image exists. Using it
 is left to the process function, which activates the environment or runs the
-container itself, as `conda activate` or `docker run` would be used by hand.
+container itself, so that one process may use several environments or images,
+each for a part of its work, or activate one for only some of its commands.
 Without the options, the methods are not called, and the process function
 finds whatever the machine already has.
+
+`conda activate` is a shell function of conda, not a program, so a process that
+called it directly would depend on how the shell that runs it was started: on a
+terminal where conda was set up, and from which the function was inherited, it
+works; under a service, a Slurm job or a shell that conda never set up, it
+fails. The engine removes that dependence without taking the activation away
+from the process: `conda_activate <name>` loads the shell functions of conda
+into the shell when it does not have them, and then activates the environment,
+after which `conda` itself (`conda deactivate`, another `conda activate`) can be
+used. It loads them from a conda executable, the one that the conda functions of
+the shell point to (`CONDA_EXE`), or else the one that `configure` found, which
+every built script holds as `CONDA`, as it holds `DOCKER`. With neither, it
+fails with an error that says so. `define_conda_env` loads them the same way
+before it looks for an environment or creates one. A process uses `"${DOCKER}"`
+to run a container, the docker that `configure` found, rather than the first one
+in the `PATH`.
 
 # The state of a run
 
@@ -1748,7 +1800,207 @@ directory that has been moved: `debasher_exec` itself, and
 with the process script that the run wrote, as the `Supervisor` of a
 resident program does. `debasher_exec_process` runs one process function
 outside any run, after loading its module, which is useful to try a process on
-its own.
+its own and is how a process test runs it (see "Testing a process with bats").
+
+# Business tests of a program
+
+A business test checks the business logic of one process of a program: what
+the process does with the values of its options, run on its own, with no
+scheduler, no output directory and none of the other processes. A process
+receives a list of options and produces files, values or data written into a
+FIFO (see "Introduction"), so it can be run like any Unix program, given its
+options, and tested by looking at what it writes. How the processes of a
+program connect, and whether the program as a whole runs, is not what these
+tests check: running the program does that.
+
+This section describes where the tests of a program live, how a process is
+tested with bats, how a node of a resident program is tested with pytest, the
+tool that runs the tests of a program, and how an installation checks that
+tool with the programs that it ships.
+
+## The test directory
+
+Business tests are offered only to a program in a program directory: a
+directory, of any name, that holds a program and its tests. Its program file
+is found in one of two ways:
+
+- When the directory holds program metadata of the web UI
+  (`.debasher/program.json`, see "The home directory" in
+  `doc/design_doc_webui.md`), the program file is `<name>.sh`, where `<name>`
+  is the top-level `name` field of that metadata, after which the web UI names
+  the script that it generates. The name of the directory does not matter,
+  since the user chooses it, and a program renamed after its first save keeps
+  its directory. The metadata is read as JSON
+  (`debasher::_get_ui_program_name`), since the processes and options of the
+  program have `name` fields too.
+- Otherwise, for a program written by hand, the program file is the only
+  `*.sh` file at the top of the directory. A directory with none, or with
+  several, is not a program directory: other scripts, such as the external
+  script of an alias or a helper of the user, may live beside the program, and
+  the runner does not guess which one is the program.
+
+The tests of the program are in its test directory, `test` inside the program
+directory, as test files of two kinds:
+
+- `*.bats`, process tests, run with bats;
+- `test_*.py`, node tests, run with pytest.
+
+Any other file of the test directory is left to the tests, typically data that
+they read, which a test finds from the directory of its own file
+(`BATS_TEST_DIRNAME` in bats, `Path(__file__).parent` in pytest). The test
+directory is a user file of the program directory: no reserved name of the web
+UI matches it, so its program files panel shows the tests and lets the user
+edit them.
+
+## Testing a process with bats
+
+A process test runs a process with `debasher_exec_process`, which loads the
+module of the program, runs its `_program` method and calls the process
+function with the options that it is given, outside any run (see "Tools that
+read a run"). Nothing builds the options of the process, since `_define_opts`
+does not run: the test gives every option that the process function reads, and
+for each file that the process writes a path under the temporary directory of
+the test. An option that names a FIFO holds a path like any other, so a
+regular file stands in for the FIFO: a process that reads a FIFO is tested on a
+file that holds what would arrive, and one that writes a FIFO on a file that
+the test reads afterwards.
+
+A process test loads the test helpers, `debasher_bats_helpers`, a Bash library
+installed with the engine, whose path the test runner exports as
+`DEBASHER_BATS_HELPERS`. The library defines `debasher_process`, which runs
+`debasher_exec_process -q "${DEBASHER_TEST_PFILE}" <process> -- <options>` and
+stops with a message when `DEBASHER_TEST_PFILE` is not set. Loading the
+library declares that the tests need bats 1.5.0, the version that brought
+`run --separate-stderr`, which bats otherwise warns about. For the process
+`greet` of the program `webui_batch_greet`, which waits `-secs` seconds, writes
+a greeting into the file `-outf` and fails on the text `fail`:
+
+```bash
+load "${DEBASHER_BATS_HELPERS}"
+
+@test "greet writes the greeting" {
+    run debasher_process greet -text Ann -secs 0 \
+        -outf "${BATS_TEST_TMPDIR}/greeting.txt"
+    [ "${status}" -eq 0 ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/greeting.txt")" = "Hello, Ann!" ]
+}
+
+@test "greet fails on the text fail" {
+    run --separate-stderr debasher_process greet -text fail -secs 0 \
+        -outf "${BATS_TEST_TMPDIR}/greeting.txt"
+    [ "${status}" -eq 1 ]
+    [ "${stderr}" = "Error: asked to fail" ]
+}
+```
+
+Two features of `debasher_exec_process` serve these tests:
+
+- `-q`, given before the program file, drops the progress messages of the
+  tool ("Loading debasher modules..." and the like) and those of
+  `load_debasher_module` for every module it loads, which it silences through
+  `DEBASHER_QUIET_MODULE_LOADING`. What the process writes to its standard
+  error is then all that a test finds there. The errors of the tool, and what
+  the code of a module or the `_program` method writes, are still printed.
+- The tool exits with the status of the process function, so that a test can
+  tell one failure of the process from another.
+
+A process runs in the environment of the test runner. It activates its Conda
+environments and runs its Docker images itself, as in a run (see "Conda and
+Docker environments"), so that part behaves the same. Creating the environments
+and pulling the images, which `--conda-support` and `--docker-support` do before
+a run, is done only when the test runner is given the same options (see "The
+test runner: `debasher_test`"); otherwise they have to exist already. A test of
+a process that needs an environment calls
+`debasher_skip_without_conda_env <name>` of the test helpers first, which skips
+the test, with its reason, where conda or the environment is missing, for
+example on a machine that never ran the program with conda support. Its `_skip`,
+`_post` and `_reset_outfiles` methods do not run. An array process is tested one
+task at a time, with the options of that task, since `_generate_opts` does not
+run either. A process whose work needs the other end of a FIFO to run at the
+same time, such as one of the two processes of a cycle that wait for each
+other's replies, cannot be tested on its own with a regular file standing in for
+the FIFO.
+
+## Testing a node with pytest
+
+The process function of a node runs `python3` on its heredoc, which builds the
+node and calls `run()`: the node opens its FIFOs, exchanges envelopes and
+reports to the `Supervisor`, none of which is business logic. A node test does
+not run the process. It builds the class of the node inside the test, with the
+node harness of the runtime library, feeds it packets, and looks at the
+packets that it sends and at its node state (see "Testing a node without the
+engine" in `doc/design_doc_resident.md`). Node tests are written in Python,
+the language of the code of a node.
+
+## The test runner: `debasher_test`
+
+`debasher_test [--conda-support] [--docker-support] <dir>` runs the tests of
+the program in the program directory `<dir>`:
+
+1. It checks that `<dir>` is a program directory, and stops otherwise.
+2. It looks for test files in the test directory. When there is none, or no
+   test directory, it says so and exits.
+3. It exports `DEBASHER_TEST_PFILE`, the absolute path of the program file,
+   `DEBASHER_BATS_HELPERS`, and `DEBASHER_LIBEXECDIR`, where the node harness
+   finds its tool, and adds the directory of the tools of the engine to `PATH`
+   and the directories of its Python modules to `PYTHONPATH`.
+4. With `--conda-support` or `--docker-support`, it loads the program and
+   creates the Conda environments, or pulls the Docker images, that its
+   processes declare, those that do not exist yet, using the functions that
+   `debasher_exec` uses with those options before a run
+   (`debasher::_prepare_conda_envs`, `debasher::_pull_docker_imgs`), so that a
+   test of a process finds them (see "Conda and Docker environments"). The logs
+   of conda go to a temporary directory, given as `DEBASHER_CONDA_DIR`, since
+   there is no output directory; it is removed once the environments exist, and
+   kept, with its path in the error, when one could not be created. An
+   environment or an image that cannot be prepared means that the tests cannot
+   run.
+5. From the program directory, it runs bats on the process tests and pytest on
+   the node tests, each only when the program has tests of that kind. The bats
+   and pytest that it runs are those that `configure` found, or those given in
+   `DEBASHER_BATS` and `DEBASHER_PYTEST`, such as the pytest of a virtual
+   environment. A kind of test whose tool is missing is an error.
+
+Its exit status is 0 when every test passed, 1 when a test failed, 2 when it
+could not run the tests (no program directory, a missing tool, a wrong
+argument) and 77 when the program has no tests. 77 is the status with which
+Automake marks a skipped test: a caller tells a program without tests from one
+whose tests pass.
+
+A run of the tests writes nothing into the program directory: pytest runs
+without its cache (`-p no:cacheprovider`) and without writing bytecode
+(`PYTHONDONTWRITEBYTECODE`), bats keeps its files in temporary directories,
+and the test helpers and the node harness write only under temporary
+directories. A test that writes into the program directory by itself breaks
+this, and nothing stops it. This is what lets the tests of an installed
+program run where the user cannot write.
+
+A test file can also be run on its own, with bats or pytest, once the
+variables that the runner exports are set, which helps to debug one test.
+
+## Checking an installation
+
+`make installcheck` runs `debasher_check_installation`, which runs the programs
+of `data/webui_programs` from where they were installed. Four of them carry a
+test directory, installed with them: `webui_batch_greet`, with process tests,
+`webui_running_sum`, with node tests, `webui_watch_tally`, with node tests of a
+`DirectoryWatcher` that observes a directory and of the node it feeds, and
+`webui_conda_example`, with a process test of a process that activates a conda
+environment, skipped where the environment does not exist.
+`debasher_check_installation` runs `debasher_test` on every program of
+`data/webui_programs` and fails on any status other than 0 or 77. When
+`configure` did not find the tool of a kind of test that a program has, the
+check does not run the test runner on that program, and says that its tests are
+skipped. It also checks that the test runner finds the program of a copy of
+`webui_batch_greet` in a directory of another name, that it prepares the Conda
+environment of `webui_conda_example` with `--conda-support` where conda is
+usable, and that it refuses, with status 2, a directory that is not a program
+directory.
+
+This checks, once DeBasher is installed, that the test runner, the test
+helpers and the node harness work as installed, which no test of `make check`
+can, since those run on the build tree. The two programs also show a module
+author how to write each kind of test.
 
 # Guarantees and non-goals
 
@@ -1874,5 +2126,7 @@ What is known to be missing from the design, or left open by it:
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
+- **Choosing the tests to run.** Giving the test runner the test files, or a
+  filter, so that it runs only some of the tests of a program.
 - **Sequential processes in the web UI.** The web UI neither shows the
   sequential processes of a program nor keeps them when it saves the program.

@@ -134,8 +134,8 @@ def test_a_save_that_changes_the_output_directory_is_refused_while_the_old_one_r
 
 @pytest.mark.parametrize(
     "call",
-    [execution.validate_program, execution.check_program_options, execution.run_program],
-    ids=["validate", "check-options", "run"],
+    [execution.validate_program, execution.check_program_options, execution.run_program, execution.run_tests],
+    ids=["validate", "check-options", "run", "run-tests"],
 )
 def test_what_saves_before_running_is_refused_while_a_run_is_in_progress(tmp_path, running_in, call):
     program = _program(tmp_path)

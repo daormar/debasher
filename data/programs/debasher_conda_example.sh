@@ -77,8 +77,9 @@ conda_example()
     # Initialize variables
     local outf=$(read_opt_value_from_func_args "-outf" "$@")
 
-    # Activate conda environment
-    conda activate py27 || return 1
+    # Activate conda environment (conda_activate loads the shell functions
+    # of conda first if the shell running the process does not have them)
+    conda_activate py27 || return 1
 
     # Write python version to file
     python --version > "${outf}" 2>&1 || return 1

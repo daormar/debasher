@@ -445,7 +445,8 @@ directory: it watches ``WATCH_DIR`` (or the directory that the option
 port ``outrequests`` for every file whose name matches ``PATTERN``
 once the file is complete, that is, once its size and modification
 time stop changing. A module that only needs to set those attributes
-derives from it with no code of its own.
+derives from it with no code of its own. The :doc:`webui_watch_tally`
+shows a complete program with a ``DirectoryWatcher``, and its tests.
 
 Notices
 ^^^^^^^
@@ -584,3 +585,5 @@ of the repository. They were built with the web interface, and
    webui_running_sum
 
    webui_batch_launcher
+
+   webui_watch_tally

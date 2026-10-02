@@ -408,12 +408,22 @@ declare DEBASHER_PROGRAM_OUTDIR
 # the output directory (see debasher::_get_sched_opts_dir)
 declare DEBASHER_SCHED_OPTS_DIR
 
+# Declare variable that, when set, replaces the .conda directory of the
+# output directory, where the logs of the creation of conda environments
+# go (see debasher::_get_absolute_condadir): debasher_test, which has no
+# output directory, sets it
+declare DEBASHER_CONDA_DIR
+
 # Declare array to store file names of loaded modules
 declare -a DEBASHER_PROGRAM_MODULES
 
 # Declare array to store the file names of the modules being loaded, the
 # outermost first (see debasher::load_debasher_module)
 declare -a DEBASHER_MODULE_LOAD_STACK
+
+# Declare variable that, set to 1, makes debasher::load_debasher_module
+# load modules without saying so (see debasher_exec_process -q)
+DEBASHER_QUIET_MODULE_LOADING=0
 
 # Declare array to store, from the last module search, same-named
 # candidates found one level below a DEBASHER_MOD_DIR entry that were

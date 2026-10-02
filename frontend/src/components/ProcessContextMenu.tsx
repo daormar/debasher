@@ -62,6 +62,9 @@ interface Props {
   onSelect: (action: ProcessMenuAction) => void;
   onClose: () => void;
   nodeActions: NodeAction[];
+  // "Add test", which writes a test skeleton for the process, on a process
+  // that offers it (see offersAddTest).
+  onAddTest?: () => void;
   // An action of the canvas rather than of the execution of the process,
   // listed after the others: on the Supervisor, showing or hiding the
   // Supervisor wiring.
@@ -77,6 +80,7 @@ export default function ProcessContextMenu({
   onSelect,
   onClose,
   nodeActions,
+  onAddTest,
   canvasAction,
 }: Props) {
 
@@ -192,6 +196,29 @@ export default function ProcessContextMenu({
         </button>
 
       ))}
+
+      {onAddTest && (
+
+        <button
+
+          onClick={onAddTest}
+
+          disabled={isPending}
+
+          style={{
+            textAlign: "left",
+            padding: "8px 12px",
+            border: "none",
+            borderTop: "1px solid #eee",
+            background: "none",
+            cursor: "pointer",
+          }}
+
+        >
+          Add test
+        </button>
+
+      )}
 
       {canvasAction && (
 

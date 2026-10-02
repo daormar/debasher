@@ -1,5 +1,6 @@
 import * as execution from "../../src/api/executionApi";
 import * as processes from "../../src/api/processApi";
+import * as programFiles from "../../src/api/programFilesApi";
 import * as storage from "../../src/storage/programStorage";
 
 // The backend as the MCP server reaches it: the functions of the frontend's
@@ -17,6 +18,7 @@ export const httpBackend = {
   suggestNodes: processes.suggestNodes,
   getNodeInfo: processes.getNodeInfo,
   validateProgram: execution.validateProgram,
+  runTests: execution.runTests,
   checkProgramOptions: execution.checkProgramOptions,
   fetchProgramStatus: execution.fetchProgramStatus,
   getProcessStatuses: execution.getProcessStatuses,
@@ -37,6 +39,11 @@ export const httpBackend = {
   launchedWithNoHoldFifos: execution.launchedWithNoHoldFifos,
   writeResidentFifo: execution.writeResidentFifo,
   readResidentFifo: execution.readResidentFifo,
+  getFileTree: programFiles.getFileTree,
+  getFileContent: programFiles.getFileContent,
+  writeFileContent: programFiles.writeFileContent,
+  deleteEntry: programFiles.deleteEntry,
+  moveEntry: programFiles.moveEntry,
 };
 
 export type Backend = typeof httpBackend;

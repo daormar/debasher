@@ -410,6 +410,150 @@ describe("talking to a resident program", () => {
 
 });
 
+describe("business tests and user files", () => {
+
+  // The user files of the home directory, kept as the program files of the
+  // backend keep them, with its refusal of the generated script.
+  function withFiles(files: Record<string, string>, changes: Partial<Program> = {}) {
+    const writes: { path: string; create: boolean }[] = [];
+    const removed: string[] = [];
+    const moved: [string, string][] = [];
+    const backend = fakeBackend([program(changes)], {
+      deleteEntry: async (_homeDir: string, _programName: string, path: string) => {
+        removed.push(path);
+        return [];
+      },
+      moveEntry: async (_homeDir: string, _programName: string, from: string, to: string) => {
+        moved.push([from, to]);
+        return [];
+      },
+      getFileContent: async (_homeDir: string, path: string) =>
+        path in files ? { kind: "file" as const, content: files[path] } : { kind: "missing" as const },
+      writeFileContent: async (_homeDir: string, programName: string, path: string, content: string, create = false) => {
+        if (path === `${programName}.sh`) {
+          throw new Error("Cannot edit the program's generated script");
+        }
+        files[path] = content;
+        writes.push({ path, create });
+        return [];
+      },
+      getFileTree: async () => [
+        { name: "p.sh", path: "p.sh", type: "file" as const, readonly: true, children: null },
+        {
+          name: "test", path: "test", type: "dir" as const, readonly: false,
+          children: [{ name: "a.bats", path: "test/a.bats", type: "file" as const, readonly: false, children: null }],
+        },
+      ],
+    });
+    return { backend, files, writes, removed, moved };
+  }
+
+  it("runs the tests after saving the program, and says their outcome", async () => {
+    let tested: Program | null = null;
+    const backend = fakeBackend([program()], {
+      runTests: async (sent: Program) => {
+        tested = sent;
+        return { outcome: "failed" as const, output: "not ok 1 a works\n", revision: 2 };
+      },
+    });
+
+    const answer = await text(backend, "run_tests", { home_dir: HOME });
+
+    expect(answer).toContain("Some tests failed.");
+    expect(answer).toContain("not ok 1 a works");
+    expect(tested!.homeDir).toBe(HOME);
+  });
+
+  it("writes the test skeleton of a process", async () => {
+    const { backend, files, writes } = withFiles({});
+
+    const answer = await text(backend, "add_test", { home_dir: HOME, process: "a" });
+
+    expect(writes).toEqual([{ path: "test/a.bats", create: true }]);
+    expect(files["test/a.bats"]).toContain("run debasher_process a");
+    expect(answer).toContain("Wrote test/a.bats");
+  });
+
+  it("writes a test skeleton under another name", async () => {
+    const { backend, files } = withFiles({ "test/a.bats": "mine" });
+
+    expect(await text(backend, "add_test", { home_dir: HOME, process: "a", file_name: "a-edge-cases.bats" }))
+      .toContain("Wrote test/a-edge-cases.bats");
+    expect(files["test/a.bats"]).toBe("mine");
+  });
+
+  it("refuses a name that debasher_test would not run", async () => {
+    const { backend, writes } = withFiles({});
+
+    await expect(call(backend, "add_test", { home_dir: HOME, process: "a", file_name: "a.sh" }))
+      .rejects.toThrow("<name>.bats");
+    expect(writes).toEqual([]);
+  });
+
+  it("never overwrites a test that exists", async () => {
+    const { backend, writes } = withFiles({ "test/a.bats": "mine" });
+
+    await expect(call(backend, "add_test", { home_dir: HOME, process: "a" })).rejects.toThrow("test/a.bats exists");
+    expect(writes).toEqual([]);
+  });
+
+  it("refuses a node that the node harness does not build", async () => {
+    const sup = { ...process("Sup", []), nodeKind: "Supervisor" as const };
+    const { backend } = withFiles({}, { programType: "resident", processes: [sup] });
+
+    await expect(call(backend, "add_test", { home_dir: HOME, process: "Sup" })).rejects.toThrow("node harness");
+  });
+
+  it("lists, reads and writes the user files", async () => {
+    const { backend, files } = withFiles({ "test/a.bats": "@test x {}" });
+
+    expect(await text(backend, "list_program_files", { home_dir: HOME }))
+      .toBe("p.sh (generated script, read-only)\ntest/\n  a.bats");
+    expect(await text(backend, "read_program_file", { home_dir: HOME, path: "test/a.bats" })).toBe("@test x {}");
+    await expect(call(backend, "read_program_file", { home_dir: HOME, path: "nope" })).rejects.toThrow("does not exist");
+
+    await text(backend, "write_program_file", { home_dir: HOME, path: "test/data/in.txt", content: "1 2" });
+    expect(files["test/data/in.txt"]).toBe("1 2");
+  });
+
+  it("deletes a user file only when the call confirms it", async () => {
+    const { backend, removed } = withFiles({});
+
+    await expect(call(backend, "delete_program_file", { home_dir: HOME, path: "test/a.bats" }))
+      .rejects.toThrow("This deletes test/a.bats, which cannot be undone: call again with confirm.");
+    expect(removed).toEqual([]);
+
+    expect(await text(backend, "delete_program_file", { home_dir: HOME, path: "test/a.bats", confirm: true }))
+      .toBe("Deleted test/a.bats.");
+    expect(removed).toEqual(["test/a.bats"]);
+  });
+
+  it("says how many files a directory holds before deleting it", async () => {
+    const { backend } = withFiles({});
+
+    await expect(call(backend, "delete_program_file", { home_dir: HOME, path: "test" }))
+      .rejects.toThrow("the directory test and the 1 files in it");
+    await expect(call(backend, "delete_program_file", { home_dir: HOME, path: "nope" }))
+      .rejects.toThrow("nope does not exist");
+  });
+
+  it("moves a user file", async () => {
+    const { backend, moved } = withFiles({});
+
+    expect(await text(backend, "move_program_file", { home_dir: HOME, path: "test/a.bats", new_path: "test/b.bats" }))
+      .toBe("Moved test/a.bats to test/b.bats.");
+    expect(moved).toEqual([["test/a.bats", "test/b.bats"]]);
+  });
+
+  it("refuses to write the generated script, as the backend does", async () => {
+    const { backend } = withFiles({});
+
+    await expect(call(backend, "write_program_file", { home_dir: HOME, path: "p.sh", content: "" }))
+      .rejects.toThrow("generated script");
+  });
+
+});
+
 describe("the MCP server", () => {
 
   async function connected(backend: Backend) {

@@ -46,6 +46,39 @@ def resolve_within(home_dir: str, rel_path: str) -> Path:
     return candidate
 
 
+def resolve_entry_within(home_dir: str, rel_path: str) -> Path:
+    """
+    Resolves `rel_path` against `home_dir` as resolve_within does, except
+    for its last component, which is left as it is: the path of the entry
+    itself, for deleting, renaming or moving it, so that a symbolic link is
+    removed or moved as a link, never the file or directory it points to.
+    Everything above the entry is resolved, and has to stay inside
+    `home_dir`, so a link can only be reached from inside it, and removing
+    or moving it never touches what it points to.
+
+    Raises ValueError, as resolve_within does, and for a path whose last
+    component names no entry ("..").
+    """
+    if not rel_path:
+        raise ValueError("path must not be empty")
+
+    relative = Path(rel_path)
+    if relative.is_absolute():
+        raise ValueError(f"{rel_path!r} must be a relative path")
+    if relative.name in ("", ".."):
+        raise ValueError(f"{rel_path!r} does not name an entry of the program's home directory")
+    if persistence.is_reserved_name(relative.name):
+        raise ValueError(f"{rel_path!r} refers to a reserved DeBasher file or directory")
+
+    return resolve_within(home_dir, str(relative.parent)) / relative.name
+
+
+def _lexists(path: Path) -> bool:
+    """Whether `path` exists, a symbolic link counting even when it points
+    nowhere."""
+    return path.exists() or path.is_symlink()
+
+
 def _is_protected_script(target: Path, home: Path, program_name: str) -> bool:
     """
     True for the program's own generated `<programName>.sh`, and only
@@ -203,14 +236,20 @@ class WriteContentRequest(BaseModel):
     programName: str
     path: str
     content: str
+    # Whether a file that does not exist is created, with the directories
+    # above it, as "Add test" and the MCP server need; without it, only an
+    # existing file is written, as the panel's editor does.
+    create: bool = False
 
 
 @router.post("/write-content", response_model=FileTreeResponse)
 def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
     """
     Overwrites an existing file's content, for the panel's in-place
-    editor. Refuses the protected `<programName>.sh` and any path that
-    doesn't already name a file: this isn't a way to create one.
+    editor, or, with `create`, also creates a file that does not exist,
+    with the directories above it. Refuses the protected
+    `<programName>.sh`, and, without `create`, any path that doesn't
+    already name a file. A path that names a directory is always refused.
     """
     if not request.path:
         raise HTTPException(status_code=400, detail="path must not be empty")
@@ -226,10 +265,13 @@ def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
             status_code=400, detail="Cannot edit the program's generated script"
         )
 
-    if not target.is_file():
+    if target.is_dir():
+        raise HTTPException(status_code=400, detail=f"{request.path!r} is a directory")
+    if not target.is_file() and not request.create:
         raise HTTPException(status_code=404, detail=f"{request.path!r} does not exist")
 
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(request.content)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Could not write {request.path!r}: {e}")
@@ -245,11 +287,8 @@ class DeleteRequest(BaseModel):
 
 @router.post("/delete", response_model=FileTreeResponse)
 def delete_entry(request: DeleteRequest) -> FileTreeResponse:
-    if not request.path:
-        raise HTTPException(status_code=400, detail="path must not be empty")
-
     try:
-        target = resolve_within(request.homeDir, request.path)
+        target = resolve_entry_within(request.homeDir, request.path)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 
@@ -259,7 +298,7 @@ def delete_entry(request: DeleteRequest) -> FileTreeResponse:
             status_code=400, detail="Cannot delete the program's generated script"
         )
 
-    if not target.exists():
+    if not _lexists(target):
         raise HTTPException(status_code=404, detail=f"{request.path!r} does not exist")
 
     try:
@@ -291,8 +330,8 @@ def move_entry(request: MoveRequest) -> FileTreeResponse:
         raise HTTPException(status_code=400, detail="srcPath and dstPath must not be empty")
 
     try:
-        src = resolve_within(request.homeDir, request.srcPath)
-        dst = resolve_within(request.homeDir, request.dstPath)
+        src = resolve_entry_within(request.homeDir, request.srcPath)
+        dst = resolve_entry_within(request.homeDir, request.dstPath)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 
@@ -304,10 +343,10 @@ def move_entry(request: MoveRequest) -> FileTreeResponse:
             status_code=400, detail="Cannot move the program's generated script"
         )
 
-    if not src.exists():
+    if not _lexists(src):
         raise HTTPException(status_code=404, detail=f"{request.srcPath!r} does not exist")
 
-    if dst.exists():
+    if _lexists(dst):
         raise HTTPException(status_code=400, detail=f"{request.dstPath!r} already exists")
 
     try:

@@ -31,6 +31,7 @@ import type {
   ResetProgramStateResult,
   RunProgramResult,
   StopResult,
+  TestOutcome,
 } from "../api/executionApi";
 import type { GeneralRunPhase } from "../models/generalRun";
 import type { ResidentRunPhase } from "../models/residentRun";
@@ -111,6 +112,10 @@ interface ProgramContextType {
   validateProgram: () => Promise<string>;
 
   checkProgramOptions: () => Promise<string>;
+
+  // "Run tests": saves the program first, and answers with the test outcome
+  // and the reports of the tests.
+  runTests: () => Promise<{ outcome: TestOutcome; output: string }>;
 
   // The run phase of a resident program, derived from processStatuses,
   // from whether the output directory holds program state, and from a
@@ -399,6 +404,7 @@ export function ProgramProvider({
     startProgramRun,
     validateProgram,
     checkProgramOptions,
+    runTests,
     stopRun,
     killResidentProgram,
     resetOutputDir,
@@ -663,6 +669,8 @@ export function ProgramProvider({
     validateProgram,
 
     checkProgramOptions,
+
+    runTests,
 
     runEndSeen,
 

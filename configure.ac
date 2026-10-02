@@ -101,18 +101,24 @@ else
    AC_MSG_RESULT([yes, $bash_major_version.$bash_minor_version])
 fi
 
-# Check conda (conda is defined as a function so AC_PATH_PROGS may be
-# inadequate for checking)
-AC_MSG_CHECKING(for conda)
-if command -v conda > /dev/null 2>&1; then
-  AC_MSG_RESULT(yes)
-else
-  if ! test -z "$_CONDA_EXE"; then
-    AC_MSG_RESULT(yes)
-  else
-    AC_MSG_RESULT(no)
-    AC_MSG_WARN([conda may not be available, check that there is a working conda installation])
-  fi
+# Check conda: its executable, from which debasher::conda_activate loads
+# the shell functions of conda when a shell does not have them. It is the
+# one given with ./configure CONDA=..., or else the one that the conda
+# shell functions of this shell point to (CONDA_EXE, or _CONDA_EXE in
+# older versions), or else the first conda program in the PATH. conda
+# itself is usually a shell function, which a program search cannot see.
+AC_ARG_VAR([CONDA], [conda executable, from which processes load the shell functions of conda])
+if test -z "$CONDA"; then
+  for conda_candidate in "$CONDA_EXE" "$_CONDA_EXE"; do
+    if test -n "$conda_candidate" && test -x "$conda_candidate"; then
+      CONDA=$conda_candidate
+      break
+    fi
+  done
+fi
+AC_PATH_PROGS(CONDA, conda)
+if test -z "$CONDA"; then
+  AC_MSG_WARN([conda was not found: a process cannot activate a conda environment; give it with ./configure CONDA=<conda executable>])
 fi
 
 # Check that docker is available

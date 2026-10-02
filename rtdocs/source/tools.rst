@@ -32,7 +32,7 @@ debasher_exec_process
 
 ::
 
-    $ debasher_exec_process <prgfile> <processname> [-- [<process_opts>]]
+    $ debasher_exec_process [-q] <prgfile> <processname> [-- [<process_opts>]]
 
 ``debasher_exec_process`` loads the module given by ``<prgfile>`` and
 executes a single one of its processes, ``<processname>``, directly in
@@ -45,7 +45,105 @@ mainly useful to debug a process implementation in isolation.
   it) and exits.
 
 * If ``--`` is given, everything after it is passed as the process's
-  own command line options, and the process is executed.
+  own command line options, and the process is executed. The tool
+  then exits with the exit status of the process.
+
+* ``-q`` drops the progress messages of the tool (such as the
+  ``Loading module ...`` lines), so that the standard error holds only
+  what the process and the module write, and the errors.
+
+debasher_test
+^^^^^^^^^^^^^
+
+::
+
+    $ debasher_test [--conda-support] [--docker-support] <prgdir>
+
+``debasher_test`` runs the business tests of a program: tests of what
+each process does with the values of its options, run on its own
+with ``debasher_exec_process``, outside any run. It applies to a
+program in a directory of its own, ``<prgdir>``, of any name. For a
+program saved by the web UI, the program file is the script named
+after the program in its metadata (``.debasher/program.json``); for a
+program written by hand, it is the only ``*.sh`` file at the top of
+``<prgdir>``, and the tool refuses a directory with several. The tests are the
+files ``<prgdir>/test/*.bats``, which the tool runs with bats, and, for
+the nodes of a resident program, the files ``<prgdir>/test/test_*.py``,
+which it runs with pytest.
+
+A bats test loads the helper library whose path the tool exports as
+``DEBASHER_BATS_HELPERS``, and runs a process with
+``debasher_process <processname> [<process_opts>]``. Since no output
+directory is involved, the test gives every option the process reads,
+with the files it writes placed under the temporary directory of the
+test. For example, for a process ``greet`` that writes a greeting
+into the file given by ``-outf``::
+
+    load "${DEBASHER_BATS_HELPERS}"
+
+    @test "greet writes the greeting into its file" {
+        run debasher_process greet -text Ann -secs 0 \
+            -outf "${BATS_TEST_TMPDIR}/greeting.txt"
+        [ "${status}" -eq 0 ]
+        [ "$(cat "${BATS_TEST_TMPDIR}/greeting.txt")" = "Hello, Ann!" ]
+    }
+
+A node of a resident program is tested without running it: no FIFO is
+opened and no ``Supervisor`` is involved. A pytest test builds the node
+with ``load_node`` of the module ``debasher_runtime_testing``, naming
+the ports whose traffic it checks, gives it packets with ``feed`` and
+reads what it sent on a port with ``sent``. ``restart`` builds the node
+again from its node state, as recovery after a crash does, and fails
+when the restored node does not capture the same state. For example,
+for a node ``Accumulate`` that sends the running sum of the numbers it
+receives::
+
+    from debasher_runtime_testing import load_node
+
+    def test_running_sum():
+        node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+        node.feed("numbers", 3)
+        node.feed("numbers", 4)
+        assert node.sent("outsum") == [3, 7]
+
+    def test_restart_keeps_the_sum():
+        node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+        node.feed("numbers", 3)
+        node = node.restart()
+        node.feed("numbers", 4)
+        assert node.sent("outsum") == [7]
+
+``load_node`` also takes ``opts``, the options of the node by name.
+A node that observes the outside world, such as a
+``DirectoryWatcher``, is tested with ``observe``: it runs the
+``observe`` method of the node once and returns what it brought in,
+which the node then processes as in a run. The test can change the
+outside world between two calls, for example put a file in the
+directory that a ``DirectoryWatcher`` watches (given with
+``opts={"watchdir": ...}``) and observe twice, since a file counts
+only once it has stayed the same for two observations in a row. A
+``ProgramLauncher`` and the ``Supervisor`` cannot be tested this way.
+
+A process that activates a Conda environment runs in it in a test as
+in a run. ``--conda-support`` and ``--docker-support`` create the Conda
+environments and pull the Docker images that the processes declare
+before the tests, as ``debasher_exec`` does before a run with the same
+options; without them, they have to exist already, and a test of such
+a process starts with ``debasher_skip_without_conda_env <name>``, which
+skips it, with its reason, where conda or the environment is missing.
+**Run tests** in the web interface passes those options when the
+program has conda or docker support.
+
+The exit status of ``debasher_test`` is 0 when every test passed, 1
+when a test failed, 2 when the tests could not be run (for instance,
+``<prgdir>`` has no program file, or bats or pytest is not installed)
+and 77 when the program has no tests. ``DEBASHER_BATS`` and
+``DEBASHER_PYTEST`` give the bats and the pytest to run instead of
+those found when DeBasher was configured. Running the tests writes
+nothing into ``<prgdir>``. The programs ``webui_batch_greet`` (bats
+tests), ``webui_running_sum`` and ``webui_watch_tally`` (pytest
+tests, the second of a ``DirectoryWatcher``), installed under
+``<prefix>/share/debasher/webui_programs``, carry examples.
 
 debasher_proc_dataset
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -364,7 +462,9 @@ debasher_mcp
 
 ``debasher_mcp`` runs the MCP server of DeBasher, which offers to an AI
 agent, such as Claude Code, what the web interface offers to a person:
-reading a program, editing it, running it and following its run, as tools
+reading a program, editing it, running it and following its run,
+writing and running its business tests (see `debasher_test`_), and
+managing the files of its home directory, as tools
 of the Model Context Protocol. The agent starts it and talks to it over its
 standard input and output. It is a client of the server that
 ``debasher_webui`` launches, which has to be running, and it edits programs

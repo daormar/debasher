@@ -74,6 +74,9 @@ import BatchRunsModal from "./BatchRunsModal";
 import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
 import ProgramFilesPanel from "./ProgramFilesPanel";
+import type { OpenFileRequest } from "./ProgramFilesPanel";
+import AddTestDialog from "./AddTestDialog";
+import { offersAddTest } from "../models/testSkeleton";
 import CanvasLegend from "./CanvasLegend";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
@@ -384,6 +387,14 @@ export default function ProgramCanvas() {
   // Right-click "Inspect execution" menu, see ProcessContextMenu.
   const [processContextMenu, setProcessContextMenu] =
     useState<{ process: ProgramProcess; x: number; y: number } | null>(null);
+
+  // The file that the program files panel is asked to open, after "Add test"
+  const [filesPanelRequest, setFilesPanelRequest] =
+    useState<OpenFileRequest | null>(null);
+
+  // The process whose "Add test" dialog is open
+  const [addTestOf, setAddTestOf] =
+    useState<ProgramProcess | null>(null);
 
   const [isProcessOutputPending, setProcessOutputPending] =
     useState(false);
@@ -779,6 +790,22 @@ export default function ProgramCanvas() {
 
   }
 
+  // "Add test": asks which file to write (see AddTestDialog), which then
+  // opens in the program files panel. The file goes into the home
+  // directory, so the program has to have been saved.
+  function handleAddTest(process: ProgramProcess) {
+
+    setProcessContextMenu(null);
+
+    if (!program.homeDir.trim()) {
+      setProcessCommandOutput({ title: `${process.name}: add test`, output: "Save the program before adding a test." });
+      return;
+    }
+
+    setAddTestOf(process);
+
+  }
+
   // The inspection actions of a node of a resident program, enabled once the
   // node has been launched, whatever the run phase.
   function residentInspectionsOf(process: ProgramProcess): ResidentInspection[] {
@@ -896,7 +923,7 @@ export default function ProgramCanvas() {
         <MiniMap />
 
         <Panel position="top-left">
-          <ProgramFilesPanel />
+          <ProgramFilesPanel openRequest={filesPanelRequest} />
         </Panel>
 
         <Panel position="top-right">
@@ -936,6 +963,11 @@ export default function ProgramCanvas() {
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
           nodeActions={nodeActionsOf(processContextMenu.process)}
+          onAddTest={
+            offersAddTest(program, processContextMenu.process)
+              ? () => handleAddTest(processContextMenu.process)
+              : undefined
+          }
           canvasAction={
             program.programType === "resident" &&
             processContextMenu.process.nodeKind === "Supervisor"
@@ -948,6 +980,18 @@ export default function ProgramCanvas() {
                 }
               : undefined
           }
+        />
+      )}
+
+      {addTestOf && (
+        <AddTestDialog
+          program={program}
+          process={addTestOf}
+          onOpen={(path, notice) => {
+            setFilesPanelRequest({ path, notice, nonce: Date.now() });
+            setAddTestOf(null);
+          }}
+          onClose={() => setAddTestOf(null)}
         />
       )}
 

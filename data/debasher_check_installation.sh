@@ -25,12 +25,12 @@ print_skipped_check()
 }
 
 ########
-# Whether conda can activate an environment here, as the conda example
-# does: a conda command is not enough, conda has to be set up in the shell
-# (conda init). Tried in a subshell, which leaves this one as it was.
+# Whether a process can activate a conda environment here: configure found
+# a conda executable, from which conda_activate loads the shell functions
+# of conda, whatever this shell has.
 conda_is_usable()
 {
-    ( conda activate base && conda deactivate ) > /dev/null 2>&1
+    test -n "${CONDA}" && test -x "${CONDA}"
 }
 
 ########
@@ -108,6 +108,158 @@ check_program_file()
             echo ""
             exit 1
     esac
+}
+
+########
+# Runs the resident program of the module `pfile`, whose DirectoryWatcher
+# watches a directory of its own given with -watchdir, writes the file
+# `file_name` there (under a hidden name first, so that it is complete once
+# it appears), and checks that `expected_payload` comes out of the output
+# FIFO `output_fifo`; then stops the program in order and checks that every
+# process finished.
+check_watched_program()
+{
+    local tmpdir=$1
+    local pfile=$2
+    local outdirname=$3
+    local file_name=$4
+    local output_fifo=$5
+    local expected_payload=$6
+    local outdir="${tmpdir}/${outdirname}"
+    local watchdir="${tmpdir}/${outdirname}_watched"
+    local status_out="${tmpdir}/${outdirname}_status.out"
+    local output_file="${tmpdir}/${outdirname}_output.out"
+    local timeout_secs=30
+    local ret=0
+
+    echo -n "## Checking $("${BASENAME}" "${pfile}") (resident) ... "
+
+    "${MKDIR}" -p "${watchdir}"
+    "${debasher_bindir}/debasher_exec" --pfile "${pfile}" \
+                                       --outdir "${outdir}" \
+                                       -watchdir "${watchdir}" \
+                                       > "${tmpdir}/${outdirname}_exec.out" 2>&1 || ret=1
+
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "inprogress" ${timeout_secs} "${status_out}" || ret=124
+    fi
+
+    local reader_pid=""
+    if test $ret -eq 0 ; then
+        local output_path=$("${FIND}" "${outdir}/__fifos__" -name "${output_fifo}")
+        "${CAT}" "${output_path}" > "${output_file}" &
+        reader_pid=$!
+
+        echo "a line" > "${watchdir}/.${file_name}"
+        "${MV}" "${watchdir}/.${file_name}" "${watchdir}/${file_name}"
+
+        ret=124
+        local i
+        for ((i = 0; i < timeout_secs; i++)); do
+            if "${GREP}" -q -F "\"payload\": ${expected_payload}}" "${output_file}" 2>/dev/null; then
+                ret=0
+                break
+            fi
+            "${SLEEP}" 1
+        done
+    fi
+
+    "${debasher_bindir}/debasher_stop_resident" -d "${outdir}" --timeout ${timeout_secs} \
+                                                > "${tmpdir}/${outdirname}_stop.out" 2>&1
+    if test $? -ne 0 && test $ret -eq 0 ; then
+        ret=1
+    fi
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "finished" ${timeout_secs} "${status_out}" || ret=1
+    fi
+
+    if test -n "${reader_pid}" ; then
+        kill "${reader_pid}" 2>/dev/null
+        wait "${reader_pid}" 2>/dev/null
+    fi
+
+    case $ret in
+        0)
+            echo "OK"
+            ;;
+        124)
+            echo "Timed Out"
+            ;;
+        *)
+            echo "Failed"
+            ;;
+    esac
+    echo ""
+    return $ret
+}
+
+########
+# Runs debasher_test on the program directory `prgdir`, with the options
+# `test_opts` if given, which passes when every test passes or the program
+# has none. The check is skipped when configure did not find the tool of a
+# kind of test that the program has.
+check_business_tests()
+{
+    local tmpdir=$1
+    local prgdir=$2
+    local test_opts=$3
+    local name=$("${BASENAME}" "${prgdir}")
+
+    local tool
+    for tool in bats pytest; do
+        local pattern="*.bats" path="${BATS}"
+        if [ "${tool}" = "pytest" ]; then
+            pattern="test_*.py"
+            path="${PYTEST}"
+        fi
+        if [ -z "${path}" ] && [ -n "$("${FIND}" "${prgdir}/test" -maxdepth 1 -name "${pattern}" 2> /dev/null)" ]; then
+            echo "## Checking the business tests of ${name} ... Skipped (${tool} not found)"
+            echo ""
+            return 2
+        fi
+    done
+
+    echo -n "## Checking the business tests of ${name}${test_opts:+ (${test_opts})} ... "
+    local test_out="${tmpdir}/${name}_test.out"
+    "${debasher_bindir}/debasher_test" ${test_opts} "${prgdir}" > "${test_out}" 2>&1
+    case $? in
+        0)
+            echo "OK"
+            echo ""
+            return 0
+            ;;
+        77)
+            echo "OK (no tests)"
+            echo ""
+            return 0
+            ;;
+        *)
+            echo "Failed"
+            echo ""
+            return 1
+            ;;
+    esac
+}
+
+########
+# Checks that debasher_test refuses the directory `dir`, which is not a
+# program directory, with the status of tests that could not be run
+check_business_tests_refused()
+{
+    local tmpdir=$1
+    local dir=$2
+
+    echo -n "## Checking that debasher_test refuses a directory that is not a program directory ... "
+    "${debasher_bindir}/debasher_test" "${dir}" > "${tmpdir}/debasher_test_refused.out" 2>&1
+    if [ $? -eq 2 ]; then
+        echo "OK"
+        echo ""
+        return 0
+    else
+        echo "Failed"
+        echo ""
+        return 1
+    fi
 }
 
 ########
@@ -777,7 +929,7 @@ if conda_is_usable; then
             ;;
     esac
 else
-    print_skipped_check "${progname}" "conda not found or not set up in the shell"
+    print_skipped_check "${progname}" "conda not found"
     ((checks_skipped++))
 fi
 
@@ -937,6 +1089,109 @@ case $? in
         ((checks_timedout++))
         ;;
 esac
+
+# Check webui_conda_example, a general program whose process activates a
+# conda environment, which the run creates if it does not exist
+progname="webui_conda_example"
+if conda_is_usable; then
+    sched="BUILTIN"
+    bs_cpus=1
+    bs_mem=256
+    check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                       "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" ""
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+else
+    print_skipped_check "${progname}" "conda not found"
+    ((checks_skipped++))
+fi
+
+# Check webui_watch_tally, a resident program with a DirectoryWatcher: a
+# text file that arrives in the watched directory is the first one counted
+progname="webui_watch_tally"
+check_watched_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                      "${progname}" "first.txt" "tally" '{"run": "first", "seen": 1}'
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Checks of the business tests of the programs built with the web UI,
+# which debasher_test runs on each program as installed
+echo "# Checks of the business tests"
+echo ""
+
+for prgdir in "${debasher_datadir}"/webui_programs/*/; do
+    check_business_tests "${tmpdir}" "${prgdir%/}"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        2)
+            ((checks_skipped++))
+            ;;
+    esac
+done
+
+# A program directory need not have the name of its program: the copy of
+# webui_batch_greet under another name is still found through its
+# metadata
+renamed_prgdir="${tmpdir}/greet_under_another_name"
+"${CP}" -r "${debasher_datadir}/webui_programs/webui_batch_greet" "${renamed_prgdir}"
+check_business_tests "${tmpdir}" "${renamed_prgdir}"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    2)
+        ((checks_skipped++))
+        ;;
+esac
+
+# The test runner prepares the conda environments of a program before its
+# tests when asked to, as a run does
+if conda_is_usable; then
+    check_business_tests "${tmpdir}" "${debasher_datadir}/webui_programs/webui_conda_example" "--conda-support"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        2)
+            ((checks_skipped++))
+            ;;
+    esac
+fi
+
+if check_business_tests_refused "${tmpdir}" "${tmpdir}"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check execution using SLURM if available: SBATCH is the name of the tool,
 # looked for in the PATH when the program runs, as the engine does

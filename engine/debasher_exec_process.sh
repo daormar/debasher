@@ -23,12 +23,32 @@
 print_desc()
 {
     echo "debasher_exec_process executes a program process"
-    echo "Usage: debasher_exec_process <prgfile> <processname> [-- [<process_opts>] ]"
+    echo "Usage: debasher_exec_process [-q] <prgfile> <processname> [-- [<process_opts>] ]"
     echo "Notes: if \`[-- [<process_opts>] ]\` is not given, the tool shows process information and exits"
     echo "       a relative <prgfile> is looked for in the current directory and then in the directories of DEBASHER_MOD_DIR"
+    echo "       -q drops the progress messages of the tool, so that the standard error holds only what the"
+    echo "       module and the process write, and errors"
+    echo "       when the process is executed, the tool exits with the status of the process function"
 }
 
 ########
+# Prints a progress message of the tool on the standard error, unless -q
+# was given
+_exec_process_progress()
+{
+    if [ "${_exec_process_quiet}" -eq 0 ]; then
+        echo "$@" >&2
+    fi
+}
+
+########
+
+_exec_process_quiet=0
+if [ "${1:-}" = "-q" ]; then
+    _exec_process_quiet=1
+    DEBASHER_QUIET_MODULE_LOADING=1
+    shift
+fi
 
 if [ $# -lt 2 ]; then
     print_desc
@@ -42,16 +62,16 @@ shift
 processname=$1
 shift
 
-echo "Loading debasher modules..." >&2
+_exec_process_progress "Loading debasher modules..."
 debasher::load_debasher_module "${pfile}" || exit 1
-echo "" >&2
+_exec_process_progress ""
 
-echo "Executing program function given in module..." >&2
+_exec_process_progress "Executing program function given in module..."
 debasher::_exec_program_func_for_module "${pfile}" >&2
-echo "" >&2
+_exec_process_progress ""
 
 if [ $# -eq 0 ]; then
-    echo "Showing documentation for process ${processname}..." >&2
+    _exec_process_progress "Showing documentation for process ${processname}..."
     showmeths=0
     showmethswithcode=0
     showvars=0
@@ -64,8 +84,11 @@ if [ $# -eq 0 ]; then
 else
     if [ "$1" = "--" ]; then
         shift
-        echo "Executing: ${processname} $*" >&2
-        "${processname}" "$@" || exit 1
+        _exec_process_progress "Executing: ${processname} $*"
+        # The status of the process function, so that a caller (such as a
+        # process test) can tell one failure of the process from another
+        "${processname}" "$@"
+        exit $?
     else
         print_desc >&2
         exit 1

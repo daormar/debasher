@@ -1,0 +1,265 @@
+{
+  "id": "e993db0f-6d90-44b3-b497-587c46a9abbb",
+  "name": "webui_watch_tally",
+  "programType": "resident",
+  "description": "Example built with the web UI: a resident program whose DirectoryWatcher watches the directory given by -watchdir and, for each text file there once it is complete, has a node count the files seen so far and write the count out.",
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": false,
+    "dockerSupport": false,
+    "snapshotEverySecs": ""
+  },
+  "programOptions": {},
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "0dd263b4-2fe1-46e9-b829-f2b665d1ab1e",
+      "name": "Watch",
+      "description": "Watches the directory given by -watchdir and sends a request for each text file there, once it is complete.",
+      "position": {
+        "x": 100.0,
+        "y": 100.0
+      },
+      "options": [
+        {
+          "id": "b5b2e768-61c1-4403-8be9-78bd0136cd7b",
+          "label": "-watchdir",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "none",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "directory to watch, given on the command line",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "b9ada8e5-7f82-40fd-b7d8-e94458f62f88",
+          "label": "-outrequests",
+          "direction": "output",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "one request for each complete text file",
+          "value": "requests",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "DirectoryWatcher",
+      "initiator": true,
+      "nodeCode": {
+        "preamble": "",
+        "classBody": "# Only text files count; a file whose name starts with a dot never does.\nPATTERN = \"*.txt\"",
+        "processData": "",
+        "captureNodeState": "",
+        "restoreNodeState": "",
+        "initializeRuntime": "",
+        "observe": ""
+      }
+    },
+    {
+      "id": "a344c92e-544a-442d-8993-344b359b593d",
+      "name": "Tally",
+      "description": "Counts the files requested so far, and writes the count out with the name of each file.",
+      "position": {
+        "x": 100.0,
+        "y": 260.0
+      },
+      "options": [
+        {
+          "id": "a222c841-cb86-43bf-a333-7c7b9ac1921b",
+          "label": "-inrequests",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "none",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "the requests of Watch",
+          "value": "[Watch;-outrequests]",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        },
+        {
+          "id": "2d1b700b-8de9-496c-86bf-d51a8407dce3",
+          "label": "-outtally",
+          "direction": "output",
+          "dataType": "string",
+          "channel": "fifo",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "the name of each file with the number of files seen so far, read outside the program",
+          "value": "tally",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "FBPProcess",
+      "initiator": false,
+      "nodeCode": {
+        "preamble": "",
+        "classBody": "def __init__(self):\n    super().__init__()\n    # The node state: how many files have been requested so far.\n    self.seen = 0",
+        "processData": "self.seen += 1\nself.send_data(\"outtally\", {\"run\": packet[\"run\"], \"seen\": self.seen})",
+        "captureNodeState": "return {\"seen\": self.seen}",
+        "restoreNodeState": "self.seen = node_state[\"seen\"]",
+        "initializeRuntime": "pass",
+        "observe": ""
+      }
+    },
+    {
+      "id": "dc8cc5a7-c40d-43a1-a8de-9ce11ff3d0d8",
+      "name": "Sup",
+      "description": "Watches Watch and Tally and relaunches them if they go down.",
+      "position": {
+        "x": 320.0,
+        "y": 100.0
+      },
+      "options": [],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": "Supervisor",
+      "initiator": false,
+      "nodeCode": null
+    }
+  ],
+  "seqProcesses": [],
+  "edges": [
+    {
+      "id": "25695049-8fb1-4185-af47-fdbe1cfb27db",
+      "sourceProcessId": "0dd263b4-2fe1-46e9-b829-f2b665d1ab1e",
+      "sourceOptionId": "b9ada8e5-7f82-40fd-b7d8-e94458f62f88",
+      "targetProcessId": "a344c92e-544a-442d-8993-344b359b593d",
+      "targetOptionId": "a222c841-cb86-43bf-a333-7c7b9ac1921b"
+    }
+  ]
+}
