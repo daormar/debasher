@@ -1025,6 +1025,24 @@ for prgdir in "${debasher_datadir}"/webui_programs/*/; do
     esac
 done
 
+# A program directory need not have the name of its program: the copy of
+# webui_batch_greet under another name is still found through its
+# metadata
+renamed_prgdir="${tmpdir}/greet_under_another_name"
+"${CP}" -r "${debasher_datadir}/webui_programs/webui_batch_greet" "${renamed_prgdir}"
+check_business_tests "${tmpdir}" "${renamed_prgdir}"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    2)
+        ((checks_skipped++))
+        ;;
+esac
+
 if check_business_tests_refused "${tmpdir}" "${tmpdir}"; then
     ((checks_passed++))
 else

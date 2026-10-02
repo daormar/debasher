@@ -294,10 +294,12 @@ program" (node, packet, node state, envelope) have the meaning that
 
 - **business test**: a test of the business logic of one process: what the
   process does with the values of its options, run on its own, outside any run.
-- **program directory**: a directory whose base name is `<name>` and that holds
-  the program file `<name>.sh`. The home directory of a program that the web UI
-  creates is one (see `doc/design_doc_webui.md`). Only a program in a program
-  directory has business tests.
+- **program directory**: a directory, of any name, that holds a program and
+  its tests: the program file is `<name>.sh` at its top, where `<name>` is the
+  name of the program that the program metadata of the web UI gives, or,
+  without that metadata, the only `*.sh` file at its top. The home directory of
+  a program of the web UI is one (see `doc/design_doc_webui.md`). Only a
+  program in a program directory has business tests.
 - **test directory**: `test` inside a program directory, which holds the test
   files of the program and the data that they read.
 - **process test**: a test, written in a bats file `*.bats` of the test
@@ -1802,10 +1804,26 @@ tool with the programs that it ships.
 ## The test directory
 
 Business tests are offered only to a program in a program directory: a
-directory whose base name is `<name>` and that holds the program file
-`<name>.sh`, which is how the web UI lays out every program it creates (see
-`doc/design_doc_webui.md`). The tests of the program are in its test
-directory, `test` inside the program directory, as test files of two kinds:
+directory, of any name, that holds a program and its tests. Its program file
+is found in one of two ways:
+
+- When the directory holds program metadata of the web UI
+  (`.debasher/program.json`, see "The home directory" in
+  `doc/design_doc_webui.md`), the program file is `<name>.sh`, where `<name>`
+  is the top-level `name` field of that metadata, after which the web UI names
+  the script that it generates. The name of the directory does not matter,
+  since the user chooses it, and a program renamed after its first save keeps
+  its directory. The metadata is read as JSON
+  (`debasher::_get_ui_program_name`), since the processes and options of the
+  program have `name` fields too.
+- Otherwise, for a program written by hand, the program file is the only
+  `*.sh` file at the top of the directory. A directory with none, or with
+  several, is not a program directory: other scripts, such as the external
+  script of an alias or a helper of the user, may live beside the program, and
+  the runner does not guess which one is the program.
+
+The tests of the program are in its test directory, `test` inside the program
+directory, as test files of two kinds:
 
 - `*.bats`, process tests, run with bats;
 - `test_*.py`, node tests, run with pytest.
@@ -1934,7 +1952,9 @@ runs `debasher_test` on every program of `data/webui_programs` and fails on
 any status other than 0 or 77. When `configure` did not find the tool of a kind
 of test that a program has, the check does not run the test runner on that
 program, and says that its tests are skipped. It also checks that the test
-runner refuses, with status 2, a directory that is not a program directory.
+runner finds the program of a copy of `webui_batch_greet` in a directory of
+another name, and that it refuses, with status 2, a directory that is not a
+program directory.
 
 This checks, once DeBasher is installed, that the test runner, the test
 helpers and the node harness work as installed, which no test of `make check`

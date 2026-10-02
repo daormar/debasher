@@ -62,9 +62,11 @@ debasher_test
 ``debasher_test`` runs the business tests of a program: tests of what
 each process does with the values of its options, run on its own
 with ``debasher_exec_process``, outside any run. It applies to a
-program in a directory of its own, ``<prgdir>``, whose base name
-``<name>`` is also the name of its program file, ``<name>.sh`` (the
-layout of every program that the web UI creates). The tests are the
+program in a directory of its own, ``<prgdir>``, of any name. For a
+program saved by the web UI, the program file is the script named
+after the program in its metadata (``.debasher/program.json``); for a
+program written by hand, it is the only ``*.sh`` file at the top of
+``<prgdir>``, and the tool refuses a directory with several. The tests are the
 files ``<prgdir>/test/*.bats``, which the tool runs with bats, and, for
 the nodes of a resident program, the files ``<prgdir>/test/test_*.py``,
 which it runs with pytest.

@@ -106,6 +106,37 @@ debasher::_is_ui_program_dir()
 }
 
 ########
+# Echoes the name of the program whose metadata the DeBasher UI keeps in
+# the directory `dir`: the top-level "name" field of
+# .debasher/program.json, after which the UI names the script of the
+# program, <name>.sh, whatever the name of the directory. Read as JSON,
+# since the processes and options of the program have "name" fields too.
+# Returns 1, with no output, when the directory has no such metadata or
+# the name cannot be read from it.
+debasher::_get_ui_program_name()
+{
+    local dir=$1
+
+    local metadata_fname=$(debasher::_get_ui_program_metadata_fname "${dir}")
+
+    [ -f "${metadata_fname}" ] || return 1
+
+    "${PYTHON}" -c '
+import json
+import sys
+
+try:
+    with open(sys.argv[1]) as f:
+        name = json.load(f).get("name")
+except (OSError, ValueError, AttributeError):
+    sys.exit(1)
+if not isinstance(name, str) or not name:
+    sys.exit(1)
+print(name)
+' "${metadata_fname}" 2> /dev/null
+}
+
+########
 debasher::_search_mod_in_immediate_subdirs()
 {
     # $1 - parent directory (an entry from DEBASHER_MOD_DIR, or the
