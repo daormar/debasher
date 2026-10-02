@@ -12,6 +12,7 @@ webui_batch_launcher/.debasher/program.json			\
 webui_fifo_sum/webui_fifo_sum.sh				\
 webui_fifo_sum/.debasher/program.json				\
 webui_running_sum/webui_running_sum.sh				\
-webui_running_sum/.debasher/program.json
+webui_running_sum/.debasher/program.json			\
+webui_running_sum/test/test_accumulate.py
 
 EXTRA_DIST = $(nobase_webuiprg_DATA)

@@ -507,8 +507,8 @@ prepared and never in a task. Besides `debasher_exec`, only the tools that
 run a process function outside a run (`debasher_exec_process`) or document a
 module (`debasher_doc_mod`), the tool that resets a resident program, and the
 tool that gives the node harness the code of a node (`debasher_get_node_source`,
-planned, see "Testing a node without the engine" in
-`doc/design_doc_resident.md`), load modules; the tools that read a run do not.
+see "Testing a node without the engine" in `doc/design_doc_resident.md`), load
+modules; the tools that read a run do not.
 
 ## Processes and their methods
 
@@ -1785,9 +1785,6 @@ its own and is how a process test runs it (see "Testing a process with bats").
 
 # Business tests of a program
 
-*Process tests and the test runner are built; node tests are planned (see
-"Testing a node with pytest").*
-
 A business test checks the business logic of one process of a program: what
 the process does with the values of its options, run on its own, with no
 scheduler, no output directory and none of the other processes. A process
@@ -1883,8 +1880,6 @@ FIFO.
 
 ## Testing a node with pytest
 
-*Planned: designed, not built yet.*
-
 The process function of a node runs `python3` on its heredoc, which builds the
 node and calls `run()`: the node opens its FIFOs, exchanges envelopes and
 reports to the `Supervisor`, none of which is business logic. A node test does
@@ -1903,9 +1898,9 @@ directory `<dir>`:
 2. It looks for test files in the test directory. When there is none, or no
    test directory, it says so and exits.
 3. It exports `DEBASHER_TEST_PFILE`, the absolute path of the program file,
-   and `DEBASHER_BATS_HELPERS`, and adds the directory of the tools of the
-   engine to `PATH` and the directories of its Python modules to
-   `PYTHONPATH`.
+   `DEBASHER_BATS_HELPERS`, and `DEBASHER_LIBEXECDIR`, where the node harness
+   finds its tool, and adds the directory of the tools of the engine to `PATH`
+   and the directories of its Python modules to `PYTHONPATH`.
 4. From the program directory, it runs bats on the process tests and pytest on
    the node tests, each only when the program has tests of that kind. The bats
    and pytest that it runs are those that `configure` found, or those given in
@@ -1930,9 +1925,6 @@ A test file can also be run on its own, with bats or pytest, once the
 variables that the runner exports are set, which helps to debug one test.
 
 ## Checking an installation
-
-*Built, except the node tests of `webui_running_sum`, which come with the node
-harness.*
 
 `make installcheck` runs `debasher_check_installation`, which runs the
 programs of `data/webui_programs` from where they were installed. Two of them

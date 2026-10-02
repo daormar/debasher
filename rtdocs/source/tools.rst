@@ -65,9 +65,11 @@ with ``debasher_exec_process``, outside any run. It applies to a
 program in a directory of its own, ``<prgdir>``, whose base name
 ``<name>`` is also the name of its program file, ``<name>.sh`` (the
 layout of every program that the web UI creates). The tests are the
-files ``<prgdir>/test/*.bats``, which the tool runs with bats.
+files ``<prgdir>/test/*.bats``, which the tool runs with bats, and, for
+the nodes of a resident program, the files ``<prgdir>/test/test_*.py``,
+which it runs with pytest.
 
-A test loads the helper library whose path the tool exports as
+A bats test loads the helper library whose path the tool exports as
 ``DEBASHER_BATS_HELPERS``, and runs a process with
 ``debasher_process <processname> [<process_opts>]``. Since no output
 directory is involved, the test gives every option the process reads,
@@ -84,14 +86,45 @@ into the file given by ``-outf``::
         [ "$(cat "${BATS_TEST_TMPDIR}/greeting.txt")" = "Hello, Ann!" ]
     }
 
+A node of a resident program is tested without running it: no FIFO is
+opened and no ``Supervisor`` is involved. A pytest test builds the node
+with ``load_node`` of the module ``debasher_runtime_testing``, naming
+the ports whose traffic it checks, gives it packets with ``feed`` and
+reads what it sent on a port with ``sent``. ``restart`` builds the node
+again from its node state, as recovery after a crash does, and fails
+when the restored node does not capture the same state. For example,
+for a node ``Accumulate`` that sends the running sum of the numbers it
+receives::
+
+    from debasher_runtime_testing import load_node
+
+    def test_running_sum():
+        node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+        node.feed("numbers", 3)
+        node.feed("numbers", 4)
+        assert node.sent("outsum") == [3, 7]
+
+    def test_restart_keeps_the_sum():
+        node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+        node.feed("numbers", 3)
+        node = node.restart()
+        node.feed("numbers", 4)
+        assert node.sent("outsum") == [7]
+
+``load_node`` also takes ``opts``, the options of the node by name.
+Only a node that derives directly from ``FBPProcess`` can be tested
+this way, not a ``DirectoryWatcher``, a ``ProgramLauncher`` or the
+``Supervisor``.
+
 The exit status of ``debasher_test`` is 0 when every test passed, 1
 when a test failed, 2 when the tests could not be run (for instance,
-``<prgdir>`` has no program file, or bats is not installed) and 77
-when the program has no tests. ``DEBASHER_BATS`` gives the bats to run
-instead of the one found when DeBasher was configured. Running the
-tests writes nothing into ``<prgdir>``. The program
-``webui_batch_greet``, installed under
-``<prefix>/share/debasher/webui_programs``, carries an example.
+``<prgdir>`` has no program file, or bats or pytest is not installed)
+and 77 when the program has no tests. ``DEBASHER_BATS`` and
+``DEBASHER_PYTEST`` give the bats and the pytest to run instead of
+those found when DeBasher was configured. Running the tests writes
+nothing into ``<prgdir>``. The programs ``webui_batch_greet`` (bats
+tests) and ``webui_running_sum`` (pytest tests), installed under
+``<prefix>/share/debasher/webui_programs``, carry examples.
 
 debasher_proc_dataset
 ^^^^^^^^^^^^^^^^^^^^^^

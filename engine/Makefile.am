@@ -10,13 +10,14 @@ debasher_compare_opts debasher_solve_knapsack_greedy		\
 debasher_gen_knapsack_problem debasher_gen_telegram_data	\
 debasher_list_deblib_pub_funcs debasher_list_proc_names		\
 debasher_get_proc_info debasher_get_verbatim_func_source		\
-debasher_launch_process debasher_resolve_pfile debasher_inspect_node
+debasher_launch_process debasher_resolve_pfile debasher_inspect_node	\
+debasher_get_node_source
 
 python_PYTHON= debasher_runtime_lib.py debasher_runtime_envelope.py	\
 debasher_runtime_transport.py debasher_runtime_inputlog.py		\
 debasher_runtime_fbp.py debasher_runtime_supervisor.py			\
 debasher_runtime_launcher.py debasher_runtime_watcher.py		\
-debasher_prg_lib.py
+debasher_runtime_testing.py debasher_prg_lib.py
 
 mypkglibdir = $(libdir)/@PACKAGE@
 mypkglib_DATA = debasher_lib debasher_lib_utils debasher_lib_sched	\
@@ -53,7 +54,8 @@ debasher_launch_process.sh debasher_resolve_pfile.sh			\
 debasher_reformat_status.py						\
 debasher_solve_knapsack_greedy.py					\
 debasher_gen_knapsack_problem.py debasher_compare_opts.py		\
-debasher_gen_telegram_data.py debasher_test.sh debasher_bats_helpers.sh
+debasher_gen_telegram_data.py debasher_test.sh debasher_bats_helpers.sh \
+debasher_get_node_source.sh
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R

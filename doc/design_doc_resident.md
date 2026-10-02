@@ -1077,12 +1077,12 @@ heredoc of a process of a resident program. The engine only checks, without
 importing anything, that the heredoc has a top-level class deriving from
 `FBPProcess` or `Supervisor` (`debasher::_classify_resident_process_role`). It
 never instantiates it: the heredoc itself creates the object, which parses the
-options of the process from `argv`, and calls `run()`. A heredoc may do so
-under `if __name__ == "__main__":`, which holds when the engine runs the
-heredoc, since `python3 -c` runs it as the main module, and the engine runs
-both forms. The node harness needs that condition: it runs the heredoc under
-another module name, to get the class without starting the node (see "Testing
-a node without the engine").
+options of the process from `argv`, and calls `run()`, in the line
+`<Name>().run()` that ends it. That line may also go under
+`if __name__ == "__main__":`, which holds when the engine runs the heredoc,
+since `python3 -c` runs it as the main module. The node harness recognizes
+both forms, and runs the heredoc without starting the node (see "Testing a
+node without the engine").
 
 A resident program has nodes only, and no sequential processes (see "Sequential
 processes" in `doc/design_doc_engine.md`): the engine refuses
@@ -1509,8 +1509,6 @@ state it had. `debasher_reset_resident` does it for the whole program (see
 
 ## Testing a node without the engine
 
-*Planned: designed, not built yet.*
-
 A node test (see "Business tests of a program" in `doc/design_doc_engine.md`)
 checks the business logic of a node: what it sends for what it receives, and
 that its node state brings it back to where it was. None of that needs FIFOs,
@@ -1545,25 +1543,46 @@ test:
 
 - It takes the heredoc of `process` from the program file named by
   `DEBASHER_TEST_PFILE`, through `debasher_get_node_source <pfile> <process>`,
-  a tool that loads the module and prints what
-  `debasher::_get_resident_process_source` gives.
-- It parses the heredoc with Python's `ast` module and refuses one whose line
-  `<Name>().run()` is not under `if __name__ == "__main__":` (see "Defining a
-  node"). It then runs the heredoc under a module name of its own, so that the
-  class gets defined and the node does not start. Script generation of the web
-  UI writes the line under that condition, and so do the resident programs
-  that DeBasher ships.
+  a tool of `libexec` that loads the module and prints what
+  `debasher::_get_resident_process_source` gives: the text that the engine
+  runs, since both take it from the same heredoc provider (the method
+  `_heredoc_py` of the process, or its legacy variable). The text of each
+  process is taken once in a test session, since loading the module is what
+  costs time.
+- It parses the heredoc with Python's `ast` module and leaves out the line
+  `<Name>().run()` of its class (see "Defining a node"). A line under
+  `if __name__ == "__main__":` needs nothing, since the harness runs the
+  heredoc under a module name of its own. Any other call to a method `run()`
+  with no arguments outside a definition, such as `node = Name()` followed by
+  `node.run()`, is refused, with a message that names the forms the harness
+  recognizes, since it would start the node. A call with arguments, such as
+  `subprocess.run([...])`, starts no node and is run.
+- It runs the rest as a module: a module object registered in `sys.modules`,
+  so that what looks up a class by its `__module__` (`dataclasses`, `pickle`,
+  `typing`) finds it, and in whose namespace the code runs, so that the
+  methods of the class see the functions, constants and imports of the code
+  before the class as they do in a run. The text is put into `linecache` under
+  the name `<heredoc of <process>>`, so that a traceback shows the lines of
+  the heredoc.
 - It takes the one class of the heredoc that derives from a class of the
   runtime library, as the engine requires, and refuses it when it derives from
   `Supervisor`, `DirectoryWatcher` or `ProgramLauncher`: only a plain subclass
   of `FBPProcess` can be tested.
-- It builds the node with its options injected, as the unit tests of the
-  runtime library do: `opts`, plus a placeholder value for each port, whose
-  FIFO is never opened. The ports are `inputs` and `outputs`, the names of
-  their options without the dash, which the harness gives the node as the
-  engine would, in `DEBASHER_PROCESS_PORTS` (see "Ports from the engine"). The
-  execdir of the node is a temporary directory.
+- It builds the node from an `argv` in the shape that the engine gives a
+  heredoc, since the class of a node takes no argument and its constructor
+  parses `sys.argv`: `opts`, by name with or without the dash, a value `True`
+  given as a flag, plus a placeholder value for each port, whose FIFO is never
+  opened. The ports are `inputs` and `outputs`, the names of their options
+  without the dash, which the harness gives the node as the engine would, in
+  `DEBASHER_PROCESS_PORTS` (see "Ports from the engine"). The execdir of the
+  node is a temporary directory.
 - It calls `initialize_runtime()`, as `run()` does before any thread starts.
+
+Whenever the harness calls the node (its constructor, `initialize_runtime()`,
+`feed` and `restart`), it sets the environment that the engine gives a node
+(its ports and its execdir, with no computational specifications and no task
+index), and puts back what the test had afterwards, since several nodes under
+test share one process.
 
 The test names the ports because the harness does not build the options of the
 program, which is what tells the engine which options of a process are ports.
@@ -1577,7 +1596,9 @@ A node under test offers:
 - `feed(port, packet)`: calls `process_data(port, packet)` on the calling
   thread, marked as the brain thread is, so that `send_data` works during the
   call and only then. The packet first makes a round trip through JSON, so that
-  the node gets what would arrive through a FIFO: a tuple arrives as a list.
+  the node gets what would arrive through a FIFO: a tuple arrives as a list. A
+  port that is not one of `inputs` is refused. When `process_data` raises,
+  what it sent before stays in `sent`.
 - `sent(port)`: the payloads that the node has sent on `port` since it was
   built, decoded from the lines that `send_data` queued. The harness takes
   each line off the outbound queue as soon as `process_data` returns, and
@@ -1595,6 +1616,13 @@ A node under test offers:
 In a node under test, `sleep()` returns at once, as it does while a node
 replays its input log: the pace of a node is not business logic. The node logs
 to its standard error as always, which pytest captures.
+
+The text that the harness runs differs from that of a run in two cases, both
+rare in a node. A heredoc whose delimiter is not quoted (`<<EOF`) has its
+variables expanded by Bash when it is printed, in the shell of
+`debasher_get_node_source` rather than in that of the task. And the code
+before the class runs with the environment and the `argv` of pytest, since the
+harness gives the node its own only when it calls the node.
 
 The harness checks nothing of the framework: sequence numbers, rounds, the
 input log, `CLOSE`, the heartbeat and the limits of a node are left to the
