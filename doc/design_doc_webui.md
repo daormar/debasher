@@ -280,9 +280,8 @@ See "A prompt for the code of a process".
 - **language rules**: the part of a code prompt, fixed for each language, that
   says how the engine runs the code of a process of that language.
 - **template**: the first code that the code editor gives a process, in the
-  language of the process, which reads its options: in Bash every option, in
-  another language every option but a fanout family, which it marks with a
-  `TODO` (see "Building the code prompt").
+  language of the process, which reads every option of the process, a fanout
+  family included (see "Building the code prompt").
 - **template marker**: the comment `ADD YOUR CODE HERE` of a template, where
   the code of the process goes; code that holds it, or no code at all, is
   still a template.
@@ -3055,10 +3054,9 @@ a heading of its own:
    names and reads it from there.
 5. **The code to complete.** The draft of the code editor: the template while
    the code is still one, or the code that the draft holds. The template
-   already reads the options, so the code prompt asks to keep those lines, to
-   read a fanout family that a `TODO` marks, and to write the code where the
-   template marker is; without the marker, it asks to change the code as the
-   code request says and to keep the rest.
+   already reads every option, so the code prompt asks to keep those lines
+   and to write the code where the template marker is; without the marker, it
+   asks to change the code as the code request says and to keep the rest.
 6. **The code request.** What the user wrote in the prompt panel, or, when it
    is blank, to write the code that the description of the process asks for.
 7. **What the AI tool returns.** The whole code (for a Bash process,
