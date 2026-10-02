@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createOption } from "../models/option";
-import type { ProgramOption } from "../models/option";
-import type { ProcessLanguage, ProgramProcess } from "../models/process";
+import { createOption } from "./option";
+import type { ProgramOption } from "./option";
+import type { ProcessLanguage, ProgramProcess } from "./process";
 import { TEMPLATE_MARKER, generateCodeTemplate } from "./codeTemplates";
 
 function process(language: ProcessLanguage, options: ProgramOption[]): ProgramProcess {

@@ -136,7 +136,8 @@ refer to it.
   handler modes").
 - **task**: as defined in the design of the engine. A process in `standard` mode
   runs one task; one in `array` or `generator` mode runs one per element or
-  index.
+  index, and one in `manual` mode as many as its option definition function
+  defines.
 - **fanout family**: as defined in the design of the engine. In the web UI, an
   option of a `standard` process whose label ends in `ith`, such as `-outfith`,
   which stands for as many numbered options (`-outf0`, `-outf1`, ...) as another
@@ -281,7 +282,8 @@ See "A prompt for the code of a process".
   says how the engine runs the code of a process of that language.
 - **template**: the first code that the code editor gives a process, in the
   language of the process, which reads every option of the process, a fanout
-  family included (see "Building the code prompt").
+  family included once it has a count source (see "Building the code
+  prompt").
 - **template marker**: the comment `ADD YOUR CODE HERE` of a template, where
   the code of the process goes; code that holds it, or no code at all, is
   still a template.
@@ -1551,7 +1553,7 @@ non-goals of a resident program".
 - **Nothing is lost when the backend restarts**, since it keeps no state (see
   "The backend keeps no state").
 
-**The code prompt (designed, not built)**
+**The code prompt**
 
 - **Nothing leaves the machine through the code prompt.** The web UI calls no
   AI service: the user copies the code prompt, and sees all of it first (see
@@ -1583,9 +1585,9 @@ non-goals of a resident program".
 - **An output directory that follows a moved program.** A program loaded
   from a new place keeps the output directory it was saved with (see "The
   home directory").
-- **Checking the code that an AI tool writes** (designed, not built). The web
-  UI treats it as code written by hand; validating the program and running its
-  tests check it (see "The prompt panel").
+- **Checking the code that an AI tool writes.** The web UI treats it as code
+  written by hand; validating the program and running its tests check it
+  (see "The prompt panel").
 
 # Resident programs in the web UI
 
@@ -3002,14 +3004,14 @@ not only on tests.
 
 # A prompt for the code of a process
 
-*Designed, not built.* The code editor of a process helps the user to have an
-AI tool write the code. It composes a code prompt, a text that asks for the
-code of the process and gives what the program model knows of it, for the user
-to copy into an AI tool of their choice. The code comes back the way any code
-reaches the editor: the user copies it from the answer of the AI tool and
-pastes it into the code editor. The web UI calls no AI service and keeps no
-key: nothing leaves the machine through it, and the user sees the whole code
-prompt before sending it anywhere.
+The code editor of a process helps the user to have an AI tool write the
+code. It composes a code prompt, a text that asks for the code of the process
+and gives what the program model knows of it, for the user to copy into an AI
+tool of their choice. The code comes back the way any code reaches the editor:
+the user copies it from the answer of the AI tool and pastes it into the code
+editor. The web UI calls no AI service and keeps no key: nothing leaves the
+machine through it, and the user sees the whole code prompt before sending it
+anywhere.
 
 The code prompt is offered for the code of a process of a general program. It
 is not offered for a sequential process, which has no options to describe. Nor
@@ -3020,59 +3022,72 @@ parts and obligations of its own (see "Future work").
 ## What the code prompt says
 
 A code prompt gives an AI tool what a person would need to write the code
-without seeing the editor, from the general to the particular, each part under
-a heading of its own:
+without seeing the editor. After a title that names the process and a sentence
+on what DeBasher is, it goes from the general to the particular, each part
+under a heading of its own:
 
 1. **The language rules.** How the engine runs the code of a process of the
    language of the process. A Bash process is a function named after the
    process, which the engine calls with the option list as its arguments, and
    which reads an option with `read_opt_value_from_func_args` and a flag with
    `read_flag_from_func_args`. The code of any other language is a whole
-   program, which the interpreter of the language runs with the option list as
-   its command line arguments; script generation writes it inside a Bash
-   here-document, so it may hold no line that is `EOF` alone. Then what holds
-   for every language: the value of an output option names where the process
-   writes what it produces (a file, a directory or a FIFO); a FIFO is read
-   until its end, and an output FIFO is closed once everything is written,
-   since only then does its reader see the end; and the process ends with
-   status 0 when it succeeds, and with another status when it fails.
+   program, which the interpreter of the language (`python3 -c`, `perl -e`,
+   `Rscript -e`, `groovy -e`) runs with the option list as its command line
+   arguments; script generation writes it inside a Bash here-document, so it
+   may hold no line that is `EOF` alone. In the option list, each option is
+   its label followed by its value, and a flag its label alone. Then what
+   holds for every language: the value of an output option names where the
+   process writes what it produces (a file, a directory or a FIFO), and what
+   it prints to its standard output goes to a file of the task that no other
+   process reads; a FIFO is read until its end, and an output FIFO is closed
+   once everything is written, since only then does its reader see the end;
+   the processes at the two ends of a FIFO run at the same time; and the
+   process ends with status 0 when it succeeds, and with another status when
+   it fails.
 2. **The program.** Its name and its description.
-3. **The process.** Its name, its description and its language, and, in
-   `array` or `generator` mode, that the code runs once for each task, with
-   the option list of that task.
+3. **The process.** Its name, its description and its language, and, in any
+   options handler mode but `standard`, that the code runs once for each task,
+   with the option list of that task.
 4. **The options.** For each option of the process, in its order: its label,
-   direction, data type, option channel and description, whether it is
-   mandatory, a command line option or a flag, and its literal value if it has
-   one. A connected input names the process and the output option it reads
-   from, with their descriptions; a connected output names, likewise, the
-   options that read it; an unconnected FIFO says that someone outside the
-   program is at its other end. An option of a fanout family names the option
-   that gives its count. A value descriptor says how the value is written or
-   read: a Bash process writes it with `write_value_to_desc` and reads it with
-   `read_opt_value_from_func_args`, which gives the value and not the path,
-   while a process of another language writes it into the file that the option
-   names and reads it from there.
-5. **The code to complete.** The draft of the code editor: the template while
-   the code is still one, or the code that the draft holds. The template
-   already reads every option, so the code prompt asks to keep those lines
-   and to write the code where the template marker is; without the marker, it
-   asks to change the code as the code request says and to keep the rest.
+   its direction and data type, or that it is a flag, its description, whether
+   it is mandatory or a command line option, and its literal value if it has
+   one, or where its value comes from: the specifications of the process or a
+   shared directory. An option channel other than `none` says what it means
+   for the code: a FIFO is closed once written or read until its end, and a
+   value descriptor is written as the language rules say. A connected input
+   names the process and the output option it reads from, with their
+   descriptions, and says what the output is: a FIFO, read as it arrives, a
+   value descriptor, or else a file whose writer has finished before the
+   process runs; a connected output names, likewise, the options that read
+   it; an unconnected FIFO says that someone outside the program is at its
+   other end. An option of a fanout family names the option that gives its
+   count. A value descriptor is written, in Bash, with `write_value_to_desc`,
+   and read with `read_opt_value_from_func_args`, which gives the value and
+   not the path; in another language it is written into the file that the
+   option names, and its reader gets the path of that file.
+5. **The code to complete.** The draft of the code editor, which starts as the
+   template while the code is still one, or the template when the user has
+   emptied the draft, in a fenced code block tagged with the language and longer
+   than any run of backquotes in the code. The template already reads every
+   option, so the code prompt asks to keep those lines and to write the code
+   where the template marker is; without the marker, it asks to change the code
+   as the code request says and to keep the rest.
 6. **The code request.** What the user wrote in the prompt panel, or, when it
    is blank, to write the code that the description of the process asks for.
-7. **What the AI tool returns.** The whole code (for a Bash process,
-   including the line that names its function) in a single fenced code block,
-   with nothing else inside the block. The user copies the code from the
-   answer and pastes it over the draft, so the answer has to hold all of it in
-   one piece: a single block, which the copy button that AI tools commonly
-   give each block copies whole; the whole code, not only what changed, since
-   what the answer leaves out would be lost; and, in Bash, the line that names
-   the function, without which the module would define no function for the
+7. **What the AI tool returns.** The whole code (for a Bash process, including
+   the line that names its function) in a single fenced code block tagged with
+   the language, with nothing else inside the block. The user copies the code
+   from the answer and pastes it over the draft, so the answer has to hold all
+   of it in one piece: a single block, which the copy button that AI tools
+   commonly give each block copies whole; the whole code, not only what changed,
+   since what the answer leaves out would be lost; and, in Bash, the line that
+   names the function, without which the module would define no function for the
    process.
 
 The code prompt is in English, whatever the language of the code request,
 like the rest of the web UI. It leaves out what does not change the code: the
-position of the process, its specifications, its additional methods and the
-code of its options handler.
+position of the process, the values of its specifications, its additional
+methods and the code of its options handler.
 
 ## Building the code prompt
 
@@ -3103,7 +3118,8 @@ icon, the mark that applications commonly give to what involves AI, and the
 tooltip "Prompt for an AI tool". It opens the prompt panel inside the code
 editor, beside the code, which stays editable. The prompt panel holds:
 
-- A field for the code request, empty when the panel opens.
+- A field for the code request, empty when the code editor opens and kept
+  while it stays open.
 - The code prompt, read only, composed again whenever the code request or the
   draft changes. The user changes it through the code request, or in the AI
   tool once it is copied.

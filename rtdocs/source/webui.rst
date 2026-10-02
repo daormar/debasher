@@ -159,6 +159,14 @@ The **specifications** are the computational ones (CPUs, memory and
 time) and, for a general program, the additional ones: process
 dependencies, ``force``, and an alias or an external alias.
 
+A new process starts with a template that reads every option. The "AI
+prompt" button of the code editor composes a prompt with what the
+program knows of the process (its description, its options and their
+connections, how its language is run, and the code so far), together
+with what you ask for, to copy into an AI tool of your choice; the code
+of the answer is then pasted into the editor like any other code. The
+web interface itself sends nothing to any AI service.
+
 Options Handler Modes
 ^^^^^^^^^^^^^^^^^^^^^
 

@@ -1,6 +1,6 @@
-import type { ProgramProcess } from "../models/process";
-import type { OptionDataType, ProgramOption } from "../models/option";
-import { fanoutBaseLabel, isFanoutOption } from "../models/option";
+import type { ProcessLanguage, ProgramProcess } from "./process";
+import type { OptionDataType, ProgramOption } from "./option";
+import { fanoutBaseLabel, isFanoutOption } from "./option";
 
 // Comment text used to mark the point where the user is expected to
 // write the process's actual logic. Also used, via isCodeStillTemplate,
@@ -413,4 +413,47 @@ export function generateCodeTemplate(process: ProgramProcess): string {
     default:
       return generateBashTemplate(process);
   }
+}
+
+// The name of each language as a code prompt writes it, and the tag of a
+// fenced code block of that language.
+export const LANGUAGE_NAMES: Record<ProcessLanguage, string> = {
+  bash: "Bash",
+  python: "Python",
+  perl: "Perl",
+  r: "R",
+  groovy: "Groovy",
+};
+
+// The interpreter that the engine runs the code of a language with, and
+// the option that hands it the code (DEBASHER_HEREDOC_INTERPRETERS and
+// DEBASHER_HEREDOC_INTERPRETER_OPTS in engine/debasher_lib.sh).
+const INTERPRETERS: Record<Exclude<ProcessLanguage, "bash">, string> = {
+  python: "python3 -c",
+  perl: "perl -e",
+  r: "Rscript -e",
+  groovy: "groovy -e",
+};
+
+// The language rules of a code prompt: how the engine runs the code of a
+// process of the language, and how the templates above read its options,
+// so that a change to either is made here, beside them.
+export function languageRules(language: ProcessLanguage, processName: string): string[] {
+  const own =
+    language === "bash"
+      ? [
+          `- The process is a Bash function named \`${processName}\`, which the engine calls with the option list of a task as its arguments: each option as its label followed by its value, and a flag as its label alone.`,
+          '- Read the value of an option with `read_opt_value_from_func_args "<label>" "$@"`, which prints `${DEBASHER_OPT_NOT_FOUND}` when the option is not given, and test a flag with `read_flag_from_func_args "<label>" "$@"`.',
+          "- Declare the variables of the function with `local`, and end it with `return 0` on success and another status on failure.",
+        ]
+      : [
+          `- The process is a whole ${LANGUAGE_NAMES[language]} program, which the engine runs with \`${INTERPRETERS[language]}\` and the option list of a task as its command line arguments: each option as its label followed by its value, and a flag as its label alone.`,
+          "- The generated module holds the code in a Bash here-document that ends with a line `EOF`, so no line of the code may be `EOF` alone.",
+          "- The program ends with exit status 0 on success and another status on failure.",
+        ];
+  return [
+    ...own,
+    "- The value of an output option names where the process writes what it produces: a file, a directory or a FIFO. The process writes there: what it prints to its standard output goes to a file of the task that no other process reads.",
+    "- A FIFO is read until its end. An output FIFO is closed once everything is written, since only then does its reader see the end; a process at the other end of a FIFO runs at the same time.",
+  ];
 }
