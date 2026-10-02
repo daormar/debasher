@@ -828,8 +828,8 @@ missing.
   is decided task by task for an array. Like a process that ran, a
   skipped one is not evaluated again by later executions unless it has
   to run again (for instance, because its options changed). A process
-  that writes into a FIFO should not be skipped, since the process that
-  reads the FIFO would wait for it forever.
+  at either end of a FIFO should not be skipped, since the process at
+  the other end would wait forever for it to open the FIFO.
 
   .. code-block:: bash
 

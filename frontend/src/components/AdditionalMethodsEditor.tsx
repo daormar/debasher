@@ -1,100 +1,22 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 
 import MethodBodyEditor from "./MethodBodyEditor";
-import type { AdditionalMethods, ProgramProcess } from "../models/process";
+import type { ProgramProcess } from "../models/process";
+import { PROCESS_METHODS, type ProcessMethod } from "../models/processMethods";
 
 interface Props {
   process: ProgramProcess;
   onClose: () => void;
 }
 
-interface MethodDescriptor {
-  key: keyof AdditionalMethods;
-  name: string;
-  description: ReactNode;
-}
-
 // The DEBASHER_PROCESS_METHODS (engine/debasher_lib.sh) not covered
 // elsewhere in the Inspector: "document" is the Description field,
 // "exec" is the "Edit code" implementation, and the option explanation/
 // definition methods are driven by the process's options/options
-// handler.
-const METHODS: MethodDescriptor[] = [
-  {
-    key: "resetOutfilesCode",
-    name: "reset_outfiles",
-    description: (
-      <>
-        Runs instead of the engine's default output-directory cleanup,
-        right before this process's implementation. Receives the same
-        option arguments as the implementation itself, accessible via{" "}
-        <code>"$@"</code> (e.g.{" "}
-        <code>{'read_opt_value_from_func_args "-opt" "$@"'}</code>).
-      </>
-    ),
-  },
-  {
-    key: "postCode",
-    name: "post",
-    description: (
-      <>
-        Runs right after this process's implementation succeeds, e.g. for
-        post-processing or cleanup. Receives the same option arguments as
-        the implementation itself, accessible via <code>"$@"</code>.
-      </>
-    ),
-  },
-  {
-    key: "outdirBasenameCode",
-    name: "outdir_basename",
-    description: (
-      <>
-        Echoes the basename to use for this process's own output
-        directory, instead of the default (its process name). Takes no
-        arguments.
-      </>
-    ),
-  },
-  {
-    key: "skipCode",
-    name: "skip",
-    description: (
-      <>
-        Decides whether to skip running this process: return{" "}
-        <code>0</code> to skip it, non-zero to run it normally. Receives
-        the same option arguments as the implementation itself, accessible
-        via <code>"$@"</code>.
-      </>
-    ),
-  },
-  {
-    key: "condaEnvsCode",
-    name: "conda_envs",
-    description: (
-      <>
-        Declares this process's conda environments, e.g.{" "}
-        <code>define_conda_env myenv myenv.yml</code>. Takes no arguments,
-        and runs once per process regardless of its number of tasks.
-      </>
-    ),
-  },
-  {
-    key: "dockerImgsCode",
-    name: "docker_imgs",
-    description: (
-      <>
-        Declares this process's Docker images, e.g.{" "}
-        <code>{'pull_docker_img "library/hello-world"'}</code>. Takes no
-        arguments, and runs once per process regardless of its number of
-        tasks.
-      </>
-    ),
-  },
-];
-
+// handler. What each of the others does is in models/processMethods.ts.
 export default function AdditionalMethodsEditor({ process, onClose }: Props) {
 
-  const [editingMethod, setEditingMethod] = useState<MethodDescriptor | null>(null);
+  const [editingMethod, setEditingMethod] = useState<ProcessMethod | null>(null);
 
   return (
 
@@ -142,7 +64,7 @@ export default function AdditionalMethodsEditor({ process, onClose }: Props) {
           }}
         >
 
-          {METHODS.map(method => (
+          {PROCESS_METHODS.map(method => (
             <button
               key={method.key}
               onClick={() => setEditingMethod(method)}
@@ -174,8 +96,6 @@ export default function AdditionalMethodsEditor({ process, onClose }: Props) {
         <MethodBodyEditor
           process={process}
           methodKey={editingMethod.key}
-          methodName={editingMethod.name}
-          description={editingMethod.description}
           onClose={() => setEditingMethod(null)}
         />
       )}

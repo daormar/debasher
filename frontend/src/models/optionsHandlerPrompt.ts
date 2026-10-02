@@ -101,7 +101,7 @@ function rulesSection(process: ProgramProcess, mode: PromptedHandlerMode): strin
 
 // The code of the process, which says how a task uses its options; the
 // prompt says when there is none to show yet.
-function processCodeSection(process: ProgramProcess): string[] {
+export function processCodeSection(process: ProgramProcess, intro = "how each task uses its options"): string[] {
   const header = ["## The code of the process", ""];
   if (process.additionalSpecs.alias || process.additionalSpecs.externalAlias) {
     return [...header, `The process takes its code from the ${process.additionalSpecs.alias ? "alias" : "external alias"} \`${process.additionalSpecs.alias || process.additionalSpecs.externalAlias}\`, which is not shown here.`];
@@ -112,7 +112,7 @@ function processCodeSection(process: ProgramProcess): string[] {
   const fence = fenceFor(process.code);
   return [
     ...header,
-    `For context only, how each task uses its options (${LANGUAGE_NAMES[process.language]}):`,
+    `For context only, ${intro} (${LANGUAGE_NAMES[process.language]}):`,
     "",
     `${fence}${process.language}`,
     process.code.replace(/\n+$/, ""),
@@ -137,7 +137,7 @@ function nodeCodeSection(process: ProgramProcess): string[] {
   return lines;
 }
 
-function codeSection(draft: string): string[] {
+export function codeSection(draft: string): string[] {
   const header = ["## The code to complete", ""];
   if (draft.trim() === "") {
     return [...header, "Empty: write it from scratch."];

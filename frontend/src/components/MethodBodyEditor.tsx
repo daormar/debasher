@@ -1,27 +1,28 @@
-import { useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
 import { languageExtension } from "./codeLanguages";
 import type { AdditionalMethods, ProgramProcess } from "../models/process";
+import { processMethod } from "../models/processMethods";
+import { buildMethodPrompt } from "../models/methodPrompt";
+import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
 
 interface Props {
   process: ProgramProcess;
   methodKey: keyof AdditionalMethods;
-  methodName: string;
-  description: ReactNode;
   onClose: () => void;
 }
 
 export default function MethodBodyEditor({
   process,
   methodKey,
-  methodName,
-  description,
   onClose,
 }: Props) {
 
-  const { setAdditionalMethods } = useProgram();
+  const { program, setAdditionalMethods } = useProgram();
+
+  const method = processMethod(methodKey);
 
   const [draft, setDraft] = useState(process.additionalMethods[methodKey] ?? "");
 
@@ -35,6 +36,16 @@ export default function MethodBodyEditor({
     onClose();
 
   }
+
+  // The prompt panel, as in the code editor of a process.
+  const [isPromptOpen, setPromptOpen] = useState(false);
+
+  const [codeRequest, setCodeRequest] = useState("");
+
+  const codePrompt = useMemo(
+    () => isPromptOpen ? buildMethodPrompt(program, process, methodKey, draft, codeRequest) : "",
+    [isPromptOpen, program, process, methodKey, draft, codeRequest]
+  );
 
   return (
 
@@ -52,8 +63,8 @@ export default function MethodBodyEditor({
 
       <div
         style={{
-          width: "70%",
-          maxWidth: 900,
+          width: isPromptOpen ? "92%" : "70%",
+          maxWidth: isPromptOpen ? 1500 : 900,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -63,33 +74,67 @@ export default function MethodBodyEditor({
         }}
       >
 
-        <h3 style={{ margin: 0 }}>
-          {methodName}: {process.name}
-        </h3>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+
+          <h3 style={{ margin: 0 }}>
+            {method.name}: {process.name}
+          </h3>
+
+          <CodePromptButton isOpen={isPromptOpen} onToggle={() => setPromptOpen(open => !open)} />
+
+        </div>
 
         <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
-          {description}
+          {withCodeSpans(method.summary)}
         </p>
 
         <div
           style={{
-            border: "1px solid #ccc",
+            display: "flex",
+            gap: 12,
+            alignItems: "stretch",
           }}
         >
 
-          <CodeMirror
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              border: "1px solid #ccc",
+            }}
+          >
 
-            value={draft}
+            <CodeMirror
 
-            height="400px"
+              value={draft}
 
-            extensions={[
-              languageExtension("bash"),
-            ]}
+              height="400px"
 
-            onChange={value => setDraft(value)}
+              extensions={[
+                languageExtension("bash"),
+              ]}
 
-          />
+              onChange={value => setDraft(value)}
+
+            />
+
+          </div>
+
+          {isPromptOpen && (
+            <CodePromptPanel
+              prompt={codePrompt}
+              request={codeRequest}
+              onRequestChange={setCodeRequest}
+              pasteHint="Paste the code of the answer into the editor."
+            />
+          )}
 
         </div>
 
@@ -117,4 +162,12 @@ export default function MethodBodyEditor({
 
   );
 
+}
+
+// A text whose code spans are written between backquotes, with each span
+// shown as code.
+function withCodeSpans(text: string) {
+  return text.split("`").map((piece, i) => (
+    i % 2 === 1 ? <code key={i}>{piece}</code> : <Fragment key={i}>{piece}</Fragment>
+  ));
 }

@@ -154,7 +154,9 @@ an input, as the engine requires. Its editor sets:
 The **code** of a process is written in Bash, Python, Perl, R or
 Groovy, and its other methods (``skip``, ``post``, ``conda_envs``,
 ``docker_imgs``, and the rest of the process methods described in the
-:ref:`implem` Section) are edited with "Configure additional methods".
+:ref:`implem` Section) are edited with "Configure additional methods",
+whose editor of each method has the same "AI prompt" button as the
+code editor, with the rules of that method.
 The **specifications** are the computational ones (CPUs, memory and
 time) and, for a general program, the additional ones: process
 dependencies, ``force``, and an alias or an external alias.

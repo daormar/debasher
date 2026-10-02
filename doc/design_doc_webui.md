@@ -50,9 +50,9 @@ extension to resident programs, and says which parts of it are built. "Business
 tests in the web UI" describes how the web UI runs the tests of a program and
 writes a first test for a process. "A prompt for the code of a process"
 describes how the code editors help to have an AI tool write the code of a
-process, of its options handler or of a node. "Editing a program from an agent:
-the MCP server" describes a second client of the backend, for AI agents, and
-"Future work" lists what is known to be missing.
+process, of its options handler, of its additional methods or of a node.
+"Editing a program from an agent: the MCP server" describes a second client of
+the backend, for AI agents, and "Future work" lists what is known to be missing.
 
 # Glossary
 
@@ -276,9 +276,9 @@ See "A prompt for the code of a process".
 - **AI tool**: an application driven by a model, outside the web UI, that the
   user chooses and copies a code prompt into; an agent may serve as one.
 - **code prompt**: the text that a code editor (the code editor of a process,
-  the editors of the code of its options handler, or the node code editor)
-  composes for an AI tool, asking for the code and giving what the program model
-  knows of the process or the node.
+  the editors of the code of its options handler and of its additional methods,
+  or the node code editor) composes for an AI tool, asking for the code and
+  giving what the program model knows of the process or the node.
 - **node code editor**: the editor of the code of a node of a resident
   program, part by part (`NodeCodeEditor`; see "The program model of a
   resident program").
@@ -3011,23 +3011,25 @@ not only on tests.
 
 # A prompt for the code of a process
 
-The code editor of a process, the editors of the code of its options handler,
-and the node code editor help the user to have an AI tool write the code. Each
-composes a code prompt, a text that asks for the code and gives what the program
-model knows of the process or the node, for the user to copy into an AI tool of
-their choice. The code comes back the way any code reaches the editor: the user
-copies it from the answer of the AI tool and pastes it into the code editor. The
-web UI calls no AI service and keeps no key: nothing leaves the machine through
-it, and the user sees the whole code prompt before sending it anywhere.
+The code editor of a process, the editors of the code of its options handler and
+of its additional methods, and the node code editor help the user to have an AI
+tool write the code. Each composes a code prompt, a text that asks for the code
+and gives what the program model knows of the process or the node, for the user
+to copy into an AI tool of their choice. The code comes back the way any code
+reaches the editor: the user copies it from the answer of the AI tool and pastes
+it into the code editor. The web UI calls no AI service and keeps no key:
+nothing leaves the machine through it, and the user sees the whole code prompt
+before sending it anywhere.
 
 The code prompt is offered for the code of a process of a general program, for
 the code of the options handler of a process or a node in `array` or `generator`
-mode (see "The code prompt of an options handler"), and for the code of a node
-of a resident program other than the `Supervisor`, whose code has parts and a
-contract of its own (see "The code prompt of a node"). It is not offered for a
-sequential process, which has no options to describe, nor, yet, for the code of
-the additional methods, for the option definition function of a `manual` process
-or for the preamble (see "Future work").
+mode (see "The code prompt of an options handler"), for the additional methods
+of a process of a general program (see "The code prompt of an additional
+method"), and for the code of a node of a resident program other than the
+`Supervisor`, whose code has parts and a contract of its own (see "The code
+prompt of a node"). It is not offered for a sequential process, which has no
+options to describe, nor, yet, for the option definition function of a `manual`
+process or for the preamble (see "Future work").
 
 ## What the code prompt says
 
@@ -3294,6 +3296,54 @@ builds it, pure like `buildCodePrompt`, whose description of the options it
 reuses. The option definition function of a `manual` process has no code
 prompt (see "Future work").
 
+## The code prompt of an additional method
+
+The editor of each additional method of a process (`reset_outfiles`, `post`,
+`outdir_basename`, `skip`, `conda_envs` and `docker_imgs`) offers the same
+prompt panel, with the same button. An additional method is a Bash function,
+whatever the language of the process, which script generation writes as
+`<process>_<method>()` around the body that the user gives, and which the
+engine calls at a moment of its own, with arguments of its own, and expects
+something of: `skip` skips the task when it returns success, `post` runs
+whether the process function succeeded or failed, `outdir_basename` prints a
+name and nothing else, and `conda_envs` and `docker_imgs` run once for the
+process and only make sure that an environment or an image exists. The code
+prompt says so, after a title and a sentence on what a method is:
+
+1. **How the engine runs the method.** That it is a Bash function whose body
+   alone is written, and the rules of the method: when the engine calls it, with
+   which arguments (the options of the task for `reset_outfiles`, `post` and
+   `skip`, none for the others), what it has to return or print, and what
+   follows from it, such as that a process at either end of a FIFO must not be
+   skipped, since the process at the other end would wait forever for it to open
+   the FIFO.
+2. **The program** and **the process**, with whether it runs as several
+   tasks.
+3. **The options.** For a method that receives them, as in the code prompt of
+   a process; for one that does not, the same list, introduced as what the
+   code of the process reads, which still shows what the method works on.
+4. **The code of the process**, for context, as in the code prompt of an
+   options handler: a method acts on what the process does, such as the file
+   that `reset_outfiles` removes or the environment that `conda_envs` declares
+   and the process activates.
+5. **The code to complete**, or that it is empty.
+6. **The code request**, or, when it is blank, to write the method that the
+   description and the code of the process call for.
+7. **What the AI tool returns.** After the rule to ask rather than guess, the
+   whole body in a single fenced code block tagged `bash`, without the line
+   that names the function and the braces around the body.
+
+The rules of each method are those of the engine (see "Processes and their
+methods", "Executing a task", "When one end fails" and "Conda and Docker
+environments" in `doc/design_doc_engine.md`). Unlike the node reference, which
+the backend reads from the runtime library, they cannot be read at run time, so
+they are kept once, in `PROCESS_METHODS`
+(`frontend/src/models/processMethods.ts`), together with the summary that the
+editor of the method shows, so that the editor and the code prompt never tell
+two stories. `buildMethodPrompt` (`frontend/src/models/methodPrompt.ts`) builds
+the code prompt, pure like `buildCodePrompt`, with the parts that it shares with
+the code prompts of a process and of an options handler.
+
 # Editing a program from an agent: the MCP server
 
 The MCP server offers to an agent, such as Claude Code, what the editor offers
@@ -3540,13 +3590,12 @@ backend's own tests.
 - **The output directory of a moved program.** Deciding what a program
   loaded from a new place should do with an output directory that still
   points to the old one.
-- **A code prompt for the rest of the code.** The code prompt for the other
-  code that the user writes: the additional methods, the preamble, and the
-  option definition function of a `manual` process, which is written with the
-  API of the engine for options and would need a reference of it, read from
-  the engine as the node reference is read from the runtime library. The MCP
-  server could offer the code prompt too, from the same functions that build
-  it.
+- **A code prompt for the rest of the code.** The code prompt for the other code
+  that the user writes: the preamble, and the option definition function of a
+  `manual` process, which is written with the API of the engine for options and
+  would need a reference of it, read from the engine as the node reference is
+  read from the runtime library. The MCP server could offer the code prompt too,
+  from the same functions that build it.
 - **An assistant on the documentation of DeBasher.** A chat in the web UI
   that answers questions about DeBasher from its documentation (the
   documentation of the project, the design documents and the module
