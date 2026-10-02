@@ -951,12 +951,21 @@ lines, and not a binary one), edits an existing file (and, for "Add test" and
 the MCP server, creates a new one, see "Adding a test"), creates a directory,
 deletes, renames or moves an entry, and uploads files of any type, which is
 also how the script of an `ext_alias` reaches a program that was not imported.
-It keeps three guarantees:
+It keeps four guarantees:
 
 - It never shows, enters or writes a reserved name, at any depth.
-- Every path is resolved inside the home directory, following symbolic links,
-  and a path that would leave it is refused. The panel never descends into a
-  directory that is a symbolic link.
+- Every path is resolved inside the home directory, following symbolic links
+  (except the entry that is deleted, renamed or moved, see below), and a path
+  that would leave it is refused. The panel never descends into a directory
+  that is a symbolic link.
+- Deleting, renaming or moving acts on the entry that the path names (with its
+  contents, for a directory), and on nothing else: everything above the entry is
+  resolved and has to stay inside the home directory, but the entry itself is
+  not followed (`resolve_entry_within`). A symbolic link is removed or moved as
+  a link, never the file or directory it points to, so removing a link to a
+  place outside the home directory leaves that place as it was. A path that
+  names no entry, such as `.` or `test/..`, is refused, so the home directory
+  itself is never deleted or moved.
 - The generated script is shown, read-only: the panel never edits, deletes,
   moves or overwrites it, since the next save would regenerate it anyway.
 
@@ -1477,9 +1486,12 @@ non-goals of a resident program".
 - **A program lives where it is loaded from.** Its home directory is the
   directory it was loaded from, even if it was copied or moved there (see
   "The home directory").
-- **User files are the user's.** The program files panel never touches a
-  reserved name, never leaves the home directory, and never changes the
-  generated script (see "Reserved names and user files").
+- **User files are the user's.** The program files panel, and the MCP server
+  through the same endpoints, never touches a reserved name, never leaves the
+  home directory, never deletes or moves anything but the entry that a path
+  names and its contents (a link and not what it points to, never the home
+  directory itself), and never changes the generated script (see "Reserved names
+  and user files").
 - **A reset stays in the output directory.** Resetting it deletes only what is
   inside it, and does nothing when it is blank, missing, the root, the user's
   home or the home directory (see "The output directory").

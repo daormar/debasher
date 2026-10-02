@@ -46,6 +46,39 @@ def resolve_within(home_dir: str, rel_path: str) -> Path:
     return candidate
 
 
+def resolve_entry_within(home_dir: str, rel_path: str) -> Path:
+    """
+    Resolves `rel_path` against `home_dir` as resolve_within does, except
+    for its last component, which is left as it is: the path of the entry
+    itself, for deleting, renaming or moving it, so that a symbolic link is
+    removed or moved as a link, never the file or directory it points to.
+    Everything above the entry is resolved, and has to stay inside
+    `home_dir`, so a link can only be reached from inside it, and removing
+    or moving it never touches what it points to.
+
+    Raises ValueError, as resolve_within does, and for a path whose last
+    component names no entry ("..").
+    """
+    if not rel_path:
+        raise ValueError("path must not be empty")
+
+    relative = Path(rel_path)
+    if relative.is_absolute():
+        raise ValueError(f"{rel_path!r} must be a relative path")
+    if relative.name in ("", ".."):
+        raise ValueError(f"{rel_path!r} does not name an entry of the program's home directory")
+    if persistence.is_reserved_name(relative.name):
+        raise ValueError(f"{rel_path!r} refers to a reserved DeBasher file or directory")
+
+    return resolve_within(home_dir, str(relative.parent)) / relative.name
+
+
+def _lexists(path: Path) -> bool:
+    """Whether `path` exists, a symbolic link counting even when it points
+    nowhere."""
+    return path.exists() or path.is_symlink()
+
+
 def _is_protected_script(target: Path, home: Path, program_name: str) -> bool:
     """
     True for the program's own generated `<programName>.sh`, and only
@@ -254,11 +287,8 @@ class DeleteRequest(BaseModel):
 
 @router.post("/delete", response_model=FileTreeResponse)
 def delete_entry(request: DeleteRequest) -> FileTreeResponse:
-    if not request.path:
-        raise HTTPException(status_code=400, detail="path must not be empty")
-
     try:
-        target = resolve_within(request.homeDir, request.path)
+        target = resolve_entry_within(request.homeDir, request.path)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 
@@ -268,7 +298,7 @@ def delete_entry(request: DeleteRequest) -> FileTreeResponse:
             status_code=400, detail="Cannot delete the program's generated script"
         )
 
-    if not target.exists():
+    if not _lexists(target):
         raise HTTPException(status_code=404, detail=f"{request.path!r} does not exist")
 
     try:
@@ -300,8 +330,8 @@ def move_entry(request: MoveRequest) -> FileTreeResponse:
         raise HTTPException(status_code=400, detail="srcPath and dstPath must not be empty")
 
     try:
-        src = resolve_within(request.homeDir, request.srcPath)
-        dst = resolve_within(request.homeDir, request.dstPath)
+        src = resolve_entry_within(request.homeDir, request.srcPath)
+        dst = resolve_entry_within(request.homeDir, request.dstPath)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 
@@ -313,10 +343,10 @@ def move_entry(request: MoveRequest) -> FileTreeResponse:
             status_code=400, detail="Cannot move the program's generated script"
         )
 
-    if not src.exists():
+    if not _lexists(src):
         raise HTTPException(status_code=404, detail=f"{request.srcPath!r} does not exist")
 
-    if dst.exists():
+    if _lexists(dst):
         raise HTTPException(status_code=400, detail=f"{request.dstPath!r} already exists")
 
     try:
