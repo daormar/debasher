@@ -111,7 +111,7 @@ $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA): Makefile
 	echo "TIMEOUT=\"$(TIMEOUT)\"" >> $@
 	echo "SEQ=\"$(SEQ)\"" >> $@
 	echo "DOCKER=\"$(DOCKER)\"" >> $@
-	echo "CONDA=\"$(CONDA)\"" >> $@
+	echo "CONDA_CMD=\"$(CONDA_CMD)\"" >> $@
 	echo "SRUN=\"$(SRUN)\"" >> $@
 	echo "SCANCEL=\"$(SCANCEL)\"" >> $@
 	echo "SBATCH=\"$(SBATCH)\"" >> $@

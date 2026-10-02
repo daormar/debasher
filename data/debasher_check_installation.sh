@@ -30,7 +30,7 @@ print_skipped_check()
 # of conda, whatever this shell has.
 conda_is_usable()
 {
-    test -n "${CONDA}" && test -x "${CONDA}"
+    test -n "${CONDA_CMD}" && test -f "${CONDA_CMD}" && test -x "${CONDA_CMD}"
 }
 
 ########

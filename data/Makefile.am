@@ -69,7 +69,7 @@ debasher_check_installation: Makefile
 	echo "JAVA=\"$(JAVA)\"" >> $@
 	echo "DOT=\"$(DOT)\"" >> $@
 	echo "BATS=\"$(BATS)\"" >> $@
-	echo "CONDA=\"$(CONDA)\"" >> $@
+	echo "CONDA_CMD=\"$(CONDA_CMD)\"" >> $@
 	echo "PYTEST=\"$(PYTEST)\"" >> $@
 	cat $< >> $@
 	chmod ugo+x $@

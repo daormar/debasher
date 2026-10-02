@@ -1652,7 +1652,7 @@ into the shell when it does not have them, and then activates the environment,
 after which `conda` itself (`conda deactivate`, another `conda activate`) can be
 used. It loads them from a conda executable, the one that the conda functions of
 the shell point to (`CONDA_EXE`), or else the one that `configure` found, which
-every built script holds as `CONDA`, as it holds `DOCKER`. With neither, it
+every built script holds as `CONDA_CMD`, as it holds `DOCKER`. With neither, it
 fails with an error that says so. `define_conda_env` loads them the same way
 before it looks for an environment or creates one. A process uses `"${DOCKER}"`
 to run a container, the docker that `configure` found, rather than the first one
