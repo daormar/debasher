@@ -167,6 +167,9 @@ function FileTreeNode({ entry, depth, expanded, selectedPath, onToggle, onSelect
 // the same process opens the file again.
 export interface OpenFileRequest {
   path: string;
+  // A line to show above the file while it stays open, such as what to do
+  // with a test skeleton just written
+  notice?: string;
   nonce: number;
 }
 
@@ -214,6 +217,11 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
   const [savingContent, setSavingContent] =
     useState(false);
 
+  // The line shown above the file that an open request named, while that
+  // file stays the one shown
+  const [openNotice, setOpenNotice] =
+    useState<{ path: string; text: string } | null>(null);
+
   const [isDragOver, setDragOver] =
     useState(false);
 
@@ -249,8 +257,9 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
     if (!openRequest) {
       return;
     }
-    const { path } = openRequest;
+    const { path, notice } = openRequest;
     setOpen(true);
+    setOpenNotice(notice ? { path, text: notice } : null);
     void (async () => {
       await refresh();
       setExpanded(current => {
@@ -619,6 +628,15 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
                   flexDirection: "column",
                 }}
               >
+
+                {openNotice && preview?.path === openNotice.path && (
+                  <div
+                    data-testid="open-notice"
+                    style={{ padding: "6px 8px", background: "#fff8e1", borderBottom: "1px solid #eee", fontSize: 13 }}
+                  >
+                    {openNotice.text}
+                  </div>
+                )}
 
                 {previewLoading ? (
                   <div style={{ padding: 8, color: "#888" }}>Loading…</div>

@@ -3,7 +3,14 @@ import { createOption } from "./option";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
-import { offersAddTest, testFilePath, testSkeleton } from "./testSkeleton";
+import {
+  defaultTestFileName,
+  offersAddTest,
+  testFileNameProblem,
+  testFilePath,
+  testSkeleton,
+  testSkeletonSummary,
+} from "./testSkeleton";
 
 function process(name: string, options: ProgramOption[], fields: Partial<ProgramProcess> = {}): ProgramProcess {
   return { id: name, name, options, ...fields } as ProgramProcess;
@@ -36,13 +43,40 @@ describe("offersAddTest", () => {
   });
 });
 
-describe("testFilePath", () => {
+describe("the name of a test file", () => {
   it("names a process test after its process", () => {
-    expect(testFilePath(program("general", []), process("org.ns.greet", []))).toBe("test/org.ns.greet.bats");
+    expect(defaultTestFileName(program("general", []), process("org.ns.greet", []))).toBe("org.ns.greet.bats");
   });
 
   it("names a node test as a Python module", () => {
-    expect(testFilePath(program("resident", []), process("org.ns.Acc", []))).toBe("test/test_org_ns_Acc.py");
+    expect(defaultTestFileName(program("resident", []), process("org.ns.Acc", []))).toBe("test_org_ns_Acc.py");
+  });
+
+  it("puts a test file in the test directory", () => {
+    expect(testFilePath("greet.bats")).toBe("test/greet.bats");
+  });
+
+  it("accepts only a name that debasher_test runs", () => {
+    const general = program("general", []);
+    const resident = program("resident", []);
+    for (const name of ["greet.bats", "org.ns.greet.bats", "greet-2.bats"]) {
+      expect(testFileNameProblem(general, name)).toBeNull();
+    }
+    for (const name of ["greet.sh", ".greet.bats", "sub/greet.bats", ".bats", "test_greet.py"]) {
+      expect(testFileNameProblem(general, name)).toMatch(/<name>\.bats/);
+    }
+    for (const name of ["test_acc.py", "test_Acc_2.py"]) {
+      expect(testFileNameProblem(resident, name)).toBeNull();
+    }
+    for (const name of ["acc.py", "test_.py", "test_org.ns.acc.py", "test_acc.bats", "sub/test_acc.py"]) {
+      expect(testFileNameProblem(resident, name)).toMatch(/test_<name>\.py/);
+    }
+  });
+
+  it("says what the skeleton is before it is written", () => {
+    expect(testSkeletonSummary(program("general", []), process("greet", []))).toMatch(
+      /^Writes a first test for greet: a process test \(bats\).*fill in its TODOs/
+    );
   });
 });
 
@@ -67,8 +101,13 @@ describe("the skeleton of a process test", () => {
     expect(skeleton.indexOf("-verbose")).toBeLessThan(skeleton.indexOf("run debasher_process"));
   });
 
+  it("marks with a TODO each thing to fill in", () => {
+    expect(skeleton).toContain("    # TODO: replace each TODO value with the value of the test\n    run debasher_process greet");
+    expect(skeleton).toContain('    [ "${status}" -eq 0 ]\n    # TODO: check what the process wrote');
+  });
+
   it("fails until the user writes its checks", () => {
-    expect(skeleton).toMatch(/\[ "\$\{status\}" -eq 0 \]\n\n {4}# Write the checks.*\n {4}false\n\}\n$/);
+    expect(skeleton).toMatch(/ {4}# TODO: once the checks above are written, remove the line below,\n {4}# which makes a skeleton fail\n {4}false\n\}\n$/);
   });
 
   it("runs a process with no options alone", () => {
@@ -125,20 +164,35 @@ describe("the skeleton of a node that observes the outside world", () => {
     expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(3);
   });
 
-  it("puts a file in the directory that a DirectoryWatcher watches, and observes twice", () => {
+  describe("a DirectoryWatcher", () => {
     const watchdir = createOption("watchdir", "-watchdir", { commandLine: true });
     const watch = process("Watch", [watchdir, out], { nodeKind: "DirectoryWatcher" });
     const skeleton = testSkeleton(program("resident", [watch]), watch);
 
-    expect(skeleton).toContain("def test_Watch_brings_in_what_it_observes(tmp_path):");
-    expect(skeleton).toContain('    under_test = node(opts={"watchdir": str(tmp_path)})');
-    expect(skeleton).toContain('    (tmp_path / "TODO").write_text("TODO")');
-    expect(skeleton).toMatch(/ {4}under_test\.observe\(\)\n {4}injected = under_test\.observe\(\)/);
-  });
+    it("has no test that feeds it, since it has no input and needs its directory", () => {
+      expect(skeleton).not.toContain("sends_what_it_should");
+      expect(skeleton).not.toContain("feed(");
+      expect(skeleton).not.toMatch(/under_test = node\(\)/);
+    });
 
-  it("points to WATCH_DIR for a DirectoryWatcher with no option for its directory", () => {
-    const watch = process("Watch", [out], { nodeKind: "DirectoryWatcher" });
+    it("puts a file in the directory that it watches, and observes twice", () => {
+      expect(skeleton).toContain("def test_Watch_brings_in_what_it_observes(tmp_path):");
+      expect(skeleton).toContain('    under_test = node(opts={"watchdir": str(tmp_path)})');
+      expect(skeleton).toContain('    # TODO: write in tmp_path the files that the test needs\n    (tmp_path / "TODO").write_text("TODO")');
+      expect(skeleton).toMatch(/ {4}under_test\.observe\(\)\n {4}injected = under_test\.observe\(\)/);
+    });
 
-    expect(testSkeleton(program("resident", [watch]), watch)).toContain("# Put a file in the directory that WATCH_DIR names");
+    it("checks that after a restart it requests nothing twice", () => {
+      expect(skeleton).toContain("def test_Watch_requests_nothing_twice_after_a_restart(tmp_path):");
+      expect(skeleton).toContain("    under_test = under_test.restart()");
+      expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(2);
+    });
+
+    it("points to WATCH_DIR when it has no option for its directory", () => {
+      const bare = process("Watch", [out], { nodeKind: "DirectoryWatcher" });
+
+      expect(testSkeleton(program("resident", [bare]), bare))
+        .toContain("# TODO: write in the directory that WATCH_DIR names the files that the test needs");
+    });
   });
 });

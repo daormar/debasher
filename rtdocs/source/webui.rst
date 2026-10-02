@@ -258,12 +258,15 @@ The "Run" menu of the toolbar runs the program and acts on its run:
   with ``debasher_test`` (see the :ref:`tools` Section), and shows
   whether they passed and what they printed. It is not offered while a
   run is in progress. The right-button menu of a process offers **Add
-  test**, which writes a first test for that process in ``test/`` and
-  opens it in the program files panel: a test that runs the process
-  with placeholders for its options, or, for a node of a resident
-  program, one that builds the node and feeds it a packet. Fill in the
-  placeholders and the checks, then remove the line that makes the new
-  test fail on purpose.
+  test**, which asks for the name of a new test file in ``test/`` (it
+  proposes one), says what it will write, and, once confirmed, writes a
+  first test for that process and opens it in the program files panel:
+  a test that runs the process with placeholders for its options, or,
+  for a node of a resident program, one that builds the node and feeds
+  it a packet, or observes for it. Every place to fill in is marked
+  with a ``TODO`` comment; fill them in, then remove the line that
+  makes each new test fail on purpose. A file that already exists is
+  opened, never overwritten.
 * **Run program** saves the program and launches it with
   ``debasher_exec``. A program that the engine refuses is reported at
   once, with what ``debasher_exec`` printed.

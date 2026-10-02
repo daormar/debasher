@@ -24,7 +24,13 @@ import {
 } from "../../src/models/residentRun";
 import type { TalkCandidate } from "../../src/models/residentTalk";
 import { entryText, talkCandidates } from "../../src/models/residentTalk";
-import { offersAddTest, testFilePath, testSkeleton } from "../../src/models/testSkeleton";
+import {
+  defaultTestFileName,
+  offersAddTest,
+  testFileNameProblem,
+  testFilePath,
+  testSkeleton,
+} from "../../src/models/testSkeleton";
 import { createEmptyProgram, NoProgramMetadata } from "../../src/storage/programStorage";
 import type { Backend } from "./backend";
 import { describeProcess, describeProgram, describeSeqProcess, lastLines, optionLine } from "./describe";
@@ -877,18 +883,28 @@ const testTools = [
 
   tool(
     "add_test",
-    "Writes the test skeleton of a process, as \"Add test\" does: test/<process>.bats for a process of a general program, test/test_<process>.py for a node. Fill in its placeholders and its checks, then remove the line that makes it fail. Refused when the file exists.",
-    { home_dir: schemas.homeDir, process: schemas.processName },
+    "Writes the test skeleton of a process, as \"Add test\" does, into the test directory: by default test/<process>.bats for a process of a general program and test/test_<process>.py for a node, or file_name. Fill in its TODOs, then remove the line that makes each test fail. Refused when the file exists.",
+    {
+      home_dir: schemas.homeDir,
+      process: schemas.processName,
+      file_name: z.string().min(1).optional()
+        .describe("The name of the file in the test directory: <name>.bats in a general program, test_<name>.py in a resident one."),
+    },
     EDITS,
-    async (backend, { home_dir, process: name }) => {
+    async (backend, { home_dir, process: name, file_name }) => {
       const program = await loadProgram(backend, home_dir);
       const process = processOf(program, name);
       if (!offersAddTest(program, process)) {
         throw new Refusal(`${name} is a ${process.nodeKind}: the node harness builds only an FBPProcess or a DirectoryWatcher.`);
       }
-      const path = testFilePath(program, process);
+      const fileName = file_name ?? defaultTestFileName(program, process);
+      const problem = testFileNameProblem(program, fileName);
+      if (problem) {
+        throw new Refusal(problem);
+      }
+      const path = testFilePath(fileName);
       if ((await backend.getFileContent(home_dir, path)).kind !== "missing") {
-        throw new Refusal(`${path} exists: read it with read_program_file.`);
+        throw new Refusal(`${path} exists: read it with read_program_file, or give another file_name.`);
       }
       const content = testSkeleton(program, process);
       await backend.writeFileContent(home_dir, program.name, path, content, true);

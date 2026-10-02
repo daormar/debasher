@@ -75,8 +75,8 @@ import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
 import ProgramFilesPanel from "./ProgramFilesPanel";
 import type { OpenFileRequest } from "./ProgramFilesPanel";
-import { getFileContent, writeFileContent } from "../api/programFilesApi";
-import { offersAddTest, testFilePath, testSkeleton } from "../models/testSkeleton";
+import AddTestDialog from "./AddTestDialog";
+import { offersAddTest } from "../models/testSkeleton";
 import CanvasLegend from "./CanvasLegend";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
@@ -391,6 +391,10 @@ export default function ProgramCanvas() {
   // The file that the program files panel is asked to open, after "Add test"
   const [filesPanelRequest, setFilesPanelRequest] =
     useState<OpenFileRequest | null>(null);
+
+  // The process whose "Add test" dialog is open
+  const [addTestOf, setAddTestOf] =
+    useState<ProgramProcess | null>(null);
 
   const [isProcessOutputPending, setProcessOutputPending] =
     useState(false);
@@ -786,29 +790,19 @@ export default function ProgramCanvas() {
 
   }
 
-  // "Add test": writes the test skeleton of the process, unless its file
-  // exists, which is never overwritten, and opens the file in the program
-  // files panel.
-  async function handleAddTest(process: ProgramProcess) {
+  // "Add test": asks which file to write (see AddTestDialog), which then
+  // opens in the program files panel. The file goes into the home
+  // directory, so the program has to have been saved.
+  function handleAddTest(process: ProgramProcess) {
 
     setProcessContextMenu(null);
 
-    const title = `${process.name}: add test`;
     if (!program.homeDir.trim()) {
-      setProcessCommandOutput({ title, output: "Save the program before adding a test." });
+      setProcessCommandOutput({ title: `${process.name}: add test`, output: "Save the program before adding a test." });
       return;
     }
 
-    const path = testFilePath(program, process);
-    try {
-      const existing = await getFileContent(program.homeDir, path);
-      if (existing.kind === "missing") {
-        await writeFileContent(program.homeDir, program.name, path, testSkeleton(program, process), true);
-      }
-      setFilesPanelRequest({ path, nonce: Date.now() });
-    } catch (err) {
-      setProcessCommandOutput({ title, output: err instanceof Error ? err.message : "Failed to add the test." });
-    }
+    setAddTestOf(process);
 
   }
 
@@ -986,6 +980,18 @@ export default function ProgramCanvas() {
                 }
               : undefined
           }
+        />
+      )}
+
+      {addTestOf && (
+        <AddTestDialog
+          program={program}
+          process={addTestOf}
+          onOpen={(path, notice) => {
+            setFilesPanelRequest({ path, notice, nonce: Date.now() });
+            setAddTestOf(null);
+          }}
+          onClose={() => setAddTestOf(null)}
         />
       )}
 

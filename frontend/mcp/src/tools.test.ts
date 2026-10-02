@@ -474,6 +474,22 @@ describe("business tests and user files", () => {
     expect(answer).toContain("Wrote test/a.bats");
   });
 
+  it("writes a test skeleton under another name", async () => {
+    const { backend, files } = withFiles({ "test/a.bats": "mine" });
+
+    expect(await text(backend, "add_test", { home_dir: HOME, process: "a", file_name: "a-edge-cases.bats" }))
+      .toContain("Wrote test/a-edge-cases.bats");
+    expect(files["test/a.bats"]).toBe("mine");
+  });
+
+  it("refuses a name that debasher_test would not run", async () => {
+    const { backend, writes } = withFiles({});
+
+    await expect(call(backend, "add_test", { home_dir: HOME, process: "a", file_name: "a.sh" }))
+      .rejects.toThrow("<name>.bats");
+    expect(writes).toEqual([]);
+  });
+
   it("never overwrites a test that exists", async () => {
     const { backend, writes } = withFiles({ "test/a.bats": "mine" });
 

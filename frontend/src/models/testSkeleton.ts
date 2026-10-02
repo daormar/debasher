@@ -36,16 +36,54 @@ export function offersAddTest(program: Program, process: ProgramProcess): boolea
 const WATCH_DIR_LABEL = "-watchdir";
 
 /**
- * The path of the test skeleton of `process`, relative to the home
- * directory: test/<process>.bats, or test/test_<process>.py with every
- * dot of a qualified name turned into an underscore, since pytest imports
- * a test file as a module, and a dot would make its name a package path.
+ * The name of the test skeleton of `process` that "Add test" proposes, in
+ * the test directory: <process>.bats, or test_<process>.py with every dot
+ * of a qualified name turned into an underscore, since pytest imports a
+ * test file as a module, and a dot would make its name a package path.
  */
-export function testFilePath(program: Program, process: ProgramProcess): string {
+export function defaultTestFileName(program: Program, process: ProgramProcess): string {
+  return program.programType === "resident" ? `test_${pythonName(process.name)}.py` : `${process.name}.bats`;
+}
+
+/**
+ * Why `fileName` cannot name a test file of the program, or null when it
+ * can: a name of the test directory that debasher_test runs, *.bats in a
+ * general program and test_<name>.py in a resident one, with a name that
+ * Python can import. A name that debasher_test does not run would hold a
+ * test that never runs.
+ */
+export function testFileNameProblem(program: Program, fileName: string): string | null {
   if (program.programType === "resident") {
-    return `${TEST_DIR}/test_${pythonName(process.name)}.py`;
+    return /^test_\w+\.py$/.test(fileName)
+      ? null
+      : "A node test is a file test_<name>.py, with letters, digits and underscores in <name>, which debasher_test runs with pytest.";
   }
-  return `${TEST_DIR}/${process.name}.bats`;
+  return /^[\w-][\w.-]*\.bats$/.test(fileName)
+    ? null
+    : "A process test is a file <name>.bats, with letters, digits, dots, dashes and underscores, which debasher_test runs with bats.";
+}
+
+// The path of a test file, relative to the home directory.
+export function testFilePath(fileName: string): string {
+  return `${TEST_DIR}/${fileName}`;
+}
+
+/**
+ * What the test skeleton of `process` is, as "Add test" tells the user
+ * before it writes it.
+ */
+export function testSkeletonSummary(program: Program, process: ProgramProcess): string {
+  const what =
+    program.programType !== "resident"
+      ? `a process test (bats) that runs ${process.name} with placeholders for its options`
+      : process.nodeKind === "DirectoryWatcher"
+        ? `a node test (pytest) that builds ${process.name} and observes a directory for it to watch`
+        : `a node test (pytest) that builds ${process.name}, feeds it a packet${observesOutside(process) ? " and observes" : ""}`;
+  return (
+    `Writes a first test for ${process.name}: ${what}. Its tests fail on purpose until you fill in its TODOs, ` +
+    'real values and checks, and remove the line that makes them fail. "Run tests" runs it with the other ' +
+    "tests of the program."
+  );
 }
 
 export function testSkeleton(program: Program, process: ProgramProcess): string {
@@ -73,7 +111,15 @@ function optionComments(options: ProgramOption[], indent: string): string[] {
   });
 }
 
-const FAIL_COMMENT = "Write the checks of this test, then remove the line below, which makes a skeleton fail";
+// The end of every test of a skeleton: a line that fails on purpose, with
+// what to do about it
+function failLines(failLine: string): string[] {
+  return [
+    "    # TODO: once the checks above are written, remove the line below,",
+    "    # which makes a skeleton fail",
+    `    ${failLine}`,
+  ];
+}
 
 function processTestSkeleton(process: ProgramProcess): string {
   const flags = process.options.filter(option => option.direction === "input" && option.dataType === "None");
@@ -102,12 +148,15 @@ function processTestSkeleton(process: ProgramProcess): string {
   if (flags.length > 0) {
     lines.push(`    # Flags, to add to the command if the test needs them: ${flags.map(flag => flag.label).join(" ")}`);
   }
+  if (given.some(option => option.direction === "input")) {
+    lines.push("    # TODO: replace each TODO value with the value of the test");
+  }
   lines.push(
     command,
     '    [ "${status}" -eq 0 ]',
+    "    # TODO: check what the process wrote",
     "",
-    `    # ${FAIL_COMMENT}`,
-    "    false",
+    ...failLines("false"),
     "}",
     ""
   );
@@ -121,9 +170,18 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
 
   const name = pythonName(process.name);
   const loadCall = `load_node(${JSON.stringify(process.name)}, opts=opts, inputs=${pythonList(inputs)}, outputs=${pythonList(outputs)})`;
-  const feed = inputs.length > 0 ? `    under_test.feed(${JSON.stringify(inputs[0])}, "TODO")` : "    # The node has no business input to feed";
-  const check = outputs.length > 0 ? `    assert under_test.sent(${JSON.stringify(outputs[0])}) == ["TODO"]` : "    # The node has no business output to check";
-  const fail = [`    # ${FAIL_COMMENT}`, '    pytest.fail("write the checks of this test")'];
+  const node: NodeSkeleton = {
+    name,
+    feed:
+      inputs.length > 0
+        ? ["    # TODO: the packet of the test", `    under_test.feed(${JSON.stringify(inputs[0])}, "TODO")`]
+        : ["    # The node has no business input to feed"],
+    sentCheck:
+      outputs.length > 0
+        ? [`    assert under_test.sent(${JSON.stringify(outputs[0])}) == ["TODO"]`]
+        : ["    # The node has no business output to check"],
+    fail: failLines('pytest.fail("write the checks of this test")'),
+  };
 
   const lines = [
     `"""`,
@@ -140,61 +198,104 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
   if (configuration.length > 0) {
     lines.push("    # Configuration options that opts could give:", ...optionComments(configuration, "    "));
   }
-  lines.push(
-    `    return ${loadCall}`,
-    "",
-    "",
-    `def test_${name}_sends_what_it_should():`,
-    "    under_test = node()",
-    feed,
-    check,
-    ...fail,
-    "",
-    "",
-    `def test_${name}_goes_on_after_a_restart():`,
-    "    under_test = node()",
-    feed,
-    "    under_test = under_test.restart()",
-    feed,
-    check,
-    ...fail,
-    ""
-  );
-  if (observesOutside(process)) {
-    lines.push("", ...observeTest(process, name, check, fail));
+  lines.push(`    return ${loadCall}`, "");
+
+  const tests =
+    process.nodeKind === "DirectoryWatcher"
+      ? watcherTests(process, node)
+      : [
+          [
+            `def test_${name}_sends_what_it_should():`,
+            "    under_test = node()",
+            ...node.feed,
+            "    # TODO: what the node sent for it",
+            ...node.sentCheck,
+            ...node.fail,
+          ],
+          [
+            `def test_${name}_goes_on_after_a_restart():`,
+            "    under_test = node()",
+            ...node.feed,
+            "    under_test = under_test.restart()",
+            ...node.feed,
+            "    # TODO: what the restarted node sent, from the node state it got back",
+            ...node.sentCheck,
+            ...node.fail,
+          ],
+          ...(observesOutside(process) ? [observeTest(node)] : []),
+        ];
+  for (const test of tests) {
+    lines.push("", ...test);
   }
+  lines.push("");
   return lines.join("\n");
 }
 
-// The test of what a node that observes the outside world brings in: what
-// observe() injects, and what process_data then sends.
-function observeTest(process: ProgramProcess, name: string, check: string, fail: string[]): string[] {
-  const lines: string[] = [];
-  if (process.nodeKind === "DirectoryWatcher") {
-    const hasWatchDirOption = process.options.some(option => option.label === WATCH_DIR_LABEL);
-    lines.push(
-      `def test_${name}_brings_in_what_it_observes(tmp_path):`,
-      hasWatchDirOption
-        ? `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_LABEL))}: str(tmp_path)})`
-        : "    under_test = node()",
-      hasWatchDirOption
-        ? '    (tmp_path / "TODO").write_text("TODO")'
-        : "    # Put a file in the directory that WATCH_DIR names",
+// What the tests of a node skeleton share: the Python name of the node and
+// the lines that feed it, check what it sent and fail on purpose.
+interface NodeSkeleton {
+  name: string;
+  feed: string[];
+  sentCheck: string[];
+  fail: string[];
+}
+
+// The test of what an FBPProcess that observes the outside world brings in:
+// what observe() injects, and what process_data then sends.
+function observeTest(node: NodeSkeleton): string[] {
+  return [
+    `def test_${node.name}_brings_in_what_it_observes():`,
+    "    under_test = node()",
+    "    # TODO: make the outside world show the node something to observe",
+    "    injected = under_test.observe()",
+    "    # TODO: what observe() brought in, and what the node sent for it",
+    '    assert injected == ["TODO"]',
+    ...node.sentCheck,
+    ...node.fail,
+  ];
+}
+
+// The tests of a DirectoryWatcher, which has no input to feed and is built
+// with the directory it watches: what it brings in when a file arrives
+// there, and that after a restart it requests no file twice.
+function watcherTests(process: ProgramProcess, node: NodeSkeleton): string[][] {
+  const hasWatchDirOption = process.options.some(option => option.label === WATCH_DIR_LABEL);
+  const build = hasWatchDirOption
+    ? `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_LABEL))}: str(tmp_path)})`
+    : "    under_test = node()";
+  const files = hasWatchDirOption
+    ? ["    # TODO: write in tmp_path the files that the test needs", '    (tmp_path / "TODO").write_text("TODO")']
+    : ["    # TODO: write in the directory that WATCH_DIR names the files that the test needs"];
+  const signature = hasWatchDirOption ? "(tmp_path)" : "()";
+  return [
+    [
+      `def test_${node.name}_brings_in_what_it_observes${signature}:`,
+      build,
+      ...files,
       "    # A file is complete once it stayed the same for STABLE_OBSERVATIONS",
       "    # observations in a row (two by default)",
       "    under_test.observe()",
-      "    injected = under_test.observe()"
-    );
-  } else {
-    lines.push(
-      `def test_${name}_brings_in_what_it_observes():`,
-      "    under_test = node()",
-      "    # Make the outside world show the node something to observe",
-      "    injected = under_test.observe()"
-    );
-  }
-  lines.push('    assert injected == ["TODO"]', check, ...fail, "");
-  return lines;
+      "    injected = under_test.observe()",
+      "    # TODO: what observe() brought in, and what the node sent for it",
+      '    assert injected == ["TODO"]',
+      ...node.sentCheck,
+      ...node.fail,
+    ],
+    [
+      `def test_${node.name}_requests_nothing_twice_after_a_restart${signature}:`,
+      build,
+      ...files,
+      "    under_test.observe()",
+      "    under_test.observe()",
+      "    under_test = under_test.restart()",
+      "    under_test.observe()",
+      "    under_test.observe()",
+      "    # TODO: after a restart observe() brings the files in again, and",
+      "    # process_data drops them: check what the node sent",
+      ...node.sentCheck,
+      ...node.fail,
+    ],
+  ];
 }
 
 function pythonList(names: string[]): string {

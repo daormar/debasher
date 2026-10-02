@@ -258,9 +258,10 @@ test helpers and the test runner are defined in the glossary of
 - **test outcome**: what "Run tests" reports, from the exit status of the test
   runner, or `timedOut` when the wait runs out: `passed`, `failed`, `noTests`,
   `notRun` or `timedOut`.
-- **test skeleton**: the file that "Add test" writes for a process: a process
-  test or a node test whose placeholders the user fills in, and which fails
-  until the user removes the line that makes it fail.
+- **test skeleton**: the file that "Add test" writes for a process, once the
+  user confirms its name: a process test or a node test whose `TODO` marks the
+  user fills in, and which fails until the user removes the line that makes it
+  fail.
 
 ## The MCP server
 
@@ -2865,25 +2866,41 @@ with the outcome as its message.
 
 ## Adding a test
 
-"Add test", in the context menu of a process, writes a test skeleton for that
-process into the test directory and opens it in the program files panel:
+"Add test", in the context menu of a process, offers to write a test skeleton
+for that process into the test directory, and opens it in the program files
+panel. It writes nothing on its own: it opens a dialog that names the file it
+would write and says what the skeleton is, and the file is written only when the
+user confirms. The dialog proposes a name, which the user may change, for
+example to keep a second test file for the same process:
 
-- for a process of a general program, `test/<process>.bats`, a process test;
+- for a process of a general program, `<process>.bats`, a process test;
 - for a node whose node kind is `FBPProcess` or `DirectoryWatcher`,
-  `test/test_<process>.py`, a node test, with every dot of a qualified name
-  turned into an underscore, since pytest imports a test file as a module and a
-  dot would make its name a package path.
+  `test_<process>.py`, a node test, with every dot of a qualified name turned
+  into an underscore, since pytest imports a test file as a module and a dot
+  would make its name a package path.
 
-It is not offered on a `Supervisor` or a `ProgramLauncher`, which the node
-harness does not build (see "Testing a node without the engine" in
-`doc/design_doc_resident.md`). When the file already exists, "Add test" opens it
-and writes nothing, so that a test the user wrote is never lost. It needs a
-program that has been saved, since the file goes into its home directory, and it
-writes the skeleton from the program as it is in the editor, without saving it.
+A name that the test runner would not run is refused, before anything is
+written: `<name>.bats` in a general program, and `test_<name>.py` with a name
+that Python can import in a resident one, always in the test directory itself
+(`testFileNameProblem`). A test file under any other name would hold a test
+that never runs, which is worse than an error. When the named file already
+exists, the dialog says so and offers to open it instead, and writes nothing,
+so that a test the user wrote is never lost. Once the skeleton is written, the
+program files panel shows it, with a line above it that names the file and says
+to fill in its `TODO` marks and then remove the line that makes each test
+fail.
+
+"Add test" is not offered on a `Supervisor` or a `ProgramLauncher`, which the
+node harness does not build (see "Testing a node without the engine" in
+`doc/design_doc_resident.md`). It needs a program that has been saved, since
+the file goes into its home directory, and it writes the skeleton from the
+program as it is in the editor, without saving it.
 
 A test skeleton is written from the options of the process, by a function of
 the program model (`frontend/src/models/testSkeleton.ts`), so that the MCP
-server writes the same one:
+server writes the same one. Every place that the user has to fill in carries a
+comment that starts with `TODO:` and says what goes there, so that a search for
+`TODO` finds all of them:
 
 - A process test loads the test helpers and runs the process with
   `debasher_process`, giving each of its options but the flags, in the order of
@@ -2893,24 +2910,32 @@ server writes the same one:
   each option, and the flags, which the user adds to the command if the test
   needs them, since a line commented out in the middle of a command split over
   several lines would end it there. The test then checks that the process
-  ended with status 0.
+  ended with status 0, and leaves a `TODO` where it should check what the
+  process wrote.
 - A node test builds the node with `load_node`, naming as its inputs the
   business inputs and the external inputs of the node and as its outputs its
   business outputs (see "The program model of a resident program"), and lists
-  in a comment the configuration options that `opts` could give. One test feeds
-  a placeholder packet on the first input and checks what the first output
-  sent; another restarts the node after it. A node that observes the outside
-  world (a `DirectoryWatcher`, or an `FBPProcess` with a body for `observe`)
-  gets a third test, which calls `observe()` and checks what it brought in and
-  what the node sent. For a `DirectoryWatcher` with the option `-watchdir`,
-  that test watches its temporary directory, writes a placeholder file in it
-  and observes twice, since a file is complete only once it has stayed the
-  same for two observations in a row by default.
+  in a comment the configuration options that `opts` could give. For an
+  `FBPProcess`, one test feeds a placeholder packet on the first input and
+  checks what the first output sent, and another restarts the node after it;
+  a node with a body for `observe` gets a third test, which calls `observe()`
+  and checks what it brought in and what the node sent.
+- A `DirectoryWatcher` has no input to feed, and cannot be built without the
+  directory it watches, so its node test has none of the tests that feed the
+  node. It has two instead, which observe: one checks what the node brings in
+  when a file arrives in the directory, and one restarts the node and checks
+  that it requests no file twice. With the option `-watchdir`, both watch the
+  temporary directory of the test and write a placeholder file in it; without
+  it, a `TODO` says to write the files in the directory that `WATCH_DIR` names.
+  Each observes twice before it checks, since a file is complete only once it
+  has stayed the same for two observations in a row by default. So a skeleton
+  never fails because the node cannot be built, only on the line that makes it
+  fail or on a placeholder.
 
 A skeleton is a starting point, not a test, and it says so by failing: each of
 its tests ends with a line that fails on purpose (`false` in bats,
-`pytest.fail(...)` in pytest), with a comment telling the user to write the
-checks of the test and then remove it. A placeholder alone could not promise
+`pytest.fail(...)` in pytest), under a `TODO` that tells the user to remove it
+once the checks of the test are written. A placeholder alone could not promise
 that, since a process may accept any value and end with status 0, so "Run
 tests" never reports a skeleton as a test that passes.
 
@@ -2918,18 +2943,18 @@ The file is written through the program files of the backend, whose
 `/write-content` creates a file that does not exist when the request says
 `create`, with the directories above it, keeping the guarantees of the program
 files panel (see "Reserved names and user files"); without `create` it writes
-only a file that exists. After "Add test", the program files panel
-reads the tree again, since it holds no other notice of a file written outside
-it.
+only a file that exists. After "Add test", the program files panel reads the
+tree again, since it holds no other notice of a file written outside it.
 
 ## Business tests from the MCP server
 
 The MCP server offers the same operations as MCP tools (see "The MCP tools"):
-`run_tests`, with the outcome and the last lines of the output, and
-`add_test`, which writes the same test skeleton under the same name, refuses a
-file that exists, and answers its path and content. An agent writes and fixes
-the tests themselves, and the files that they read, with the MCP tools for
-user files, which act on any user file, not only on tests.
+`run_tests`, with the outcome and the last lines of the output, and `add_test`,
+which writes the same test skeleton under the same name, or under the name that
+the call gives with the same rules, refuses a file that exists, and answers its
+path and content. An agent writes and fixes the tests themselves, and the files
+that they read, with the MCP tools for user files, which act on any user file,
+not only on tests.
 
 # Editing a program from an agent: the MCP server
 
