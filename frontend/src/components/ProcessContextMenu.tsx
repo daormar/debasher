@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+
+import { useClickOutside } from "./useClickOutside";
 
 const MENU_ITEMS = [
   "Show options",
@@ -87,23 +89,7 @@ export default function ProcessContextMenu({
   const containerRef =
     useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        onClose();
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside, true);
-
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside, true);
-
-  }, [onClose]);
+  useClickOutside(containerRef, true, onClose);
 
   return (
 

@@ -42,17 +42,18 @@ backend receives. The two sections that follow describe the translation between
 the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
 disk, and "Execution and observation" how it runs a program and follows it.
-"Frontend state and the canvas" describes the frontend's own state, and
-"Sequential processes in the web UI" describes how a program keeps the
-sequential processes of its module. "Guarantees and non-goals" gathers the
-guarantees stated along the way. "Resident programs in the web UI" designs the
-extension to resident programs, and says which parts of it are built. "Business
-tests in the web UI" describes how the web UI runs the tests of a program and
-writes a first test for a process. "A prompt for the code of a process"
-describes how the code editors help to have an AI tool write the code of a
-process, of its options handler, of its additional methods or of a node.
-"Editing a program from an agent: the MCP server" describes a second client of
-the backend, for AI agents, and "Future work" lists what is known to be missing.
+"Frontend state and the canvas" describes the frontend's own state and the
+Help menu of the editor, and "Sequential processes in the web UI" describes how
+a program keeps the sequential processes of its module. "Guarantees and
+non-goals" gathers the guarantees stated along the way. "Resident programs in
+the web UI" designs the extension to resident programs, and says which parts of
+it are built. "Business tests in the web UI" describes how the web UI runs the
+tests of a program and writes a first test for a process. "A prompt for the
+code of a process" describes how the code editors help to have an AI tool write
+the code of a process, of its options handler, of its additional methods or of
+a node. "Editing a program from an agent: the MCP server" describes a second
+client of the backend, for AI agents, and "Future work" lists what is known to
+be missing.
 
 # Glossary
 
@@ -1372,6 +1373,29 @@ so a dissolved group keeps its color and its badge on the canvas until then
 (see "Future work"). The process status does not go through that list: each
 canvas node reads it from the store. Neither do the edges, which are derived
 again from the store on every change.
+
+## The Help menu
+
+The Help menu, at the right of the toolbar of the editor, before "Close", links
+to the documentation of DeBasher (its contents and the page on the web UI) and
+to the repository (the source code and its issues). It also opens "How to cite
+DeBasher", a dialog with a link to the article that describes DeBasher and its
+reference, as text and as BibTeX, each with a "Copy" that behaves as the one of
+the prompt panel when the browser refuses the clipboard (see "The prompt
+panel"). What the menu offers is data, in `models/helpLinks.ts`. Every link
+opens in a new tab of the browser, with no access back to the tab of the editor:
+the store keeps no record of unsaved changes (see "Screens and the store"), so
+following a link in the same tab would lose them without a warning.
+
+A link to a page of the documentation of DeBasher names a page of
+`rtdocs/source` by the name of its source, and the tests of the frontend check
+that the page exists in the repository, where the sources of the documentation
+of DeBasher are present (they are not distributed with the package), so that a
+renamed page breaks a test instead of a link. They check as well that the
+reference is the one that `README.md` asks to cite. The links lead to the
+published documentation of DeBasher (its latest version), not to that of the
+version that serves the web UI, so a link may lead to pages newer than the
+installed version (see "Future work").
 
 # Sequential processes in the web UI
 
@@ -3624,6 +3648,13 @@ backend's own tests.
   the documentation, and maybe the program, to a service outside the machine,
   which the user has to know; and its answers are only as good as a
   documentation kept in step with the code.
+- **The documentation installed with DeBasher.** Building the documentation
+  of DeBasher into HTML when the package is made, installing it, and serving it
+  from the backend, so that the Help menu links to the documentation of the
+  installed version, also on a machine with no access to the internet, and to
+  the published documentation only when the installed one is absent. Building
+  it needs Sphinx and its extensions, which a package built from the
+  distributed sources would rather not need.
 - **Closing an external input.** An action of "Talk to FIFOs" that writes a
   `CLOSE` into an external input, to tell a node that its source has
   finished, once the engine has a hook that lets the code of a node learn that

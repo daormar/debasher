@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import {
   checkLaunch,
@@ -18,6 +18,7 @@ import ProgramOptionsEditor from "./ProgramOptionsEditor";
 import ResetOutputDirConfirm from "./ResetOutputDirConfirm";
 import TalkToFifosDialog from "./TalkToFifosDialog";
 import ResidentTalkDialog from "./ResidentTalkDialog";
+import { useClickOutside } from "./useClickOutside";
 
 const MENU_ITEMS = [
   "Set output directory",
@@ -504,27 +505,9 @@ export default function RunMenu() {
 
   }
 
-  useEffect(() => {
+  const closeMenu = useCallback(() => setOpen(false), []);
 
-    if (!isOpen) {
-      return;
-    }
-
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside, true);
-
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside, true);
-
-  }, [isOpen]);
+  useClickOutside(containerRef, isOpen, closeMenu);
 
   return (
 
