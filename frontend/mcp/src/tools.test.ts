@@ -416,7 +416,17 @@ describe("business tests and user files", () => {
   // backend keep them, with its refusal of the generated script.
   function withFiles(files: Record<string, string>, changes: Partial<Program> = {}) {
     const writes: { path: string; create: boolean }[] = [];
+    const removed: string[] = [];
+    const moved: [string, string][] = [];
     const backend = fakeBackend([program(changes)], {
+      deleteEntry: async (_homeDir: string, _programName: string, path: string) => {
+        removed.push(path);
+        return [];
+      },
+      moveEntry: async (_homeDir: string, _programName: string, from: string, to: string) => {
+        moved.push([from, to]);
+        return [];
+      },
       getFileContent: async (_homeDir: string, path: string) =>
         path in files ? { kind: "file" as const, content: files[path] } : { kind: "missing" as const },
       writeFileContent: async (_homeDir: string, programName: string, path: string, content: string, create = false) => {
@@ -435,7 +445,7 @@ describe("business tests and user files", () => {
         },
       ],
     });
-    return { backend, files, writes };
+    return { backend, files, writes, removed, moved };
   }
 
   it("runs the tests after saving the program, and says their outcome", async () => {
@@ -488,6 +498,35 @@ describe("business tests and user files", () => {
 
     await text(backend, "write_program_file", { home_dir: HOME, path: "test/data/in.txt", content: "1 2" });
     expect(files["test/data/in.txt"]).toBe("1 2");
+  });
+
+  it("deletes a user file only when the call confirms it", async () => {
+    const { backend, removed } = withFiles({});
+
+    await expect(call(backend, "delete_program_file", { home_dir: HOME, path: "test/a.bats" }))
+      .rejects.toThrow("This deletes test/a.bats, which cannot be undone: call again with confirm.");
+    expect(removed).toEqual([]);
+
+    expect(await text(backend, "delete_program_file", { home_dir: HOME, path: "test/a.bats", confirm: true }))
+      .toBe("Deleted test/a.bats.");
+    expect(removed).toEqual(["test/a.bats"]);
+  });
+
+  it("says how many files a directory holds before deleting it", async () => {
+    const { backend } = withFiles({});
+
+    await expect(call(backend, "delete_program_file", { home_dir: HOME, path: "test" }))
+      .rejects.toThrow("the directory test and the 1 files in it");
+    await expect(call(backend, "delete_program_file", { home_dir: HOME, path: "nope" }))
+      .rejects.toThrow("nope does not exist");
+  });
+
+  it("moves a user file", async () => {
+    const { backend, moved } = withFiles({});
+
+    expect(await text(backend, "move_program_file", { home_dir: HOME, path: "test/a.bats", new_path: "test/b.bats" }))
+      .toBe("Moved test/a.bats to test/b.bats.");
+    expect(moved).toEqual([["test/a.bats", "test/b.bats"]]);
   });
 
   it("refuses to write the generated script, as the backend does", async () => {

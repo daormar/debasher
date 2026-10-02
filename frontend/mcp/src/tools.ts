@@ -831,6 +831,25 @@ const residentTools = [
 const filePath = z.string().min(1)
   .describe('A path relative to the home directory of the program, such as "test/greet.bats".');
 
+// The entry of the tree of user files at `path`, if any.
+function findFileEntry(entries: FileEntry[], path: string): FileEntry | undefined {
+  for (const entry of entries) {
+    if (entry.path === path) {
+      return entry;
+    }
+    const found = findFileEntry(entry.children ?? [], path);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+// The number of files under some entries of the tree, at any depth.
+function countFiles(entries: FileEntry[]): number {
+  return entries.reduce((count, entry) => count + (entry.type === "dir" ? countFiles(entry.children ?? []) : 1), 0);
+}
+
 // The user files of a home directory, one per line, indented by depth, a
 // directory with a final slash.
 function fileTreeLines(entries: FileEntry[], depth = 0): string[] {
@@ -877,6 +896,12 @@ const testTools = [
     }
   ),
 
+];
+
+// The user files of the home directory, as the program files panel manages
+// them (see "Reserved names and user files" in doc/design_doc_webui.md).
+const userFileTools = [
+
   tool(
     "list_program_files",
     "Lists the user files of the home directory of the program, such as its tests and the data they read, with the generated script; files that DeBasher manages are not shown.",
@@ -915,6 +940,40 @@ const testTools = [
     }
   ),
 
+  tool(
+    "delete_program_file",
+    "Deletes a user file of the home directory of the program, or a directory with everything in it. It cannot be undone, so it needs confirm. The generated script and the files that DeBasher manages are refused.",
+    { home_dir: schemas.homeDir, path: filePath, confirm },
+    DELETES,
+    async (backend, { home_dir, path, confirm: confirmed }) => {
+      const program = await loadProgram(backend, home_dir);
+      if (!confirmed) {
+        const entry = findFileEntry(await backend.getFileTree(home_dir, program.name), path);
+        if (!entry) {
+          throw new Refusal(`${path} does not exist.`);
+        }
+        const what = entry.type === "dir"
+          ? `the directory ${path} and the ${countFiles(entry.children ?? [])} files in it`
+          : path;
+        throw new Refusal(`This deletes ${what}, which cannot be undone: call again with confirm.`);
+      }
+      await backend.deleteEntry(home_dir, program.name, path);
+      return `Deleted ${path}.`;
+    }
+  ),
+
+  tool(
+    "move_program_file",
+    "Renames or moves a user file or directory of the home directory of the program, creating the directories above the new path. Refused when the new path exists, so nothing is overwritten.",
+    { home_dir: schemas.homeDir, path: filePath, new_path: filePath.describe("The new path, relative to the home directory.") },
+    EDITS,
+    async (backend, { home_dir, path, new_path }) => {
+      const program = await loadProgram(backend, home_dir);
+      await backend.moveEntry(home_dir, program.name, path, new_path);
+      return `Moved ${path} to ${new_path}.`;
+    }
+  ),
+
 ];
 
 export const TOOLS: Tool[] = [
@@ -924,4 +983,5 @@ export const TOOLS: Tool[] = [
   ...runningTools,
   ...residentTools,
   ...testTools,
+  ...userFileTools,
 ];

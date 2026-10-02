@@ -445,8 +445,9 @@ debasher_mcp
 
 ``debasher_mcp`` runs the MCP server of DeBasher, which offers to an AI
 agent, such as Claude Code, what the web interface offers to a person:
-reading a program, editing it, running it and following its run, and
-writing and running its business tests (see `debasher_test`_), as tools
+reading a program, editing it, running it and following its run,
+writing and running its business tests (see `debasher_test`_), and
+managing the files of its home directory, as tools
 of the Model Context Protocol. The agent starts it and talks to it over its
 standard input and output. It is a client of the server that
 ``debasher_webui`` launches, which has to be running, and it edits programs

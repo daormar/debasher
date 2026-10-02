@@ -42,6 +42,8 @@ export const httpBackend = {
   getFileTree: programFiles.getFileTree,
   getFileContent: programFiles.getFileContent,
   writeFileContent: programFiles.writeFileContent,
+  deleteEntry: programFiles.deleteEntry,
+  moveEntry: programFiles.moveEntry,
 };
 
 export type Backend = typeof httpBackend;

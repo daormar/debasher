@@ -2804,8 +2804,8 @@ files under `test/` in the home directory, which the program files panel
 shows and edits. The web UI adds two things on top: it runs the tests
 of the program and shows their result, and it writes a test skeleton for a
 process, so that a test does not start from an empty file. The MCP server
-offers both to an agent, together with the reading and writing of user files,
-so that an agent that writes a process can also write its tests.
+offers both to an agent, together with the management of user files, so that
+an agent that writes a process can also write its tests.
 
 ## Running the tests
 
@@ -2908,14 +2908,11 @@ it.
 ## Business tests from the MCP server
 
 The MCP server offers the same operations as MCP tools (see "The MCP tools"):
-`run_tests`, with the outcome and the last lines of the output; `add_test`,
-which writes the same test skeleton under the same name, refuses a file that
-exists, and answers its path and content; and, for an agent to write tests
-and the files that they read, `list_program_files`, `read_program_file` and
-`write_program_file`, over the program files of the backend. The last one
-creates or replaces a user file, with the directories above it. The backend
-refuses, for the MCP server as for the panel, a reserved name, a path that
-leaves the home directory and the generated script.
+`run_tests`, with the outcome and the last lines of the output, and
+`add_test`, which writes the same test skeleton under the same name, refuses a
+file that exists, and answers its path and content. An agent writes and fixes
+the tests themselves, and the files that they read, with the MCP tools for
+user files, which act on any user file, not only on tests.
 
 # Editing a program from an agent: the MCP server
 
@@ -3098,9 +3095,20 @@ error.
   on the nodes on which the canvas offers them; and `list_fifos`, `write_fifo`
   and `read_fifo`, which talk to the FIFOs that "Talk to FIFOs" offers, with
   its rules (see "Observing and talking to a live program").
-- **Business tests and user files.** `run_tests`, `add_test`,
-  `list_program_files`, `read_program_file` and `write_program_file` (see
-  "Business tests from the MCP server").
+- **Business tests.** `run_tests` and `add_test` (see "Business tests from the
+  MCP server").
+- **User files.** `list_program_files`, `read_program_file`,
+  `write_program_file`, `delete_program_file` and `move_program_file`, which
+  manage the user files of the home directory as the program files panel does
+  (see "Reserved names and user files"), through the endpoints of the backend
+  that the panel uses. `write_program_file` creates or replaces a file, with the
+  directories above it (`/write-content` with `create`, see "Adding a test");
+  `move_program_file` creates the directories above the new path and never
+  replaces what is there; `delete_program_file` deletes a file, or a directory
+  with everything in it, which cannot be undone, so it is refused unless the
+  call says `confirm`, and the refusal says what would be deleted. The backend
+  refuses, for the MCP server as for the panel, a reserved name, a path that
+  leaves the home directory and the generated script.
 
 The MCP tools keep the guards of the editor through the backend, not by
 repeating them: the backend refuses a second run on an output directory, the two
@@ -3132,9 +3140,6 @@ backend's own tests.
 
 # Future work
 
-- **Deleting user files from the MCP server.** An MCP tool that deletes or
-  moves a user file, as the program files panel does; an agent can write tests
-  and the files that they read, but not remove them.
 - **The result of each test.** "Run tests" shows the reports of bats and
   pytest as text; parsing them would let the canvas mark the processes whose
   tests fail.
