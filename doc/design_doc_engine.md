@@ -1945,9 +1945,11 @@ variables that the runner exports are set, which helps to debug one test.
 ## Checking an installation
 
 `make installcheck` runs `debasher_check_installation`, which runs the
-programs of `data/webui_programs` from where they were installed. Two of them
-carry a test directory, installed with them: `webui_batch_greet`, with process
-tests, and `webui_running_sum`, with node tests. `debasher_check_installation`
+programs of `data/webui_programs` from where they were installed. Three of
+them carry a test directory, installed with them: `webui_batch_greet`, with
+process tests, `webui_running_sum`, with node tests, and `webui_watch_tally`,
+with node tests of a `DirectoryWatcher` that observes a directory and of the
+node it feeds. `debasher_check_installation`
 runs `debasher_test` on every program of `data/webui_programs` and fails on
 any status other than 0 or 77. When `configure` did not find the tool of a kind
 of test that a program has, the check does not run the test runner on that

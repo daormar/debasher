@@ -54,9 +54,9 @@ from debasher_runtime_watcher import DirectoryWatcher
 # the programs.
 
 # The node kinds that the harness does not build: what makes them what
-# they are (observing, launching, supervising) is not driven by
-# process_data alone
-_REFUSED_KINDS = (Supervisor, DirectoryWatcher, ProgramLauncher)
+# they are (launching general programs, supervising the nodes) is not
+# driven by process_data and observe() alone
+_REFUSED_KINDS = (Supervisor, ProgramLauncher)
 
 # The heredoc of each process, by program file and process name, taken
 # once per test session: loading the module is what costs time
@@ -74,7 +74,9 @@ def load_node(process, opts=None, inputs=(), outputs=()):
     the dash. A port that the test leaves out is not a port of the node
     under test. The node gets a placeholder for the option of each port,
     whose FIFO is never opened, and initialize_runtime() is called, as
-    run() does before any thread starts.
+    run() does before any thread starts. The directory of the program file
+    is the directory of the module of the node, against which a relative
+    path, such as the WATCH_DIR of a DirectoryWatcher, is resolved.
     """
     pfile = os.environ.get("DEBASHER_TEST_PFILE")
     if not pfile:
@@ -83,7 +85,8 @@ def load_node(process, opts=None, inputs=(), outputs=()):
             "debasher_test, or set it to the program file"
         )
     node_class = _node_class(process, _node_source(pfile, process))
-    under_test = NodeUnderTest(node_class, opts or {}, list(inputs), list(outputs))
+    module_dir = os.path.dirname(os.path.abspath(pfile))
+    under_test = NodeUnderTest(node_class, opts or {}, list(inputs), list(outputs), module_dir)
     with under_test._node_env():
         under_test.node.initialize_runtime()
     return under_test
@@ -158,7 +161,7 @@ def _node_class(process, source):
         if issubclass(node_class, kind):
             raise ValueError(
                 f"load_node: {node_class.__name__} is a {kind.__name__}: the harness "
-                "builds only a plain subclass of FBPProcess"
+                "builds a subclass of FBPProcess or of DirectoryWatcher"
             )
     return node_class
 
@@ -224,16 +227,17 @@ def _json_round_trip(value):
 
 class NodeUnderTest:
     """
-    A node built by load_node: `feed` calls its process_data, `sent` gives
-    what it sent, `restart` builds it again from its node state, and
-    `node` is the instance itself.
+    A node built by load_node: `feed` calls its process_data, `observe`
+    its observe(), `sent` gives what it sent, `restart` builds it again
+    from its node state, and `node` is the instance itself.
     """
 
-    def __init__(self, node_class, opts, inputs, outputs):
+    def __init__(self, node_class, opts, inputs, outputs, module_dir=None):
         self._node_class = node_class
         self._opts = dict(opts)
         self._inputs = inputs
         self._outputs = outputs
+        self._module_dir = module_dir
         # The execdir of the node, where it may leave a notice: nothing is
         # written into the program directory
         self._tmpdir = tempfile.TemporaryDirectory(prefix="debasher_node_")
@@ -243,6 +247,13 @@ class NodeUnderTest:
             self.node = node_class()
         # The pace of a node is not business logic
         self.node.sleep = lambda seconds: None
+        # What inject() brings in, which in a run goes to the input log and
+        # then to the brain thread (see observe below); inject() keeps its
+        # own checks
+        self._injected = []
+        self.node._on_arrivals = lambda port, items: self._injected.extend(
+            envelope.payload for envelope, _ in items
+        )
 
     @contextlib.contextmanager
     def _node_env(self):
@@ -257,6 +268,7 @@ class NodeUnderTest:
             "DEBASHER_PROCESS_EXECDIR": self._tmpdir.name,
             "DEBASHER_PROCESS_COMP_SPECS": None,
             "DEBASHER_PROCESS_TASK_IDX": None,
+            "DEBASHER_PROCESS_MODULE_DIR": self._module_dir,
         }
         saved = {name: os.environ.get(name) for name in env}
         try:
@@ -295,18 +307,43 @@ class NodeUnderTest:
         Calls process_data(port, packet) on this thread, the one allowed to
         send while the call lasts, as the brain thread is. The packet first
         makes a round trip through JSON, so that the node gets what would
-        arrive through a FIFO.
+        arrive through a FIFO. `port` is an input port of the node under
+        test, or its OBSERVE_PORT, for something that observe() would have
+        brought in.
         """
-        if port not in self._inputs:
+        observe_port = self.node._observe_port()
+        if port not in self._inputs and (observe_port is None or port != observe_port):
             raise ValueError(
-                f"feed: {port!r} is not an input port of the node under test "
-                f"(inputs: {self._inputs})"
+                f"feed: {port!r} is neither an input port of the node under test "
+                f"(inputs: {self._inputs}) nor its observe port ({observe_port})"
             )
         try:
             with self._node_env():
                 self.node._run_process_data(port, _json_round_trip(packet))
         finally:
             self._collect_sent()
+
+    def observe(self):
+        """
+        Runs observe() once on this thread, as the observation thread would
+        at the end of an interval, and then calls process_data, in order,
+        with what it brought in with inject(), under OBSERVE_PORT, as the
+        brain thread would. Returns what observe() brought in, after the
+        same round trip through JSON as a message.
+        """
+        if not self.node._observes():
+            raise ValueError(f"observe: {self._node_class.__name__} does not define observe()")
+        self._injected.clear()
+        with self._node_env():
+            self.node.observe()
+        injected = list(self._injected)
+        try:
+            with self._node_env():
+                for payload in injected:
+                    self.node._run_process_data(self.node._observe_port(), payload)
+        finally:
+            self._collect_sent()
+        return injected
 
     def _collect_sent(self):
         """
@@ -339,7 +376,7 @@ class NodeUnderTest:
         """
         with self._node_env():
             node_state = _json_round_trip(self.node.capture_node_state())
-        restarted = NodeUnderTest(self._node_class, self._opts, self._inputs, self._outputs)
+        restarted = NodeUnderTest(self._node_class, self._opts, self._inputs, self._outputs, self._module_dir)
         with restarted._node_env():
             restarted.node.restore_node_state(_json_round_trip(node_state))
             restarted.node.initialize_runtime()

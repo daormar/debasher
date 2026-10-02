@@ -1510,14 +1510,15 @@ state it had. `debasher_reset_resident` does it for the whole program (see
 ## Testing a node without the engine
 
 A node test (see "Business tests of a program" in `doc/design_doc_engine.md`)
-checks the business logic of a node: what it sends for what it receives, and
-that its node state brings it back to where it was. None of that needs FIFOs,
-envelopes, rounds or a `Supervisor`, so the test builds the class of the node
-in its own Python process, without the engine, and calls its hooks directly.
-The node harness, the module `debasher_runtime_testing` of the runtime
-library, does that for it. For the node `Accumulate` of the program
-`webui_running_sum`, which keeps the running sum of the numbers that arrive on
-its port `numbers` and sends each new sum on `outsum`:
+checks the business logic of a node: what it sends for what it receives, what it
+brings in when it observes the outside world, and that its node state brings it
+back to where it was. None of that needs FIFOs, envelopes, rounds or a
+`Supervisor`, so the test builds the class of the node in its own Python
+process, without the engine, and calls its hooks directly. The node harness, the
+module `debasher_runtime_testing` of the runtime library, does that for it. For
+the node `Accumulate` of the program `webui_running_sum`, which keeps the
+running sum of the numbers that arrive on its port `numbers` and sends each new
+sum on `outsum`:
 
 ```python
 from debasher_runtime_testing import load_node
@@ -1566,8 +1567,9 @@ test:
   the heredoc.
 - It takes the one class of the heredoc that derives from a class of the
   runtime library, as the engine requires, and refuses it when it derives from
-  `Supervisor`, `DirectoryWatcher` or `ProgramLauncher`: only a plain subclass
-  of `FBPProcess` can be tested.
+  `Supervisor` or `ProgramLauncher`: a subclass of `FBPProcess` or of
+  `DirectoryWatcher` can be tested, while what a launcher node or the
+  `Supervisor` does is not driven by `process_data` and `observe()` alone.
 - It builds the node from an `argv` in the shape that the engine gives a
   heredoc, since the class of a node takes no argument and its constructor
   parses `sys.argv`: `opts`, by name with or without the dash, a value `True`
@@ -1579,10 +1581,12 @@ test:
 - It calls `initialize_runtime()`, as `run()` does before any thread starts.
 
 Whenever the harness calls the node (its constructor, `initialize_runtime()`,
-`feed` and `restart`), it sets the environment that the engine gives a node
-(its ports and its execdir, with no computational specifications and no task
-index), and puts back what the test had afterwards, since several nodes under
-test share one process.
+`feed`, `observe` and `restart`), it sets the environment that the engine gives
+a node (its ports, its execdir and the directory of its module, which is that
+of the program file, with no computational specifications and no task index),
+and puts back what the test had afterwards, since several nodes under test
+share one process. The directory of the module is what a relative path of the
+node is resolved against, such as the `WATCH_DIR` of a `DirectoryWatcher`.
 
 The test names the ports because the harness does not build the options of the
 program, which is what tells the engine which options of a process are ports.
@@ -1596,9 +1600,22 @@ A node under test offers:
 - `feed(port, packet)`: calls `process_data(port, packet)` on the calling
   thread, marked as the brain thread is, so that `send_data` works during the
   call and only then. The packet first makes a round trip through JSON, so that
-  the node gets what would arrive through a FIFO: a tuple arrives as a list. A
-  port that is not one of `inputs` is refused. When `process_data` raises,
-  what it sent before stays in `sent`.
+  the node gets what would arrive through a FIFO: a tuple arrives as a list.
+  The port is one of `inputs`, or the observe port of the node (`OBSERVE_PORT`),
+  standing for something that `observe()` would have brought in; any other is
+  refused. When `process_data` raises, what it sent before stays in `sent`.
+- `observe()`: runs the `observe()` of the node once on the calling thread, as
+  the observation thread would at the end of an interval, and then calls
+  `process_data` with what it brought in with `inject()`, in order and under
+  the observe port, as the brain thread would; it returns what was brought in,
+  after the same round trip through JSON as a message. The harness takes what
+  `inject()` hands to the input log instead of writing it there, and leaves
+  the checks of `inject()` as they are: one from `process_data`, or in a node
+  without an observe port, still raises. A node that does not define
+  `observe()` is refused. Since a test calls it, it can make the outside world
+  change between two observations, such as a file that a `DirectoryWatcher`
+  sees grow, then stay the same for `STABLE_OBSERVATIONS` observations in a
+  row before it is brought in.
 - `sent(port)`: the payloads that the node has sent on `port` since it was
   built, decoded from the lines that `send_data` queued. The harness takes
   each line off the outbound queue as soon as `process_data` returns, and
@@ -1606,7 +1623,9 @@ A node under test offers:
   packets a test feeds.
 - `restart()`: captures the node state and makes a round trip of it through
   JSON, as a checkpoint does; builds a new node under test with the same
-  options and ports; restores the state into it and calls
+  options and ports, whose `observe()` remembers nothing of the earlier one,
+  as after a crash, so a test can check that `process_data` drops what the new
+  node brings in again; restores the state into it and calls
   `initialize_runtime()`, the order in which `run()` starts a relaunched node;
   and returns the new node, whose `sent` starts empty. It raises when the new
   node captures a node state other than the one it was restored from, since
@@ -1624,14 +1643,14 @@ variables expanded by Bash when it is printed, in the shell of
 before the class runs with the environment and the `argv` of pytest, since the
 harness gives the node its own only when it calls the node.
 
-The harness checks nothing of the framework: sequence numbers, rounds, the
-input log, `CLOSE`, the heartbeat and the limits of a node are left to the
-tests of the engine, and `observe()` never runs. It is part of the runtime
-library, and not of each node test, because it reaches into the internals of
-`FBPProcess`: it calls `process_data` the way the brain thread does, and it
-empties the outbound queues and the outbound backlog. A node test uses only
-the harness, so those internals can change without breaking the tests of the
-programs.
+The harness checks nothing of the framework: sequence numbers, rounds, the input
+log, `CLOSE`, the heartbeat and the limits of a node are left to the tests of
+the engine, and `observe()` runs only when the test calls it, never on a timer
+of its own. It is part of the runtime library, and not of each node test,
+because it reaches into the internals of `FBPProcess`: it calls `process_data`
+the way the brain thread does, and it empties the outbound queues and the
+outbound backlog. A node test uses only the harness, so those internals can
+change without breaking the tests of the programs.
 
 # Input log
 
@@ -3934,8 +3953,9 @@ Design ideas from Future work move here once they are actually built.
 - **The ports of a node under test from the program.** The node harness taking
   the ports of a node from the options of the program, as the engine computes
   them for a run, instead of from the test.
-- **The other node kinds under test.** A `DirectoryWatcher`, `observe()` and a
-  `ProgramLauncher` in the node harness.
+- **A launcher node under test.** A `ProgramLauncher` in the node harness, with
+  its launches simulated: what it asked to launch, with which options, and how
+  the test says each batch run ended.
 - **A restart of every node, with no test written for it.** The test runner
   checking `restart()` on every node of a program; the harness would need the
   options that the constructor of each node reads.

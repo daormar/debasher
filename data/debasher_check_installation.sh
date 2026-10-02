@@ -111,6 +111,89 @@ check_program_file()
 }
 
 ########
+# Runs the resident program of the module `pfile`, whose DirectoryWatcher
+# watches a directory of its own given with -watchdir, writes the file
+# `file_name` there (under a hidden name first, so that it is complete once
+# it appears), and checks that `expected_payload` comes out of the output
+# FIFO `output_fifo`; then stops the program in order and checks that every
+# process finished.
+check_watched_program()
+{
+    local tmpdir=$1
+    local pfile=$2
+    local outdirname=$3
+    local file_name=$4
+    local output_fifo=$5
+    local expected_payload=$6
+    local outdir="${tmpdir}/${outdirname}"
+    local watchdir="${tmpdir}/${outdirname}_watched"
+    local status_out="${tmpdir}/${outdirname}_status.out"
+    local output_file="${tmpdir}/${outdirname}_output.out"
+    local timeout_secs=30
+    local ret=0
+
+    echo -n "## Checking $("${BASENAME}" "${pfile}") (resident) ... "
+
+    "${MKDIR}" -p "${watchdir}"
+    "${debasher_bindir}/debasher_exec" --pfile "${pfile}" \
+                                       --outdir "${outdir}" \
+                                       -watchdir "${watchdir}" \
+                                       > "${tmpdir}/${outdirname}_exec.out" 2>&1 || ret=1
+
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "inprogress" ${timeout_secs} "${status_out}" || ret=124
+    fi
+
+    local reader_pid=""
+    if test $ret -eq 0 ; then
+        local output_path=$("${FIND}" "${outdir}/__fifos__" -name "${output_fifo}")
+        "${CAT}" "${output_path}" > "${output_file}" &
+        reader_pid=$!
+
+        echo "a line" > "${watchdir}/.${file_name}"
+        "${MV}" "${watchdir}/.${file_name}" "${watchdir}/${file_name}"
+
+        ret=124
+        local i
+        for ((i = 0; i < timeout_secs; i++)); do
+            if "${GREP}" -q -F "\"payload\": ${expected_payload}}" "${output_file}" 2>/dev/null; then
+                ret=0
+                break
+            fi
+            "${SLEEP}" 1
+        done
+    fi
+
+    "${debasher_bindir}/debasher_stop_resident" -d "${outdir}" --timeout ${timeout_secs} \
+                                                > "${tmpdir}/${outdirname}_stop.out" 2>&1
+    if test $? -ne 0 && test $ret -eq 0 ; then
+        ret=1
+    fi
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "finished" ${timeout_secs} "${status_out}" || ret=1
+    fi
+
+    if test -n "${reader_pid}" ; then
+        kill "${reader_pid}" 2>/dev/null
+        wait "${reader_pid}" 2>/dev/null
+    fi
+
+    case $ret in
+        0)
+            echo "OK"
+            ;;
+        124)
+            echo "Timed Out"
+            ;;
+        *)
+            echo "Failed"
+            ;;
+    esac
+    echo ""
+    return $ret
+}
+
+########
 # Runs debasher_test on the program directory `prgdir`, which passes when
 # every test passes or the program has none. The check is skipped when
 # configure did not find the tool of a kind of test that the program has.
@@ -993,6 +1076,23 @@ progname="webui_batch_launcher"
 check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                        "${progname}" "requests" '{"opts":{"-text":"world","-secs":"0"},"run":"r1"}' \
                        "report" '{"run": "r1", "status": "finished", "finished": 1, "failed": 0}'
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
+# Check webui_watch_tally, a resident program with a DirectoryWatcher: a
+# text file that arrives in the watched directory is the first one counted
+progname="webui_watch_tally"
+check_watched_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                      "${progname}" "first.txt" "tally" '{"run": "first", "seen": 1}'
 case $? in
     0)
         ((checks_passed++))

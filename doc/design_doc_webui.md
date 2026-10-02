@@ -2869,18 +2869,17 @@ with the outcome as its message.
 process into the test directory and opens it in the program files panel:
 
 - for a process of a general program, `test/<process>.bats`, a process test;
-- for a node whose node kind is `FBPProcess`, `test/test_<process>.py`, a node
-  test, with every dot of a qualified name turned into an underscore, since
-  pytest imports a test file as a module and a dot would make its name a
-  package path.
+- for a node whose node kind is `FBPProcess` or `DirectoryWatcher`,
+  `test/test_<process>.py`, a node test, with every dot of a qualified name
+  turned into an underscore, since pytest imports a test file as a module and a
+  dot would make its name a package path.
 
-It is not offered on a `Supervisor`, a `DirectoryWatcher` or a
-`ProgramLauncher`, which the node harness does not build (see "Testing a node
-without the engine" in `doc/design_doc_resident.md`). When the file already
-exists, "Add test" opens it and writes nothing, so that a test the user wrote
-is never lost. It needs a program that has been saved, since the file goes into
-its home directory, and it writes the skeleton from the program as it is in the
-editor, without saving it.
+It is not offered on a `Supervisor` or a `ProgramLauncher`, which the node
+harness does not build (see "Testing a node without the engine" in
+`doc/design_doc_resident.md`). When the file already exists, "Add test" opens it
+and writes nothing, so that a test the user wrote is never lost. It needs a
+program that has been saved, since the file goes into its home directory, and it
+writes the skeleton from the program as it is in the editor, without saving it.
 
 A test skeleton is written from the options of the process, by a function of
 the program model (`frontend/src/models/testSkeleton.ts`), so that the MCP
@@ -2900,7 +2899,13 @@ server writes the same one:
   business outputs (see "The program model of a resident program"), and lists
   in a comment the configuration options that `opts` could give. One test feeds
   a placeholder packet on the first input and checks what the first output
-  sent; another restarts the node after it.
+  sent; another restarts the node after it. A node that observes the outside
+  world (a `DirectoryWatcher`, or an `FBPProcess` with a body for `observe`)
+  gets a third test, which calls `observe()` and checks what it brought in and
+  what the node sent. For a `DirectoryWatcher` with the option `-watchdir`,
+  that test watches its temporary directory, writes a placeholder file in it
+  and observes twice, since a file is complete only once it has stayed the
+  same for two observations in a row by default.
 
 A skeleton is a starting point, not a test, and it says so by failing: each of
 its tests ends with a line that fails on purpose (`false` in bats,

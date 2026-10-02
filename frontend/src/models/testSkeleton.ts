@@ -1,4 +1,4 @@
-import { isBusinessOutput, nodeOptionRole } from "./node";
+import { isBusinessOutput, nodeOptionRole, observesOutside } from "./node";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
@@ -7,7 +7,8 @@ import type { Program } from "./program";
  * The test skeleton that "Add test" writes for a process (see "Adding a
  * test" in doc/design_doc_webui.md): a process test, run with bats, for a
  * process of a general program, and a node test, run with pytest, for a
- * node whose node kind is FBPProcess. The MCP server writes the same one.
+ * node whose node kind is FBPProcess or DirectoryWatcher. The MCP server
+ * writes the same one.
  *
  * A skeleton is a starting point, not a test: each of its tests ends with
  * a line that fails on purpose, so that "Run tests" never reports a
@@ -20,11 +21,19 @@ export const TEST_DIR = "test";
 /**
  * Whether "Add test" is offered on `process`: on every process of a
  * general program, and on a node only when the node harness builds it,
- * that is when its node kind is FBPProcess.
+ * that is when its node kind is FBPProcess or DirectoryWatcher.
  */
 export function offersAddTest(program: Program, process: ProgramProcess): boolean {
-  return program.programType !== "resident" || process.nodeKind === "FBPProcess";
+  return (
+    program.programType !== "resident" ||
+    process.nodeKind === "FBPProcess" ||
+    process.nodeKind === "DirectoryWatcher"
+  );
 }
+
+// The option of a DirectoryWatcher that gives the directory it watches
+// instead of WATCH_DIR (WATCH_DIR_OPTION in the runtime library).
+const WATCH_DIR_LABEL = "-watchdir";
 
 /**
  * The path of the test skeleton of `process`, relative to the home
@@ -111,7 +120,7 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
   const configuration = process.options.filter(option => nodeOptionRole(option) === "configuration");
 
   const name = pythonName(process.name);
-  const loadCall = `load_node(${JSON.stringify(process.name)}, inputs=${pythonList(inputs)}, outputs=${pythonList(outputs)})`;
+  const loadCall = `load_node(${JSON.stringify(process.name)}, opts=opts, inputs=${pythonList(inputs)}, outputs=${pythonList(outputs)})`;
   const feed = inputs.length > 0 ? `    under_test.feed(${JSON.stringify(inputs[0])}, "TODO")` : "    # The node has no business input to feed";
   const check = outputs.length > 0 ? `    assert under_test.sent(${JSON.stringify(outputs[0])}) == ["TODO"]` : "    # The node has no business output to check";
   const fail = [`    # ${FAIL_COMMENT}`, '    pytest.fail("write the checks of this test")'];
@@ -126,7 +135,7 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
     "from debasher_runtime_testing import load_node",
     "",
     "",
-    "def node():",
+    "def node(opts=None):",
   ];
   if (configuration.length > 0) {
     lines.push("    # Configuration options that opts could give:", ...optionComments(configuration, "    "));
@@ -151,7 +160,41 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
     ...fail,
     ""
   );
+  if (observesOutside(process)) {
+    lines.push("", ...observeTest(process, name, check, fail));
+  }
   return lines.join("\n");
+}
+
+// The test of what a node that observes the outside world brings in: what
+// observe() injects, and what process_data then sends.
+function observeTest(process: ProgramProcess, name: string, check: string, fail: string[]): string[] {
+  const lines: string[] = [];
+  if (process.nodeKind === "DirectoryWatcher") {
+    const hasWatchDirOption = process.options.some(option => option.label === WATCH_DIR_LABEL);
+    lines.push(
+      `def test_${name}_brings_in_what_it_observes(tmp_path):`,
+      hasWatchDirOption
+        ? `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_LABEL))}: str(tmp_path)})`
+        : "    under_test = node()",
+      hasWatchDirOption
+        ? '    (tmp_path / "TODO").write_text("TODO")'
+        : "    # Put a file in the directory that WATCH_DIR names",
+      "    # A file is complete once it stayed the same for STABLE_OBSERVATIONS",
+      "    # observations in a row (two by default)",
+      "    under_test.observe()",
+      "    injected = under_test.observe()"
+    );
+  } else {
+    lines.push(
+      `def test_${name}_brings_in_what_it_observes():`,
+      "    under_test = node()",
+      "    # Make the outside world show the node something to observe",
+      "    injected = under_test.observe()"
+    );
+  }
+  lines.push('    assert injected == ["TODO"]', check, ...fail, "");
+  return lines;
 }
 
 function pythonList(names: string[]): string {

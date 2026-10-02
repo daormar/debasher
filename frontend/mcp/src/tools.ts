@@ -884,7 +884,7 @@ const testTools = [
       const program = await loadProgram(backend, home_dir);
       const process = processOf(program, name);
       if (!offersAddTest(program, process)) {
-        throw new Refusal(`${name} is a ${process.nodeKind}: the node harness builds only an FBPProcess.`);
+        throw new Refusal(`${name} is a ${process.nodeKind}: the node harness builds only an FBPProcess or a DirectoryWatcher.`);
       }
       const path = testFilePath(program, process);
       if ((await backend.getFileContent(home_dir, path)).kind !== "missing") {

@@ -29,7 +29,8 @@ describe("offersAddTest", () => {
   it("is offered on a node only when the node harness builds it", () => {
     const resident = program("resident", []);
     expect(offersAddTest(resident, process("Acc", [], { nodeKind: "FBPProcess" }))).toBe(true);
-    for (const nodeKind of ["Supervisor", "DirectoryWatcher", "ProgramLauncher"] as const) {
+    expect(offersAddTest(resident, process("Watch", [], { nodeKind: "DirectoryWatcher" }))).toBe(true);
+    for (const nodeKind of ["Supervisor", "ProgramLauncher"] as const) {
       expect(offersAddTest(resident, process("X", [], { nodeKind }))).toBe(false);
     }
   });
@@ -90,7 +91,7 @@ describe("the skeleton of a node test", () => {
   const skeleton = testSkeleton(program("resident", [acc, source], edges), acc);
 
   it("names the external inputs, the connected inputs and the business outputs", () => {
-    expect(skeleton).toContain('return load_node("Accumulate", inputs=["numbers", "in"], outputs=["outsum"])');
+    expect(skeleton).toContain('return load_node("Accumulate", opts=opts, inputs=["numbers", "in"], outputs=["outsum"])');
   });
 
   it("lists the configuration options in a comment", () => {
@@ -105,5 +106,39 @@ describe("the skeleton of a node test", () => {
 
   it("fails in each test until the user writes its checks", () => {
     expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(2);
+  });
+
+  it("has no test of observe for a node that does not observe", () => {
+    expect(skeleton).not.toContain("observe()");
+  });
+});
+
+describe("the skeleton of a node that observes the outside world", () => {
+  const out = createOption("outrequests", "-outrequests", { direction: "output", channel: "fifo" });
+
+  it("observes for a node with a body for observe", () => {
+    const poll = process("Poll", [out], { nodeKind: "FBPProcess", nodeCode: { observe: "self.inject(1)" } } as Partial<ProgramProcess>);
+    const skeleton = testSkeleton(program("resident", [poll]), poll);
+
+    expect(skeleton).toContain("def test_Poll_brings_in_what_it_observes():");
+    expect(skeleton).toContain("    injected = under_test.observe()");
+    expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(3);
+  });
+
+  it("puts a file in the directory that a DirectoryWatcher watches, and observes twice", () => {
+    const watchdir = createOption("watchdir", "-watchdir", { commandLine: true });
+    const watch = process("Watch", [watchdir, out], { nodeKind: "DirectoryWatcher" });
+    const skeleton = testSkeleton(program("resident", [watch]), watch);
+
+    expect(skeleton).toContain("def test_Watch_brings_in_what_it_observes(tmp_path):");
+    expect(skeleton).toContain('    under_test = node(opts={"watchdir": str(tmp_path)})');
+    expect(skeleton).toContain('    (tmp_path / "TODO").write_text("TODO")');
+    expect(skeleton).toMatch(/ {4}under_test\.observe\(\)\n {4}injected = under_test\.observe\(\)/);
+  });
+
+  it("points to WATCH_DIR for a DirectoryWatcher with no option for its directory", () => {
+    const watch = process("Watch", [out], { nodeKind: "DirectoryWatcher" });
+
+    expect(testSkeleton(program("resident", [watch]), watch)).toContain("# Put a file in the directory that WATCH_DIR names");
   });
 });

@@ -68,7 +68,7 @@ def test_a_call_to_run_with_arguments_in_the_preamble_is_not_refused():
     assert node.sent("outsum") == [1]
 
 
-@pytest.mark.parametrize("kind", ["Supervisor", "DirectoryWatcher", "ProgramLauncher"])
+@pytest.mark.parametrize("kind", ["Supervisor", "ProgramLauncher"])
 def test_a_node_of_another_kind_is_refused(kind):
     source = f"from debasher_runtime_lib import {kind}\n\n\nclass Other({kind}):\n    pass\n\n\nOther().run()\n"
     with pytest.raises(ValueError, match=f"is a {kind}"):
@@ -124,7 +124,7 @@ def test_a_packet_arrives_as_through_a_fifo():
 
 def test_feeding_a_port_that_is_not_an_input_is_refused():
     node = _node(ACCUMULATE)
-    with pytest.raises(ValueError, match="not an input port"):
+    with pytest.raises(ValueError, match="neither an input port"):
         node.feed("other", 1)
 
 
@@ -262,3 +262,134 @@ def test_load_node_reports_a_process_without_code(tmp_path, monkeypatch):
     monkeypatch.setattr(testing, "_source_cache", {})
     with pytest.raises(RuntimeError, match="has no Python heredoc"):
         testing.load_node("X")
+
+
+# --- observe ---------------------------------------------------------------------
+
+# A node that observes a list of its own, standing for the outside world
+OBSERVER = """from debasher_runtime_lib import FBPProcess
+
+SEEN = []
+
+
+class Observer(FBPProcess):
+    OBSERVE_PORT = "seen"
+
+    def __init__(self):
+        super().__init__()
+        self.count = 0
+
+    def observe(self):
+        while SEEN:
+            self.inject({"item": SEEN.pop(0)})
+
+    def process_data(self, port_name, packet):
+        self.count += 1
+        self.send_data("out", f"{port_name}:{packet['item']}:{self.count}")
+
+    def capture_node_state(self):
+        return {"count": self.count}
+
+    def restore_node_state(self, node_state):
+        self.count = node_state["count"]
+
+    def initialize_runtime(self):
+        pass
+
+
+Observer().run()
+"""
+
+
+def _observer():
+    node = _node(OBSERVER, process="Observer", inputs=(), outputs=("out",))
+    world = sys.modules[type(node.node).__module__].SEEN
+    return node, world
+
+
+def test_observe_brings_in_what_it_sees_and_processes_it_in_order():
+    node, world = _observer()
+    world.extend(["a", "b"])
+
+    assert node.observe() == [{"item": "a"}, {"item": "b"}]
+    assert node.sent("out") == ["seen:a:1", "seen:b:2"]
+    assert node.observe() == []
+
+
+def test_the_observe_port_can_be_fed_directly():
+    node, _ = _observer()
+
+    node.feed("seen", {"item": "x"})
+
+    assert node.sent("out") == ["seen:x:1"]
+
+
+def test_observe_needs_a_node_that_defines_it():
+    with pytest.raises(ValueError, match="does not define observe"):
+        _node(ACCUMULATE).observe()
+
+
+def test_inject_keeps_its_own_checks():
+    source = OBSERVER.replace('    OBSERVE_PORT = "seen"\n', "")
+    node = _node(source, process="Observer", inputs=(), outputs=("out",))
+    sys.modules[type(node.node).__module__].SEEN.append("a")
+
+    with pytest.raises(RuntimeError, match="needs OBSERVE_PORT"):
+        node.observe()
+
+
+WATCHER = """from debasher_runtime_lib import DirectoryWatcher
+
+
+class Watch(DirectoryWatcher):
+    PATTERN = "*.txt"
+
+
+Watch().run()
+"""
+
+
+def test_a_directory_watcher_requests_a_file_once_it_is_complete(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    node = _node(WATCHER, process="Watch", opts={"watchdir": str(inbox)}, inputs=(), outputs=("outrequests",))
+    (inbox / "a.txt").write_text("data")
+    (inbox / ".b.txt").write_text("still being written")
+    (inbox / "c.csv").write_text("not matched")
+
+    # Complete once its size and time stay the same for two observations
+    assert node.observe() == []
+    assert node.observe() == [{"file": str(inbox / "a.txt")}]
+    assert node.sent("outrequests") == [{"opts": {"-infile": str(inbox / "a.txt")}, "run": "a"}]
+
+
+def test_a_restarted_directory_watcher_requests_nothing_twice(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    node = _node(WATCHER, process="Watch", opts={"watchdir": str(inbox)}, inputs=(), outputs=("outrequests",))
+    (inbox / "a.txt").write_text("data")
+    node.observe()
+    node.observe()
+
+    restarted = node.restart()
+    restarted.observe()
+
+    # Brought in again, as after a crash, and dropped by process_data
+    assert restarted.observe() == [{"file": str(inbox / "a.txt")}]
+    assert restarted.sent("outrequests") == []
+
+
+def test_a_relative_directory_is_the_one_beside_the_program(tmp_path, monkeypatch):
+    (tmp_path / "inbox").mkdir()
+    (tmp_path / "inbox" / "a.txt").write_text("data")
+    source = WATCHER.replace('PATTERN = "*.txt"', 'PATTERN = "*.txt"\n    WATCH_DIR = "inbox"')
+    monkeypatch.setenv("DEBASHER_LIBEXECDIR", str(_fake_libexec(tmp_path, source)))
+    monkeypatch.setenv("DEBASHER_TEST_PFILE", str(tmp_path / "prg.sh"))
+    monkeypatch.setattr(testing, "_source_cache", {})
+    monkeypatch.delenv("DEBASHER_PROCESS_MODULE_DIR", raising=False)
+
+    node = testing.load_node("Watch", outputs=["outrequests"])
+    node.observe()
+
+    assert node.observe() == [{"file": str(tmp_path / "inbox" / "a.txt")}]
+    assert "DEBASHER_PROCESS_MODULE_DIR" not in os.environ

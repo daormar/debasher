@@ -114,9 +114,15 @@ receives::
         assert node.sent("outsum") == [7]
 
 ``load_node`` also takes ``opts``, the options of the node by name.
-Only a node that derives directly from ``FBPProcess`` can be tested
-this way, not a ``DirectoryWatcher``, a ``ProgramLauncher`` or the
-``Supervisor``.
+A node that observes the outside world, such as a
+``DirectoryWatcher``, is tested with ``observe``: it runs the
+``observe`` method of the node once and returns what it brought in,
+which the node then processes as in a run. The test can change the
+outside world between two calls, for example put a file in the
+directory that a ``DirectoryWatcher`` watches (given with
+``opts={"watchdir": ...}``) and observe twice, since a file counts
+only once it has stayed the same for two observations in a row. A
+``ProgramLauncher`` and the ``Supervisor`` cannot be tested this way.
 
 The exit status of ``debasher_test`` is 0 when every test passed, 1
 when a test failed, 2 when the tests could not be run (for instance,
@@ -125,7 +131,8 @@ and 77 when the program has no tests. ``DEBASHER_BATS`` and
 ``DEBASHER_PYTEST`` give the bats and the pytest to run instead of
 those found when DeBasher was configured. Running the tests writes
 nothing into ``<prgdir>``. The programs ``webui_batch_greet`` (bats
-tests) and ``webui_running_sum`` (pytest tests), installed under
+tests), ``webui_running_sum`` and ``webui_watch_tally`` (pytest
+tests, the second of a ``DirectoryWatcher``), installed under
 ``<prefix>/share/debasher/webui_programs``, carry examples.
 
 debasher_proc_dataset
