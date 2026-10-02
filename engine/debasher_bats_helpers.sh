@@ -59,7 +59,7 @@ debasher_skip_without_conda_env()
     local env_name=$1
     local conda_exe=${CONDA_EXE:-${DEBASHER_CONDA:-}}
 
-    if [ -z "${conda_exe}" ] || [ ! -x "${conda_exe}" ]; then
+    if [ -z "${conda_exe}" ] || [ ! -f "${conda_exe}" ] || [ ! -x "${conda_exe}" ]; then
         skip "conda was not found"
     fi
     if ! "${conda_exe}" env list 2> /dev/null \

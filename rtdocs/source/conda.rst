@@ -80,7 +80,7 @@ it was set up for, which the shell running a process may lack (under a
 service, a Slurm job or ``debasher_exec_process``). ``conda_activate``
 loads those functions first when they are missing, from the conda
 executable named by ``CONDA_EXE`` or else from the one found when
-DeBasher was configured (``./configure CONDA=<conda executable>``
+DeBasher was configured (``./configure CONDA_CMD=<conda executable>``
 gives another), and then activates the environment. After it,
 ``conda`` itself (``conda deactivate``, another ``conda activate``)
 can be used.

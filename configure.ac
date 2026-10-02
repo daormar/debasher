@@ -103,22 +103,28 @@ fi
 
 # Check conda: its executable, from which debasher::conda_activate loads
 # the shell functions of conda when a shell does not have them. It is the
-# one given with ./configure CONDA=..., or else the one that the conda
+# one given with ./configure CONDA_CMD=..., or else the one that the conda
 # shell functions of this shell point to (CONDA_EXE, or _CONDA_EXE in
 # older versions), or else the first conda program in the PATH. conda
 # itself is usually a shell function, which a program search cannot see.
-AC_ARG_VAR([CONDA], [conda executable, from which processes load the shell functions of conda])
-if test -z "$CONDA"; then
+# The variable is not called CONDA, which some environments (the runners
+# of GitHub Actions) set to the directory where conda is installed.
+AC_ARG_VAR([CONDA_CMD], [conda executable, from which processes load the shell functions of conda])
+if test -z "$CONDA_CMD"; then
   for conda_candidate in "$CONDA_EXE" "$_CONDA_EXE"; do
-    if test -n "$conda_candidate" && test -x "$conda_candidate"; then
-      CONDA=$conda_candidate
+    if test -n "$conda_candidate" && test -f "$conda_candidate" && test -x "$conda_candidate"; then
+      CONDA_CMD=$conda_candidate
       break
     fi
   done
 fi
-AC_PATH_PROGS(CONDA, conda)
-if test -z "$CONDA"; then
-  AC_MSG_WARN([conda was not found: a process cannot activate a conda environment; give it with ./configure CONDA=<conda executable>])
+AC_PATH_PROGS(CONDA_CMD, conda)
+if test -n "$CONDA_CMD" && ! { test -f "$CONDA_CMD" && test -x "$CONDA_CMD"; }; then
+  AC_MSG_WARN([$CONDA_CMD is not a conda executable, ignored])
+  CONDA_CMD=
+fi
+if test -z "$CONDA_CMD"; then
+  AC_MSG_WARN([conda was not found: a process cannot activate a conda environment; give it with ./configure CONDA_CMD=<conda executable>])
 fi
 
 # Check that docker is available

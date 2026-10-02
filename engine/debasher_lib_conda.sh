@@ -43,7 +43,7 @@ define_conda_env() { debasher::define_conda_env "$@"; }
 # available in the current shell, when they are not already: they are
 # loaded from the conda executable, the one that the conda shell functions
 # of the environment point to (CONDA_EXE) or else the one that configure
-# found (CONDA), so that a process does not depend on how the shell that
+# found (CONDA_CMD), so that a process does not depend on how the shell that
 # runs it was started. Returns 1, with an error, when there is no conda
 # executable to load them from.
 debasher::_load_conda_functions()
@@ -52,9 +52,9 @@ debasher::_load_conda_functions()
         return 0
     fi
 
-    local conda_exe=${CONDA_EXE:-${CONDA}}
-    if [ -z "${conda_exe}" ] || [ ! -x "${conda_exe}" ]; then
-        echo "Error: conda was not found: there is no conda executable in CONDA_EXE, and configure found none (give it with ./configure CONDA=<conda executable>)" >&2
+    local conda_exe=${CONDA_EXE:-${CONDA_CMD}}
+    if [ -z "${conda_exe}" ] || [ ! -f "${conda_exe}" ] || [ ! -x "${conda_exe}" ]; then
+        echo "Error: conda was not found: there is no conda executable in CONDA_EXE, and configure found none (give it with ./configure CONDA_CMD=<conda executable>)" >&2
         return 1
     fi
 
