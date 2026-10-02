@@ -8,6 +8,11 @@ import { fanoutBaseLabel, isFanoutOption } from "./option";
 // thus safe to regenerate when the process's options change).
 export const TEMPLATE_MARKER = "ADD YOUR CODE HERE";
 
+// The first code of the editor of the code that prints the number of tasks
+// of an option generator, which the code prompt takes as no code at all.
+export const GENERATOR_SIZE_TEMPLATE = `# TODO: return the number of tasks
+`;
+
 export function isCodeStillTemplate(code: string): boolean {
   return code.trim() === "" || code.includes(TEMPLATE_MARKER);
 }

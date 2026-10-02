@@ -182,6 +182,12 @@ so how many tasks it runs:
 * **manual**: the option definition function is written whole, by
   hand (general programs only).
 
+The editors of the code of an array and of a generator have the same
+"AI prompt" button as the code editor. Its prompt carries the options
+of the process with their values, which show what each task needs, and
+the code of the process, if it is written; it lets the AI tool ask
+what a task is when nothing says so.
+
 An option of a standard process whose label ends in ``ith``, such as
 ``-outfith``, is a *fanout family*: it stands for as many numbered
 options (``-outf0``, ``-outf1``, ...) as a command line option of the

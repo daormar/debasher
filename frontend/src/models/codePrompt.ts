@@ -77,7 +77,7 @@ function processSection(process: ProgramProcess, language: string): string[] {
   return lines;
 }
 
-function optionsSection(program: Program, process: ProgramProcess): string[] {
+export function optionsSection(program: Program, process: ProgramProcess): string[] {
   if (process.options.length === 0) {
     return ["## The options", "", "The process has no options."];
   }
